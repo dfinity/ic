@@ -1,0 +1,39 @@
+[package]
+name = "ic-validator-fuzz"
+version = "0.0.0"
+publish = false
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+ic-types = { path = "../../types/types" }
+ic-validator-http-request-arbitrary = { path = "../http_request_arbitrary" }
+ic-validator-ingress-message = { path = "../ingress_message" }
+libfuzzer-sys = "0.4"
+
+[dependencies.ic-validator]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "validate_request"
+path = "fuzz_targets/validate_request.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "signed_ingress"
+path = "fuzz_targets/signed_ingress.rs"
+test = false
+doc = false

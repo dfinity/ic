@@ -2,24 +2,27 @@ use candid::types::number::Nat;
 use dfn_candid::candid_one;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
-use ic_crypto_sha::Sha256;
-use ic_icrc1::endpoints::TransferArg;
-use ic_icrc1::{Account, Memo};
-use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
-use ic_ledger_core::Tokens;
+use ic_crypto_sha2::Sha256;
+use ic_ledger_core::{Tokens, tokens::TOKEN_SUBDIVIDABLE_BY};
+use ic_nervous_system_common::DEFAULT_TRANSFER_FEE;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
 use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
+use icrc_ledger_types::icrc1::{
+    account::Account,
+    transfer::{Memo, TransferArg},
+};
 
-use ic_sns_governance::pb::v1::manage_neuron::claim_or_refresh::{By, MemoAndController};
-use ic_sns_governance::pb::v1::manage_neuron::{ClaimOrRefresh, Command, Disburse};
 use ic_sns_governance::pb::v1::{
     Account as AccountProto, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
     NeuronPermissionList, NeuronPermissionType,
+    manage_neuron::{
+        ClaimOrRefresh, Command, Disburse,
+        claim_or_refresh::{By, MemoAndController},
+    },
 };
-use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
-use ic_sns_test_utils::icrc1;
-use ic_sns_test_utils::itest_helpers::{
-    local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder,
+use ic_sns_test_utils::{
+    icrc1,
+    itest_helpers::{SnsCanisters, SnsTestsInitPayloadBuilder, state_machine_test_on_sns_subnet},
 };
 
 // This tests the whole neuron lifecycle in integration with the ledger. Namely
@@ -27,7 +30,7 @@ use ic_sns_test_utils::itest_helpers::{
 // can be claimed and ultimately disbursed to the same account.
 #[test]
 fn test_stake_and_disburse_neuron_with_notification() {
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -41,7 +44,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
             };
 
             let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-                .with_ledger_account(user.get_principal_id().into(), alloc)
+                .with_ledger_account(user.get_principal_id().0.into(), alloc)
                 .with_nervous_system_parameters(system_params)
                 .build();
 
@@ -50,7 +53,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
             let user_balance = icrc1::balance_of(
                 &sns_canisters.ledger,
                 Account {
-                    owner: user.get_principal_id(),
+                    owner: user.get_principal_id().0,
                     subaccount: None,
                 },
             )
@@ -60,7 +63,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
 
             // Stake a neuron by transferring to a subaccount of the neurons
             // canister and claiming the neuron on the governance canister..
-            let nonce = 12345u64;
+            let nonce = 12345_u64;
             let to_subaccount = {
                 let mut state = Sha256::new();
                 state.write(&[0x0c]);
@@ -80,7 +83,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
                     fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
                     from_subaccount: None,
                     to: Account {
-                        owner: PrincipalId::from(sns_canisters.governance.canister_id()),
+                        owner: PrincipalId::from(sns_canisters.governance.canister_id()).0,
                         subaccount: Some(to_subaccount),
                     },
                     created_at_time: None,
@@ -111,7 +114,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
                 .expect("Error calling the manage_neuron api.");
 
             let neuron_id = match manage_neuron_response.command.unwrap() {
-                CommandResponse::Error(error) => panic!("Unexpected error: {}", error),
+                CommandResponse::Error(error) => panic!("Unexpected error: {error}"),
                 CommandResponse::ClaimOrRefresh(claim_or_refresh_response) => {
                     claim_or_refresh_response.refreshed_neuron_id.unwrap()
                 }
@@ -122,7 +125,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
             let user_balance = icrc1::balance_of(
                 &sns_canisters.ledger,
                 Account {
-                    owner: user.get_principal_id(),
+                    owner: user.get_principal_id().0,
                     subaccount: None,
                 },
             )
@@ -167,7 +170,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
             let user_balance: Tokens = icrc1::balance_of(
                 &sns_canisters.ledger,
                 Account {
-                    owner: user.get_principal_id(),
+                    owner: user.get_principal_id().0,
                     subaccount: None,
                 },
             )

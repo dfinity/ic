@@ -4,111 +4,282 @@ syntax = "proto3";
 package types.v1;
 
 import "bitcoin/v1/bitcoin.proto";
-import "canister_http/v1/canister_http.proto";
-import "types/v1/types.proto";
-import "types/v1/dkg.proto";
-import "types/v1/ecdsa.proto";
+import "messaging/xnet/v1/certification.proto";
 import "messaging/xnet/v1/certified_stream_slice.proto";
+import "registry/subnet/v1/subnet.proto";
+import "types/v1/artifact.proto";
+import "types/v1/dkg.proto";
+import "types/v1/idkg.proto";
+import "types/v1/types.proto";
+
+message CertificationMessage {
+  oneof msg {
+    messaging.xnet.v1.Certification certification = 1;
+    messaging.xnet.v1.CertificationShare certification_share = 2;
+  }
+}
+
+message ValidatedConsensusArtifact {
+  ConsensusMessage msg = 1;
+  uint64 timestamp = 2;
+}
 
 message CatchUpPackage {
-	bytes content = 1;
-	bytes signature = 2;
-	NiDkgId signer = 3;
+  bytes content = 1;
+  bytes signature = 2;
+  NiDkgId signer = 3;
+}
+
+message CatchUpPackageShare {
+  string version = 1;
+  RandomBeacon random_beacon = 2;
+  bytes state_hash = 3;
+  bytes block_hash = 4;
+  bytes random_beacon_hash = 5;
+  bytes signature = 6;
+  NodeId signer = 7;
+  optional uint64 oldest_registry_version_in_use_by_replicated_state = 8;
 }
 
 message CatchUpContent {
-	Block block = 1;
-	RandomBeacon random_beacon = 2;
-	bytes state_hash = 3;
-	bytes block_hash = 4;
-	bytes random_beacon_hash = 5;
+  Block block = 1;
+  RandomBeacon random_beacon = 2;
+  bytes state_hash = 3;
+  bytes block_hash = 4;
+  bytes random_beacon_hash = 5;
+  optional uint64 oldest_registry_version_in_use_by_replicated_state = 6;
 }
 
 message Block {
-	string version = 1;
-	bytes parent = 2;
-	DkgPayload dkg_payload = 3;
-	uint64 height = 4;
-	uint64 rank = 5;
-	// ValidationContext
-	uint64 time = 6;
-	uint64 registry_version = 7;
-	uint64 certified_height = 8;
-	// Payloads
-	IngressPayload ingress_payload = 9;
-	XNetPayload xnet_payload = 10;
-	SelfValidatingPayload self_validating_payload = 12;
-	// Only present in summary blocks
-	EcdsaSummaryPayload ecdsa_summary = 13;
-	CanisterHttpPayload canister_http_payload = 14;
-	bytes payload_hash = 11;
+  string version = 1;
+  bytes parent = 2;
+  DkgPayload dkg_payload = 3;
+  uint64 height = 4;
+  uint64 rank = 5;
+  // ValidationContext
+  uint64 time = 6;
+  uint64 registry_version = 7;
+  uint64 certified_height = 8;
+  // Payloads
+  IngressPayload ingress_payload = 9;
+  XNetPayload xnet_payload = 10;
+  SelfValidatingPayload self_validating_payload = 12;
+  IDkgPayload idkg_payload = 13;
+  reserved 14;
+  bytes canister_http_payload_bytes = 15;
+  bytes query_stats_payload_bytes = 16;
+  bytes chain_key_payload_bytes = 17;
+  bytes payload_hash = 11;
+}
+
+message ConsensusMessage {
+  oneof msg {
+    RandomBeacon random_beacon = 1;
+    Finalization finalization = 2;
+    Notarization notarization = 3;
+    BlockProposal block_proposal = 4;
+    RandomBeaconShare random_beacon_share = 5;
+    NotarizationShare notarization_share = 6;
+    FinalizationShare finalization_share = 7;
+    RandomTape random_tape = 8;
+    RandomTapeShare random_tape_share = 9;
+    CatchUpPackage cup = 10;
+    CatchUpPackageShare cup_share = 11;
+    EquivocationProof equivocation_proof = 12;
+  }
 }
 
 message BlockProposal {
-	bytes hash = 1;
-	Block value = 2;
-	bytes signature = 3;
-	bytes signer = 4;
+  bytes hash = 1;
+  Block value = 2;
+  bytes signature = 3;
+  reserved 4;
+  NodeId signer = 5;
 }
 
 message RandomBeacon {
-	string version = 1;
-	uint64 height = 2;
-	bytes parent = 3;
-	bytes signature = 4;
-	NiDkgId signer = 5;
+  string version = 1;
+  uint64 height = 2;
+  bytes parent = 3;
+  bytes signature = 4;
+  NiDkgId signer = 5;
+}
+
+message RandomBeaconShare {
+  string version = 1;
+  uint64 height = 2;
+  bytes parent = 3;
+  bytes signature = 4;
+  NodeId signer = 5;
 }
 
 message RandomTape {
-	string version = 1;
-	uint64 height = 2;
-	bytes signature = 3;
-	NiDkgId signer = 4;
+  string version = 1;
+  uint64 height = 2;
+  bytes signature = 3;
+  NiDkgId signer = 4;
+}
+
+message RandomTapeShare {
+  string version = 1;
+  uint64 height = 2;
+  bytes signature = 3;
+  NodeId signer = 4;
 }
 
 message Finalization {
-	string version = 1;
-	uint64 height = 2;
-	bytes block = 3;
-	bytes signature = 4;
-	repeated bytes signers = 5;
+  string version = 1;
+  uint64 height = 2;
+  bytes block = 3;
+  bytes signature = 4;
+  repeated bytes signers = 5;
+}
+
+message FinalizationShare {
+  string version = 1;
+  uint64 height = 2;
+  bytes block = 3;
+  bytes signature = 4;
+  NodeId signer = 5;
 }
 
 message Notarization {
-	string version = 1;
-	uint64 height = 2;
-	bytes block = 3;
-	bytes signature = 4;
-	repeated bytes signers = 5;
+  string version = 1;
+  uint64 height = 2;
+  bytes block = 3;
+  bytes signature = 4;
+  repeated bytes signers = 5;
+}
+
+message NotarizationShare {
+  string version = 1;
+  uint64 height = 2;
+  bytes block = 3;
+  bytes signature = 4;
+  NodeId signer = 5;
+}
+
+message EquivocationProof {
+  NodeId signer = 1;
+  string version = 2;
+  uint64 height = 3;
+  SubnetId subnet_id = 4;
+
+  // First equivocating block
+  bytes hash1 = 5;
+  bytes signature1 = 6;
+  // Second equivocating block
+  bytes hash2 = 7;
+  bytes signature2 = 8;
 }
 
 message SubnetStreamSlice {
-	SubnetId subnet_id = 1;
-	messaging.xnet.v1.CertifiedStreamSlice stream_slice = 2;
+  SubnetId subnet_id = 1;
+  messaging.xnet.v1.CertifiedStreamSlice stream_slice = 2;
 }
 
 message SelfValidatingPayload {
-	// Responses from the Bitcoin Adapter talking to the Bitcoin testnet.
-	repeated bitcoin.v1.BitcoinAdapterResponse bitcoin_testnet_payload = 1;
+  // Responses from the Bitcoin Adapter talking to the Bitcoin testnet.
+  repeated bitcoin.v1.BitcoinAdapterResponse bitcoin_testnet_payload = 1;
 }
 
 message XNetPayload {
-	repeated SubnetStreamSlice stream_slices = 1;
+  repeated SubnetStreamSlice stream_slices = 1;
 }
 
-message CanisterHttpPayload {
-	repeated canister_http.v1.CanisterHttpResponseWithConsensus responses = 1;
-	repeated uint64 timeouts = 2;
-	repeated canister_http.v1.CanisterHttpResponseDivergence divergence_responses = 3;
+message QueryStatsPayload {
+  reserved 1;
+  repeated CanisterQueryStats canister_stats = 2;
+}
+
+message CanisterQueryStats {
+  types.v1.CanisterId canister_id = 1;
+  uint32 num_calls = 2;
+  uint64 num_instructions = 3;
+  uint64 ingress_payload_size = 4;
+  uint64 egress_payload_size = 5;
+}
+
+enum ChainKeyErrorCode {
+  CHAIN_KEY_ERROR_CODE_UNSPECIFIED = 0;
+  CHAIN_KEY_ERROR_CODE_TIMED_OUT = 1;
+  CHAIN_KEY_ERROR_CODE_INVALID_KEY = 2;
+}
+
+message ChainKeyAgreement {
+  uint64 callback_id = 1;
+  oneof agreement {
+    bytes data = 2;
+    ChainKeyErrorCode reject = 3;
+  }
 }
 
 message IngressIdOffset {
-	uint64 expiry = 1;
-	bytes message_id = 2;
-	uint64 offset = 3;
+  uint64 expiry = 1;
+  bytes message_id = 2;
+  uint64 offset = 3;
+}
+
+message IngressMessage {
+  bytes message_id = 1;
+  uint64 expiry = 2;
+  bytes signed_request_bytes = 3;
 }
 
 message IngressPayload {
-	repeated IngressIdOffset id_and_pos = 1;
-	bytes buffer = 2;
+  reserved 1, 2;
+  repeated IngressMessage ingress_messages = 3;
+}
+
+// Stripped consensus artifacts messages below
+message GetIngressMessageInBlockRequest {
+  IngressMessageId ingress_message_id = 1;
+  ConsensusMessageId block_proposal_id = 2;
+  bytes ingress_bytes_hash = 3;
+}
+
+message GetIngressMessageInBlockResponse {
+  bytes ingress_message = 1;
+}
+
+message GetIDkgDealingInBlockRequest {
+  uint32 node_index = 1;
+  IDkgArtifactId dealing_id = 2;
+  ConsensusMessageId block_proposal_id = 3;
+}
+
+message GetIDkgDealingInBlockResponse {
+  registry.subnet.v1.IDkgSignedDealingTuple signed_dealing = 1;
+}
+
+message StrippedBlockProposal {
+  // The original block proposal proto but all [`Strippable`] data is removed.
+  BlockProposal pruned_block_proposal = 1;
+  // The stripped ingress messages, i.e. the IDs of ingress messages that were pruned from the block proposal.
+  repeated StrippedIngressMessage ingress_messages = 2;
+  // The consensus message ID of the original (unstripped) block proposal, including the [`Strippable`] data.
+  ConsensusMessageId unstripped_consensus_message_id = 3;
+  // The stripped IDKG dealings, i.e. the IDs of IDKG dealings that were pruned from the block proposal.
+  repeated StrippedIDkgDealing stripped_idkg_dealings = 4;
+}
+
+message StrippedIDkgDealing {
+  uint32 dealer_index = 1;
+  IDkgArtifactId dealing_id = 2;
+}
+
+message StrippedIngressMessage {
+  IngressMessageId stripped = 1;
+  bytes ingress_bytes_hash = 2;
+}
+
+message StrippedConsensusMessage {
+  oneof msg {
+    StrippedBlockProposal stripped_block_proposal = 1;
+    ConsensusMessage unstripped = 2;
+  }
+}
+
+message StrippedConsensusMessageId {
+  ConsensusMessageId unstripped_id = 1;
 }

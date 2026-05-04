@@ -36,6 +36,9 @@ image::https://lucid.app/publicSegments/view/8fbd547e-8351-41f4-aff6-895a8870f22
 ### Concurrency
 Note that the Registry Local Store is usually accessed using the Registry Client, which itself is polling and caching the local store repeatedly. Due to the resulting asynchrony of the local registry state, client functions can be parameterized with a specific (last seen) registry version.
 
+## Orchestrator Dashboard
+The Dashboard listens for connections on port `7070` and displays the node's ID, datacenter ID, subnet ID, latest replica version, scheduled upgrades, current CUP height, registered readonly and backup keys, and more.
+
 ## Replica Upgrades and Subnet Membership
 The orchestrator triggers upgrades of the replica process. For that, it periodically performs the following operations:
 
@@ -75,6 +78,13 @@ The Orchestrator monitors the registry for new data centers. If a new data cente
 
 .Firewall configuration updates
 image::https://lucid.app/publicSegments/view/426c30ab-6b25-4a69-ac4c-03b2d79222d0/image.png[Registry Loop, width=900]
+{empty} +
+
+## Key Rotations
+If the node is assigned to an ECDSA subnet with key rotations enabled, the Orchestrator periodically (every 10 seconds) checks for new key rotations by calling the corresponding function of the crypto component. If crypto indicates that it is time to rotate the key, the function to do the rotation is called and the new key is registered by sending an update call to a random NNS node. In case registration fails we will notice a key without registration during the next iteration, and will try to register it again.
+
+.Key rotation check
+image::https://lucid.app/publicSegments/view/ca1ba0da-f61f-49a6-9e26-f5bfaf543ccc/image.png[Key Rotation Check, width=900]
 {empty} +
 
 ## Error Handling

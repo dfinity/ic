@@ -23,14 +23,14 @@ mod creation {
     pub fn create_transcript<C: NiDkgCspClient>(
         ni_dkg_csp_client: &C,
         config: &NiDkgConfig,
-        verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+        verified_dealings: BTreeMap<NodeId, NiDkgDealing>,
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
-        let verified_dealings = NiDkgDealings::new(verified_dealings.clone())?;
+        let verified_dealings = NiDkgDealings::new(verified_dealings)?;
         ensure_sufficiently_many_dealings(config, &verified_dealings)?;
         ensure_dealing_node_ids_in_dealers(config.dealers(), &verified_dealings);
-        let csp_transcript = create_csp_transcript(ni_dkg_csp_client, config, &verified_dealings)?;
+        let csp_transcript = create_csp_transcript(ni_dkg_csp_client, config, verified_dealings)?;
         Ok(NiDkgTranscript {
-            dkg_id: config.dkg_id(),
+            dkg_id: config.dkg_id().clone(),
             threshold: config.threshold(),
             committee: config.receivers().clone(),
             registry_version: config.registry_version(),
@@ -60,8 +60,6 @@ mod creation {
         dealers: &NiDkgDealers,
         verified_dealings: &NiDkgDealings,
     ) {
-        // TODO (CRP-572): We could improve the complexity from O(|dealings| *
-        // log(|dealers|)) to O(|dealings| + |dealers|) e.g. by using a HashSet.
         let dealing_node_ids_not_in_dealers: BTreeSet<NodeId> = verified_dealings
             .iter()
             .filter(|(node_id, _)| !dealers.get().contains(node_id))
@@ -70,17 +68,14 @@ mod creation {
             .collect();
         if !dealing_node_ids_not_in_dealers.is_empty() {
             // panic because this is a precondition violation:
-            panic!(
-                "Missing node ids in dealers: {:?}",
-                dealing_node_ids_not_in_dealers
-            );
+            panic!("Missing node ids in dealers: {dealing_node_ids_not_in_dealers:?}");
         }
     }
 
     fn create_csp_transcript<C: NiDkgCspClient>(
         ni_dkg_csp_client: &C,
         config: &NiDkgConfig,
-        verified_dealings: &NiDkgDealings,
+        verified_dealings: NiDkgDealings,
     ) -> Result<CspNiDkgTranscript, DkgCreateTranscriptError> {
         if let Some(resharing_transcript) = &config.resharing_transcript() {
             return convert_dealings_and_call_create_resharing_transcript(
@@ -96,7 +91,7 @@ mod creation {
     fn convert_dealings_and_call_create_resharing_transcript<C: NiDkgCspClient>(
         ni_dkg_csp_client: &C,
         config: &NiDkgConfig,
-        verified_dealings: &NiDkgDealings,
+        verified_dealings: NiDkgDealings,
         resharing_transcript: &NiDkgTranscript,
     ) -> Result<CspNiDkgTranscript, DkgCreateTranscriptError> {
         let csp_dealings = csp_dealings(verified_dealings, |dealer| {
@@ -122,17 +117,14 @@ mod creation {
             .committee
             .position(dealer)
             .unwrap_or_else(|| {
-                panic!(
-                    "This operation requires node ({}) to be a dealer, but it is not.",
-                    dealer
-                )
+                panic!("This operation requires node ({dealer}) to be a dealer, but it is not.")
             })
     }
 
     fn convert_dealings_and_call_create_transcript<C: NiDkgCspClient>(
         ni_dkg_csp_client: &C,
         config: &NiDkgConfig,
-        verified_dealings: &NiDkgDealings,
+        verified_dealings: NiDkgDealings,
     ) -> Result<CspNiDkgTranscript, DkgCreateTranscriptError> {
         let csp_dealings = csp_dealings(verified_dealings, |dealer| {
             dealer_index_in_dealers_or_panic(config.dealers(), dealer)
@@ -147,16 +139,14 @@ mod creation {
     }
 
     fn csp_dealings(
-        verified_dealings: &NiDkgDealings,
+        verified_dealings: NiDkgDealings,
         index_provider: impl Fn(NodeId) -> NodeIndex,
     ) -> BTreeMap<NodeIndex, CspNiDkgDealing> {
-        let mut csp_dealings = BTreeMap::new();
-        for (dealer, dealing) in verified_dealings.iter() {
-            let csp_dealing = CspNiDkgDealing::from(dealing.clone());
-            let dealer_index = index_provider(*dealer);
-            csp_dealings.insert(dealer_index, csp_dealing);
-        }
-        csp_dealings
+        verified_dealings
+            .dealings
+            .into_iter()
+            .map(|(dealer, dealing)| (index_provider(dealer), CspNiDkgDealing::from(dealing)))
+            .collect()
     }
 
     struct NiDkgDealings {
@@ -216,8 +206,8 @@ mod loading {
     use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
     use ic_interfaces::crypto::LoadTranscriptResult;
     use ic_logger::info;
-    use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
+    use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 
     pub fn load_transcript<C: NiDkgCspClient>(
         self_node_id: &NodeId,
@@ -239,9 +229,12 @@ mod loading {
         insert_transcript_data_into_store(
             lockable_threshold_sig_data_store,
             &csp_transcript,
-            transcript.dkg_id,
+            &transcript.dkg_id,
+            transcript.registry_version,
             &transcript.committee,
         );
+        let epoch = epoch(transcript.registry_version);
+        ni_dkg_csp_client.observe_epoch_in_loaded_transcript(epoch);
         Ok(result)
     }
 
@@ -297,7 +290,7 @@ mod loading {
         } else {
             // If our node ID is not listed in the transcript then we
             // certainly do not have access to the associated key
-            Ok(LoadTranscriptResult::SigningKeyUnavailable)
+            Ok(LoadTranscriptResult::NodeNotInCommittee)
         }
     }
 
@@ -309,7 +302,6 @@ mod loading {
     ) -> Result<(), CspDkgLoadPrivateKeyError> {
         ni_dkg_csp_client.load_threshold_signing_key(
             AlgorithmId::NiDkg_Groth20_Bls12_381,
-            transcript.dkg_id,
             epoch(transcript.registry_version),
             csp_transcript.clone(),
             self_index_in_committee,
@@ -319,15 +311,17 @@ mod loading {
     fn insert_transcript_data_into_store(
         lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
         csp_transcript: &CspNiDkgTranscript,
-        dkg_id: NiDkgId,
+        dkg_id: &NiDkgId,
+        registry_version: RegistryVersion,
         committee: &NiDkgReceivers,
     ) {
         lockable_threshold_sig_data_store
             .write()
             .insert_transcript_data(
-                DkgId::NiDkgId(dkg_id),
+                dkg_id,
                 CspPublicCoefficients::from(csp_transcript),
                 indices(committee),
+                registry_version,
             );
     }
 

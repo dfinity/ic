@@ -8,22 +8,27 @@
 use std::{
     collections::BTreeMap,
     convert::TryInto,
-    fmt,
     fs::{self, File},
     io,
     path::{Path, PathBuf},
     str::FromStr,
 };
 
-use openssl::pkey;
+use anyhow::{Result, anyhow};
+
+use prost::Message;
 use serde_json::Value;
 use thiserror::Error;
 use url::Url;
+use x509_cert::der; // re-export of der crate
+use x509_cert::spki; // re-export of spki crate
 
-use ic_interfaces_registry::{
-    RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
-};
+use ic_interfaces_registry::{RegistryDataProvider, RegistryRecord, ZERO_REGISTRY_VERSION};
+
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
+    api_boundary_node::v1::ApiBoundaryNodeRecord,
+    dc::v1::DataCenterRecord,
     node_operator::v1::NodeOperatorRecord,
     provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
@@ -31,19 +36,31 @@ use ic_protobuf::registry::{
     subnet::v1::SubnetListRecord,
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
+use ic_protobuf::registry::{
+    dc::v1::Gps,
+    firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet},
+};
 use ic_protobuf::types::v1::{PrincipalId as PrincipalIdProto, SubnetId as SubnetIdProto};
 use ic_registry_client::client::RegistryDataProviderError;
 use ic_registry_keys::{
-    make_blessed_replica_version_key, make_node_operator_record_key,
-    make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
-    make_subnet_list_record_key, make_unassigned_nodes_config_record_key, ROOT_SUBNET_ID_KEY,
+    FirewallRulesScope, ROOT_SUBNET_ID_KEY, make_api_boundary_node_record_key,
+    make_blessed_replica_versions_key, make_canister_ranges_key, make_data_center_record_key,
+    make_firewall_rules_record_key, make_node_operator_record_key,
+    make_provisional_whitelist_record_key, make_replica_version_key, make_subnet_list_record_key,
+    make_unassigned_nodes_config_record_key,
 };
 use ic_registry_local_store::{Changelog, KeyMutation, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
+use ic_registry_routing_table::{
+    CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable, WellFormedError,
+    routing_table_insert_subnet,
+};
+use ic_registry_transport::insert;
 use ic_registry_transport::pb::v1::RegistryMutation;
-use ic_types::{PrincipalId, PrincipalIdParseError, RegistryVersion, ReplicaVersion, SubnetId};
+use ic_types::{
+    CanisterId, PrincipalId, PrincipalIdParseError, RegistryVersion, ReplicaVersion, SubnetId,
+};
 
 use crate::subnet_configuration::{SubnetConfig, SubnetIndex};
 use crate::util::write_registry_entry;
@@ -65,8 +82,8 @@ pub const IC_ROOT_PUB_KEY_PATH: &str = "nns_public_key.pem";
 ///
 /// For testing purposes, the bootstrapped nodes can be configured to have a
 /// node operator. The corresponding allowance is the number of configured
-/// initial nodes mulitplied by this value.
-pub const INITIAL_NODE_ALLOWANCE_MULTIPLIER: usize = 2;
+/// initial nodes multiplied by this value.
+pub const INITIAL_NODE_ALLOWANCE_MULTIPLIER: usize = 40;
 
 pub const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
 
@@ -75,6 +92,7 @@ pub struct TopologyConfig {
     subnets: BTreeMap<SubnetIndex, SubnetConfig>,
     subnet_ids: BTreeMap<SubnetIndex, SubnetId>,
     unassigned_nodes: BTreeMap<NodeIndex, NodeConfiguration>,
+    api_boundary_nodes: BTreeMap<NodeIndex, NodeConfiguration>,
 }
 
 impl TopologyConfig {
@@ -85,6 +103,54 @@ impl TopologyConfig {
 
     pub fn get_subnet(&self, subnet_index: SubnetIndex) -> Option<SubnetConfig> {
         self.subnets.get(&subnet_index).cloned()
+    }
+
+    /// Create a routing table with an allocation range for the creation of canisters with specified Canister IDs.
+    fn get_routing_table_with_specified_ids_allocation_range(
+        &self,
+    ) -> Result<RoutingTable, WellFormedError> {
+        let mut routing_table = RoutingTable::default();
+
+        // Calculates specified and subnet allocation ranges based on given start and end.
+        let calculate_ranges = |specified_ids_range_start: u64, specified_ids_range_end: u64| {
+            let specified_ids_range = CanisterIdRange {
+                start: CanisterId::from(specified_ids_range_start),
+                end: CanisterId::from(specified_ids_range_end),
+            };
+
+            let subnets_allocation_range_start =
+                ((specified_ids_range_end / CANISTER_IDS_PER_SUBNET) + 2) * CANISTER_IDS_PER_SUBNET;
+            let subnets_allocation_range_end =
+                subnets_allocation_range_start + CANISTER_IDS_PER_SUBNET - 1;
+
+            let subnets_allocation_range = CanisterIdRange {
+                start: CanisterId::from(subnets_allocation_range_start),
+                end: CanisterId::from(subnets_allocation_range_end),
+            };
+
+            (specified_ids_range, subnets_allocation_range)
+        };
+
+        // Set initial range values.
+        let mut start = 0;
+        let mut end = u64::MAX / 2;
+
+        for (i, &subnet_index) in self.subnets.keys().enumerate() {
+            let subnet_id = self.subnet_ids[&subnet_index];
+            let (specified_ids_range, subnets_allocation_range) = calculate_ranges(start, end);
+
+            // Insert both ranges for the first subnet, only specified range for others.
+            routing_table.insert(specified_ids_range, subnet_id)?;
+            if i == 0 {
+                routing_table.insert(subnets_allocation_range, subnet_id)?;
+            }
+
+            // Adjust start and end for the next subnet.
+            start = end + 1;
+            end = end.saturating_add(CANISTER_IDS_PER_SUBNET);
+        }
+
+        Ok(routing_table)
     }
 
     /// Based on the setting of `self.subnets` generate a suitable
@@ -104,20 +170,39 @@ impl TopologyConfig {
         routing_table
     }
 
+    pub fn insert_api_boundary_node(
+        &mut self,
+        idx: NodeIndex,
+        config: NodeConfiguration,
+    ) -> Result<()> {
+        if config.domain.is_none() {
+            return Err(anyhow!(
+                "Missing domain name: an API boundary node requires a domain name."
+            ));
+        }
+
+        self.api_boundary_nodes.insert(idx, config);
+        Ok(())
+    }
+
     pub fn insert_unassigned_node(&mut self, idx: NodeIndex, nc: NodeConfiguration) {
         self.unassigned_nodes.insert(idx, nc);
     }
 
-    /// Set all node providers to the principal `node_operator`.
+    /// Set node operator on nodes that don't already have one set.
     pub fn with_initial_node_operator(mut self, node_operator: PrincipalId) -> Self {
         for (_, sc) in self.subnets.iter_mut() {
             for (_, nc) in sc.membership.iter_mut() {
-                nc.node_operator_principal_id = Some(node_operator);
+                if nc.node_operator_principal_id.is_none() {
+                    nc.node_operator_principal_id = Some(node_operator);
+                }
             }
         }
 
         for (_, nc) in self.unassigned_nodes.iter_mut() {
-            nc.node_operator_principal_id = Some(node_operator);
+            if nc.node_operator_principal_id.is_none() {
+                nc.node_operator_principal_id = Some(node_operator);
+            }
         }
         self
     }
@@ -126,24 +211,9 @@ impl TopologyConfig {
         let assigned = self
             .subnets
             .iter()
-            .fold(0usize, |a, (_, x)| a + x.membership.len());
+            .fold(0_usize, |a, (_, x)| a + x.membership.len());
         let unassigned = self.unassigned_nodes.len();
         assigned + unassigned
-    }
-}
-
-#[derive(Clone)]
-pub struct NodeOperatorPublicKey {
-    pkey_wrapper: pkey::PKey<pkey::Public>,
-}
-
-// We need to implement a wrapper and the debug trait since PKey does not
-// implement Debug
-impl fmt::Debug for NodeOperatorPublicKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NodeOperatorPublicKey")
-            .field("pkey_wrapper", &self.pkey_wrapper.public_key_to_der())
-            .finish()
     }
 }
 
@@ -156,6 +226,7 @@ pub struct NodeOperatorEntry {
     dc_id: String,
     rewardable_nodes: BTreeMap<String, u32>,
     ipv6: Option<String>,
+    max_rewardable_nodes: BTreeMap<String, u32>,
 }
 
 // We must be able to inject a values of type NodeOperatorEntry into the
@@ -168,16 +239,18 @@ impl From<NodeOperatorEntry> for NodeOperatorRecord {
             node_provider_principal_id: item
                 .node_provider_principal_id
                 .map(|x| x.to_vec())
-                .unwrap_or_else(Vec::new),
-            dc_id: item.dc_id,
+                .unwrap_or_default(),
+            dc_id: item.dc_id.to_lowercase(),
             rewardable_nodes: item.rewardable_nodes,
             ipv6: item.ipv6,
+            max_rewardable_nodes: item.max_rewardable_nodes,
         }
     }
 }
 
 pub type InitializedTopology = BTreeMap<SubnetIndex, InitializedSubnet>;
 pub type UnassignedNodes = BTreeMap<NodeIndex, InitializedNode>;
+pub type ApiBoundaryNodes = BTreeMap<NodeIndex, InitializedNode>;
 
 #[derive(Clone, Debug)]
 pub struct IcConfig {
@@ -196,10 +269,15 @@ pub struct IcConfig {
     initial_release_package_url: Option<Url>,
     /// The hash of the initial release package.
     initial_release_package_sha256_hex: Option<String>,
+    /// The guest launch measurements of the initial release package.
+    guest_launch_measurements: Option<GuestLaunchMeasurements>,
     /// Should the tool generate the subnet records.
     generate_subnet_records: bool,
     /// The index of the NNS subnet, if any.
     nns_subnet_index: Option<u64>,
+
+    // Initial set of data center records to populate the registry with.
+    initial_dc_records: Vec<DataCenterRecord>,
 
     /// Vector of node operator records
     initial_registry_node_operator_entries: Vec<NodeOperatorEntry>,
@@ -216,18 +294,33 @@ pub struct IcConfig {
     ///
     /// A corresponding `NodeOperatorRecord` will be created with a
     /// `node_allowance` equal to the number of initially created nodes.
-    pub initial_node_operator: Option<PrincipalId>,
+    initial_node_operator: Option<PrincipalId>,
 
     /// The node provider principal id of the node operator record will be set
     /// to to this initial node provider id.
-    pub initial_node_provider: Option<PrincipalId>,
+    initial_node_provider: Option<PrincipalId>,
 
     /// The initial set of SSH public keys to populate the registry with, to
     /// give "readonly" access to all unassigned nodes.
-    pub ssh_readonly_access_to_unassigned_nodes: Vec<String>,
+    ssh_readonly_access_to_unassigned_nodes: Vec<String>,
+
+    /// Do not create an unassigned node record.
+    skip_unassigned_record: bool,
+
+    /// Whether or not to assign canister ID allocation range for specified IDs to subnet.
+    /// By default, it has the value 'false'.
+    use_specified_ids_allocation_range: bool,
+
+    /// Whitelisted firewall prefixes for initial registry state, separated by
+    /// commas.
+    whitelisted_prefixes: Option<String>,
+
+    /// Whitelisted ports for the firewall prefixes, separated by
+    /// commas. Port 8080 is always included.
+    whitelisted_ports: Option<String>,
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum InitializeError {
     #[error("io error: {source}")]
     IoError {
@@ -239,12 +332,6 @@ pub enum InitializeError {
     JsonError {
         #[from]
         source: serde_json::Error,
-    },
-
-    #[error("OpenSSL error: {source}")]
-    OpenSslError {
-        #[from]
-        source: openssl::error::ErrorStack,
     },
 
     #[error("principal did not parse: {source}")]
@@ -289,15 +376,30 @@ impl IcConfig {
         self.provisional_whitelist = Some(provisional_whitelist);
     }
 
+    /// Set whitelisted firewall prefixes for initial registry state, where
+    /// each are separated by commas.
+    pub fn set_whitelisted_prefixes(&mut self, whitelisted_prefixes: Option<String>) {
+        self.whitelisted_prefixes = whitelisted_prefixes;
+    }
+
+    pub fn set_whitelisted_ports(&mut self, whitelisted_ports: Option<String>) {
+        self.whitelisted_ports = whitelisted_ports;
+    }
+
+    pub fn skip_unassigned_record(&mut self) {
+        self.skip_unassigned_record = true;
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new<P: AsRef<Path>>(
         target_dir: P,
         topology_config: TopologyConfig,
-        replica_version_id: Option<ReplicaVersion>,
+        replica_version_id: ReplicaVersion,
         generate_subnet_records: bool,
         nns_subnet_index: Option<u64>,
         release_package_url: Option<Url>,
         release_package_sha256_hex: Option<String>,
+        guest_launch_measurements: Option<GuestLaunchMeasurements>,
         provisional_whitelist: Option<ProvisionalWhitelist>,
         initial_node_operator: Option<PrincipalId>,
         initial_node_provider: Option<PrincipalId>,
@@ -306,18 +408,60 @@ impl IcConfig {
         Self {
             target_dir: PathBuf::from(target_dir.as_ref()),
             topology_config,
-            initial_replica_version_id: replica_version_id.unwrap_or_default(),
+            skip_unassigned_record: false,
+            initial_replica_version_id: replica_version_id,
             generate_subnet_records,
             nns_subnet_index,
             initial_release_package_url: release_package_url,
             initial_release_package_sha256_hex: release_package_sha256_hex,
             initial_registry_node_operator_entries: Vec::new(),
+            initial_dc_records: Vec::new(),
+            guest_launch_measurements,
             provisional_whitelist,
             initial_mutations: Vec::new(),
             initial_node_operator,
             initial_node_provider,
             ssh_readonly_access_to_unassigned_nodes,
+            use_specified_ids_allocation_range: false,
+            whitelisted_prefixes: None,
+            whitelisted_ports: None,
         }
+    }
+
+    /// Add a data center record to the initial registry.
+    pub fn add_data_center_record(&mut self, mut dc_record: DataCenterRecord) {
+        dc_record.id = dc_record.id.to_lowercase();
+        self.initial_dc_records.push(dc_record);
+    }
+
+    /// Add a node operator record to the initial registry.
+    pub fn add_node_operator_record(
+        &mut self,
+        name: String,
+        principal_id: PrincipalId,
+        node_provider_principal_id: Option<PrincipalId>,
+        node_allowance: u64,
+        dc_id: String,
+        rewardable_nodes: BTreeMap<String, u32>,
+    ) {
+        self.initial_registry_node_operator_entries
+            .push(NodeOperatorEntry {
+                _name: name,
+                principal_id,
+                node_provider_principal_id,
+                node_allowance,
+                dc_id,
+                rewardable_nodes: rewardable_nodes.clone(),
+                ipv6: None,
+                max_rewardable_nodes: rewardable_nodes,
+            });
+    }
+
+    pub fn set_use_specified_ids_allocation_range(
+        &mut self,
+        use_specified_ids_allocation_range: bool,
+    ) {
+        self.use_specified_ids_allocation_range = use_specified_ids_allocation_range;
     }
 
     /// initialize the IC. Generates ...
@@ -326,9 +470,40 @@ impl IcConfig {
     /// * ... a registry file to be used as a static registry
     pub fn initialize(mut self) -> Result<InitializedIc, InitializeError> {
         let version = INITIAL_REGISTRY_VERSION;
+
+        let mut mutations = self.initial_mutations.clone();
+
+        if let Some(prefixes) = self.whitelisted_prefixes {
+            let ports = if let Some(ports) = self.whitelisted_ports {
+                ports
+                    .split(',')
+                    .map(|port| port.parse::<u32>().unwrap())
+                    .chain(std::iter::once(8080))
+                    .collect()
+            } else {
+                vec![8080]
+            };
+
+            mutations.extend(vec![insert(
+                make_firewall_rules_record_key(&FirewallRulesScope::Global),
+                FirewallRuleSet {
+                    entries: vec![FirewallRule {
+                        ipv4_prefixes: Vec::new(),
+                        ipv6_prefixes: prefixes.split(',').map(|v| v.to_string()).collect(),
+                        ports,
+                        action: FirewallAction::Allow as i32,
+                        comment: "Globally allow provided prefixes for testing".to_string(),
+                        user: None,
+                        direction: Some(FirewallRuleDirection::Inbound as i32),
+                    }],
+                }
+                .encode_to_vec(),
+            )]);
+        }
+
         let data_provider = ProtoRegistryDataProvider::new();
         data_provider
-            .add_mutations(self.initial_mutations.clone())
+            .add_mutations(mutations)
             .expect("Failed to add initial mutations");
         let mut initialized_topology = InitializedTopology::new();
 
@@ -353,6 +528,10 @@ impl IcConfig {
                     dc_id: "".into(),
                     rewardable_nodes: BTreeMap::new(),
                     ipv6: None,
+                    max_rewardable_nodes: BTreeMap::from([(
+                        "type3.1".into(),
+                        node_allowance.try_into().unwrap_or(u32::MAX),
+                    )]),
                 });
         }
 
@@ -379,12 +558,40 @@ impl IcConfig {
             unassigned_nodes.insert(*n_idx, init_node);
         }
 
+        let mut api_boundary_nodes = BTreeMap::new();
+        for (n_idx, nc) in self.topology_config.api_boundary_nodes.iter() {
+            // create all the registry entries for the node
+            let node_path = InitializedSubnet::build_node_path(self.target_dir.as_path(), *n_idx);
+            let init_node = nc.clone().initialize(node_path)?;
+            init_node.write_registry_entries(&data_provider, version)?;
+            api_boundary_nodes.insert(*n_idx, init_node.clone());
+
+            // create the API boundary node registry entry
+            let api_bn_record = ApiBoundaryNodeRecord {
+                version: self.initial_replica_version_id.to_string(),
+            };
+            write_registry_entry(
+                &data_provider,
+                self.target_dir.as_path(),
+                &make_api_boundary_node_record_key(init_node.node_id),
+                version,
+                api_bn_record,
+            );
+        }
+
         // Set the routing table after initializing the subnet ids
         let routing_table_record = if self.generate_subnet_records {
-            PbRoutingTable::from(
+            PbRoutingTable::from(if self.use_specified_ids_allocation_range {
                 self.topology_config
-                    .get_routing_table(self.nns_subnet_index.as_ref()),
-            )
+                    .get_routing_table_with_specified_ids_allocation_range()
+                    .expect(
+                        "Failed to create a routing table with an allocation range \
+                         for the creation of canisters with specified Canister IDs.",
+                    )
+            } else {
+                self.topology_config
+                    .get_routing_table(self.nns_subnet_index.as_ref())
+            })
         } else {
             PbRoutingTable::from(RoutingTable::default())
         };
@@ -432,21 +639,22 @@ impl IcConfig {
         write_registry_entry(
             &data_provider,
             self.target_dir.as_path(),
-            &make_routing_table_record_key(),
+            // The ranges can safely be written into a single entry, and Registry will shard the entry
+            // as needed on the next change.  This works up to the maximum size of a registry entry.
+            &make_canister_ranges_key(CanisterId::from_u64(0)),
             version,
-            routing_table_record,
+            routing_table_record.clone(),
         );
 
-        fn opturl_to_string(opt_url: Option<Url>) -> String {
-            opt_url
-                .map(|u| u.to_string())
-                .unwrap_or_else(|| "".to_string())
+        fn opturl_to_string_vec(opt_url: Option<Url>) -> Vec<String> {
+            opt_url.map(|u| vec![u.to_string()]).unwrap_or_default()
         }
 
         let initial_replica_version = self.initial_replica_version_id.to_string();
         let replica_version_record = ReplicaVersionRecord {
-            release_package_url: opturl_to_string(self.initial_release_package_url),
             release_package_sha256_hex: self.initial_release_package_sha256_hex.unwrap_or_default(),
+            release_package_urls: opturl_to_string_vec(self.initial_release_package_url),
+            guest_launch_measurements: self.guest_launch_measurements,
         };
 
         let blessed_replica_versions_record = BlessedReplicaVersions {
@@ -464,7 +672,7 @@ impl IcConfig {
         write_registry_entry(
             &data_provider,
             self.target_dir.as_path(),
-            &make_blessed_replica_version_key(),
+            &make_blessed_replica_versions_key(),
             version,
             blessed_replica_versions_record,
         );
@@ -489,6 +697,16 @@ impl IcConfig {
             PbProvisionalWhitelist::from(provisional_whitelist),
         );
 
+        for dc_record in self.initial_dc_records {
+            write_registry_entry(
+                &data_provider,
+                self.target_dir.as_path(),
+                make_data_center_record_key(dc_record.id.as_str()).as_ref(),
+                version,
+                dc_record,
+            );
+        }
+
         for node_operator_entry in self.initial_registry_node_operator_entries {
             let id = node_operator_entry.principal_id;
             let node_operator_record: NodeOperatorRecord = node_operator_entry.into();
@@ -506,13 +724,15 @@ impl IcConfig {
             ssh_readonly_access: self.ssh_readonly_access_to_unassigned_nodes,
         };
 
-        write_registry_entry(
-            &data_provider,
-            self.target_dir.as_path(),
-            &make_unassigned_nodes_config_record_key(),
-            version,
-            unassigned_nodes_config,
-        );
+        if !self.skip_unassigned_record {
+            write_registry_entry(
+                &data_provider,
+                self.target_dir.as_path(),
+                &make_unassigned_nodes_config_record_key(),
+                version,
+                unassigned_nodes_config,
+            );
+        }
 
         data_provider.write_to_file(InitializedIc::registry_path_(self.target_dir.as_path()));
 
@@ -528,7 +748,7 @@ impl IcConfig {
         let changelog = updates.iter().fold(
             Changelog::default(),
             |mut cl,
-             RegistryTransportRecord {
+             RegistryRecord {
                  version,
                  key,
                  value,
@@ -549,20 +769,11 @@ impl IcConfig {
             registry_store.store(v, cle)
         })?;
 
-        // Set certified time.
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Could not get system time");
-        let nanos = now.as_nanos() as u64;
-        registry_store
-            .update_certified_time(nanos)
-            .expect("Could not update certified time.");
-
         Ok(InitializedIc {
             target_dir: self.target_dir,
             initialized_topology,
             unassigned_nodes,
+            api_boundary_nodes,
         })
     }
 
@@ -594,13 +805,27 @@ impl IcConfig {
     /// >   provider_keys/
     /// >     np.der
     ///
-    /// > "dc_A": { "node_allowance" : 3,
+    /// > "dc_A": {
+    /// >   "node_allowance" : 3,
     /// >   "node_provider": "provider_keys/np.der",
     /// > }
     ///
     /// *Note* that in case of the provider key, the filename *must* include the
     /// extension. If the path is not absolute, the directory containing the
     /// meta.json is used as a basis.
+    ///
+    /// Extra data center information can be added to the meta.json file, such as
+    /// region, owner, and gps coordinates. The gps coordinates should be in the
+    /// format of a 2-element array, where the first element is the latitude
+    /// and the second element is the longitude. For example:
+    ///
+    /// > "dc_A": {
+    /// >   "node_allowance" : 3,
+    /// >   "node_provider": "provider_keys/np.der",
+    /// >   "region": "us-west-1",
+    /// >   "owner": "example_owner",
+    /// >   "gps": [37.7749, -122.4194]
+    /// > }
     pub fn load_registry_node_operator_records_from_dir(
         mut self,
         der_dir: &Path,
@@ -632,6 +857,8 @@ impl IcConfig {
         //and push them into the node_operator_entries vector. We don't use a map
         // because there are too many '?' in there.
         let mut node_operator_entries = Vec::new();
+        let mut data_center_entries = Vec::new();
+
         for fname in der_files {
             let name = fname
                 .file_name()
@@ -692,25 +919,78 @@ impl IcConfig {
                     }),
                 }?;
                 let provider_buf: Vec<u8> = fs::read(provider_path.as_path())?;
-                let _ = pkey::PKey::public_key_from_der(&provider_buf)?;
+
+                // Sanity check that public key is in DER format.
+                use der::Decode;
+                spki::SubjectPublicKeyInfoOwned::from_der(&provider_buf).map_err(|e| {
+                    InitializeError::IoError {
+                        source: io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!(
+                                "input is not a DER-encoded X.509 SubjectPublicKeyInfo (SPKI): {e}."
+                            ),
+                        ),
+                    }
+                })?;
+
                 Some(PrincipalId::new_self_authenticating(&provider_buf))
             } else {
                 None
             };
+
+            let dcr = DataCenterRecord {
+                id: name.to_string(),
+                region: match obj["region"].as_str() {
+                    Some(region) => region.to_string(),
+                    None => String::from(""),
+                },
+                owner: match obj["owner"].as_str() {
+                    Some(owner) => owner.to_string(),
+                    None => String::from(""),
+                },
+                gps: match obj["gps"].as_array() {
+                    Some(gps) => {
+                        if gps.len() != 2 {
+                            return Err(InitializeError::NotString {
+                                key: "gps".to_string(),
+                                value: obj["gps"].to_string(),
+                            });
+                        }
+                        let lat = gps[0].as_f64().ok_or_else(|| InitializeError::NotString {
+                            key: "gps".to_string(),
+                            value: obj["gps"].to_string(),
+                        })?;
+                        let lon = gps[1].as_f64().ok_or_else(|| InitializeError::NotString {
+                            key: "gps".to_string(),
+                            value: obj["gps"].to_string(),
+                        })?;
+                        Some(Gps {
+                            latitude: lat as f32,
+                            longitude: lon as f32,
+                        })
+                    }
+                    None => None,
+                },
+            };
+
+            data_center_entries.push(dcr);
 
             node_operator_entries.push(NodeOperatorEntry {
                 _name: String::from(name),
                 principal_id: PrincipalId::new_self_authenticating(&operator_buf),
                 node_provider_principal_id,
                 node_allowance,
-                dc_id: "".into(),
+                dc_id: name.into(),
                 rewardable_nodes: BTreeMap::new(),
                 ipv6: None,
+                max_rewardable_nodes: BTreeMap::new(),
             });
         }
 
         self.initial_registry_node_operator_entries
             .extend(node_operator_entries);
+
+        self.initial_dc_records.extend(data_center_entries);
         Ok(self)
     }
 }
@@ -719,6 +999,7 @@ pub struct InitializedIc {
     pub target_dir: PathBuf,
     pub initialized_topology: InitializedTopology,
     pub unassigned_nodes: UnassignedNodes,
+    pub api_boundary_nodes: ApiBoundaryNodes,
 }
 
 impl InitializedIc {

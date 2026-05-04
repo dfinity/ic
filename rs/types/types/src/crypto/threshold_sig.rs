@@ -1,10 +1,12 @@
 //! Defines threshold signature types.
-use crate::crypto::threshold_sig::ni_dkg::NiDkgTranscript;
 use crate::crypto::AlgorithmId;
+use crate::crypto::threshold_sig::ni_dkg::{NiDkgTranscript, ThresholdSigPublicKeyError};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
-use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
-pub use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::ThresholdSigPublicKeyBytesConversionError;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+pub use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::ThresholdSigPublicKeyBytesConversionError;
+use ic_crypto_internal_types::sign::threshold_sig::public_key::{
+    CspNiDkgTranscriptToCspThresholdSigPublicKeyConversionError, bls12_381,
+};
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use serde::{Deserialize, Serialize};
@@ -17,7 +19,7 @@ pub mod ni_dkg;
 mod tests;
 
 /// A threshold signature public key.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct ThresholdSigPublicKey {
     internal: CspThresholdSigPublicKey,
 }
@@ -42,11 +44,25 @@ impl From<ThresholdSigPublicKey> for CspThresholdSigPublicKey {
     }
 }
 
-impl From<&NiDkgTranscript> for ThresholdSigPublicKey {
-    fn from(ni_dkg_transcript: &NiDkgTranscript) -> Self {
+impl From<CspNiDkgTranscriptToCspThresholdSigPublicKeyConversionError>
+    for ThresholdSigPublicKeyError
+{
+    fn from(err: CspNiDkgTranscriptToCspThresholdSigPublicKeyConversionError) -> Self {
+        match err {
+            CspNiDkgTranscriptToCspThresholdSigPublicKeyConversionError::CoefficientsEmpty => {
+                ThresholdSigPublicKeyError::CoefficientsEmpty
+            }
+        }
+    }
+}
+
+impl TryFrom<&NiDkgTranscript> for ThresholdSigPublicKey {
+    type Error = ThresholdSigPublicKeyError;
+
+    fn try_from(ni_dkg_transcript: &NiDkgTranscript) -> Result<Self, Self::Error> {
         let csp_ni_dkg_transcript = CspNiDkgTranscript::from(ni_dkg_transcript);
-        let csp_threshold_sig_pubkey = CspThresholdSigPublicKey::from(&csp_ni_dkg_transcript);
-        ThresholdSigPublicKey::from(csp_threshold_sig_pubkey)
+        let csp_threshold_sig_pubkey = CspThresholdSigPublicKey::try_from(&csp_ni_dkg_transcript)?;
+        Ok(ThresholdSigPublicKey::from(csp_threshold_sig_pubkey))
     }
 }
 impl From<bls12_381::PublicKeyBytes> for ThresholdSigPublicKey {
@@ -101,6 +117,62 @@ impl From<ThresholdSigPublicKey> for PublicKeyProto {
             key_value: pubkey_bytes.0.to_vec(),
             version: 0,
             proof_data: None,
+            timestamp: None,
         }
     }
+}
+
+/// The Internet Computer's root of trust.
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+pub struct IcRootOfTrust(ThresholdSigPublicKey);
+
+impl AsRef<IcRootOfTrust> for IcRootOfTrust {
+    fn as_ref(&self) -> &IcRootOfTrust {
+        self
+    }
+}
+
+impl AsRef<ThresholdSigPublicKey> for IcRootOfTrust {
+    fn as_ref(&self) -> &ThresholdSigPublicKey {
+        &self.0
+    }
+}
+
+impl From<ThresholdSigPublicKey> for IcRootOfTrust {
+    fn from(public_key: ThresholdSigPublicKey) -> Self {
+        IcRootOfTrust(public_key)
+    }
+}
+
+impl From<[u8; 96]> for IcRootOfTrust {
+    fn from(value: [u8; 96]) -> Self {
+        IcRootOfTrust::from(ThresholdSigPublicKey::from(bls12_381::PublicKeyBytes(
+            value,
+        )))
+    }
+}
+
+impl From<IcRootOfTrust> for PublicKeyProto {
+    fn from(value: IcRootOfTrust) -> Self {
+        PublicKeyProto::from(value.0)
+    }
+}
+
+/// Retrieves the Internet Computer's root of trust.
+///
+/// # Security
+/// The root of trust is used to verify canister signatures of a given subnet.
+/// Providing the wrong root of trust could lead to accepting signatures that
+/// should not have been accepted and would be a major security bug.
+pub trait RootOfTrustProvider {
+    type Error;
+
+    /// Provided in test environments in addition to `Self::root_of_trust`
+    /// so that canister signatures produced by the ICP mainnet
+    /// are valid in the test environments.
+    fn additional_root_of_trust(&self) -> Option<IcRootOfTrust> {
+        None
+    }
+
+    fn root_of_trust(&self) -> Result<IcRootOfTrust, Self::Error>;
 }

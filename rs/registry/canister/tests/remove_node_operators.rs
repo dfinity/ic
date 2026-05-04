@@ -3,28 +3,28 @@ use candid::Encode;
 use dfn_candid::candid_one;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::invariant_compliant_mutation_as_atomic_req,
 };
-use ic_protobuf::registry::node_operator::v1::RemoveNodeOperatorsPayload;
-use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+use registry_canister::{
+    init::RegistryCanisterInitPayloadBuilder,
+    mutations::do_remove_node_operators::RemoveNodeOperatorsPayload,
+};
 
 #[test]
 fn test_the_anonymous_user_cannot_remove_node_operators() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let mut registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;
 
-        let payload = RemoveNodeOperatorsPayload {
-            node_operators_to_remove: vec![],
-        };
+        let payload = RemoveNodeOperatorsPayload::new(vec![]);
 
         // The anonymous end-user tries to remove node operators, bypassing
         // the Governance canister. This should be rejected.
@@ -54,7 +54,7 @@ fn test_the_anonymous_user_cannot_remove_node_operators() {
 
 #[test]
 fn test_a_canister_other_than_the_governance_canister_cannot_remove_node_operators() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // An attacker got a canister that is trying to pass for the Governance
         // canister...
         let attacker_canister = set_up_universal_canister(&runtime).await;
@@ -67,14 +67,12 @@ fn test_a_canister_other_than_the_governance_canister_cannot_remove_node_operato
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;
 
-        let payload = RemoveNodeOperatorsPayload {
-            node_operators_to_remove: vec![],
-        };
+        let payload = RemoveNodeOperatorsPayload::new(vec![]);
 
         // The attacker canister tries to remove node operators, pretending
         // to be the Governance canister. This should have no effect.

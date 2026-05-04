@@ -1,0 +1,22 @@
+{
+    "version": 1,
+    "canisters": {
+      "rate_limit_canister": {
+        "type": "rust",
+        "package": "rate_limits",
+        "candid": "canister/interface.did",
+        "gzip": true
+      }
+    },
+    "defaults": {
+      "build": {
+        "packtool": ""
+      }
+    },
+    "networks": {
+      "local": {
+        "bind": "127.0.0.1:8080",
+        "type": "ephemeral"
+      }
+    }
+  }

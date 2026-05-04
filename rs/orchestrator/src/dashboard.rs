@@ -1,14 +1,18 @@
 use crate::{
-    catch_up_package_provider::CatchUpPackageProvider, registry_helper::RegistryHelper,
-    replica_process::ReplicaProcess, ssh_access_manager::SshAccessParameters,
+    catch_up_package_provider::LocalCUPReader, orchestrator::SubnetAssignment,
+    process_manager::ProcessManager, registry_helper::RegistryHelper,
+    ssh_access_manager::SshAccessParameters, upgrade::ReplicaProcess,
 };
-use async_trait::async_trait;
 pub use ic_dashboard::Dashboard;
-use ic_logger::{info, warn, ReplicaLogger};
-use ic_types::{consensus::HasHeight, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
-use std::process::Command;
-use std::sync::{Arc, Mutex};
-use tokio::sync::RwLock;
+use ic_logger::{ReplicaLogger, info, warn};
+use ic_types::{
+    NodeId, RegistryVersion, ReplicaVersion, Time, consensus::HasHeight,
+    hostos_version::HostosVersion,
+};
+use std::{
+    process::Command,
+    sync::{Arc, Mutex, RwLock},
+};
 
 const ORCHESTRATOR_DASHBOARD_PORT: u16 = 7070;
 
@@ -18,30 +22,35 @@ pub(crate) struct OrchestratorDashboard {
     node_id: NodeId,
     last_applied_ssh_parameters: Arc<RwLock<SshAccessParameters>>,
     last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
-    replica_process: Arc<Mutex<ReplicaProcess>>,
-    subnet_id: Arc<RwLock<Option<SubnetId>>>,
+    last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
+    last_poll_certified_time: Arc<RwLock<Time>>,
+    replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+    subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
-    cup_provider: Arc<CatchUpPackageProvider>,
+    hostos_version: Option<HostosVersion>,
+    local_cup_reader: LocalCUPReader,
     logger: ReplicaLogger,
 }
 
-#[async_trait]
 impl Dashboard for OrchestratorDashboard {
     fn port() -> u16 {
         ORCHESTRATOR_DASHBOARD_PORT
     }
 
-    async fn build_response(&self) -> String {
+    fn build_response(&self) -> String {
         format!(
             "node id: {}\n\
              DC id: {}\n\
              last registry version: {}\n\
+             last poll's certified time: {}\n\
              subnet id: {}\n\
              replica process id: {}\n\
              replica version: {}\n\
+             host os version: {}\n\
              scheduled upgrade: {}\n\
              {}\n\
              firewall config registry version: {}\n\
+             ipv4 config registry version: {}\n\
              {}\n\
              readonly keys: {}\n\
              backup keys: {}\n\
@@ -49,13 +58,19 @@ impl Dashboard for OrchestratorDashboard {
             self.node_id,
             self.registry.dc_id().unwrap_or_default(),
             self.registry.get_latest_version().get(),
-            self.get_subnet_id().await,
+            self.get_last_poll_certified_time(),
+            self.get_subnet_id(),
             self.get_pid(),
             self.replica_version,
-            self.get_scheduled_upgrade().await,
+            self.hostos_version
+                .as_ref()
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "None".to_string()),
+            self.get_scheduled_upgrade(),
             self.get_local_cup_info(),
-            *self.last_applied_firewall_version.read().await,
-            self.display_last_applied_ssh_parameters().await,
+            *self.last_applied_firewall_version.read().unwrap(),
+            *self.last_applied_ipv4_config_version.read().unwrap(),
+            self.display_last_applied_ssh_parameters(),
             self.get_authorized_keys("readonly"),
             self.get_authorized_keys("backup"),
             self.get_authorized_keys("admin"),
@@ -73,10 +88,13 @@ impl OrchestratorDashboard {
         node_id: NodeId,
         last_applied_ssh_parameters: Arc<RwLock<SshAccessParameters>>,
         last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
-        replica_process: Arc<Mutex<ReplicaProcess>>,
-        subnet_id: Arc<RwLock<Option<SubnetId>>>,
+        last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
+        last_poll_certified_time: Arc<RwLock<Time>>,
+        replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+        subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
-        cup_provider: Arc<CatchUpPackageProvider>,
+        hostos_version: Option<HostosVersion>,
+        local_cup_reader: LocalCUPReader,
         logger: ReplicaLogger,
     ) -> Self {
         Self {
@@ -84,24 +102,27 @@ impl OrchestratorDashboard {
             node_id,
             last_applied_ssh_parameters,
             last_applied_firewall_version,
+            last_applied_ipv4_config_version,
+            last_poll_certified_time,
             replica_process,
-            subnet_id,
+            subnet_assignment,
             replica_version,
-            cup_provider,
+            hostos_version,
+            local_cup_reader,
             logger,
         }
     }
 
     fn get_authorized_keys(&self, account: &str) -> String {
         try_to_get_authorized_keys(account).unwrap_or_else(|e| {
-            let error = format!("Failed to read the keys of the accout {}: {}", account, e);
+            let error = format!("Failed to read the keys of the account {account}: {e}");
             warn!(self.logger, "{}", error);
             error
         })
     }
 
-    async fn display_last_applied_ssh_parameters(&self) -> String {
-        let parameters = self.last_applied_ssh_parameters.read().await;
+    fn display_last_applied_ssh_parameters(&self) -> String {
+        let parameters = self.last_applied_ssh_parameters.read().unwrap();
         let subnet = match parameters.subnet_id {
             Some(id) => id.to_string(),
             None => "Unassigned".to_string(),
@@ -120,17 +141,19 @@ impl OrchestratorDashboard {
         }
     }
 
-    async fn get_subnet_id(&self) -> String {
-        match *self.subnet_id.read().await {
-            Some(id) => id.to_string(),
-            None => "None".to_string(),
+    fn get_subnet_id(&self) -> String {
+        match *self.subnet_assignment.read().unwrap() {
+            SubnetAssignment::Assigned(id) => id.to_string(),
+            SubnetAssignment::Unassigned => "Unassigned".to_string(),
+            SubnetAssignment::Unknown => "Subnet not known yet".to_string(),
         }
     }
 
-    async fn get_scheduled_upgrade(&self) -> String {
-        let subnet_id = match *self.subnet_id.read().await {
-            Some(id) => id,
-            None => return "None".to_string(),
+    fn get_scheduled_upgrade(&self) -> String {
+        let subnet_id = match *self.subnet_assignment.read().unwrap() {
+            SubnetAssignment::Assigned(id) => id,
+            SubnetAssignment::Unassigned => return "None".to_string(),
+            SubnetAssignment::Unknown => return "Subnet not known yet".to_string(),
         };
 
         let expected_replica_version = match self.registry.get_expected_replica_version(subnet_id) {
@@ -146,15 +169,32 @@ impl OrchestratorDashboard {
     }
 
     fn get_local_cup_info(&self) -> String {
-        let (height, signed) = match self.cup_provider.get_local_cup() {
-            None => (String::from("None"), String::from("None")),
+        let (height, signed, hash, timestamp) = match self.local_cup_reader.get_local_cup() {
+            None => (
+                String::from("None"),
+                String::from("None"),
+                String::from("None"),
+                String::from("None"),
+            ),
             Some(cup) => {
-                let height = cup.cup.content.height().to_string();
-                let signed = !cup.cup.signature.signature.get().0.is_empty();
-                (height, signed.to_string())
+                let height = cup.height().to_string();
+                let signed = cup.is_signed();
+                let hash = cup.content.state_hash.get().0;
+
+                let timestamp = cup.content.block.get_value().context.time;
+                let timestamp_str = timestamp_to_string(timestamp);
+
+                (height, signed.to_string(), hex::encode(hash), timestamp_str)
             }
         };
-        format!("cup height: {}\ncup signed: {}", height, signed)
+        format!(
+            "cup height: {height}\ncup signed: {signed}\ncup state hash: {hash}\ncup timestamp: {timestamp}"
+        )
+    }
+
+    fn get_last_poll_certified_time(&self) -> String {
+        let time = *self.last_poll_certified_time.read().unwrap();
+        timestamp_to_string(time)
     }
 }
 
@@ -168,9 +208,14 @@ fn try_to_get_authorized_keys(account: &str) -> Result<String, String> {
     let output = Command::new("/opt/ic/bin/read-ssh-keys.sh")
         .arg(account)
         .output()
-        .map_err(|e| format!("Failed to execute \"read-ssh-keys.sh\" : {}", e))?;
+        .map_err(|e| format!("Failed to execute \"read-ssh-keys.sh\" : {e}"))?;
     match output.status.success() {
         true => Ok(stringify(&output.stdout)?),
         false => Err(stringify(&output.stderr)?),
     }
+}
+
+fn timestamp_to_string(time: Time) -> String {
+    // UNIX timestamp in nanoseconds followed by the human-readable representation
+    format!("{} ({})", time.as_nanos_since_unix_epoch(), time)
 }

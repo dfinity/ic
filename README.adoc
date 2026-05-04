@@ -42,13 +42,13 @@ Engineering
 
 
 
-=== Network Dashboards from the community
+=== ICP Dashboard
 
 You can observe the state of the Internet Computer's infrastructure (Nodes, data centers, subnets) and traditional blockchain metrics (blocks/second, Token Supply, etc)
 
-- https://dashboard.internetcomputer.org Network dashboard by the Internet Computer Association
-- https://www.dfinityexplorer.org/# by https://github.com/dylancm4[Dylan Miller]
+- https://dashboard.internetcomputer.org
 
+=== The community
 
 To interact with the community, check out the developer forum: https://forum.dfinity.org/
 
@@ -68,70 +68,80 @@ The https://dfinity.org/[DFINITY Foundation] is a Swiss not-for-profit organizat
 
 - *If you are a blockchain enthusiast*, and your intent is to understand the protocol (not an implementation), you may be better off going to the https://medium.com/dfinity/achieving-consensus-on-the-internet-computer-ee9fbfbafcbc[Consensus protocol] and https://sdk.dfinity.org/docs/interface-spec/index.html[IC Interface Specification]. This content (by the DFINITY research team) is tailor made for understanding the protocol and design.
 
-- *If you are a blockchain miner*, you should know that the Internet Computer Protocol (while it is a blockchain) does not have the traditional mining or validating you may come to expect from blockchain projects. The Internet Computer Protocol is designed using new and novel cryptography that does not require "mining"... but it does require independent node providers, which may include yourself. You can of course check out the source code in this repo, but a better resource may be this: https://support.internetcomputer.org/hc/en-us/sections/4405489337748-Node-Provider[Being a node provider on the Internet Computer]
+- *If you are a blockchain miner*, you should know that the Internet Computer Protocol (while it is a blockchain) does not have the traditional mining or validating you may come to expect from blockchain projects. The Internet Computer Protocol is designed using new and novel cryptography that does not require "mining"... but it does require independent node providers, which may include yourself. You can of course check out the source code in this repo, but a better resource may be this: https://wiki.internetcomputer.org/wiki/Internet_Computer_wiki#For_Node_Providers[Internet Computer Wiki - For Node Providers]
 
 - *If you are an engineer looking to build a new SDK, oracle, wallet or any part that enables and improves the Internet Computer ecosystem*, you should take a look at the https://sdk.dfinity.org/docs/interface-spec/index.html[Interface Specification] which is for low-level interaction with the Internet Computer.
 
 - *If you are a systems engineer, security engineer or cryptographer*, and your intent is to see what is going on under the hood by digging through source and building this locally, *_then you are in the right place_*.
 
-== Prerequisites
-*For all environments*
-
-- https://www.docker.com/[Docker].
-- Git
-
-*Please note: The default memory assigned to the docker image may be less (2GB by default on MacOS). We recommend this should be increased to 10 GB avoid build failures within the Docker container.*
-
-ifdef::env-github[]
-++++
-<p align="center">
-  <img width="400" src="docker_memory.png">
-</p>
-++++
-endif::[]
-
 == Building the code
 
-To see what dependencies the Docker image pulls in, check https://github.com/dfinity/ic/blob/master/gitlab-ci/docker/Dockerfile[Dockerfile].
+*System requirements*
 
+- x86-64 based system (minimum: 16 GB MEM/SWAP, 100 GB available disk space)
+- Ubuntu 22.04 or newer
+- https://podman.io/getting-started/installation[Podman]
+
+For detailed information on building IC-OS images, please refer to the link:ic-os/README.adoc[IC-OS README]
+
+Alternatively, to build all IC-OS images using a simple, containerized environment, run:
+
+  $ ./ci/container/build-ic.sh -i
+
+To build only the binaries and canisters, use the `-b` and/or `-c` flags:
+
+  $ ./ci/container/build-ic.sh -b -c
+
+All built artifacts will be located in the top-level artifacts/ directory.
+
+== Verifying Releases
+
+=== Overview
+
+The Internet Computer provides a robust system for verifying the build reproducibility of IC-OS update images. Each https://dashboard.internetcomputer.org/releases[release proposal] includes detailed verification instructions.
+
+=== Prerequisites
+
+* Ubuntu 22.04 or higher
+* Python 3.x
+* curl (`sudo apt install curl`)
+* About 100 GB of free disk space in `$HOME` (or another volume, specifed via
+  option `--cache-dir`)
+
+=== Quick Start
+
+To verify an IC OS Version Election proposal:
+
+IMPORTANT: Always use versioned repro-check URLs (replace `{COMMIT_ID}` with the actual commit hash) instead of `master` to ensure compatibility between the repro-check script and the build system for that specific commit.
+
+[source,bash]
 ----
-$ ./gitlab-ci/tools/docker-build-ic
+# Verify by proposal number
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/{COMMIT_ID}/ci/scripts/repro-check | \
+    python3 - -p <proposal_number>
+
+# Verify by git commit
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/{COMMIT_ID}/ci/scripts/repro-check | \
+    python3 - -c {COMMIT_ID}
 ----
 
-This builds:
+=== Component-Specific Verification
 
-* Native binaries (replica, orchestrator, et al -- for the full list, see https://github.com/dfinity/ic/blob/master/gitlab-ci/src/job_scripts/lib/cargo-build-release-linux-native.sh)
-* Canisters
-* The ICOS disk image
+You can verify specific components individually:
 
-In order to build only the binaries or the canisters, add the following flag on the `build-ic` script:
+[source,bash]
 ----
-$ ./gitlab-ci/tools/docker-build-ic --artifacts="binaries,canisters"
-----
-Specify the disk or canisters directory by using respectively `--disk-dir="dir"` and `--canisters-dir="dir"`. 
-Find more information by using `-h` or `--help`.
+# Verify GuestOS only
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/{COMMIT_ID}/ci/scripts/repro-check | \
+    python3 - -c {COMMIT_ID} --guestos
 
-All the built artifacts can be found in the top-level `artifacts/` directory.
+# Verify HostOS only
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/{COMMIT_ID}/ci/scripts/repro-check | \
+    python3 - -c {COMMIT_ID} --hostos
 
-== Verifying releases
-
-https://dashboard.internetcomputer.org/releases[Each release proposal] contains the information in the payload that allows to verify the disk image: the download url of the disk image, git revision that the image was built from, the SHA256 checksum of the image.
-This information allows anyone to verify this release:
-
-* checkout the source tree at specific git revision
-* build the ICOS disk image using instructions above
-* compare the SHA256 checksum of resulting image with the one published in the release proposal payload.
-
-The https://github.com/dfinity/ic/blob/master/gitlab-ci/tools/repro-check.sh[repro-check.sh] script can be used to do it conveniently.
-
-To verify specific git revision:
-----
-$ ./gitlab-ci/tool/repro-check.sh -c <git revision>
-----
-
-To verify specific proposal:
-----
-$ ./gitlab-ci/tool/repro-check.sh -p <proposal id>
+# Verify SetupOS only
+curl -fsSL https://raw.githubusercontent.com/dfinity/ic/{COMMIT_ID}/ci/scripts/repro-check | \
+    python3 - -c {COMMIT_ID} --setupos
 ----
 
 == Contributing
@@ -153,8 +163,23 @@ and verify that it derives from the same binary image that is referenced in
 upgrade proposals published via the Network Nervous System (NNS).
 
 All code of the Internet Computer is be licensed under the Apache 2.0 license, except for a
-few components licensed under the http://dfinity.org/licenses/IC-1.0[Internet Computer Community
-Source License] and http://dfinity.org/licenses/IC-shared-1.0[Internet Computer Shared Community Source License] which are more restrictive than the Apache 2.0 license to protect the Intellectual Property (IP) of the DFINITY Foundation.
+few components licensed under the link:licenses/IC-1.0.txt[Internet Computer Community Source License] and link:licenses/IC-shared-1.0.txt[Internet Computer Shared Community Source License] which are more restrictive than the Apache 2.0 license to protect the Intellectual Property (IP) of the DFINITY Foundation.
 
+=== Submitting New Contributions
 
-While we adapt our development processes and security reviews for a world of developing with our code in the open, we are not accepting any pull requests at this time. For now, please join our developer community at https://forum.dfinity.org. If you discover any bugs and vulnerabilities, please follow the procedure at https://dfinity.org/vulnerability-disclosure-program/. 
+We will soon be accepting external contributions (date TBD). Please follow these guidelines link:CONTRIBUTING.md[CONTRIBUTING.md]
+
+=== Bug Reports
+
+If you discover any bugs and vulnerabilities, please follow the procedure outlined in link:SECURITY.md[SECURITY.md]
+
+=== Rust Dependency Policy
+
+To make the mono repository a success, there needs to be some basic rules to make development faster.
+
+* When adding a new external crate dependency please make sure it is necessary. Check that
+** There isn't another already imported crate with similar functionality.
+** The crate is well maintained and comes from reputable authors.
+* When bumping the semantic version of an external crate, please do it for the whole repository. Avoid importing the same crate with multiple versions.
+* Keep the rust-lang up-to-date for Bazel and Cargo.
+* Use Cargo workspace for inferring external crate versions by adding the new crate to the section `[workspace.dependencies]` of the workspace `Cargo.toml` and adding `new-crate = { workspace = true }` to each package-specific `Cargo.toml` that needs it.

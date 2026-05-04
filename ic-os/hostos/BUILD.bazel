@@ -1,0 +1,47 @@
+load("//toolchains/sysimage:toolchain.bzl", "ext4_image")
+
+package(default_visibility = ["__subpackages__"])
+
+exports_files([
+    "partitions.csv",
+    "volumes.csv",
+    "grub.cfg",
+])
+
+# Aliases to allow installing the same file in multiple locations
+alias(
+    name = "console-override-dev",
+    actual = "//ic-os/components:misc/console-getty@/hostos-dev/override.conf",
+)
+
+alias(
+    name = "console-override-dev-alias",
+    actual = "//ic-os/components:misc/console-getty@/hostos-dev/override.conf",
+)
+
+alias(
+    name = "console-override-prod",
+    actual = "//ic-os/components:misc/console-getty@/hostos-prod/override.conf",
+)
+
+alias(
+    name = "console-override-prod-alias",
+    actual = "//ic-os/components:misc/console-getty@/hostos-prod/override.conf",
+)
+
+ext4_image(
+    name = "partition-config.tzst",
+    partition_size = "100M",
+    tags = ["manual"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+)
+
+# All host-os targets are named the same, just stay in different submodules.
+# To build or run specific target:
+#
+# bazel run   //ic-os/hostos/envs/prod:upload_disk-img           [--s3_endpoint=<internal endpoint address>]
+# bazel build //ic-os/hostos/envs/dev/...
+#
+# check //ic-os/defs.bzl for the full list of targets.

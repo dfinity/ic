@@ -1,0 +1,10 @@
+[package]
+name = "ic-nervous-system-time-helpers"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+
+[dependencies]
+ic-cdk = { workspace = true }

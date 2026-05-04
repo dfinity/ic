@@ -4,14 +4,18 @@ use std::{
 };
 
 use crate::invariants::common::{
-    get_subnet_ids_from_snapshot, InvariantCheckError, RegistrySnapshot,
+    InvariantCheckError, RegistrySnapshot, get_node_record_from_snapshot,
+    get_subnet_ids_from_snapshot,
 };
 
-use ic_base_types::SubnetId;
-use ic_base_types::{NodeId, PrincipalId};
-use ic_nns_common::registry::{decode_or_panic, MAX_NUM_SSH_KEYS};
-use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
-use ic_registry_keys::{make_node_record_key, make_subnet_record_key, SUBNET_RECORD_KEY_PREFIX};
+use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
+use ic_protobuf::registry::{
+    node::v1::{NodeRecord, NodeRewardType},
+    subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord, SubnetType},
+};
+use ic_registry_keys::{SUBNET_RECORD_KEY_PREFIX, make_subnet_record_key};
+use prost::Message;
 
 /// Subnet invariants hold iff:
 ///    * Each SSH key access list does not contain more than 50 keys
@@ -20,6 +24,13 @@ use ic_registry_keys::{make_node_record_key, make_subnet_record_key, SUBNET_RECO
 ///    * Each subnet contains at least one node
 ///    * There is at least one system subnet
 ///    * Each subnet in the registry occurs in the subnet list and vice versa
+///    * Only application subnets (when rented) and cloud engines can have a "free" cycles cost schedule
+///    * Cloud engines must:
+///         * have a "free" cycles cost schedule
+///         * consist of nodes with reward type 4
+///    * Conversely, only cloud engines can have nodes with reward type 4
+///    * SEV-enabled subnets consist of SEV-enabled nodes only (i.e. nodes with a chip ID in the node record)
+///    * Only rented subnets can have subnet admins set to a non-empty list
 pub(crate) fn check_subnet_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
@@ -32,12 +43,10 @@ pub(crate) fn check_subnet_invariants(
         let subnet_record = subnet_records_map
             .remove(&make_subnet_record_key(subnet_id).into_bytes())
             .unwrap_or_else(|| {
-                panic!(
-                    "Subnet {:} is in subnet list but no record exists",
-                    subnet_id
-                )
+                panic!("Subnet {subnet_id:} is in subnet list but no record exists")
             });
 
+        // Each SSH key access list does not contain more than 50 keys
         if subnet_record.ssh_readonly_access.len() > MAX_NUM_SSH_KEYS
             || subnet_record.ssh_backup_access.len() > MAX_NUM_SSH_KEYS
         {
@@ -54,54 +63,100 @@ pub(crate) fn check_subnet_invariants(
             });
         }
 
-        let num_nodes = subnet_record.membership.len();
-        let mut subnet_members: HashSet<NodeId> = subnet_record
+        let subnet_members: HashSet<NodeId> = subnet_record
             .membership
             .iter()
             .map(|v| NodeId::from(PrincipalId::try_from(v).unwrap()))
             .collect();
 
         // Subnet membership must contain registered nodes only
-        subnet_members.retain(|&k| {
-            let node_key = make_node_record_key(k);
-            let node_exists = snapshot.contains_key(node_key.as_bytes());
-            if !node_exists {
-                panic!("Node {} does not exist in Subnet {}", k, subnet_id);
-            }
-            node_exists
-        });
+        let node_records = subnet_members
+            .iter()
+            .map(|&node_id| {
+                get_node_record_from_snapshot(node_id, snapshot).and_then(|opt| {
+                    opt.ok_or_else(|| InvariantCheckError {
+                        msg: format!("Node {node_id} does not exist in the registry"),
+                        source: None,
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         // Each node appears at most once in a subnet membership
+        let num_nodes = subnet_record.membership.len();
         if num_nodes > subnet_members.len() {
-            panic!("Repeated nodes in subnet {:}", subnet_id);
+            panic!("Repeated nodes in subnet {subnet_id:}");
         }
+
         // Each subnet contains at least one node
         if subnet_members.is_empty() {
-            panic!("No node in subnet {:}", subnet_id);
+            panic!("No node in subnet {subnet_id:}");
         }
+
+        // Each node appears at most once in at most one subnet membership
         let intersection = accumulated_nodes_in_subnets
             .intersection(&subnet_members)
             .collect::<HashSet<_>>();
-        // Each node appears at most once in at most one subnet membership
         if !intersection.is_empty() {
             return Err(InvariantCheckError {
-                msg: format!(
-                    "Nodes in subnet {:} also belong to other subnets",
-                    subnet_id
-                ),
+                msg: format!("Nodes in subnet {subnet_id:} also belong to other subnets"),
                 source: None,
             });
         }
         accumulated_nodes_in_subnets.extend(&subnet_members);
+
         // Count occurrence of system subnets
         if subnet_record.subnet_type == i32::from(SubnetType::System) {
             system_subnet_count += 1;
         }
 
-        check_gossip_config_invariants(subnet_id, subnet_record);
+        // Only Application subnets and cloud engines are allowed to be free (of cost).
+        let ok = subnet_record.canister_cycles_cost_schedule != i32::from(CanisterCyclesCostSchedule::Free)
+          // If free, then the subnet must be of type Application (this implies that it is
+          // rented), or CloudEngine.
+          || [
+              i32::from(SubnetType::Application),
+              i32::from(SubnetType::CloudEngine),
+          ].contains(&subnet_record.subnet_type);
+        if !ok {
+            return Err(InvariantCheckError {
+                msg: format!(
+                    "Subnet {subnet_id:} is not an application subnet or CloudEngine but has a free cycles cost schedule"
+                ),
+                source: None,
+            });
+        }
+
+        if subnet_record.subnet_type == i32::from(SubnetType::CloudEngine)
+            && subnet_record.canister_cycles_cost_schedule
+                != i32::from(CanisterCyclesCostSchedule::Free)
+        {
+            return Err(InvariantCheckError {
+                msg: format!(
+                    "Subnet {subnet_id:} is a cloud engine subnet but its cycles cost schedule \
+                    is not free"
+                ),
+                source: None,
+            });
+        }
+
+        check_node_type4_iff_cloud_engine(subnet_id, &subnet_record, &node_records)?;
+
+        // SEV-enabled subnets invariants
+        if let Some(features) = subnet_record.features.as_ref()
+            && features.sev_enabled == Some(true)
+        {
+            check_sev_subnet_invariants(subnet_id, subnet_members, snapshot)?;
+        }
+
+        check_subnet_admins_invariant(&subnet_record, subnet_id)?;
     }
-    // There is at least one system subnet
-    if system_subnet_count < 1 {
+
+    // There is at least one system subnet. Note that we disable this invariant for benchmarks, as
+    // the code to set up "invariants compliant" registry mostly depends on "test-only" code, and
+    // it's very difficult to conform canbench benchmarks to test-only code. It's also risky to move
+    // those "test-only" code towards "non-test-only" code.
+    if system_subnet_count < 1 && !cfg!(feature = "canbench-rs") {
         return Err(InvariantCheckError {
             msg: "no system subnet".to_string(),
             source: None,
@@ -121,6 +176,35 @@ pub(crate) fn check_subnet_invariants(
     Ok(())
 }
 
+// Checks that only rented subnets or cloud engine subnets can have admins.
+fn check_subnet_admins_invariant(
+    subnet_record: &SubnetRecord,
+    subnet_id: SubnetId,
+) -> Result<(), InvariantCheckError> {
+    // Here, it is taken that rented subnets are of type application and on a
+    // free schedule. This is not very reliable and could be improved in the
+    // future (e.g. by adding a new subnet type).
+    let is_application_subnet = subnet_record.subnet_type == i32::from(SubnetType::Application);
+    let is_on_free_cost_schedule =
+        subnet_record.canister_cycles_cost_schedule == i32::from(CanisterCyclesCostSchedule::Free);
+    let is_rented = is_on_free_cost_schedule && is_application_subnet;
+
+    let is_cloud_engine_subnet =
+        subnet_record.subnet_type == i32::from(SubnetType::CloudEngine) && is_on_free_cost_schedule;
+
+    let can_have_admins =
+        subnet_record.subnet_admins.is_empty() || is_rented || is_cloud_engine_subnet;
+    if !can_have_admins {
+        return Err(InvariantCheckError {
+            msg: format!(
+                "Subnet {subnet_id:} is not a rented or cloud engine subnet but has a non-empty subnet admins list"
+            ),
+            source: None,
+        });
+    }
+    Ok(())
+}
+
 // Return all subnet records in the snapshot
 pub(crate) fn get_subnet_records_map(
     snapshot: &RegistrySnapshot,
@@ -128,89 +212,94 @@ pub(crate) fn get_subnet_records_map(
     let mut subnets: BTreeMap<Vec<u8>, SubnetRecord> = BTreeMap::new();
     for (k, v) in snapshot {
         if k.starts_with(SUBNET_RECORD_KEY_PREFIX.as_bytes()) {
-            let record = decode_or_panic::<SubnetRecord>(v.clone());
+            let record = SubnetRecord::decode(v.as_slice()).unwrap();
             subnets.insert((*k).clone(), record);
         }
     }
     subnets
 }
 
-/// Gossip config invariants hold iff:
-///    * number of chunks requested in parallel > 0
-///    * timeout for chunk > 200 ms
-///    * number of times a chunk is requested from peers in parallel > 0
-///    * 0 < size of receive_check_cache < 2 * priority function interval
-///    * 50ms < priority function interval < 6 * consensus unit delay
-///    * registry poll period > 3000 milliseconds
-///    * 10s < retranmission request interval < 2min
-fn check_gossip_config_invariants(subnet_id: SubnetId, subnet_record: SubnetRecord) {
-    match subnet_record.gossip_config {
-        Some(gossip_config) => {
-            if gossip_config.max_artifact_streams_per_peer < 1 {
-                panic!(
-                    "Gossip config value for max_artifact_streams_per_peer for subnet {:} is \
-                    currently {:} but it must be at least one.",
-                    subnet_id, gossip_config.max_artifact_streams_per_peer
-                )
+/// All nodes of a subnet must support SEV in order for SEV to be enabled on the subnet.
+fn check_sev_subnet_invariants(
+    subnet_id: SubnetId, // only used for error messages, so we can report which subnet is non-compliant
+    subnet_members: HashSet<NodeId>,
+    snapshot: &RegistrySnapshot,
+) -> Result<(), InvariantCheckError> {
+    // SEV-enabled subnets consist of SEV-enabled nodes only (i.e. nodes with a chip ID in the node record)
+    let nodes_missing_chip_id: Vec<NodeId> = subnet_members
+        .iter()
+        .filter_map(|&node_id| {
+            let node_record = get_node_record_from_snapshot(node_id, snapshot)
+                .ok()
+                .flatten();
+
+            let Some(node_record) = node_record else {
+                // Missing nodes are ok, because that is checked earlier.
+                // (What we really care about here is that all (existing)
+                // nodes support SEV.)
+                return None;
+            };
+            if node_record.chip_id.is_some() {
+                // This node is SEV-enabled as it has a chip ID;
+                // no need to report it as non-compliant.
+                return None;
             }
-            if gossip_config.max_chunk_wait_ms < 200 {
-                panic!(
-                    "Gossip config value for max_chunk_wait_ms for subnet {:} is currently {:} \
-                    but it must be at least 200ms to take the network delay into account.",
-                    subnet_id, gossip_config.max_chunk_wait_ms
-                )
-            }
-            if gossip_config.max_duplicity < 1 {
-                panic!(
-                    "Gossip config value for max_duplicity for subnet {:} is currently {:} but it \
-                     must be at least 1.",
-                    subnet_id, gossip_config.max_duplicity
-                )
-            }
-            if gossip_config.receive_check_cache_size < 1
-                || gossip_config.receive_check_cache_size
-                    > 6 * gossip_config.pfn_evaluation_period_ms
-            {
-                panic!(
-                    "Gossip config value for receive_check_cache_size for subnet {:} is \
-                    currently {:} but it must be between 1 and  6 * pfn_evaluation_period_ms which is {:} \
-                    (no honest peer sends more than 6000 adverts per second per Gossip client, \
-                    larger cache does not help).",
-                    subnet_id, gossip_config.receive_check_cache_size,
-                    6 * gossip_config.pfn_evaluation_period_ms
-                )
-            }
-            if gossip_config.pfn_evaluation_period_ms < 50
-                || gossip_config.pfn_evaluation_period_ms as u64
-                    > 6 * subnet_record.unit_delay_millis
-            {
-                panic!(
-                    "Gossip config value for pfn_evaluation_period_ms for subnet {:} is currently \
-                    {:} but it must be between 50 and 6 * unit_delay_millis which is {:}, to update the \
-                    priority function at roughly the same rate as consensus progresses.",
-                    subnet_id, gossip_config.pfn_evaluation_period_ms,
-                    6 * subnet_record.unit_delay_millis,
-                )
-            }
-            if gossip_config.registry_poll_period_ms < 2000 {
-                panic!(
-                    "Gossip config value for registry_poll_period_ms for subnet {:} is currently \
-                    {:} but it must be at least 2000, aligned with the NNS block interval.",
-                    subnet_id, gossip_config.registry_poll_period_ms
-                )
-            }
-            if gossip_config.retransmission_request_ms < 10_000
-                || gossip_config.retransmission_request_ms > 120_000
-            {
-                panic!(
-                    "Gossip config value for retransmission_request_ms for subnet {:} is currently\
-                     {:} but it must be between 10_000 and 120_000. This ensures a subnet with \
-                     healthy nodes which have not received all adverts have the opportunity to \
-                     catch up in the order of 10 seconds to two minutes.",
-                    subnet_id, gossip_config.retransmission_request_ms
-                )
-            }
-        }
-        None => panic!("No gossip config defined in subnet record {:}.", subnet_id),
+            // We have found a non-compliant node! Report it (to the caller)!
+            Some(node_id)
+        })
+        .collect();
+
+    if !nodes_missing_chip_id.is_empty() {
+        return Err(InvariantCheckError {
+            msg: format!(
+                "Subnet {subnet_id} is SEV-enabled, but the following nodes are missing a chip ID: {:?}",
+                nodes_missing_chip_id
+            ),
+            source: None,
+        });
     }
+
+    Ok(())
 }
+
+fn check_node_type4_iff_cloud_engine(
+    subnet_id: SubnetId, // only used for error messages, so we can report which subnet is non-compliant
+    subnet_record: &SubnetRecord,
+    node_records: &[NodeRecord],
+) -> Result<(), InvariantCheckError> {
+    let is_cloud_engine = subnet_record.subnet_type == i32::from(SubnetType::CloudEngine);
+    let is_cloud_engine_node = |node: &NodeRecord| match node.node_reward_type() {
+        NodeRewardType::Unspecified
+        | NodeRewardType::Type0
+        | NodeRewardType::Type1
+        | NodeRewardType::Type2
+        | NodeRewardType::Type3
+        | NodeRewardType::Type3dot1
+        | NodeRewardType::Type1dot1 => false,
+        NodeRewardType::Type4
+        | NodeRewardType::Type4dot1
+        | NodeRewardType::Type4dot2
+        | NodeRewardType::Type4dot3
+        | NodeRewardType::Type4dot4
+        | NodeRewardType::Type4dot5 => true,
+    };
+    let is_node_ok = |node: &NodeRecord| is_cloud_engine == is_cloud_engine_node(node);
+
+    let ok = node_records.iter().all(is_node_ok);
+    if !ok {
+        let msg = if is_cloud_engine {
+            "is a cloud engine subnet but some nodes do not have reward type 4"
+        } else {
+            "is not a cloud engine subnet but some nodes have reward type 4"
+        };
+        return Err(InvariantCheckError {
+            msg: format!("Subnet {subnet_id:} {msg}"),
+            source: None,
+        });
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests;

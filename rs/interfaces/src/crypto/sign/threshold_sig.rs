@@ -1,7 +1,7 @@
 use ic_base_types::{NodeId, SubnetId};
-use ic_types::crypto::threshold_sig::ni_dkg::DkgId;
-use ic_types::crypto::{CombinedThresholdSigOf, CryptoResult, Signable, ThresholdSigShareOf};
 use ic_types::RegistryVersion;
+use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
+use ic_types::crypto::{CombinedThresholdSigOf, CryptoResult, Signable, ThresholdSigShareOf};
 use std::collections::BTreeMap;
 
 pub mod ni_dkg;
@@ -24,9 +24,10 @@ pub trait ThresholdSigner<T: Signable> {
     ///   calling this method.
     /// * `CryptoError::SecretKeyNotFound` if the secret key is not present in
     ///   the secret key store.
-    // TODO (CRP-479): switch to Result<ThresholdSigShareOf<T>,
-    // ThresholdSigDataNotFoundError>
-    fn sign_threshold(&self, message: &T, dkg_id: DkgId) -> CryptoResult<ThresholdSigShareOf<T>>;
+    /// * `CryptoError::TransientInternalError` if there is a transient
+    ///   internal error, e.g., an RPC error when calling the CSP vault.
+    fn sign_threshold(&self, message: &T, dkg_id: &NiDkgId)
+    -> CryptoResult<ThresholdSigShareOf<T>>;
 }
 
 /// A Crypto Component interface to verify threshold signatures.
@@ -65,7 +66,7 @@ pub trait ThresholdSigVerifier<T: Signable> {
         &self,
         signature: &ThresholdSigShareOf<T>,
         message: &T,
-        dkg_id: DkgId,
+        dkg_id: &NiDkgId,
         signer: NodeId,
     ) -> CryptoResult<()>;
 
@@ -87,7 +88,7 @@ pub trait ThresholdSigVerifier<T: Signable> {
     fn combine_threshold_sig_shares(
         &self,
         shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
-        dkg_id: DkgId,
+        dkg_id: &NiDkgId,
     ) -> CryptoResult<CombinedThresholdSigOf<T>>;
 
     /// Verifies a combined threshold signature.
@@ -109,7 +110,7 @@ pub trait ThresholdSigVerifier<T: Signable> {
         &self,
         signature: &CombinedThresholdSigOf<T>,
         message: &T,
-        dkg_id: DkgId,
+        dkg_id: &NiDkgId,
     ) -> CryptoResult<()>;
 }
 

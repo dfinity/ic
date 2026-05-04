@@ -1,6 +1,6 @@
 use crate::{json, snapshot::Snapshot};
 use ic_base_types::PrincipalId;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use serde_json::Value;
 use std::{collections::BTreeMap, convert::TryFrom, ops::Range, str::FromStr};
 
@@ -9,7 +9,7 @@ const BIN_DATA_SHA256: &str = "(binary-data|sha256)";
 const PRINCIPAL_ID: &str = "(principal-id)";
 const BIN_DATA: &str = "(binary-data)";
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct NormalizedSnapshot(pub Value);
 
 pub fn normalize(mut value: Value) -> (NormalizedSnapshot, Sha256InvMap) {
@@ -38,7 +38,7 @@ pub fn expand(inv_map: &Sha256InvMap, snapshot: NormalizedSnapshot) -> Snapshot 
     Snapshot(value)
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Sha256InvMap {
     m: BTreeMap<[u8; 32], Vec<u8>>,
 }
@@ -57,16 +57,16 @@ impl Sha256InvMap {
 
     #[allow(dead_code)]
     fn expand(&self, v: &Value) -> Option<Value> {
-        if let Some(s) = v.as_str() {
-            if let Some(s) = s.strip_prefix(BIN_DATA_SHA256) {
-                let digest = hex_to_sha256_digest(s);
-                let val = self
-                    .m
-                    .get(&digest)
-                    .expect("Could not find sha256 value.")
-                    .clone();
-                return Some(json::assert_to_value(val));
-            }
+        if let Some(s) = v.as_str()
+            && let Some(s) = s.strip_prefix(BIN_DATA_SHA256)
+        {
+            let digest = hex_to_sha256_digest(s);
+            let val = self
+                .m
+                .get(&digest)
+                .expect("Could not find sha256 value.")
+                .clone();
+            return Some(json::assert_to_value(val));
         }
         None
     }
@@ -97,11 +97,11 @@ fn byte_array_to_principal_id(value: &Value) -> Option<Value> {
 }
 
 fn principal_id_to_bytes(value: &Value) -> Option<Value> {
-    if let Some(s) = value.as_str() {
-        if let Some(s) = s.strip_prefix(PRINCIPAL_ID) {
-            let principal_id = PrincipalId::from_str(s).expect("Not a principal id.");
-            return Some(json::assert_to_value(principal_id.as_slice()));
-        }
+    if let Some(s) = value.as_str()
+        && let Some(s) = s.strip_prefix(PRINCIPAL_ID)
+    {
+        let principal_id = PrincipalId::from_str(s).expect("Not a principal id.");
+        return Some(json::assert_to_value(principal_id.as_slice()));
     }
     None
 }
@@ -116,21 +116,22 @@ fn hex_encode_small_arrays(value: &Value) -> Option<Value> {
 }
 
 fn hex_decode_arrays(value: &Value) -> Option<Value> {
-    if let Some(s) = value.as_str() {
-        if let Some(s) = s.strip_prefix(BIN_DATA) {
-            let bytes = hex_to_bytes(s);
-            return Some(json::assert_to_value(bytes));
-        }
+    if let Some(s) = value.as_str()
+        && let Some(s) = s.strip_prefix(BIN_DATA)
+    {
+        let bytes = hex_to_bytes(s);
+        return Some(json::assert_to_value(bytes));
     }
     None
 }
 
 fn as_byte_array_len(value: &Value, range: Range<usize>) -> Option<Vec<u8>> {
-    if let Some(v) = value.as_array() {
-        if v.iter().all(|f| f.as_u64().unwrap_or(0x100) < 0x100) && range.contains(&v.len()) {
-            let bytes = v.iter().map(|x| x.as_u64().unwrap() as u8).collect();
-            return Some(bytes);
-        }
+    if let Some(v) = value.as_array()
+        && v.iter().all(|f| f.as_u64().unwrap_or(0x100) < 0x100)
+        && range.contains(&v.len())
+    {
+        let bytes = v.iter().map(|x| x.as_u64().unwrap() as u8).collect();
+        return Some(bytes);
     }
     None
 }
@@ -138,13 +139,13 @@ fn as_byte_array_len(value: &Value, range: Range<usize>) -> Option<Vec<u8>> {
 fn bytes_to_hex(data: &[u8]) -> String {
     let mut res = String::new();
     for b in data {
-        res.push_str(&format!("{:02X}", b))
+        res.push_str(&format!("{b:02X}"))
     }
     res
 }
 
 fn hex_to_sha256_digest(s: &str) -> [u8; 32] {
-    let mut res = [0u8; 32];
+    let mut res = [0_u8; 32];
     for (i, c) in res.iter_mut().enumerate() {
         *c = (hexdigit_to_u8(s.as_bytes()[2 * i]) << 4) + hexdigit_to_u8(s.as_bytes()[2 * i + 1]);
     }
@@ -169,7 +170,7 @@ fn hexdigit_to_u8(c: u8) -> u8 {
         b'0'..=b'9' => c - b'0',
         b'A'..=b'F' => c - b'A' + 0xA,
         b'a'..=b'f' => c - b'a' + 0xA,
-        _ => panic!("Not a hex digit: {}", c),
+        _ => panic!("Not a hex digit: {c}"),
     }
 }
 

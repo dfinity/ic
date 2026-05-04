@@ -1,15 +1,11 @@
 //! Generate data for proptests
 
-#![allow(clippy::unwrap_used)]
-
 use super::*;
 use crate::crypto;
 use ic_crypto_internal_bls12_381_type::Scalar;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::NumberOfNodes;
 use proptest::prelude::*;
-
-//mod tests;
 
 //////////////////////
 // Proptest strategies
@@ -49,12 +45,27 @@ pub fn threshold_sig_public_key_bytes() -> impl Strategy<Value = PublicKeyBytes>
 }
 
 #[cfg(test)]
+pub fn threshold_sig_secret_key_bytes() -> impl Strategy<Value = SecretKeyBytes> {
+    secret_key().prop_map(SecretKeyBytes::from)
+}
+
+#[cfg(test)]
 pub fn individual_signature_bytes() -> impl Strategy<Value = IndividualSignatureBytes> {
-    individual_signature().prop_map(|signature| signature.into())
+    individual_signature().prop_map(|signature| IndividualSignatureBytes::from(&signature))
 }
 #[cfg(test)]
 pub fn combined_signature_bytes() -> impl Strategy<Value = CombinedSignatureBytes> {
-    combined_signature().prop_map(|signature| signature.into())
+    combined_signature().prop_map(|signature| CombinedSignatureBytes::from(&signature))
+}
+
+#[cfg(test)]
+impl proptest::prelude::Arbitrary for SecretKeyBytes {
+    type Parameters = ();
+    type Strategy = BoxedStrategy<Self>;
+
+    fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+        threshold_sig_secret_key_bytes().boxed()
+    }
 }
 
 #[cfg(test)]

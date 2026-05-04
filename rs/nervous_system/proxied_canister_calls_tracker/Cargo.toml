@@ -1,0 +1,16 @@
+[package]
+name = "ic-nervous-system-proxied-canister-calls-tracker"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-base-types = { path = "../../types/base_types" }
+ic-cdk = { workspace = true }
+
+[dev-dependencies]
+maplit = "1.0.2"
+pretty_assertions = { workspace = true }
+tokio = { workspace = true }

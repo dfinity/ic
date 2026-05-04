@@ -1,0 +1,9 @@
+[Unit]
+Description=VSOCK agent daemon
+
+[Service]
+ExecStart=/opt/ic/bin/vsock_host
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

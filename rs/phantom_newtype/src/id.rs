@@ -1,4 +1,5 @@
 use crate::displayer::{DisplayProxy, DisplayerOf};
+use ic_heap_bytes::DeterministicHeapBytes;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
 use std::fmt;
@@ -32,13 +33,13 @@ use std::marker::PhantomData;
 /// ```compile_fail
 /// use phantom_newtype::Id;
 ///
-/// struct Recepient {}
+/// struct Recipient {}
 /// struct Message {}
 ///
-/// type RecepientId = Id<Recepient, u64>;
+/// type RecipientId = Id<Recipient, u64>;
 /// type MessageId = Id<Message, u64>;
 ///
-/// assert_eq!(RecepientId::from(15), MessageId::from(15));
+/// assert_eq!(RecipientId::from(15), MessageId::from(15));
 /// ```
 ///
 /// `Id` is cheap to copy if `Repr` is:
@@ -159,7 +160,7 @@ impl<Entity, Repr> Id<Entity, Repr>
 where
     Entity: DisplayerOf<Id<Entity, Repr>>,
 {
-    /// `display` provides a machanism to implement a custom display
+    /// `display` provides a mechanism to implement a custom display
     /// for phantom types.
     ///
     /// ```
@@ -301,5 +302,11 @@ impl<Entity, Repr: slog::Value> slog::Value for Id<Entity, Repr> {
         serializer: &mut dyn slog::Serializer,
     ) -> slog::Result {
         self.0.serialize(record, key, serializer)
+    }
+}
+
+impl<Entity, Repr: DeterministicHeapBytes> DeterministicHeapBytes for Id<Entity, Repr> {
+    fn deterministic_heap_bytes(&self) -> usize {
+        self.0.deterministic_heap_bytes()
     }
 }

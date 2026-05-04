@@ -1,16 +1,25 @@
 [package]
 name = "ic-http-utils"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-flate2 = "1.0.20"
-hex = "0.4.2"
-http = "0.2.1"
-tokio = { version = "1.15.0", features = ["full"] }
-hyper = { version = "0.14.18", features = ["full"] }
-hyper-tls = "0.5.0"
-ic-crypto-sha = { path = "../crypto/sha" }
+flate2 = { workspace = true }
+hex = { workspace = true }
+http = { workspace = true }
+ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-logger = { path = "../monitoring/logger" }
-slog = "2.5.2"
-tar = "0.4.38"
+reqwest = { workspace = true }
+slog = { workspace = true }
+tar = { workspace = true }
+tokio = { workspace = true }
+zstd = { workspace = true }
+
+[dev-dependencies]
+assert_matches = { workspace = true }
+ic-test-utilities-in-memory-logger = { path = "../test_utilities/in_memory_logger" }
+mockito = { workspace = true }
+tempfile = { workspace = true }

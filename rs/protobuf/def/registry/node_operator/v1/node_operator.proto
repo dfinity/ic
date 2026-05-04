@@ -5,14 +5,14 @@ package registry.node_operator.v1;
 // unique principal id, a.k.a. NOID.
 //
 // Note that while a node operator might host nodes for more than
-// one funding parter, its principal ID must be unique.
+// one funding partner, its principal ID must be unique.
 message NodeOperatorRecord {
   // The principal id of the node operator. This principal is the entity that
   // is able to add and remove nodes.
   //
   // This must be unique across NodeOperatorRecords.
   bytes node_operator_principal_id = 1;
-  
+
   // The remaining number of nodes that could be added by this node operator.
   // This number should never go below 0.
   uint64 node_allowance = 2;
@@ -28,9 +28,8 @@ message NodeOperatorRecord {
   map<string, uint32> rewardable_nodes = 5;
 
   optional string ipv6 = 6;
-}
 
-/// The payload of a request to remove Node Operator records from the Registry
-message RemoveNodeOperatorsPayload {
-  repeated bytes node_operators_to_remove = 1;
+  // A map from node type to the maximum number of nodes for which the associated Node
+  // Provider could be rewarded for each type of node.
+  map<string, uint32> max_rewardable_nodes = 7;
 }

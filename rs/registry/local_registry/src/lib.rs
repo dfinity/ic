@@ -1,21 +1,10 @@
+#![allow(clippy::disallowed_types)]
 //! Access a local store through the standard `RegistryClient` trait. Hides the
 //! complexities of syncing the local store with the NNS registry behind a
 //! simple function call. Control over when the synchronization happens is left
 //! to the user of `LocalRegistry`.
-//!
-//! # (Minor) Limitations
-//!
-//! Concurrently calling `sync_with_nns` might result in reordered updates to
-//! the certified time stored in the local store. However, the certified time is
-//! not exposed through the interface of `LocalRegistry`.
 
-use std::{
-    net::IpAddr,
-    path::Path,
-    str::FromStr,
-    sync::{Arc, RwLock},
-    time::Duration,
-};
+use std::{net::IpAddr, path::Path, str::FromStr, sync::Arc, time::Duration};
 
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult, ZERO_REGISTRY_VERSION};
 use ic_protobuf::registry::node::v1::ConnectionEndpoint as PbConnectionEndpoint;
@@ -25,10 +14,11 @@ use ic_registry_local_store::{
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, registry::RegistryClientError, RegistryVersion,
-    SubnetId,
+    RegistryVersion, SubnetId, crypto::threshold_sig::ThresholdSigPublicKey,
+    registry::RegistryClientError,
 };
 use thiserror::Error;
+use tokio::sync::RwLock;
 use url::Url;
 
 use ic_registry_client_helpers::{
@@ -45,11 +35,6 @@ pub struct LocalRegistry {
     // threshold public key of the root subnet changes.
     cached_registry_canister: RwLock<(RootSubnetInfo, RegistryCanister)>,
     query_timeout: Duration,
-    tokio_runtime_handle: tokio::runtime::Handle,
-    // In case the LocalRegistry was not created with a handle to an external
-    // tokio Runtime, LocalRegistry must take ownership of its own tokio
-    // runtime.
-    tokio_runtime: Option<tokio::runtime::Runtime>,
 }
 
 impl LocalRegistry {
@@ -69,27 +54,6 @@ impl LocalRegistry {
     pub fn new<P: AsRef<Path>>(
         local_store_path: P,
         query_timeout: Duration,
-    ) -> Result<Self, LocalRegistryError> {
-        let tokio_runtime =
-            tokio::runtime::Runtime::new().expect("Could not instantiate tokio runtime");
-        let mut s = Self::new_with_runtime_handle(
-            local_store_path,
-            query_timeout,
-            tokio_runtime.handle().clone(),
-        )?;
-
-        // We need to hold on to a tokio runtime.
-        s.tokio_runtime = Some(tokio_runtime);
-        Ok(s)
-    }
-
-    /// Same as [new].
-    ///
-    /// `tokio_runtime_handle` will be used to handle asynchronous code paths.
-    pub fn new_with_runtime_handle<P: AsRef<Path>>(
-        local_store_path: P,
-        query_timeout: Duration,
-        tokio_runtime_handle: tokio::runtime::Handle,
     ) -> Result<Self, LocalRegistryError> {
         let local_store_reader = Arc::new(LocalStoreImpl::new(local_store_path.as_ref()));
         let local_store_writer = LocalStoreImpl::new(local_store_path.as_ref());
@@ -111,30 +75,26 @@ impl LocalRegistry {
             local_store_writer,
             cached_registry_canister,
             query_timeout,
-            tokio_runtime_handle,
-            tokio_runtime: None,
         })
     }
 
     /// Synchronizes the local store with the NNS registry. The URLs and the
     /// public key of the NNS are read from the in-memory cache.
-    ///
-    /// *Note*: If called concurrently, updates to the certified time might be
-    /// stored out of order.
-    pub fn sync_with_nns(&self) -> Result<(), LocalRegistryError> {
+    pub async fn sync_with_nns(&self) -> Result<(), LocalRegistryError> {
         // The changelog entry for a given registry version never changes. As
         // the local store overwrites existing versions atomically, it follows
         // that even if multiple threads call this function concurrently,
         // invariants are retained.
         let latest_cached_version = self.registry_cache.get_latest_version();
-        let (mut raw_changelog, certified_time) = {
-            let guard = self.cached_registry_canister.read().unwrap();
-            let (raw_changelog, _, t) = self
-                .tokio_runtime_handle
-                .block_on(guard.1.get_certified_changes_since(
+        let (mut raw_changelog, _certified_time) = {
+            let guard = self.cached_registry_canister.read().await;
+            let (raw_changelog, _, t) = guard
+                .1
+                .get_certified_changes_since(
                     latest_cached_version.get(),
                     &guard.0.urls_and_pubkey.1,
-                ))
+                )
+                .await
                 .map_err(LocalRegistryError::from)?;
             (raw_changelog, t)
         };
@@ -162,28 +122,24 @@ impl LocalRegistry {
             })
             .expect("Writing to the FS failed: Stop.");
 
-        // update certified time
-        self.local_store_writer
-            .update_certified_time(certified_time.as_nanos_since_unix_epoch())
-            .expect("Could not store certified time");
-        self.sync_with_local_store()
+        self.sync_with_local_store().await
     }
 
     /// Updates the in-memory cache with the current state of the local store.
     ///
     /// Note that the in-memory cache ignores the state of the local store
     /// unless this method is called.
-    pub fn sync_with_local_store(&self) -> Result<(), LocalRegistryError> {
+    pub async fn sync_with_local_store(&self) -> Result<(), LocalRegistryError> {
         // update cache to reflect state of the local store
         self.registry_cache.update_to_latest_version();
         let latest_version = self.registry_cache.get_latest_version();
         {
             // the write lock guarantees that updates to the registry canister
             // are ordered across all threads
-            let mut guard = self.cached_registry_canister.write().unwrap();
+            let mut guard = self.cached_registry_canister.write().await;
             // invariant: the registry version of the memoized urls grows monotonically.
             // Thus, this is robust wrt. concurrent updates to the cache that
-            // might have happend before we obtained the lock.
+            // might have happened before we obtained the lock.
             if guard.0.registry_version < latest_version {
                 let urls_and_pubkey =
                     Self::get_root_subnet_info(&self.registry_cache, latest_version)?;
@@ -232,8 +188,8 @@ impl LocalRegistry {
     ) -> Result<Vec<Url>, LocalRegistryError> {
         let t_infos = registry_result_to_local_registry_error(
             version,
-            "get_subnet_transport_infos",
-            reg_client.get_subnet_transport_infos(subnet_id, version),
+            "get_subnet_node_records",
+            reg_client.get_subnet_node_records(subnet_id, version),
         )?;
         let mut urls: Vec<Url> = t_infos
             .iter()
@@ -248,7 +204,7 @@ impl LocalRegistry {
 
     fn http_endpoint_to_url(http: &PbConnectionEndpoint) -> Option<Url> {
         let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
-            Ok(v) if v.is_ipv6() => format!("[{}]", v),
+            Ok(v) if v.is_ipv6() => format!("[{v}]"),
             Ok(v) => v.to_string(),
             Err(_) => http.ip_addr.clone(),
         };
@@ -284,7 +240,7 @@ impl RegistryClient for LocalRegistry {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq)]
 struct RootSubnetInfo {
     registry_version: RegistryVersion,
     urls_and_pubkey: (Vec<Url>, ThresholdSigPublicKey),
@@ -310,7 +266,7 @@ fn registry_result_to_local_registry_error<T>(
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum LocalRegistryError {
     #[error("The provided registry is at version 0 (empty)")]
     EmptyRegistry,
@@ -341,9 +297,8 @@ mod tests {
 
     use super::*;
     use ic_registry_client_helpers::subnet::SubnetListRegistry;
-    use ic_registry_local_store::compact_delta_to_changelog;
+    use ic_test_utilities_registry::get_mainnet_delta_00_6d_c1;
     use ic_types::PrincipalId;
-    use tempfile::TempDir;
 
     const DEFAULT_QUERY_TIMEOUT: Duration = Duration::from_millis(500);
 
@@ -375,21 +330,6 @@ mod tests {
             .into_iter()
             .collect::<HashSet<_>>();
         assert_eq!(root_subnet_node_ids.len(), 37);
-    }
-
-    fn get_mainnet_delta_00_6d_c1() -> (TempDir, LocalStoreImpl) {
-        let tempdir = TempDir::new().unwrap();
-        let store = LocalStoreImpl::new(tempdir.path());
-        let changelog =
-            compact_delta_to_changelog(ic_registry_local_store_artifacts::MAINNET_DELTA_00_6D_C1)
-                .expect("")
-                .1;
-
-        for (v, changelog_entry) in changelog.into_iter().enumerate() {
-            let v = RegistryVersion::from((v + 1) as u64);
-            store.store(v, changelog_entry).unwrap();
-        }
-        (tempdir, store)
     }
 
     fn expected_root_subnet_id() -> SubnetId {

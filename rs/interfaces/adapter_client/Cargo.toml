@@ -1,0 +1,11 @@
+[package]
+name = "ic-interfaces-adapter-client"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+strum_macros = { workspace = true }
+thiserror = { workspace = true }

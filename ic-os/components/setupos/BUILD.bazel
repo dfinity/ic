@@ -1,0 +1,25 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+package(default_visibility = ["//ic-os/components:__subpackages__"])
+
+exports_files(glob(
+    ["*"],
+    exclude = [
+        "BUILD.bazel",
+    ],
+))
+
+sh_test(
+    name = "test_setupos",
+    srcs = ["test-setupos.sh"],
+    args = [
+        "$(execpath check-network.sh)",
+        "$(execpath check-hardware.sh)",
+        "$(execpath functions.sh)",
+    ],
+    data = [
+        "check-hardware.sh",
+        "check-network.sh",
+        "functions.sh",
+    ],
+)

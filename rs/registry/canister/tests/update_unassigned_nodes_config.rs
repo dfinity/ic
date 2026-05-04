@@ -3,13 +3,14 @@ use dfn_candid::candid;
 
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::{get_value, get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
 use ic_registry_keys::make_unassigned_nodes_config_record_key;
+use ic_types::ReplicaVersion;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
@@ -19,11 +20,11 @@ use assert_matches::assert_matches;
 
 #[test]
 fn test_the_anonymous_user_cannot_update_unassigned_nodes_config() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;
@@ -41,12 +42,14 @@ fn test_the_anonymous_user_cannot_update_unassigned_nodes_config() {
         assert_matches!(response,
                 Err(s) if s.contains("is not authorized to call this method: \
                 update_unassigned_nodes_config"));
-        assert!(get_value::<UnassignedNodesConfigRecord>(
-            &registry,
-            make_unassigned_nodes_config_record_key().as_bytes()
-        )
-        .await
-        .is_none(),);
+        assert!(
+            get_value::<UnassignedNodesConfigRecord>(
+                &registry,
+                make_unassigned_nodes_config_record_key().as_bytes()
+            )
+            .await
+            .is_none(),
+        );
 
         Ok(())
     });
@@ -54,11 +57,11 @@ fn test_the_anonymous_user_cannot_update_unassigned_nodes_config() {
 
 #[test]
 fn test_updating_unassigned_nodes_config_does_not_break_invariants() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;
@@ -90,7 +93,7 @@ fn test_updating_unassigned_nodes_config_does_not_break_invariants() {
         // New payload with already-blessed version
         payload = UpdateUnassignedNodesConfigPayload {
             ssh_readonly_access: None,
-            replica_version: Some("version_42".to_string()),
+            replica_version: Some(ReplicaVersion::default().into()),
         };
 
         assert!(
@@ -111,7 +114,7 @@ fn test_updating_unassigned_nodes_config_does_not_break_invariants() {
             .await,
             UnassignedNodesConfigRecord {
                 ssh_readonly_access: vec![],
-                replica_version: "version_42".to_string(),
+                replica_version: ReplicaVersion::default().into(),
             }
         );
 

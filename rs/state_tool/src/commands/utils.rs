@@ -1,7 +1,8 @@
 //! Utility functions shared across commands.
 
-use ic_config::{config_parser::ConfigSource, ConfigOptional};
+use ic_config::{ConfigOptional, config_parser::ConfigSource};
 use ic_logger::replica_logger::no_op_logger;
+use ic_metrics::MetricsRegistry;
 use ic_state_layout::StateLayout;
 use std::path::PathBuf;
 
@@ -20,7 +21,7 @@ pub fn locate_state_root(config_path: PathBuf) -> Result<StateLayout, String> {
                 config_path.display()
             )
         })?
-        .state_root();
+        .state_root;
 
-    Ok(StateLayout::try_new(no_op_logger(), state_root).unwrap())
+    Ok(StateLayout::try_new(no_op_logger(), state_root, &MetricsRegistry::new()).unwrap())
 }

@@ -1,22 +1,76 @@
+use crate::pb::v1::{NeuronId, ProposalId};
+use ic_stable_structures::{Storable, storable::Bound};
+use num_traits::bounds::{LowerBounded, UpperBounded};
+use std::borrow::Cow;
+
 pub mod access_control;
 pub mod init;
 pub mod pb;
 pub mod registry;
 pub mod types;
 
-use ic_crypto_sha::Sha256;
-use std::convert::TryInto;
+impl NeuronId {
+    pub const MIN: Self = Self { id: u64::MIN };
+    pub const MAX: Self = Self { id: u64::MAX };
 
-impl pb::v1::NeuronId {
-    pub fn from_subaccount(subaccount: &[u8; 32]) -> Self {
+    pub fn next(&self) -> Option<NeuronId> {
+        self.id.checked_add(1).map(|id| NeuronId { id })
+    }
+}
+
+impl From<NeuronId> for u64 {
+    fn from(id: NeuronId) -> Self {
+        id.id
+    }
+}
+
+impl Storable for NeuronId {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        self.id.to_bytes()
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
         Self {
-            id: {
-                let mut state = Sha256::new();
-                state.write(subaccount);
-                // TODO(NNS1-192) We should just store the Sha256, but for now
-                // we convert it to a number
-                u64::from_ne_bytes(state.finish()[0..8].try_into().unwrap())
-            },
+            id: u64::from_bytes(bytes),
         }
     }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: std::mem::size_of::<u64>() as u32,
+        is_fixed_size: true,
+    };
+}
+
+impl LowerBounded for NeuronId {
+    fn min_value() -> Self {
+        Self::MIN
+    }
+}
+
+impl UpperBounded for NeuronId {
+    fn max_value() -> Self {
+        Self::MAX
+    }
+}
+
+impl ProposalId {
+    pub const MIN: Self = Self { id: u64::MIN };
+    pub const MAX: Self = Self { id: u64::MAX };
+}
+
+impl Storable for ProposalId {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        self.id.to_bytes()
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        Self {
+            id: u64::from_bytes(bytes),
+        }
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: std::mem::size_of::<u64>() as u32,
+        is_fixed_size: true,
+    };
 }

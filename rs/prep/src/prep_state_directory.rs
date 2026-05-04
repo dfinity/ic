@@ -1,10 +1,10 @@
 #![allow(dead_code)]
-use std::{
-    fmt, io,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
+use ic_crypto_utils_threshold_sig_der::{
+    parse_threshold_sig_key_from_pem_file, threshold_sig_public_key_to_der,
+};
 
 use crate::internet_computer::{IC_REGISTRY_LOCAL_STORE_PATH, IC_ROOT_PUB_KEY_PATH};
 
@@ -27,7 +27,11 @@ impl IcPrepStateDir {
 
     /// DER-encoded root public key.
     pub fn root_public_key(&self) -> Result<Vec<u8>> {
-        parse_threshold_sig_key(self.root_public_key_path())
+        let path = self.root_public_key_path();
+        let pk = parse_threshold_sig_key_from_pem_file(&path)
+            .with_context(|| format!("failed to parse threshold sig key from {:?}", path))?;
+        threshold_sig_public_key_to_der(pk)
+            .with_context(|| "failed to convert threshold sig public key to DER")
     }
 
     /// Returns the path to the PEM-encoded root public key.
@@ -45,46 +49,19 @@ impl IcPrepStateDir {
     }
 }
 
-fn parse_threshold_sig_key<P: AsRef<Path> + fmt::Debug>(pem_file: P) -> Result<Vec<u8>> {
-    fn invalid_data_err(msg: impl std::string::ToString) -> io::Error {
-        io::Error::new(io::ErrorKind::InvalidData, msg.to_string())
-    }
-
-    let buf =
-        std::fs::read(&pem_file).with_context(|| format!("failed to read from {:?}", &pem_file))?;
-    let s = String::from_utf8_lossy(&buf);
-    let lines: Vec<_> = s.trim_end().lines().collect();
-    let n = lines.len();
-
-    if n < 3 {
-        bail!("input file is too short: {:?}", &pem_file);
-    }
-
-    if !lines[0].starts_with("-----BEGIN PUBLIC KEY-----") {
-        bail!(
-            "PEM file doesn't start with BEGIN PK block: {:?}",
-            &pem_file
-        );
-    }
-    if !lines[n - 1].starts_with("-----END PUBLIC KEY-----") {
-        bail!("PEM file doesn't end with END PK block: {:?}", &pem_file);
-    }
-
-    let decoded = base64::decode(&lines[1..n - 1].join(""))
-        .with_context(|| format!("failed to decode base64 from: {:?}", &pem_file))?;
-
-    Ok(decoded)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::internet_computer::{IcConfig, TopologyConfig};
     use crate::node::{NodeConfiguration, NodeIndex};
-    use crate::subnet_configuration::SubnetConfig;
-    use ic_crypto::threshold_sig_public_key_from_der;
+    use crate::subnet_configuration::{SubnetConfig, SubnetRunningState};
+    use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
+    use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule;
     use ic_registry_subnet_type::SubnetType;
+    use ic_types::ReplicaVersion;
     use std::collections::BTreeMap;
+    use std::net::SocketAddr;
+    use std::str::FromStr;
     use tempfile::TempDir;
 
     #[test]
@@ -108,7 +85,7 @@ mod tests {
         let pk = ic_prep_state_dir
             .root_public_key()
             .expect("Could not parse public key pem file.");
-        assert!(threshold_sig_public_key_from_der(&pk).is_ok());
+        assert!(parse_threshold_sig_key_from_der(&pk).is_ok());
     }
 
     fn init_ic() -> Result<(TempDir, IcPrepStateDir)> {
@@ -121,15 +98,12 @@ mod tests {
         subnet_nodes.insert(
             0,
             NodeConfiguration {
-                xnet_api: vec!["http://1.2.3.4:1".parse()?],
-                public_api: vec!["http://1.2.3.4:2".parse()?],
-                private_api: vec![],
-                prometheus_metrics: vec!["http://1.2.3.4:3".parse()?],
-                p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:4".parse()?,
-                p2p_num_flows: 1,
-                p2p_start_flow_tag: 0,
+                xnet_api: SocketAddr::from_str("1.2.3.4:8080").unwrap(),
+                public_api: SocketAddr::from_str("1.2.3.4:8081").unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
+                domain: None,
+                node_reward_type: None,
             },
         );
 
@@ -139,9 +113,9 @@ mod tests {
             SubnetConfig::new(
                 0,
                 subnet_nodes,
+                ReplicaVersion::default(),
                 None,
-                None,
-                None,
+                /*max_ingress_bytes_per_block=*/ None,
                 None,
                 None,
                 None,
@@ -149,6 +123,8 @@ mod tests {
                 None,
                 None,
                 SubnetType::System,
+                CanisterCyclesCostSchedule::Normal,
+                None,
                 None,
                 None,
                 None,
@@ -157,20 +133,23 @@ mod tests {
                 None,
                 vec![],
                 vec![],
+                SubnetRunningState::Active,
+                None,
             ),
         );
 
         let ic_config = IcConfig::new(
             /* target_dir= */ tmp.path(),
             topology_config,
-            /* replica_version_id= */ None,
+            ReplicaVersion::default(),
             /* generate_subnet_records= */ true, // see note above
             /* nns_subnet_index= */ Some(0),
             /* release_package_download_url= */ None,
             /* release_package_sha256_hex */ None,
-            None,
-            None,
-            None,
+            /* guest_launch_measurements */ None,
+            /* provisional_whitelist */ None,
+            /* initial_node_operator */ None,
+            /* initial_node_provider */ None,
             /* ssh_readonly_access_to_unassigned_nodes */ vec![],
         );
         let _init_ic = ic_config.initialize()?;

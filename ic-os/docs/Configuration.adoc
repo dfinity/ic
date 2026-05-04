@@ -1,0 +1,128 @@
+= Configuration
+
+Each IC-OS has a 100 MB config partition. All IC-OS config partitions are initialized to be empty, except for SetupOS.
+
+In production, configuration is propagated from a partition on the USB installer through each of SetupOS, HostOS and GuestOS.
+This process is controlled by the (link:../../rs/ic_os/config/tool/README.md[ic-os config tool]) and an assortment of bash scripts.
+
+== User-facing configuration files
+
+SetupOS constructs its config struct from the following user-facing configuration files:
+  config.ini                      # Data center and node-specific network settings
+  ssh_authorized_keys             # SSH private keys
+  node_operator_private_key.pem   # Node Operator private key created in the Node Provider onboarding
+  deployment.json                 # Deployment-specific configurations
+  nns_public_key_override.pem     # NNS public key override (only for dev variant)
+
+Refer to link:../../rs/ic_os/config/tool/README.md[rs/ic_os/config/tool] and link:../components/setupos/setup-hostos-config.sh[setup-hostos-config.sh] for more details.
+
+== HostOS -> GuestOS
+
+HostOS creates a bootstrap config image containing the GuestOS configuration files.
+
+Refer to link:../../rs/ic_os/os_tools/guest_vm_runner/src/guest_vm_config.rs[guest_vm_config.rs] and link:../../rs/ic_os/config/tool/src/hostos/guestos_bootstrap_image.rs[guestos_bootstrap_image.rs] for more details.
+
+When the HostOS launches the GuestOS, the bootstrap config image is attached to the GuestOS as a virtual USB. Refer to link:../../rs/ic_os/os_tools/guest_vm_runner/templates/guestos_vm_template.xml[guestos_vm_template.xml]
+
+When the GuestOS boots, it checks for available removable media devices (i.e. the bootstrap config image). If such a device is found, the media must contain a VFAT filesystem.
+
+GuestOS then reads from the bootstrap config image (link:../components/guestos/init/init-config/init-config.sh[see init-config.sh]). For backward compatibility with older HostOS versions, it supports both:
+
+* Legacy tar-based configuration: A single file called `ic-bootstrap.tar`
+* Direct file-based configuration: Files copied directly to the bootstrap config image
+
+Only `config.json` is unpacked and copied into `/run/config`.
+
+=== First Boot Bootstrap
+
+On first boot, GuestOS bootstraps the node by copying config files from the bootstrap config image. See
+link:../../rs/ic_os/config/tool/README.md[rs/ic_os/config/tool].
+
+* *System state:* Node initialization material (initial registry & keys) is copied directly into target directories for replica use.
+* *Config partition:* Only the SSH authorized keys (`accounts_ssh_authorized_keys`) from the injected config are copied into the `/boot/config` directory. These keys need to be available on subsequent boots (not just the first boot of the system), and need to be preserved across upgrades.
+
+The config tool uses `ic.json5.template` to produce the ic configuration (also cf. service file definition). Template placeholders are populated with information from `/run/config`.
+
+[NOTE]
+GuestOS only reads a predefined set of files from the bootstrap config image (i.e., it "sanitizes" the bootstrap config image).
+
+[NOTE]
+The reason for the bootstrap config image redirection is to ensure that GuestOS maintains control over what goes onto its config partition. Theoretically, a malicious Node Technician could modify their HostOS image and place any file onto the bootstrap config image. However, GuestOS will only copy a predefined set of files to its config partition.
+
+== GuestOS config partition
+
+The config partition stores information that must be preserved across system upgrades and needs to be available during early boot time. Consequently, this information cannot reside within the encrypted payload data partition.
+
+Currently, all contents in the config partition are stored as plain-text without integrity protection.
+
+Other config partition files produced by the GuestOS at runtime:
+
+=== CONFIGURED file
+
+This file serves as a tag to indicate that the one-time bootstrap configuration has been completed. If the `/boot/config/CONFIGURED` file is not present, the boot sequence will search for a virtual USB stick (the bootstrap config image) containing the injected configuration files, and create the file.
+
+=== store.keyfile
+
+This file contains the key material used to derive the wrapping key for all block device encryption. The `store.keyfile` is created during the first boot, and encrypted partitions are configured with it.
+
+In the absence of a sealing key (which will be available in SEV-protected trusted execution environments), the `store.keyfile` is stored as plain-text. Once a sealing key becomes available, it should be used to wrap the contents of this file.
+
+== Implementation notes
+
+=== Guidance for adding configuration bits
+
+To add or modify a configuration field within the icos config tool, see
+link:../../rs/ic_os/config/tool/README.md[rs/ic_os/config/tool].
+
+To add a new configuration file/directory:
+
+1. Add handling to `guestos_bootstrap_image.rs` to include the new file/directory in the bootstrap config image.
+
+2. Add handling to `bootstrap_ic_node.rs` for the new file/directory.
+
+3. Add interpretation of configuration file/directory to suitable place, e.g. the config tool's template rendering or init scripts.
+
+4. Adapt testnet and/or prod deployment config as needed
+** E.g. if you are adding a production deployment config file, you may need to add a file to the SetupOS config partition to be piped through to HostOS.
+
+*Values and defaults*: Please ensure that the system is operational even in the absence of specific configuration bits, and fall back to sane production defaults. Already deployed nodes will by definition lack new configuration variables and need to behave properly. And defaults unsuitable for tests need to be overridden in tests (not the other way around).
+
+*Format*: The configuration files are "free-form". In principle, any format will work. But please use simple formats (e.g. files containing key=value pair lines). Parsing is done inside shell scripts and safely parsing "fancy" formats may be tricky.
+Consider that values may be controlled by an attacker on boot. Bootstrapping a node with bogus values can cause the node to malfunction. Our security goal is to disallow a Node Technician to gain control over the node via code injection or similar.
+
+*Configuration files*: New configuration bits might be added to either existing configuration files that have a suitable structure (e.g. key=value pairs), or new files. If in doubt, opt for adding additional configuration files.
+
+*Interpretation of configuration bits*: Any script or service in the system may pull configuration bits out of /boot/config to customize its behavior. E.g. if adding parameter-driven customization of ic.json5, then augment the generate-ic-config.sh script to pull the configuration values and substitute them into the generated configuration.
+
+=== Testing
+
+For testing, to add new configuration bits, you can modify the config tool located at
+link:../../rs/ic_os/config/tool/README.md[rs/ic_os/config/tool]. Or, you may find it easier to update *guestos_bootstrap_image.rs* and *bootstrap_ic_node.rs* directly,
+particularly if you wish to add a new configuration file (as opposed to just a new configuration _field_).
+
+* *ic_os config tool* can be run stand-alone to verify that it produces the intended configuration object.
+
+After all is done, it is advised to prepare a configuration for a single node and boot it in a VM before conducting testnet deployments.
+
+=== Injecting external state
+
+*Typical bootstrap process:* On first boot, the system will perform technical initialization (filesystems, etc.) and afterwards, initialize itself to act as a node in the IC. The node is initialized using key generation on the node itself (such that the private key never leaves the node) and through joining the IC (the node gets the rest of its state via joining the IC). "Registration" to the target IC is initiated by the node itself by sending a Node Operator-signed "join" request to its NNS.
+
+However, the typical bootstrap process can be modified such that the node is initialized using externally generated private keys and an externally generated initial state. All "registration" to the target IC is assumed to have been performed by other means.
+
+The behavior is triggered through the presence of the following files in the bootstrap config image:
+
+- `ic_crypto` - Crypto key material
+- `ic_registry_local_store` - Initial registry state
+- `ic_state` - Initial IC state
+
+*SEV/TEE Restrictions:* When SEV (Secure Encrypted Virtualization) is active on production builds, state injection is blocked for security reasons. This prevents a potentially malicious node operator from injecting arbitrary state into a TEE-protected node. State injection is only allowed when:
+
+- SEV is not active, OR
+- The GuestOS is built with the `dev` feature flag (for testing purposes)
+
+This behavior is suitable for the following use cases:
+
+- Bootstrapping an IC instance: In this case, suitable state for all nodes is generated by ic-prep and then distributed across multiple nodes. This is used, for example, during testnet setup.
+
+- Externally controlled join of a node to a subnet: In this case, ic-prep is used to prepare key material to the node, while ic-admin is used to modify the target NNS such that it "accepts" the new node as part of the IC.

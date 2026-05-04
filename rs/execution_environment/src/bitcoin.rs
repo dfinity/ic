@@ -1,222 +1,48 @@
-use crate::util::candid_error_to_user_error;
-use candid::Encode;
-use ic_btc_canister::state::State as BitcoinCanisterState;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{
-    BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetSuccessorsArgs,
-    BitcoinGetSuccessorsResponse, BitcoinGetUtxosArgs, BitcoinNetwork, BitcoinSendTransactionArgs,
-    EmptyBlob, Method as Ic00Method, Payload,
+use ic_management_canister_types_private::{
+    BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsResponse, BitcoinSendTransactionInternalArgs,
+    Payload,
 };
-use ic_registry_subnet_features::BitcoinFeatureStatus;
 use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::BitcoinGetSuccessorsContext, ReplicatedState,
+    ReplicatedState,
+    metadata_state::subnet_call_context_manager::{
+        BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
+    },
 };
-use ic_types::{messages::Request, Cycles, PrincipalId};
-
-// A number of last transactions in a block chain to calculate fee percentiles.
-// Assumed to be ~10'000 transactions to cover the last ~4-10 blocks.
-//
-// Note: number of transactions is supposed to be constant, because `get_current_fee_percentiles` cache
-// does not support `number_of_transactions` multiple values.
-const NUMBER_OF_TRANSACTIONS_FOR_CALCULATING_FEES: u32 = 10_000;
-
-const GET_BALANCE_FEE: Cycles = Cycles::new(100_000_000);
-const GET_UTXOS_FEE: Cycles = Cycles::new(100_000_000);
-const GET_CURRENT_FEE_PERCENTILES_FEE: Cycles = Cycles::new(100_000_000);
-const SEND_TRANSACTION_FEE_BASE: Cycles = Cycles::new(5_000_000_000);
-const SEND_TRANSACTION_FEE_PER_BYTE: Cycles = Cycles::new(20_000_000);
-
-/// Handles a `bitcoin_get_balance` request.
-pub fn get_balance(
-    payload: &[u8],
-    state: &mut ReplicatedState,
-    payment: Cycles,
-) -> (Result<Vec<u8>, UserError>, Cycles) {
-    execute_bitcoin_endpoint(
-        payload,
-        state,
-        payment,
-        GET_BALANCE_FEE,
-        |payload: &[u8], state: &mut ReplicatedState| -> Result<Vec<u8>, UserError> {
-            match BitcoinGetBalanceArgs::decode(payload) {
-                Err(err) => Err(candid_error_to_user_error(err)),
-                Ok(args) => {
-                    // Verify that the request is for the expected network.
-                    verify_network(args.network.into(), state.bitcoin().network())?;
-
-                    let btc_canister_state = BitcoinCanisterState::from(state.take_bitcoin_state());
-                    let balance_response = ic_btc_canister::get_balance(
-                        &btc_canister_state,
-                        &args.address,
-                        args.min_confirmations,
-                    );
-                    state.put_bitcoin_state(btc_canister_state.into());
-                    balance_response
-                        .map(|balance|
-                    // Using `unwrap()` here is safe because it's a simple u64 conversion.
-                    Encode!(&balance).unwrap())
-                        .map_err(|err| {
-                            UserError::new(
-                                ErrorCode::CanisterRejectedMessage,
-                                format!("{} failed: {}", Ic00Method::BitcoinGetBalance, err),
-                            )
-                        })
-                }
-            }
-        },
-    )
-}
-
-/// Handles a `bitcoin_get_utxos` request.
-pub fn get_utxos(
-    payload: &[u8],
-    state: &mut ReplicatedState,
-    payment: Cycles,
-) -> (Result<Vec<u8>, UserError>, Cycles) {
-    execute_bitcoin_endpoint(
-        payload,
-        state,
-        payment,
-        GET_UTXOS_FEE,
-        |payload: &[u8], state: &mut ReplicatedState| -> Result<Vec<u8>, UserError> {
-            match BitcoinGetUtxosArgs::decode(payload) {
-                Err(err) => Err(candid_error_to_user_error(err)),
-                Ok(args) => {
-                    // Verify that the request is for the expected network.
-                    verify_network(args.network.into(), state.bitcoin().network())?;
-
-                    let btc_canister_state = BitcoinCanisterState::from(state.take_bitcoin_state());
-                    let utxos_response = ic_btc_canister::get_utxos(
-                        &btc_canister_state,
-                        &args.address,
-                        args.filter.map(|f| f.into()),
-                    );
-                    state.put_bitcoin_state(btc_canister_state.into());
-
-                    utxos_response
-                        .map(|response| Encode!(&response).unwrap())
-                        .map_err(|err| {
-                            UserError::new(
-                                ErrorCode::CanisterRejectedMessage,
-                                format!("{} failed: {}", Ic00Method::BitcoinGetUtxos, err),
-                            )
-                        })
-                }
-            }
-        },
-    )
-}
-
-/// Handles a `get_current_fee_percentiles` request.
-pub fn get_current_fee_percentiles(
-    payload: &[u8],
-    state: &mut ReplicatedState,
-    payment: Cycles,
-) -> (Result<Vec<u8>, UserError>, Cycles) {
-    execute_bitcoin_endpoint(
-        payload,
-        state,
-        payment,
-        GET_CURRENT_FEE_PERCENTILES_FEE,
-        |payload: &[u8], state: &mut ReplicatedState| -> Result<Vec<u8>, UserError> {
-            match BitcoinGetCurrentFeePercentilesArgs::decode(payload) {
-                Err(err) => Err(candid_error_to_user_error(err)),
-                Ok(args) => {
-                    // Verify that the request is for the expected network.
-                    verify_network(args.network.into(), state.bitcoin().network())?;
-
-                    let mut btc_canister_state =
-                        BitcoinCanisterState::from(state.take_bitcoin_state());
-                    let response = ic_btc_canister::get_current_fee_percentiles(
-                        &mut btc_canister_state,
-                        NUMBER_OF_TRANSACTIONS_FOR_CALCULATING_FEES,
-                    );
-                    state.put_bitcoin_state(btc_canister_state.into());
-
-                    Ok(Encode!(&response).unwrap())
-                }
-            }
-        },
-    )
-}
-
-/// Handles a `bitcoin_send_transaction` request.
-pub fn send_transaction(
-    payload: &[u8],
-    state: &mut ReplicatedState,
-    payment: Cycles,
-) -> (Result<Vec<u8>, UserError>, Cycles) {
-    let args = match BitcoinSendTransactionArgs::decode(payload) {
-        Err(err) => {
-            // Failed to parse payload. Charge the base fee and return.
-            return (
-                Err(candid_error_to_user_error(err)),
-                payment - SEND_TRANSACTION_FEE_BASE,
-            );
-        }
-        Ok(args) => args,
-    };
-
-    let fee =
-        SEND_TRANSACTION_FEE_BASE + SEND_TRANSACTION_FEE_PER_BYTE * args.transaction.len() as u64;
-
-    execute_bitcoin_endpoint(
-        payload,
-        state,
-        payment,
-        fee,
-        move |_payload: &[u8], state: &mut ReplicatedState| -> Result<Vec<u8>, UserError> {
-            // Verify that the request is for the expected network.
-            verify_network(args.network.into(), state.bitcoin().network())?;
-
-            let mut btc_canister_state = BitcoinCanisterState::from(state.take_bitcoin_state());
-            let result = ic_btc_canister::send_transaction(&mut btc_canister_state, args);
-            state.put_bitcoin_state(btc_canister_state.into());
-
-            result
-                .map_err(|err| {
-                    UserError::new(
-                        ErrorCode::CanisterRejectedMessage,
-                        format!("{} failed: {}", Ic00Method::BitcoinSendTransaction, err),
-                    )
-                })
-                .map(|()| EmptyBlob.encode())
-        },
-    )
-}
+use ic_types::{CanisterId, messages::Request};
 
 /// Handles a `bitcoin_get_successors` request.
 /// Returns Ok if the request has been accepted, and an error otherwise.
 pub fn get_successors(
-    bitcoin_canisters: &[PrincipalId],
+    privileged_access: &[CanisterId],
     request: &Request,
     state: &mut ReplicatedState,
 ) -> Result<Option<Vec<u8>>, UserError> {
-    if !bitcoin_canisters.contains(&request.sender().get()) {
+    if !privileged_access.contains(&request.sender()) {
         return Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
             String::from("Permission denied."),
         ));
     }
 
-    // Remove follow-up responses for canisters that are no longer considered "bitcoin canisters".
+    // Remove follow-up responses for canisters that no longer have access to this API.
     state
         .metadata
         .bitcoin_get_successors_follow_up_responses
-        .retain(|sender, _| bitcoin_canisters.contains(&sender.get()));
+        .retain(|sender, _| privileged_access.contains(sender));
 
     match BitcoinGetSuccessorsArgs::decode(request.method_payload()) {
         Ok(get_successors_request) => {
             match get_successors_request {
                 BitcoinGetSuccessorsArgs::Initial(payload) => {
                     // Insert request into subnet call contexts.
-                    state
-                        .metadata
-                        .subnet_call_context_manager
-                        .push_bitcoin_get_successors_request(BitcoinGetSuccessorsContext {
+                    state.metadata.subnet_call_context_manager.push_context(
+                        SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
                             request: request.clone(),
                             payload,
-                        });
+                            time: state.time(),
+                        }),
+                    );
 
                     Ok(None)
                 }
@@ -246,66 +72,95 @@ pub fn get_successors(
                 }
             }
         }
-        Err(err) => Err(candid_error_to_user_error(err)),
+        Err(err) => Err(err),
     }
 }
 
-fn is_feature_enabled(state: &mut ReplicatedState) -> bool {
-    state.metadata.own_subnet_features.bitcoin().status == BitcoinFeatureStatus::Enabled
-}
-
-fn verify_network(
-    network_argument: BitcoinNetwork,
-    network_supported: BitcoinNetwork,
+/// Handles a `bitcoin_send_transaction_internal` request.
+/// Returns Ok if the request has been accepted, and an error otherwise.
+pub fn send_transaction_internal(
+    privileged_access: &[CanisterId],
+    request: &Request,
+    state: &mut ReplicatedState,
 ) -> Result<(), UserError> {
-    if network_argument != network_supported {
+    if !privileged_access.contains(&request.sender()) {
         return Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            format!(
-                "Received request for {} but the subnet supports {}",
-                network_argument, network_supported
-            ),
+            String::from("Permission denied."),
         ));
     }
 
-    Ok(())
-}
-
-fn execute_bitcoin_endpoint(
-    payload: &[u8],
-    state: &mut ReplicatedState,
-    payment: Cycles,
-    fee_to_charge: Cycles,
-    endpoint: impl FnOnce(&[u8], &mut ReplicatedState) -> Result<Vec<u8>, UserError>,
-) -> (Result<Vec<u8>, UserError>, Cycles) {
-    // Verify that the feature is enabled.
-    if !is_feature_enabled(state) {
-        return (
-            Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                "The bitcoin API is not enabled on this subnet.",
-            )),
-            payment,
-        );
-    }
-
-    // Verify that payment has been received.
-    if payment < fee_to_charge {
-        return (
-            Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "Received {} cycles. {} cycles are required.",
-                    payment, fee_to_charge
+    match BitcoinSendTransactionInternalArgs::decode(request.method_payload()) {
+        Ok(send_transaction_internal_request) => {
+            // Insert request into subnet call contexts.
+            state.metadata.subnet_call_context_manager.push_context(
+                SubnetCallContext::BitcoinSendTransactionInternal(
+                    BitcoinSendTransactionInternalContext {
+                        request: request.clone(),
+                        payload: send_transaction_internal_request,
+                        time: state.time(),
+                    },
                 ),
-            )),
-            payment,
-        );
-    }
+            );
 
-    // Execute the endpoint and deduct the fee.
-    (endpoint(payload, state), payment - fee_to_charge)
+            Ok(())
+        }
+        Err(err) => Err(err),
+    }
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use ic_management_canister_types_private::{
+        BitcoinGetSuccessorsArgs, IC_00, Method, Payload as Ic00Payload,
+    };
+    use ic_test_utilities::universal_canister::{call_args, wasm};
+    use ic_test_utilities_execution_environment::ExecutionTestBuilder;
+    use ic_test_utilities_types::ids::canister_test_id;
+    use ic_types::{CanisterId, PrincipalId};
+    use std::str::FromStr;
+
+    #[test]
+    fn clears_state_of_former_bitcoin_canisters() {
+        let bitcoin_canister_id = CanisterId::unchecked_from_principal(
+            PrincipalId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap(),
+        );
+
+        let mut test = ExecutionTestBuilder::new()
+            // Set the bitcoin canister to be the ID of the canister about to be created.
+            .with_bitcoin_privileged_access(bitcoin_canister_id)
+            .with_bitcoin_follow_up_responses(bitcoin_canister_id, vec![vec![1], vec![2]])
+            .with_bitcoin_follow_up_responses(
+                canister_test_id(123),
+                vec![vec![1], vec![2], vec![3]],
+            )
+            .with_provisional_whitelist_all()
+            .build();
+
+        let uni = test.universal_canister().unwrap();
+        assert_eq!(
+            uni.get_ref(),
+            &bitcoin_canister_id.get(),
+            "id of universal canister doesn't match expected id"
+        );
+
+        let call = wasm()
+            .call_simple(
+                IC_00,
+                Method::BitcoinGetSuccessors,
+                call_args()
+                    .other_side(BitcoinGetSuccessorsArgs::FollowUp(3).encode())
+                    .on_reject(wasm().reject_message().reject()),
+            )
+            .build();
+
+        test.ingress(uni, "update", call).unwrap();
+
+        assert_eq!(
+            test.state()
+                .metadata
+                .bitcoin_get_successors_follow_up_responses,
+            maplit::btreemap! { bitcoin_canister_id => vec![vec![1], vec![2]] }
+        );
+    }
+}

@@ -1,4 +1,4 @@
-use ic_registry_transport_protobuf_generator::{generate_prost_files, ProtoPaths};
+use ic_registry_transport_protobuf_generator::{ProtoPaths, generate_prost_files};
 use std::path::PathBuf;
 
 fn main() {
@@ -6,7 +6,7 @@ fn main() {
         std::env::var("CARGO_MANIFEST_DIR")
             .expect("CARGO_MANIFEST_DIR env variable is not defined"),
     );
-    let out = manifest_dir.join("../gen");
+    let out = manifest_dir.join("../src/gen");
     let transport_proto = manifest_dir.join("../proto");
     let protobuf_proto = manifest_dir.join("../../../protobuf/def");
 

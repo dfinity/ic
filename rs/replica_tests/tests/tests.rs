@@ -1,50 +1,21 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
-use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{self as ic00, EmptyBlob, Method, Payload};
+use ic_error_types::ErrorCode;
+use ic_management_canister_types_private::{self as ic00, EmptyBlob, Method, Payload};
 use ic_replica_tests as utils;
-use ic_replica_tests::assert_reply;
+use ic_replica_tests::{assert_reply, install_universal_canister};
 use ic_replicated_state::{PageIndex, PageMap};
 use ic_state_machine_tests::StateMachine;
 use ic_sys::PAGE_SIZE;
-use ic_test_utilities::types::ids::canister_test_id;
-use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_test_utilities::universal_canister::{call_args, wasm};
+use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
-    ingress::WasmResult, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-    time::current_time_and_expiry_time, CanisterId, NumBytes, RegistryVersion,
+    CanisterId, NumBytes, RegistryVersion, ingress::WasmResult,
+    messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, time::expiry_time_from_now,
 };
+use std::sync::Arc;
 
 const WASM_PAGE_SIZE: usize = 65536;
-
-pub struct UniversalCanister<'a> {
-    env: &'a StateMachine,
-    canister_id: CanisterId,
-}
-
-impl<'a> UniversalCanister<'a> {
-    pub fn canister_id(&self) -> CanisterId {
-        self.canister_id
-    }
-
-    pub fn query<P: Into<Vec<u8>>>(&self, payload: P) -> Result<WasmResult, UserError> {
-        self.env.query(self.canister_id(), "query", payload.into())
-    }
-
-    pub fn update<P: Into<Vec<u8>>>(&self, payload: P) -> Result<WasmResult, UserError> {
-        self.env
-            .execute_ingress(self.canister_id(), "update", payload.into())
-    }
-}
-
-fn install_universal_canister<P: Into<Vec<u8>>>(
-    env: &StateMachine,
-    args: P,
-) -> UniversalCanister<'_> {
-    let canister_id = env
-        .install_canister(UNIVERSAL_CANISTER_WASM.to_vec(), args.into(), None)
-        .expect("failed to install universal canister");
-    UniversalCanister { env, canister_id }
-}
 
 #[test]
 /// Tests a message can roundtrip through all layers
@@ -80,7 +51,7 @@ fn test_duplicate_message_is_noop() {
             Ok(WasmResult::Reply(vec![0, 0, 0, 0]))
         );
 
-        let expiry_time = current_time_and_expiry_time().1;
+        let expiry_time = expiry_time_from_now();
 
         // Grow stable memory again. Output should be the size of stable memory
         // before growing it (1).
@@ -385,32 +356,35 @@ fn test_query_trap_recovery() {
     let canister_id = env.install_canister_wat(wat, vec![], None);
     assert_reply(
         env.query(canister_id, "read", vec![]),
-        &0u32.to_le_bytes()[..],
+        &0_u32.to_le_bytes()[..],
     );
 
     assert!(env.query(canister_id, "trap", vec![]).is_err());
 
     assert_reply(
         env.query(canister_id, "read", vec![]),
-        &0u32.to_le_bytes()[..],
+        &0_u32.to_le_bytes()[..],
     );
 }
 
 #[test]
 /// Tests that a canister correctly initializes itself
 fn test_memory_persistence() {
-    utils::canister_test(|test| {
+    utils::canister_test_async(|test| async {
         let (canister_id, _) = test.create_and_install_canister(TEST_MEMORY, vec![]);
+        let test = Arc::new(test);
         // helper to make a query that writes some data to a given address
-        let write_data_query = |addr: i32, data: Vec<u8>| {
-            // payload[0;4] is the address: beginning of the last Wasm page
-            let mut payload = addr.to_le_bytes().to_vec();
-            // payload[4;8] is the data: [1, 2, .., 8]
-            payload.extend(data);
-            test.query(canister_id, "query_data", payload)
-                .unwrap()
-                .bytes()
-        };
+        let write_data_query =
+            |addr: i32, data: Vec<u8>, test: Arc<ic_replica_tests::LocalTestRuntime>| async move {
+                // payload[0;4] is the address: beginning of the last Wasm page
+                let mut payload = addr.to_le_bytes().to_vec();
+                // payload[4;8] is the data: [1, 2, .., 8]
+                payload.extend(data);
+                test.query(canister_id, "query_data", payload)
+                    .await
+                    .unwrap()
+                    .bytes()
+            };
 
         let write_data_ingress = |addr: i32, data: Vec<u8>| {
             // payload[0;4] is the address: beginning of the last Wasm page
@@ -436,7 +410,12 @@ fn test_memory_persistence() {
         // 2) Write some data to the last page. The `target` address is written to
         //    heap[0;4] and the remainder of the payload is written where the `target`
         //    points to.
-        write_data_query(199 * WASM_PAGE_SIZE as i32, (1u8..9).collect());
+        write_data_query(
+            199 * WASM_PAGE_SIZE as i32,
+            (1_u8..9).collect(),
+            test.clone(),
+        )
+        .await;
         // Query does *not* modify the memory file
         assert_eq!(
             display_page_map(
@@ -451,7 +430,7 @@ fn test_memory_persistence() {
         );
 
         // 3) Same message as 2) but this time as an ingress message and not a query
-        write_data_ingress(199 * WASM_PAGE_SIZE as i32, (1u8..9).collect());
+        write_data_ingress(199 * WASM_PAGE_SIZE as i32, (1_u8..9).collect());
         let expected_after_ingress_1 =
             // heap[0;4] is the `target` address, i.e. beginning of the last Wasm page
             // heap[target;8] is where the payload [1, 2, .., 8] is written to
@@ -472,7 +451,12 @@ fn test_memory_persistence() {
         );
 
         // 4) Another query. Does not modify the memory file.
-        write_data_query(100 * WASM_PAGE_SIZE as i32, (1u8..17).collect());
+        write_data_query(
+            100 * WASM_PAGE_SIZE as i32,
+            (1_u8..17).collect(),
+            test.clone(),
+        )
+        .await;
         assert_eq!(
             display_page_map(
                 test.canister_state(&canister_id)
@@ -486,7 +470,7 @@ fn test_memory_persistence() {
         );
 
         // 5) Same as 4) but this time as an ingress
-        write_data_ingress(100 * WASM_PAGE_SIZE as i32, (1u8..5).collect());
+        write_data_ingress(100 * WASM_PAGE_SIZE as i32, (1_u8..5).collect());
         let expected_after_ingress_2 =
             "[2×00 1×64 6553597×00 1×01 1×02 1×03 1×04 6488060×00 1×01 1×02 1×03 1×04 1×05 1×06 1×07 1×08 65528×00]"
             //                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -549,7 +533,8 @@ const TEST_MEMORY: &str = r#"
 
 #[test]
 fn test_heap_initialized_from_data_section_only_once() {
-    let wat = r#"
+    utils::canister_test_async(|test| async move {
+        let wat = r#"
         (module
           (import "ic0" "msg_reply" (func $msg_reply))
           (import "ic0" "msg_reply_data_append"
@@ -580,7 +565,6 @@ fn test_heap_initialized_from_data_section_only_once() {
           (export "canister_update write" (func $write))
           (export "canister_query read" (func $read))
         )"#;
-    utils::canister_test(move |test| {
         let (canister_id, _) = test.create_and_install_canister(wat, vec![]);
 
         let num_pages = (WASM_PAGE_SIZE / PAGE_SIZE) as u64;
@@ -597,12 +581,16 @@ fn test_heap_initialized_from_data_section_only_once() {
             ),
             "[1×78 65535×00]"
         );
-        let result = test.query(canister_id, "read", vec![]).unwrap().bytes();
+        let result = test
+            .query(canister_id, "read", vec![])
+            .await
+            .unwrap()
+            .bytes();
         let val = i32::from_le_bytes(std::convert::TryInto::try_into(&result[0..4]).unwrap());
         assert_eq!(val, 120);
 
         // result[0;4] is set to 0xbeef by the ingress message
-        test.ingress(canister_id, "write", 0xbeefi32.to_le_bytes().to_vec())
+        test.ingress(canister_id, "write", 0xbeef_i32.to_le_bytes().to_vec())
             .unwrap();
         assert_eq!(
             display_page_map(
@@ -618,7 +606,11 @@ fn test_heap_initialized_from_data_section_only_once() {
 
         // When we instantiate the canister for subsequent operations we don't set the
         // heap contents from data section anymore. Hence heap[0;4] stays 0xbeef
-        let result = test.query(canister_id, "read", vec![]).unwrap().bytes();
+        let result = test
+            .query(canister_id, "read", vec![])
+            .await
+            .unwrap()
+            .bytes();
         let val = i32::from_le_bytes(std::convert::TryInto::try_into(&result[0..4]).unwrap());
         assert_eq!(val, 0xbeef);
     })
@@ -750,7 +742,7 @@ fn test_memory_access_between_min_and_max_ingress() {
 #[should_panic(expected = "heap out of bounds")]
 // Grow memory beyond the maximum limit. Should throw an exception
 // when attempting to write to it.
-fn test_update_available_memory_1() {
+fn test_try_grow_wasm_memory_1() {
     let wat = r#"
         (module
           (import "ic0" "msg_reply" (func $msg_reply))
@@ -774,7 +766,7 @@ fn test_update_available_memory_1() {
 // Grow memory beyond the maximum limit. Should throw an exception when
 // attempting to read from it.
 #[should_panic(expected = "heap out of bounds")]
-fn test_update_available_memory_2() {
+fn test_try_grow_wasm_memory_2() {
     let wat = r#"
         (module
           (import "ic0" "msg_reply" (func $msg_reply))
@@ -796,8 +788,9 @@ fn test_update_available_memory_2() {
 
 #[test]
 // Grow memory multiple times, including beyond limit.
-fn test_update_available_memory_3() {
-    let wat = r#"
+fn test_try_grow_wasm_memory_3() {
+    utils::canister_test_async(|test| async move {
+        let wat = r#"
         (module
           (import "ic0" "msg_reply" (func $msg_reply))
           (import "ic0" "msg_reply_data_append"
@@ -841,9 +834,8 @@ fn test_update_available_memory_3() {
           (export "canister_update grow_by_one" (func $grow_by_one))
           (export "canister_query grow_by_one_query" (func $grow_by_one))
           (export "canister_query read_byte" (func $read_byte)))"#;
-    // installs a canister that uses debug.log from canister_init
-    // and check the received value
-    utils::canister_test(move |test| {
+        // installs a canister that uses debug.log from canister_init
+        // and check the received value
         // 1. After install the memory size is equal to the declared memory minimum
         // size.
         let (canister_id, _) = test.create_and_install_canister(wat, vec![]);
@@ -883,6 +875,7 @@ fn test_update_available_memory_3() {
         println!("> read_byte(page_num=1)");
         let val = test
             .query(canister_id, "read_byte", i32::to_le_bytes(1).to_vec())
+            .await
             .unwrap()
             .bytes()[0];
         assert_eq!(val, 0xa, "query result");
@@ -903,6 +896,7 @@ fn test_update_available_memory_3() {
         // 4. Queries grow the memory but it does not modify the persisted memory.
         println!("> grow_by_one()");
         test.query(canister_id, "grow_by_one_query", vec![])
+            .await
             .unwrap();
 
         // memory.size = 2
@@ -936,7 +930,7 @@ fn test_update_available_memory_3() {
         );
 
         // 6. Grow the memory by another page and modify its contents. Should fail since
-        // we exceed the maximum meory size.
+        // we exceed the maximum memory size.
         println!("> grow_by_one() memory.size = 3 -> memory.size = 4 (over limit)");
         let err = test
             .ingress(canister_id, "grow_by_one", vec![])
@@ -960,232 +954,6 @@ fn test_update_available_memory_3() {
     });
 }
 
-// TODO(RUN-324): This test tends to hang, we need to speed it up.
-#[ignore]
-#[test]
-// Grow memory multiple times first and write to newly added pages later.
-fn test_update_available_memory_4() {
-    let wat = r#"
-        (module
-          (import "ic0" "msg_reply" (func $msg_reply))
-          (import "ic0" "msg_reply_data_append"
-            (func $msg_reply_data_append (param i32 i32)))
-          (import "ic0" "msg_arg_data_copy"
-            (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
-
-          (func $grow_by_one
-            (drop (memory.grow (i32.const 1)))
-            (call $msg_reply_data_append (i32.const 0) (i32.const 0))
-            (call $msg_reply))
-
-          ;; reads a byte from the beginning of a memory page
-          (func $read_byte
-            ;; copy the i32 page number into heap[0;4]
-            (call $ic0_msg_arg_data_copy
-              (i32.const 0) ;; dst
-              (i32.const 0) ;; off
-              (i32.const 4) ;; len
-            )
-            ;; copy page(n)[0;1] to heap[0;1]
-            ;; we do this to make a Wasm instruction access out-of-bounds memory area and not
-            ;; msg.reply system call. Both should fail but the failure path is different.
-            (i32.store8
-              (i32.const 4)
-              (i32.load (i32.mul (i32.load (i32.const 0)) (i32.const 65536)))
-            )
-            (call $msg_reply_data_append
-              (i32.const 4)
-              (i32.const 1))
-            (call $msg_reply))
-
-          ;; writes a byte to the beginning of a memory page
-          (func $write_byte
-            ;; copy the i32 page number into heap[0;4]
-            (call $ic0_msg_arg_data_copy
-              (i32.const 0) ;; dst
-              (i32.const 0) ;; off
-              (i32.const 4) ;; len
-            )
-            ;; copy the u8 value heap[5;1]
-            (call $ic0_msg_arg_data_copy
-              (i32.const 4) ;; dst
-              (i32.const 4) ;; off
-              (i32.const 1) ;; len
-            )
-            (i32.store8
-              ;; target address
-              (i32.mul (i32.load (i32.const 0)) (i32.const 65536))
-              ;; target value
-              (i32.load8_u (i32.const 4))
-            )
-            (call $msg_reply_data_append (i32.const 0) (i32.const 0))
-            (call $msg_reply))
-
-          (global $counter (mut i32) (i32.const 10))
-          (memory $memory 2 5)
-          (export "canister_update grow_by_one" (func $grow_by_one))
-          (export "canister_query read_byte" (func $read_byte))
-          (export "canister_update write_byte" (func $write_byte))
-        )"#;
-    // installs a canister that uses debug.log from canister_init
-    // and check the received value
-    utils::canister_test(move |test| {
-        let (canister_id, _) = test.create_and_install_canister(wat, vec![]);
-
-        let num_pages = |n| (n * WASM_PAGE_SIZE / PAGE_SIZE) as u64;
-
-        // memory.size = 3
-        println!("> grow_by_one()");
-        test.ingress(canister_id, "grow_by_one", vec![])
-            .expect("grow memory to 3");
-        // memory.size = 4
-        println!("> grow_by_one()");
-        test.ingress(canister_id, "grow_by_one", vec![])
-            .expect("grow memory to 4");
-        // memory.size = 5
-        println!("> grow_by_one()");
-        test.ingress(canister_id, "grow_by_one", vec![])
-            .expect("grow memory to 4");
-        // memory.size = 5 (max limit)
-        println!("> grow_by_one()");
-        test.ingress(canister_id, "grow_by_one", vec![])
-            .expect("grow memory to 6 attempt 1");
-        // memory.size = 5 (max limit)
-        println!("> grow_by_one()");
-        test.ingress(canister_id, "grow_by_one", vec![])
-            .expect("grow memory to 6 attempt 2");
-
-        assert_eq!(
-            display_page_map(
-                test.canister_state(&canister_id)
-                    .execution_state
-                    .unwrap()
-                    .wasm_memory
-                    .page_map,
-                0..num_pages(5)
-            ),
-            "[327680×00]"
-        );
-
-        let make_payload = |page_num: i32, value: u8| {
-            let mut v = vec![];
-            v.extend(page_num.to_le_bytes().to_vec());
-            v.extend(value.to_le_bytes().to_vec());
-            v
-        };
-
-        // Write to memory pages allocated to satisfy memory minimum size. We use
-        // page(0) to unpack the payload so only write to page(1)
-        println!("> write_byte(1, 7)");
-        test.ingress(canister_id, "write_byte", make_payload(1, 7))
-            .unwrap();
-        println!(
-            "> memory: {}",
-            display_page_map(
-                test.canister_state(&canister_id)
-                    .execution_state
-                    .unwrap()
-                    .wasm_memory
-                    .page_map,
-                0..num_pages(5)
-            )
-        );
-        #[rustfmt::skip] // rustfmt breaks the explanatory comment at the bottom of thi assert
-        assert_eq!(
-            display_page_map(
-                test.canister_state(&canister_id)
-                    .execution_state
-                    .unwrap()
-                    .wasm_memory.page_map,
-                0..num_pages(5)
-            ),
-            "[1×01 3×00 1×07 65531×00 1×07 262143×00]"
-            //^^^^^^^^^^^^^^          ^^^
-            //unpacked payload        value
-        );
-
-        let test_write_read = |page_num, value| {
-            // 1. Grown memory page is zero-initialized
-            println!("> read_byte({})", page_num);
-            let result = test
-                .query(
-                    canister_id,
-                    "read_byte",
-                    i32::to_le_bytes(page_num).to_vec(),
-                )
-                .unwrap()
-                .bytes()[0];
-            println!(
-                "> memory: {}",
-                display_page_map(
-                    test.canister_state(&canister_id)
-                        .execution_state
-                        .unwrap()
-                        .wasm_memory
-                        .page_map,
-                    0..num_pages(5)
-                )
-            );
-            assert_eq!(result, 0, "query result before write");
-            // 2. Write a byte
-            println!("> write_byte({}, {})", page_num, value);
-            test.ingress(canister_id, "write_byte", make_payload(page_num, value))
-                .unwrap();
-            println!(
-                "> memory: {}",
-                display_page_map(
-                    test.canister_state(&canister_id)
-                        .execution_state
-                        .unwrap()
-                        .wasm_memory
-                        .page_map,
-                    0..num_pages(5)
-                )
-            );
-            println!("> read_byte({})", page_num);
-            // 3. Read it back
-            let result = test
-                .query(
-                    canister_id,
-                    "read_byte",
-                    i32::to_le_bytes(page_num).to_vec(),
-                )
-                .unwrap()
-                .bytes()[0];
-            println!(
-                "> memory: {}",
-                display_page_map(
-                    test.canister_state(&canister_id)
-                        .execution_state
-                        .unwrap()
-                        .wasm_memory
-                        .page_map,
-                    0..num_pages(5)
-                )
-            );
-            assert_eq!(result, value, "query result after write");
-        };
-
-        // Write data to the grown memory pages and read it back.
-        test_write_read(3, 9);
-        test_write_read(4, 10);
-        test_write_read(2, 8);
-
-        #[rustfmt::skip]
-        assert_eq!(
-            display_page_map(
-                test.canister_state(&canister_id)
-                    .execution_state
-                    .unwrap()
-                    .wasm_memory.page_map,
-                0..num_pages(5)
-            ),
-            "[1×02 3×00 1×08 65531×00 1×07 65535×00 1×08 65535×00 1×09 65535×00 1×0a 65535×00]"
-            //                        ^^^ page(1)   ^^^ page(2)   ^^^ page(3)   ^^^ page(4)
-        );
-    });
-}
-
 #[test]
 #[should_panic(expected = "cannot be executed in init mode")]
 fn test_call_forbidden_function_in_canister_init() {
@@ -1197,7 +965,7 @@ fn test_call_forbidden_function_in_canister_init() {
        (call $msg_reply_data_append
          (i32.const 0)
          (i32.const 0)))
-      ;; since we call a function which accesses memory we need to delcare memory
+      ;; since we call a function which accesses memory we need to declare memory
       (memory 0)
     )"#;
 
@@ -1233,7 +1001,7 @@ fn escape(id: &CanisterId) -> String {
 
 fn escape_bytes(x: &[u8]) -> String {
     x.iter().fold(String::new(), |mut res, b| {
-        res.push_str(&format!("\\{:02x}", b));
+        res.push_str(&format!("\\{b:02x}"));
         res
     })
 }
@@ -1247,7 +1015,7 @@ fn escape_bytes(x: &[u8]) -> String {
 // sums up all the responses and returns the sum when all the replies have been
 // received.
 //
-// The first canister ensures that when call_simple fails, it fails with the
+// The first canister ensures that when call_perform fails, it fails with the
 // appropriate error code and the test ensures that the ingress message
 // eventually finishes running.
 fn test_inter_canister_messaging_full_queues() {
@@ -1276,7 +1044,7 @@ fn test_inter_canister_messaging_full_queues() {
             vec![], None);
 
     // This canister keeps forwarding the value that was received in an
-    // ingress msg to the reflector canister above till call_simple fails.
+    // ingress msg to the reflector canister above till call_perform fails.
     // It sums up the reflected values and returns the sum.
     let canister_id = env.install_canister_wat(
         &format!(
@@ -1287,14 +1055,15 @@ fn test_inter_canister_messaging_full_queues() {
               (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i32 i32)))
               (import "ic0" "debug_print" (func $debug_print (param i32) (param i32)))
-              (import "ic0" "call_simple"
-                (func $ic0_call_simple
-                    (param i32 i32)
-                    (param $method_name_src i32)    (param $method_name_len i32)
-                    (param $reply_fun i32)          (param $reply_env i32)
-                    (param $reject_fun i32)         (param $reject_env i32)
-                    (param $data_src i32)           (param $data_len i32)
-                    (result i32)))
+              (import "ic0" "call_new"
+                (func $ic0_call_new
+                  (param i32 i32)
+                  (param $method_name_src i32)    (param $method_name_len i32)
+                  (param $reply_fun i32)          (param $reply_env i32)
+                  (param $reject_fun i32)         (param $reject_env i32)
+              ))
+              (import "ic0" "call_data_append" (func $ic0_call_data_append (param $src i32) (param $size i32)))
+              (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
 
               (func $compute
                 ;; heap[10] = payload[0]
@@ -1303,15 +1072,18 @@ fn test_inter_canister_messaging_full_queues() {
                 (block
                   (loop
                     ;; Call the reflector and store the return value in heap[30]
-                    (i32.store
-                      (i32.const 30)
-                      (call $ic0_call_simple
+                    (call $ic0_call_new
                         (i32.const 100) (i32.const {})  ;; reflector canister id
                         (i32.const 0) (i32.const 2)     ;; refers to "re" on the heap
                         (i32.const 0) (i32.const 0)     ;; on_reply closure
                         (i32.const 0) (i32.const 0)     ;; on_reject closure
+                    )
+                    (call $ic0_call_data_append
                         (i32.const 10) (i32.const 1)    ;; refers to byte copied from the payload
-                      )
+                    )
+                    (i32.store
+                      (i32.const 30)
+                      (call $ic0_call_perform)
                     )
 
                     ;; If heap[30] == 2 then call failed due to full queues.  Break out of loop
@@ -1536,7 +1308,7 @@ fn test_inter_canister_message_exchange_1() {
         env.execute_ingress(canister_id, "compute", vec![*num])
             .unwrap();
         let val = env.query(canister_id, "read", vec![]).unwrap().bytes();
-        assert_eq!(val[0], 2 * num + 3, "computation for value {} failed", num);
+        assert_eq!(val[0], 2 * num + 3, "computation for value {num} failed");
     }
 }
 
@@ -1582,14 +1354,15 @@ fn test_inter_canister_message_exchange_2() {
               (import "ic0" "msg_reply" (func $msg_reply))
               (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i32 i32)))
-              (import "ic0" "call_simple"
-                (func $ic0_call_simple
-                    (param i32 i32)
-                    (param $method_name_src i32)    (param $method_name_len i32)
-                    (param $reply_fun i32)          (param $reply_env i32)
-                    (param $reject_fun i32)         (param $reject_env i32)
-                    (param $data_src i32)           (param $data_len i32)
-                    (result i32)))
+              (import "ic0" "call_new"
+                (func $ic0_call_new
+                  (param i32 i32)
+                  (param $method_name_src i32)    (param $method_name_len i32)
+                  (param $reply_fun i32)          (param $reply_env i32)
+                  (param $reject_fun i32)         (param $reject_env i32)
+              ))
+              (import "ic0" "call_data_append" (func $ic0_call_data_append (param $src i32) (param $size i32)))
+              (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
 
               (func $compute
                 ;; heap[20] = 0
@@ -1597,20 +1370,24 @@ fn test_inter_canister_message_exchange_2() {
                 ;; heap[10] = payload[0]
                 (call $ic0_msg_arg_data_copy (i32.const 10) (i32.const 0) (i32.const 1))
                 ;; sends heap[10] to one multiplier
-                (call $ic0_call_simple
+                (call $ic0_call_new
                     (i32.const 100) (i32.const {})  ;; multiplier canister id
                     (i32.const 0) (i32.const 2)     ;; refers to "2x" on the heap
                     (i32.const 0) (i32.const 0)     ;; on_reply closure
-                    (i32.const 0) (i32.const 0)     ;; on_reject closure
+                    (i32.const 0) (i32.const 0))    ;; on_reject closure
+                (call $ic0_call_data_append
                     (i32.const 10) (i32.const 1))   ;; refers to byte copied from the payload
+                (call $ic0_call_perform)
                 drop
                 ;; sends heap[10] to another multiplier
-                (call $ic0_call_simple
+                (call $ic0_call_new
                     (i32.const 200) (i32.const {})  ;; multiplier canister id
                     (i32.const 0) (i32.const 2)     ;; refers to "2x" on the heap
                     (i32.const 0) (i32.const 0)     ;; on_reply closure
-                    (i32.const 0) (i32.const 0)     ;; on_reject closure
+                    (i32.const 0) (i32.const 0))    ;; on_reject closure
+                (call $ic0_call_data_append
                     (i32.const 10) (i32.const 1))   ;; refers to byte copied from the payload
+                (call $ic0_call_perform)
                 drop
                 (global.set $ncalls (i32.const 2)))
 
@@ -1651,7 +1428,7 @@ fn test_inter_canister_message_exchange_2() {
         env.execute_ingress(canister_id, "compute", vec![*num])
             .unwrap();
         let val = env.query(canister_id, "read", vec![]).unwrap().bytes();
-        assert_eq!(val[0], 4 * num, "computation for value {} failed", num);
+        assert_eq!(val[0], 4 * num, "computation for value {num} failed");
     }
 }
 
@@ -1663,7 +1440,7 @@ fn test_inter_canister_message_exchange_2() {
 // - canister B multiplies it by 3 and returns to A
 // - canister A multiplies it by 5 and stores on the heap
 fn test_inter_canister_message_exchange_3() {
-    utils::canister_test(|test| {
+    utils::canister_test_async(|test| async move {
         let (canister_c, _) = test.create_and_install_canister(
                 r#"(module
               (import "ic0" "msg_arg_data_copy" (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
@@ -1755,25 +1532,28 @@ fn test_inter_canister_message_exchange_3() {
               (import "ic0" "msg_reply" (func $msg_reply))
               (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i32 i32)))
-              (import "ic0" "call_simple"
-                (func $ic0_call_simple
-                    (param i32 i32)
-                    (param $method_name_src i32)    (param $method_name_len i32)
-                    (param $reply_fun i32)          (param $reply_env i32)
-                    (param $reject_fun i32)         (param $reject_env i32)
-                    (param $data_src i32)           (param $data_len i32)
-                    (result i32)))
+              (import "ic0" "call_new"
+                (func $ic0_call_new
+                  (param i32 i32)
+                  (param $method_name_src i32)    (param $method_name_len i32)
+                  (param $reply_fun i32)          (param $reply_env i32)
+                  (param $reject_fun i32)         (param $reject_env i32)
+              ))
+              (import "ic0" "call_data_append" (func $ic0_call_data_append (param $src i32) (param $size i32)))
+              (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
 
               (func $mul
                 ;; heap[10] = payload[0]
                 (call $ic0_msg_arg_data_copy (i32.const 10) (i32.const 0) (i32.const 1))
                 ;; sends heap[10] to one multiplier
-                (call $ic0_call_simple
+                (call $ic0_call_new
                     (i32.const 100) (i32.const {})  ;; multiplier canister id
                     (i32.const 0) (i32.const 3)     ;; refers to "mul" on the heap
                     (i32.const 0) (i32.const 0)     ;; on_reply closure
-                    (i32.const 0) (i32.const 0)     ;; on_reject closure
+                    (i32.const 0) (i32.const 0))    ;; on_reject closure
+                (call $ic0_call_data_append
                     (i32.const 10) (i32.const 1))   ;; refers to byte copied from the payload
+                (call $ic0_call_perform)
                 drop)
 
               (func $mul_callback (param $env i32)
@@ -1804,12 +1584,15 @@ fn test_inter_canister_message_exchange_3() {
 
         for num in &[7, 5, 1] {
             test.ingress(canister_a, "mul", vec![*num]).unwrap();
-            let val = test.query(canister_a, "read", vec![]).unwrap().bytes();
+            let val = test
+                .query(canister_a, "read", vec![])
+                .await
+                .unwrap()
+                .bytes();
             assert_eq!(
                 val[0],
                 2 * 3 * 5 * num,
-                "computation for value {} failed",
-                num
+                "computation for value {num} failed"
             );
         }
     })
@@ -1826,14 +1609,15 @@ fn test_inter_canister_message_exchange_4() {
               (import "ic0" "msg_reply" (func $msg_reply))
               (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i32 i32)))
-              (import "ic0" "call_simple"
-                (func $ic0_call_simple
-                    (param i32 i32)
-                    (param $method_name_src i32)    (param $method_name_len i32)
-                    (param $reply_fun i32)          (param $reply_env i32)
-                    (param $reject_fun i32)         (param $reject_env i32)
-                    (param $data_src i32)           (param $data_len i32)
-                    (result i32)))
+              (import "ic0" "call_new"
+                (func $ic0_call_new
+                  (param i32 i32)
+                  (param $method_name_src i32)    (param $method_name_len i32)
+                  (param $reply_fun i32)          (param $reply_env i32)
+                  (param $reject_fun i32)         (param $reject_env i32)
+              ))
+              (import "ic0" "call_data_append" (func $ic0_call_data_append (param $src i32) (param $size i32)))
+              (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
 
               (func $compute
                 ;; heap[10] = payload[0]
@@ -1841,12 +1625,14 @@ fn test_inter_canister_message_exchange_4() {
                 ;; write own canister id to heap[100..]
                 (call $canister_self_copy (i32.const 100) (i32.const 0) (call $canister_self_size))
                 ;; calls the multiplier canister
-                (call $ic0_call_simple
+                (call $ic0_call_new
                     (i32.const 100) (call $canister_self_size)
                     (i32.const 0) (i32.const 6)     ;; refers to "square" on the heap
                     (i32.const 0) (i32.const 0)     ;; on_reply closure
-                    (i32.const 0) (i32.const 0)     ;; on_reject closure
+                    (i32.const 0) (i32.const 0))    ;; on_reject closure
+                (call $ic0_call_data_append
                     (i32.const 10) (i32.const 1))   ;; refers to byte copied from the payload
+                (call $ic0_call_perform)
                 drop)
 
               (func $square
@@ -1884,7 +1670,7 @@ fn test_inter_canister_message_exchange_4() {
     for num in &[11, 7, 5, 1] {
         env.execute_ingress(id, "compute", vec![*num]).unwrap();
         let val = env.query(id, "read", vec![]).unwrap().bytes();
-        assert_eq!(val[0], num * num, "computation for value {} failed", num);
+        assert_eq!(val[0], num * num, "computation for value {num} failed");
     }
 }
 
@@ -1957,9 +1743,15 @@ fn test_reject_callback() {
                   (import "ic0" "canister_self_copy"
                           (func $ic0_self_copy (param i32 i32 i32)))
 
-                  (import "ic0" "call_simple"
-                          (func $ic0_call_simple (param i32 i32 i32 i32 i32 i32 i32 i32 i32 i32)
-                                                 (result i32)))
+                  (import "ic0" "call_new"
+                      (func $ic0_call_new
+                          (param i32 i32)
+                          (param $method_name_src i32)    (param $method_name_len i32)
+                          (param $reply_fun i32)          (param $reply_env i32)
+                          (param $reject_fun i32)         (param $reject_env i32)
+                  ))
+                  (import "ic0" "call_data_append" (func $ic0_call_data_append (param $src i32) (param $size i32)))
+                  (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
 
                   (import "ic0" "msg_reject" (func $msg_reject (param i32 i32)))
 
@@ -1974,18 +1766,19 @@ fn test_reject_callback() {
                   (func (export "canister_update entry") (local $len i32)
                         (local.set $len (call $ic0_self_size))
                         (call $ic0_self_copy (i32.const 32) (i32.const 0) (local.get $len))
-                        (drop (call $ic0_call_simple
+                        (call $ic0_call_new
                               (i32.const 32)            ;; callee_src
                               (local.get $len)          ;; callee_size
                               (i32.const 7)             ;; method_name_src
-                              (i32.const 4)            ;; method_name_len
+                              (i32.const 4)             ;; method_name_len
                               (i32.const 0)             ;; reply_fun
                               (i32.const 0)             ;; reply_env
                               (i32.const 1)             ;; reject_fun
-                              (i32.const 0)             ;; reject_env
+                              (i32.const 0))            ;; reject_env
+                         (call $ic0_call_data_append
                               (i32.const 0)             ;; data_src
-                              (i32.const 5)             ;; data_len
-                              )))
+                              (i32.const 5))            ;; data_len
+                         (drop (call $ic0_call_perform)))
 
                   (func (export "canister_update ping")
                         (call $msg_reject (i32.const 0) (i32.const 6)))
@@ -2046,14 +1839,13 @@ fn inter_canister_response_limit() {
                     (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param i32 i32)))
 
                     (func $hi
-                      (call $msg_reply_data_append (i32.const 30) (i32.const {}))
+                      (call $msg_reply_data_append (i32.const 30) (i32.const {size}))
                       (call $msg_reply)
                     )
 
                     (memory $memory 1)
                     (export "canister_update hi" (func $hi))
-                    (export "memory" (memory $memory)))"#,
-                size),
+                    (export "memory" (memory $memory)))"#),
             vec![], None);
     let err = env.execute_ingress(canister_a, "hi", vec![5]).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
@@ -2121,7 +1913,8 @@ fn setup_initial_dkg_method_interface() {
         // keys for other nodes, yet the test fixture instantiates the registry
         // for a single node.
         let node_ids = vec![canister.node_id()];
-        let request_payload = ic00::SetupInitialDKGArgs::new(node_ids, RegistryVersion::new(1));
+        let request_payload =
+            ic00::SetupInitialDKGArgs::new(node_ids, RegistryVersion::new(1), None);
         let response = canister
             .update(wasm().call_simple(
                 ic00::IC_00,
@@ -2136,7 +1929,7 @@ fn setup_initial_dkg_method_interface() {
                 assert_eq!(records.low_threshold_transcript_record.threshold, 1);
                 assert_eq!(records.high_threshold_transcript_record.threshold, 1);
             }
-            response => panic!("Unexpected response {:?}", response),
+            response => panic!("Unexpected response {response:?}"),
         }
     });
 }

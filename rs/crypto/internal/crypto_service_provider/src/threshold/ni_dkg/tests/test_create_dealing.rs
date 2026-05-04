@@ -22,14 +22,14 @@ fn test_create_dealing_should_detect_errors(
     network_size: usize,
     _num_reshares: i32,
 ) {
-    let mut rng = ChaCha20Rng::from_seed(seed);
-    let network = MockNetwork::random(&mut rng, network_size);
-    let config = MockDkgConfig::from_network(&mut rng, &network, None);
+    let rng = &mut ChaCha20Rng::from_seed(seed);
+    let network = MockNetwork::random(rng, network_size);
+    let config = MockDkgConfig::from_network(rng, &network, None);
     let state = StateWithConfig { network, config };
     // Dealing errors:
-    state.deal_with_incorrect_algorithm_id_should_fail(&mut rng);
-    state.deal_with_incorrect_threshold_should_fail(&mut rng);
-    state.deal_with_incorrect_receiver_ids_should_fail(&mut rng);
+    state.deal_with_incorrect_algorithm_id_should_fail(rng);
+    state.deal_with_incorrect_threshold_should_fail(rng);
+    state.deal_with_incorrect_receiver_ids_should_fail(rng);
     // MalformedFsPublicKeyError is untested as we have no Fs keys yet.
     // SizeError is untested because of the impracticality of making over 4
     // billion receivers.
@@ -72,7 +72,6 @@ impl StateWithConfig {
 
         let dealing = dealer_node.create_dealing(
             incorrect_algorithm_id,
-            self.config.dkg_id,
             self.config
                 .dealers
                 .position(dealer_node.node_id)
@@ -86,17 +85,14 @@ impl StateWithConfig {
                 .map(CspPublicCoefficients::from),
         );
         match dealing {
-            Ok(_) => panic!(
-                "Dealing should fail with AlgorithmId: {:?}",
-                incorrect_algorithm_id
-            ),
+            Ok(_) => panic!("Dealing should fail with AlgorithmId: {incorrect_algorithm_id:?}"),
             Err(CspDkgCreateReshareDealingError::UnsupportedAlgorithmId(algorithm_id)) => {
                 assert_eq!(
                     algorithm_id, incorrect_algorithm_id,
                     "Wrong algorithm_id reported"
                 )
             }
-            Err(error) => panic!("Incorrect error: {:?}", error),
+            Err(error) => panic!("Incorrect error: {error:?}"),
         }
     }
 
@@ -122,7 +118,6 @@ impl StateWithConfig {
         for incorrect_threshold in &[0, num_receivers + 1, num_receivers + 2] {
             let dealing = dealer_node.create_dealing(
                 self.config.algorithm_id,
-                self.config.dkg_id,
                 self.config
                     .dealers
                     .position(dealer_node.node_id)
@@ -136,9 +131,11 @@ impl StateWithConfig {
                     .map(CspPublicCoefficients::from),
             );
             match dealing {
-                Ok(_) => panic!("Dealing should fail with incorrect threshold.\n  Threshold: {}\n  Num receivers: {}", incorrect_threshold, num_receivers),
+                Ok(_) => panic!(
+                    "Dealing should fail with incorrect threshold.\n  Threshold: {incorrect_threshold}\n  Num receivers: {num_receivers}"
+                ),
                 Err(CspDkgCreateReshareDealingError::InvalidThresholdError(_)) => (),
-                Err(error) => panic!("Incorrect error: {:?}", error),
+                Err(error) => panic!("Incorrect error: {error:?}"),
             }
         }
     }
@@ -168,7 +165,6 @@ impl StateWithConfig {
 
         let dealing = dealer_node.create_dealing(
             self.config.algorithm_id,
-            self.config.dkg_id,
             self.config
                 .dealers
                 .position(dealer_node.node_id)
@@ -182,9 +178,9 @@ impl StateWithConfig {
                 .map(CspPublicCoefficients::from),
         );
         match dealing {
-            Ok(_) => panic!("Dealing should fail with indices: {:?}", incorrect_indices),
+            Ok(_) => panic!("Dealing should fail with indices: {incorrect_indices:?}"),
             Err(CspDkgCreateReshareDealingError::MisnumberedReceiverError { .. }) => (),
-            Err(error) => panic!("Incorrect error: {:?}", error),
+            Err(error) => panic!("Incorrect error: {error:?}"),
         }
     }
 
@@ -202,7 +198,7 @@ impl StateWithConfig {
         let incorrect_indices: Vec<NodeIndex> = (0..map.len() as NodeIndex * 2)
             .filter(|index| *index != missing_index)
             .choose_multiple(rng, map.len());
-        let values = map.iter().map(|(_, value)| (*value).clone());
+        let values = map.values().map(|value| (*value).clone());
         incorrect_indices.into_iter().zip(values).collect()
     }
 }

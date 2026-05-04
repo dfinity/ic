@@ -3,7 +3,7 @@ use crate::KeyId;
 use ic_crypto_internal_threshold_sig_bls12381::api::threshold_sign_error::ClibThresholdSignError;
 
 /// Errors occurring while performing threshold signature generation
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CspThresholdSignError {
     SecretKeyNotFound {
         algorithm: AlgorithmId,
@@ -16,7 +16,8 @@ pub enum CspThresholdSignError {
     MalformedSecretKey {
         algorithm: AlgorithmId,
     },
-    InternalError {
+    KeyIdInstantiationError(String),
+    TransientInternalError {
         internal_error: String,
     },
 }
@@ -34,7 +35,7 @@ impl From<ClibThresholdSignError> for CspThresholdSignError {
 impl From<CspSecretKeyConversionError> for CspThresholdSignError {
     fn from(sk_conversion_error: CspSecretKeyConversionError) -> Self {
         match sk_conversion_error {
-            CspSecretKeyConversionError::WrongSecretKeyType {} => {
+            CspSecretKeyConversionError::WrongSecretKeyType => {
                 CspThresholdSignError::WrongSecretKeyType {}
             }
         }
@@ -46,26 +47,26 @@ impl fmt::Display for CspThresholdSignError {
         match self {
             CspThresholdSignError::SecretKeyNotFound { algorithm, key_id } => write!(
                 f,
-                "The secret key with key id {:?} and algorithm id {:?} was not found in the \
-                secret key store.",
-                key_id, algorithm
+                "The secret key with key id {key_id:?} and algorithm id {algorithm:?} was not found in the \
+                secret key store."
             ),
             CspThresholdSignError::UnsupportedAlgorithm { algorithm } => write!(
                 f,
                 "The algorithm of the public key from the threshold signature data \
-            store is not supported: {:?}",
-                algorithm
+            store is not supported: {algorithm:?}"
             ),
             CspThresholdSignError::WrongSecretKeyType {} => {
                 write!(f, "The secret key has a wrong type")
             }
             CspThresholdSignError::MalformedSecretKey { algorithm } => write!(
                 f,
-                "Unable to parse the secret key with algorithm id {:?}",
-                algorithm
+                "Unable to parse the secret key with algorithm id {algorithm:?}"
             ),
-            CspThresholdSignError::InternalError { internal_error } => {
-                write!(f, "Internal error: {}", internal_error)
+            CspThresholdSignError::TransientInternalError { internal_error } => {
+                write!(f, "Transient internal error: {internal_error}")
+            }
+            CspThresholdSignError::KeyIdInstantiationError(message) => {
+                write!(f, "KeyID instantiation error: {message}")
             }
         }
     }

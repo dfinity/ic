@@ -1,0 +1,4 @@
+service : {
+  greeting : (text, nat16) -> (text) query;
+  combine : (nat16, nat16, nat16, nat16) -> (nat16, nat16) query;
+}

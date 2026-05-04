@@ -1,27 +1,54 @@
 use async_trait::async_trait;
 use ic_http_utils::file_downloader::FileDownloader;
-use ic_logger::{error, info, warn, ReplicaLogger};
-use std::future::Future;
+use ic_logger::{ReplicaLogger, error, info, warn};
+use std::ffi::OsStr;
 use std::str::FromStr;
 use std::{
     fmt::Debug,
     io::Write,
     path::PathBuf,
-    process::exit,
+    process::Output,
     time::{Duration, SystemTime},
 };
 use tokio::process::Command;
-use tokio::sync::watch::Receiver;
-use tokio::time::error::Elapsed;
 
 use crate::error::{UpgradeError, UpgradeResult};
 
 pub mod error;
 
+/// Trait for running manageboot.sh commands.
+#[async_trait]
+pub trait ManagebootRunner: Send + Sync {
+    /// Run the given manageboot command and return its output.
+    async fn run(&self, args: &[&OsStr]) -> std::io::Result<Output>;
+}
+
+/// Production implementation of [`ManagebootRunner`] that executes the command
+/// as a child process.
+pub struct ManagebootRunnerImpl {
+    binary: PathBuf,
+}
+
+impl ManagebootRunnerImpl {
+    pub fn new(binary: PathBuf) -> Self {
+        Self { binary }
+    }
+}
+
+#[async_trait]
+impl ManagebootRunner for ManagebootRunnerImpl {
+    async fn run(&self, args: &[&OsStr]) -> std::io::Result<Output> {
+        Command::new(&self.binary).args(args).output().await
+    }
+}
+
+/// Used to signal that the system is rebooting.
+pub struct Rebooting;
+
 const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 
 /// Defines the image upgrader trait and default implementation. It receives a generic version identifier `V`
-/// and a return value `R` stemming from a peridoically called `check_for_upgrade` function.
+/// and a return value `R` stemming from a periodically called `check_for_upgrade` function.
 /// The lifecycle of an image can be described by:
 /// 1. Confirming the boot of the current image using the `manageboot.sh` script. Cf. `confirm_boot()`
 /// 2. Optionally collecting metrics of the reboot time from disk.
@@ -46,7 +73,7 @@ const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 ///     fn get_release_package_url_and_hash(
 ///         &self,
 ///         version: &Version,
-///     ) -> UpgradeResult<(String, Option<String>)> {
+///     ) -> UpgradeResult<(Vec<String>, Option<String>)> {
 ///         // Collect and return release package information, i.e. from registry.
 ///         ...
 ///     }
@@ -70,7 +97,7 @@ const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 ///     ...
 ///
 ///     let upgrade = Upgrader {...};
-///     
+///
 ///     upgrade.confirm_boot().await;
 ///
 ///     upgrade.upgrade_loop(exit_signal, interval, timeout, |result| async {
@@ -84,9 +111,9 @@ const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 /// ```
 ///
 #[async_trait]
-pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send>:
-    Send + Sync
-{
+pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send + Sync {
+    type UpgradeType;
+
     /// Return the currently prepared version, if there is one. Default is None.
     /// A version `v` is considered to be prepared if its release package was successfully
     /// downloaded and unpacked after a call to `prepare_upgrade(v)`.
@@ -96,55 +123,84 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     /// Set or unset the currently prepared version. Default is No-op.
     /// The prepared version is set during `prepare_upgrade()` and unset during the `execute_upgrade()` step.
     fn set_prepared_version(&mut self, _version: Option<V>) {}
-    /// Path to the directory containing boot scripts.
-    fn binary_dir(&self) -> &PathBuf;
     /// Path to the image image download and unpacking destination.
     fn image_path(&self) -> &PathBuf;
     /// Optional data path, used for storing latest reboot time. Default is None.
-    fn data_dir(&self) -> &Option<PathBuf> {
-        &None
+    fn data_dir(&self) -> Option<&PathBuf> {
+        None
     }
     /// Return the logger to be passed to the upgrade functions.
     fn log(&self) -> &ReplicaLogger;
     /// Return the release package url and optional SHA256 hex string for the given version.
     /// Used to download the release package during `prepare_upgrade()`.
-    fn get_release_package_url_and_hash(
+    fn get_release_package_urls_and_hash(
         &self,
         version: &V,
-    ) -> UpgradeResult<(String, Option<String>)>;
+    ) -> UpgradeResult<(Vec<String>, Option<String>)>;
+
+    /// Runs the disk encryption key exchange process if SEV is active. NOOP otherwise.
+    async fn maybe_exchange_disk_encryption_key(&mut self) -> UpgradeResult<()>;
+
+    /// Return the implementation of [`ManagebootRunner`] to be used for running the
+    /// `manageboot.sh` commands.
+    fn manageboot_runner(&self) -> &dyn ManagebootRunner;
 
     /// Calls a corresponding script to "confirm" that the base OS could boot
-    /// successfully. With a confirmation the image will be reverted on the next
+    /// successfully. Without a confirmation the image will be reverted on the next
     /// restart.
     async fn confirm_boot(&self) {
-        if let Err(err) = Command::new(self.binary_dir().join("manageboot.sh").into_os_string())
-            .arg("confirm")
-            .output()
-            .await
-        {
+        let args = ["guestos".as_ref(), "confirm".as_ref()];
+        if let Err(err) = self.manageboot_runner().run(&args).await {
             error!(self.log(), "Could not confirm the boot: {:?}", err);
         }
     }
+
+    /// Return a value that would differentiate the nodes (but not necessarily unique) in order
+    /// to allow them to download the new release package from different URLs.
+    fn get_load_balance_number(&self) -> usize;
 
     /// Downloads release package associated with the given version
     ///
     /// Releases are downloaded using [`FileDownloader::download_file()`] which
     /// returns immediately if the file with matching hash already exists.
     async fn download_release_package(&self, version: &V) -> UpgradeResult<()> {
-        let (release_package_url, hash) = self.get_release_package_url_and_hash(version)?;
-        let start_time = std::time::Instant::now();
-        let file_downloader = FileDownloader::new(Some(self.log().clone()));
-        file_downloader
-            .download_file(&release_package_url, self.image_path(), hash)
-            .await
-            .map_err(UpgradeError::from)?;
-        info!(
-            self.log(),
-            "Image downloading request for version {:?} processed in {:?}",
-            version,
-            start_time.elapsed(),
-        );
-        Ok(())
+        let (mut release_package_urls, hash) = self.get_release_package_urls_and_hash(version)?;
+
+        let url_count = release_package_urls.len();
+        if url_count == 0 {
+            return Err(UpgradeError::GenericError(format!(
+                "No download URLs are provided for version {version:?}"
+            )));
+        }
+
+        // Load-balance, by making each node rotate the `release_package_urls` by some number.
+        // Note that the order is the same for everyone; only the starting point is different.
+        // This is okay because we do expect the first attempt to be successful.
+        release_package_urls.rotate_right(self.get_load_balance_number() % url_count);
+
+        // We return the last error if download attempts from all the URLs fail.
+        // We will always either set `error`, or return `Ok` from this loop.
+        let mut error = UpgradeError::GenericError("unreachable".to_string());
+        for release_package_url in release_package_urls.iter() {
+            let req = format!("Request to download image {version:?} from {release_package_url}");
+            let file_downloader =
+                FileDownloader::new_with_timeout(Some(self.log().clone()), Duration::from_secs(60));
+            let start_time = std::time::Instant::now();
+            let download_result = file_downloader
+                .download_file(release_package_url, self.image_path(), hash.clone())
+                .await;
+            let duration = start_time.elapsed();
+
+            if let Err(e) = download_result {
+                warn!(self.log(), "{} failed in {:?}: {}", req, duration, e);
+                error = UpgradeError::from(e);
+            } else {
+                info!(self.log(), "{} processed in {:?}", req, duration);
+                return Ok(());
+            }
+        }
+
+        Err(error)
     }
 
     /// Downloads release package associated with the given version,
@@ -160,34 +216,37 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
 
         self.download_release_package(version).await?;
 
-        // The call to `manageboot.sh upgrade-install` could corrupt any previous upgrade preperation.
+        // The call to `manageboot.sh upgrade-install` could corrupt any previous upgrade preparation.
         // In case this function fails and we do want to leave `prepared_upgrade_version` set. Therefore,
         // clear it here.
         self.set_prepared_version(None);
 
-        let mut script = self.binary_dir().clone();
-        script.push("manageboot.sh");
-        let mut c = Command::new(script.clone().into_os_string());
-        let out = c
-            .arg("upgrade-install")
-            .arg(self.image_path())
-            .output()
+        let args = [
+            "guestos".as_ref(),
+            "upgrade-install".as_ref(),
+            self.image_path().as_os_str(),
+        ];
+        let out = self
+            .manageboot_runner()
+            .run(&args)
             .await
-            .map_err(|e| UpgradeError::file_command_error(e, &c))?;
-        if out.status.success() {
-            self.set_prepared_version(Some(version.clone()));
-            Ok(())
-        } else {
+            .map_err(|e| UpgradeError::manageboot_error(e, &args))?;
+
+        if !out.status.success() {
             warn!(self.log(), "upgrade-install has failed");
-            Err(UpgradeError::GenericError(
+            return Err(UpgradeError::GenericError(
                 "upgrade-install failed".to_string(),
-            ))
+            ));
         }
+
+        self.maybe_exchange_disk_encryption_key().await?;
+        self.set_prepared_version(Some(version.clone()));
+        Ok(())
     }
 
     /// Executes the node upgrade by unpacking the downloaded image (if it didn't happen yet)
     /// and rebooting the node.
-    async fn execute_upgrade<T>(&mut self, version: &V) -> UpgradeResult<T> {
+    async fn execute_upgrade(&mut self, version: &V) -> UpgradeResult<Rebooting> {
         match self.get_prepared_version() {
             Some(v) if v == version => {
                 info!(
@@ -207,28 +266,26 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
             warn!(self.log(), "Cannot persist the time of reboot: {}", e);
         }
 
-        // We could successfuly unpack the file above, so we do not need the image anymore.
+        // We could successfully unpack the file above, so we do not need the image anymore.
         std::fs::remove_file(self.image_path())
             .map_err(|e| UpgradeError::IoError("Couldn't delete the image".to_string(), e))?;
 
         info!(self.log(), "Attempting to reboot");
-        let mut script = self.binary_dir().clone();
-        script.push("manageboot.sh");
-        let mut c = Command::new(script.into_os_string());
-        let out = c
-            .arg("upgrade-commit")
-            .output()
+        let args = ["guestos".as_ref(), "upgrade-commit".as_ref()];
+        let out = self
+            .manageboot_runner()
+            .run(&args)
             .await
-            .map_err(|e| UpgradeError::file_command_error(e, &c))?;
+            .map_err(|e| UpgradeError::manageboot_error(e, &args))?;
 
         if !out.status.success() {
-            warn!(self.log(), "upgrade-commit has failed");
+            warn!(self.log(), "upgrade-commit has failed: {:?}", out.status);
             Err(UpgradeError::GenericError(
                 "upgrade-commit failed".to_string(),
             ))
         } else {
             info!(self.log(), "Rebooting {:?}", out);
-            exit(42);
+            Ok(Rebooting)
         }
     }
 
@@ -275,29 +332,5 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     /// * Check if an image upgrade is scheduled.
     /// * Optionally prepare the upgrade in advance using `prepare_upgrade`.
     /// * Once it is time to upgrade, execute it using `execute_upgrade`
-    async fn check_for_upgrade(&mut self) -> UpgradeResult<R>;
-
-    /// Calls `check_for_upgrade()` once every `interval`, timing out after `timeout`.
-    /// Awaiting this function blocks until `exit_signal` is set to `true`.
-    /// For every execution of `check_for_upgrade()` the given handler is called with
-    /// the result returned by the check.
-    async fn upgrade_loop<F, Fut>(
-        &mut self,
-        mut exit_signal: Receiver<bool>,
-        interval: Duration,
-        timeout: Duration,
-        handler: F,
-    ) where
-        F: Fn(Result<UpgradeResult<R>, Elapsed>) -> Fut + Send + Sync,
-        Fut: Future<Output = ()> + Send,
-    {
-        while !*exit_signal.borrow() {
-            let r = tokio::time::timeout(timeout, self.check_for_upgrade()).await;
-            handler(r).await;
-            tokio::select! {
-                _ = tokio::time::sleep(interval) => {}
-                _ = exit_signal.changed() => {}
-            };
-        }
-    }
+    async fn check_for_upgrade(&mut self) -> UpgradeResult<Self::UpgradeType>;
 }

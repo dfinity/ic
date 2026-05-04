@@ -13,4 +13,4 @@ Folder structure:
 Generation of Rust files
 ------------------------
 
-Run `bazel run generator` inside this directory, commit the changes.
+Run `bazel run //rs/protobuf/generator`, commit the changes.

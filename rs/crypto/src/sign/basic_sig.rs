@@ -1,6 +1,10 @@
 use super::*;
-use ic_crypto_internal_csp::api::{CspSigVerifier, CspSigner};
+use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::types::SigConverter;
+use ic_crypto_internal_csp::vault::api::{
+    BasicSignatureCspVault, CspBasicSignatureError, PublicRandomSeedGeneratorError,
+};
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult};
 
 #[cfg(test)]
 mod tests;
@@ -10,7 +14,7 @@ pub struct BasicSigVerifierInternal {}
 impl BasicSigVerifierInternal {
     pub fn verify_basic_sig<S: CspSigner, H: Signable>(
         csp_signer: &S,
-        registry: Arc<dyn RegistryClient>,
+        registry: &dyn RegistryClient,
         signature: &BasicSigOf<H>,
         message: &H,
         signer: NodeId,
@@ -43,102 +47,85 @@ impl BasicSigVerifierInternal {
         Ok(BasicSignatureBatch { signatures_map })
     }
 
-    pub fn verify_basic_sig_batch_vartime<S: CspSigVerifier, H: Signable>(
-        csp_signer: &S,
-        registry: Arc<dyn RegistryClient>,
-        signature: &BasicSignatureBatch<H>,
+    pub fn verify_basic_sig_batch<H: Signable>(
+        vault: &dyn CspVault,
+        registry: &dyn RegistryClient,
+        signatures: &BasicSignatureBatch<H>,
         message: &H,
         registry_version: RegistryVersion,
     ) -> CryptoResult<()> {
-        if signature.signatures_map.is_empty() {
+        if signatures.signatures_map.is_empty() {
             return Err(CryptoError::InvalidArgument {
-                message: "Empty BasicSignatureBatch. At least one signature should be included in the batch."
-                    .to_string(),
+                message: "Empty BasicSignatureBatch. At least one signature should be included in the batch.".to_string(),
             });
         };
-        let mut pk_sig_pairs =
-            Vec::<(CspPublicKey, CspSignature)>::with_capacity(signature.signatures_map.len());
-        let mut first_algorithm_id: Option<AlgorithmId> = None;
 
-        for (signer, signature) in signature.signatures_map.iter() {
-            let pk_proto = key_from_registry(
-                registry.to_owned(),
-                *signer,
-                KeyPurpose::NodeSigning,
-                registry_version,
-            )?;
+        let message = message.as_signed_bytes();
+        let mut msgs = Vec::with_capacity(signatures.signatures_map.len());
+        let mut sigs = Vec::with_capacity(signatures.signatures_map.len());
+        let mut keys = Vec::with_capacity(signatures.signatures_map.len());
 
-            let this_algorithm_id = AlgorithmId::from(pk_proto.algorithm);
-            match first_algorithm_id {
-                Some(algorithm_id) => {
-                    if algorithm_id != this_algorithm_id {
-                        return Err(CryptoError::InvalidArgument {
-                            message: format!(
-                                "Inconsistent input AlgorithmIds in batched basic sig verification: {}, {}",
-                                algorithm_id, this_algorithm_id
-                            ),
-                        });
-                    }
-                }
-                None => first_algorithm_id = Some(this_algorithm_id),
+        for (signer, signature) in signatures.signatures_map.iter() {
+            let pk_proto =
+                key_from_registry(registry, *signer, KeyPurpose::NodeSigning, registry_version)?;
+
+            let pubkey_alg = AlgorithmId::from(pk_proto.algorithm);
+            if pubkey_alg != AlgorithmId::Ed25519 {
+                return Err(CryptoError::AlgorithmNotSupported {
+                    algorithm: pubkey_alg,
+                    reason: "Only Ed25519 is supported in batched basic sig verification."
+                        .to_string(),
+                });
             }
+            let pk = ic_ed25519::PublicKey::deserialize_raw(&pk_proto.key_value).map_err(|e| {
+                CryptoError::MalformedPublicKey {
+                    algorithm: AlgorithmId::Ed25519,
+                    key_bytes: Some(pk_proto.key_value),
+                    internal_error: e.to_string(),
+                }
+            })?;
 
-            let csp_pk = CspPublicKey::try_from(pk_proto)?;
-            let csp_sig = SigConverter::for_target(this_algorithm_id).try_from_basic(signature)?;
-            pk_sig_pairs.push((csp_pk, csp_sig));
+            msgs.push(&message[..]);
+            sigs.push(&signature.get_ref().0[..]);
+            keys.push(pk);
         }
-        // `first_algorithm_id.expect()` does not panic because it's guaranteed that there was at least one valid AlgorithmId by
-        // 1) it's checked that `signature_map` is not empty, and
-        // 2) it's checked that at least `pk_proto` is well-formed,
-        // and thus `this_algorithm_id` is never `None` at this point in code.
-        csp_signer.verify_batch_vartime(
-            &pk_sig_pairs[..],
-            &message.as_signed_bytes(),
-            first_algorithm_id.expect("Something went wrong with the AlgorithmId assignment"),
-        )?;
-        Ok(())
+
+        let seed = vault.new_public_seed().map_err(|e| match e {
+            PublicRandomSeedGeneratorError::TransientInternalError { internal_error } => {
+                CryptoError::TransientInternalError { internal_error }
+            }
+        })?;
+        let rng = &mut seed.into_rng();
+
+        ic_ed25519::PublicKey::batch_verify(&msgs, &sigs, &keys, rng).map_err(|e| {
+            CryptoError::SignatureVerification {
+                algorithm: AlgorithmId::Ed25519,
+                public_key_bytes: vec![],
+                sig_bytes: vec![],
+                internal_error: e.to_string(),
+            }
+        })
     }
 }
 
-pub struct BasicSignerInternal {}
+pub fn sign<H: Signable>(
+    message: &H,
+    vault: &dyn BasicSignatureCspVault,
+    metrics: &CryptoMetrics,
+) -> CryptoResult<BasicSigOf<H>> {
+    let message_bytes = message.as_signed_bytes();
+    let message_bytes_len = message_bytes.len();
 
-impl BasicSignerInternal {
-    pub fn sign_basic<S: CspSigner, H: Signable>(
-        csp_signer: &S,
-        registry: Arc<dyn RegistryClient>,
-        message: &H,
-        signer: NodeId,
-        registry_version: RegistryVersion,
-    ) -> CryptoResult<BasicSigOf<H>> {
-        let pk_proto =
-            key_from_registry(registry, signer, KeyPurpose::NodeSigning, registry_version)?;
-        let algorithm_id = AlgorithmId::from(pk_proto.algorithm);
-        let csp_pk = CspPublicKey::try_from(pk_proto)?;
-        let key_id = public_key_hash_as_key_id(&csp_pk);
-        let csp_sig = csp_signer.sign(algorithm_id, &message.as_signed_bytes(), key_id)?;
+    let result = vault
+        .sign(message_bytes)
+        .map_err(|e: CspBasicSignatureError| CryptoError::from(e));
 
-        Ok(BasicSigOf::new(BasicSig(csp_sig.as_ref().to_vec())))
-    }
-}
-
-pub struct BasicSignVerifierByPublicKeyInternal {}
-
-impl BasicSignVerifierByPublicKeyInternal {
-    pub fn verify_basic_sig_by_public_key<C: CspSigner, S: Signable>(
-        csp_signer: &C,
-        signature: &BasicSigOf<S>,
-        signed_bytes: &S,
-        public_key: &UserPublicKey,
-    ) -> CryptoResult<()> {
-        let pubkey_algorithm = public_key.algorithm_id;
-        let csp_pk = CspPublicKey::try_from(public_key)?;
-        let csp_sig = SigConverter::for_target(pubkey_algorithm).try_from_basic(signature)?;
-
-        csp_signer.verify(
-            &csp_sig,
-            &signed_bytes.as_signed_bytes(),
-            pubkey_algorithm,
-            csp_pk,
-        )
-    }
+    metrics.observe_parameter_size(
+        MetricsDomain::BasicSignature,
+        "sign_basic",
+        "message",
+        message_bytes_len,
+        MetricsResult::from(&result),
+    );
+    Ok(BasicSigOf::new(BasicSig(result?.as_ref().to_vec())))
 }

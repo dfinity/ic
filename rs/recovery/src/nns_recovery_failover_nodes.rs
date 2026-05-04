@@ -1,27 +1,43 @@
-use crate::admin_helper::RegistryParams;
-use crate::command_helper::pipe_all;
-use crate::recovery_iterator::RecoveryIterator;
-use crate::{error::RecoveryError, RecoveryArgs};
-use crate::{NeuronArgs, RecoveryResult, IC_REGISTRY_LOCAL_STORE};
+use crate::{
+    IC_REGISTRY_LOCAL_STORE, NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step,
+    admin_helper::RegistryParams,
+    cli::{print_height_info, read_optional, read_optional_data_location, read_optional_node_ids},
+    command_helper::pipe_all,
+    error::{GracefulExpect, RecoveryError},
+    recovery_iterator::RecoveryIterator,
+    registry_helper::RegistryPollingStrategy,
+    util::{DataLocation, SshUser},
+};
 use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_types::{NodeId, ReplicaVersion};
+use serde::{Deserialize, Serialize};
 use slog::Logger;
-use std::net::IpAddr;
-use std::path::PathBuf;
-use std::process::Command;
+use std::{iter::Peekable, net::IpAddr, net::Ipv6Addr, path::PathBuf, process::Command};
 use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
+use strum_macros::{EnumIter, EnumMessage, EnumString};
 use url::Url;
-
-use crate::{Recovery, Step};
 
 /// Caller id that will be used to mutate the registry canister.
 pub const CANISTER_CALLER_ID: &str = "r7inp-6aaaa-aaaaa-aaabq-cai";
 
-#[derive(Debug, Copy, Clone, EnumIter)]
+#[derive(
+    Copy,
+    Clone,
+    PartialEq,
+    Debug,
+    Deserialize,
+    EnumIter,
+    EnumMessage,
+    EnumString,
+    Serialize,
+    strum_macros::Display,
+)]
 pub enum StepType {
     StopReplica,
+    DownloadCertifications,
+    MergeCertificationPools,
+    DownloadConsensusPool,
     DownloadState,
     ProposeToCreateSubnet,
     DownloadParentNNSStore,
@@ -36,20 +52,20 @@ pub enum StepType {
     Cleanup,
 }
 
-#[derive(Parser)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
 #[clap(version = "1.0")]
 pub struct NNSRecoveryFailoverNodesArgs {
     /// Id of the broken subnet
-    #[clap(long, parse(try_from_str=crate::util::subnet_id_from_str))]
+    #[clap(long, value_parser=crate::util::subnet_id_from_str)]
     pub subnet_id: SubnetId,
 
     /// Replica version to start the new NNS with (has to be blessed by parent NNS)
-    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    #[clap(long)]
     pub replica_version: Option<ReplicaVersion>,
 
-    /// Public ssh key to be deployed to the subnet for read only access
     #[clap(long)]
-    pub pub_key: Option<String>,
+    /// The replay will stop at this height and make a checkpoint.
+    pub replay_until_height: Option<u64>,
 
     /// IP address of the auxiliary host the registry is uploaded to
     #[clap(long)]
@@ -71,22 +87,38 @@ pub struct NNSRecoveryFailoverNodesArgs {
     #[clap(long)]
     pub download_node: Option<IpAddr>,
 
-    /// IP address of the node to upload the new subnet state to
+    /// Height of the checkpoint to download. If not provided, the latest checkpoint is used.
     #[clap(long)]
-    pub upload_node: Option<IpAddr>,
+    pub download_state_height: Option<u64>,
+
+    /// The method of uploading state. Possible values are either `local` (for a
+    /// local recovery on the admin node) or the ipv6 address of the target node.
+    /// Local recoveries allow us to skip a potentially expensive data transfer.
+    #[clap(long, value_parser=crate::util::data_location_from_str)]
+    pub upload_method: Option<DataLocation>,
 
     /// IP address of the parent nns host to download the registry store from
     #[clap(long)]
     pub parent_nns_host_ip: Option<IpAddr>,
 
-    #[clap(long, multiple_values(true), parse(try_from_str=crate::util::node_id_from_str))]
+    #[clap(long, num_args(1..), value_parser=crate::util::node_id_from_str)]
     /// Replace the members of the given subnet with these nodes
     pub replacement_nodes: Option<Vec<NodeId>>,
+
+    /// If present the tool will start execution for the provided step, skipping the initial ones
+    #[clap(long = "resume")]
+    pub next_step: Option<StepType>,
+
+    /// Which steps to skip
+    #[clap(long)]
+    pub skip: Option<Vec<StepType>>,
 }
 
 pub struct NNSRecoveryFailoverNodes {
-    step_iterator: Box<dyn Iterator<Item = StepType>>,
+    step_iterator: Peekable<StepTypeIter>,
+    pub recovery_args: RecoveryArgs,
     pub params: NNSRecoveryFailoverNodesArgs,
+    pub neuron_args: Option<NeuronArgs>,
     recovery: Recovery,
     logger: Logger,
     new_registry_local_store: PathBuf,
@@ -99,37 +131,141 @@ impl NNSRecoveryFailoverNodes {
         neuron_args: Option<NeuronArgs>,
         subnet_args: NNSRecoveryFailoverNodesArgs,
     ) -> Self {
-        let ssh_confirmation = neuron_args.is_some();
-        let recovery = Recovery::new(logger.clone(), recovery_args, neuron_args, ssh_confirmation)
-            .expect("Failed to init recovery");
+        let recovery = Recovery::new(
+            logger.clone(),
+            recovery_args.clone(),
+            neuron_args.clone(),
+            subnet_args.validate_nns_url.clone(),
+            RegistryPollingStrategy::OnlyOnInit,
+        )
+        .expect_graceful("Failed to init recovery");
+
         let new_registry_local_store = recovery.work_dir.join(IC_REGISTRY_LOCAL_STORE);
         Self {
-            step_iterator: Box::new(StepType::iter()),
+            step_iterator: StepType::iter().peekable(),
             params: subnet_args,
+            recovery_args,
+            neuron_args,
             recovery,
             logger,
             new_registry_local_store,
         }
     }
 
-    pub fn get_recovery_api(&self) -> &Recovery {
-        &self.recovery
-    }
-
     pub fn get_local_store_tar(&self) -> PathBuf {
         self.recovery
             .work_dir
-            .join(format!("{}.tar.gz", IC_REGISTRY_LOCAL_STORE))
+            .join(format!("{IC_REGISTRY_LOCAL_STORE}.tar.zst"))
     }
 }
 
-impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
-    fn get_step_iterator(&mut self) -> &mut Box<dyn Iterator<Item = StepType>> {
+impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
+    fn get_step_iterator(&mut self) -> &mut Peekable<StepTypeIter> {
         &mut self.step_iterator
+    }
+
+    fn store_next_step(&mut self, step_type: Option<StepType>) {
+        self.params.next_step = step_type;
     }
 
     fn get_logger(&self) -> &Logger {
         &self.logger
+    }
+
+    fn interactive(&self) -> bool {
+        !self.recovery_args.skip_prompts
+    }
+
+    fn get_skipped_steps(&self) -> Vec<StepType> {
+        self.params.skip.clone().unwrap_or_default()
+    }
+
+    fn read_step_params(&mut self, step_type: StepType) {
+        // Depending on the next step we might require some user interaction before we can execute
+        // it.
+        match step_type {
+            StepType::StopReplica | StepType::DownloadConsensusPool | StepType::DownloadState => {
+                if self.params.download_node.is_none() {
+                    // We could pick a node with highest finalization and CUP height automatically,
+                    // but we might have a preference between nodes of same heights.
+                    print_height_info(
+                        &self.logger,
+                        &self.recovery.registry_helper,
+                        self.params.subnet_id,
+                    );
+
+                    self.params.download_node = read_optional(&self.logger, "Enter download IP:");
+                }
+            }
+            _ => {}
+        }
+        match step_type {
+            StepType::DownloadState => {
+                if self.params.download_state_height.is_none() {
+                    self.params.download_state_height = read_optional(
+                        &self.logger,
+                        "Enter the height of the checkpoint to download (leave empty for latest checkpoint):",
+                    );
+                }
+            }
+            StepType::ProposeToCreateSubnet => {
+                if self.params.replica_version.is_none() {
+                    self.params.replica_version = read_optional(
+                        &self.logger,
+                        "New NNS version (current unassigned version or other version blessed by parent NNS): ",
+                    );
+                }
+                if self.params.replacement_nodes.is_none() {
+                    self.params.replacement_nodes = read_optional_node_ids(
+                        &self.logger,
+                        "Enter space separated list of replacement nodes: ",
+                    );
+                }
+            }
+
+            StepType::DownloadParentNNSStore => {
+                if self.params.parent_nns_host_ip.is_none() {
+                    self.params.parent_nns_host_ip = read_optional(
+                        &self.logger,
+                        "Enter parent NNS IP to download the registry store from:",
+                    );
+                }
+            }
+
+            StepType::ICReplayWithRegistryContent => {
+                if self.params.replay_until_height.is_none() {
+                    self.params.replay_until_height =
+                        read_optional(&self.logger, "Replay until height: ");
+                }
+            }
+
+            StepType::UploadAndHostTar => {
+                if self.params.aux_user.is_none() {
+                    self.params.aux_user = read_optional(&self.logger, "Enter aux user:");
+                }
+                if self.params.aux_ip.is_none() {
+                    self.params.aux_ip = read_optional(&self.logger, "Enter aux IP:");
+                }
+                if (self.params.aux_user.is_none() || self.params.aux_ip.is_none())
+                    && self.params.registry_url.is_none()
+                {
+                    self.params.registry_url = read_optional(
+                        &self.logger,
+                        "Enter URL of the hosted registry store tar file:",
+                    );
+                }
+            }
+
+            StepType::WaitForCUP => {
+                if self.params.upload_method.is_none() {
+                    self.params.upload_method = read_optional_data_location(
+                        &self.logger,
+                        "Are you performing a local recovery directly on the node, or a remote recovery? [local/<ipv6>]",
+                    );
+                }
+            }
+            _ => {}
+        }
     }
 
     fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step>> {
@@ -142,11 +278,40 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
                 }
             }
 
+            StepType::DownloadCertifications => {
+                Ok(Box::new(self.recovery.get_download_certs_step(
+                    self.params.subnet_id,
+                    SshUser::Admin,
+                    self.recovery.admin_key_file.clone(),
+                    !self.interactive(),
+                )))
+            }
+
+            StepType::MergeCertificationPools => {
+                Ok(Box::new(self.recovery.get_merge_certification_pools_step()))
+            }
+
+            StepType::DownloadConsensusPool => {
+                if let Some(node_ip) = self.params.download_node {
+                    Ok(Box::new(self.recovery.get_download_consensus_pool_step(
+                        node_ip,
+                        SshUser::Admin,
+                        self.recovery.admin_key_file.clone(),
+                    )?))
+                } else {
+                    Err(RecoveryError::StepSkipped)
+                }
+            }
+
             StepType::DownloadState => {
                 if let Some(node_ip) = self.params.download_node {
-                    Ok(Box::new(
-                        self.recovery.get_download_state_step(node_ip, false),
-                    ))
+                    Ok(Box::new(self.recovery.get_download_state_step(
+                        node_ip,
+                        SshUser::Admin,
+                        self.recovery.admin_key_file.clone(),
+                        /*keep_downloaded_state=*/ false,
+                        self.params.download_state_height,
+                    )?))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
@@ -171,9 +336,11 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
 
             StepType::DownloadParentNNSStore => {
                 if let Some(ip) = self.params.parent_nns_host_ip {
-                    Ok(Box::new(self.recovery.get_download_regsitry_store_step(
+                    Ok(Box::new(self.recovery.get_download_registry_store_step(
                         ip,
                         self.params.subnet_id,
+                        SshUser::Admin,
+                        self.recovery.admin_key_file.clone(),
                     )))
                 } else {
                     Err(RecoveryError::StepSkipped)
@@ -185,32 +352,35 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
                     self.params.subnet_id,
                     self.new_registry_local_store.clone(),
                     CANISTER_CALLER_ID,
+                    self.params.replay_until_height,
+                    !self.interactive(),
                 )?,
             )),
 
-            StepType::ValidateReplayOutput => {
-                Ok(Box::new(self.recovery.get_validate_replay_step_with_nns(
-                    self.params.subnet_id,
-                    self.params.validate_nns_url.clone(),
-                    0,
-                )))
-            }
+            StepType::ValidateReplayOutput => Ok(Box::new(
+                self.recovery
+                    .get_validate_replay_step(self.params.subnet_id, 0),
+            )),
 
             StepType::UpdateRegistryLocalStore => Ok(Box::new(
                 self.recovery
-                    .get_update_local_store_step(self.params.subnet_id),
+                    .get_update_local_store_step(self.params.subnet_id, !self.interactive()),
             )),
 
-            StepType::CreateRegistryTar => Ok(Box::new(self.recovery.get_create_tars_step())),
+            StepType::CreateRegistryTar => {
+                Ok(Box::new(self.recovery.get_create_registry_tar_step()))
+            }
 
             StepType::UploadAndHostTar => {
                 let tar = self.get_local_store_tar();
                 if let (Some(aux_user), Some(aux_ip)) =
                     (self.params.aux_user.clone(), self.params.aux_ip)
                 {
-                    Ok(Box::new(
-                        self.recovery.get_upload_and_host_tar(aux_user, aux_ip, tar),
-                    ))
+                    Ok(Box::new(self.recovery.get_upload_and_host_tar(
+                        SshUser::Other(aux_user),
+                        aux_ip,
+                        tar,
+                    )))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
@@ -219,11 +389,10 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
             StepType::ProposeCUP => {
                 let url = if let Some(aux_ip) = self.params.aux_ip {
                     let url_str = format!(
-                        "http://[{}]:8081/tmp/recovery_registry/{}.tar.gz",
-                        aux_ip, IC_REGISTRY_LOCAL_STORE
+                        "http://[{aux_ip}]:8081/tmp/recovery_registry/{IC_REGISTRY_LOCAL_STORE}.tar.zst"
                     );
                     Some(Url::parse(&url_str).map_err(|e| {
-                        RecoveryError::invalid_output_error(format!("Failed to parse Url: {}", e))
+                        RecoveryError::invalid_output_error(format!("Failed to parse Url: {e}"))
                     })?)
                 } else {
                     self.params.registry_url.clone()
@@ -256,6 +425,7 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
                         &[],
                         Some(registry_params),
                         None,
+                        None,
                     )?))
                 } else {
                     Err(RecoveryError::StepSkipped)
@@ -263,7 +433,11 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
             }
 
             StepType::WaitForCUP => {
-                if let Some(node_ip) = self.params.upload_node {
+                if let Some(method) = self.params.upload_method {
+                    let node_ip = match method {
+                        DataLocation::Remote(ip) => ip,
+                        DataLocation::Local => IpAddr::V6(Ipv6Addr::LOCALHOST),
+                    };
                     Ok(Box::new(self.recovery.get_wait_for_cup_step(node_ip)))
                 } else {
                     Err(RecoveryError::StepSkipped)
@@ -271,8 +445,12 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
             }
 
             StepType::UploadStateToChildNNSHost => {
-                if let Some(node_ip) = self.params.upload_node {
-                    Ok(Box::new(self.recovery.get_upload_and_restart_step(node_ip)))
+                if let Some(method) = self.params.upload_method {
+                    Ok(Box::new(self.recovery.get_upload_state_and_restart_step(
+                        SshUser::Admin,
+                        method,
+                        self.recovery.admin_key_file.clone(),
+                    )))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }

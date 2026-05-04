@@ -1,19 +1,27 @@
 //! Defines types used for certification.
 
 use crate::{
+    CryptoHashOfPartialState, Height,
+    artifact::{CertificationMessageId, IdentifiableArtifact, PbArtifact},
     consensus::{
-        Committee, CountBytes, HasCommittee, HasHeight, ThresholdSignature, ThresholdSignatureShare,
+        Committee, CountBytes, HasCommittee, HasHeight, IsShare, ThresholdSignature,
+        ThresholdSignatureShare,
     },
     crypto::{CryptoHash, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator},
-    CryptoHashOfPartialState, Height,
 };
-use ic_protobuf::messaging::xnet::v1 as pb;
+use ic_crypto_tree_hash::Witness;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
+use ic_protobuf::{
+    proxy::ProxyDecodeError,
+    types::v1::{self as pb, certification_message::Msg},
+};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
 /// CertificationMessage captures the different types of messages sent around
 /// for the purpose of state certification.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CertificationMessage {
     /// Certification captures a full certification on behalf of a subnet
     Certification(Certification),
@@ -22,11 +30,35 @@ pub enum CertificationMessage {
     CertificationShare(CertificationShare),
 }
 
+impl IdentifiableArtifact for CertificationMessage {
+    const NAME: &'static str = "certification";
+    type Id = CertificationMessageId;
+    fn id(&self) -> Self::Id {
+        self.into()
+    }
+}
+
+impl PbArtifact for CertificationMessage {
+    type PbId = ic_protobuf::types::v1::CertificationMessageId;
+    type PbIdError = ProxyDecodeError;
+    type PbMessage = ic_protobuf::types::v1::CertificationMessage;
+    type PbMessageError = ProxyDecodeError;
+}
+
 impl HasHeight for CertificationMessage {
     fn height(&self) -> Height {
         match self {
             CertificationMessage::Certification(c) => c.height,
             CertificationMessage::CertificationShare(c) => c.height,
+        }
+    }
+}
+
+impl IsShare for CertificationMessage {
+    fn is_share(&self) -> bool {
+        match self {
+            CertificationMessage::Certification(_) => false,
+            CertificationMessage::CertificationShare(_) => true,
         }
     }
 }
@@ -63,8 +95,34 @@ impl From<CertificationShare> for CertificationMessage {
     }
 }
 
+impl From<CertificationMessage> for pb::CertificationMessage {
+    fn from(share: CertificationMessage) -> Self {
+        match share {
+            CertificationMessage::Certification(cert) => Self {
+                msg: Some(Msg::Certification(cert.into())),
+            },
+            CertificationMessage::CertificationShare(share) => Self {
+                msg: Some(Msg::CertificationShare(share.into())),
+            },
+        }
+    }
+}
+
+impl TryFrom<pb::CertificationMessage> for CertificationMessage {
+    type Error = ProxyDecodeError;
+    fn try_from(share: pb::CertificationMessage) -> Result<Self, Self::Error> {
+        let Some(msg) = share.msg else {
+            return Err(ProxyDecodeError::MissingField("CertificationMessage::msg"));
+        };
+        Ok(match msg {
+            Msg::Certification(inner) => Self::Certification(inner.try_into()?),
+            Msg::CertificationShare(inner) => Self::CertificationShare(inner.try_into()?),
+        })
+    }
+}
+
 /// CertificationMessageHash contains the hash of a CertificationMessage.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub enum CertificationMessageHash {
     /// Certification captures the hash of a full certification on behalf of a
     /// subnet
@@ -74,8 +132,39 @@ pub enum CertificationMessageHash {
     CertificationShare(CryptoHashOf<CertificationShare>),
 }
 
+impl From<&CertificationMessageHash> for pb::CertificationMessageHash {
+    fn from(value: &CertificationMessageHash) -> Self {
+        use pb::certification_message_hash::Kind;
+        let kind = match value.clone() {
+            CertificationMessageHash::Certification(x) => Kind::Certification(x.get().0),
+            CertificationMessageHash::CertificationShare(x) => Kind::CertificationShare(x.get().0),
+        };
+        Self { kind: Some(kind) }
+    }
+}
+
+impl TryFrom<pb::CertificationMessageHash> for CertificationMessageHash {
+    type Error = ProxyDecodeError;
+    fn try_from(value: pb::CertificationMessageHash) -> Result<Self, Self::Error> {
+        use pb::certification_message_hash::Kind;
+        let kind = value
+            .kind
+            .ok_or_else(|| ProxyDecodeError::MissingField("CertificationMessageHash::kind"))?;
+
+        Ok(match kind {
+            Kind::Certification(x) => {
+                CertificationMessageHash::Certification(CryptoHashOf::new(CryptoHash(x)))
+            }
+            Kind::CertificationShare(x) => {
+                CertificationMessageHash::CertificationShare(CryptoHashOf::new(CryptoHash(x)))
+            }
+        })
+    }
+}
+
 /// CertificationContent holds the data signed by certification
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CertificationContent {
     /// The hash of the relevant parts of the replicated state
     pub hash: CryptoHashOfPartialState,
@@ -85,14 +174,6 @@ impl CertificationContent {
     /// Create a new CertificationContent given a CryptoHashOfPartialState
     pub fn new(hash: CryptoHashOfPartialState) -> Self {
         CertificationContent { hash }
-    }
-}
-
-impl From<pb::CertificationContent> for CertificationContent {
-    fn from(value: pb::CertificationContent) -> Self {
-        CertificationContent {
-            hash: CryptoHashOfPartialState::new(CryptoHash(value.hash)),
-        }
     }
 }
 
@@ -121,10 +202,14 @@ impl AsRef<CertificationContent> for CertificationMessage {
 
 /// A Certification is a CertificationContent that is cryptographically signed
 /// by a subnet using a threshold signature
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Certification {
     /// the height that the CertificationContent belongs to
     pub height: Height,
+    /// the witness for the height
+    /// TODO: remove option after staged roll-out
+    pub height_witness: Option<Witness>,
     /// the signature on the CertificationContent
     pub signed: Signed<CertificationContent, ThresholdSignature<CertificationContent>>,
 }
@@ -145,10 +230,12 @@ impl CountBytes for Certification {
 
 /// A certification share is the signature of a single replica on a
 /// CertificationContent
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct CertificationShare {
     /// the height that the CertificationContent belongs to
     pub height: Height,
+    /// the witness for the height
+    pub height_witness: Witness,
     /// the signature on the CertificationContent
     pub signed: Signed<CertificationContent, ThresholdSignatureShare<CertificationContent>>,
 }

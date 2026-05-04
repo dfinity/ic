@@ -1,299 +1,489 @@
-#![allow(clippy::unwrap_used)]
 use super::*;
+use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
-use ic_config::crypto::CryptoConfig;
-use ic_crypto::utils::get_node_keys_or_generate_if_missing;
+use ic_types::time::UNIX_EPOCH;
+use std::str::FromStr;
 
-#[test]
-fn should_succeed_on_valid_keys() {
-    let (keys, node_id) = valid_node_keys_and_node_id();
-    assert!(keys.version >= 1);
-
-    let valid_keys = ValidNodePublicKeys::try_from(keys.clone(), node_id).unwrap();
-
-    assert_eq!(valid_keys.node_id(), node_id);
-    assert_eq!(
-        valid_keys.node_signing_key(),
-        &keys.node_signing_pk.unwrap()
-    );
-    assert_eq!(
-        valid_keys.committee_signing_key(),
-        &keys.committee_signing_pk.unwrap()
-    );
-    assert_eq!(
-        valid_keys.dkg_dealing_encryption_key(),
-        &keys.dkg_dealing_encryption_pk.unwrap()
-    );
-    assert!(valid_keys.idkg_dealing_encryption_key().is_some());
-    assert_eq!(
-        valid_keys.idkg_dealing_encryption_key().unwrap(),
-        &keys.idkg_dealing_encryption_pk.unwrap()
-    );
-    assert_eq!(valid_keys.tls_certificate(), &keys.tls_certificate.unwrap());
-}
-
-#[test]
-fn should_fail_if_node_signing_key_is_missing() {
-    let (keys, node_id) = {
-        let (mut keys, node_id) = valid_node_keys_and_node_id();
-        keys.node_signing_pk = None;
-        (keys, node_id)
+mod all_node_public_keys_validation {
+    use super::*;
+    use crate::tests::node_signing_public_key_validation::{
+        derived_node_id, node_id_from_node_signing_public_key,
+    };
+    use ic_crypto_test_utils_keys::public_keys::{
+        valid_committee_signing_public_key, valid_dkg_dealing_encryption_public_key,
+        valid_idkg_dealing_encryption_public_key, valid_node_signing_public_key,
+        valid_tls_certificate_and_validation_time,
     };
 
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
+    #[test]
+    fn should_succeed_for_valid_hard_coded_keys() {
+        let (hard_coded_keys, validation_time) = valid_current_node_public_keys();
+        let node_id = node_id_from_node_signing_public_key(&hard_coded_keys);
 
-    assert!(matches!(result, Err(KeyValidationError { error })
-        if error == "invalid node signing key: key is missing"
-    ));
-}
+        let valid_keys =
+            ValidNodePublicKeys::try_from(hard_coded_keys.clone(), node_id, validation_time);
 
-#[test]
-fn should_fail_if_node_signing_key_pubkey_conversion_fails() {
-    let (keys, node_id) = {
-        let (mut keys, node_id) = valid_node_keys_and_node_id();
-        keys.node_signing_pk.as_mut().unwrap().key_value.push(42);
-        (keys, node_id)
-    };
+        assert_matches!(valid_keys, Ok(actual)
+            if actual.node_id() == node_id &&
+            actual.node_signing_key() == &hard_coded_keys.node_signing_public_key.unwrap() &&
+            actual.committee_signing_key() == &hard_coded_keys.committee_signing_public_key.unwrap() &&
+            actual.tls_certificate() == &hard_coded_keys.tls_certificate.unwrap() &&
+            actual.dkg_dealing_encryption_key() == &hard_coded_keys.dkg_dealing_encryption_public_key.unwrap() &&
+            actual.idkg_dealing_encryption_key() == &hard_coded_keys.idkg_dealing_encryption_public_key.unwrap());
+    }
 
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
-
-    assert!(matches!(result, Err(KeyValidationError { error })
-        if error.contains("invalid node signing key: PublicKeyBytesFromProtoError")
-        && error.contains("Wrong data length")
-    ));
-}
-
-#[test]
-fn should_fail_if_node_signing_key_verification_fails() {
-    let (keys, node_id) = {
-        let (mut keys, _node_id) = valid_node_keys_and_node_id();
-        let invalid_pubkey = {
-            let nspk_proto = keys.node_signing_pk.as_ref().unwrap();
-            let nspk_bytes = BasicSigEd25519PublicKeyBytes::try_from(nspk_proto).unwrap();
-            invalidate_valid_ed25519_pubkey(nspk_bytes)
+    #[test]
+    fn should_fail_if_node_signing_key_is_missing() {
+        let public_keys = CurrentNodePublicKeys {
+            node_signing_public_key: None,
+            ..valid_current_node_public_keys().0
         };
-        keys.node_signing_pk.as_mut().unwrap().key_value = invalid_pubkey.0.to_vec();
 
-        let node_id_for_corrupted_node_signing_key = {
-            let corrupted_key = &keys.node_signing_pk.as_ref().unwrap().key_value;
-            let mut buf = [0; BasicSigEd25519PublicKeyBytes::SIZE];
-            buf.copy_from_slice(corrupted_key);
-            derive_node_id(BasicSigEd25519PublicKeyBytes(buf))
+        let result = ValidNodePublicKeys::try_from(public_keys, derived_node_id(), UNIX_EPOCH);
+
+        assert_matches!(result, Err(KeyValidationError { error })
+            if error == "invalid node signing key: key is missing"
+        );
+    }
+
+    #[test]
+    fn should_fail_if_committee_signing_key_is_missing() {
+        let public_keys = CurrentNodePublicKeys {
+            committee_signing_public_key: None,
+            ..valid_current_node_public_keys().0
         };
-        (keys, node_id_for_corrupted_node_signing_key)
-    };
+        let node_id = node_id_from_node_signing_public_key(&public_keys);
 
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
+        let result = ValidNodePublicKeys::try_from(public_keys, node_id, UNIX_EPOCH);
 
-    assert!(matches!(result, Err(KeyValidationError { error })
-        if error == "invalid node signing key: verification failed"
-    ));
+        assert_matches!(result, Err(KeyValidationError { error })
+            if error == "invalid committee signing key: key is missing"
+        );
+    }
+
+    #[test]
+    fn should_fail_if_tls_key_validation_fails_because_cert_is_missing() {
+        let public_keys = CurrentNodePublicKeys {
+            tls_certificate: None,
+            ..valid_current_node_public_keys().0
+        };
+        let node_id = node_id_from_node_signing_public_key(&public_keys);
+
+        let result = ValidNodePublicKeys::try_from(public_keys, node_id, UNIX_EPOCH);
+
+        assert_matches!(result, Err(KeyValidationError { error })
+            if error == "invalid TLS certificate: certificate is missing"
+        );
+    }
+
+    #[test]
+    fn should_fail_if_dkg_dealing_encryption_key_is_missing() {
+        let (current_node_public_keys, validation_time) = valid_current_node_public_keys();
+        let public_keys = CurrentNodePublicKeys {
+            dkg_dealing_encryption_public_key: None,
+            ..current_node_public_keys
+        };
+        let node_id = node_id_from_node_signing_public_key(&public_keys);
+
+        let result = ValidNodePublicKeys::try_from(public_keys, node_id, validation_time);
+
+        assert_eq!(
+            result.unwrap_err(),
+            KeyValidationError {
+                error: "invalid DKG dealing encryption key: key is missing".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn should_fail_if_idkg_dealing_encryption_key_is_missing() {
+        let (current_node_public_keys, validation_time) = valid_current_node_public_keys();
+        let public_keys = CurrentNodePublicKeys {
+            idkg_dealing_encryption_public_key: None,
+            ..current_node_public_keys
+        };
+        let node_id = node_id_from_node_signing_public_key(&public_keys);
+
+        let result = ValidNodePublicKeys::try_from(public_keys, node_id, validation_time);
+
+        assert_matches!(result, Err(KeyValidationError { error })
+            if error == "invalid I-DKG dealing encryption key: key is missing"
+        );
+    }
+
+    fn valid_current_node_public_keys() -> (CurrentNodePublicKeys, Time) {
+        let (tls_cert, validation_time) = valid_tls_certificate_and_validation_time();
+        (
+            CurrentNodePublicKeys {
+                node_signing_public_key: Some(valid_node_signing_public_key()),
+                committee_signing_public_key: Some(valid_committee_signing_public_key()),
+                tls_certificate: Some(tls_cert),
+                dkg_dealing_encryption_public_key: Some(valid_dkg_dealing_encryption_public_key()),
+                idkg_dealing_encryption_public_key: Some(valid_idkg_dealing_encryption_public_key()),
+            },
+            validation_time,
+        )
+    }
 }
 
-#[test]
-fn should_fail_if_node_signing_key_is_not_valid_for_the_given_node_id() {
-    let wrong_node_id = node_id(1223334444);
-    let (keys, node_id) = valid_node_keys_and_node_id();
-    assert_ne!(node_id, wrong_node_id);
+mod node_signing_public_key_validation {
+    use super::*;
+    use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
 
-    let result = ValidNodePublicKeys::try_from(keys, wrong_node_id);
+    #[test]
+    fn should_succeed_for_hard_coded_valid_node_signing_public_key() {
+        let public_key = valid_node_signing_public_key();
 
-    assert!(matches!(result, Err(KeyValidationError { error })
-        if error.contains("invalid node signing key")
-        && error.contains(format!("key not valid for node ID {}", wrong_node_id).as_str())
-    ));
+        let valid_public_key = ValidNodeSigningPublicKey::try_from(public_key.clone());
+
+        assert_matches!(valid_public_key, Ok(actual) if actual.get() == &public_key);
+    }
+
+    #[test]
+    fn should_fail_on_default_public_key() {
+        let result = ValidNodeSigningPublicKey::try_from(PublicKey::default());
+
+        assert_matches!(result, Err(KeyValidationError {error})
+            if error.contains("invalid node signing key"));
+    }
+
+    #[test]
+    fn should_fail_if_node_signing_key_pubkey_conversion_fails() {
+        let invalid_node_signing_key = {
+            let mut public_key = valid_node_signing_public_key();
+            public_key.key_value.push(42);
+            public_key
+        };
+
+        let result = ValidNodeSigningPublicKey::try_from(invalid_node_signing_key);
+
+        assert_matches!(result, Err(KeyValidationError { error })
+            if error.contains("invalid node signing key: Unexpected length 33")
+        );
+    }
+
+    #[test]
+    fn should_fail_if_node_signing_key_verification_fails() {
+        let (corrupted_node_signing_public_key, node_id_for_corrupted_node_signing_key) = {
+            let mut corrupted_public_key = valid_node_signing_public_key();
+            invalidate_ed25519_pubkey(&mut corrupted_public_key.key_value);
+
+            let node_id_for_corrupted_node_signing_key = {
+                // Only fails if the length is incorrect which should not happen
+                let pubkey_der =
+                    ic_ed25519::PublicKey::convert_raw_to_der(&corrupted_public_key.key_value)
+                        .expect("Conversion failed");
+
+                NodeId::from(PrincipalId::new_self_authenticating(&pubkey_der))
+            };
+            (corrupted_public_key, node_id_for_corrupted_node_signing_key)
+        };
+
+        let result = ValidNodeSigningPublicKey::try_from((
+            corrupted_node_signing_public_key,
+            node_id_for_corrupted_node_signing_key,
+        ));
+
+        assert_matches!(result, Err(KeyValidationError { error })
+            if error == "invalid node signing key: has torsion component"
+        );
+    }
+
+    #[test]
+    fn should_fail_if_node_signing_key_is_not_valid_for_the_given_node_id() {
+        let wrong_node_id = node_id(1223334444);
+        assert_ne!(wrong_node_id, derived_node_id());
+
+        let result =
+            ValidNodeSigningPublicKey::try_from((valid_node_signing_public_key(), wrong_node_id));
+
+        assert_matches!(result, Err(KeyValidationError { error })
+            if error.contains("invalid node signing key")
+            && error.contains(format!("key not valid for node ID {wrong_node_id}").as_str())
+        );
+    }
+
+    pub fn derived_node_id() -> NodeId {
+        use ic_crypto_utils_basic_sig::conversions as basicsig_conversions;
+        let expected_node_id = NodeId::new(
+            PrincipalId::from_str(
+                "4inqb-2zcvk-f6yql-sowol-vg3es-z24jd-jrkow-mhnsd-ukvfp-fak5p-aae",
+            )
+            .unwrap(),
+        );
+        let actual_node_id = basicsig_conversions::derive_node_id(&valid_node_signing_public_key())
+            .expect("invalid node signing public key");
+        assert_eq!(expected_node_id, actual_node_id);
+        expected_node_id
+    }
+
+    pub fn node_id_from_node_signing_public_key(public_keys: &CurrentNodePublicKeys) -> NodeId {
+        use ic_crypto_utils_basic_sig::conversions as basicsig_conversions;
+
+        basicsig_conversions::derive_node_id(
+            public_keys
+                .node_signing_public_key
+                .as_ref()
+                .expect("missing node signing key required to compute NodeId"),
+        )
+        .expect("Corrupted node signing public key")
+    }
 }
 
-#[test]
-fn should_fail_if_committee_signing_key_is_missing() {
-    let (keys, node_id) = {
-        let (mut keys, node_id) = valid_node_keys_and_node_id();
-        keys.committee_signing_pk = None;
-        (keys, node_id)
+mod committee_signing_public_key_validation {
+    use super::*;
+    use ic_crypto_test_utils_keys::public_keys::{
+        valid_committee_signing_public_key, valid_committee_signing_public_key_2,
     };
 
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
+    #[test]
+    fn should_succeed_for_hard_coded_valid_committee_signing_public_key() {
+        let public_key = valid_committee_signing_public_key();
 
-    assert!(matches!(result, Err(KeyValidationError { error })
-        if error == "invalid committee signing key: key is missing"
-    ));
+        let valid_public_key = ValidCommitteeSigningPublicKey::try_from(public_key.clone());
+
+        assert_matches!(valid_public_key, Ok(actual) if actual.get() == &public_key);
+    }
+
+    #[test]
+    fn should_fail_on_default_public_key() {
+        let result = ValidCommitteeSigningPublicKey::try_from(PublicKey::default());
+
+        assert_matches!(result, Err(KeyValidationError {error})
+            if error.contains("invalid committee signing key"));
+    }
+
+    #[test]
+    fn should_fail_if_committee_signing_key_pubkey_conversion_fails() {
+        let invalid_committee_signing_key = {
+            let mut public_key = valid_committee_signing_public_key();
+            public_key.key_value.push(42);
+            public_key
+        };
+
+        let result = ValidCommitteeSigningPublicKey::try_from(invalid_committee_signing_key);
+
+        assert_matches!(result, Err(KeyValidationError { error })
+            if error.contains("invalid committee signing key: PublicKeyBytesFromProtoError")
+            && error.contains("Wrong data length")
+        );
+    }
+
+    #[test]
+    fn should_fail_if_committee_signing_key_pubkey_is_corrupted() {
+        let corrupted_committee_signing_key = {
+            let mut public_key = valid_committee_signing_public_key();
+            // this flips the compression flag and thus makes the encoding of the point invalid
+            public_key.key_value[0] ^= 0xff;
+            public_key
+        };
+
+        let result = ValidCommitteeSigningPublicKey::try_from(corrupted_committee_signing_key);
+
+        assert_matches!(result, Err(KeyValidationError { error })
+            if error.contains("invalid committee signing key: Malformed MultiBls12_381 public key")
+        );
+    }
+
+    #[test]
+    fn should_fail_if_committee_signing_key_pop_conversion_fails() {
+        let invalid_committee_signing_key = {
+            let mut public_key = valid_committee_signing_public_key();
+            public_key.proof_data.as_mut().unwrap().push(42);
+            public_key
+        };
+
+        let result = ValidCommitteeSigningPublicKey::try_from(invalid_committee_signing_key);
+
+        assert_matches!(result, Err(KeyValidationError { error })
+            if error.contains("invalid committee signing key: PopBytesFromProtoError")
+            && error.contains("Wrong pop length")
+        );
+    }
+
+    #[test]
+    fn should_fail_if_committee_signing_key_pop_is_corrupted() {
+        let corrupted_committee_signing_key = {
+            let mut public_key = valid_committee_signing_public_key();
+            public_key.proof_data.as_mut().unwrap()[0] ^= 0xff;
+            public_key
+        };
+
+        let result = ValidCommitteeSigningPublicKey::try_from(corrupted_committee_signing_key);
+
+        assert_matches!(result, Err(KeyValidationError { error })
+            if error.contains("invalid committee signing key: Malformed MultiBls12_381 PoP")
+        );
+    }
+
+    #[test]
+    fn should_fail_if_committee_signing_key_pop_verification_fails() {
+        let swapped_pop_committee_signing_key = {
+            let mut committee_signing_public_key = valid_committee_signing_public_key();
+            let proof_data_for_other_key = valid_committee_signing_public_key_2().proof_data;
+            assert_ne!(
+                committee_signing_public_key.proof_data,
+                proof_data_for_other_key
+            );
+            committee_signing_public_key.proof_data = proof_data_for_other_key;
+            committee_signing_public_key
+        };
+
+        let result = ValidCommitteeSigningPublicKey::try_from(swapped_pop_committee_signing_key);
+
+        assert_matches!(result, Err(KeyValidationError { error })
+            if error.contains("invalid committee signing key: MultiBls12_381 PoP could not be verified")
+            && error.contains("PoP verification failed")
+        );
+    }
 }
 
-#[test]
-fn should_fail_if_committee_signing_key_pubkey_conversion_fails() {
-    let (keys, node_id) = {
-        let (mut keys, node_id) = valid_node_keys_and_node_id();
-        if let Some(pk) = keys.committee_signing_pk.as_mut() {
-            pk.key_value.push(42);
-        }
-        (keys, node_id)
+mod dkg_dealing_encryption_public_key_validation {
+    use super::*;
+    use crate::tests::node_signing_public_key_validation::derived_node_id;
+    use ic_crypto_test_utils_keys::public_keys::{
+        valid_dkg_dealing_encryption_public_key, valid_dkg_dealing_encryption_public_key_2,
     };
 
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
+    #[test]
+    fn should_succeed_for_hard_coded_valid_dkg_dealing_encryption_public_key() {
+        let public_key = valid_dkg_dealing_encryption_public_key();
 
-    assert!(matches!(result, Err(KeyValidationError { error })
-        if error.contains("invalid committee signing key: PublicKeyBytesFromProtoError")
-        && error.contains("Wrong data length")
-    ));
-}
+        let valid_public_key =
+            ValidDkgDealingEncryptionPublicKey::try_from((public_key.clone(), derived_node_id()));
 
-#[test]
-fn should_fail_if_committee_signing_key_pubkey_is_corrupted() {
-    let (keys, node_id) = {
-        let (mut keys, node_id) = valid_node_keys_and_node_id();
-        if let Some(pk) = keys.committee_signing_pk.as_mut() {
-            pk.key_value[0] ^= 0xff; // this flips the compression flag and thus
-                                     // makes the encoding of the point invalid
-        }
-        (keys, node_id)
-    };
+        assert_matches!(valid_public_key, Ok(actual) if actual.get() == &public_key);
+    }
 
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
+    #[test]
+    fn should_fail_on_default_public_key() {
+        let result =
+            ValidDkgDealingEncryptionPublicKey::try_from((PublicKey::default(), derived_node_id()));
 
-    assert!(matches!(result, Err(KeyValidationError { error })
-        if error.contains("invalid committee signing key: Malformed MultiBls12_381 public key")
-    ));
-}
+        assert_matches!(result, Err(KeyValidationError {error})
+            if error.contains("invalid DKG dealing encryption key"));
+    }
 
-#[test]
-fn should_fail_if_committee_signing_key_pop_conversion_fails() {
-    let (keys, node_id) = {
-        let (mut keys, node_id) = valid_node_keys_and_node_id();
-        if let Some(pk) = keys.committee_signing_pk.as_mut() {
-            pk.proof_data.as_mut().unwrap().push(42);
-        }
-        (keys, node_id)
-    };
+    #[test]
+    fn should_fail_if_dkg_dealing_encryption_key_pop_is_missing() {
+        let public_key = PublicKey {
+            proof_data: None,
+            ..valid_dkg_dealing_encryption_public_key()
+        };
 
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
+        let result = ValidDkgDealingEncryptionPublicKey::try_from((public_key, derived_node_id()));
 
-    assert!(matches!(result, Err(KeyValidationError { error })
-        if error.contains("invalid committee signing key: PopBytesFromProtoError")
-        && error.contains("Wrong pop length")
-    ));
-}
-
-#[test]
-fn should_fail_if_committee_signing_key_pop_is_corrupted() {
-    let (keys, node_id) = {
-        let (mut keys, node_id) = valid_node_keys_and_node_id();
-        if let Some(pk) = keys.committee_signing_pk.as_mut() {
-            pk.proof_data.as_mut().unwrap()[0] ^= 0xff;
-        }
-        (keys, node_id)
-    };
-
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
-
-    assert!(matches!(result, Err(KeyValidationError { error })
-        if error.contains("invalid committee signing key: Malformed MultiBls12_381 PoP")
-    ));
-}
-
-#[test]
-fn should_fail_if_committee_signing_key_pop_verification_fails() {
-    let (keys, node_id) = {
-        let (mut keys, node_id) = valid_node_keys_and_node_id();
-        if let Some(pk) = keys.committee_signing_pk.as_mut() {
-            let proof_data_for_other_key =
-                valid_node_keys().committee_signing_pk.unwrap().proof_data;
-            assert_ne!(pk.proof_data, proof_data_for_other_key);
-            pk.proof_data = proof_data_for_other_key;
-        }
-        (keys, node_id)
-    };
-
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
-
-    assert!(matches!(result, Err(KeyValidationError { error })
-        if error.contains("invalid committee signing key: MultiBls12_381 PoP could not be verified")
-        && error.contains("PoP verification failed")
-    ));
-}
-
-#[test]
-fn should_fail_if_dkg_dealing_encryption_key_is_missing() {
-    let (keys, node_id) = {
-        let (mut keys, node_id) = valid_node_keys_and_node_id();
-        keys.dkg_dealing_encryption_pk = None;
-        (keys, node_id)
-    };
-
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
-
-    assert_eq!(
-        result.unwrap_err(),
-        KeyValidationError {
-            error: "invalid DKG dealing encryption key: key is missing".to_string(),
-        }
-    );
-}
-
-#[test]
-fn should_fail_if_dkg_dealing_encryption_key_pop_is_missing() {
-    let (keys, node_id) = {
-        let (mut keys, node_id) = valid_node_keys_and_node_id();
-        if let Some(pk) = keys.dkg_dealing_encryption_pk.as_mut() {
-            pk.proof_data = None;
-        }
-        (keys, node_id)
-    };
-
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
-
-    assert_eq!(
-        result.unwrap_err(),
-        KeyValidationError {
-            error: "invalid DKG dealing encryption key: Failed to convert proof \
+        assert_eq!(
+            result.unwrap_err(),
+            KeyValidationError {
+                error: "invalid DKG dealing encryption key: Failed to convert proof \
             of possession (PoP): Missing proof data"
-                .to_string(),
-        }
-    );
+                    .to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn should_fail_if_dkg_dealing_encryption_key_conversion_fails() {
+        let mut public_key = valid_dkg_dealing_encryption_public_key();
+        public_key.key_value[0] ^= 0xff;
+
+        let result = ValidDkgDealingEncryptionPublicKey::try_from((public_key, derived_node_id()));
+
+        assert_eq!(
+            result.unwrap_err(),
+            KeyValidationError {
+                error: "invalid DKG dealing encryption key: Internal conversion failed".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn should_fail_if_dkg_dealing_encryption_key_is_invalid() {
+        let swapped_pop_dkg_dealing_encryption_key = {
+            let mut public_key = valid_dkg_dealing_encryption_public_key();
+            let proof_data_for_other_key = valid_dkg_dealing_encryption_public_key_2().proof_data;
+            assert_ne!(public_key.proof_data, proof_data_for_other_key);
+            public_key.proof_data = proof_data_for_other_key;
+            public_key
+        };
+
+        let result = ValidDkgDealingEncryptionPublicKey::try_from((
+            swapped_pop_dkg_dealing_encryption_key,
+            derived_node_id(),
+        ));
+
+        assert_eq!(
+            result.unwrap_err(),
+            KeyValidationError {
+                error: "invalid DKG dealing encryption key: verification failed".to_string(),
+            }
+        );
+    }
 }
 
-#[test]
-fn should_fail_if_dkg_dealing_encryption_key_conversion_fails() {
-    let (keys, node_id) = {
-        let (mut keys, node_id) = valid_node_keys_and_node_id();
-        if let Some(pk) = keys.dkg_dealing_encryption_pk.as_mut() {
-            pk.key_value[0] ^= 0xff;
-        }
-        (keys, node_id)
-    };
+mod idkg_dealing_encryption_public_key_validation {
+    use super::*;
+    use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key;
 
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
+    #[test]
+    fn should_succeed_for_hard_coded_valid_idkg_dealing_encryption_key() {
+        let public_key = valid_idkg_dealing_encryption_public_key();
 
-    assert_eq!(
-        result.unwrap_err(),
-        KeyValidationError {
-            error: "invalid DKG dealing encryption key: Internal conversion failed".to_string(),
-        }
-    );
-}
+        let valid_public_key = ValidIDkgDealingEncryptionPublicKey::try_from(public_key.clone());
 
-#[test]
-fn should_fail_if_dkg_dealing_encryption_key_is_invalid() {
-    let (keys, node_id) = {
-        let (mut keys, node_id) = valid_node_keys_and_node_id();
-        if let Some(pk) = keys.dkg_dealing_encryption_pk.as_mut() {
-            let proof_data_for_other_key = valid_node_keys()
-                .dkg_dealing_encryption_pk
-                .unwrap()
-                .proof_data;
-            assert_ne!(pk.proof_data, proof_data_for_other_key);
-            pk.proof_data = proof_data_for_other_key;
-        }
-        (keys, node_id)
-    };
+        assert_matches!(valid_public_key, Ok(actual) if actual.get() == &public_key);
+    }
 
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
+    #[test]
+    fn should_fail_on_default_public_key() {
+        let result = ValidIDkgDealingEncryptionPublicKey::try_from(PublicKey::default());
 
-    assert_eq!(
-        result.unwrap_err(),
-        KeyValidationError {
-            error: "invalid DKG dealing encryption key: verification failed".to_string(),
-        }
-    );
+        assert_matches!(result, Err(KeyValidationError {error})
+            if error == "invalid I-DKG dealing encryption key: unsupported algorithm: Some(Unspecified)");
+    }
+
+    #[test]
+    fn should_fail_if_idkg_dealing_encryption_key_algorithm_unsupported() {
+        let public_key = PublicKey {
+            algorithm: AlgorithmIdProto::Unspecified as i32,
+            ..valid_idkg_dealing_encryption_public_key()
+        };
+
+        let result = ValidIDkgDealingEncryptionPublicKey::try_from(public_key);
+
+        assert_matches!(result, Err(KeyValidationError { error })
+            if error == "invalid I-DKG dealing encryption key: unsupported algorithm: Some(Unspecified)"
+        );
+    }
+
+    #[test]
+    fn should_fail_if_idkg_dealing_encryption_key_is_invalid() {
+        let public_key = PublicKey {
+            key_value: b"invalid key".to_vec(),
+            ..valid_idkg_dealing_encryption_public_key()
+        };
+
+        let result = ValidIDkgDealingEncryptionPublicKey::try_from(public_key);
+
+        assert_matches!(result, Err(KeyValidationError { error })
+        if error == "invalid I-DKG dealing encryption key: verification failed: InvalidPublicKey"
+        );
+    }
+
+    #[test]
+    fn should_fail_on_empty_key_value() {
+        let public_key = PublicKey {
+            key_value: vec![],
+            ..valid_idkg_dealing_encryption_public_key()
+        };
+
+        let result = ValidIDkgDealingEncryptionPublicKey::try_from(public_key);
+
+        assert_matches!(result, Err(KeyValidationError { error })
+        if error == "invalid I-DKG dealing encryption key: verification failed: InvalidPublicKey"
+        );
+    }
 }
 
 #[test]
@@ -307,221 +497,21 @@ fn should_correctly_display_key_validation_error() {
     );
 }
 
-#[test]
-fn should_fail_if_idkg_dealing_encryption_key_is_missing() {
-    let (keys, node_id) = {
-        let (mut keys, node_id) = valid_node_keys_and_node_id();
-        assert!(keys.version >= 1);
-        keys.idkg_dealing_encryption_pk = None;
-        (keys, node_id)
-    };
+fn invalidate_ed25519_pubkey(key: &mut Vec<u8>) {
+    assert_eq!(key.len(), 32);
 
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
+    let mut key_arr = [0_u8; 32];
+    key_arr.copy_from_slice(key);
 
-    assert!(matches!(result, Err(KeyValidationError { error })
-        if error == "invalid I-DKG dealing encryption key: key is missing"
-    ));
-}
-
-#[test]
-fn should_fail_if_idkg_dealing_encryption_key_algorithm_unsupported() {
-    let (keys, node_id) = {
-        let (mut keys, node_id) = valid_node_keys_and_node_id();
-        assert!(keys.version >= 1);
-        if let Some(pk) = keys.idkg_dealing_encryption_pk.as_mut() {
-            pk.algorithm = AlgorithmIdProto::Unspecified as i32;
-        }
-        (keys, node_id)
-    };
-
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
-
-    assert!(matches!(result, Err(KeyValidationError { error })
-        if error == "invalid I-DKG dealing encryption key: unsupported algorithm: Some(Unspecified)"
-    ));
-}
-
-#[test]
-fn should_fail_if_idkg_dealing_encryption_key_is_invalid() {
-    let (keys, node_id) = {
-        let (mut keys, node_id) = valid_node_keys_and_node_id();
-        assert!(keys.version >= 1);
-        if let Some(pk) = keys.idkg_dealing_encryption_pk.as_mut() {
-            pk.key_value = b"invalid key".to_vec();
-        }
-        (keys, node_id)
-    };
-
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
-
-    assert!(matches!(result, Err(KeyValidationError { error })
-        if error == "invalid I-DKG dealing encryption key: verification failed: InvalidPublicKey"));
-}
-
-#[test]
-fn should_not_fail_if_idkg_dealing_encryption_key_is_missing_in_version_0() {
-    let (keys, node_id) = {
-        let (mut keys, node_id) = valid_node_keys_and_node_id();
-        keys.idkg_dealing_encryption_pk = None;
-        keys.version = 0;
-        (keys, node_id)
-    };
-
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
-
-    assert!(result.is_ok());
-}
-
-#[test]
-fn should_not_fail_if_idkg_dealing_encryption_key_algorithm_unsupported_in_version_0() {
-    let (keys, node_id) = {
-        let (mut keys, node_id) = valid_node_keys_and_node_id();
-        assert!(keys.idkg_dealing_encryption_pk.is_some());
-        if let Some(pk) = keys.idkg_dealing_encryption_pk.as_mut() {
-            pk.algorithm = AlgorithmIdProto::Unspecified as i32;
-        }
-        keys.version = 0;
-        (keys, node_id)
-    };
-
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
-
-    assert!(result.is_ok());
-}
-
-#[test]
-fn should_not_fail_if_idkg_dealing_encryption_key_is_invalid_in_version_0() {
-    let (keys, node_id) = {
-        let (mut keys, node_id) = valid_node_keys_and_node_id();
-        assert!(keys.idkg_dealing_encryption_pk.is_some());
-        if let Some(pk) = keys.idkg_dealing_encryption_pk.as_mut() {
-            pk.key_value = b"invalid key".to_vec();
-        }
-        keys.version = 0;
-        (keys, node_id)
-    };
-
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
-
-    assert!(result.is_ok());
-}
-
-#[test]
-fn should_not_include_some_idkg_dealing_encryption_key_in_valid_keys_in_version_0() {
-    let (keys, node_id) = {
-        let (mut keys, node_id) = valid_node_keys_and_node_id();
-        assert!(keys.version >= 1);
-        assert!(keys.idkg_dealing_encryption_pk.is_some());
-        keys.version = 0;
-        (keys, node_id)
-    };
-
-    let result = ValidNodePublicKeys::try_from(keys, node_id);
-
-    assert!(matches!(result, Ok(valid_keys) if valid_keys.idkg_dealing_encryption_key().is_none()));
-}
-
-/// TLS certificate validation is only smoke tested here. Detailed tests can be
-/// found in `ic_crypto_tls_cert_validation`.
-mod tls_certificate_validation {
-    use super::*;
-
-    #[test]
-    fn should_fail_if_tls_key_validation_fails_because_cert_is_missing() {
-        let (valid_node_keys, node_id) = valid_node_keys_and_node_id();
-        let keys = NodePublicKeys {
-            tls_certificate: None,
-            ..valid_node_keys
-        };
-
-        let result = ValidNodePublicKeys::try_from(keys, node_id);
-
-        assert!(matches!(result, Err(KeyValidationError { error })
-            if error == "invalid TLS certificate: certificate is missing"
-        ));
-    }
-
-    #[test]
-    fn should_fail_if_tls_key_validation_fails_and_cert_is_present_but_invalid() {
-        let (valid_node_keys, node_id) = valid_node_keys_and_node_id();
-        let keys = NodePublicKeys {
-            tls_certificate: Some(X509PublicKeyCert {
-                certificate_der: vec![],
-            }),
-            ..valid_node_keys
-        };
-
-        let result = ValidNodePublicKeys::try_from(keys, node_id);
-
-        assert!(matches!(result, Err(KeyValidationError { error })
-            if error.contains("invalid TLS certificate: failed to parse DER")
-        ));
-    }
-}
-
-mod idkg_dealing_encryption_public_key_validation {
-    use super::*;
-
-    #[test]
-    fn should_succeed_on_valid_idkg_dealing_encryption_key() {
-        let idkg_de_key = valid_node_keys()
-            .idkg_dealing_encryption_pk
-            .expect("missing iDKG dealing encryption key");
-
-        let result = ValidIDkgDealingEncryptionPublicKey::try_from(idkg_de_key.clone());
-
-        assert!(matches!(result, Ok(key) if key.get() == &idkg_de_key));
-    }
-
-    #[test]
-    fn should_fail_if_idkg_dealing_encryption_key_algorithm_unsupported() {
-        let mut idkg_de_key = valid_node_keys()
-            .idkg_dealing_encryption_pk
-            .expect("missing iDKG dealing encryption key");
-        idkg_de_key.algorithm = AlgorithmIdProto::Unspecified as i32;
-
-        let result = ValidIDkgDealingEncryptionPublicKey::try_from(idkg_de_key);
-
-        assert!(matches!(result, Err(KeyValidationError { error })
-            if error == "invalid I-DKG dealing encryption key: unsupported algorithm: Some(Unspecified)"
-        ));
-    }
-
-    #[test]
-    fn should_fail_if_idkg_dealing_encryption_key_is_invalid() {
-        let mut idkg_de_key = valid_node_keys()
-            .idkg_dealing_encryption_pk
-            .expect("missing iDKG dealing encryption key");
-        idkg_de_key.key_value = b"invalid key".to_vec();
-
-        let result = ValidIDkgDealingEncryptionPublicKey::try_from(idkg_de_key);
-
-        assert!(matches!(result, Err(KeyValidationError { error })
-        if error == "invalid I-DKG dealing encryption key: verification failed: InvalidPublicKey"));
-    }
-}
-
-fn invalidate_valid_ed25519_pubkey(
-    valid_pubkey: BasicSigEd25519PublicKeyBytes,
-) -> BasicSigEd25519PublicKeyBytes {
     use curve25519_dalek::edwards::CompressedEdwardsY;
-    let point_of_prime_order = CompressedEdwardsY(valid_pubkey.0).decompress().unwrap();
+    let point_of_prime_order = CompressedEdwardsY(key_arr).decompress().unwrap();
     let point_of_order_8 = CompressedEdwardsY([0; 32]).decompress().unwrap();
     let point_of_composite_order = point_of_prime_order + point_of_order_8;
     assert!(!point_of_composite_order.is_torsion_free());
-    BasicSigEd25519PublicKeyBytes(point_of_composite_order.compress().0)
+
+    *key = point_of_composite_order.compress().0.to_vec();
 }
 
-fn valid_node_keys() -> NodePublicKeys {
-    let (node_pks, _node_id) = valid_node_keys_and_node_id();
-    node_pks
-}
-
-pub fn valid_node_keys_and_node_id() -> (NodePublicKeys, NodeId) {
-    let (config, _tepm_dir) = CryptoConfig::new_in_temp_dir();
-    get_node_keys_or_generate_if_missing(&config, None)
-}
-
-pub fn node_id(n: u64) -> NodeId {
+fn node_id(n: u64) -> NodeId {
     NodeId::from(PrincipalId::new_node_test_id(n))
 }

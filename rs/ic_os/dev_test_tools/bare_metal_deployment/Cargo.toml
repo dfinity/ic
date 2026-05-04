@@ -1,0 +1,19 @@
+[package]
+name = "bare_metal_deployment"
+edition.workspace = true
+
+[[bin]]
+name = "deploy"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+deterministic_ips = { path = "../../networking/deterministic_ips" }
+clap = { workspace = true }
+http = { workspace = true }
+macaddr = { workspace = true }
+rust-ini = { workspace = true }
+rand = { workspace = true }
+rexpect = { workspace = true }
+thiserror = { workspace = true }
+ssh2 = { workspace = true }

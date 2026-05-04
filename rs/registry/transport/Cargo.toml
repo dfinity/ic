@@ -1,16 +1,27 @@
 [package]
 name = "ic-registry-transport"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-candid = "0.8.1"
+async-trait = { workspace = true }
+candid = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-protobuf = { path = "../../protobuf" }
-prost = "0.10.4"
-bytes = "1.0.1"
-serde = { version = "1.0.99", features = ["derive"] }
+mockall = { workspace = true }
+prost = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
+ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
+ic-registry-keys = { path = "../keys" }
 ic-registry-transport-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-tempfile = "3.1.0"
+lazy_static = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+pretty_assertions = { workspace = true }

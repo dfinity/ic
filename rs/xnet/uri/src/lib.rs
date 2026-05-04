@@ -22,13 +22,13 @@ impl fmt::Display for XNetAuthParseError {
         write!(f, "failed to parse xnet authority")?;
         match self {
             Self::InvalidNodeId { input, reason } => {
-                write!(f, "{}: invalid node id: {}", input, reason)
+                write!(f, "{input}: invalid node id: {reason}")
             }
             Self::InvalidRegistryVersion { input, reason } => {
-                write!(f, "{}: invalid registry version: {}", input, reason)
+                write!(f, "{input}: invalid registry version: {reason}")
             }
             Self::InvalidSocketAddress { input, reason } => {
-                write!(f, "{}: invalid socket address: {}", input, reason)
+                write!(f, "{input}: invalid socket address: {reason}")
             }
         }
     }
@@ -40,7 +40,7 @@ impl std::error::Error for XNetAuthParseError {}
 ///
 /// This type provides convenience methods to parse/encode the data
 /// into URI authority section.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct XNetAuthority {
     /// The node we are pulling streams from.
     pub node_id: NodeId,

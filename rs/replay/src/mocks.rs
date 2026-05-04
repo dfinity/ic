@@ -1,9 +1,12 @@
-use ic_consensus::consensus::{payload_builder::PayloadBuilder, SubnetRecords};
-use ic_interfaces::{consensus::PayloadValidationError, validation::ValidationResult};
+use ic_interfaces::{
+    batch_payload::ProposalContext,
+    consensus::{PayloadBuilder, PayloadValidationError},
+    validation::ValidationResult,
+};
 use ic_types::{
-    batch::{BatchPayload, ValidationContext},
-    consensus::Payload,
     Height, Time,
+    batch::{BatchPayload, ValidationContext},
+    consensus::{Payload, block_maker::SubnetRecords},
 };
 
 /// A mock we're using to instantiate the consensus Validator. Since notarizations
@@ -24,9 +27,9 @@ impl PayloadBuilder for MockPayloadBuilder {
     fn validate_payload(
         &self,
         _height: Height,
+        _proposal_context: &ProposalContext,
         _payload: &Payload,
         _past_payloads: &[(Height, Time, Payload)],
-        _context: &ValidationContext,
     ) -> ValidationResult<PayloadValidationError> {
         Ok(())
     }

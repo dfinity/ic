@@ -14,11 +14,11 @@ mod test {
 
     #[test]
     fn test_wasm_is_legal() {
-        wabt::wasm2wat(EMPTY_WASM).unwrap();
+        wasmprinter::print_bytes(EMPTY_WASM).unwrap();
     }
 
     #[test]
     fn check_hardcoded_sha256_is_up_to_date() {
-        assert_eq!(EMPTY_WASM_SHA256, ic_crypto_sha::Sha256::hash(EMPTY_WASM));
+        assert_eq!(EMPTY_WASM_SHA256, ic_crypto_sha2::Sha256::hash(EMPTY_WASM));
     }
 }

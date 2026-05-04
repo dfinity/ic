@@ -5,6 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub mod icrc1;
 pub mod itest_helpers;
+pub mod state_test_helpers;
 
 // The memory allocation for the ledger, governance and registry canisters
 // (4GiB)

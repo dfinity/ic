@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_types::{CanisterId, Cycles};
+use ic_types::CanisterId;
+use ic_types_cycles::Cycles;
 
 #[async_trait]
 pub trait CanisterApi {
@@ -13,6 +14,7 @@ pub trait CanisterApi {
         target_subnet: SubnetId,
         controller_id: PrincipalId,
         cycles: Cycles,
+        wasm_memory_limit: u64,
     ) -> Result<CanisterId, String>;
 
     /// Delete a canister that has been created
@@ -32,6 +34,9 @@ pub trait CanisterApi {
         canister: CanisterId,
         controllers: Vec<PrincipalId>,
     ) -> Result<(), String>;
+
+    /// Return cycles available from the canister's own balance, or error if not enough
+    fn this_canister_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String>;
 
     /// Return the cycles available, or fail if insufficient cycles are available.
     fn message_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String>;

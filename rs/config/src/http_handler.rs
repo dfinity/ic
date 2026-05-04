@@ -1,171 +1,92 @@
+use crate::execution_environment::QUERY_EXECUTION_THREADS_TOTAL;
 use serde::{Deserialize, Serialize};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
-use std::{convert::TryFrom, net::SocketAddr};
 
-const DEFAULT_IP_ADDR: &str = "0.0.0.0";
-
-const DEFAULT_PORT: u16 = 8080u16;
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "snake_case")]
-/// The port configuration. Defaults to using port 8080.
-pub enum PortConfig {
-    /// Instructs the HTTP handler to use the specified port
-    Port(u16),
-
-    /// Instructs the HTTP handler to bind to any open port and report the port
-    /// to the specified file.
-    /// The port is written in its textual representation, no newline at the
-    /// end.
-    WritePortTo(PathBuf),
-}
-
-/// The external configuration that can be loaded from a configuration file.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ExternalConfig {
-    // We use "flatten" in order to avoid having to write:
-    // ```
-    // {
-    //   http_handler: {
-    //     port: {
-    //       port: ...
-    //     }
-    //   }
-    // }
-    // ```
-    // which is redundant because `port` and `write_port_to` apply only to the port
-    /// DEPRECATED: Use `listen_addr` instead.
-    ///
-    /// Port to listen on.
-    ///
-    /// ```json5
-    /// {
-    ///   http_handler: {
-    ///     port: 8080
-    ///   }
-    /// }
-    /// ```
-    /// or
-    /// ```json5
-    /// {
-    ///   http_handler: {
-    ///     write_port_to: "./path/to/file"
-    ///   }
-    /// }
-    /// ```
-    #[serde(flatten)]
-    pub port: Option<PortConfig>,
-
-    /// IP address and port to listen on
-    ///
-    /// ```json5
-    /// {
-    ///   http_handler: {
-    ///     listen_addr: "127.0.0.1:8080"
-    ///   }
-    /// }
-    /// ```
-    pub listen_addr: Option<SocketAddr>,
-
-    /// An escape hatch to allow API traffic over IPv6 if absolutely
-    /// necessary.
-    pub allow_ipv6_my_users_have_no_privacy: Option<bool>,
-
-    // The root key is the public key of this Internet Computer instance.
-    //
-    // If set to `true`, the replica returns the public key of the current
-    // subnet in the `/status` endpoint. This is only needed in development
-    // instances and tests.
-    //
-    // In production environments, this should be set to `false` and clients
-    // will have an independent trustworthy source for this data.
-    //
-    // NOTE: Accidentally setting this flag to `true` in production is not a
-    //       major security risk for the IC, but developers should not be
-    //       tempted to get the IC's root key from this insecure location.
-    pub show_root_key_in_status: bool,
-}
-
-impl Default for ExternalConfig {
-    fn default() -> Self {
-        Self {
-            listen_addr: None,
-            allow_ipv6_my_users_have_no_privacy: None,
-            port: None,
-            show_root_key_in_status: true,
-        }
-    }
-}
+const DEFAULT_IP_V6_ADDR: Ipv6Addr = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
+const DEFAULT_PORT: u16 = 8080_u16;
 
 /// The internal configuration -- any historical warts from the external
 /// configuration are removed. Anything using this struct can trust that it
 /// has been validated.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Config {
     /// IP address and port to listen on
     pub listen_addr: SocketAddr,
+
     /// The path to write the listening port to
     pub port_file_path: Option<PathBuf>,
-    /// True if the replica public key is returned from the `/status` endpoint
-    pub show_root_key_in_status: bool,
+
+    /// If no bytes are read from a connection for the duration of
+    /// 'connection_read_timeout_seconds', then the connection is dropped.
+    /// There is no point is setting a timeout on the write bytes since
+    /// they are conditioned on the received requests.
+    pub connection_read_timeout_seconds: u64,
+
+    /// Per request timeout in seconds before the server replies with `504 Gateway Timeout`.
+    pub request_timeout_seconds: u64,
+
+    /// The `SETTINGS_MAX_CONCURRENT_STREAMS` option for HTTP2 connections.
+    pub http_max_concurrent_streams: u32,
+
+    /// Request with body size bigger than `max_request_size_bytes` will be rejected
+    /// and [`413 Content Too Large`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/413) will be returned to the user.
+    pub max_request_size_bytes: u64,
+
+    /// Delegation certificate requests with body size bigger than `max_delegation_certificate_size_bytes`
+    /// will be rejected. For valid IC delegation certificates this is never the case since the size is always constant.
+    pub max_delegation_certificate_size_bytes: u64,
+
+    /// Serving at most `max_read_state_concurrent_requests` requests concurrently for each endpoint:
+    /// `/api/v2/canister/read_state`, `/api/v2/subnet/read_state`, `/api/v3/canister/read_state`, `/api/v3/subnet/read_state`
+    pub max_read_state_concurrent_requests: usize,
+
+    /// Serving at most `max_status_concurrent_requests` requests concurrently for endpoint `/api/v2/status`.
+    pub max_status_concurrent_requests: usize,
+
+    /// Serving at most `max_catch_up_package_concurrent_requests` requests concurrently for endpoint `/_/catch_up_package`.
+    pub max_catch_up_package_concurrent_requests: usize,
+
+    /// Serving at most `max_dashboard_concurrent_requests` requests concurrently for endpoint `/_/dashboard`.
+    pub max_dashboard_concurrent_requests: usize,
+
+    /// Serving at most `max_call_concurrent_requests` requests concurrently for endpoint `/api/v2/call`.
+    pub max_call_concurrent_requests: usize,
+
+    /// Serving at most `max_call_concurrent_requests` requests concurrently for each endpoint:
+    /// `/api/v2/query`, `/api/v3/query`
+    pub max_query_concurrent_requests: usize,
+
+    /// Serving at most `max_pprof_concurrent_requests` requessts concurrently for all endpoints under `/_/pprof`.
+    pub max_pprof_concurrent_requests: usize,
+
+    /// The maximum time the replica will wait for a message to be certified before timing out the requests and responding with `202`, for endpoints `/api/v3/call` and `/api/v4/call`.
+    pub ingress_message_certificate_timeout_seconds: u64,
+
+    /// Serving at most `max_tracing_flamegraph_concurrent_requests` requests concurrently for all endpoints under `/_/tracing/flamegraph`.
+    pub max_tracing_flamegraph_concurrent_requests: usize,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            listen_addr: SocketAddr::new(
-                DEFAULT_IP_ADDR.parse().expect("can't fail"),
-                DEFAULT_PORT,
-            ),
+            listen_addr: SocketAddr::new(IpAddr::V6(DEFAULT_IP_V6_ADDR), DEFAULT_PORT),
             port_file_path: None,
-            show_root_key_in_status: true,
-        }
-    }
-}
-
-impl TryFrom<ExternalConfig> for Config {
-    type Error = &'static str;
-
-    fn try_from(ec: ExternalConfig) -> Result<Self, Self::Error> {
-        let mut config = Config::default();
-
-        config.listen_addr = match (ec.port, ec.listen_addr) {
-            (None, Some(listen_addr)) => Ok(listen_addr),
-            (Some(port), None) => match port {
-                PortConfig::Port(port) => Ok(SocketAddr::new(
-                    DEFAULT_IP_ADDR.parse().expect("can't fail"),
-                    port,
-                )),
-                PortConfig::WritePortTo(path) => {
-                    config.port_file_path = Some(path);
-                    Ok(SocketAddr::new(
-                        DEFAULT_IP_ADDR.parse().expect("can't fail"),
-                        0,
-                    ))
-                }
-            },
-            (None, None) => Err("one of port or listen_addr must be specified"),
-            (Some(PortConfig::Port(_)), Some(_)) => Err("both port and listen_addr were specified"),
-            (Some(PortConfig::WritePortTo(path)), Some(listen_addr)) => {
-                config.port_file_path = Some(path);
-                Ok(listen_addr)
-            }
-        }?;
-
-        config.show_root_key_in_status = ec.show_root_key_in_status;
-        Ok(config)
-    }
-}
-
-impl TryFrom<Option<ExternalConfig>> for Config {
-    type Error = &'static str;
-
-    fn try_from(ec: Option<ExternalConfig>) -> Result<Self, Self::Error> {
-        match ec {
-            Some(ec) => Self::try_from(ec),
-            None => Ok(Self::default()),
+            connection_read_timeout_seconds: 1_200, // 20 min
+            request_timeout_seconds: 300,           // 5 min
+            http_max_concurrent_streams: 1000,
+            max_request_size_bytes: 5 * 1024 * 1024, // 5MB
+            max_delegation_certificate_size_bytes: 1024 * 1024, // 1MB
+            max_read_state_concurrent_requests: 100,
+            max_catch_up_package_concurrent_requests: 100,
+            max_dashboard_concurrent_requests: 100,
+            max_status_concurrent_requests: 100,
+            max_call_concurrent_requests: 50,
+            max_query_concurrent_requests: QUERY_EXECUTION_THREADS_TOTAL * 100,
+            max_pprof_concurrent_requests: 5,
+            ingress_message_certificate_timeout_seconds: 10,
+            max_tracing_flamegraph_concurrent_requests: 5,
         }
     }
 }

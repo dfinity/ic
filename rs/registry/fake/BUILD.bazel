@@ -1,14 +1,35 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+# This should only be used by tests, although it's currently used by LocalRegistry.
+
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/interfaces/registry",
+    "//rs/types/types",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/registry/keys",
+]
+
+SRCS = glob(
+    ["src/**"],
+    exclude = ["**/*tests.rs"],
+)
+
 rust_library(
     name = "fake",
-    srcs = glob(["src/**"]),
+    srcs = SRCS,
     crate_name = "ic_registry_client_fake",
-    version = "0.8.0",
-    deps = [
-        "//rs/interfaces/registry",
-        "//rs/types/types",
-    ],
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "fake_test",
+    srcs = glob(["src/**/*.rs"]),
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

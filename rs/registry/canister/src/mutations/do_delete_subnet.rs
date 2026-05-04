@@ -1,125 +1,92 @@
-use std::convert::TryFrom;
-
-use crate::{
-    common::LOG_PREFIX,
-    mutations::common::{decode_registry_value, encode_or_panic},
-    registry::Registry,
-};
-
-use candid::{CandidType, Deserialize};
-use cycles_minting_canister::RemoveSubnetFromAuthorizedSubnetListArgs;
-use dfn_core::call;
-use ic_base_types::{PrincipalId, SubnetId};
-use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, NNS_SUBNET_ID};
-use ic_protobuf::registry::routing_table::v1::RoutingTable as RoutingTablePb;
+use candid::{CandidType, Principal};
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
+use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetType};
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
-    make_firewall_rules_record_key, make_routing_table_record_key, make_subnet_list_record_key,
-    make_subnet_record_key, FirewallRulesScope,
+    make_subnet_list_record_key, make_subnet_record_key,
 };
-use ic_registry_routing_table::RoutingTable;
 use ic_registry_transport::{delete, update};
+use ic_types::{PrincipalId, SubnetId};
+use prost::Message;
+use serde::{Deserialize, Serialize};
+
+use crate::{common::LOG_PREFIX, registry::Registry};
 
 impl Registry {
-    /// Delete an existing Subnet from the Registry.
+    /// Note: The method name implies general subnet deletion. Currently, however, only CloudEngine subnets
+    ///       can be deleted. The reason is that general subnet deletion requires changes in the deterministic
+    ///       state machine, which are planned in the near future.  
     ///
-    /// This method is called by Governance, after a proposal for deleting a
-    /// Subnet has been accepted.
-    pub async fn do_delete_subnet(&mut self, payload: DeleteSubnetPayload) {
-        println!("{}do_delete_subnet: {:?}", LOG_PREFIX, payload);
+    /// Deleting a subnet means to:
+    /// - Remove its subnet ID from the key `subnet_list`.
+    /// - Remove its subnet record.
+    /// - Remove all routing table shards that its subnet ID maps to.
+    /// - Remove the catch up package.
+    /// - Remove the subnet public key.
+    ///
+    /// Consumers of `subnet_list`, the subnet record and the routing table assume live subnets, whereas
+    /// consumers that must take deleted subnets into account do so via old registry versions (the
+    /// registry client method `get_versioned_value` allows the caller to distinguish between deleted
+    /// and non-existing values via `version ?= 0`).
+    pub fn do_delete_subnet(&mut self, payload: DeleteSubnetPayload) -> Result<(), String> {
+        println!("{LOG_PREFIX}do_delete_subnet: {payload:?}");
 
-        let subnet_id_to_remove = SubnetId::from(payload.subnet_id.unwrap());
-        let mut subnet_list = self.get_subnet_list_record();
+        let DeleteSubnetPayload { subnet_id } = payload;
+        let subnet_id_ = SubnetId::from(PrincipalId::from(subnet_id));
+        let subnet_record = self.get_subnet(subnet_id_, self.latest_version())?;
 
-        let latest_version = self.latest_version();
+        // Currently, only CloudEngines can be deleted.
+        if subnet_record.subnet_type != i32::from(SubnetType::CloudEngine) {
+            return Err("Only CloudEngines may be deleted".to_string());
+        }
 
-        let routing_table_vec = self
-            .get(make_routing_table_record_key().as_bytes(), latest_version)
-            .unwrap();
-        let routing_table = RoutingTable::try_from(decode_registry_value::<RoutingTablePb>(
-            routing_table_vec.value.clone(),
-        ))
-        .unwrap();
-        let nns_subnet_id = match routing_table.route(GOVERNANCE_CANISTER_ID.into()) {
-            Some(v) => v,
-            None => *NNS_SUBNET_ID,
+        // Remove from `subnet_list`.
+        let mut subnet_list = self.get_subnet_list_record().subnets;
+        let len_before = subnet_list.len();
+        subnet_list.retain(|s| s != subnet_id.as_slice());
+        if subnet_list.len() > len_before - 1 {
+            println!(
+                "{LOG_PREFIX}do_delete_subnet: Subnet {} was not present in subnet_list.",
+                subnet_id
+            );
+        }
+        let new_subnet_list_record = SubnetListRecord {
+            subnets: subnet_list,
         };
-
-        // Check that the Subnet hosting the governance canister will not be deleted
-        if subnet_id_to_remove == nns_subnet_id {
-            panic!("Cannot delete the NNS subnet");
-        }
-
-        if !subnet_list
-            .subnets
-            .contains(&subnet_id_to_remove.get().into())
-        {
-            panic!("Subnet {} does not exist", subnet_id_to_remove);
-        }
-
-        // 1. Remove Subnet from Routing Table
-        let update_routing_table_mutation =
-            self.remove_subnet_from_routing_table(latest_version, subnet_id_to_remove);
-
-        // 2. Remove Subnet from Subnet List
-        subnet_list
-            .subnets
-            .retain(|subnet_id| *subnet_id != subnet_id_to_remove.get().to_vec());
-        let update_subnet_list_mutation = update(
+        let subnet_list_mutation = update(
             make_subnet_list_record_key().as_bytes(),
-            encode_or_panic(&subnet_list),
+            new_subnet_list_record.encode_to_vec(),
         );
 
-        // 3. Delete Subnet's CUP
-        let delete_cup_mutation =
-            delete(make_catch_up_package_contents_key(subnet_id_to_remove).as_bytes());
+        // Remove catch up package.
+        let subnet_dkg_mutation = delete(make_catch_up_package_contents_key(subnet_id_).as_bytes());
 
-        // 4. Delete Subnet's threshold signing key
-        let delete_threshold_signing_pubkey =
-            delete(make_crypto_threshold_signing_pubkey_key(subnet_id_to_remove).as_bytes());
+        // Remove pubkey.
+        let subnet_threshold_signing_pubkey_mutation =
+            delete(make_crypto_threshold_signing_pubkey_key(subnet_id_).as_bytes());
 
-        // 5. Delete Subnet record
-        let delete_subnet_mutation = delete(make_subnet_record_key(subnet_id_to_remove));
+        // Remove subnet record.
+        let remove_subnet_mutation = delete(make_subnet_record_key(subnet_id_).into_bytes());
 
+        // Remove routing table shards.
+        let mut remove_from_routing_table_mutations =
+            self.remove_subnet_from_routing_table(self.latest_version(), subnet_id_);
         let mut mutations = vec![
-            update_routing_table_mutation,
-            update_subnet_list_mutation,
-            delete_cup_mutation,
-            delete_threshold_signing_pubkey,
-            delete_subnet_mutation,
+            subnet_list_mutation,
+            subnet_dkg_mutation,
+            subnet_threshold_signing_pubkey_mutation,
+            remove_subnet_mutation,
         ];
+        mutations.append(&mut remove_from_routing_table_mutations);
 
-        // 6. Delete Subnet specific Firewall Ruleset (if it exists)
-        let firewall_ruleset_key =
-            make_firewall_rules_record_key(&FirewallRulesScope::Subnet(subnet_id_to_remove));
-        if self
-            .get(firewall_ruleset_key.as_bytes(), self.latest_version())
-            .is_some()
-        {
-            let delete_firewall_ruleset_mutation = delete(firewall_ruleset_key);
-            mutations.push(delete_firewall_ruleset_mutation);
-        }
-
-        // 7. Make a call to the CMC and only apply changes if it's successful
-        let cmc_payload = RemoveSubnetFromAuthorizedSubnetListArgs {
-            subnet: subnet_id_to_remove,
-        };
-        let _: () = call(
-            CYCLES_MINTING_CANISTER_ID,
-            "remove_subnet_from_authorized_subnet_list",
-            dfn_candid::candid_one,
-            &cmc_payload,
-        )
-        .await
-        .expect("Call to the CMC did not succeed, subnet deletion reverted");
-
-        // 8. Check invariants and apply mutations
+        // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
+        Ok(())
     }
 }
 
-/// The payload of a proposal to delete an existing subnet.
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct DeleteSubnetPayload {
-    pub subnet_id: Option<PrincipalId>,
+    pub subnet_id: Principal,
 }

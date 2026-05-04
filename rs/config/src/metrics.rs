@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, path::PathBuf};
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Exporter {
     /// Log metrics at `TRACE` level every 30 seconds.
@@ -12,13 +12,24 @@ pub enum Exporter {
     File(PathBuf),
 }
 
-impl Default for Exporter {
+impl Default for Config {
     fn default() -> Self {
-        Exporter::Log
+        Self {
+            exporter: Exporter::Log,
+            max_concurrent_requests: 50,
+            request_timeout_seconds: 30,
+        }
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[serde(default)]
 pub struct Config {
     pub exporter: Exporter,
+
+    /// There can be at most 'max_concurrent_requests' in-flight requests.
+    pub max_concurrent_requests: usize,
+
+    /// Per request timeout in seconds before the server replies with 504 Gateway Timeout.
+    pub request_timeout_seconds: u64,
 }

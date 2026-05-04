@@ -9,7 +9,7 @@ use std::fmt;
 use std::fmt::Formatter;
 
 /// Occurs if key removal using `NiDkgAlgorithm::retain_only_active_keys` fails.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum DkgKeyRemovalError {
     InputValidationError(TranscriptsToRetainValidationError),
     FsEncryptionPublicKeyNotInRegistry(FsEncryptionPublicKeyNotInRegistryError),
@@ -17,6 +17,8 @@ pub enum DkgKeyRemovalError {
     Registry(RegistryClientError),
     FsKeyNotInSecretKeyStoreError(KeyNotFoundError),
     TransientInternalError(InternalError),
+    KeyNotFoundError(KeyNotFoundError),
+    KeyIdInstantiationError(InternalError),
 }
 
 impl fmt::Display for DkgKeyRemovalError {

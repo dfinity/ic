@@ -1,118 +1,253 @@
+use crate::fixtures::environment_fixture::{EnvironmentFixture, EnvironmentFixtureState};
 use async_trait::async_trait;
+use candid::Nat;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::NervousSystemError;
-use ic_sns_governance::governance::{
-    governance_minting_account, neuron_account_id, Governance, TimeWarp, ValidGovernanceProto,
+use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
+use ic_nervous_system_common::{E8, NervousSystemError};
+use ic_sns_governance::{
+    governance::{Governance, ValidGovernanceProto},
+    pb::v1::{
+        GetMaturityModulationRequest, GetMaturityModulationResponse, GetNeuron, GetProposal,
+        Governance as GovernanceProto, GovernanceError, ManageNeuron, ManageNeuronResponse,
+        NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+        NeuronPermissionType, Proposal, ProposalData, ProposalId, Vote, get_neuron_response,
+        get_proposal_response,
+        governance::{GovernanceCachedMetrics, MaturityModulation, Mode, SnsMetadata, Version},
+        manage_neuron::{
+            self, AddNeuronPermissions, MergeMaturity, RegisterVote, RemoveNeuronPermissions,
+        },
+        manage_neuron_response::{
+            self, AddNeuronPermissionsResponse, FollowResponse, MergeMaturityResponse,
+            RegisterVoteResponse, RemoveNeuronPermissionsResponse,
+        },
+        neuron::{DissolveState, Followees},
+        proposal::Action,
+    },
+    types::Environment,
 };
-use ic_sns_governance::ledger::Ledger;
-use ic_sns_governance::pb::v1::manage_neuron::MergeMaturity;
-use ic_sns_governance::pb::v1::manage_neuron_response::MergeMaturityResponse;
-use ic_sns_governance::pb::v1::neuron::{DissolveState, Followees};
-use ic_sns_governance::pb::v1::Governance as GovernanceProto;
-use ic_sns_governance::pb::v1::{
-    get_neuron_response, manage_neuron, manage_neuron_response, proposal, GetNeuron,
-    GovernanceError, ManageNeuron, ManageNeuronResponse, Motion, NervousSystemParameters, Neuron,
-    NeuronId, NeuronPermission, NeuronPermissionType, Proposal, ProposalId, Vote,
+use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
+use icrc_ledger_types::{
+    icrc1::account::{Account, Subaccount},
+    icrc3::blocks::GetBlocksResult,
 };
-use ic_sns_governance::types::{native_action_ids, Environment, HeapGrowthPotential};
-use rand::rngs::StdRng;
-use rand::{RngCore, SeedableRng};
-use std::collections::BTreeMap;
-use std::convert::TryFrom;
-use std::sync::Arc;
-use std::sync::Mutex;
+use maplit::btreemap;
+use rand::{SeedableRng, rngs::StdRng};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    convert::TryFrom,
+    sync::{Arc, Mutex},
+};
 
-const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
+pub mod environment_fixture;
 
-type LedgerMap = BTreeMap<Account, u64>;
+pub const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 
-/// Constructs a test principal id from an NeuronId.
-/// Convenience functions to make creating neurons more concise.
-pub fn principal(neuron_id: &NeuronId) -> PrincipalId {
-    let first_byte = neuron_id.id.get(0).unwrap();
-    PrincipalId::try_from(format!("SID{}", first_byte).as_bytes().to_vec()).unwrap()
-}
-
-pub fn get_proposal_submission_principal(neuron: &Neuron) -> Result<PrincipalId, String> {
-    for neuron_permission in &neuron.permissions {
-        if neuron_permission
-            .permission_type
-            .contains(&(NeuronPermissionType::SubmitProposal as i32))
-        {
-            return Ok(neuron_permission.principal.unwrap());
-        }
-    }
-
-    Err(format!(
-        "Neuron {} has no permissions with NeuronPermissionType::MakeProposal",
-        neuron.id.as_ref().unwrap()
-    ))
-}
-
-pub fn prorated_neuron_age(
-    aging_since: u64,
-    old_stake_e8s: u64,
-    new_stake_e8s: u64,
-    now: u64,
-) -> u64 {
-    if aging_since < now && old_stake_e8s <= new_stake_e8s {
-        let old_stake = old_stake_e8s as u128;
-        let old_age = now.saturating_sub(aging_since) as u128;
-        let new_age = (old_age * old_stake) / (new_stake_e8s as u128);
-        now.saturating_sub(new_age as u64)
-    } else {
-        u64::MAX
-    }
+/// Constructs a neuron id from a principal_id and memo. This is a
+/// convenient helper method in tests.
+pub fn neuron_id(principal_id: PrincipalId, memo: u64) -> NeuronId {
+    NeuronId::from(
+        ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes(
+            principal_id,
+            memo,
+        ),
+    )
 }
 
 /// The LedgerFixture allows for independent testing of Ledger functionality.
-#[derive(Default)]
+#[derive(Clone)]
 pub struct LedgerFixture {
-    accounts: LedgerMap,
+    ledger_fixture_state: Arc<Mutex<LedgerFixtureState>>,
 }
 
 impl LedgerFixture {
-    pub fn get_supply(&self) -> Tokens {
-        Tokens::from_e8s(self.accounts.iter().map(|(_, y)| y).sum())
+    pub fn new(state: LedgerFixtureState) -> Self {
+        LedgerFixture {
+            ledger_fixture_state: Arc::new(Mutex::new(state)),
+        }
     }
 }
 
-#[derive(Default)]
-pub struct LedgerBuilder {
-    ledger_fixture: LedgerFixture,
+#[async_trait]
+impl ICRC1Ledger for LedgerFixture {
+    async fn transfer_funds(
+        &self,
+        amount_e8s: u64,
+        fee_e8s: u64,
+        from_subaccount: Option<Subaccount>,
+        to: Account,
+        _memo: u64,
+    ) -> Result<u64, NervousSystemError> {
+        let ledger_fixture_state = &mut self.ledger_fixture_state.try_lock().unwrap();
+
+        let self_canister_id = ledger_fixture_state.self_canister_id;
+        let from_account = Account {
+            owner: self_canister_id.get().0,
+            subaccount: from_subaccount,
+        };
+
+        println!(
+            "Issuing ledger transfer from account {} (subaccount {}) to account {} amount {} fee {}",
+            from_account,
+            from_subaccount
+                .as_ref()
+                .map_or_else(|| "None".to_string(), |a| format!("{a:?}")),
+            to,
+            amount_e8s,
+            fee_e8s
+        );
+
+        // Only change SNS governance's SNS token balance when transferring from
+        // a non-default account. This is because when transferring from the
+        // default account, the "transfer" is actually a minting transaction.
+        if from_subaccount.is_some() {
+            let from_e8s = ledger_fixture_state
+                .accounts
+                .get_mut(&from_account)
+                .ok_or_else(|| {
+                    NervousSystemError::new_with_message("Source account doesn't exist")
+                })?;
+
+            let requested_e8s = amount_e8s + fee_e8s;
+
+            if *from_e8s < requested_e8s {
+                return Err(NervousSystemError::new_with_message(format!(
+                    "Insufficient funds. Available {} requested {}",
+                    *from_e8s, requested_e8s
+                )));
+            }
+
+            *from_e8s -= requested_e8s;
+        }
+
+        *ledger_fixture_state.accounts.entry(to).or_default() += amount_e8s;
+
+        ledger_fixture_state.block_height += 1;
+
+        Ok(ledger_fixture_state.block_height)
+    }
+
+    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+        let accounts = &mut self.ledger_fixture_state.try_lock().unwrap().accounts;
+
+        Ok(Tokens::from_e8s(accounts.values().sum()))
+    }
+
+    async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError> {
+        let accounts = &mut self.ledger_fixture_state.try_lock().unwrap().accounts;
+        let account_e8s = accounts.get(&account).unwrap_or(&0);
+        Ok(Tokens::from_e8s(*account_e8s))
+    }
+
+    fn canister_id(&self) -> CanisterId {
+        self.ledger_fixture_state
+            .try_lock()
+            .unwrap()
+            .target_canister_id
+    }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
+    }
 }
 
-impl LedgerBuilder {
+/// The LedgerFixtureState captures the state of a given LedgerFixture instance.
+/// This state is used to inspect properly issued ledger calls from Governance.
+pub struct LedgerFixtureState {
+    accounts: BTreeMap<Account, u64>,
+    self_canister_id: CanisterId,
+    target_canister_id: CanisterId,
+    block_height: u64,
+}
+
+/// The builder for the LedgerFixture. This allows for setting up the state
+/// of the LedgerFixture before its instantiated.
+pub struct LedgerFixtureBuilder {
+    accounts: BTreeMap<Account, u64>,
+    self_canister_id: CanisterId,
+    target_canister_id: CanisterId,
+    block_height: u64,
+}
+
+impl LedgerFixtureBuilder {
+    pub fn new(self_canister_id: CanisterId, target_canister_id: CanisterId) -> Self {
+        LedgerFixtureBuilder {
+            accounts: btreemap! {},
+            self_canister_id,
+            target_canister_id,
+            block_height: 0,
+        }
+    }
+
     pub fn create(self) -> LedgerFixture {
-        self.ledger_fixture
-    }
-
-    pub fn minting_account() -> Account {
-        governance_minting_account()
+        LedgerFixture::new(LedgerFixtureState {
+            accounts: self.accounts,
+            self_canister_id: self.self_canister_id,
+            target_canister_id: self.target_canister_id,
+            block_height: self.block_height,
+        })
     }
 
     pub fn add_account(&mut self, ident: Account, amount: u64) -> &mut Self {
-        self.ledger_fixture.accounts.insert(ident, amount);
+        self.accounts.insert(ident, amount);
         self
     }
 
     pub fn try_add_account(&mut self, ident: Account, amount: u64) -> &mut Self {
-        self.ledger_fixture.accounts.entry(ident).or_insert(amount);
+        self.accounts.entry(ident).or_insert(amount);
         self
     }
 
     pub fn account_id(ident: PrincipalId) -> Account {
         Account {
-            owner: ident,
+            owner: ident.0,
             subaccount: None,
         }
     }
 
     pub fn get_account_balance(&self, ident: Account) -> Option<u64> {
-        self.ledger_fixture.accounts.get(&ident).copied()
+        self.accounts.get(&ident).copied()
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct CmcFixture {
+    pub maturity_modulation: Arc<Mutex<i32>>,
+}
+
+impl CmcFixture {
+    pub fn new(maturity_modulation: i32) -> Self {
+        Self {
+            maturity_modulation: Arc::new(Mutex::new(maturity_modulation)),
+        }
+    }
+}
+
+#[async_trait]
+impl CMC for CmcFixture {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
+        Ok(*self.maturity_modulation.try_lock().unwrap())
     }
 }
 
@@ -121,7 +256,7 @@ impl LedgerBuilder {
 /// the neuron id, which is provided by the caller.
 pub struct NeuronBuilder {
     id: Option<NeuronId>,
-    stake: u64,
+    stake_e8s: u64,
     permissions: Vec<NeuronPermission>,
     age_timestamp: Option<u64>,
     created_seconds: Option<u64>,
@@ -130,13 +265,14 @@ pub struct NeuronBuilder {
     dissolve_state: Option<DissolveState>,
     followees: BTreeMap<u64, Followees>,
     voting_power_percentage_multiplier: u64,
+    vesting_period_seconds: Option<u64>,
 }
 
 impl From<Neuron> for NeuronBuilder {
     fn from(neuron: Neuron) -> Self {
         NeuronBuilder {
             id: neuron.id,
-            stake: neuron.cached_neuron_stake_e8s,
+            stake_e8s: neuron.cached_neuron_stake_e8s,
             permissions: vec![],
             age_timestamp: if neuron.aging_since_timestamp_seconds == u64::MAX {
                 None
@@ -149,6 +285,7 @@ impl From<Neuron> for NeuronBuilder {
             dissolve_state: neuron.dissolve_state,
             followees: neuron.followees,
             voting_power_percentage_multiplier: neuron.voting_power_percentage_multiplier,
+            vesting_period_seconds: neuron.vesting_period_seconds,
         }
     }
 }
@@ -157,7 +294,7 @@ impl NeuronBuilder {
     pub fn new_without_owner(id: NeuronId, stake: u64) -> Self {
         NeuronBuilder {
             id: Some(id),
-            stake,
+            stake_e8s: stake,
             permissions: vec![],
             age_timestamp: None,
             created_seconds: None,
@@ -166,13 +303,14 @@ impl NeuronBuilder {
             dissolve_state: None,
             followees: BTreeMap::new(),
             voting_power_percentage_multiplier: 100,
+            vesting_period_seconds: None,
         }
     }
 
-    pub fn new(id: NeuronId, stake: u64, owner: NeuronPermission) -> Self {
+    pub fn new(id: NeuronId, stake_e8s: u64, owner: NeuronPermission) -> Self {
         NeuronBuilder {
             id: Some(id),
-            stake,
+            stake_e8s,
             permissions: vec![owner],
             age_timestamp: None,
             created_seconds: None,
@@ -181,6 +319,40 @@ impl NeuronBuilder {
             dissolve_state: None,
             followees: BTreeMap::new(),
             voting_power_percentage_multiplier: 100,
+            vesting_period_seconds: None,
+        }
+    }
+
+    pub fn create(self, now: u64, ledger: &mut LedgerFixtureBuilder) -> Neuron {
+        if let Some(id) = self.id.as_ref() {
+            let subaccount = id.subaccount().unwrap();
+            let neuron_account = Account {
+                owner: ledger.self_canister_id.get().0,
+                subaccount: Some(subaccount),
+            };
+            ledger.add_account(neuron_account, self.stake_e8s);
+        }
+
+        Neuron {
+            id: self.id,
+            permissions: self.permissions,
+            cached_neuron_stake_e8s: self.stake_e8s,
+            neuron_fees_e8s: self.neuron_fees,
+            created_timestamp_seconds: self.created_seconds.unwrap_or(now),
+            aging_since_timestamp_seconds: match self.dissolve_state {
+                Some(DissolveState::WhenDissolvedTimestampSeconds(_)) => u64::MAX,
+                _ => match self.age_timestamp {
+                    None => now,
+                    Some(secs) => secs,
+                },
+            },
+            maturity_e8s_equivalent: self.maturity,
+            dissolve_state: self.dissolve_state,
+            followees: self.followees,
+            voting_power_percentage_multiplier: self.voting_power_percentage_multiplier,
+            vesting_period_seconds: self.vesting_period_seconds,
+            disburse_maturity_in_progress: vec![],
+            ..Default::default()
         }
     }
 
@@ -242,221 +414,72 @@ impl NeuronBuilder {
         self
     }
 
-    pub fn create(self, now: u64, ledger: &mut LedgerBuilder) -> Neuron {
-        if let Some(id) = self.id.as_ref() {
-            let subaccount = id.subaccount().unwrap();
-            ledger.add_account(neuron_account_id(subaccount), self.stake);
-        }
-
-        Neuron {
-            id: self.id,
-            permissions: self.permissions,
-            cached_neuron_stake_e8s: self.stake,
-            neuron_fees_e8s: self.neuron_fees,
-            created_timestamp_seconds: self.created_seconds.unwrap_or(now),
-            aging_since_timestamp_seconds: match self.dissolve_state {
-                Some(DissolveState::WhenDissolvedTimestampSeconds(_)) => u64::MAX,
-                _ => match self.age_timestamp {
-                    None => now,
-                    Some(secs) => secs,
-                },
-            },
-            maturity_e8s_equivalent: self.maturity,
-            dissolve_state: self.dissolve_state,
-            followees: self.followees,
-            voting_power_percentage_multiplier: self.voting_power_percentage_multiplier,
-        }
-    }
-
     pub fn add_followees(mut self, function_id: u64, followees: Followees) -> Self {
         self.followees.insert(function_id, followees);
         self
     }
-}
 
-pub struct SNSFixtureState {
-    now: u64,
-    rng: StdRng,
-    ledger: LedgerFixture,
-}
-
-#[derive(Clone)]
-pub struct SNSFixture {
-    sns_state: Arc<Mutex<SNSFixtureState>>,
-}
-
-impl SNSFixture {
-    pub fn new(state: SNSFixtureState) -> Self {
-        SNSFixture {
-            sns_state: Arc::new(Mutex::new(state)),
-        }
+    pub fn set_vesting_period(mut self, seconds: u64) -> Self {
+        self.vesting_period_seconds = Some(seconds);
+        self
     }
 }
 
-#[async_trait]
-impl Ledger for SNSFixture {
-    async fn transfer_funds(
-        &self,
-        amount_e8s: u64,
-        fee_e8s: u64,
-        from_subaccount: Option<Subaccount>,
-        to_account: Account,
-        _: u64,
-    ) -> Result<u64, NervousSystemError> {
-        let from_account = from_subaccount.map_or(governance_minting_account(), neuron_account_id);
-        println!(
-            "Issuing ledger transfer from account {} (subaccount {}) to account {} amount {} fee {}",
-            from_account, from_subaccount.as_ref().map_or_else(||"None".to_string(), |a| format!("{:#?}", a)), to_account, amount_e8s, fee_e8s
-        );
-        let accounts = &mut self.sns_state.try_lock().unwrap().ledger.accounts;
-
-        let _to_e8s = accounts
-            .get(&to_account)
-            .ok_or_else(|| NervousSystemError::new_with_message("Target account doesn't exist"))?;
-        let from_e8s = accounts
-            .get_mut(&from_account)
-            .ok_or_else(|| NervousSystemError::new_with_message("Source account doesn't exist"))?;
-
-        let requested_e8s = amount_e8s + fee_e8s;
-
-        if *from_e8s < requested_e8s {
-            return Err(NervousSystemError::new_with_message(format!(
-                "Insufficient funds. Available {} requested {}",
-                *from_e8s, requested_e8s
-            )));
-        }
-
-        *from_e8s -= requested_e8s;
-
-        *accounts.entry(to_account).or_default() += amount_e8s;
-
-        Ok(0)
-    }
-
-    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
-        Ok(self.sns_state.try_lock().unwrap().ledger.get_supply())
-    }
-
-    async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError> {
-        let accounts = &mut self.sns_state.try_lock().unwrap().ledger.accounts;
-        let account_e8s = accounts.get(&account).unwrap_or(&0);
-        Ok(Tokens::from_e8s(*account_e8s))
-    }
-
-    fn canister_id(&self) -> CanisterId {
-        CanisterId::from_u64(1)
-    }
-}
-
-#[async_trait]
-impl Environment for SNSFixture {
-    fn now(&self) -> u64 {
-        self.sns_state.try_lock().unwrap().now
-    }
-
-    fn random_u64(&mut self) -> u64 {
-        self.sns_state.try_lock().unwrap().rng.next_u64()
-    }
-
-    fn random_byte_array(&mut self) -> [u8; 32] {
-        let mut bytes = [0u8; 32];
-        self.sns_state
-            .try_lock()
-            .unwrap()
-            .rng
-            .fill_bytes(&mut bytes);
-        bytes
-    }
-
-    async fn call_canister(
-        &self,
-        _canister_id: CanisterId,
-        _method_name: &str,
-        _arg: Vec<u8>,
-    ) -> Result<Vec<u8>, (Option<i32>, String)> {
-        unimplemented!("call_canister is unimplemented")
-    }
-
-    fn heap_growth_potential(&self) -> HeapGrowthPotential {
-        HeapGrowthPotential::NoIssue
-    }
-
-    fn canister_id(&self) -> CanisterId {
-        CanisterId::from_u64(1)
-    }
-}
-
-/// The SNSState is used to capture all of the salient details of the SNS
-/// environment, so that we can compute the "delta", or what changed between
+/// The GovernanceState is used to capture all of the salient details of the Governance
+/// canister, so that we can compute the "delta", or what changed between
 /// actions.
-#[derive(Clone, Default, comparable::Comparable)]
+#[derive(Clone, Debug, Default, comparable::Comparable)]
 #[compare_default]
-pub struct SNSState {
-    now: u64,
-    accounts: LedgerMap,
-    governance_proto: GovernanceProto,
+pub struct GovernanceState {
+    pub now: u64,
+    pub sns_accounts: BTreeMap<Account, u64>,
+    pub icp_accounts: BTreeMap<Account, u64>,
+    pub governance_proto: GovernanceProto,
     // Attributes from `Governance`, which itself is not cloneable
-    latest_gc_num_proposals: usize,
+    pub latest_gc_num_proposals: usize,
 }
 
-/// A struct to help setting up tests concisely thanks to a concise format to
-/// specifies who proposes something and who votes on that proposal.
-pub struct ProposalNeuronBehavior {
-    /// Neuron id of the proposer.
-    proposer: Neuron,
-    /// Map neuron id of voters to their votes.
-    votes: BTreeMap<NeuronId, Vote>,
-    /// Keep track of proposal actions to use.
-    proposal_action: u64,
-}
-
-impl ProposalNeuronBehavior {
-    /// Creates a proposal from the specified proposer, and register the
-    /// specified votes.
-    ///
-    /// This function assumes that:
-    /// - neuron of id `i` has for controller `principal(i)`
-    pub async fn propose_and_vote(&self, sns: &mut SNS, summary: String) -> ProposalId {
-        // Submit proposal
-        let action = match self.proposal_action {
-            native_action_ids::MOTION => proposal::Action::Motion(Motion {
-                motion_text: format!("summary: {}", summary),
-            }),
-            _ => panic!("Unsupported proposal_action"),
-        };
-        let pid = sns
-            .governance
-            .make_proposal(
-                self.proposer.id.as_ref().unwrap(),
-                &get_proposal_submission_principal(&self.proposer).unwrap(),
-                &Proposal {
-                    title: "A Reasonable Title".to_string(),
-                    summary,
-                    action: Some(action),
-                    ..Default::default()
-                },
-            )
-            .await
-            .unwrap();
-        // Vote
-        for (voter, vote) in &self.votes {
-            sns.register_vote_assert_success(principal(voter), voter.clone(), pid, *vote);
-        }
-        pid
-    }
-}
-
-#[allow(clippy::upper_case_acronyms)]
-pub struct SNS {
-    pub fixture: SNSFixture,
+/// The GovernanceCanisterFixture is the root in the fixture hierarchy. It owns all fixtures
+/// and ultimately the Governance struct under test. The GovernanceCanisterFixture provides
+/// many helper methods for common calls, but allows for tests to operate directly on the
+/// low level fixtures if needed.
+pub struct GovernanceCanisterFixture {
+    pub environment_fixture: EnvironmentFixture,
+    pub icp_ledger_fixture: LedgerFixture,
+    pub sns_ledger_fixture: LedgerFixture,
+    pub cmc_fixture: CmcFixture,
     pub governance: Governance,
-    pub(crate) initial_state: Option<SNSState>,
+    pub(crate) initial_state: Option<GovernanceState>,
 }
 
-impl SNS {
+impl GovernanceCanisterFixture {
     /// Increases the time by the given amount.
     pub fn advance_time_by(&mut self, delta_seconds: u64) -> &mut Self {
-        self.fixture.sns_state.lock().unwrap().now += delta_seconds;
+        self.environment_fixture
+            .environment_fixture_state
+            .lock()
+            .unwrap()
+            .now += delta_seconds;
+        self
+    }
+
+    /// Ensures that SNS upgrade features are not going to produce any external calls that are
+    /// orthogonal to this test scenario, as they would require setting up mock responses.
+    pub fn temporarily_disable_sns_upgrades(&mut self) -> &mut Self {
+        assert!(self.governance.acquire_upgrade_periodic_task_lock());
+        self
+    }
+
+    /// Ensures that the cached metrics are not updated during the test. Siuable for tests that
+    /// do not care about the cached metrics. Only needs to be called once per test.
+    pub fn disable_update_cached_metrics(&mut self) -> &mut Self {
+        self.governance
+            .proto
+            .metrics
+            .replace(GovernanceCachedMetrics {
+                timestamp_seconds: u64::MAX,
+                ..Default::default()
+            });
         self
     }
 
@@ -465,15 +488,26 @@ impl SNS {
         self
     }
 
-    pub(crate) fn get_state(&self) -> SNSState {
-        SNSState {
-            now: self.now(),
-            accounts: self
-                .fixture
-                .sns_state
+    pub fn get_state(&self) -> GovernanceState {
+        GovernanceState {
+            now: self
+                .environment_fixture
+                .environment_fixture_state
                 .try_lock()
                 .unwrap()
-                .ledger
+                .now,
+            sns_accounts: self
+                .sns_ledger_fixture
+                .ledger_fixture_state
+                .try_lock()
+                .unwrap()
+                .accounts
+                .clone(),
+            icp_accounts: self
+                .icp_ledger_fixture
+                .ledger_fixture_state
+                .try_lock()
+                .unwrap()
                 .accounts
                 .clone(),
             governance_proto: self.governance.proto.clone(),
@@ -481,87 +515,9 @@ impl SNS {
         }
     }
 
-    pub fn run_periodic_tasks(&mut self) -> &mut Self {
+    pub fn run_periodic_tasks_now(&mut self) -> &mut Self {
         self.governance.run_periodic_tasks().now_or_never();
         self
-    }
-
-    /// Issues a manage_neuron command to register a vote
-    fn register_vote(
-        &mut self,
-        caller: PrincipalId,
-        neuron_id: NeuronId,
-        pid: ProposalId,
-        vote: Vote,
-    ) -> ManageNeuronResponse {
-        let manage_neuron = ManageNeuron {
-            subaccount: neuron_id.subaccount().unwrap().to_vec(),
-            command: Some(manage_neuron::Command::RegisterVote(
-                manage_neuron::RegisterVote {
-                    proposal: Some(pid),
-                    vote: vote as i32,
-                },
-            )),
-        };
-        self.governance
-            .manage_neuron(&manage_neuron, &caller)
-            .now_or_never()
-            .unwrap()
-    }
-
-    /// Issues a manage_neuron command to register a vote, and asserts that it
-    /// worked.
-    pub fn register_vote_assert_success(
-        &mut self,
-        caller: PrincipalId,
-        neuron_id: NeuronId,
-        pid: ProposalId,
-        vote: Vote,
-    ) {
-        let result = self.register_vote(caller, neuron_id, pid, vote);
-        assert_eq!(
-            result,
-            ManageNeuronResponse {
-                command: Some(manage_neuron_response::Command::RegisterVote(
-                    manage_neuron_response::RegisterVoteResponse {}
-                ))
-            }
-        );
-    }
-
-    /// Creates a proposal from the specified proposer, and register the
-    /// specified votes.
-    ///
-    /// This function assumes that:
-    /// - neuron of id `i` has for controller `principal(i)`
-    pub async fn propose_with_action(
-        &mut self,
-        prop: &ProposalNeuronBehavior,
-        summary: String,
-        action: proposal::Action,
-    ) -> ProposalId {
-        // Submit proposal
-        self.governance
-            .make_proposal(
-                prop.proposer.id.as_ref().unwrap(),
-                &get_proposal_submission_principal(&prop.proposer).unwrap(),
-                &Proposal {
-                    title: "A Reasonable Title".to_string(),
-                    summary,
-                    action: Some(action),
-                    ..Default::default()
-                },
-            )
-            .await
-            .unwrap()
-    }
-
-    pub async fn propose_and_vote(
-        &mut self,
-        behavior: impl Into<ProposalNeuronBehavior>,
-        summary: String,
-    ) -> ProposalId {
-        behavior.into().propose_and_vote(self, summary).await
     }
 
     pub fn merge_maturity(
@@ -593,7 +549,7 @@ impl SNS {
         }
     }
 
-    pub fn get_neuron(&self, neuron_id: &NeuronId) -> Result<Neuron, GovernanceError> {
+    pub fn get_neuron(&self, neuron_id: &NeuronId) -> Neuron {
         let result = self
             .governance
             .get_neuron(GetNeuron {
@@ -603,13 +559,18 @@ impl SNS {
             .unwrap();
 
         match result {
-            get_neuron_response::Result::Neuron(neuron) => Ok(neuron),
-            get_neuron_response::Result::Error(err) => Err(err),
+            get_neuron_response::Result::Neuron(neuron) => neuron,
+            get_neuron_response::Result::Error(err) => panic!("Expected Neuron to exist: {err}"),
         }
     }
 
-    pub fn get_account_balance(&self, account: Account) -> u64 {
-        self.account_balance(account)
+    pub fn get_account_balance(&self, account: &Account, target_ledger: TargetLedger) -> u64 {
+        let ledger_fixture = match target_ledger {
+            TargetLedger::Icp => &self.icp_ledger_fixture,
+            TargetLedger::Sns => &self.sns_ledger_fixture,
+        };
+        ledger_fixture
+            .account_balance(*account)
             .now_or_never()
             .unwrap()
             .unwrap()
@@ -617,132 +578,424 @@ impl SNS {
     }
 
     pub fn get_neuron_account_id(&self, neuron_id: &NeuronId) -> Account {
-        neuron_account_id(neuron_id.subaccount().unwrap())
+        self.governance
+            .neuron_account_id(neuron_id.subaccount().unwrap())
     }
 
-    pub fn get_neuron_stake(&self, neuron: &Neuron) -> u64 {
-        self.get_account_balance(self.get_neuron_account_id(neuron.id.as_ref().unwrap()))
-    }
-}
-
-#[async_trait]
-impl Ledger for SNS {
-    async fn transfer_funds(
-        &self,
-        amount_e8s: u64,
-        fee_e8s: u64,
-        from_subaccount: Option<Subaccount>,
-        to_account: Account,
-        arg: u64,
-    ) -> Result<u64, NervousSystemError> {
-        self.fixture
-            .transfer_funds(amount_e8s, fee_e8s, from_subaccount, to_account, arg)
+    pub async fn get_neuron_stake_e8s(&self, neuron: &Neuron) -> u64 {
+        self.sns_ledger_fixture
+            .account_balance(self.get_neuron_account_id(neuron.id.as_ref().unwrap()))
             .await
+            .unwrap()
+            .get_e8s()
     }
 
-    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
-        self.fixture.total_supply().await
+    pub fn manage_neuron(
+        &mut self,
+        target_neuron: &NeuronId,
+        manage_neuron_command: manage_neuron::Command,
+        caller: PrincipalId,
+    ) -> ManageNeuronResponse {
+        self.governance
+            .manage_neuron(
+                &ManageNeuron {
+                    subaccount: target_neuron.clone().id,
+                    command: Some(manage_neuron_command),
+                },
+                &caller,
+            )
+            .now_or_never()
+            .unwrap()
     }
 
-    async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError> {
-        self.fixture.account_balance(account).await
+    pub fn add_neuron_permissions(
+        &mut self,
+        target_neuron: &NeuronId,
+        target_principal: PrincipalId,
+        permissions_to_add: NeuronPermissionList,
+        caller: PrincipalId,
+    ) -> Result<AddNeuronPermissionsResponse, GovernanceError> {
+        let response = self.manage_neuron(
+            target_neuron,
+            manage_neuron::Command::AddNeuronPermissions(AddNeuronPermissions {
+                principal_id: Some(target_principal),
+                permissions_to_add: Some(permissions_to_add),
+            }),
+            caller,
+        );
+        match response.command {
+            Some(manage_neuron_response::Command::AddNeuronPermission(a)) => Ok(a),
+            Some(manage_neuron_response::Command::Error(e)) => Err(e),
+            e => panic!("Unexpected response: {e:#?}"),
+        }
     }
 
-    fn canister_id(&self) -> CanisterId {
-        ic_sns_governance::types::Environment::canister_id(&self.fixture)
-    }
-}
+    pub fn remove_neuron_permissions(
+        &mut self,
+        target_neuron: &NeuronId,
+        target_principal: PrincipalId,
+        permissions_to_add: NeuronPermissionList,
+        caller: PrincipalId,
+    ) -> Result<RemoveNeuronPermissionsResponse, GovernanceError> {
+        let response = self.manage_neuron(
+            target_neuron,
+            manage_neuron::Command::RemoveNeuronPermissions(RemoveNeuronPermissions {
+                principal_id: Some(target_principal),
+                permissions_to_remove: Some(permissions_to_add),
+            }),
+            caller,
+        );
 
-#[async_trait]
-impl Environment for SNS {
-    fn now(&self) -> u64 {
-        self.fixture.now()
-    }
-
-    fn set_time_warp(&mut self, _new_time_warp: TimeWarp) {
-        unimplemented!()
-    }
-
-    fn random_u64(&mut self) -> u64 {
-        self.fixture.random_u64()
-    }
-
-    fn random_byte_array(&mut self) -> [u8; 32] {
-        self.fixture.random_byte_array()
-    }
-
-    async fn call_canister(
-        &self,
-        canister_id: CanisterId,
-        method_name: &str,
-        arg: Vec<u8>,
-    ) -> Result<Vec<u8>, (Option<i32>, String)> {
-        self.fixture
-            .call_canister(canister_id, method_name, arg)
-            .await
+        match response.command {
+            Some(manage_neuron_response::Command::RemoveNeuronPermission(r)) => Ok(r),
+            Some(manage_neuron_response::Command::Error(e)) => Err(e),
+            e => panic!("Unexpected response: {e:#?}"),
+        }
     }
 
-    fn heap_growth_potential(&self) -> HeapGrowthPotential {
-        self.fixture.heap_growth_potential()
+    pub fn get_neuron_permissions(&mut self, target_neuron: NeuronId) -> Vec<NeuronPermission> {
+        self.governance
+            .get_neuron(GetNeuron {
+                neuron_id: Some(target_neuron),
+            })
+            .result
+            .unwrap()
+            .unwrap()
+            .permissions
     }
 
-    fn canister_id(&self) -> CanisterId {
-        ic_sns_governance::types::Environment::canister_id(&self.fixture)
+    #[track_caller]
+    pub fn assert_principal_has_permissions_for_neuron(
+        &mut self,
+        target_neuron: &NeuronId,
+        target_principal: PrincipalId,
+        expected_permissions: NeuronPermissionList,
+    ) {
+        let actual_permissions = self.get_neuron_permissions(target_neuron.clone());
+        // Convert expected_permissions and actual_permissions to BTreeSets
+        // so that we can compare them without worrying about order.
+        let expected_permissions: BTreeSet<NeuronPermissionType> = NeuronPermissionList {
+            permissions: expected_permissions
+                .permissions
+                .into_iter()
+                .collect::<Vec<_>>(),
+        }
+        .try_into()
+        .unwrap();
+        let actual_permissions: BTreeSet<NeuronPermissionType> = NeuronPermissionList {
+            permissions: actual_permissions
+                .into_iter()
+                .filter(|p| p.principal.unwrap() == target_principal)
+                .flat_map(|p| p.permission_type.into_iter())
+                .collect::<Vec<_>>(),
+        }
+        .try_into()
+        .unwrap();
+
+        assert_eq!(
+            expected_permissions, actual_permissions,
+            "Expected {expected_permissions:?}, found {actual_permissions:?}"
+        );
     }
-}
 
-pub type LedgerTransform = Box<dyn FnOnce(Box<dyn Ledger>) -> Box<dyn Ledger>>;
+    pub fn now(&self) -> u64 {
+        self.environment_fixture.now()
+    }
 
-/// The SNSBuilder permits the declarative construction of an SNS fixture. All
-/// of the methods concern setting or querying what this initial state will
-/// be. Therefore, `get_account_balance` on a builder object will only tell
-/// you what the account will be once the SNS fixture is created, which is
-/// different from calling `get_account_balance` on the resulting fixture,
-/// even though it will initially be the same amount.
-pub struct SNSBuilder {
-    start_time: u64,
-    ledger_builder: LedgerBuilder,
-    governance: GovernanceProto,
-    ledger_transforms: Vec<LedgerTransform>,
-}
+    pub fn get_nervous_system_parameters(&self) -> &NervousSystemParameters {
+        self.governance.proto.parameters.as_ref().unwrap()
+    }
 
-impl Default for SNSBuilder {
-    fn default() -> Self {
-        SNSBuilder {
-            start_time: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
-            ledger_builder: LedgerBuilder::default(),
-            governance: GovernanceProto {
+    pub fn configure_neuron(
+        &mut self,
+        target_neuron: &NeuronId,
+        operation: manage_neuron::configure::Operation,
+        caller: PrincipalId,
+    ) -> Result<manage_neuron_response::ConfigureResponse, GovernanceError> {
+        let command = manage_neuron::Command::Configure(manage_neuron::Configure {
+            operation: Some(operation),
+        });
+        let response = self.manage_neuron(target_neuron, command, caller);
+        match response.command.unwrap() {
+            manage_neuron_response::Command::Configure(response) => Ok(response),
+            manage_neuron_response::Command::Error(e) => Err(e),
+            _ => panic!("Unexpected command response when configuring the neuron"),
+        }
+    }
+
+    pub fn make_proposal(
+        &mut self,
+        target_neuron: &NeuronId,
+        proposal: Proposal,
+        caller: PrincipalId,
+    ) -> Result<(ProposalId, ProposalData), GovernanceError> {
+        let manage_neuron_command = manage_neuron::Command::MakeProposal(proposal);
+        let manage_neuron_response =
+            self.manage_neuron(target_neuron, manage_neuron_command, caller);
+
+        match manage_neuron_response.command.unwrap() {
+            manage_neuron_response::Command::MakeProposal(make_proposal_response) => {
+                let proposal_id = make_proposal_response.proposal_id.unwrap();
+                let proposal = self.get_proposal_or_panic(proposal_id);
+                Ok((proposal_id, proposal))
+            }
+            manage_neuron_response::Command::Error(governance_error) => Err(governance_error),
+            _ => panic!("Unexpected command response when making a proposal"),
+        }
+    }
+
+    /// Unlike `make_proposal`, this function bypasses the `MakeProposal`
+    /// manage_neuron API and directly inserts the proposal into the governance
+    /// state. This is useful when you want to have manual control over the
+    /// ProposalData.
+    pub fn directly_insert_proposal_data(&mut self, proposal_data: ProposalData) {
+        self.governance.proto.proposals.insert(
+            proposal_data
+                .id
+                .expect("proposal_data must contain a proposal id")
+                .id,
+            proposal_data,
+        );
+    }
+
+    pub fn make_default_proposal(
+        &mut self,
+        target_neuron: &NeuronId,
+        proposal: impl Into<Action>,
+        caller: PrincipalId,
+    ) -> Result<(ProposalId, ProposalData), GovernanceError> {
+        self.make_proposal(
+            target_neuron,
+            Proposal {
+                action: Some(proposal.into()),
                 ..Default::default()
             },
-            ledger_transforms: Vec::default(),
+            caller,
+        )
+    }
+
+    pub fn get_proposal_or_panic(&mut self, proposal_id: ProposalId) -> ProposalData {
+        match self
+            .governance
+            .get_proposal(&GetProposal {
+                proposal_id: Some(proposal_id),
+            })
+            .result
+            .unwrap()
+        {
+            get_proposal_response::Result::Error(e) => {
+                panic!("Proposal retrieval failed. Panicking 😬: {e:?}")
+            }
+            get_proposal_response::Result::Proposal(proposal_data) => proposal_data,
+        }
+    }
+
+    pub fn get_swap_canister_id(&self) -> PrincipalId {
+        self.governance
+            .proto
+            .swap_canister_id
+            .expect("Expected the swap_canister_id to be set in the GovernanceCanisterFixture")
+    }
+
+    pub fn follow(
+        &mut self,
+        target_neuron: &NeuronId,
+        function_id: u64,
+        followees: Vec<NeuronId>,
+        caller: PrincipalId,
+    ) -> Result<FollowResponse, GovernanceError> {
+        let response = self.manage_neuron(
+            target_neuron,
+            manage_neuron::Command::Follow(manage_neuron::Follow {
+                function_id,
+                followees,
+            }),
+            caller,
+        );
+
+        match response.command.unwrap() {
+            manage_neuron_response::Command::Follow(follow_response) => Ok(follow_response),
+            manage_neuron_response::Command::Error(governance_error) => Err(governance_error),
+            _ => panic!("Unexpected command response when setting a follow relationship"),
+        }
+    }
+
+    pub fn vote(
+        &mut self,
+        target_neuron: &NeuronId,
+        proposal_id: ProposalId,
+        vote: Vote,
+        caller: PrincipalId,
+    ) -> Result<RegisterVoteResponse, GovernanceError> {
+        let manage_neuron_command = manage_neuron::Command::RegisterVote(RegisterVote {
+            proposal: Some(proposal_id),
+            vote: vote as i32,
+        });
+        let manage_neuron_response =
+            self.manage_neuron(target_neuron, manage_neuron_command, caller);
+
+        match manage_neuron_response.command.unwrap() {
+            manage_neuron_response::Command::RegisterVote(register_vote_response) => {
+                Ok(register_vote_response)
+            }
+            manage_neuron_response::Command::Error(governance_error) => Err(governance_error),
+            _ => panic!("Unexpected command response when making a proposal"),
+        }
+    }
+
+    pub fn get_maturity_modulation(&mut self) -> GetMaturityModulationResponse {
+        self.governance
+            .get_maturity_modulation(GetMaturityModulationRequest::default())
+    }
+}
+
+pub type LedgerTransform = Box<dyn FnOnce(Box<dyn ICRC1Ledger>) -> Box<dyn ICRC1Ledger>>;
+
+/// The GovernanceCanisterFixtureBuilder permits the declarative construction
+/// of an GovernanceCanisterFixture. All of the methods concern setting or
+/// querying what this initial state will be. Therefore, `get_account_balance`
+/// on a builder object will only tell you what the account will be once
+/// the GovernanceCanisterFixture is created, which is different from calling
+/// `get_account_balance` on the resulting fixture, even though it will
+/// initially be the same amount.
+pub struct GovernanceCanisterFixtureBuilder {
+    start_time: u64,
+    governance_canister_id: CanisterId,
+    governance: GovernanceProto,
+    /// Transform the SNS ledger just before it's built, e.g., to allow blocking on
+    /// its calls for interleaving tests. Multiple transformations can be
+    /// chained; they are applied in the order in which they were added.
+    sns_ledger_transforms: Vec<LedgerTransform>,
+    /// Transform the ICP ledger just before it's built, e.g., to allow blocking on
+    /// its calls for interleaving tests. Multiple transformations can be
+    /// chained; they are applied in the order in which they were added.
+    icp_ledger_transforms: Vec<LedgerTransform>,
+    sns_ledger_builder: LedgerFixtureBuilder,
+    icp_ledger_builder: LedgerFixtureBuilder,
+    cmc_fixture: CmcFixture,
+}
+
+impl Default for GovernanceCanisterFixtureBuilder {
+    fn default() -> Self {
+        let (
+            governance_canister_id,
+            root_canister_id,
+            sns_ledger_canister_id,
+            icp_ledger_canister_id,
+            swap_canister_id,
+        ) = (
+            CanisterId::from_u64(0),
+            CanisterId::from_u64(1),
+            CanisterId::from_u64(2),
+            CanisterId::from_u64(3),
+            CanisterId::from_u64(4),
+        );
+
+        GovernanceCanisterFixtureBuilder {
+            start_time: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
+            governance: GovernanceProto {
+                root_canister_id: Some(root_canister_id.get()),
+                ledger_canister_id: Some(sns_ledger_canister_id.get()),
+                swap_canister_id: Some(swap_canister_id.get()),
+                mode: Mode::Normal as i32,
+                sns_metadata: Some(SnsMetadata::with_default_values_for_testing()),
+                parameters: Some(NervousSystemParameters::with_default_values()),
+                maturity_modulation: Some(MaturityModulation {
+                    current_basis_points: Some(0),
+                    updated_at_timestamp_seconds: Some(1),
+                }),
+                deployed_version: Some(Version::default()),
+                ..Default::default()
+            },
+            sns_ledger_transforms: Vec::default(),
+            icp_ledger_transforms: Vec::default(),
+            governance_canister_id,
+            sns_ledger_builder: LedgerFixtureBuilder::new(
+                governance_canister_id,
+                sns_ledger_canister_id,
+            ),
+            icp_ledger_builder: LedgerFixtureBuilder::new(
+                governance_canister_id,
+                icp_ledger_canister_id,
+            ),
+            cmc_fixture: CmcFixture::default(),
         }
     }
 }
 
-impl SNSBuilder {
+/// Enum representing the different ledgers that the GovernanceCanisterFixture can query or update.
+pub enum TargetLedger {
+    Icp,
+    Sns,
+}
+
+impl GovernanceCanisterFixtureBuilder {
     pub fn new() -> Self {
-        SNSBuilder::default()
+        Self::default()
     }
 
-    pub fn create(self) -> SNS {
-        let fixture = SNSFixture::new(SNSFixtureState {
+    pub fn create(self) -> GovernanceCanisterFixture {
+        let environment_fixture = EnvironmentFixture::new(EnvironmentFixtureState {
             now: self.start_time,
             rng: StdRng::seed_from_u64(9539),
-            ledger: self.ledger_builder.create(),
+            canister_id: self.governance_canister_id,
+            observed_canister_calls: vec![],
+            mocked_canister_replies: vec![],
         });
-        let mut ledger: Box<dyn Ledger> = Box::new(fixture.clone());
-        for t in self.ledger_transforms {
-            ledger = t(ledger);
+
+        let sns_ledger_fixture = self.sns_ledger_builder.create();
+        let mut sns_ledger: Box<dyn ICRC1Ledger> = Box::new(sns_ledger_fixture.clone());
+        for t in self.sns_ledger_transforms {
+            sns_ledger = t(sns_ledger);
+        }
+
+        let icp_ledger_fixture = self.icp_ledger_builder.create();
+        let mut icp_ledger: Box<dyn ICRC1Ledger> = Box::new(icp_ledger_fixture.clone());
+        for t in self.icp_ledger_transforms {
+            icp_ledger = t(icp_ledger);
         }
 
         let valid_governance = ValidGovernanceProto::try_from(self.governance).unwrap();
-        let mut sns = SNS {
-            fixture: fixture.clone(),
-            governance: Governance::new(valid_governance, Box::new(fixture), ledger),
+        let mut governance = GovernanceCanisterFixture {
+            environment_fixture: environment_fixture.clone(),
+            icp_ledger_fixture,
+            sns_ledger_fixture,
+            cmc_fixture: self.cmc_fixture.clone(),
+            governance: Governance::new(
+                valid_governance,
+                Box::new(environment_fixture),
+                sns_ledger,
+                icp_ledger,
+                Box::new(self.cmc_fixture),
+            )
+            .enable_test_features(),
             initial_state: None,
         };
-        sns.capture_state();
-        sns
+        governance.capture_state();
+        governance
+    }
+
+    /// Creates the fixture, and also initializes a neuron with 1e8 staked and
+    /// a dissolve delay of 6 months.
+    pub fn create_with_test_neuron(self) -> (GovernanceCanisterFixture, PrincipalId, NeuronId) {
+        let user_principal = PrincipalId::new_user_test_id(1000);
+        let neuron_id = neuron_id(user_principal, /*memo*/ 0);
+        let fixture = self
+            .add_neuron(
+                NeuronBuilder::new(
+                    neuron_id.clone(),
+                    E8,
+                    NeuronPermission::all(&user_principal),
+                )
+                .set_dissolve_delay(15778801),
+            )
+            .create();
+        (fixture, user_principal, neuron_id)
+    }
+
+    pub fn set_maturity_modulation(mut self, maturity_modulation: i32) -> Self {
+        self.cmc_fixture = CmcFixture::new(maturity_modulation);
+        self
     }
 
     pub fn set_start_time(mut self, seconds: u64) -> Self {
@@ -758,36 +1011,33 @@ impl SNSBuilder {
         self
     }
 
-    pub fn set_block_height(self, _height: u64) -> Self {
+    pub fn add_account_for(
+        mut self,
+        principal_id: PrincipalId,
+        amount: u64,
+        target_ledger: TargetLedger,
+    ) -> Self {
+        self.ledger_builder_from_target_mut(target_ledger)
+            .add_account(
+                Account {
+                    owner: principal_id.0,
+                    subaccount: None,
+                },
+                amount,
+            );
         self
     }
 
-    pub fn with_supply(mut self, amount: u64) -> Self {
-        self.ledger_builder
-            .add_account(LedgerBuilder::minting_account(), amount);
-        self
-    }
-
-    pub fn add_account_for(mut self, principal_id: PrincipalId, amount: u64) -> Self {
-        self.ledger_builder.add_account(
-            Account {
-                owner: principal_id,
-                subaccount: None,
-            },
-            amount,
-        );
-        self
-    }
-
-    pub fn get_account_balance(&self, ident: Account) -> Option<u64> {
-        self.ledger_builder.get_account_balance(ident)
+    pub fn get_account_balance(&self, ident: Account, target_ledger: TargetLedger) -> Option<u64> {
+        self.ledger_builder_from_target(target_ledger)
+            .get_account_balance(ident)
     }
 
     pub fn add_neuron(mut self, neuron: NeuronBuilder) -> Self {
         if let Some(owner) = neuron.get_owner() {
-            self.ledger_builder.try_add_account(
+            self.sns_ledger_builder.try_add_account(
                 Account {
-                    owner,
+                    owner: owner.0,
                     subaccount: None,
                 },
                 0,
@@ -797,7 +1047,7 @@ impl SNSBuilder {
         if let Some(ref neuron_id) = neuron.id {
             self.governance.neurons.insert(
                 neuron_id.to_string(),
-                neuron.create(self.start_time, &mut self.ledger_builder),
+                neuron.create(self.start_time, &mut self.sns_ledger_builder),
             );
         }
 
@@ -817,15 +1067,70 @@ impl SNSBuilder {
     /// Transform the ledger just before it's built, e.g., to allow blocking on
     /// its calls for interleaving tests. Multiple transformations can be
     /// chained; they are applied in the order in which they were added.
-    pub fn add_ledger_transform(mut self, transform: LedgerTransform) -> Self {
-        self.ledger_transforms.push(transform);
+    pub fn add_ledger_transform(
+        mut self,
+        transform: LedgerTransform,
+        target_ledger: TargetLedger,
+    ) -> Self {
+        match target_ledger {
+            TargetLedger::Icp => self.icp_ledger_transforms.push(transform),
+            TargetLedger::Sns => self.sns_ledger_transforms.push(transform),
+        };
         self
+    }
+
+    pub fn ledger_builder_from_target(&self, target_ledger: TargetLedger) -> &LedgerFixtureBuilder {
+        match target_ledger {
+            TargetLedger::Icp => &self.icp_ledger_builder,
+            TargetLedger::Sns => &self.sns_ledger_builder,
+        }
+    }
+
+    pub fn ledger_builder_from_target_mut(
+        &mut self,
+        target_ledger: TargetLedger,
+    ) -> &mut LedgerFixtureBuilder {
+        match target_ledger {
+            TargetLedger::Icp => &mut self.icp_ledger_builder,
+            TargetLedger::Sns => &mut self.sns_ledger_builder,
+        }
+    }
+
+    pub fn with_neuron_grantable_permissions(
+        mut self,
+        neuron_permission_list: NeuronPermissionList,
+    ) -> Self {
+        let mut parameters = self
+            .governance
+            .parameters
+            .unwrap_or_else(NervousSystemParameters::with_default_values);
+        parameters.neuron_grantable_permissions = Some(neuron_permission_list);
+        self.governance.parameters = Some(parameters);
+        self
+    }
+
+    pub fn add_neuron_with_permissions(
+        self,
+        permissions: &[(PrincipalId, NeuronPermissionList)],
+        neuron_id: NeuronId,
+    ) -> Self {
+        // Starting with a neuron with no permissions assigned, call
+        // `neuron.add_neuron_permission` for each permission in `permissions`.
+        let neuron = permissions.iter().cloned().fold(
+            NeuronBuilder::new_without_owner(neuron_id, E8),
+            |neuron, (principal_id, permissions)| {
+                neuron.add_neuron_permission(permissions.for_principal(principal_id))
+            },
+        );
+
+        // Set up the canister fixture with our neuron.
+        self.add_neuron(neuron)
     }
 }
 
 #[macro_export]
 macro_rules! assert_changes {
-    ($sns:expr, $expected:expr) => {{
+    ($sns:expr_2021, $expected:expr_2021) => {{
         let new_state = $sns.get_state();
         comparable::pretty_assert_changes!(
             $sns.initial_state
@@ -840,7 +1145,7 @@ macro_rules! assert_changes {
 
 #[macro_export]
 macro_rules! prop_assert_changes {
-    ($sns:expr, $expected:expr) => {{
+    ($sns:expr_2021, $expected:expr_2021) => {{
         let new_state = $sns.get_state();
         comparable::prop_pretty_assert_changes!(
             $sns.initial_state

@@ -1,33 +1,29 @@
 use crate::{
+    HasTimestamp, IntoInner,
     consensus_pool::{MutablePoolSection, PoolSectionOp, PoolSectionOps},
     height_index::{HeightIndex, Indexes, SelectIndex},
 };
-use ic_consensus_message::ConsensusMessageHashable;
-use ic_interfaces::{
-    artifact_pool::{HasTimestamp, IntoInner},
-    consensus_pool::{HeightIndexedPool, HeightRange, OnlyError, PoolSection},
+use ic_interfaces::consensus_pool::{
+    HeightIndexedPool, HeightRange, OnlyError, PoolSection, PurgeableArtifactType,
 };
-use ic_logger::{warn, ReplicaLogger};
 use ic_types::{
+    Height, Time,
     artifact::ConsensusMessageId,
     consensus::*,
     crypto::{CryptoHash, CryptoHashOf},
-    Height, Time,
 };
 use std::collections::BTreeMap;
 
 pub struct InMemoryPoolSection<T: IntoInner<ConsensusMessage>> {
     indexes: Indexes,
     artifacts: BTreeMap<CryptoHash, T>,
-    log: ReplicaLogger,
 }
 
 impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<T> {
-    pub fn new(log: ReplicaLogger) -> InMemoryPoolSection<T> {
+    pub fn new() -> InMemoryPoolSection<T> {
         InMemoryPoolSection {
             artifacts: BTreeMap::new(),
             indexes: Indexes::new(),
-            log,
         }
     }
 
@@ -42,89 +38,64 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
         self.remove_by_hash(msg_id.hash.digest())
     }
 
-    #[allow(clippy::cognitive_complexity)]
-    fn purge_below(&mut self, height: Height) {
-        if let Some(range) = self.random_beacon().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.random_beacon.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
+    /// Purge artifacts below the given [`Height`].
+    ///
+    /// If `artifact_type` is provided, we will purge only artifacts of the given type. Otherwise we
+    /// will purge *all* artifacts.
+    ///
+    /// Return [`ConsensusMessageId`]s of deleted artifacts.
+    fn purge_below(
+        &mut self,
+        height: Height,
+        artifact_type: Option<PurgeableArtifactType>,
+    ) -> Vec<ConsensusMessageId> {
+        let mut purged = Vec::new();
+
+        macro_rules! purge {
+            ($artifact_name:ident, $artifact_type:ident) => {
+                if let Some(range) = self.$artifact_name().height_range() {
+                    for h in range.min.get()..height.get() {
+                        let height = Height::from(h);
+                        for hash in self.indexes.$artifact_name.remove_all(height) {
+                            self.artifacts.remove(hash.get_ref());
+                            purged.push(ConsensusMessageId {
+                                hash: ConsensusMessageHash::$artifact_type(hash),
+                                height,
+                            });
+                        }
+                    }
+                };
+            };
+        }
+
+        if let Some(artifact_type) = artifact_type {
+            match artifact_type {
+                PurgeableArtifactType::NotarizationShare => {
+                    purge!(notarization_share, NotarizationShare);
+                }
+                PurgeableArtifactType::FinalizationShare => {
+                    purge!(finalization_share, FinalizationShare);
+                }
+                PurgeableArtifactType::EquivocationProof => {
+                    purge!(equivocation_proof, EquivocationProof);
                 }
             }
-        };
-        if let Some(range) = self.finalization().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.finalization.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
-        if let Some(range) = self.notarization().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.notarization.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
-        if let Some(range) = self.block_proposal().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.block_proposal.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
-        if let Some(range) = self.random_beacon_share().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.random_beacon_share.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
-        if let Some(range) = self.notarization_share().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.notarization_share.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
-        if let Some(range) = self.finalization_share().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.finalization_share.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
-        if let Some(range) = self.random_tape().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.random_tape.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
-        if let Some(range) = self.random_tape_share().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.random_tape_share.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
-        if let Some(range) = self.catch_up_package().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.catch_up_package.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
-        if let Some(range) = self.catch_up_package_share().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self
-                    .indexes
-                    .catch_up_package_share
-                    .remove_all(Height::from(h))
-                {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
+        } else {
+            purge!(random_beacon, RandomBeacon);
+            purge!(random_beacon_share, RandomBeaconShare);
+            purge!(finalization, Finalization);
+            purge!(finalization_share, FinalizationShare);
+            purge!(notarization, Notarization);
+            purge!(notarization_share, NotarizationShare);
+            purge!(block_proposal, BlockProposal);
+            purge!(random_tape, RandomTape);
+            purge!(random_tape_share, RandomTapeShare);
+            purge!(catch_up_package, CatchUpPackage);
+            purge!(catch_up_package_share, CatchUpPackageShare);
+            purge!(equivocation_proof, EquivocationProof);
+        }
+
+        purged
     }
 
     fn get_by_hashes<S: ConsensusMessageHashable>(&self, hashes: Vec<&CryptoHashOf<S>>) -> Vec<S> {
@@ -150,9 +121,8 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
 
     /// Get a consensus message by its hash
     pub fn remove_by_hash(&mut self, hash: &CryptoHash) -> Option<T> {
-        self.artifacts.remove(hash).map(|artifact| {
+        self.artifacts.remove(hash).inspect(|artifact| {
             self.indexes.remove(artifact.as_ref(), hash);
-            artifact
         })
     }
 
@@ -161,10 +131,8 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
     }
 }
 
-impl<
-        T: ConsensusMessageHashable + 'static,
-        S: IntoInner<ConsensusMessage> + HasTimestamp + Clone,
-    > HeightIndexedPool<T> for InMemoryPoolSection<S>
+impl<T: ConsensusMessageHashable + 'static, S: IntoInner<ConsensusMessage> + HasTimestamp + Clone>
+    HeightIndexedPool<T> for InMemoryPoolSection<S>
 where
     CryptoHashOf<T>: SelectIndex,
 {
@@ -209,7 +177,6 @@ where
 
         // returning the iterator directly isn't trusted due to the use of `self` in the
         // closure
-        #[allow(clippy::needless_collect)]
         let vec: Vec<T> = heights.flat_map(|h| self.get_by_height(*h)).collect();
         Box::new(vec.into_iter())
     }
@@ -238,13 +205,17 @@ where
             Box::new(std::iter::empty())
         }
     }
+
+    fn size(&self) -> usize {
+        self.select_index::<CryptoHashOf<T>>().size()
+    }
 }
 
 impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> PoolSection<T>
     for InMemoryPoolSection<T>
 {
     fn contains(&self, msg_id: &ConsensusMessageId) -> bool {
-        self.artifacts.get(msg_id.hash.digest()).is_some()
+        self.artifacts.contains_key(msg_id.hash.digest())
     }
 
     fn get(&self, msg_id: &ConsensusMessageId) -> Option<ConsensusMessage> {
@@ -294,23 +265,33 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> PoolSection<T>
     fn catch_up_package_share(&self) -> &dyn HeightIndexedPool<CatchUpPackageShare> {
         self
     }
+    fn equivocation_proof(&self) -> &dyn HeightIndexedPool<EquivocationProof> {
+        self
+    }
 }
 
 impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> MutablePoolSection<T>
     for InMemoryPoolSection<T>
 {
-    fn mutate(&mut self, ops: PoolSectionOps<T>) {
+    fn mutate(&mut self, ops: PoolSectionOps<T>) -> Vec<ConsensusMessageId> {
+        let mut purged = Vec::new();
         for op in ops.ops {
             match op {
                 PoolSectionOp::Insert(artifact) => self.insert(artifact),
                 PoolSectionOp::Remove(msg_id) => {
-                    if self.remove(&msg_id).is_none() {
-                        warn!(self.log, "Error removing artifact {:?}", &msg_id)
+                    if self.remove(&msg_id).is_some() {
+                        purged.push(msg_id)
                     }
                 }
-                PoolSectionOp::PurgeBelow(height) => self.purge_below(height),
+                PoolSectionOp::PurgeBelow(height) => {
+                    purged.append(&mut self.purge_below(height, None))
+                }
+                PoolSectionOp::PurgeTypeBelow(artifact_type, height) => {
+                    purged.append(&mut self.purge_below(height, Some(artifact_type)))
+                }
             }
         }
+        purged
     }
 
     fn pool_section(&self) -> &dyn PoolSection<T> {
@@ -320,12 +301,15 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> MutablePoolSection<T
 
 #[cfg(test)]
 pub mod test {
-    use super::*;
-    use ic_interfaces::artifact_pool::ValidatedArtifact;
-    use ic_test_utilities::consensus::{fake::*, make_genesis};
+    use std::collections::HashSet;
 
-    fn make_summary(genesis_height: Height) -> ic_types::consensus::dkg::Summary {
-        let mut summary = ic_types::consensus::dkg::Summary::fake();
+    use super::*;
+    use ic_interfaces::consensus_pool::ValidatedArtifact;
+    use ic_test_utilities_consensus::{fake::*, make_genesis};
+    use ic_types::consensus::dkg::DkgSummary;
+
+    fn make_summary(genesis_height: Height) -> DkgSummary {
+        let mut summary = DkgSummary::fake();
         summary.height = genesis_height;
         summary
     }
@@ -346,12 +330,12 @@ pub mod test {
 
     #[test]
     fn test_iterate_with_large_range() {
-        assert!(ic_test_utilities::with_timeout(
+        assert!(ic_test_utilities_time::with_timeout(
             std::time::Duration::new(12, 0),
             || {
-                let mut pool = InMemoryPoolSection::new(ic_logger::replica_logger::no_op_logger());
+                let mut pool = InMemoryPoolSection::new();
                 let min = Height::from(1);
-                let max = Height::from(std::u64::MAX);
+                let max = Height::from(u64::MAX);
                 pool.insert(make_artifact(fake_random_beacon(min)));
                 pool.insert(make_artifact(fake_random_beacon(max)));
 
@@ -359,6 +343,44 @@ pub mod test {
                     .random_beacon()
                     .get_by_height_range(pool.random_beacon().height_range().unwrap());
                 assert_eq!(result.count(), 2);
+            }
+        ));
+    }
+
+    #[test]
+    fn test_purging() {
+        assert!(ic_test_utilities_time::with_timeout(
+            std::time::Duration::new(12, 0),
+            || {
+                let beacons = (1..=10)
+                    .map(|i| fake_random_beacon(Height::from(i)))
+                    .collect::<Vec<_>>();
+                let ids = beacons.iter().map(|b| b.get_id()).collect::<HashSet<_>>();
+
+                let mut pool = InMemoryPoolSection::new();
+                beacons
+                    .into_iter()
+                    .for_each(|b| pool.insert(make_artifact(b)));
+
+                assert_eq!(pool.random_beacon().get_all().count(), ids.len());
+                let h30 = Height::from(30);
+                pool.insert(make_artifact(fake_random_beacon(Height::from(30))));
+
+                let mut ops = PoolSectionOps::new();
+                ops.purge_type_below(PurgeableArtifactType::NotarizationShare, Height::from(20));
+                ops.purge_type_below(PurgeableArtifactType::FinalizationShare, Height::from(20));
+                let result = pool.mutate(ops);
+                assert!(result.is_empty());
+
+                let mut ops = PoolSectionOps::new();
+                ops.purge_below(Height::from(20));
+                let result = pool.mutate(ops);
+                assert_eq!(ids.len(), result.len());
+                assert_eq!(ids, HashSet::from_iter(result));
+
+                let range = pool.random_beacon().height_range().unwrap();
+                assert_eq!(range.min, h30);
+                assert_eq!(range.max, h30);
             }
         ));
     }

@@ -1,0 +1,13 @@
+[package]
+name = "ic-interfaces-registry-mocks"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-base-types = { path = "../../../types/base_types" }
+ic-interfaces-registry = { path = "../" }
+ic-types = { path = "../../../types/types" }
+mockall = { workspace = true }

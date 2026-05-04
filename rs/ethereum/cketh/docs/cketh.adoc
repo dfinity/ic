@@ -1,0 +1,294 @@
+= ckETH +
+
+The ckETH minter canister converts ETH to ckETH and back, where ckETH is a token issued on the Internet Computer that is backed 1:1 by ETH.
+The minter works with a link:../../../ledger_suite/icrc1/README.md[Ledger Canister], handling the ckETH token transfers and with https://internetcomputer.org/https-outcalls[HTTP outcalls], to query multiple JSON-RPC providers to interact with the Ethereum blockchain.
+
+TIP: A demonstration of the interactions described in this file is available link:https://www.youtube.com/watch?v=y_2im2V66k0[here].
+
+== Testing with Sepolia
+
+Another instance of the minter and of the ledger are deployed that target specifically the link:https://moralis.io/sepolia-testnet-guide-what-is-the-sepolia-testnet/[Sepolia] Ethereum testnet.
+This allows you to test the minter without having to use real ETH.
+You can use one of the numerous link:https://sepoliafaucet.com/[Sepolia Faucet] to obtain some Sepolia ETH and start testing the ckSepoliaETH minter!
+
+== Quick Links
+
+|===
+|Ethereum Chain |ckETH helper smart contract |Minter dashboard|Ledger|`dfx` commands in
+
+|link:https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-1.json[Ethereum Mainnet]
+|link:https://etherscan.io/address/0x18901044688D3756C35Ed2b36D93e6a5B8e00E68[0x18901044688D3756C35Ed2b36D93e6a5B8e00E68]
+|link:https://sv3dd-oaaaa-aaaar-qacoa-cai.raw.icp0.io/dashboard[ckETH minter]
+|link:https://dashboard.internetcomputer.org/canister/ss2fx-dyaaa-aaaar-qacoq-cai[ckETH ledger]
+| `ic/rs/ethereum/cketh/mainnet`
+
+|link:https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-11155111.json[Ethereum Testnet Sepolia]
+|link:https://sepolia.etherscan.io/address/0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38[0x2D39863d30716aaf2B7fFFd85Dd03Dda2BFC2E38]
+|link:https://jzenf-aiaaa-aaaar-qaa7q-cai.raw.icp0.io/dashboard[ckSepoliaETH minter]
+|link:https://dashboard.internetcomputer.org/canister/apia6-jaaaa-aaaar-qabma-cai[ckSepoliaETH ledger]
+| `ic/rs/ethereum/cketh/testnet`
+|===
+
+TIP: To interact with the minter or ledger as exemplified below with `dfx`, make sure to locate yourself in the correct directory as listed in the table above.
+
+== Feedback
+
+We would greatly appreciate any feedback you may have.
+Please feel free to reach out by leaving a comment in this link:https://forum.dfinity.org/t/cketh-a-canister-issued-ether-twin-token-on-the-ic/22819/1[forum post].
+
+[#deposit_eth_to_cketh]
+== Deposit: ETH to ckETH
+
+----
+ ┌────┐                               ┌───────────────┐                                                ┌──────┐
+ │User│                               │Helper Contract│                                                │Minter│
+ └─┬──┘                               └───────┬───────┘                                                └──┬───┘
+   │                                          │                                                           │
+   │depositEth(amount, principal, subaccount) │                                                           │
+   │─────────────────────────────────────────>│                                                           │
+   │                                          │                                                           │
+   │                                          │       get_events                                          │
+   │                                          │<──────────────────────────────────────────────────────────│
+   │                                          │                                                           │
+   │                                          │ReceivedEthOrErc20(`0x`, user, amount, principal, subaccount)│
+   │                                          │──────────────────────────────────────────────────────────>│
+   │                                          │                                                           │
+   │                         mint (amount, principal, subaccount)                                         │
+   │<─────────────────────────────────────────────────────────────────────────────────────────────────────│
+ ┌─┴──┐                               ┌───────┴───────┐                                                ┌──┴───┐
+ │User│                               │Helper Contract│                                                │Minter│
+ └────┘                               └───────────────┘                                                └──────┘
+----
+
+Converting ETH into ckETH requires a call to a smart contract on Ethereum and passing your IC principal as argument, in the form of a `bytes32` array.
+
+[TIP]
+.Retrieve your IC principal
+====
+To know your principal, you can run
+
+[source,shell]
+----
+dfx identity get-principal
+----
+====
+
+[WARNING]
+.Address of the helper smart contract
+====
+The address of the helper smart contract may change in the future when the minter is upgraded.
+Please verify the address of the helper contract **before** any important transfer by comparing it to the address specified in the field `deposit_with_subaccount_helper_contract_address` in the response of `get_minter_info`, which can be queried as follows
+
+[source,shell]
+----
+dfx canister --network ic call minter get_minter_info
+----
+====
+
+The simplest way to convert your IC principal to the smart contract argument is to use the link:https://sv3dd-oaaaa-aaaar-qacoa-cai.raw.icp0.io/dashboard[minter dashboard].
+Another way is to use the `principal-to-hex` utility.
+
+[TIP]
+.Convert your IC principal to a `bytes32` array
+====
+With `Cargo`
+
+[source,shell]
+----
+cargo run --bin cketh-principal-to-hex $(dfx identity get-principal)
+----
+
+With `Bazel`
+
+[source,shell]
+----
+bazel run //rs/ethereum/cketh/minter:principal_to_hex -- $(dfx identity get-principal)
+----
+====
+
+Call the link:https://etherscan.io/address/0x18901044688D3756C35Ed2b36D93e6a5B8e00E68#writeContract[minter helper contract] `depositEth` method of the helper smart contract (can be called from the contract's Etherscan page) specifying
+
+. The amount of ETH being deposited.
+. The IC principal encoded as a `bytes32`.
+. The IC ledger subaccount (use `0x` for the default subaccount), which is a 32-byte array, encoded as a hexadecimal string and prefixed by `0x`. The IC principal together with the IC ledger subaccount uniquely identify an IC ledger account to which the amount of ckETH should be minted.
+
+[WARNING]
+====
+* It's critical that the encoded IC principal is correct otherwise the funds will be lost.
+* The helper smart contracts for Ethereum and for Sepolia have different addresses (refer to the above table).
+====
+
+[TIP]
+.Check your ckETH balance
+====
+Once your transaction has been mined on Ethereum, the minter should pick it up and mint the corresponding amount of ckETH **after roughly 20 minutes**, so don't panic if the following command currently returns 0.
+
+[source,shell]
+----
+dfx canister --network ic call ledger icrc1_balance_of 'record {owner = principal "'"$(dfx identity get-principal)"'" }'
+----
+====
+
+[#withdrawal_eth_to_cketh]
+== Withdrawal: ckETH to ETH
+
+----
+ ┌────┐                       ┌──────┐        ┌──────┐                                           ┌────────────────┐
+ │User│                       │Ledger│        │Minter│                                           │Ethereum Network│
+ └─┬──┘                       └──┬───┘        └──┬───┘                                           └───────┬────────┘
+   │                             │               │                                                       │
+   │icrc2_approve(minter, amount)│               │                                                       │
+   │────────────────────────────>│               │                                                       │
+   │                             │               │                                                       │
+   │withdraw_eth(destination_eth_address, amount)│                                                       │
+   │────────────────────────────────────────────>│                                                       │
+   │                             │               │                                                       │
+   │                             │               │eth_sendRawTransaction(destination_eth_address, amount)│
+   │                             │               │──────────────────────────────────────────────────────>│
+ ┌─┴──┐                       ┌──┴───┐        ┌──┴───┐                                           ┌───────┴────────┐
+ │User│                       │Ledger│        │Minter│                                           │Ethereum Network│
+ └────┘                       └──────┘        └──────┘                                           └────────────────┘
+----
+
+[TIP]
+.Conversion ETH <--> Wei
+====
+The amounts described below use the smallest denomination of ETH called **wei**, where
+`1 ETH = 1_000_000_000_000_000_000 WEI` (Ethereum uses 18 decimals).
+You can use link:https://eth-converter.com/[this converter] to convert ETH to wei.
+====
+
+The first time a user wants to withdraw some ckETH, two steps are needed:
+
+1. Approve the minter's principal on the ledger for the desired amount.
++
+[source,shell]
+----
+dfx canister --network ic call ledger icrc2_approve "(record { spender = record { owner = principal \"$(dfx canister id minter --network ic)\" }; amount = LARGE_AMOUNT_WEI })"
+----
+2. Call the minter to make a withdrawal for the desired amount.
++
+[source,shell]
+----
+dfx canister --network ic call minter withdraw_eth "(record {amount = SMALL_AMOUNT_WEI; recipient = \"YOUR_ETH_ADDRESS\"})"
+----
+
+Additional withdrawals could be made as long as the allowance from step 1 was not exhausted or did not time out.
+
+After calling `withdraw_eth`, the minter will usually send a transaction to the Ethereum network within 6 minutes. Additional delays may occasionally occur due to reasons such as congestion on the Ethereum network or some Ethereum JSON-RPC providers being offline.
+
+=== Example of a withdrawal
+
+.Approve the minter to spend 1 ETH (`1_000_000_000_000_000_000` wei)
+====
+[source,shell]
+----
+dfx canister --network ic call ledger icrc2_approve "(record { spender = record { owner = principal \"$(dfx canister id minter --network ic)\" }; amount = 1_000_000_000_000_000_000 })"
+----
+====
+
+.Withdraw 0.15 ETH (`150_000_000_000_000_000` wei) to `0xAB586458E47f3e9D350e476fB7E294a57825A3f4`
+====
+[source,shell]
+----
+dfx canister --network ic call minter withdraw_eth "(record {amount = 150_000_000_000_000_000; recipient = \"0xAB586458E47f3e9D350e476fB7E294a57825A3f4\"})"
+----
+====
+
+=== Cost of a withdrawal
+
+Note that the transaction will be made at the cost of the beneficiary meaning that the resulting received amount will be less than the specified withdrawal amount.
+The exact fee deducted depends on the dynamic Ethereum transaction fees used at the time the transaction was created.
+
+In more detail, assume that a user calls `withdraw_eth` (after having approved the minter) to withdraw `withdraw_amount` (e.g. 1ckETH) to some address.
+Then the minter is going to do the following
+
+. Burn `withdraw_amount` on the ckETH ledger for the IC principal (the caller of `withdraw_eth`).
+. Estimate the maximum current cost of a transaction on Ethereum, say `max_tx_fee_estimate`. This `max_tx_fee_estimate` is expected to be large enough to be valid for the few next blocks.
+. Issue an Ethereum transaction (via threshold ECDSA) with the value `withdraw_amount - max_tx_fee_estimate`. This requires of course that `withdraw_amount >= max_tx_fee_estimate` and that's why we currently have a conservative minimum value for withdrawals of `30_000_000_000_000_000` wei. This ensures that the minter can always send the transaction to Ethereum if one or several resubmissions are needed if the Ethereum network is congested and fees are increasing rapidly (each resubmission requires an increase of at least 10% of the transaction fee).
+. When the transaction is mined, the destination of the transaction will receive `withdraw_amount - max_tx_fee_estimate`. Since on Ethereum transactions are paid by the sender, the minter’s account will be charged with
++
+----
+(withdraw_amount - max_tx_fee_estimate) + actual_tx_fee == withdrawal_amount - (max_tx_fee_estimate - actual_tx_fee),
+----
+where `actual_tx_fee` represents the actual transaction fee (can be retrieved from the transaction receipt) and by construction `max_tx_fee_estimate - actual_tx_fee > 0`.
+
+[TIP]
+.Effective transaction fees vs unspent transaction fees
+====
+The minter dashboard displays in the metadata table the following fees
+
+. `Total effective transaction fees`: the sum of all `actual_tx_fee` for all withdrawals.
+. `Total unspent transaction fees`: the sum of all `max_tx_fee_estimate - actual_tx_fee` for all withdrawals. This represents an overestimate of the actual transaction fees that were charged to the user but in retrospect not needed to mine the sent transaction.
+====
+
+.Transaction https://etherscan.io/tx/0x5ab62cfd3715c549fb4cd56fc511bc403f45c43b1e91ffdb83654201b0b5db39[0x5ab62cfd3715c549fb4cd56fc511bc403f45c43b1e91ffdb83654201b0b5db39]
+====
+To make things more concrete, we break down the cost of a concrete withdrawal (ledger burn index `2`) that resulted in the Ethereum transaction https://etherscan.io/tx/0x5ab62cfd3715c549fb4cd56fc511bc403f45c43b1e91ffdb83654201b0b5db39[0x5ab62cfd3715c549fb4cd56fc511bc403f45c43b1e91ffdb83654201b0b5db39]:
+
+. Initial withdrawal amount: `withdraw_amount:= 39_998_000_000_000_000` wei
+. Gas limit: `21_000`
+. Max fee per gas: `0x14369c3348 == 86_815_552_328` wei
+. Maximum estimated transaction fees: `max_tx_fee_estimate:= 21_000 * 86_815_552_328 == 1_823_126_598_888_000` wei
+. Amount received at destination: `39_998_000_000_000_000 - max_tx_fee_estimate == 38_174_873_401_112_000`
+. Effective gas price: `0x9f8c76bc8 == 42_828_524_488` wei
+. Actual transaction fee: `actual_tx_fee:= 21_000 * 42_828_524_488 == 899_399_014_248_000` wei
+. Unspent transaction fee: `max_tx_fee_estimate - actual_tx_fee == 923_727_584_640_000` wei
+. Amount charged at minter's address `withdrawal_amount - (max_tx_fee_estimate - actual_tx_fee) == 39_074_272_415_360_000` wei
+====
+
+== Cost of all ckETH Transactions
+
+|===
+|Operation |Canister |Cost |Example
+
+|Deposit ETH -> ckETH
+| Minter
+|Variable, depends on the Ethereum transaction fees.
+|Transaction https://etherscan.io/tx/0xa1e108e8d1502fd99a8b3128fe2075830bb17fc22d35ea07f8383a28dc93034a[0xa1e10...] needed `33_288` gas and cost roughly `0.0021` ETH
+
+|Withdrawal ckETH -> ETH
+
+(Minimum amount `0.03` ckETH)
+| Minter
+|Variable, depends on the Ethereum transaction fees.
+|Transaction https://etherscan.io/tx/0x5ab62cfd3715c549fb4cd56fc511bc403f45c43b1e91ffdb83654201b0b5db39[0x5ab62...] detailed above needed `21_000` gas and cost roughly `0.0018` ETH
+
+a|Transfer ckETH -> ckETH
+
+. `icrc1_transfer`
+. `icrc2_transfer_from`
+| Ledger
+| Fix `0.000002` ckETH.
+
+Set by `transfer_fee` decided in proposal https://dashboard.internetcomputer.org/proposal/126309[126309].
+| Transfer with https://dashboard.internetcomputer.org/ethereum/transaction/12[ledger index 12]
+
+a| Approval
+
+. `icrc2_approve`
+| Ledger
+| Fix `0.000002` ckETH.
+
+Set by `transfer_fee` decided in proposal https://dashboard.internetcomputer.org/proposal/126309[126309].
+| Approval with https://dashboard.internetcomputer.org/ethereum/transaction/3[ledger index 3]
+|===
+
+== Ledger Memos
+
+All ckETH transactions issued by the ckETH minter and recorded on the ledger use a memo field to store additional information about the transaction. The ckETH minter records a transaction on the ledger in the following cases:
+
+. minting ckETH after a deposit of ETH,
+. burning ckETH after a withdrawal request to ETH,
+. minting ckETH to reimburse a failed withdrawal.
+
+=== Design
+The general idea is to encode the memo as a https://cbor.io/[CBOR] message and use the transaction type to select the message type. The messages will follow the compact encoding described in the https://twittner.gitlab.io/minicbor/minicbor_derive/index.html[minicbor] package documentation.
+
+.Example Implementation in TypeScript
+====
+There is an example implementation of how to decode the ckETH ledger memos in Javascript in the https://github.com/dfinity/oisy-wallet/tree/main[Oisy Wallet] repository:
+
+* https://github.com/dfinity/oisy-wallet/blob/384013a67a994555b6bd1cd6baeba0a83c444839/src/frontend/src/icp/utils/cketh-memo.utils.ts[Decode ckETH ledger burn and mint memo]
+* https://github.com/dfinity/oisy-wallet/blob/384013a67a994555b6bd1cd6baeba0a83c444839/src/frontend/src/tests/icp/utils/cketh-memo.utils.spec.ts[Tests to decode ckETH ledger memo]
+====

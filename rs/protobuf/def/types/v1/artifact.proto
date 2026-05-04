@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package types.v1;
+
+import "google/protobuf/empty.proto";
+import "registry/subnet/v1/subnet.proto";
+import "types/v1/canister_http.proto";
+import "types/v1/idkg.proto";
+
+message DkgMessageId {
+  bytes hash = 1;
+  uint64 height = 2;
+}
+
+message ConsensusMessageId {
+  ConsensusMessageHash hash = 1;
+  uint64 height = 2;
+}
+
+message ConsensusMessageHash {
+  oneof kind {
+    bytes random_beacon = 1;
+    bytes finalization = 2;
+    bytes notarization = 3;
+    bytes block_proposal = 4;
+    bytes random_beacon_share = 5;
+    bytes notarization_share = 6;
+    bytes finalization_share = 7;
+    bytes random_tape = 8;
+    bytes random_tape_share = 9;
+    bytes catch_up_package = 10;
+    bytes catch_up_package_share = 11;
+    bytes equivocation_proof = 12;
+  }
+}
+
+message IngressMessageId {
+  uint64 expiry = 1;
+  bytes message_id = 2;
+}
+
+message CertificationMessageId {
+  CertificationMessageHash hash = 1;
+  uint64 height = 2;
+}
+
+message CertificationMessageHash {
+  oneof kind {
+    bytes certification = 1;
+    bytes certification_share = 2;
+  }
+}

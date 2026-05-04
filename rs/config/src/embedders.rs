@@ -1,23 +1,55 @@
-use ic_types::NumInstructions;
+use std::time::Duration;
+
+use ic_base_types::NumBytes;
+use ic_sys::PAGE_SIZE;
+use ic_types::{
+    MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES,
+    NumInstructions, NumOsPages,
+};
 use serde::{Deserialize, Serialize};
 
+use crate::execution_environment::SUBNET_HEAP_DELTA_CAPACITY;
 use crate::flag_status::FlagStatus;
-use ic_base_types::NumBytes;
 
 // Defining 100000 globals in a module can result in significant overhead in
 // each message's execution time (about 40x), so set a limit 3 orders of
 // magnitude lower which should still allow for reasonable canisters to be
 // written (current max number of globals on the Alpha network is 7).
-pub(crate) const MAX_GLOBALS: usize = 300;
+// NOTE. The following constant is contained in the public Interface Specification.
+// Please update the corresponding section (https://internetcomputer.org/docs/references/ic-interface-spec#system-api-module)
+// if you change its value.
+pub const MAX_GLOBALS: usize = 1000;
 // The maximum number of functions allowed in a Wasm module.
+// NOTE. The following constant is contained in the public Interface Specification.
+// Please update the corresponding section (https://internetcomputer.org/docs/references/ic-interface-spec#system-api-module)
+// if you change its value.
 pub(crate) const MAX_FUNCTIONS: usize = 50000;
 // The maximum number of custom sections allowed in a Wasm module.
+// NOTE. The following constant is contained in the public Interface Specification.
+// Please update the corresponding section (https://internetcomputer.org/docs/references/ic-interface-spec#system-api-module)
+// if you change its value.
 pub(crate) const MAX_CUSTOM_SECTIONS: usize = 16;
 // The total size of the exported custom sections in bytes.
 // The size should not exceed 1MiB.
+// NOTE. The following constant is contained in the public Interface Specification.
+// Please update the corresponding section (https://internetcomputer.org/docs/references/ic-interface-spec#system-api-module)
+// if you change its value.
 pub(crate) const MAX_CUSTOM_SECTIONS_SIZE: NumBytes = NumBytes::new(1048576);
-/// The number of threads to use for query execution.
-pub(crate) const QUERY_EXECUTION_THREADS: usize = 2;
+// The maximum number of exported functions called `canister_update <name>`,
+// `canister_query <name>`, or `canister_composite_query <name>`.
+// NOTE. The following constant is contained in the public Interface Specification.
+// Please update the corresponding section (https://internetcomputer.org/docs/references/ic-interface-spec#system-api-module)
+// if you change its value.
+pub(crate) const MAX_NUMBER_EXPORTED_FUNCTIONS: usize = 1000;
+// The maximum sum of `<name>` lengths in exported functions called `canister_update <name>`,
+// `canister_query <name>`, or `canister_composite_query <name>`.
+// NOTE. The following constant is contained in the public Interface Specification.
+// Please update the corresponding section (https://internetcomputer.org/docs/references/ic-interface-spec#system-api-module)
+// if you change its value.
+pub(crate) const MAX_SUM_EXPORTED_FUNCTION_NAME_LENGTHS: usize = 20000;
+/// The number of threads to use for query execution per canister.
+/// See also `QUERY_EXECUTION_THREADS_TOTAL`.
+pub(crate) const QUERY_EXECUTION_THREADS_PER_CANISTER: usize = 2;
 
 /// In terms of execution time, compiling 1 WASM instructions takes as much time
 /// as actually executing 6_000 instructions. Only public for use in tests.
@@ -25,28 +57,114 @@ pub(crate) const QUERY_EXECUTION_THREADS: usize = 2;
 pub(crate) const DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION: NumInstructions =
     NumInstructions::new(6_000);
 
+/// Fixed base cost charged per `create_execution_state` call, independent of
+/// module size. Accounts for ~10ms of constant compilation overhead.
+pub const DEFAULT_CREATE_EXECUTION_STATE_BASE_COST: NumInstructions =
+    NumInstructions::new(20_000_000);
+
 /// The number of rayon threads used by wasmtime to compile wasm binaries
 const DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS: usize = 10;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+/// The number of rayon threads use for the parallel page copying optimization.
+const DEFAULT_PAGE_ALLOCATOR_THREADS: usize = 8;
+
+/// Sandbox process eviction ensures that the number of sandbox processes is
+/// always below this threshold. Idle sandboxes should be using at most ~5MiB
+/// resident memory with the on-disk compilation cache, so 10,000 sandboxes
+/// shouldn't be more than 50 GiB.
+pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 10_000;
+
+/// A sandbox process may be evicted after it has been idle for this
+/// duration and sandbox process eviction is activated.
+pub(crate) const DEFAULT_MAX_SANDBOX_IDLE_TIME: Duration = Duration::from_secs(30 * 60);
+
+/// The maximum number of pages that a message dirties without optimizing dirty
+/// page copying by triggering a new execution slice for copying pages.
+/// This default is 1 GiB.
+pub(crate) const DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION: usize = (GIB as usize) / PAGE_SIZE;
+
+/// Scheduling overhead for copying dirty pages, in instructions.
+pub(crate) const DIRTY_PAGE_COPY_OVERHEAD: NumInstructions = NumInstructions::new(3_000);
+
+/// The overhead for dirty pages in Wasm64.
+pub const WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER: u64 = 4;
+
+const KIB: u64 = 1024;
+const GIB: u64 = KIB * KIB * KIB;
+
+// Maximum number of stable memory dirty OS pages (4KiB) that an upgrade/install message execution
+// is allowed to produce.
+const STABLE_MEMORY_DIRTY_PAGE_LIMIT_UPGRADE: NumOsPages =
+    NumOsPages::new(8 * GIB / (PAGE_SIZE as u64));
+// Maximum number of stable memory dirty OS pages (4KiB) that a regular message (update) execution
+// is allowed to produce.
+const STABLE_MEMORY_DIRTY_PAGE_LIMIT_MESSAGE: NumOsPages =
+    NumOsPages::new(2 * GIB / (PAGE_SIZE as u64));
+// Maximum number of stable memory dirty OS pages (4KiB) that a non-replicated query is allowed to produce.
+const STABLE_MEMORY_DIRTY_PAGE_LIMIT_QUERY: NumOsPages = NumOsPages::new(GIB / (PAGE_SIZE as u64));
+
+// Maximum number of stable memory OS pages (4KiB) that that an upgrade/install message execution
+// is allowed to access.
+const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_UPGRADE: NumOsPages =
+    NumOsPages::new(8 * GIB / (PAGE_SIZE as u64));
+// Maximum number of stable memory OS pages (4KiB) that a that a regular message (update) execution
+// is allowed to access.
+const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_MESSAGE: NumOsPages =
+    NumOsPages::new(2 * GIB / (PAGE_SIZE as u64));
+// Maximum number of stable memory OS pages (4KiB) that a single non-replicated query execution
+// is allowed to access.
+const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY: NumOsPages =
+    NumOsPages::new(GIB / (PAGE_SIZE as u64));
+
+/// The maximum size in bytes for an uncompressed Wasm module. This value is
+/// also used as the maximum size for the Wasm chunk store of each canister.
+pub const WASM_MAX_SIZE: NumBytes = NumBytes::new(100 * 1024 * 1024); // 100 MiB
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct FeatureFlags {
+    /// If this flag is enabled, then the output of the `debug_print` system-api
+    /// call will be skipped based on heuristics.
     pub rate_limiting_of_debug_prints: FlagStatus,
-    pub module_sharing: FlagStatus,
+    /// Use deterministic memory tracker.
+    pub deterministic_memory_tracker: FlagStatus,
 }
 
-impl Default for FeatureFlags {
-    fn default() -> Self {
+impl FeatureFlags {
+    const fn const_default() -> Self {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
-            module_sharing: FlagStatus::Enabled,
+            deterministic_memory_tracker: FlagStatus::Disabled,
         }
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+impl Default for FeatureFlags {
+    fn default() -> Self {
+        Self::const_default()
+    }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub enum MeteringType {
+    New,
+    /// for testing and benchmarking
+    None,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct StableMemoryPageLimit {
+    // Regular message (e.g., update) execution dirty/accessed page limit.
+    pub message: NumOsPages,
+    // Longer message (e.g., upgrade) execution dirty/accessed page limit.
+    pub upgrade: NumOsPages,
+    // Query (replicated and non-replicated, as well as composite) execution dirty/accessed page limit.
+    pub query: NumOsPages,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Config {
-    pub max_wasm_stack_size: usize,
-    pub query_execution_threads: usize,
+    /// The number of threads to use for query execution per canister.
+    pub query_execution_threads_per_canister: usize,
 
     /// Maximum number of globals allowed in a Wasm module.
     pub max_globals: usize,
@@ -60,29 +178,127 @@ pub struct Config {
     /// Maximum size of the custom sections in bytes.
     pub max_custom_sections_size: NumBytes,
 
+    /// The maximum number of exported functions called `canister_update <name>`,
+    /// `canister_query <name>`, or `canister_composite_query <name>`.
+    pub max_number_exported_functions: usize,
+
+    /// The maximum sum of `<name>` lengths in exported functions called `canister_update <name>`,
+    /// `canister_query <name>`, or `canister_composite_query <name>`.
+    pub max_sum_exported_function_name_lengths: usize,
+
     /// Compiling a single WASM instruction should cost as much as executing
     /// this many instructions.
     pub cost_to_compile_wasm_instruction: NumInstructions,
 
+    /// Fixed base cost charged per `create_execution_state` call, independent
+    /// of module size.
+    pub create_execution_state_base_cost: NumInstructions,
+
     /// The number of rayon threads used by wasmtime to compile wasm binaries
     pub num_rayon_compilation_threads: usize,
 
+    /// The number of the rayon threads used for the parallel page copying optimization.
+    pub num_rayon_page_allocator_threads: usize,
+
     /// Flags to enable or disable features that are still experimental.
     pub feature_flags: FeatureFlags,
+
+    /// Instruction counting strategy
+    pub metering_type: MeteringType,
+
+    // Maximum number of stable memory pages that a single message execution
+    // can access.
+    pub stable_memory_accessed_page_limit: StableMemoryPageLimit,
+
+    /// Maximum number of stable memory dirty pages that a single message
+    /// execution is allowed to produce.
+    pub stable_memory_dirty_page_limit: StableMemoryPageLimit,
+
+    /// Sandbox process eviction ensures that the number of sandbox processes is
+    /// always below this threshold.
+    pub max_sandbox_count: usize,
+
+    /// A sandbox process may be evicted after it has been idle for this
+    /// duration and sandbox process eviction is activated.
+    pub max_sandbox_idle_time: Duration,
+
+    /// The subnet heap delta capacity used for computing the maximum
+    /// sandbox RSS (`default_subnet_heap_delta_capacity / 3`).
+    /// This is the default value from `SchedulerConfig` and may be
+    /// overridden at runtime by the registry's `maximum_state_delta`.
+    pub default_subnet_heap_delta_capacity: NumBytes,
+
+    /// Dirty page overhead. The number of instructions to charge for each dirty
+    /// page created by a write to stable memory. The default value should be
+    /// replaced with the correct value at runtime when the hypervisor is
+    /// created.
+    pub dirty_page_overhead: NumInstructions,
+
+    /// If this flag is enabled, then execution of a slice will produce a log
+    /// entry with the number of executed instructions and the duration.
+    pub trace_execution: FlagStatus,
+
+    /// The maximum number of pages that a message dirties without optimizing dirty
+    /// page copying by triggering a new execution slice for copying and using prefaulting.
+    pub max_dirty_pages_without_optimization: usize,
+
+    /// The dirty page copying overhead, in instructions.
+    pub dirty_page_copy_overhead: NumInstructions,
+
+    /// The dirty page overhead factor for Wasm64.
+    pub wasm64_dirty_page_overhead_multiplier: u64,
+
+    /// The maximum allowed size for an uncompressed canister Wasm module.
+    pub wasm_max_size: NumBytes,
+
+    /// The maximum size of the wasm heap memory.
+    pub max_wasm_memory_size: NumBytes,
+
+    /// The maximum size of the wasm heap memory for Wasm64 canisters.
+    pub max_wasm64_memory_size: NumBytes,
+
+    /// The maximum size of the stable memory.
+    pub max_stable_memory_size: NumBytes,
 }
 
 impl Config {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Config {
-            max_wasm_stack_size: 5 * 1024 * 1024,
-            query_execution_threads: QUERY_EXECUTION_THREADS,
+            query_execution_threads_per_canister: QUERY_EXECUTION_THREADS_PER_CANISTER,
             max_globals: MAX_GLOBALS,
             max_functions: MAX_FUNCTIONS,
             max_custom_sections: MAX_CUSTOM_SECTIONS,
             max_custom_sections_size: MAX_CUSTOM_SECTIONS_SIZE,
+            max_number_exported_functions: MAX_NUMBER_EXPORTED_FUNCTIONS,
+            max_sum_exported_function_name_lengths: MAX_SUM_EXPORTED_FUNCTION_NAME_LENGTHS,
             cost_to_compile_wasm_instruction: DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
+            create_execution_state_base_cost: DEFAULT_CREATE_EXECUTION_STATE_BASE_COST,
             num_rayon_compilation_threads: DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS,
-            feature_flags: FeatureFlags::default(),
+            num_rayon_page_allocator_threads: DEFAULT_PAGE_ALLOCATOR_THREADS,
+            feature_flags: FeatureFlags::const_default(),
+            metering_type: MeteringType::New,
+            stable_memory_dirty_page_limit: StableMemoryPageLimit {
+                message: STABLE_MEMORY_DIRTY_PAGE_LIMIT_MESSAGE,
+                upgrade: STABLE_MEMORY_DIRTY_PAGE_LIMIT_UPGRADE,
+                query: STABLE_MEMORY_DIRTY_PAGE_LIMIT_QUERY,
+            },
+            stable_memory_accessed_page_limit: StableMemoryPageLimit {
+                message: STABLE_MEMORY_ACCESSED_PAGE_LIMIT_MESSAGE,
+                upgrade: STABLE_MEMORY_ACCESSED_PAGE_LIMIT_UPGRADE,
+                query: STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY,
+            },
+            max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
+            max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,
+            default_subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
+            dirty_page_overhead: NumInstructions::new(0),
+            trace_execution: FlagStatus::Disabled,
+            max_dirty_pages_without_optimization: DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION,
+            dirty_page_copy_overhead: DIRTY_PAGE_COPY_OVERHEAD,
+            wasm_max_size: WASM_MAX_SIZE,
+            max_wasm_memory_size: NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
+            max_wasm64_memory_size: NumBytes::new(MAX_WASM64_MEMORY_IN_BYTES),
+            max_stable_memory_size: NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES),
+            wasm64_dirty_page_overhead_multiplier: WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER,
         }
     }
 }

@@ -1,19 +1,21 @@
+use canister_test::Runtime;
 use dfn_candid::{candid, candid_one};
 use ic_canister_client_sender::Sender;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
-use ic_nns_common::types::NeuronId;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
+use ic_nns_common::{pb::v1::ProposalId, types::NeuronId};
 use ic_nns_governance::governance::REWARD_DISTRIBUTION_PERIOD_SECONDS;
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::{
     Ballot, Governance as GovernanceProto, GovernanceError, NetworkEconomics, Neuron, ProposalData,
     RewardEvent, Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    ids::TEST_NEURON_1_ID,
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
 };
-use std::iter::once;
-use std::time::{Duration, SystemTime};
+use std::{
+    iter::once,
+    time::{Duration, SystemTime},
+};
 
 /// This is trying to the simplest possible integration test for reward
 /// distribution.
@@ -32,7 +34,7 @@ use std::time::{Duration, SystemTime};
 /// can be tested.
 #[test]
 fn test_increase_maturity_just_after_init() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // Set up the governance proto to simulate:
         // - genesis 1.5 voting reward period in the past
         // - one proposal that have been voted on by one neuron and is ready to be
@@ -55,6 +57,7 @@ fn test_increase_maturity_just_after_init() {
             proposals: once((
                 1,
                 ProposalData {
+                    id: Some(ProposalId { id: 1 }),
                     proposal_timestamp_seconds: genesis_timestamp_secs,
                     ballots: once((
                         TEST_NEURON_1_ID,
@@ -89,20 +92,34 @@ fn test_increase_maturity_just_after_init() {
             .query_("get_latest_reward_event", candid, ())
             .await
             .unwrap();
-        eprintln!("{:?}", latest_reward_event);
+        eprintln!("{latest_reward_event:?}");
         while latest_reward_event.day_after_genesis == 0 {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            latest_reward_event = dbg!(nns_canisters
-                .governance
-                .query_("get_latest_reward_event", candid, ())
-                .await
-                .unwrap());
+            match &runtime {
+                Runtime::Remote(_) | Runtime::Local(_) => {
+                    std::thread::sleep(std::time::Duration::from_millis(100))
+                }
+                Runtime::StateMachine(sm) => {
+                    sm.advance_time(Duration::from_millis(100));
+                    sm.tick();
+                }
+            }
+            latest_reward_event = dbg!(
+                nns_canisters
+                    .governance
+                    .query_("get_latest_reward_event", candid, ())
+                    .await
+                    .unwrap()
+            );
         }
+        // Async reward distribution
+        for _ in 0..5 {
+            runtime.tick().await;
+        }
+
         assert_eq!(latest_reward_event.day_after_genesis, 1);
         assert!(
             latest_reward_event.distributed_e8s_equivalent > 0,
-            "latest_reward_event: {:?}",
-            latest_reward_event
+            "latest_reward_event: {latest_reward_event:?}"
         );
 
         let sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
@@ -123,8 +140,7 @@ fn test_increase_maturity_just_after_init() {
         // distributed.
         assert_eq!(
             neuron.maturity_e8s_equivalent, latest_reward_event.distributed_e8s_equivalent,
-            "Neuron: {:?}",
-            neuron
+            "Neuron: {neuron:?}"
         );
 
         Ok(())

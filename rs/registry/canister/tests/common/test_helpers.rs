@@ -2,36 +2,41 @@
 
 use candid::Encode;
 use canister_test::{Canister, Runtime};
-use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
-use ic_config::crypto::CryptoConfig;
-use ic_crypto::utils::get_node_keys_or_generate_if_missing;
-use ic_ic00_types::{ECDSAPublicKeyArgs, EcdsaKeyId, Method as Ic00Method};
-use ic_nns_common::registry::encode_or_panic;
+use dfn_candid::candid_one;
+use ic_base_types::{CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId};
+use ic_crypto_node_key_validation::ValidNodePublicKeys;
+use ic_management_canister_types_private::{
+    DerivationPath, ECDSAPublicKeyArgs, EcdsaKeyId, MasterPublicKeyId, Method as Ic00Method,
+    SchnorrKeyId, SchnorrPublicKeyArgs, VetKdKeyId, VetKdPublicKeyArgs,
+};
+use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister;
+use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_test_utils::common::{build_registry_wasm, build_test_registry_wasm};
 use ic_nns_test_utils::itest_helpers::{
     set_up_registry_canister, set_up_universal_canister, try_call_via_universal_canister,
 };
-use ic_nns_test_utils::registry::get_value_or_panic;
+use ic_nns_test_utils::registry::{get_value_or_panic, new_node_keys_and_node_id};
 use ic_protobuf::registry::node::v1::NodeRecord;
-use ic_protobuf::registry::routing_table::v1 as pb;
-use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
-use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord};
+use ic_protobuf::registry::subnet::v1::{
+    CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
+    SubnetListRecord, SubnetRecord,
+};
+use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_crypto_node_key, make_node_record_key,
-    make_subnet_list_record_key, make_subnet_record_key,
+    make_catch_up_package_contents_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_routing_table::RoutingTable;
-use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
-use ic_registry_transport::insert;
+use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
-use ic_types::crypto::KeyPurpose;
-use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+use ic_types::ReplicaVersion;
+use pocket_ic::nonblocking::PocketIc;
+use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
 use registry_canister::mutations::do_create_subnet::CreateSubnetPayload;
-use registry_canister::mutations::node_management::do_add_node::{
-    connection_endpoint_from_string, flow_endpoint_from_string,
-};
+use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
+use registry_canister::mutations::node_management::do_add_node::connection_endpoint_from_string;
+use registry_canister::pb::v1::{GetSubnetForCanisterRequest, SubnetForCanister};
+use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use std::time::Duration;
@@ -45,72 +50,33 @@ pub async fn get_subnet_record(registry: &Canister<'_>, subnet_id: SubnetId) -> 
     get_value_or_panic::<SubnetRecord>(registry, make_subnet_record_key(subnet_id).as_bytes()).await
 }
 
-pub fn get_subnet_holding_ecdsa_keys(
-    ecdsa_key_ids: &[EcdsaKeyId],
+pub fn get_subnet_holding_chain_keys(
+    key_ids: Vec<MasterPublicKeyId>,
     node_ids: Vec<NodeId>,
 ) -> SubnetRecord {
-    let mut record: SubnetRecord = CreateSubnetPayload {
-        unit_delay_millis: 10,
-        gossip_retransmission_request_ms: 10_000,
-        gossip_registry_poll_period_ms: 2000,
-        gossip_pfn_evaluation_period_ms: 50,
-        gossip_receive_check_cache_size: 1,
-        gossip_max_duplicity: 1,
-        gossip_max_chunk_wait_ms: 200,
-        gossip_max_artifact_streams_per_peer: 1,
+    let unit_delay_millis = 10;
+    let replica_version_id = String::from(ReplicaVersion::default());
+    let mut subnet_record = SubnetRecord::from(CreateSubnetPayload {
+        unit_delay_millis,
+        replica_version_id,
         node_ids,
         ..Default::default()
-    }
-    .into();
-    record.ecdsa_config = Some(
-        EcdsaConfig {
-            quadruples_to_create_in_advance: 1,
-            key_ids: ecdsa_key_ids.to_vec(),
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-            signature_request_timeout_ns: None,
-        }
-        .into(),
-    );
+    });
+    subnet_record.chain_key_config = Some(ChainKeyConfigPb {
+        key_configs: key_ids
+            .into_iter()
+            .map(|key_id| KeyConfigPb {
+                key_id: Some(MasterPublicKeyIdPb::from(&key_id)),
+                pre_signatures_to_create_in_advance: key_id.requires_pre_signatures().then_some(1),
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            })
+            .collect(),
+        signature_request_timeout_ns: None,
+        idkg_key_rotation_period_ms: None,
+        max_parallel_pre_signature_transcripts_in_creation: None,
+    });
 
-    record
-}
-
-/// This creates a CatchupPackageContents for nodes that would be part of as subnet
-/// which is necessary if the underlying IC test machinery knows about the subnets you added
-/// to your registry
-pub fn dummy_cup_for_subnet(nodes: Vec<NodeId>) -> CatchUpPackageContents {
-    let low_threshold_transcript_record =
-        dummy_initial_dkg_transcript(nodes.clone(), NiDkgTag::LowThreshold);
-    let high_threshold_transcript_record =
-        dummy_initial_dkg_transcript(nodes, NiDkgTag::HighThreshold);
-
-    return CatchUpPackageContents {
-        initial_ni_dkg_transcript_low_threshold: Some(low_threshold_transcript_record),
-        initial_ni_dkg_transcript_high_threshold: Some(high_threshold_transcript_record),
-        ..Default::default()
-    };
-
-    // copied from rs/consensus/src/dkg.rs
-    fn dummy_initial_dkg_transcript(
-        committee: Vec<NodeId>,
-        tag: NiDkgTag,
-    ) -> InitialNiDkgTranscriptRecord {
-        let threshold = committee.len() as u32 / 3 + 1;
-        let transcript =
-            NiDkgTranscript::dummy_transcript_for_tests_with_params(committee, tag, threshold, 0);
-        InitialNiDkgTranscriptRecord {
-            id: Some(transcript.dkg_id.into()),
-            threshold: transcript.threshold.get().get(),
-            committee: transcript
-                .committee
-                .iter()
-                .map(|(_, c)| c.get().to_vec())
-                .collect(),
-            registry_version: 1,
-            internal_csp_transcript: serde_cbor::to_vec(&transcript.internal_csp_transcript)
-                .unwrap(),
-        }
-    }
+    subnet_record
 }
 
 /// This allows us to create a registry canister that is in-sync with the FakeRegistryClient
@@ -141,41 +107,84 @@ pub async fn setup_registry_synced_with_fake_client(
 
 /// Prepare a mutate request to add the desired number of nodes, and returned the IDs
 /// of the nodes to be added.
-pub fn prepare_registry_with_nodes(node_count: u64) -> (RegistryAtomicMutateRequest, Vec<NodeId>) {
+///
+/// The argument `starting_mutation_id` can be used to avoid mutation collisions in tests
+/// that involve multiple registry mutations, e.g., creating multiple node records that
+/// should have distinct API endpoints.
+///
+/// This function will create `node_count` mutations.
+///
+/// Example usage:
+/// ```
+/// // Creates one initial mutation
+/// let mut registry = registry_canister::common::test_helpers::invariant_compliant_registry(0);
+/// // Creates 10 more mutations, so we have 11 mutations (0..10 inclusive).
+/// let (mut_req_a, _) = prepare_registry_with_nodes(10, 1);
+/// registry.maybe_apply_mutation_internal(mut_req_a.mutations)
+/// // Creates 8 more mutations, so we have 19 mutations (0..18 inclusive).
+/// let (mut_req_b, _) prepare_registry_with_nodes(8, 11);
+/// registry.maybe_apply_mutation_internal(mut_req_b.mutations)
+/// ```
+pub fn prepare_registry_with_nodes(
+    node_count: u64,
+    starting_mutation_id: u8,
+) -> (RegistryAtomicMutateRequest, Vec<NodeId>) {
+    let (mutate_request, node_ids_and_valid_pks) =
+        prepare_registry_with_nodes_and_valid_pks(node_count, starting_mutation_id);
+    (
+        mutate_request,
+        node_ids_and_valid_pks.keys().cloned().collect(),
+    )
+}
+
+/// Same as [`prepare_registry_with_nodes_and_valid_pks`], but also return the valid node public
+/// keys.
+pub fn prepare_registry_with_nodes_and_valid_pks(
+    node_count: u64,
+    starting_mutation_id: u8,
+) -> (
+    RegistryAtomicMutateRequest,
+    BTreeMap<NodeId, ValidNodePublicKeys>,
+) {
+    let default_template = NodeRecord {
+        node_operator_id: PrincipalId::new_user_test_id(999).into_vec(),
+        ..Default::default()
+    };
+
+    prepare_registry_with_nodes_from_template(node_count, starting_mutation_id, default_template)
+}
+
+/// Following the same as `prepare_registry_with_nodes`, and additionally allow
+/// passing a "template" used to fill values on each `NodeRecord`.
+pub fn prepare_registry_with_nodes_from_template(
+    node_count: u64,
+    starting_mutation_id: u8,
+    node_template: NodeRecord,
+) -> (
+    RegistryAtomicMutateRequest,
+    BTreeMap<NodeId, ValidNodePublicKeys>,
+) {
     // Prepare a transaction to add the nodes to the registry
     let mut mutations = vec![];
-    let node_ids: Vec<NodeId> = (0..node_count)
-        .map(|_| {
-            let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-            let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
-            mutations.push(insert(
-                &make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
-                encode_or_panic(&node_pks.dkg_dealing_encryption_pk.unwrap()),
+    let node_ids_and_valid_pks: BTreeMap<NodeId, ValidNodePublicKeys> = (0..node_count)
+        .map(|id| {
+            let (valid_pks, node_id) = new_node_keys_and_node_id();
+            let effective_id = starting_mutation_id + (id as u8);
+            let node_record = NodeRecord {
+                xnet: Some(connection_endpoint_from_string(&format!(
+                    "128.0.{effective_id}.1:1234"
+                ))),
+                http: Some(connection_endpoint_from_string(&format!(
+                    "128.0.{effective_id}.1:4321"
+                ))),
+                ..node_template.clone()
+            };
+            mutations.append(&mut make_add_node_registry_mutations(
+                node_id,
+                node_record,
+                valid_pks.clone(),
             ));
-            mutations.push(insert(
-                &make_crypto_node_key(node_id, KeyPurpose::NodeSigning).as_bytes(),
-                encode_or_panic(&node_pks.node_signing_pk.unwrap()),
-            ));
-            mutations.push(insert(
-                &make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption).as_bytes(),
-                encode_or_panic(&node_pks.idkg_dealing_encryption_pk.unwrap()),
-            ));
-
-            let node_key = make_node_record_key(node_id);
-            mutations.push(insert(
-                node_key.as_bytes(),
-                encode_or_panic(&NodeRecord {
-                    xnet: Some(connection_endpoint_from_string("128.0.0.1:1234")),
-                    http: Some(connection_endpoint_from_string("128.0.0.1:1234")),
-                    p2p_flow_endpoints: vec!["123,128.0.0.1:10000"]
-                        .iter()
-                        .map(|x| flow_endpoint_from_string(x))
-                        .collect(),
-                    node_operator_id: PrincipalId::new_user_test_id(999).into_vec(),
-                    ..Default::default()
-                }),
-            ));
-            node_id
+            (node_id, valid_pks)
         })
         .collect();
 
@@ -184,7 +193,7 @@ pub fn prepare_registry_with_nodes(node_count: u64) -> (RegistryAtomicMutateRequ
         preconditions: vec![],
     };
 
-    (mutate_request, node_ids)
+    (mutate_request, node_ids_and_valid_pks)
 }
 
 fn get_added_subnets(
@@ -238,14 +247,14 @@ pub async fn get_cup_contents(
 }
 
 /// Requests an ECDSA public key several times until it succeeds.
-pub async fn wait_for_ecdsa_setup(
+async fn wait_for_ecdsa_setup(
     runtime: &Runtime,
     calling_canister: &Canister<'_>,
     key_id: &EcdsaKeyId,
 ) {
     let public_key_request = ECDSAPublicKeyArgs {
         canister_id: None,
-        derivation_path: vec![],
+        derivation_path: DerivationPath::new(vec![]),
         key_id: key_id.clone(),
     };
     let mut public_key_result = None;
@@ -253,20 +262,108 @@ pub async fn wait_for_ecdsa_setup(
         public_key_result = Some(
             try_call_via_universal_canister(
                 calling_canister,
-                &runtime.get_management_canister(),
+                &runtime.get_management_canister_with_effective_canister_id(
+                    calling_canister.canister_id().into(),
+                ),
                 &Ic00Method::ECDSAPublicKey.to_string(),
                 Encode!(&public_key_request).unwrap(),
             )
             .await,
         );
-        println!("Response: {:?}", public_key_result);
+        println!("Response: {public_key_result:?}");
         if public_key_result.as_ref().unwrap().is_ok() {
             break;
         }
-        println!("Waiting for public key... {}", i);
+        println!("Waiting for public key... {i}");
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     public_key_result.unwrap().unwrap();
+}
+
+/// Requests a Schnorr public key several times until it succeeds.
+async fn wait_for_schnorr_setup(
+    runtime: &Runtime,
+    calling_canister: &Canister<'_>,
+    key_id: &SchnorrKeyId,
+) {
+    let public_key_request = SchnorrPublicKeyArgs {
+        canister_id: None,
+        derivation_path: DerivationPath::new(vec![]),
+        key_id: key_id.clone(),
+    };
+    let mut public_key_result = None;
+    for i in 0..100 {
+        public_key_result = Some(
+            try_call_via_universal_canister(
+                calling_canister,
+                &runtime.get_management_canister_with_effective_canister_id(
+                    calling_canister.canister_id().into(),
+                ),
+                &Ic00Method::SchnorrPublicKey.to_string(),
+                Encode!(&public_key_request).unwrap(),
+            )
+            .await,
+        );
+        println!("Response: {public_key_result:?}");
+        if public_key_result.as_ref().unwrap().is_ok() {
+            break;
+        }
+        println!("Waiting for public key... {i}");
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    public_key_result.unwrap().unwrap();
+}
+
+/// Requests a Vetkey public key several times until it succeeds.
+async fn wait_for_vetkd_setup(
+    runtime: &Runtime,
+    calling_canister: &Canister<'_>,
+    key_id: &VetKdKeyId,
+) {
+    let public_key_request = VetKdPublicKeyArgs {
+        canister_id: None,
+        context: vec![],
+        key_id: key_id.clone(),
+    };
+    let mut public_key_result = None;
+    for i in 0..100 {
+        public_key_result = Some(
+            try_call_via_universal_canister(
+                calling_canister,
+                &runtime.get_management_canister_with_effective_canister_id(
+                    calling_canister.canister_id().into(),
+                ),
+                &Ic00Method::VetKdPublicKey.to_string(),
+                Encode!(&public_key_request).unwrap(),
+            )
+            .await,
+        );
+        println!("Response: {public_key_result:?}");
+        if public_key_result.as_ref().unwrap().is_ok() {
+            break;
+        }
+        println!("Waiting for public key... {i}");
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    public_key_result.unwrap().unwrap();
+}
+
+pub async fn wait_for_chain_key_setup(
+    runtime: &Runtime,
+    calling_canister: &Canister<'_>,
+    master_public_key_id: &MasterPublicKeyId,
+) {
+    match master_public_key_id {
+        MasterPublicKeyId::Ecdsa(key_id) => {
+            wait_for_ecdsa_setup(runtime, calling_canister, key_id).await;
+        }
+        MasterPublicKeyId::Schnorr(key_id) => {
+            wait_for_schnorr_setup(runtime, calling_canister, key_id).await;
+        }
+        MasterPublicKeyId::VetKd(key_id) => {
+            wait_for_vetkd_setup(runtime, calling_canister, key_id).await;
+        }
+    }
 }
 
 pub fn check_error_message<T: std::fmt::Debug>(
@@ -275,19 +372,76 @@ pub fn check_error_message<T: std::fmt::Debug>(
 ) {
     match result {
         Ok(value) => panic!(
-            "expected the call to fail with message '{}', got Ok({:?})",
-            expected_substring, value
+            "expected the call to fail with message '{expected_substring}', got Ok({value:?})"
         ),
         Err(e) => assert!(
             e.contains(expected_substring),
-            "expected the call to fail with message '{}', got:  {}",
-            expected_substring,
-            e
+            "expected the call to fail with message '{expected_substring}', got:  {e}"
         ),
     }
 }
 
-pub async fn get_routing_table(canister: &canister_test::Canister<'_>) -> RoutingTable {
-    let pb_routing_table: pb::RoutingTable = get_value_or_panic(canister, b"routing_table").await;
-    RoutingTable::try_from(pb_routing_table).expect("failed to decode routing table")
+pub async fn check_subnet_for_canisters(
+    registry: &canister_test::Canister<'_>,
+    canister_id_subnet_id_pairs: Vec<(CanisterId, SubnetId)>,
+) {
+    for (canister_id, expected_subnet_id) in canister_id_subnet_id_pairs {
+        let result: Result<SubnetForCanister, String> = registry
+            .query_(
+                "get_subnet_for_canister",
+                candid_one,
+                GetSubnetForCanisterRequest {
+                    principal: Some(canister_id.get()),
+                },
+            )
+            .await
+            .unwrap();
+        let actual_subnet_id = result.unwrap().subnet_id.unwrap();
+        assert_eq!(
+            actual_subnet_id,
+            expected_subnet_id.get(),
+            "Subnet for canister {} should be {}, got {}",
+            canister_id.get(),
+            expected_subnet_id.get(),
+            actual_subnet_id
+        );
+    }
+}
+
+pub async fn install_registry_canister(pocket_ic: &PocketIc) {
+    install_registry_canister_with_payload_builder(
+        pocket_ic,
+        RegistryCanisterInitPayloadBuilder::new().build(),
+        false,
+    )
+    .await;
+}
+
+pub async fn install_test_registry_canister(pocket_ic: &PocketIc) {
+    install_registry_canister_with_payload_builder(
+        pocket_ic,
+        RegistryCanisterInitPayloadBuilder::new().build(),
+        true,
+    )
+    .await;
+}
+
+pub async fn install_registry_canister_with_payload_builder(
+    pocket_ic: &PocketIc,
+    payload: RegistryCanisterInitPayload,
+    test_configuration: bool,
+) {
+    install_canister(
+        pocket_ic,
+        "Registry",
+        REGISTRY_CANISTER_ID,
+        Encode!(&payload).unwrap(),
+        if test_configuration {
+            build_test_registry_wasm()
+        } else {
+            build_registry_wasm()
+        },
+        Some(ROOT_CANISTER_ID.get()),
+    )
+    .await;
 }

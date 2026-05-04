@@ -1,51 +1,126 @@
+use super::CanisterInput;
+use super::message_pool::{Kind, Reference};
 use crate::StateError;
+use ic_base_types::CanisterId;
+use ic_types::CountBytes;
+use ic_types::messages::{Ingress, RequestOrResponse};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
+use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, VecDeque};
+use std::convert::{From, TryFrom, TryInto};
+use std::fmt::Debug;
+use std::mem::size_of;
+use std::sync::Arc;
+
+pub mod proto;
 #[cfg(test)]
 mod tests;
 
-use ic_protobuf::proxy::ProxyDecodeError;
-use ic_protobuf::state::{ingress::v1 as pb_ingress, queues::v1 as pb_queues};
-use ic_types::{
-    messages::{Ingress, Request, RequestOrResponse, Response},
-    QueueIndex,
-};
-use ic_types::{CountBytes, Cycles, Time};
-use std::{
-    collections::VecDeque,
-    convert::{From, TryFrom, TryInto},
-    hash::{Hash, Hasher},
-    mem::size_of,
-    sync::Arc,
-};
+/// A typed FIFO queue with equal but separate capacities for requests and
+/// responses, ensuring full-duplex communication up to its capacity.
+///
+/// The queue holds typed weak references into a `MessageStore`. The messages
+/// that these references point to may expire or be shed, resulting in stale
+/// references that are not immediately removed from the queue. Which is why the
+/// queue stats track "request slots" and "response slots" instead of "requests"
+/// and "responses"; and `len()` returns the length of the queue, not the number
+/// of messages that can be popped.
+///
+/// Backpressure (limiting number of open callbacks to a given destination) is
+/// enforced by making enqueuing a request contingent on reserving a slot for
+/// the eventual response in the reverse queue; and bounding the number of
+/// responses (actually enqueued plus reserved slots) by the queue capacity.
+/// Note that this ensures that a response is only ever enqueued into a slot
+/// already reserved for it.
+///
+/// Backpressure should implicitly limit the number of requests (since there
+/// cannot be more live requests than callbacks). It is however possible for
+/// requests to time out; produce a reject response in the reverse queue; and
+/// for that response to be consumed while the request still consumes a slot in
+/// the queue; so we must additionally explicitly limit the number of slots used
+/// by requests to the queue capacity.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub(crate) struct CanisterQueue<T> {
+    /// A FIFO queue of request and response weak references into the pool.
+    ///
+    /// Since responses may be enqueued at arbitrary points in time, reserved slots
+    /// for responses cannot be explicitly represented in `queue`. They only exist
+    /// as the difference between `response_slots` and the number of actually
+    /// enqueued response references (calculated as `request_slots + response_slots
+    /// - queue.len()`).
+    ///
+    /// Some messages (all best-effort messages; plus guaranteed response requests
+    /// in output queues) may time out or be load shed and be dropped from the pool.
+    /// The kind (`Request` or `Response`) of such a stale reference can be learned
+    /// from the reference itself.
+    ///
+    ///  * Stale requests are to be ignored, whether they are found in an input or
+    ///    an output queue. They timed out or were shed while enqueued and, if in an
+    ///    output queue, a corresponding reject response was generated.
+    ///  * Stale responses in output queues (always best-effort) are also to be
+    ///    ignored. They timed out or were shed while enqueued and the originating
+    ///    canister is responsible for generating a timeout response instead.
+    ///  * Stale responses in input queues (always best-effort) are responses that
+    ///    were shed while enqueued or are `SYS_UNKNOWN` reject responses enqueued
+    ///    as dangling references to begin with. They are to be handled as
+    ///    `SYS_UNKNOWN` reject responses ("timeout" if their deadline expired,
+    ///    "drop" otherwise).
+    queue: VecDeque<Reference<T>>,
 
-/// A FIFO queue that enforces an upper bound on the number of slots used and
-/// reserved. Pushing an item into the queue or reserving a slot may fail if the
-/// queue is full. Pushing an item into a reserved slot will always succeed
-/// (unless a reservation has not been made, in which case it will panic).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct QueueWithReservation<T: std::clone::Clone> {
-    queue: VecDeque<T>,
-    /// Maximum number of messages allowed in the `queue` above.
+    /// Maximum number of requests; or responses + reserved slots; that can be held
+    /// in the queue at any one time.
     capacity: usize,
-    /// Number of slots in the above `queue` currently reserved.  A slot must
-    /// first be reserved before it can be pushed to which consumes it.
-    num_slots_reserved: usize,
+
+    /// Number of enqueued request references.
+    ///
+    /// Invariants:
+    ///  * `request_slots == queue.iter().filter(|r| r.kind() == Kind::Request).count()`
+    ///  * `request_slots <= capacity`
+    request_slots: usize,
+
+    /// Number of slots used by response references or reserved for expected
+    /// responses.
+    ///
+    /// Invariants:
+    ///  * `response_slots >= queue.iter().filter(|r| r.kind() == Kind::Response).count()`
+    ///  * `response_slots <= capacity`
+    response_slots: usize,
+
+    /// The type of item referenced by the queue.
+    marker: std::marker::PhantomData<T>,
 }
 
-impl<T: std::clone::Clone> QueueWithReservation<T> {
-    fn new(capacity: usize) -> Self {
-        let queue = VecDeque::new();
+/// An `InputQueue` is a `CanisterQueue` holding references to `CanisterInput`
+/// items, i.e. either pooled messages or compact responses.
+pub(super) type InputQueue = CanisterQueue<CanisterInput>;
 
+/// An `OutputQueue` is a `CanisterQueue` holding references to outbound
+/// `RequestOrResponse` items.
+pub(super) type OutputQueue = CanisterQueue<RequestOrResponse>;
+
+impl<T> CanisterQueue<T> {
+    /// Creates a new `CanisterQueue` with the given capacity.
+    pub(super) fn new(capacity: usize) -> Self {
         Self {
-            queue,
+            queue: VecDeque::new(),
             capacity,
-            num_slots_reserved: 0,
+            request_slots: 0,
+            response_slots: 0,
+            marker: std::marker::PhantomData,
         }
     }
 
-    /// Returns `Ok(())` if there exists at least one available slot,
+    /// Returns the number of slots available for requests.
+    pub(super) fn available_request_slots(&self) -> usize {
+        debug_assert!(self.request_slots <= self.capacity);
+        self.capacity - self.request_slots
+    }
+
+    /// Returns `Ok(())` if there exists at least one available request slot,
     /// `Err(StateError::QueueFull)` otherwise.
-    fn check_has_slot(&self) -> Result<(), StateError> {
-        if self.queue.len() + self.num_slots_reserved >= self.capacity {
+    pub(super) fn check_has_request_slot(&self) -> Result<(), StateError> {
+        if self.request_slots >= self.capacity {
             return Err(StateError::QueueFull {
                 capacity: self.capacity,
             });
@@ -53,738 +128,366 @@ impl<T: std::clone::Clone> QueueWithReservation<T> {
         Ok(())
     }
 
-    /// Returns the number of slots available in the queue. This many items can
-    /// be reserved or pushed before an error is returned.
-    fn available_slots(&self) -> usize {
-        self.capacity - (self.queue.len() + self.num_slots_reserved)
-    }
-
-    /// Reserves a slot if available, else returns `Err(StateError::QueueFull)`.
-    fn reserve_slot(&mut self) -> Result<(), StateError> {
-        self.check_has_slot()?;
-        self.num_slots_reserved += 1;
-        Ok(())
-    }
-
-    /// Pushes an item into the queue if not full, returns
-    /// `Err(StateError::QueueFull)` along with the provided item otherwise.
-    fn push(&mut self, msg: T) -> Result<(), (StateError, T)> {
-        if let Err(e) = self.check_has_slot() {
-            return Err((e, msg));
-        }
-        self.queue.push_back(msg);
-        Ok(())
-    }
-
-    /// Pushes an item into a reserved slot, consuming the reservation or
-    /// returns an error if there is no reservation available.
-    fn push_into_reserved_slot(&mut self, msg: T) -> Result<(), (StateError, T)> {
-        if self.num_slots_reserved > 0 {
-            self.num_slots_reserved -= 1;
-            self.queue.push_back(msg);
-            Ok(())
-        } else {
-            Err((StateError::QueueFull { capacity: 0 }, msg))
-        }
-    }
-
-    /// Pops an item off the tail of the queue or `None` if the queue is empty.
-    fn pop(&mut self) -> Option<T> {
-        self.queue.pop_front()
-    }
-
-    /// Returns a reference to the item at the head of the queue or `None` if
-    /// the queue is empty.
-    fn peek(&self) -> Option<&T> {
-        self.queue.front()
-    }
-
-    /// Returns the number of reserved slots in the queue.
-    pub(super) fn reserved_slots(&self) -> usize {
-        self.num_slots_reserved
-    }
-
-    /// Calculates the sum of the given stat across all enqueued messages.
+    /// Enqueues a request.
     ///
-    /// Time complexity: O(num_messages).
-    fn calculate_stat_sum(&self, stat: impl Fn(&T) -> usize) -> usize {
-        self.queue.iter().map(stat).sum::<usize>()
-    }
-}
+    /// Panics if there is no available request slot.
+    pub(super) fn push_request(&mut self, reference: Reference<T>) {
+        debug_assert!(reference.kind() == Kind::Request);
+        assert!(self.request_slots < self.capacity);
 
-impl From<&QueueWithReservation<RequestOrResponse>> for Vec<pb_queues::RequestOrResponse> {
-    fn from(q: &QueueWithReservation<RequestOrResponse>) -> Self {
-        q.queue.iter().map(|rr| rr.into()).collect()
-    }
-}
+        self.queue.push_back(reference);
+        self.request_slots += 1;
 
-impl From<&QueueWithReservation<Option<RequestOrResponse>>> for Vec<pb_queues::RequestOrResponse> {
-    fn from(q: &QueueWithReservation<Option<RequestOrResponse>>) -> Self {
-        q.queue
-            .iter()
-            .map(|opt| match opt {
-                Some(rr) => rr.into(),
-                None => pb_queues::RequestOrResponse { r: None },
-            })
-            .collect()
-    }
-}
-
-/// Validates that the queue capacity is `DEFAULT_QUEUE_CAPACITY`; and that
-/// the queue (items plus reservations) is not over capacity.
-fn check_size(q: &pb_queues::InputOutputQueue) -> Result<(), ProxyDecodeError> {
-    if q.capacity != super::DEFAULT_QUEUE_CAPACITY as u64 {
-        return Err(ProxyDecodeError::Other(format!(
-            "QueueWithReservation: capacity {}, expecting {}",
-            q.capacity,
-            super::DEFAULT_QUEUE_CAPACITY
-        )));
-    }
-    if q.capacity < q.queue.len() as u64 + q.num_slots_reserved {
-        return Err(ProxyDecodeError::Other(format!(
-            "QueueWithReservation: message count ({}) + reserved slots ({}) > capacity ({})",
-            q.queue.len(),
-            q.num_slots_reserved,
-            q.capacity,
-        )));
-    }
-    Ok(())
-}
-
-impl TryFrom<pb_queues::InputOutputQueue> for QueueWithReservation<RequestOrResponse> {
-    type Error = ProxyDecodeError;
-
-    fn try_from(q: pb_queues::InputOutputQueue) -> Result<Self, Self::Error> {
-        check_size(&q)?;
-        Ok(QueueWithReservation {
-            num_slots_reserved: q.num_slots_reserved as usize,
-            capacity: super::DEFAULT_QUEUE_CAPACITY,
-            queue: q
-                .queue
-                .into_iter()
-                .map(|rr| rr.try_into())
-                .collect::<Result<VecDeque<_>, _>>()?,
-        })
-    }
-}
-
-impl TryFrom<pb_queues::InputOutputQueue> for QueueWithReservation<Option<RequestOrResponse>> {
-    type Error = ProxyDecodeError;
-
-    fn try_from(q: pb_queues::InputOutputQueue) -> Result<Self, Self::Error> {
-        check_size(&q)?;
-        Ok(QueueWithReservation {
-            num_slots_reserved: q.num_slots_reserved as usize,
-            capacity: super::DEFAULT_QUEUE_CAPACITY,
-            queue: q
-                .queue
-                .into_iter()
-                .map(|rr| match rr.r {
-                    None => Ok(None),
-                    Some(_) => rr.try_into().map(Some),
-                })
-                .collect::<Result<VecDeque<_>, _>>()?,
-        })
-    }
-}
-
-/// Representation of a single canister input queue. There is an upper bound on
-/// the number of messages it can store.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(super) struct InputQueue {
-    queue: QueueWithReservation<RequestOrResponse>,
-}
-
-impl InputQueue {
-    pub(super) fn new(capacity: usize) -> Self {
-        Self {
-            queue: QueueWithReservation::new(capacity),
-        }
+        debug_assert_eq!(Ok(()), self.check_invariants());
     }
 
-    pub(super) fn check_has_slot(&self) -> Result<(), StateError> {
-        self.queue.check_has_slot()
+    /// Returns the number of response slots available for reservation.
+    pub(super) fn available_response_slots(&self) -> usize {
+        debug_assert!(self.response_slots <= self.capacity);
+        self.capacity - self.response_slots
     }
 
-    pub(super) fn available_slots(&self) -> usize {
-        self.queue.available_slots()
-    }
-
-    pub(super) fn push(
-        &mut self,
-        msg: RequestOrResponse,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
-        match msg {
-            RequestOrResponse::Request(_) => self.queue.push(msg),
-            RequestOrResponse::Response(_) => self.queue.push_into_reserved_slot(msg),
-        }
-    }
-
-    pub fn peek(&self) -> Option<&RequestOrResponse> {
-        self.queue.peek()
-    }
-
-    pub(super) fn reserve_slot(&mut self) -> Result<(), StateError> {
-        self.queue.reserve_slot()
-    }
-
-    pub(super) fn pop(&mut self) -> Option<RequestOrResponse> {
-        self.queue.pop()
-    }
-
-    /// Returns the number of messages in the queue.
-    pub(super) fn num_messages(&self) -> usize {
-        self.queue.queue.len()
-    }
-
-    /// Returns the number of reserved slots in the queue.
-    pub(super) fn reserved_slots(&self) -> usize {
-        self.queue.reserved_slots()
-    }
-
-    /// Returns `true` if the queue is empty (no messages and no reserved slots).
-    pub(super) fn is_empty(&self) -> bool {
-        self.queue.reserved_slots() == 0 && self.queue.queue.is_empty()
-    }
-
-    /// Returns the amount of cycles contained in the queue.
-    pub(super) fn cycles_in_queue(&self) -> Cycles {
-        let mut total_cycles = Cycles::zero();
-        for msg in self.queue.queue.iter() {
-            total_cycles += msg.cycles();
-        }
-        total_cycles
-    }
-
-    /// Calculates the size in bytes, including struct and messages.
-    ///
-    /// Time complexity: O(num_messages).
-    pub(super) fn calculate_size_bytes(&self) -> usize {
-        size_of::<Self>() + self.queue.calculate_stat_sum(|msg| msg.count_bytes())
-    }
-
-    /// Calculates the sum of the given stat across all enqueued messages.
-    ///
-    /// Time complexity: O(num_messages).
-    pub(super) fn calculate_stat_sum(&self, stat: fn(&RequestOrResponse) -> usize) -> usize {
-        self.queue.calculate_stat_sum(stat)
-    }
-}
-
-impl From<&InputQueue> for pb_queues::InputOutputQueue {
-    fn from(q: &InputQueue) -> Self {
-        Self {
-            queue: (&q.queue).into(),
-            index: 0,
-            capacity: q.queue.capacity as u64,
-            num_slots_reserved: q.queue.num_slots_reserved as u64,
-            deadline_range_ends: Vec::<pb_queues::MessageDeadline>::new(),
-        }
-    }
-}
-
-impl TryFrom<pb_queues::InputOutputQueue> for InputQueue {
-    type Error = ProxyDecodeError;
-
-    fn try_from(q: pb_queues::InputOutputQueue) -> Result<Self, Self::Error> {
-        if !q.deadline_range_ends.is_empty() {
-            return Err(Self::Error::Other(
-                "Found deadlines on decoding InputQueue".to_string(),
-            ));
-        }
-        Ok(Self {
-            queue: q.try_into()?,
-        })
-    }
-}
-
-/// Representation of a single Canister output queue.  There is an upper bound
-/// on the number of messages it can store.  There is also a `QueueIndex` which
-/// can be used effectively as a sequence number for the next message popped out
-/// of the queue.
-///
-/// Uses 'Option<_>' items so that requests can be dropped from anywhere in
-/// the queue, i.e. replaced with 'None'. They will keep their place in the queue
-/// until they reach the front, where they will be discarded.
-///
-/// Additionally, an invariant is imposed such that there is always 'Some' at the
-/// front. This is ensured when a message is popped off the queue by also popping
-/// any subsequent 'None' items.
-#[derive(Clone, Debug, Eq)]
-pub(crate) struct OutputQueue {
-    queue: QueueWithReservation<Option<RequestOrResponse>>,
-    index: QueueIndex,
-    /// Ordered ranges of messages having the same request deadline. Each range
-    /// is represented as a deadline and its end index (the `QueueIndex` just past
-    /// the last request where the deadline applies). Both the deadlines and queue
-    /// indices are strictly increasing.
-    deadline_range_ends: VecDeque<(Time, QueueIndex)>,
-    /// Queue index from which request timing out will resume.
-    ///
-    /// Used to ensure amortized constant time for timing out requests.
-    /// May point before the beginning of the queue if messages have been popped
-    /// since the last `time_out_requests()` call.
-    timeout_index: QueueIndex,
-    /// The number of actual messages in the queue.
-    num_messages: usize,
-}
-
-/// Since timeout_index can be different under certain conditions (specifically after
-/// deserializing since it is not persisted) for queues that are otherwise equal,
-/// it should be excluded from comparisons.
-impl PartialEq for OutputQueue {
-    fn eq(&self, other: &Self) -> bool {
-        debug_assert!(self.check_invariants());
-
-        // Compare everything except timeout_index.
-        (self.index == other.index)
-            && (self.deadline_range_ends == other.deadline_range_ends)
-            && (self.queue == other.queue)
-    }
-}
-
-/// If PartialEq is implemented manually, Hash must also be implemented manually to
-/// guarantee queue1 == queue2 -> hash(queue1) == hash(queue2).
-impl Hash for OutputQueue {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        debug_assert!(self.check_invariants());
-
-        // Hash everything except timeout_index.
-        self.index.hash(state);
-        self.deadline_range_ends.hash(state);
-        self.queue.hash(state);
-    }
-}
-
-impl OutputQueue {
-    pub(super) fn new(capacity: usize) -> Self {
-        Self {
-            queue: QueueWithReservation::new(capacity),
-            index: QueueIndex::from(0),
-            deadline_range_ends: VecDeque::new(),
-            timeout_index: QueueIndex::from(0),
-            num_messages: 0,
-        }
-    }
-
-    pub(super) fn check_has_slot(&self) -> Result<(), StateError> {
-        self.queue.check_has_slot()
-    }
-
-    pub(super) fn available_slots(&self) -> usize {
-        self.queue.available_slots()
-    }
-
-    pub(super) fn push_request(
-        &mut self,
-        msg: Arc<Request>,
-        deadline: Time,
-    ) -> Result<(), (StateError, Arc<Request>)> {
-        if let Err((err, Some(RequestOrResponse::Request(msg)))) =
-            self.queue.push(Some(RequestOrResponse::Request(msg)))
-        {
-            return Err((err, msg));
-        }
-
-        // Update the deadline queue.
-        //
-        // If the deadline is <= the one at the tail of the deadline queue,
-        // update the `deadline_range_end`.
-        //
-        // If the new deadline is greater than the one of the previous request or
-        // there is no previous request in the queue. push a new tuple.
-        let back_index = self.index + (self.queue.queue.len() as u64).into();
-        match self.deadline_range_ends.back_mut() {
-            Some((back_deadline, deadline_range_end)) if *back_deadline >= deadline => {
-                *deadline_range_end = back_index;
-            }
-            _ => {
-                self.deadline_range_ends.push_back((deadline, back_index));
-            }
-        }
-
-        self.num_messages += 1;
-        debug_assert!(self.check_invariants());
-
-        Ok(())
-    }
-
-    pub(super) fn push_response(&mut self, msg: Arc<Response>) {
-        self.queue
-            .push_into_reserved_slot(Some(RequestOrResponse::Response(msg)))
-            .unwrap();
-
-        self.num_messages += 1;
-        debug_assert!(self.check_invariants());
-    }
-
-    pub(super) fn reserve_slot(&mut self) -> Result<(), StateError> {
-        self.queue.reserve_slot()
-    }
-
-    /// Pops a message off the queue and returns it.
-    ///
-    /// Ensures there is always a 'Some' at the front.
-    pub(crate) fn pop(&mut self) -> Option<RequestOrResponse> {
-        match self.queue.pop() {
-            None => None,
-            Some(None) => {
-                panic!("OutputQueue invariant violated: Found `None` at the front.");
-            }
-            Some(Some(msg)) => {
-                self.index.inc_assign();
-                self.advance_to_next_message();
-
-                self.num_messages -= 1;
-                debug_assert!(self.check_invariants());
-
-                Some(msg)
-            }
-        }
-    }
-
-    /// Consumes any empty slots at the head of the queue and discards consumed deadline ranges.
-    fn advance_to_next_message(&mut self) {
-        // Remove `None` in front.
-        while let Some(None) = self.queue.peek() {
-            self.queue.pop();
-            self.index.inc_assign();
-        }
-
-        // Remove deadlines that are no longer relevant.
-        while let Some((_, deadline_range_end)) = self.deadline_range_ends.front() {
-            if *deadline_range_end <= self.index || *deadline_range_end <= self.timeout_index {
-                self.deadline_range_ends.pop_front();
-            } else {
-                break;
-            }
-        }
-    }
-
-    /// Checks the queue invariants. Should be called within a `debug_assert` in prod code.
-    ///
-    /// # Panics
-    ///
-    /// If an invariant is violated.
-    fn check_invariants(&self) -> bool {
-        // Check there may not be `None` in the front of the queue.
-        if let Some(None) = self.queue.queue.front() {
-            panic!("Found `None` at the front.");
-        }
-
-        // Check deadline invariant, deadlines and indices must be strictly sorted.
-        assert!(
-            self.deadline_range_ends
-                .iter()
-                .zip(self.deadline_range_ends.iter().skip(1))
-                .all(|(a, b)| a.0 < b.0 && a.1 < b.1),
-            "Deadlines not sorted.",
-        );
-
-        // Check deadline invariant, deadline indices must be in
-        // (self.index, self.index + self.queue.queue.len()].
-        if let Some((_, deadline_front_index)) = self.deadline_range_ends.front() {
-            assert!(
-                *deadline_front_index > self.index,
-                "Found Deadline range end before the queue.",
-            );
-        }
-        if let Some((_, deadline_back_index)) = self.deadline_range_ends.back() {
-            assert!(
-                *deadline_back_index <= self.index + (self.queue.queue.len() as u64).into(),
-                "Found Deadline range end after the queue.",
-            );
-        }
-
-        // Check no requests are found before `self.timeout_index`.
-        if self.timeout_index > self.index {
-            assert!(
-                self.queue
-                    .queue
-                    .iter()
-                    .take((self.timeout_index - self.index).get() as usize)
-                    .all(|rr| !matches!(rr, Some(RequestOrResponse::Request(_)))),
-                "Found Request(s) before the `timeout_index`.",
-            );
-        }
-
-        // Check no deadline range ends <= `self.timeout_index` are found.
-        assert!(self
-            .deadline_range_ends
-            .iter()
-            .all(|(_, end)| *end > self.timeout_index));
-
-        // Check `self.num_messages` is tracked properly.
-        assert_eq!(
-            self.num_messages,
-            self.queue.queue.iter().filter(|rr| rr.is_some()).count(),
-            "Number of messages and `num_messages` mismatch."
-        );
-
-        true
-    }
-
-    /// Returns the message that `pop` would have returned, without removing it
-    /// from the queue.
-    pub(crate) fn peek(&self) -> Option<&RequestOrResponse> {
-        self.queue.peek().map(|msg| msg.as_ref().unwrap())
-    }
-
-    /// Number of actual messages in the queue (`None` are ignored).
-    pub fn num_messages(&self) -> usize {
-        self.num_messages
-    }
-
-    /// Returns the number of reserved slots in the queue.
-    pub(super) fn reserved_slots(&self) -> usize {
-        self.queue.reserved_slots()
-    }
-
-    /// Returns `true` if the queue is empty (no messages and no reserved slots).
-    pub(super) fn is_empty(&self) -> bool {
-        self.queue.reserved_slots() == 0 && self.num_messages == 0
-    }
-
-    /// Returns the amount of cycles contained in the queue.
-    pub(super) fn cycles_in_queue(&self) -> Cycles {
-        let mut total_cycles = Cycles::zero();
-        for msg in self.queue.queue.iter().flatten() {
-            total_cycles += msg.cycles();
-        }
-        total_cycles
-    }
-
-    /// Calculates the sum of the given stat across all enqueued messages.
-    ///
-    /// Time complexity: O(num_messages).
-    pub(super) fn calculate_stat_sum(&self, stat: fn(&RequestOrResponse) -> usize) -> usize {
-        let stat =
-            |item: &Option<RequestOrResponse>| if let Some(item) = item { stat(item) } else { 0 };
-        self.queue.calculate_stat_sum(stat)
-    }
-
-    /// Purges timed out requests. Returns an iterator over the timed out requests.
-    /// Only consumed items are purged.
-    #[allow(dead_code)]
-    pub(super) fn time_out_requests(&mut self, current_time: Time) -> TimedOutRequestsIter {
-        TimedOutRequestsIter {
-            q: self,
-            current_time,
-        }
-    }
-}
-
-/// Iterator over timed out requests in an OutputQueue.
-///
-/// This extracts timed out requests by removing them from the queue,
-/// leaving `None` in their place and returning them one by one.
-pub(super) struct TimedOutRequestsIter<'a> {
-    /// A mutable reference to the queue whose requests are to be timed out and returned.
-    q: &'a mut OutputQueue,
-    /// The time used to determine which requests should be considered timed out.
-    /// This is compared to deadlines in q.deadline_range_ends.
-    current_time: Time,
-}
-
-impl<'a> Iterator for TimedOutRequestsIter<'a> {
-    type Item = Arc<Request>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        use RequestOrResponse::Request;
-
-        while let Some(&(deadline, deadline_range_end)) = self.q.deadline_range_ends.front() {
-            if deadline > self.current_time {
-                return None;
-            }
-
-            self.q.timeout_index = self.q.timeout_index.max(self.q.index);
-
-            debug_assert!(
-                deadline_range_end.get() <= self.q.index.get() + self.q.queue.queue.len() as u64
-            );
-            while self.q.timeout_index < deadline_range_end {
-                let i = (self.q.timeout_index - self.q.index).get() as usize;
-                self.q.timeout_index.inc_assign();
-
-                if let Some(Request(request)) = match self.q.queue.queue.get_mut(i) {
-                    Some(item @ Some(Request(_))) => item.take(),
-                    _ => continue,
-                } {
-                    self.q.num_messages -= 1;
-                    self.q.advance_to_next_message();
-                    debug_assert!(self.q.check_invariants());
-
-                    return Some(request);
-                }
-            }
-            self.q.deadline_range_ends.pop_front();
-        }
-        None
-    }
-}
-
-impl std::iter::Iterator for OutputQueue {
-    type Item = RequestOrResponse;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.pop()
-    }
-}
-
-impl From<&OutputQueue> for pb_queues::InputOutputQueue {
-    fn from(q: &OutputQueue) -> Self {
-        Self {
-            queue: (&q.queue).into(),
-            index: q.index.get(),
-            capacity: q.queue.capacity as u64,
-            num_slots_reserved: q.queue.num_slots_reserved as u64,
-            deadline_range_ends: q
-                .deadline_range_ends
-                .iter()
-                .map(
-                    |(deadline, deadline_range_end)| pb_queues::MessageDeadline {
-                        deadline: deadline.as_nanos_since_unix_epoch(),
-                        index: deadline_range_end.get(),
-                    },
-                )
-                .collect(),
-        }
-    }
-}
-
-impl TryFrom<pb_queues::InputOutputQueue> for OutputQueue {
-    type Error = ProxyDecodeError;
-
-    fn try_from(q: pb_queues::InputOutputQueue) -> Result<Self, Self::Error> {
-        let queue_front_index: QueueIndex = q.index.into();
-        let deadline_range_ends: VecDeque<(Time, QueueIndex)> = q
-            .deadline_range_ends
-            .iter()
-            .map(|di| {
-                (
-                    Time::from_nanos_since_unix_epoch(di.deadline),
-                    di.index.into(),
-                )
-            })
-            .collect();
-        let queue: QueueWithReservation<Option<RequestOrResponse>> = q.try_into()?;
-
-        // Compute the number of messages from queue.
-        let num_messages = queue.queue.iter().filter(|rr| rr.is_some()).count();
-
-        // Sanity check deadlines and indices are strictly sorted (no duplicates).
-        if deadline_range_ends
-            .iter()
-            .zip(deadline_range_ends.iter().skip(1))
-            .any(|(a, b)| a.0 >= b.0 || a.1 >= b.1)
-        {
-            return Err(Self::Error::ValueOutOfRange {
-                typ: "InputOutputQueue::deadline_range_ends",
-                err: "Deadline queue is not sorted.".to_string(),
+    /// Reserves a slot for a response, if available; else returns
+    /// `Err(StateError::QueueFull)`.
+    pub(super) fn try_reserve_response_slot(&mut self) -> Result<(), StateError> {
+        debug_assert!(self.response_slots <= self.capacity);
+        if self.response_slots >= self.capacity {
+            return Err(StateError::QueueFull {
+                capacity: self.capacity,
             });
         }
 
-        // Sanity check indices are in the interval (index, back_index].
-        let queue_back_index = queue_front_index + (queue.queue.len() as u64).into();
-        if let (Some((_, deadlines_front_index)), Some((_, deadlines_back_index))) =
-            (deadline_range_ends.front(), deadline_range_ends.back())
-        {
-            if *deadlines_front_index <= queue_front_index
-                || *deadlines_back_index > queue_back_index
-            {
-                return Err(Self::Error::ValueOutOfRange {
-                    typ: "InputOutputQueue::index",
-                    err: "Indices out of bounds.".to_string(),
-                });
+        self.response_slots += 1;
+        debug_assert_eq!(Ok(()), self.check_invariants());
+        Ok(())
+    }
+
+    /// Releases a reserved response slot.
+    ///
+    /// This is used when a request in the reverse queue is dropped before having
+    /// had a chance to be popped.
+    pub(super) fn release_reserved_response_slot(&mut self) {
+        debug_assert!(self.response_slots > 0);
+
+        self.response_slots = self.response_slots.saturating_sub(1);
+    }
+
+    /// Returns the number of reserved response slots.
+    pub(super) fn reserved_slots(&self) -> usize {
+        debug_assert!(self.request_slots + self.response_slots >= self.queue.len());
+        self.request_slots + self.response_slots - self.queue.len()
+    }
+
+    /// Returns `Ok(())` if there exists at least one reserved response slot,
+    /// `Err(())` otherwise.
+    pub(super) fn check_has_reserved_response_slot(&self) -> Result<(), ()> {
+        if self.request_slots + self.response_slots <= self.queue.len() {
+            return Err(());
+        }
+
+        Ok(())
+    }
+
+    /// Enqueues a response into a reserved slot, consuming the slot.
+    ///
+    /// Panics if there is no reserved response slot.
+    pub(super) fn push_response(&mut self, reference: Reference<T>) {
+        debug_assert!(reference.kind() == Kind::Response);
+        self.check_has_reserved_response_slot()
+            .expect("No reserved response slot");
+
+        self.queue.push_back(reference);
+        debug_assert_eq!(Ok(()), self.check_invariants());
+    }
+
+    /// Pops a reference from the queue. Returns `None` if the queue is empty.
+    pub(super) fn pop(&mut self) -> Option<Reference<T>> {
+        let reference = self.queue.pop_front()?;
+
+        if reference.kind() == Kind::Response {
+            debug_assert!(self.response_slots > 0);
+            self.response_slots = self.response_slots.saturating_sub(1);
+        } else {
+            debug_assert!(self.request_slots > 0);
+            self.request_slots -= 1;
+        }
+        debug_assert_eq!(Ok(()), self.check_invariants());
+
+        Some(reference)
+    }
+
+    /// Returns the next reference in the queue; or `None` if the queue is empty.
+    pub(super) fn peek(&self) -> Option<Reference<T>> {
+        self.queue.front().cloned()
+    }
+
+    /// Returns `true` if the queue has one or more used slots.
+    ///
+    /// This is basically an `is_empty()` test, except it also looks at reserved
+    /// slots, so it is named differently to make it clear it doesn't only check for
+    /// enqueued references.
+    pub(super) fn has_used_slots(&self) -> bool {
+        !self.queue.is_empty() || self.response_slots > 0
+    }
+
+    /// Returns the length of the queue (including stale references, but not
+    /// including reserved slots).
+    pub(super) fn len(&self) -> usize {
+        self.queue.len()
+    }
+
+    /// Discards all references at the front of the queue for which the predicate
+    /// holds. Stops when it encounters the first reference for which the predicate
+    /// is false.
+    pub(super) fn pop_while(&mut self, predicate: impl Fn(Reference<T>) -> bool) {
+        while let Some(reference) = self.peek() {
+            if !predicate(reference) {
+                break;
             }
+            self.pop();
+        }
+    }
+
+    /// Queue invariant check that panics if any invariant does not hold. Intended
+    /// to be called during checkpoint loading or from within a `debug_assert!()`.
+    ///
+    /// Time complexity: `O(n)`.
+    fn check_invariants(&self) -> Result<(), String> {
+        // Requests and response slots at or below capacity.
+        if self.request_slots > self.capacity || self.response_slots > self.capacity {
+            return Err(format!(
+                "Request ({}) or response ({}) slots exceed capacity ({})",
+                self.request_slots, self.response_slots, self.capacity
+            ));
         }
 
-        // Sanity check the front element may not be None.
-        if let Some(None) = queue.peek() {
-            return Err(Self::Error::Other("Front may not be None.".to_string()));
+        let responses = self
+            .queue
+            .iter()
+            .filter(|msg| msg.kind() == Kind::Response)
+            .count();
+        if responses > self.response_slots {
+            return Err(format!(
+                "More responses ({}) than response slots ({})",
+                responses, self.response_slots
+            ));
+        }
+        // Queue contains only requests and responses.
+        if self.queue.len() != self.request_slots + responses {
+            return Err(format!(
+                "Invalid `request_slots` ({}): queue length ({}), response count ({})",
+                self.request_slots,
+                self.queue.len(),
+                responses
+            ));
         }
 
-        Ok(Self {
-            index: queue_front_index,
-            queue,
-            deadline_range_ends,
-            timeout_index: queue_front_index,
-            num_messages,
-        })
+        Ok(())
+    }
+
+    /// Returns an iterator over the underlying references.
+    pub(super) fn iter(&self) -> impl Iterator<Item = &Reference<T>> {
+        self.queue.iter()
     }
 }
 
-/// Representation of the Ingress queue.  There is no upper bound on
+/// Representation of the Ingress queue. There is no upper bound on
 /// the number of messages it can store.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+///
+/// `IngressQueue` has a separate queue of Ingress messages for each
+/// target canister based on `effective_canister_id`, and `schedule`
+/// of executing target canisters with incoming Ingress messages.
+///
+/// When the Ingress message is pushed to the `IngressQueue`, it is added
+/// to the queue of Ingress messages of the target canister. If the target
+/// canister does not have other incoming Ingress messages it is added to
+/// the back of `schedule`.
+///
+/// When `pop()` is called `IngressQueue` returns the first Ingress message
+/// from the canister at the front of the `schedule`. If that canister
+/// has other incoming Ingress messages it is moved to the
+/// back of `schedule`, otherwise it is removed from `schedule`.
+///
+/// When `skip_ingress_input()` is called canister from the front of the
+/// `schedule` is moved to its back.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, ValidateEq)]
 pub(super) struct IngressQueue {
-    queue: VecDeque<Arc<Ingress>>,
-
+    // Schedule of canisters that have Ingress messages to be processed.
+    // Because `effective_canister_id` of `Ingress` message has type Option<CanisterId>,
+    // the same type is used for entries `schedule` and keys in `queues`.
+    schedule: VecDeque<Option<CanisterId>>,
+    // Per canister queue of Ingress messages.
+    #[validate_eq(CompareWithValidateEq)]
+    queues: BTreeMap<Option<CanisterId>, VecDeque<Arc<Ingress>>>,
+    // Total number of Ingress messages that are waiting to be executed.
+    total_ingress_count: usize,
     /// Estimated size in bytes.
     size_bytes: usize,
 }
 
 impl IngressQueue {
+    /// The memory overhead of a per-canister ingress queue, in bytes.
+    const PER_CANISTER_QUEUE_OVERHEAD_BYTES: usize =
+        size_of::<Option<CanisterId>>() + size_of::<VecDeque<Arc<Ingress>>>();
+
+    /// Pushes a new ingress message to the back of the queue.
     pub(super) fn push(&mut self, msg: Ingress) {
-        self.size_bytes += Self::ingress_size_bytes(&msg);
-        self.queue.push_back(Arc::new(msg));
-        debug_assert_eq!(Self::size_bytes(&self.queue), self.size_bytes);
-    }
+        let msg_size = Self::ingress_size_bytes(&msg);
+        let receiver_ingress_queue = self.queues.entry(msg.effective_canister_id).or_default();
 
-    pub(super) fn pop(&mut self) -> Option<Arc<Ingress>> {
-        let res = self.queue.pop_front();
-        if let Some(msg) = res.as_ref() {
-            self.size_bytes -= Self::ingress_size_bytes(msg.as_ref());
-            debug_assert_eq!(Self::size_bytes(&self.queue), self.size_bytes);
+        if receiver_ingress_queue.is_empty() {
+            self.schedule.push_back(msg.effective_canister_id);
+            self.size_bytes += Self::PER_CANISTER_QUEUE_OVERHEAD_BYTES;
         }
-        res
+
+        receiver_ingress_queue.push_back(Arc::new(msg));
+
+        self.size_bytes += msg_size;
+        debug_assert_eq!(Self::size_bytes(&self.queues), self.size_bytes);
+
+        self.total_ingress_count += 1;
     }
 
-    pub(super) fn peek(&self) -> Option<&Arc<Ingress>> {
-        self.queue.front()
+    /// Returns `None` if the queue is empty, otherwise removes the first Ingress
+    /// message of the first scheduled canister, returns it, and moves
+    /// that canister at the end of the schedule if it has more messages.
+    pub(super) fn pop(&mut self) -> Option<Arc<Ingress>> {
+        let canister_id = self.schedule.pop_front()?;
+
+        let canister_ingress_queue = self.queues.get_mut(&canister_id).unwrap();
+
+        let res = canister_ingress_queue.pop_front();
+
+        if !canister_ingress_queue.is_empty() {
+            self.schedule.push_back(canister_id);
+        } else {
+            self.queues.remove(&canister_id);
+            self.size_bytes -= Self::PER_CANISTER_QUEUE_OVERHEAD_BYTES;
+        }
+
+        let msg = res.unwrap();
+        self.size_bytes -= Self::ingress_size_bytes(msg.as_ref());
+        debug_assert_eq!(Self::size_bytes(&self.queues), self.size_bytes);
+
+        self.total_ingress_count -= 1;
+
+        Some(msg)
     }
 
+    /// Skips the ingress messages for the currently scheduled canister,
+    /// and moves the canister to the end of scheduling queue.
+    pub(super) fn skip_ingress_input(&mut self) {
+        if let Some(canister_id) = self.schedule.pop_front() {
+            self.schedule.push_back(canister_id);
+        }
+    }
+
+    /// Returns a reference to the ingress message at the front of the queue,
+    /// or `None` if the queue is empty.
+    pub(super) fn peek(&self) -> Option<Arc<Ingress>> {
+        let canister_id = self.schedule.front()?;
+        // It is safe to unwrap here since for every value in `self.schedule`
+        // we must have corresponding non-empty queue in `self.queues`.
+        let ingress = self.queues.get(canister_id).unwrap().front().unwrap();
+        Some(Arc::clone(ingress))
+    }
+
+    /// Returns the number of Ingress messages in the queue.
     pub(super) fn size(&self) -> usize {
-        self.queue.len()
+        self.total_ingress_count
     }
 
+    /// Returns the number of canisters with incoming ingress messages.
+    pub(super) fn ingress_schedule_size(&self) -> usize {
+        self.schedule.len()
+    }
+
+    /// Return true if there are no Ingress messages in the queue,
+    /// or false otherwise.
     pub(super) fn is_empty(&self) -> bool {
         self.size() == 0
     }
 
-    /// Calls `filter` on each ingress message in the queue, retaining the
-    /// messages for whom the filter returns `true` and dropping the rest.
-    pub(super) fn filter_messages<F>(&mut self, filter: F)
+    /// Returns `true` if all ingress messages in the queue satisfy the predicate,
+    /// `false` otherwise.
+    pub(super) fn all_messages<F>(&self, mut predicate: F) -> bool
     where
-        F: FnMut(&Arc<Ingress>) -> bool,
+        F: FnMut(&Ingress) -> bool,
     {
-        self.queue.retain(filter);
-        self.size_bytes = Self::size_bytes(&self.queue)
+        self.queues
+            .values()
+            .all(|queue| queue.iter().all(|msg| predicate(msg)))
     }
 
-    /// Calculates the size in bytes of an `IngressQueue` holding the given
-    /// ingress messages.
-    ///
-    /// Time complexity: O(num_messages).
-    fn size_bytes(queue: &VecDeque<Arc<Ingress>>) -> usize {
-        size_of::<Self>()
-            + queue
-                .iter()
-                .map(|i| Self::ingress_size_bytes(i))
-                .sum::<usize>()
+    /// Retains only the ingress messages that satisfy the predicate, removing and
+    /// returning all the ingress messages that don't.
+    pub(super) fn retain_messages<F>(&mut self, mut predicate: F) -> Vec<Arc<Ingress>>
+    where
+        F: FnMut(&Ingress) -> bool,
+    {
+        let mut filtered_messages = vec![];
+        for canister_ingress_queue in self.queues.values_mut() {
+            canister_ingress_queue.retain_mut(|item| {
+                if predicate(item) {
+                    return true;
+                }
+                // Empty `canister_ingress_queues` and their corresponding schedule entry
+                // are pruned below.
+                filtered_messages.push(Arc::clone(item));
+                self.size_bytes -= Self::ingress_size_bytes(&(*item));
+                self.total_ingress_count -= 1;
+                false
+            });
+        }
+
+        self.schedule
+            .retain_mut(|canister_id| match self.queues.entry(*canister_id) {
+                Entry::Occupied(entry) if entry.get().is_empty() => {
+                    entry.remove();
+                    self.size_bytes -= Self::PER_CANISTER_QUEUE_OVERHEAD_BYTES;
+                    false
+                }
+                Entry::Occupied(_) => true,
+                Entry::Vacant(_) => unreachable!(),
+            });
+
+        filtered_messages
     }
 
     /// Returns an estimate of the size of an ingress message in bytes.
     fn ingress_size_bytes(msg: &Ingress) -> usize {
         size_of::<Arc<Ingress>>() + msg.count_bytes()
     }
+
+    /// Calculates the size in bytes of an `IngressQueue` holding the given
+    /// ingress messages.
+    ///
+    /// Time complexity: O(num_messages).
+    fn size_bytes(
+        per_canister_queues: &BTreeMap<Option<CanisterId>, VecDeque<Arc<Ingress>>>,
+    ) -> usize {
+        let mut size = size_of::<Self>();
+        for queue in per_canister_queues.values() {
+            size += queue
+                .iter()
+                .map(|i| Self::ingress_size_bytes(i))
+                .sum::<usize>()
+                + Self::PER_CANISTER_QUEUE_OVERHEAD_BYTES;
+        }
+        size
+    }
 }
 
 impl Default for IngressQueue {
     fn default() -> Self {
-        let queue = Default::default();
-        let size_bytes = Self::size_bytes(&queue);
-        Self { queue, size_bytes }
+        let queues = BTreeMap::new();
+        let size_bytes = Self::size_bytes(&queues);
+        Self {
+            schedule: VecDeque::new(),
+            queues,
+            total_ingress_count: 0,
+            size_bytes,
+        }
     }
 }
 
@@ -792,25 +495,5 @@ impl CountBytes for IngressQueue {
     /// Estimate of the queue size in bytes, including metadata.
     fn count_bytes(&self) -> usize {
         self.size_bytes
-    }
-}
-
-impl From<&IngressQueue> for Vec<pb_ingress::Ingress> {
-    fn from(item: &IngressQueue) -> Self {
-        item.queue.iter().map(|i| i.as_ref().into()).collect()
-    }
-}
-
-impl TryFrom<Vec<pb_ingress::Ingress>> for IngressQueue {
-    type Error = ProxyDecodeError;
-
-    fn try_from(item: Vec<pb_ingress::Ingress>) -> Result<Self, Self::Error> {
-        let queue = item
-            .into_iter()
-            .map(|i| i.try_into().map(Arc::new))
-            .collect::<Result<VecDeque<_>, _>>()?;
-        let size_bytes = Self::size_bytes(&queue);
-
-        Ok(IngressQueue { queue, size_bytes })
     }
 }

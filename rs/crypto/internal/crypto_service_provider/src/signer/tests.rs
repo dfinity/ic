@@ -1,46 +1,67 @@
-#![allow(clippy::unwrap_used)]
 use super::*;
 use crate::api::CspSigner;
 use crate::imported_test_utils::ed25519::csp_testvec;
-use crate::imported_utilities::sign_utils::user_public_key_from_bytes;
 use crate::key_id::KeyId;
-use crate::secret_key_store::test_utils::{MockSecretKeyStore, TempSecretKeyStore};
+use crate::public_key_store::PublicKeyStore;
+use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
+use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
+use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
+use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::types::{CspPublicKey, CspSecretKey, CspSignature};
-use crate::SecretKeyStore;
+use crate::vault::local_csp_vault::builder::LocalCspVaultBuilder;
+use crate::{LocalCspVault, SecretKeyStore};
+use assert_matches::assert_matches;
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
-use ic_crypto_internal_test_vectors::ed25519::Ed25519TestVector::{
-    RFC8032_ED25519_1, RFC8032_ED25519_SHA_ABC,
-};
+use ic_crypto_internal_seed::Seed;
+use ic_crypto_internal_test_vectors::ed25519::Ed25519TestVector::RFC8032_ED25519_SHA_ABC;
 use ic_crypto_internal_test_vectors::multi_bls12_381::{
     TESTVEC_MULTI_BLS12_381_1_PK, TESTVEC_MULTI_BLS12_381_1_SIG,
 };
 use ic_crypto_internal_test_vectors::test_data;
-use ic_types::crypto::AlgorithmId::Ed25519;
-use rand::CryptoRng;
+use ic_crypto_secrets_containers::SecretArray;
+use ic_crypto_standalone_sig_verifier::user_public_key_from_bytes;
+use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use rand::Rng;
-use rand::SeedableRng;
-use rand_chacha::ChaCha20Rng;
+use std::collections::HashSet;
+use strum::IntoEnumIterator;
 
-const KEY_ID: [u8; 32] = [0u8; 32];
+const KEY_ID: [u8; 32] = [0_u8; 32];
 
 mod sign_common {
     use super::*;
 
     #[test]
-    fn should_fail_with_secret_key_not_found_if_secret_key_not_found_in_key_store() {
-        let csp = Csp::of(csprng(), secret_key_store_returning_none());
+    fn should_fail_with_internal_error_if_secret_key_not_found_in_key_store() {
+        let csp = Csp::builder_for_test()
+            .with_vault(
+                LocalCspVault::builder_for_test()
+                    .with_mock_stores()
+                    .with_public_key_store(public_key_store_returning_some_node_signing_pubkey())
+                    .with_node_secret_key_store(secret_key_store_returning_none())
+                    .build(),
+            )
+            .build();
 
-        let result = csp.sign(Ed25519, b"msg", KeyId::from(KEY_ID));
+        let result = csp.sign(AlgorithmId::Ed25519, b"msg".to_vec(), KeyId::from(KEY_ID));
 
-        assert!(result.unwrap_err().is_secret_key_not_found());
+        assert!(result.unwrap_err().is_internal_error());
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "MockSecretKeyStore")]
     fn should_panic_when_secret_key_store_panics() {
-        let csp = Csp::of(csprng(), secret_key_store_panicking_on_usage());
+        let csp = Csp::builder_for_test()
+            .with_vault(
+                LocalCspVault::builder_for_test()
+                    .with_mock_stores()
+                    .with_public_key_store(public_key_store_returning_some_node_signing_pubkey())
+                    .with_node_secret_key_store(secret_key_store_panicking_on_usage())
+                    .build(),
+            )
+            .build();
 
-        let _ = csp.sign(Ed25519, b"msg", KeyId::from(KEY_ID));
+        let _ = csp.sign(AlgorithmId::Ed25519, b"msg".to_vec(), KeyId::from(KEY_ID));
     }
 }
 
@@ -52,25 +73,43 @@ mod sign_ed25519 {
     #[test]
     fn should_correctly_sign() {
         let (sk, _, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
+        let csp = Csp::builder_for_test()
+            .with_vault(
+                LocalCspVault::builder_for_test()
+                    .with_mock_stores()
+                    .with_public_key_store(public_key_store_returning_some_node_signing_pubkey())
+                    .with_node_secret_key_store(secret_key_store_always_returning(sk))
+                    .build(),
+            )
+            .build();
 
-        let csp = Csp::of(csprng(), secret_key_store_with(KeyId::from(KEY_ID), sk));
-
-        assert_eq!(csp.sign(Ed25519, &msg, KeyId::from(KEY_ID)).unwrap(), sig);
+        assert_eq!(
+            csp.sign(AlgorithmId::Ed25519, msg, KeyId::from(KEY_ID))
+                .unwrap(),
+            sig
+        );
     }
 
     #[test]
     fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
-        let sk_with_wrong_type = CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes(
-            [0u8; multi_types::SecretKeyBytes::SIZE],
+        let sk_with_wrong_type = CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes::new(
+            SecretArray::new_and_dont_zeroize_argument(&[0_u8; multi_types::SecretKeyBytes::SIZE]),
         ));
-        let csp = Csp::of(
-            csprng(),
-            secret_key_store_with(KeyId::from(KEY_ID), sk_with_wrong_type),
-        );
+        let csp = Csp::builder_for_test()
+            .with_vault(
+                LocalCspVault::builder_for_test()
+                    .with_mock_stores()
+                    .with_public_key_store(public_key_store_returning_some_node_signing_pubkey())
+                    .with_node_secret_key_store(secret_key_store_always_returning(
+                        sk_with_wrong_type,
+                    ))
+                    .build(),
+            )
+            .build();
 
-        let result = csp.sign(Ed25519, b"msg", KeyId::from(KEY_ID));
+        let result = csp.sign(AlgorithmId::Ed25519, b"msg".to_vec(), KeyId::from(KEY_ID));
 
-        assert!(result.unwrap_err().is_invalid_argument());
+        assert!(result.unwrap_err().is_internal_error());
     }
 }
 
@@ -80,10 +119,16 @@ mod verify_common {
     #[test]
     fn should_not_use_secret_key_store_during_verification() {
         let (_, pk, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
+        let csp = Csp::builder_for_test()
+            .with_vault(
+                LocalCspVault::builder_for_test()
+                    .with_mock_stores()
+                    .with_node_secret_key_store(secret_key_store_panicking_on_usage())
+                    .build(),
+            )
+            .build();
 
-        let csp = Csp::of(csprng(), secret_key_store_panicking_on_usage());
-
-        assert!(csp.verify(&sig, &msg, Ed25519, pk).is_ok());
+        assert!(csp.verify(&sig, &msg, AlgorithmId::Ed25519, pk).is_ok());
     }
 }
 
@@ -101,7 +146,10 @@ mod verify_ecdsa_p256 {
             test_data::CHROME_ECDSA_P256_PK_DER_HEX.as_ref(),
             test_data::CHROME_ECDSA_P256_SIG_RAW_HEX.as_ref(),
         );
-        let csp = Csp::of(csprng(), MockSecretKeyStore::new());
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
+            .build();
+
         assert!(csp.verify(&csp_sig, EMPTY_MSG, EcdsaP256, csp_pk).is_ok());
     }
 
@@ -111,7 +159,9 @@ mod verify_ecdsa_p256 {
             test_data::FIREFOX_ECDSA_P256_PK_DER_HEX.as_ref(),
             test_data::FIREFOX_ECDSA_P256_SIG_RAW_HEX.as_ref(),
         );
-        let csp = Csp::of(csprng(), MockSecretKeyStore::new());
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
+            .build();
 
         assert!(csp.verify(&csp_sig, EMPTY_MSG, EcdsaP256, csp_pk).is_ok());
     }
@@ -122,7 +172,10 @@ mod verify_ecdsa_p256 {
             test_data::SAFARI_ECDSA_P256_PK_DER_HEX.as_ref(),
             test_data::SAFARI_ECDSA_P256_SIG_RAW_HEX.as_ref(),
         );
-        let csp = Csp::of(csprng(), MockSecretKeyStore::new());
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
+            .build();
+
         assert!(csp.verify(&csp_sig, EMPTY_MSG, EcdsaP256, csp_pk).is_ok());
     }
 
@@ -132,7 +185,9 @@ mod verify_ecdsa_p256 {
             test_data::SAFARI_ECDSA_P256_PK_DER_HEX.as_ref(),
             test_data::FIREFOX_ECDSA_P256_SIG_RAW_HEX.as_ref(),
         );
-        let csp = Csp::of(csprng(), MockSecretKeyStore::new());
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
+            .build();
         let result = csp.verify(&wrong_sig, EMPTY_MSG, EcdsaP256, csp_pk);
         assert!(result.unwrap_err().is_signature_verification_error());
     }
@@ -146,7 +201,9 @@ mod verify_ecdsa_p256 {
         let wrong_msg = b"wrong message";
         assert_ne!(EMPTY_MSG, wrong_msg);
 
-        let csp = Csp::of(csprng(), MockSecretKeyStore::new());
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
+            .build();
         let result = csp.verify(&csp_sig, wrong_msg, EcdsaP256, csp_pk);
         assert!(result.unwrap_err().is_signature_verification_error());
     }
@@ -159,7 +216,9 @@ mod verify_ecdsa_p256 {
         );
         let sig_with_wrong_type =
             CspSignature::multi_bls12381_individual_from_hex(TESTVEC_MULTI_BLS12_381_1_SIG);
-        let csp = Csp::of(csprng(), MockSecretKeyStore::new());
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
+            .build();
         let result = csp.verify(&sig_with_wrong_type, EMPTY_MSG, EcdsaP256, csp_pk);
         assert!(result.unwrap_err().is_signature_verification_error());
     }
@@ -172,7 +231,9 @@ mod verify_ecdsa_p256 {
         );
         let pk_with_wrong_type =
             CspPublicKey::multi_bls12381_from_hex(TESTVEC_MULTI_BLS12_381_1_PK);
-        let csp = Csp::of(csprng(), MockSecretKeyStore::new());
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
+            .build();
         let result = csp.verify(&csp_sig, EMPTY_MSG, EcdsaP256, pk_with_wrong_type);
         assert!(result.unwrap_err().is_signature_verification_error());
     }
@@ -200,17 +261,22 @@ mod verify_secp256k1 {
     #[test]
     fn should_correctly_verify_signature() {
         let (csp_pk, csp_sig) = get_csp_pk_and_sig(PK, SIG);
-        let csp = Csp::of(csprng(), MockSecretKeyStore::new());
-        assert!(csp
-            .verify(&csp_sig, EMPTY_MSG, EcdsaSecp256k1, csp_pk)
-            .is_ok());
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
+            .build();
+        assert!(
+            csp.verify(&csp_sig, EMPTY_MSG, EcdsaSecp256k1, csp_pk)
+                .is_ok()
+        );
     }
 
     #[test]
     fn should_fail_to_verify_under_wrong_signature() {
         let (csp_pk, wrong_sig) =
             get_csp_pk_and_sig(PK, test_data::FIREFOX_ECDSA_P256_SIG_RAW_HEX.as_ref());
-        let csp = Csp::of(csprng(), MockSecretKeyStore::new());
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
+            .build();
         let result = csp.verify(&wrong_sig, EMPTY_MSG, EcdsaSecp256k1, csp_pk);
         assert!(result.unwrap_err().is_signature_verification_error());
     }
@@ -221,7 +287,9 @@ mod verify_secp256k1 {
         let wrong_msg = b"wrong message";
         assert_ne!(EMPTY_MSG, wrong_msg);
 
-        let csp = Csp::of(csprng(), MockSecretKeyStore::new());
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
+            .build();
         let result = csp.verify(&csp_sig, wrong_msg, EcdsaSecp256k1, csp_pk);
         assert!(result.unwrap_err().is_signature_verification_error());
     }
@@ -231,7 +299,9 @@ mod verify_secp256k1 {
         let (csp_pk, _csp_sig) = get_csp_pk_and_sig(PK, SIG);
         let sig_with_wrong_type =
             CspSignature::multi_bls12381_individual_from_hex(TESTVEC_MULTI_BLS12_381_1_SIG);
-        let csp = Csp::of(csprng(), MockSecretKeyStore::new());
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
+            .build();
         let result = csp.verify(&sig_with_wrong_type, EMPTY_MSG, EcdsaSecp256k1, csp_pk);
         assert!(result.unwrap_err().is_signature_verification_error());
     }
@@ -241,7 +311,9 @@ mod verify_secp256k1 {
         let (_csp_pk, csp_sig) = get_csp_pk_and_sig(PK, SIG);
         let pk_with_wrong_type =
             CspPublicKey::multi_bls12381_from_hex(TESTVEC_MULTI_BLS12_381_1_PK);
-        let csp = Csp::of(csprng(), MockSecretKeyStore::new());
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
+            .build();
         let result = csp.verify(&csp_sig, EMPTY_MSG, EcdsaSecp256k1, pk_with_wrong_type);
         assert!(result.unwrap_err().is_signature_verification_error());
     }
@@ -257,81 +329,167 @@ mod verify_secp256k1 {
 }
 
 mod verify_ed25519 {
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+
     use super::*;
+    use rand::{CryptoRng, Rng};
 
     // Here we only test with a single test vector: an extensive test with the
     // entire test vector suite is done at the crypto lib level.
     #[test]
     fn should_correctly_verify() {
-        let (_, pk, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
-        let csp = Csp::of(csprng(), MockSecretKeyStore::new());
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
+        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], rng);
 
-        assert!(csp.verify(&sig, &msg, Ed25519, pk).is_ok());
+        assert_eq!(csp.verify(&sig, &msg, AlgorithmId::Ed25519, pk), Ok(()));
     }
 
     #[test]
-    fn should_fail_to_verify_under_wrong_signature() {
-        let (_, pk, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
-        let (_, _, _, wrong_sig) = csp_testvec(RFC8032_ED25519_1);
+    fn should_correctly_verify_with_other_csp() {
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
+        let Fixture { csp: _, pk, sig } = Fixture::new(&msg[..], rng);
+
+        assert_eq!(
+            utils::new_csp(rng).verify(&sig, &msg, AlgorithmId::Ed25519, pk),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn should_fail_to_verify_under_signature_with_wrong_public_key() {
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
+        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], rng);
+        let Fixture { sig: wrong_sig, .. } = Fixture::new(&msg[..], rng);
         assert_ne!(sig, wrong_sig);
-        let csp = Csp::of(csprng(), MockSecretKeyStore::new());
 
-        let result = csp.verify(&wrong_sig, &msg, Ed25519, pk);
-
-        assert!(result.unwrap_err().is_signature_verification_error());
+        assert_matches!(
+            csp.verify(&wrong_sig, &msg, AlgorithmId::Ed25519, pk),
+            Err(CryptoError::SignatureVerification { .. })
+        );
     }
 
     #[test]
     fn should_fail_to_verify_under_wrong_message() {
-        let (_, pk, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
+        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], rng);
         let wrong_msg = b"wrong message";
         assert_ne!(msg, wrong_msg);
-        let csp = Csp::of(csprng(), MockSecretKeyStore::new());
 
-        let result = csp.verify(&sig, wrong_msg, Ed25519, pk);
-
-        assert!(result.unwrap_err().is_signature_verification_error());
+        assert_matches!(
+            csp.verify(&sig, wrong_msg, AlgorithmId::Ed25519, pk),
+            Err(CryptoError::SignatureVerification { .. })
+        );
     }
 
     #[test]
     fn should_fail_to_verify_under_wrong_public_key() {
-        let (_, pk, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
-        let (_, wrong_pk, _, _) = csp_testvec(RFC8032_ED25519_1);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
+        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], rng);
+        let Fixture { pk: wrong_pk, .. } = Fixture::new(&msg[..], rng);
         assert_ne!(pk, wrong_pk);
-        let csp = Csp::of(csprng(), MockSecretKeyStore::new());
 
-        let result = csp.verify(&sig, &msg, Ed25519, wrong_pk);
-
-        assert!(result.unwrap_err().is_signature_verification_error());
+        assert_matches!(
+            csp.verify(&sig, &msg, AlgorithmId::Ed25519, wrong_pk),
+            Err(CryptoError::SignatureVerification { .. })
+        );
     }
 
     #[test]
     fn should_fail_to_verify_if_signature_has_wrong_type() {
-        let (_, pk, msg, _) = csp_testvec(RFC8032_ED25519_SHA_ABC);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
+        let Fixture { csp, pk, sig: _ } = Fixture::new(&msg[..], rng);
         let sig_with_wrong_type =
             CspSignature::multi_bls12381_individual_from_hex(TESTVEC_MULTI_BLS12_381_1_SIG);
-        let csp = Csp::of(csprng(), MockSecretKeyStore::new());
 
-        let result = csp.verify(&sig_with_wrong_type, &msg, Ed25519, pk);
-
-        assert!(result.unwrap_err().is_signature_verification_error());
+        assert_matches!(
+            csp.verify(&sig_with_wrong_type, &msg, AlgorithmId::Ed25519, pk),
+            Err(CryptoError::SignatureVerification { .. })
+        );
     }
 
     #[test]
     fn should_fail_to_verify_if_signer_public_key_has_wrong_type() {
-        let (_, _, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
+        let Fixture { csp, pk: _, sig } = Fixture::new(&msg[..], rng);
         let pk_with_wrong_type =
             CspPublicKey::multi_bls12381_from_hex(TESTVEC_MULTI_BLS12_381_1_PK);
-        let csp = Csp::of(csprng(), MockSecretKeyStore::new());
 
-        let result = csp.verify(&sig, &msg, Ed25519, pk_with_wrong_type);
-
-        assert!(result.unwrap_err().is_signature_verification_error());
+        assert_matches!(
+            csp.verify(&sig, &msg, AlgorithmId::Ed25519, pk_with_wrong_type),
+            Err(CryptoError::SignatureVerification { .. })
+        );
     }
-}
 
-fn csprng() -> impl CryptoRng + Rng + Clone {
-    ChaCha20Rng::seed_from_u64(42)
+    #[test]
+    fn should_fail_to_verify_under_wrong_algorithm_id() {
+        let rng = &mut reproducible_rng();
+        let msg = utils::random_message(rng);
+
+        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], rng);
+
+        for wrong_algorithm_id in AlgorithmId::iter().filter(|id| *id != AlgorithmId::Ed25519) {
+            assert_matches!(
+                csp.verify(&sig, &msg[..], wrong_algorithm_id, pk.to_owned()),
+                Err(CryptoError::SignatureVerification { .. })
+            );
+        }
+    }
+
+    mod utils {
+        use super::*;
+
+        const RANDOM_MSG_MAX_LEN: usize = 100;
+
+        pub fn new_csp<R: Rng + CryptoRng>(rng: &mut R) -> Csp {
+            Csp::builder_for_test()
+                .with_vault(
+                    LocalCspVault::builder_for_test()
+                        .with_rng(Seed::from_rng(rng).into_rng())
+                        .build(),
+                )
+                .build()
+        }
+
+        pub fn random_message<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
+            let mut msg = vec![0_u8; rng.gen_range(0..RANDOM_MSG_MAX_LEN)];
+            rng.fill_bytes(&mut msg[..]);
+            msg
+        }
+    }
+
+    pub struct Fixture {
+        pub csp: Csp,
+        pub pk: CspPublicKey,
+        pub sig: CspSignature,
+    }
+
+    impl Fixture {
+        /// * Generates a [`Csp`] seeded with `rng`.
+        /// * Generates a random Ed25519 key pair by copying the `csp`'s node signing key pair.
+        /// * Signs `msg` using the private key.
+        pub fn new<R: Rng + CryptoRng>(msg: &[u8], rng: &mut R) -> Self {
+            let csp = utils::new_csp(rng);
+            let pk = csp
+                .csp_vault
+                .gen_node_signing_key_pair()
+                .expect("Failed to generate a key pair");
+
+            let sig = csp
+                .csp_vault
+                .as_ref()
+                .sign(msg.to_vec())
+                .expect("Failed to generate a signature");
+
+            Self { csp, pk, sig }
+        }
+    }
 }
 
 fn secret_key_store_returning_none() -> impl SecretKeyStore {
@@ -340,20 +498,32 @@ fn secret_key_store_returning_none() -> impl SecretKeyStore {
     sks
 }
 
-fn secret_key_store_with(key_id: KeyId, secret_key: CspSecretKey) -> impl SecretKeyStore {
-    let mut temp_store = TempSecretKeyStore::new();
-    let scope = None;
-    temp_store.insert(key_id, secret_key, scope).unwrap();
-    temp_store
+fn secret_key_store_always_returning(secret_key: CspSecretKey) -> impl SecretKeyStore {
+    let mut sks = MockSecretKeyStore::new();
+    sks.expect_get()
+        .returning(move |_key_id| Some(secret_key.clone()));
+    sks
 }
 
-fn secret_key_store_panicking_on_usage() -> impl SecretKeyStore {
+fn secret_key_store_panicking_on_usage() -> MockSecretKeyStore {
     let mut sks = MockSecretKeyStore::new();
     sks.expect_insert().never();
     sks.expect_get().never();
     sks.expect_contains().never();
     sks.expect_remove().never();
     sks
+}
+
+fn public_key_store_returning_some_node_signing_pubkey() -> impl PublicKeyStore {
+    let pk_proto = PublicKeyProto {
+        algorithm: AlgorithmId::Ed25519 as i32,
+        key_value: vec![42; 32],
+        ..Default::default()
+    };
+    let mut pks = MockPublicKeyStore::new();
+    pks.expect_node_signing_pubkey()
+        .returning(move || Some(pk_proto.clone()));
+    pks
 }
 
 #[test]
@@ -365,100 +535,121 @@ fn should_panic_when_panicking_secret_key_store_is_used() {
 
 mod multi {
     use super::*;
-    use crate::api::CspKeyGenerator;
-    use crate::keygen::public_key_hash_as_key_id;
-    use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
 
     #[test]
     fn pop_verifies() {
-        let csp = Csp::of(
-            ChaCha20Rng::seed_from_u64(42),
-            VolatileSecretKeyStore::new(),
-        );
-        let (public_key, pop) = csp
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+        let csp0 = Csp::builder_for_test().build();
+        let (public_key0, pop0) = csp0
+            .csp_vault
+            .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        assert!(csp
-            .verify_pop(&pop, AlgorithmId::MultiBls12_381, public_key)
-            .is_ok());
+        assert!(
+            csp0.verify_pop(&pop0, AlgorithmId::MultiBls12_381, public_key0)
+                .is_ok()
+        );
     }
 
     #[test]
-    fn pop_verification_fails_for_mismatched_public_key() {
-        let csp = Csp::of(
-            ChaCha20Rng::seed_from_u64(42),
-            VolatileSecretKeyStore::new(),
+    fn pop_verifies_using_any_csp() {
+        // in other words, pop verification doesn't depend on the state of the CSP
+        let [csp0, csp1] = csp_with_different_seeds();
+        let (public_key0, pop0) = csp0
+            .csp_vault
+            .gen_committee_signing_key_pair()
+            .expect("Failed to generate key pair with PoP");
+
+        let (public_key1, pop1) = csp1
+            .csp_vault
+            .gen_committee_signing_key_pair()
+            .expect("Failed to generate key pair with PoP");
+
+        assert!(
+            csp0.verify_pop(&pop1, AlgorithmId::MultiBls12_381, public_key1)
+                .is_ok()
         );
-        let (public_key1, _pop1) = csp
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
-            .expect("Failed to generate key pair with PoP");
-        let (_public_key2, pop2) = csp
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
-            .expect("Failed to generate key pair with PoP");
-        match csp.verify_pop(&pop2, AlgorithmId::MultiBls12_381, public_key1) {
-            Err(CryptoError::PopVerification { .. }) => (),
-            other => panic!("Incorrect response: {:?}", other),
-        }
+        assert!(
+            csp1.verify_pop(&pop0, AlgorithmId::MultiBls12_381, public_key0)
+                .is_ok()
+        );
     }
+
+    #[test]
+    fn pop_verification_fails_for_mismatched_public_key_or_pop() {
+        let [csp0, csp1] = csp_with_different_seeds();
+        let (public_key0, pop0) = csp0
+            .csp_vault
+            .gen_committee_signing_key_pair()
+            .expect("Failed to generate key pair with PoP");
+
+        let (public_key1, pop1) = csp1
+            .csp_vault
+            .gen_committee_signing_key_pair()
+            .expect("Failed to generate key pair with PoP");
+
+        // mismatched public key
+        assert_matches!(
+            csp0.verify_pop(&pop0, AlgorithmId::MultiBls12_381, public_key1.clone()),
+            Err(CryptoError::PopVerification { .. })
+        );
+        assert_matches!(
+            csp1.verify_pop(&pop1, AlgorithmId::MultiBls12_381, public_key0.clone()),
+            Err(CryptoError::PopVerification { .. })
+        );
+
+        // mismathced PoP
+        assert_matches!(
+            csp0.verify_pop(&pop1, AlgorithmId::MultiBls12_381, public_key0),
+            Err(CryptoError::PopVerification { .. })
+        );
+        assert_matches!(
+            csp1.verify_pop(&pop0, AlgorithmId::MultiBls12_381, public_key1),
+            Err(CryptoError::PopVerification { .. })
+        );
+    }
+
     #[test]
     fn pop_verification_fails_gracefully_on_incompatible_public_key() {
+        let [csp, verifier] = csp_and_verifier_with_different_seeds();
         let algorithm = AlgorithmId::MultiBls12_381;
-        let incompatible_algorithm = AlgorithmId::Ed25519;
-        let csp = Csp::of(
-            ChaCha20Rng::seed_from_u64(42),
-            VolatileSecretKeyStore::new(),
-        );
         let (_public_key, pop) = csp
-            .gen_key_pair_with_pop(algorithm)
+            .csp_vault
+            .gen_committee_signing_key_pair()
             .expect("PoP creation failed");
-        let incompatible_public_key = csp.gen_key_pair(incompatible_algorithm).unwrap();
-        let verifier = Csp::of(
-            ChaCha20Rng::seed_from_u64(69),
-            secret_key_store_panicking_on_usage(),
-        );
+        let incompatible_public_key = csp.csp_vault.gen_node_signing_key_pair().unwrap();
+
         let result = verifier.verify_pop(&pop, algorithm, incompatible_public_key);
         assert!(result.unwrap_err().is_pop_verification_error());
     }
+
     #[test]
     fn pop_verification_fails_gracefully_on_incompatible_algorithm_id() {
-        let algorithm = AlgorithmId::MultiBls12_381;
+        let [csp, verifier] = csp_and_verifier_with_different_seeds();
         let incompatible_algorithm = AlgorithmId::Ed25519;
-        let csp = Csp::of(
-            ChaCha20Rng::seed_from_u64(42),
-            VolatileSecretKeyStore::new(),
-        );
         let (public_key, pop) = csp
-            .gen_key_pair_with_pop(algorithm)
+            .csp_vault
+            .gen_committee_signing_key_pair()
             .expect("PoP creation failed");
-        let verifier = Csp::of(
-            ChaCha20Rng::seed_from_u64(69),
-            secret_key_store_panicking_on_usage(),
-        );
         let result = verifier.verify_pop(&pop, incompatible_algorithm, public_key);
         assert!(result.unwrap_err().is_pop_verification_error());
     }
 
     #[test]
     fn individual_signatures_verify() {
-        let csp = Csp::of(
-            ChaCha20Rng::seed_from_u64(69),
-            VolatileSecretKeyStore::new(),
-        );
+        let [csp, verifier] = csp_and_verifier_with_different_seeds();
         let (public_key, _pop) = csp
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+            .csp_vault
+            .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
         let message = b"Three turtle doves";
-        let key_id = public_key_hash_as_key_id(&public_key);
+        let key_id = KeyId::from(&public_key);
         let signature = csp
-            .sign(AlgorithmId::MultiBls12_381, message, key_id)
+            .sign(AlgorithmId::MultiBls12_381, message.to_vec(), key_id)
             .expect("Signing failed");
-        let verifier = Csp::of(
-            ChaCha20Rng::seed_from_u64(69),
-            secret_key_store_panicking_on_usage(),
+        assert!(
+            verifier
+                .verify(&signature, message, AlgorithmId::MultiBls12_381, public_key)
+                .is_ok()
         );
-        assert!(verifier
-            .verify(&signature, message, AlgorithmId::MultiBls12_381, public_key)
-            .is_ok());
     }
 
     #[test]
@@ -466,81 +657,65 @@ mod multi {
         let algorithm = AlgorithmId::MultiBls12_381;
         let incompatible_algorithm = AlgorithmId::Ed25519;
         let message = b"Three turtle doves";
-        let csp = Csp::of(
-            ChaCha20Rng::seed_from_u64(69),
-            VolatileSecretKeyStore::new(),
-        );
-        let public_key = csp.gen_key_pair(algorithm).unwrap();
+        let [csp, verifier] = csp_and_verifier_with_different_seeds();
+        let (public_key, _pop) = csp.csp_vault.gen_committee_signing_key_pair().unwrap();
         let incompatible_signature = {
-            let incompatible_public_key = csp.gen_key_pair(incompatible_algorithm).unwrap();
-            let incompatible_key_id = public_key_hash_as_key_id(&incompatible_public_key);
-            csp.sign(incompatible_algorithm, message, incompatible_key_id)
-                .expect("Signing failed")
+            let incompatible_public_key = csp.csp_vault.gen_node_signing_key_pair().unwrap();
+            let incompatible_key_id = KeyId::from(&incompatible_public_key);
+            csp.sign(
+                incompatible_algorithm,
+                message.to_vec(),
+                incompatible_key_id,
+            )
+            .expect("Signing failed")
         };
-        let verifier = Csp::of(
-            ChaCha20Rng::seed_from_u64(80),
-            secret_key_store_panicking_on_usage(),
-        );
+
         let result = verifier.verify(&incompatible_signature, message, algorithm, public_key);
+
         assert!(result.unwrap_err().is_signature_verification_error());
     }
 
     #[test]
     fn individual_signature_verification_fails_for_incompatible_public_key() {
         let algorithm = AlgorithmId::MultiBls12_381;
-        let incompatible_algorithm = AlgorithmId::Ed25519;
-        let csp = Csp::of(
-            ChaCha20Rng::seed_from_u64(42),
-            VolatileSecretKeyStore::new(),
-        );
-        let public_key = csp.gen_key_pair(algorithm).unwrap();
-        let key_id = public_key_hash_as_key_id(&public_key);
-        let incompatible_public_key = csp.gen_key_pair(incompatible_algorithm).unwrap();
+        let [csp, verifier] = csp_and_verifier_with_different_seeds();
+        let (public_key, _pop) = csp.csp_vault.gen_committee_signing_key_pair().unwrap();
+        let key_id = KeyId::from(&public_key);
+        let incompatible_public_key = csp.csp_vault.gen_node_signing_key_pair().unwrap();
         let message = b"Three turtle doves";
         let signature = csp
-            .sign(algorithm, message, key_id)
+            .sign(algorithm, message.to_vec(), key_id)
             .expect("Signing failed");
-        let verifier = Csp::of(
-            ChaCha20Rng::seed_from_u64(69),
-            secret_key_store_panicking_on_usage(),
-        );
+
         let result = verifier.verify(&signature, message, algorithm, incompatible_public_key);
+
         assert!(result.unwrap_err().is_signature_verification_error());
     }
 
     #[test]
     fn combined_signature_verifies() {
         // Actors:
-        let csp1 = Csp::of(
-            ChaCha20Rng::seed_from_u64(42),
-            VolatileSecretKeyStore::new(),
-        );
-        let csp2 = Csp::of(
-            ChaCha20Rng::seed_from_u64(7_832_645),
-            VolatileSecretKeyStore::new(),
-        );
-        let verifier = Csp::of(
-            ChaCha20Rng::seed_from_u64(69),
-            secret_key_store_panicking_on_usage(),
-        );
+        let [csp1, csp2, verifier] = csp_and_verifier_with_different_seeds();
 
         // The signatories need keys:
         let (public_key1, _pop1) = csp1
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+            .csp_vault
+            .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        let key_id1 = public_key_hash_as_key_id(&public_key1);
+        let key_id1 = KeyId::from(&public_key1);
         let (public_key2, _pop2) = csp2
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+            .csp_vault
+            .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        let key_id2 = public_key_hash_as_key_id(&public_key2);
+        let key_id2 = KeyId::from(&public_key2);
 
         // Two signatures combined should verify:
         let message = b"Three turtle doves";
         let signature1 = csp1
-            .sign(AlgorithmId::MultiBls12_381, message, key_id1)
+            .sign(AlgorithmId::MultiBls12_381, message.to_vec(), key_id1)
             .expect("Signing failed");
         let signature2 = csp2
-            .sign(AlgorithmId::MultiBls12_381, message, key_id2)
+            .sign(AlgorithmId::MultiBls12_381, message.to_vec(), key_id2)
             .expect("Signing failed");
         let combined_signature = verifier
             .combine_sigs(
@@ -552,49 +727,42 @@ mod multi {
             )
             .expect("Failed to combine signatures");
 
-        assert!(verifier
-            .verify_multisig(
-                vec![public_key1, public_key2],
-                combined_signature,
-                message,
-                AlgorithmId::MultiBls12_381
-            )
-            .is_ok());
+        assert!(
+            verifier
+                .verify_multisig(
+                    vec![public_key1, public_key2],
+                    combined_signature,
+                    message,
+                    AlgorithmId::MultiBls12_381,
+                )
+                .is_ok()
+        );
     }
 
     #[test]
     fn combining_signatures_fails_gracefully_for_unsuitable_algorithm_id() {
         // Actors:
-        let csp1 = Csp::of(
-            ChaCha20Rng::seed_from_u64(42),
-            VolatileSecretKeyStore::new(),
-        );
-        let csp2 = Csp::of(
-            ChaCha20Rng::seed_from_u64(7_832_645),
-            VolatileSecretKeyStore::new(),
-        );
-        let verifier = Csp::of(
-            ChaCha20Rng::seed_from_u64(69),
-            secret_key_store_panicking_on_usage(),
-        );
+        let [csp1, csp2, verifier] = csp_and_verifier_with_different_seeds();
 
         // The signatories need keys:
         let (public_key1, _pop1) = csp1
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+            .csp_vault
+            .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        let key_id1 = public_key_hash_as_key_id(&public_key1);
+        let key_id1 = KeyId::from(&public_key1);
         let (public_key2, _pop2) = csp2
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+            .csp_vault
+            .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        let key_id2 = public_key_hash_as_key_id(&public_key2);
+        let key_id2 = KeyId::from(&public_key2);
 
         // Two signatures combined should verify:
         let message = b"Three turtle doves";
         let signature1 = csp1
-            .sign(AlgorithmId::MultiBls12_381, message, key_id1)
+            .sign(AlgorithmId::MultiBls12_381, message.to_vec(), key_id1)
             .expect("Signing failed");
         let signature2 = csp2
-            .sign(AlgorithmId::MultiBls12_381, message, key_id2)
+            .sign(AlgorithmId::MultiBls12_381, message.to_vec(), key_id2)
             .expect("Signing failed");
         let combined_signature = verifier
             .combine_sigs(
@@ -618,20 +786,14 @@ mod multi {
     #[test]
     fn combining_signatures_fails_gracefully_for_mixed_algorithm_ids() {
         // Actors:
-        let csp1 = Csp::of(
-            ChaCha20Rng::seed_from_u64(42),
-            VolatileSecretKeyStore::new(),
-        );
-        let verifier = Csp::of(
-            ChaCha20Rng::seed_from_u64(69),
-            secret_key_store_panicking_on_usage(),
-        );
+        let [csp1, verifier] = csp_and_verifier_with_different_seeds();
 
         // The signatories need keys:
         let (public_key1, _pop1) = csp1
-            .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
+            .csp_vault
+            .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        let key_id1 = public_key_hash_as_key_id(&public_key1);
+        let key_id1 = KeyId::from(&public_key1);
 
         // An incompatible signature:
         let (_, incompatible_public_key2, message, incompatible_signature2) =
@@ -639,7 +801,7 @@ mod multi {
 
         // A compatible signature:
         let signature1 = csp1
-            .sign(AlgorithmId::MultiBls12_381, &message, key_id1)
+            .sign(AlgorithmId::MultiBls12_381, message, key_id1)
             .expect("Signing failed");
 
         // Combining should fail:
@@ -652,4 +814,65 @@ mod multi {
         );
         assert!(combination.unwrap_err().is_algorithm_not_supported());
     }
+}
+
+fn vault_builder_with_different_seeds<const N: usize>() -> [LocalCspVaultBuilder<
+    rand_chacha::ChaCha20Rng,
+    TempSecretKeyStore,
+    TempSecretKeyStore,
+    TempPublicKeyStore,
+>; N] {
+    assert!(N > 0);
+    let rng = &mut ReproducibleRng::new();
+    let mut vault_builders = Vec::with_capacity(N);
+    let mut seeds = HashSet::with_capacity(N);
+    for _ in 0..N {
+        let seed: [u8; 32] = rng.r#gen();
+        vault_builders
+            .push(LocalCspVault::builder_for_test().with_rng(Seed::from_bytes(&seed).into_rng()));
+        assert!(seeds.insert(seed));
+    }
+    vault_builders
+        .try_into()
+        .map_err(|_err| "cannot convert to fixed size array".to_string())
+        .unwrap()
+}
+
+/// Instantiate an array of `N` Csps where the last element
+/// plays the role of the verifier. This is a Csp instantiated using a vault with mocked
+/// stores
+fn csp_and_verifier_with_different_seeds<const N: usize>() -> [Csp; N] {
+    let vaults: [LocalCspVaultBuilder<_, _, _, _>; N] = vault_builder_with_different_seeds();
+    let mut csps = Vec::with_capacity(N);
+    for (i, vault_builder) in vaults.into_iter().enumerate() {
+        let csp = if i == N - 1 {
+            Csp::builder_for_test()
+                .with_vault(
+                    vault_builder
+                        .with_mock_stores()
+                        .with_node_secret_key_store(secret_key_store_panicking_on_usage())
+                        .build(),
+                )
+                .build()
+        } else {
+            Csp::builder_for_test()
+                .with_vault(vault_builder.build())
+                .build()
+        };
+        csps.push(csp);
+    }
+    csps.try_into()
+        .map_err(|_err| "cannot convert to fixed size array".to_string())
+        .unwrap()
+}
+
+fn csp_with_different_seeds<const N: usize>() -> [Csp; N] {
+    let vaults: [LocalCspVaultBuilder<_, _, _, _>; N] = vault_builder_with_different_seeds();
+    vaults
+        .into_iter()
+        .map(|vault| Csp::builder_for_test().with_vault(vault.build()).build())
+        .collect::<Vec<_>>()
+        .try_into()
+        .map_err(|_err| "cannot convert to fixed size array".to_string())
+        .unwrap()
 }

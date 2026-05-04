@@ -1,0 +1,41 @@
+= Rosetta API for ICP
+
+This is a standalone server which implements the Rosetta API originally developed by coinbase.
+Rosetta has since been renamed to https://docs.cdp.coinbase.com/mesh/docs/api-reference[Mesh].
+
+It allows cryptocurrency exchanges to read and write ICP transactions using a standard interface.
+
+The Rosetta API uses slightly different terminology to us:
+* Accounts are canisters on our system
+* Shards are subnets
+* Mempools are the ingress queue
+
+== Building and running the Rosetta image
+
+Enter the dev container
+
+```
+./ci/container/container-run.sh
+```
+
+Use Bazel to build the image locally:
+
+```
+$ bazel build //rs/rosetta-api/icp:rosetta_image.tar
+```
+
+Then load the image in docker
+
+```
+$ docker load -i $(bazel cquery //rs/rosetta-api/icp:rosetta_image.tar --output=files)
+...
+Loaded image: rosetta:image
+```
+
+Finally run the image
+
+```
+$ docker run -it rosetta:image
+```
+
+Remember to mount `/home/rosetta/log` and `/data` to persist logs and data after shutting down the docker container.

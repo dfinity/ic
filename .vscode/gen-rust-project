@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+set +x
+
+rm -f -- rust-project.json
+bazel run //:gen_rust_project

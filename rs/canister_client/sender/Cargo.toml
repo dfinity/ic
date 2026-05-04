@@ -1,14 +1,15 @@
 [package]
 name = "ic-canister-client-sender"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-base-types = { path = "../../types/base_types" }
-ic-crypto-sha = { path = "../../crypto/sha" }
-# TODO(CRP-909): use public crate (not the internal one) for ecdsa-secp256k1 when available.
-ecdsa-secp256k1 = { path = "../../crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1", package = "ic-crypto-internal-basic-sig-ecdsa-secp256k1"}
+ic-ed25519 = { path = "../../../packages/ic-ed25519" }
+ic-secp256k1 = { path = "../../../packages/ic-secp256k1" }
 ic-types = { path = "../../types/types" }
-ed25519-consensus = "2.0.1"
-rand = "0.8"
-rand_chacha = "0.3"
+rand = { workspace = true }
+rand_chacha = { workspace = true }

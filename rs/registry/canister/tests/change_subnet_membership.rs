@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use std::convert::TryFrom;
+use std::{collections::BTreeMap, convert::TryFrom};
 
 use assert_matches::assert_matches;
 
@@ -9,10 +9,10 @@ use dfn_candid::candid;
 use ic_base_types::NodeId;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
-    registry::{get_value_or_panic, prepare_registry},
+    registry::{get_value_or_panic, prepare_registry, prepare_registry_with_two_node_sets},
 };
 use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
 use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
@@ -23,7 +23,7 @@ use registry_canister::{
 
 #[test]
 fn test_the_anonymous_user_cannot_change_subnet_membership() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let num_nodes_in_subnet = 4_usize;
             let (init_mutate, subnet_id, unassigned_node_ids, _) =
@@ -104,10 +104,10 @@ fn test_the_anonymous_user_cannot_change_subnet_membership() {
 }
 
 #[test]
-fn test_a_canister_other_than_the_proposals_canister_cannot_change_subnet_membership() {
-    local_test_on_nns_subnet(|runtime| {
+fn test_a_canister_other_than_the_governance_canister_cannot_change_subnet_membership() {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
-            // An attacker got a canister that is trying to pass for the proposals
+            // An attacker got a canister that is trying to pass for the governance
             // canister...
             let attacker_canister = set_up_universal_canister(&runtime).await;
             // ... but thankfully, it does not have the right ID
@@ -145,7 +145,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_change_subnet_member
             };
 
             // The attacker canister tries to add nodes to a subnet, pretending to be the
-            // proposals canister. This should have no effect.
+            // governance canister. This should have no effect.
             assert!(
                 !forward_call_via_universal_canister(
                     &attacker_canister,
@@ -177,7 +177,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_change_subnet_member
 
 #[test]
 fn test_change_subnet_membership_succeeds() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let num_nodes_in_subnet = 4_usize;
             let (init_mutate, subnet_id, unassigned_node_ids, _) =
@@ -222,12 +222,12 @@ fn test_change_subnet_membership_succeeds() {
                 node_ids_remove: node_ids_to_remove,
             };
 
-            // Install the universal canister in place of the proposals canister
-            let fake_proposal_canister = set_up_universal_canister(&runtime).await;
-            // Since it takes the id reserved for the proposal canister, it can impersonate
+            // Install the universal canister in place of the governance canister
+            let fake_governance_canister = set_up_universal_canister(&runtime).await;
+            // Since it takes the id reserved for the governance canister, it can impersonate
             // it
             assert_eq!(
-                fake_proposal_canister.canister_id(),
+                fake_governance_canister.canister_id(),
                 ic_nns_constants::GOVERNANCE_CANISTER_ID
             );
 
@@ -241,7 +241,7 @@ fn test_change_subnet_membership_succeeds() {
 
             assert!(
                 forward_call_via_universal_canister(
-                    &fake_proposal_canister,
+                    &fake_governance_canister,
                     &registry,
                     "change_subnet_membership",
                     Encode!(&payload).unwrap()
@@ -277,6 +277,134 @@ fn test_change_subnet_membership_succeeds() {
                 .collect();
 
             assert_eq!(node_ids_current, node_ids_expected);
+
+            Ok(())
+        }
+    });
+}
+
+#[test]
+fn test_change_subnet_membership_duplicate_nodes() {
+    state_machine_test_on_nns_subnet(|runtime| {
+        async move {
+            let (init_mutate, subnet_1, subnet_2, _nodes, _) =
+                prepare_registry_with_two_node_sets(3, 1, true);
+
+            let subnet_2 = subnet_2.unwrap();
+
+            let registry = set_up_registry_canister(
+                &runtime,
+                RegistryCanisterInitPayloadBuilder::new()
+                    .push_init_mutate_request(init_mutate)
+                    .build(),
+            )
+            .await;
+
+            let mut subnet_nodes: BTreeMap<_, Vec<_>> = BTreeMap::new();
+            // Get the initial node membership in the subnet
+            for subnet_id in [&subnet_1, &subnet_2] {
+                let subnet_record = get_value_or_panic::<SubnetRecord>(
+                    &registry,
+                    make_subnet_record_key(*subnet_id).as_bytes(),
+                )
+                .await;
+
+                let principals: Vec<_> = subnet_record
+                    .membership
+                    .iter()
+                    .map(|principal| PrincipalId::try_from(principal).unwrap())
+                    .collect();
+
+                subnet_nodes.insert(subnet_id, principals);
+            }
+
+            // This payload attempts to add a node from subnet 1
+            // to subnet 2, while it is still a member of subnet 1.
+            // It should fail because of the invariant checks.
+            let payload = ChangeSubnetMembershipPayload {
+                subnet_id: subnet_2.get(),
+                node_ids_add: vec![NodeId::new(
+                    *subnet_nodes.get(&subnet_1).unwrap().first().unwrap(),
+                )],
+                node_ids_remove: vec![NodeId::new(
+                    *subnet_nodes.get(&subnet_2).unwrap().first().unwrap(),
+                )],
+            };
+
+            // Install the universal canister in place of the governance canister
+            let fake_governance_canister = set_up_universal_canister(&runtime).await;
+            // Since it takes the id reserved for the governance canister, it can impersonate
+            // it
+            assert_eq!(
+                fake_governance_canister.canister_id(),
+                ic_nns_constants::GOVERNANCE_CANISTER_ID
+            );
+
+            assert!(
+                !forward_call_via_universal_canister(
+                    &fake_governance_canister,
+                    &registry,
+                    "change_subnet_membership",
+                    Encode!(&payload).unwrap()
+                )
+                .await
+            );
+
+            // Remove two nodes from subnet 1 and assign to subnet 2
+            let nodes_to_remove: Vec<_> = subnet_nodes
+                .get(&subnet_1)
+                .unwrap()
+                .iter()
+                .take(2)
+                .map(|n| NodeId::new(*n))
+                .collect();
+
+            // This payload removes two nodes from the subnet 1 in order to later
+            // add them to subnet 2.
+            let payload = ChangeSubnetMembershipPayload {
+                subnet_id: subnet_1.get(),
+                node_ids_remove: nodes_to_remove.clone(),
+                node_ids_add: vec![],
+            };
+
+            // Remove two nodes from subnet_1
+            assert!(
+                forward_call_via_universal_canister(
+                    &fake_governance_canister,
+                    &registry,
+                    "change_subnet_membership",
+                    Encode!(&payload).unwrap()
+                )
+                .await
+            );
+
+            // This payload adds the two removed nodes from subnet 1.
+            let payload = ChangeSubnetMembershipPayload {
+                subnet_id: subnet_2.get(),
+                node_ids_add: nodes_to_remove.clone(),
+                node_ids_remove: vec![],
+            };
+
+            // Add two nodes to subnet_2
+            assert!(
+                forward_call_via_universal_canister(
+                    &fake_governance_canister,
+                    &registry,
+                    "change_subnet_membership",
+                    Encode!(&payload).unwrap()
+                )
+                .await
+            );
+
+            for (id, expected_num_nodes) in [(subnet_1, 1), (subnet_2, 3)] {
+                let subnet_record = get_value_or_panic::<SubnetRecord>(
+                    &registry,
+                    make_subnet_record_key(id).as_bytes(),
+                )
+                .await;
+
+                assert_eq!(subnet_record.membership.len(), expected_num_nodes);
+            }
 
             Ok(())
         }

@@ -1,18 +1,19 @@
 use crate::labeled_tree_visitor::LabeledTreeVisitor;
 use ic_canonical_state::{
+    LabelLike,
     encoding::{decode_message, decode_stream_header},
     size_limit_visitor::{Matcher, SizeLimitVisitor},
     subtree_visitor::{Pattern, SubtreeVisitor},
-    traverse, LabelLike,
+    traverse,
 };
 use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree};
-use ic_interfaces::certified_stream_store::DecodeStreamError;
+use ic_interfaces_certified_stream_store::DecodeStreamError;
 use ic_protobuf::messaging::xnet::v1;
 use ic_protobuf::proxy::ProtoProxy;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    Height, SubnetId,
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
-    SubnetId,
 };
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -29,7 +30,7 @@ fn find_path<'a>(
     for l in path.iter() {
         match tref {
             LabeledTree::Leaf(_) => return None,
-            LabeledTree::SubTree(ref mut children) => {
+            LabeledTree::SubTree(children) => {
                 tref = children.get_mut(&Label::from(l))?;
             }
         }
@@ -71,6 +72,7 @@ fn find_path<'a>(
 /// structure.
 pub fn encode_stream_slice(
     state: &ReplicatedState,
+    height: Height,
     subnet: SubnetId,
     from: StreamIndex,
     to: StreamIndex,
@@ -79,7 +81,7 @@ pub fn encode_stream_slice(
     use Matcher as M;
     use Pattern as P;
 
-    let byte_limit = byte_limit.unwrap_or(std::usize::MAX);
+    let byte_limit = byte_limit.unwrap_or(usize::MAX);
     let size_limit_pattern = vec![
         M::Label(LABEL_STREAMS.to_vec()),
         M::Any,
@@ -114,19 +116,18 @@ pub fn encode_stream_slice(
         ),
     );
 
-    let mut tree = traverse(state, SubtreeVisitor::new(&pattern, visitor));
+    let mut tree = traverse(state, height, SubtreeVisitor::new(&pattern, visitor));
     let mut actual_to = from;
 
     // The crypto library that constructs witnesses doesn't like empty subtrees as
     // input, so we remove `messages` if it's empty.
     if let Some(LabeledTree::SubTree(stream)) =
         find_path(&mut tree, &[LABEL_STREAMS, subnet.as_slice()])
+        && let Some(LabeledTree::SubTree(messages)) = stream.get(&Label::from(LABEL_MESSAGES))
     {
-        if let Some(LabeledTree::SubTree(messages)) = stream.get(&Label::from(LABEL_MESSAGES)) {
-            actual_to += (messages.len() as u64).into();
-            if messages.is_empty() {
-                stream.remove(&Label::from(LABEL_MESSAGES));
-            }
+        actual_to += (messages.len() as u64).into();
+        if messages.is_empty() {
+            stream.remove(&Label::from(LABEL_MESSAGES));
         }
     }
 
@@ -176,7 +177,7 @@ pub fn stream_slice_partial_tree(
 }
 
 pub fn encode_tree(t: LabeledTree<Vec<u8>>) -> Vec<u8> {
-    v1::LabeledTree::proxy_encode(t).expect("failed to serialize a labeled tree")
+    v1::LabeledTree::proxy_encode(t)
 }
 
 /// Decodes a stream slice and the subnet it came from from a serialized
@@ -191,7 +192,7 @@ pub fn decode_stream_slice(
 /// Decodes a labeled tree from a byte buffer.
 pub fn decode_labeled_tree(bytes: &[u8]) -> Result<LabeledTree<Vec<u8>>, DecodeStreamError> {
     v1::LabeledTree::proxy_decode(bytes).map_err(|err| {
-        DecodeStreamError::SerializationError(format!("failed to decode stream: {}", err))
+        DecodeStreamError::SerializationError(format!("failed to decode stream: {err}"))
     })
 }
 
@@ -200,7 +201,11 @@ pub fn decode_labeled_tree(bytes: &[u8]) -> Result<LabeledTree<Vec<u8>>, DecodeS
 
 /// An auxiliary structure that mirrors the xnet streams data encoded in
 /// canonical form, starting from the root of the tree.
+///
+/// Fail on unknown fields, to prevent malicious replicas from arbitrarily
+/// padding `CertifiedStreamSlices`.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct EncodedStreams<'a> {
     #[serde(borrow)]
     streams: BTreeMap<SubnetId, EncodedStream<'a>>,
@@ -208,7 +213,11 @@ struct EncodedStreams<'a> {
 
 /// An auxiliary structure that mirrors a single xnet stream slice encoded in
 /// canonical form.
+///
+/// Fail on unknown fields, to prevent malicious replicas from arbitrarily
+/// padding `CertifiedStreamSlices`.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct EncodedStream<'a> {
     #[serde(borrow)]
     header: &'a serde_bytes::Bytes,
@@ -225,8 +234,7 @@ pub fn decode_slice_from_tree(
     let streams = EncodedStreams::deserialize(tree_deserializer::LabeledTreeDeserializer::new(t))
         .map_err(|err| {
         DecodeStreamError::SerializationError(format!(
-            "failed to deserialize encoded streams: {}",
-            err
+            "failed to deserialize encoded streams: {err}"
         ))
     })?;
 
@@ -242,8 +250,7 @@ pub fn decode_slice_from_tree(
     let header: StreamHeader =
         decode_stream_header(encoded_stream.header.as_ref()).map_err(|err| {
             DecodeStreamError::SerializationError(format!(
-                "failed to deserialize stream header from CBOR: {}",
-                err
+                "failed to deserialize stream header from CBOR: {err}"
             ))
         })?;
 
@@ -257,8 +264,7 @@ pub fn decode_slice_from_tree(
         for (idx, bytes) in encoded_stream.messages.into_iter() {
             let msg = decode_message(bytes.as_ref()).map_err(|err| {
                 DecodeStreamError::SerializationError(format!(
-                    "failed to deserialize message {} from subnet {}: {}",
-                    idx, subnet, err
+                    "failed to deserialize message {idx} from subnet {subnet}: {err}"
                 ))
             })?;
 
@@ -273,11 +279,14 @@ pub fn decode_slice_from_tree(
             queue.push(msg);
         }
 
-        if queue.begin() < header.begin || header.end < queue.end() {
-            return Err(DecodeStreamError::SerializationError(
-                format!("the range of message indices [{}, {}) does not agree with the range in header [{}, {})",
-                        queue.begin(), queue.end(), header.begin, header.end)
-            ));
+        if queue.begin() < header.begin() || header.end() < queue.end() {
+            return Err(DecodeStreamError::SerializationError(format!(
+                "the range of message indices [{}, {}) does not agree with the range in header [{}, {})",
+                queue.begin(),
+                queue.end(),
+                header.begin(),
+                header.end()
+            )));
         }
     }
 

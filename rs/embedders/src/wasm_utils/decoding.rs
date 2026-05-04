@@ -1,22 +1,17 @@
+use ic_types::NumBytes;
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use std::io::Read;
 use std::sync::Arc;
-
-/// Maximum size of a WebAssembly module.
-pub const MAX_WASM_MODULE_SIZE_BYTES: usize = 10 * 1024 * 1024;
-
-fn make_module_too_large_error() -> WasmValidationError {
-    WasmValidationError::DecodingError(format!(
-        "Wasm module is too large, it can be at most {} bytes",
-        MAX_WASM_MODULE_SIZE_BYTES
-    ))
-}
 
 enum WasmEncoding {
     Wasm,
     Gzip,
 }
 
+/// # Warning
+///
+/// If the Wasm is gzipped, then the returned size cannot be trusted. It would
+/// come from the gzip footer which could have been manipulated.
 fn wasm_encoding_and_size(
     module_bytes: &[u8],
 ) -> Result<(WasmEncoding, usize), WasmValidationError> {
@@ -39,7 +34,7 @@ fn wasm_encoding_and_size(
         // Get the uncompressed size from the footer.
         // The size is in the last 4 bytes in little-endian encoding.
         // https://datatracker.ietf.org/doc/html/rfc1952.html#page-5
-        let mut isize_bytes = [0u8; 4];
+        let mut isize_bytes = [0_u8; 4];
         // We checked the size in advance so it's safe to access the last 4 bytes.
         isize_bytes.copy_from_slice(&module_bytes[module_bytes.len() - 4..module_bytes.len()]);
         let uncompressed_size = u32::from_le_bytes(isize_bytes) as usize;
@@ -51,20 +46,31 @@ fn wasm_encoding_and_size(
     ))
 }
 
-/// Returns the size of the WASM that will result from decoding this module
-/// (which may require uncompressing it). This function doesn't actually unzip
-/// the module - it just reads the header and footer, so is safe to run outside
-/// of the sandbox.
+/// Returns the expected size of the Wasm that will result from decoding this module
+/// (which may require uncompressing it).
+///
+/// # Warning
+/// The returned size cannot be trusted. If the canisters is compressed, the
+/// size in the gzip file may have been manipulated.
+///
+/// This function doesn't actually unzip the module - it just reads the header
+/// and footer, so is safe to run outside of the sandbox.
 pub fn decoded_wasm_size(module_bytes: &[u8]) -> Result<usize, WasmValidationError> {
     wasm_encoding_and_size(module_bytes).map(|(_, s)| s)
 }
 
 /// Decodes a WebAssembly module, uncompressing it if required.
-pub fn decode_wasm(module: Arc<Vec<u8>>) -> Result<BinaryEncodedWasm, WasmValidationError> {
+pub fn decode_wasm(
+    max_size: NumBytes,
+    module: Arc<Vec<u8>>,
+) -> Result<BinaryEncodedWasm, WasmValidationError> {
     let module_bytes = module.as_slice();
     let (encoding, uncompressed_size) = wasm_encoding_and_size(module_bytes)?;
-    if uncompressed_size > MAX_WASM_MODULE_SIZE_BYTES {
-        return Err(make_module_too_large_error());
+    if uncompressed_size as u64 > max_size.get() {
+        return Err(WasmValidationError::ModuleTooLarge {
+            size: uncompressed_size as u64,
+            allowed: max_size.get(),
+        });
     }
 
     match encoding {
@@ -72,8 +78,7 @@ pub fn decode_wasm(module: Arc<Vec<u8>>) -> Result<BinaryEncodedWasm, WasmValida
         WasmEncoding::Gzip => {
             let decoder = libflate::gzip::Decoder::new(module_bytes).map_err(|e| {
                 WasmValidationError::DecodingError(format!(
-                    "failed to decode compressed Wasm module: {}",
-                    e
+                    "failed to decode compressed Wasm module: {e}"
                 ))
             })?;
 
@@ -89,8 +94,7 @@ pub fn decode_wasm(module: Arc<Vec<u8>>) -> Result<BinaryEncodedWasm, WasmValida
                 .read_to_end(&mut buf)
                 .map_err(|e| {
                     WasmValidationError::DecodingError(format!(
-                        "failed to decode compressed Wasm module: {}",
-                        e
+                        "failed to decode compressed Wasm module: {e}"
                     ))
                 })?;
 

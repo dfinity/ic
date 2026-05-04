@@ -15,13 +15,13 @@
     },
     "ledger": {
       "type": "custom",
-      "candid": "../rosetta-api/ledger_canister/ledger.did",
+      "candid": "../ledger_suite/icp/ledger.did",
       "wasm": "../target/wasm32-unknown-unknown/release/ledger-canister.wasm",
       "build": "cargo build --target wasm32-unknown-unknown --release -p ledger-canister"
     },
     "root": {
       "type": "custom",
-      "candid": "handlers/root/canister/root.did",
+      "candid": "handlers/root/impl/canister/root.did",
       "wasm": "../target/wasm32-unknown-unknown/release/root-canister.wasm",
       "build": "cargo build --target wasm32-unknown-unknown --release -p ic-nns-handler-root"
     },
@@ -33,8 +33,8 @@
     },
     "lifeline": {
       "type": "custom",
-      "candid": "handlers/lifeline/lifeline.did",
-      "wasm": "../target/wasm32-unknown-unknown/release/lifeline.wasm",
+      "candid": "handlers/lifeline/impl/lifeline.did",
+      "wasm": "../target/wasm32-unknown-unknown/release/lifeline_canister.wasm",
       "build": "cargo build --target wasm32-unknown-unknown --release -p lifeline"
     },
     "genesis-token": {

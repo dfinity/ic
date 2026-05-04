@@ -1,0 +1,122 @@
+syntax = "proto3";
+
+package types.v1;
+
+import "types/v1/errors.proto";
+import "types/v1/types.proto";
+
+message HttpHeader {
+  string name = 1;
+  bytes value = 2;
+}
+
+message CanisterHttpRequest {
+  string url = 1;
+  bytes body = 2;
+  repeated HttpHeader headers = 3;
+}
+
+message CanisterHttpResponse {
+  uint64 id = 1;
+  reserved 2;
+  types.v1.CanisterId canister_id = 4;
+  CanisterHttpResponseContent content = 3;
+}
+
+message CanisterHttpResponseMetadata {
+  uint64 id = 1;
+  reserved 2;
+  bytes content_hash = 3;
+  uint64 registry_version = 4;
+  string replica_version = 5;
+  uint32 content_size = 6;
+  bool is_reject = 7;
+}
+
+message CanisterHttpResponseContent {
+  reserved 1;
+  oneof status {
+    CanisterHttpReject reject = 2;
+    bytes success = 3;
+  }
+}
+
+message CanisterHttpReject {
+  reserved 1;
+  reserved "reject_code_old";
+  types.v1.RejectCode reject_code = 3;
+  string message = 2;
+}
+
+message CanisterHttpResponseSignature {
+  bytes signer = 1;
+  bytes signature = 2;
+}
+
+message CanisterHttpResponseWithConsensus {
+  CanisterHttpResponse response = 1;
+  bytes hash = 2;
+  uint64 registry_version = 3;
+  string replica_version = 8;
+  reserved 4;
+  reserved 5;
+  reserved 6;
+  repeated CanisterHttpResponseSignature signatures = 7;
+  uint32 content_size = 9;
+  bool is_reject = 10;
+}
+
+message CanisterHttpShare {
+  CanisterHttpResponseMetadata metadata = 1;
+  CanisterHttpResponseSignature signature = 2;
+}
+
+message CanisterHttpResponseDivergence {
+  repeated CanisterHttpShare shares = 1;
+}
+
+message FlexibleCanisterHttpResponseWithProof {
+  CanisterHttpResponse response = 1;
+  CanisterHttpShare proof = 2;
+}
+
+message FlexibleCanisterHttpResponses {
+  uint64 callback_id = 1;
+  repeated FlexibleCanisterHttpResponseWithProof responses = 2;
+}
+
+message FlexibleCanisterHttpTimeout {}
+
+message FlexibleCanisterHttpResponsesTooLarge {
+  repeated CanisterHttpShare all_seen_shares = 1;
+  uint32 total_requests = 2;
+  uint32 min_responses = 3;
+}
+
+message FlexibleCanisterHttpTooManyRejects {
+  repeated FlexibleCanisterHttpResponseWithProof reject_responses = 1;
+}
+
+message FlexibleCanisterHttpError {
+  uint64 callback_id = 1;
+  oneof error_details {
+    FlexibleCanisterHttpTimeout timeout = 2;
+    FlexibleCanisterHttpResponsesTooLarge responses_too_large = 3;
+    FlexibleCanisterHttpTooManyRejects too_many_rejects = 4;
+  }
+}
+
+message CanisterHttpResponseMessage {
+  oneof message_type {
+    CanisterHttpResponseWithConsensus response = 1;
+    uint64 timeout = 2;
+    CanisterHttpResponseDivergence divergence_response = 3;
+    FlexibleCanisterHttpResponses flexible_responses = 4;
+    FlexibleCanisterHttpError flexible_error = 5;
+  }
+}
+
+message CanisterHttpArtifact {
+  CanisterHttpShare share = 1;
+  optional CanisterHttpResponse response = 2;
+}

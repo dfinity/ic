@@ -1,13 +1,5 @@
-use ic_crypto_internal_basic_sig_der_utils::PkixAlgorithmIdentifier;
-use ic_crypto_internal_basic_sig_ecdsa_secp256r1::der_encoding_from_xy_coordinates as p256_from_coordinates;
 use ic_crypto_internal_basic_sig_rsa_pkcs1::RsaPublicKey;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
-use simple_asn1::oid;
-
-/// Return the algorithm identifier associated with COSE encoded keys
-pub fn algorithm_identifier() -> PkixAlgorithmIdentifier {
-    PkixAlgorithmIdentifier::new_with_empty_param(oid!(1, 3, 6, 1, 4, 1, 56387, 1, 1))
-}
 
 type CborMap = std::collections::BTreeMap<serde_cbor::Value, serde_cbor::Value>;
 
@@ -15,7 +7,7 @@ type CborMap = std::collections::BTreeMap<serde_cbor::Value, serde_cbor::Value>;
 ///
 /// Each variant wraps the standard DER encoding of a key for that
 /// algorithm
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 enum CosePublicKey {
     EcdsaP256Sha256(Vec<u8>),
     RsaPkcs1v15Sha256(Vec<u8>),
@@ -45,8 +37,8 @@ const COSE_KTY_RSA: serde_cbor::Value = serde_cbor::Value::Integer(3);
 const COSE_PARAM_RSA_N: serde_cbor::Value = serde_cbor::Value::Integer(-1);
 const COSE_PARAM_RSA_E: serde_cbor::Value = serde_cbor::Value::Integer(-2);
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-/// An error that occured while parsing the COSE key
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+/// An error that occurred while parsing the COSE key
 enum CosePublicKeyParseError {
     /// The key is malformed (not valid CBOR with COSE formatting)
     MalformedPublicKey(AlgorithmId),
@@ -66,20 +58,20 @@ impl CosePublicKey {
     /// The decoded public key
     pub fn from_cbor(pk_cose: &[u8]) -> Result<Self, CosePublicKeyParseError> {
         let parsed_value: serde_cbor::value::Value = serde_cbor::from_slice(pk_cose)
-            .map_err(|_| CosePublicKeyParseError::MalformedPublicKey(AlgorithmId::Placeholder))?;
+            .map_err(|_| CosePublicKeyParseError::MalformedPublicKey(AlgorithmId::Unspecified))?;
 
         if let serde_cbor::Value::Map(fields) = parsed_value {
             let kty =
                 fields
                     .get(&COSE_PARAM_KTY)
                     .ok_or(CosePublicKeyParseError::MalformedPublicKey(
-                        AlgorithmId::Placeholder,
+                        AlgorithmId::Unspecified,
                     ))?;
             let alg =
                 fields
                     .get(&COSE_PARAM_ALG)
                     .ok_or(CosePublicKeyParseError::MalformedPublicKey(
-                        AlgorithmId::Placeholder,
+                        AlgorithmId::Unspecified,
                     ))?;
 
             if *kty == COSE_KTY_EC2 && *alg == COSE_ALG_ES256 {
@@ -92,16 +84,16 @@ impl CosePublicKey {
             }
         } else {
             Err(CosePublicKeyParseError::MalformedPublicKey(
-                AlgorithmId::Placeholder,
+                AlgorithmId::Unspecified,
             )) // not a map!
         }
     }
 
     fn verify_key_ops(fields: &CborMap) -> Result<(), CosePublicKeyParseError> {
-        if let Some(key_ops) = fields.get(&COSE_PARAM_KEY_OPS) {
-            if *key_ops != serde_cbor::Value::Text("verify".to_string()) {
-                return Err(CosePublicKeyParseError::AlgorithmNotSupported);
-            }
+        if let Some(key_ops) = fields.get(&COSE_PARAM_KEY_OPS)
+            && *key_ops != serde_cbor::Value::Text("verify".to_string())
+        {
+            return Err(CosePublicKeyParseError::AlgorithmNotSupported);
         }
 
         Ok(())
@@ -145,9 +137,11 @@ impl CosePublicKey {
                     ));
                 }
 
-                let der = p256_from_coordinates(x, y).map_err(|_| {
+                let pk = ic_secp256r1::PublicKey::deserialize_from_xy(x, y).map_err(|_| {
                     CosePublicKeyParseError::MalformedPublicKey(AlgorithmId::EcdsaP256)
                 })?;
+
+                let der = pk.serialize_der();
                 Ok(Self::EcdsaP256Sha256(der))
             }
             (_, _) => Err(CosePublicKeyParseError::MalformedPublicKey(
@@ -226,7 +220,7 @@ pub fn parse_cose_public_key(pk_cose: &[u8]) -> CryptoResult<(AlgorithmId, Vec<u
         }
         Err(CosePublicKeyParseError::AlgorithmNotSupported) => {
             Err(CryptoError::AlgorithmNotSupported {
-                algorithm: AlgorithmId::Placeholder,
+                algorithm: AlgorithmId::Unspecified,
                 reason: "Algorithm not supported in COSE parser".to_string(),
             })
         }

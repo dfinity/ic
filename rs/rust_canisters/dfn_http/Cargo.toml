@@ -1,14 +1,17 @@
 [package]
 name = "dfn_http"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-candid = "0.8.1"
-serde = "1.0.99"
+candid = { workspace = true }
 dfn_candid = { path = "../dfn_candid" }
 dfn_core = { path = "../dfn_core" }
-serde_bytes = "0.11"
+serde = { workspace = true }
+serde_bytes = { workspace = true }
 
 [[bin]]
 name = "http_wasm"

@@ -1,3 +1,0 @@
-This file is put onto DEV images only into /etc/allow_console_root.
-If present, it will allow password-free access to the system via
-serial console. If missing, no console login AT ALL is possible.

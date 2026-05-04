@@ -1,5 +1,5 @@
-// This file contains the Protobuf definitions for the 'swap' canister
-// which can be used for an initial token swap (a.k.a. token sale or
+// This file contains the Protobuf definitions for the `swap` canister
+// which can be used for an initial token swap (a.k.a. token swap or
 // single price auction) to decentralise an application running on the
 // Internet Computer, turning it into a decentralized application or
 // "dapp". See the documentation of the `Swap` message for a high
@@ -10,35 +10,40 @@ syntax = "proto3";
 package ic_sns_swap.pb.v1;
 
 import "ic_base_types/pb/v1/types.proto";
-
+import "ic_nervous_system/pb/v1/nervous_system.proto";
 
 // Lifecycle states of the swap canister. The details of their meanings
 // are provided in the documentation of the `Swap` message.
 enum Lifecycle {
   // The canister is incorrectly configured. Not a real lifecycle state.
   LIFECYCLE_UNSPECIFIED = 0;
-  // In this state, the canister is correctly initialized. Once SNS
+  // In PENDING state, the canister is correctly initialized. Once SNS
   // tokens have been transferred to the swap canister's account on
   // the SNS ledger, a call to `open` with valid parameters will start
   // the swap.
-  LIFECYCLE_PENDING     = 1;
-  // In this state, prospective buyers can register for the token
+  LIFECYCLE_PENDING = 1;
+  // In ADOPTED state, the proposal to start the decentralization swap
+  // has been adopted, and the swap will be automatically opened after a delay.
+  // In the legacy (non-one-proposal) flow, the swap delay is specified by
+  // params.sale_delay_seconds. In the one-proposal flow, the swap delay is
+  // specified by `init.swap_start_timestamp_seconds`.
+  LIFECYCLE_ADOPTED = 5;
+  // In OPEN state, prospective buyers can register for the token
   // swap. The swap will be committed when the target (max) ICP has
   // been reached or the swap's due date/time occurs, whichever
   // happens first.
-  LIFECYCLE_OPEN        = 2;
-  // The token price has been determined; on a call to `finalize`,
-  // buyers receive their SNS neurons and the SNS governance canister
+  LIFECYCLE_OPEN = 2;
+  // In COMMITTED state the token price has been determined; on a call to
+  // finalize`, buyers receive their SNS neurons and the SNS governance canister
   // receives the ICP.
-  LIFECYCLE_COMMITTED   = 3;
-  // The token swap has been aborted, e.g., because the due date/time
-  // occurred before the minimum (reserve) amount of ICP has been
+  LIFECYCLE_COMMITTED = 3;
+  // In ABORTED state the token swap has been aborted, e.g., because the due
+  // date/time occurred before the minimum (reserve) amount of ICP has been
   // retrieved. On a call to `finalize`, participants get their ICP refunded.
-  LIFECYCLE_ABORTED     = 4;
+  LIFECYCLE_ABORTED = 4;
 }
 
-
-// The 'swap' canister smart contract is used to perform a type of
+// The `swap` canister smart contract is used to perform a type of
 // single-price auction (SNS/ICP) of one token type SNS for another token
 // type ICP (this is typically ICP, but can be treated as a variable) at a
 // specific date/time in the future.
@@ -50,12 +55,14 @@ enum Lifecycle {
 // State (lifecycle) diagram for the swap canister's state.
 //
 // ```text
-//                                  sufficient_participation && (swap_due || icp_target_reached)
-// PENDING ------------------> OPEN ------------------------------------------------------------> COMMITTED
-//                             |                                                                  |
-//                             | swap_due && not sufficient_participation                         |
-//                             v                                                                  v
-//                             ABORTED -------------------------------------------------------> <DELETED>
+//                                                                     sufficient_participation
+//                                                                     && (swap_due || icp_target_reached)
+// PENDING -------------------> ADOPTED ---------------------> OPEN -----------------------------------------> COMMITTED
+//         Swap receives a request        The opening delay      |                                                |
+//         from NNS governance to         has elapsed            | not sufficient_participation                   |
+//         schedule opening                                      | && (swap_due || icp_target_reached)            |
+//                                                               v                                                v
+//                                                            ABORTED ---------------------------------------> <DELETED>
 // ```
 //
 // Here `sufficient_participation` means that the minimum number of
@@ -64,12 +71,17 @@ enum Lifecycle {
 // their total contributions add up to at least `min_icp_e8s` and at most
 // `max_icp_e8s`.
 //
+// `icp_target_reached` means that the total amount of ICP contributed is
+// equal to `max_icp_e8s`. (The total amount of ICP contributed should
+// never be greater than `max_icp_e8s`.)
 //
-// The dramatis personae of the 'swap' canister are as follows:
+//
+// The dramatis personae of the `swap` canister are as follows:
 //
 // - The swap canister itself.
 //
-// - The NNS governance canister - which is the only principal that can open the swap.
+// - The NNS governance canister - which is the only principal that can open
+//   the swap.
 //
 // - The governance canister of the SNS to be decentralized.
 //
@@ -104,10 +116,14 @@ enum Lifecycle {
 // amount of SNS tokens. A call to `open` will then transition the
 // canister to the OPEN state.
 //
-// Step 2. (State OPEN). The field `params` is received as an argument
+// Step 2a. (State ADOPTED). The field `params` is received as an argument
 // to the call to `open` and is henceforth immutable. The amount of
-// SNS token is verified against the SNS ledger. The swap is open for
-// participants who can enter into the auction with a number of ICP
+// SNS token is verified against the SNS ledger. The swap will be
+// opened after an optional delay. The transition to OPEN happens
+// automatically (on the canister heartbeat) when the delay elapses.
+//
+// Step 2a. (State OPEN). The delay has elapsed and the swap is open
+// for participants who can enter into the auction with a number of ICP
 // tokens until either the target amount has been reached or the
 // auction is due, i.e., the date/time of the auction has been
 // reached. The transition to COMMITTED or ABORTED happens
@@ -125,10 +141,13 @@ enum Lifecycle {
 //
 // Step 3b. (State ABORTED). If the parameters of the swap have not
 // been satisfied before the due date/time, the swap is aborted and
-// the ICP tokens transferred back to their respective owners.
+// the ICP tokens transferred back to their respective owners. The
+// swap can also be aborted early if it is determined that the
+// swap cannot possibly succeed, e.g., because the ICP ceiling has
+// been reached and the minimum number of participants has not been.
 //
-// The 'swap' canister can be deleted when all tokens registered with the
-// 'swap' canister have been disbursed to their rightful owners.
+// The `swap` canister can be deleted when all tokens registered with the
+// `swap` canister have been disbursed to their rightful owners.
 //
 // The logic of this canister is based on the following principles.
 //
@@ -138,27 +157,36 @@ enum Lifecycle {
 // one exception, viz., the timestamp field for the start of a
 // transfer is reset if the transfer fails).
 //
-// Data flow for the community fund.
+// Data flow for the Neurons' Fund.
 //
 // - A SNS is created.
-// - Proposal to open a decentralization sale for the SNS is submitted to the NNS.
+// - Proposal to open a decentralization swap for the SNS is submitted to
+//   the NNS.
 //   - ProposalToOpenDecentralizationSale
-//     - The Community Fund investment amount
-//     - The parameters of the decentralization sale (`Params`).
+//     - The Neurons' Fund investment amount
+//     - The parameters of the decentralization swap (`Params`).
 //   - Call to open swap:
 //     - Parameters
-//     - CF Investments
+//     - Neurons' Fund investments
 //     - NNS Proposal ID of the NNS proposal to open the swap.
-// - On accept of proposal to open decentralization sale:
-//   - Compute the maturity contribution of each CF neuron and deduct this amount from the CF neuron.
-//   - The swap is informed about the corresponding amount of ICP (`CfParticipant`) in the call to open.
+// - On accept of proposal to open decentralization swap:
+//   - Compute the maturity contribution of each Neurons' Fund neuron and deduct
+//     this amount from the Neurons' Fund neuron.
+//   - The swap is informed about the corresponding amount of ICP
+//     (`CfParticipant`) in the call to open.
 //   - Call back to NNS governance after the swap is committed or aborted:
 //     - On committed swap:
-//       - Ask the NNS to mint the right amount of ICP for the SNS corresponding to the CF investment (the NNS governance canister keeps track of the total).
+//       - Ask the NNS to mint the right amount of ICP for the SNS corresponding
+//         to the Neurons' Fund investment (the NNS governance canister keeps
+//         track of the total).
 //     - On aborted swap:
-//       - Send the information about CF participants (`CfParticipant`) back to NNS governance which will return it to the corresponding neurons. Assign the control of the dapp (now under the SNS control) back to the specified principals.
-// - On reject of proposal to open decentralization sale:
-//   - Assign the control of the dapp (now under the SNS control) back to the specified principals.
+//       - Send the information about Neurons' Fund participants
+//         (`CfParticipant`) back to NNS governance which will return it to
+//         the corresponding neurons. Assign the control of the dapp (now under
+//         the SNS control) back to the specified principals.
+// - On reject of proposal to open decentralization swap:
+//   - Assign the control of the dapp (now under the SNS control) back to the
+//     specified principals.
 message Swap {
   reserved "state";
   reserved 2;
@@ -168,14 +196,19 @@ message Swap {
 
   // The current lifecycle of the swap.
   Lifecycle lifecycle = 3;
+
   // Specified on creation. That is, always specified and immutable.
   Init init = 1;
-  // Specified in the transition from PENDING to OPEN and immutable
-  // thereafter.
+
+  // Derived from `init`, always specified and immutable. In most cases `init`
+  // should be used instead.
+  // TODO(NNS1-3213): Deprecate this field
   Params params = 4;
-  // Community fund participation.  Specified in the transition from
+
+  // Neurons' Fund participation.  Specified in the transition from
   // PENDING to OPEN and immutable thereafter.
   repeated CfParticipant cf_participants = 5;
+
   // Empty in the PENDING state. In the OPEN state, new buyers can be
   // added and existing buyers can increase their bids. In the
   // COMMITTED and ABORTED states, the amount cannot be modified, and
@@ -184,12 +217,67 @@ message Swap {
   // The key is the textual representation of the buyer's principal
   // and the value represents the bid.
   map<string, BuyerState> buyers = 6;
+
   // When the swap is committed, this field is initialized according
   // to the outcome of the swap.
   repeated SnsNeuronRecipe neuron_recipes = 7;
-  // Gets set to whatever value is in the corresponding field of OpenRequest
-  // (that field is required at the application level).
+
+  // The proposal ID that was used to create the SNS that opened this swap.
+  // Note: the name is a historical artifact because the swap used to be opened
+  // with an OpenSnsTokenSwap request.
+  // This is set at installation from `init.nns_proposal_id`, and that field should be used instead.
+  // TODO(NNS1-3213): Deprecate this field
   optional uint64 open_sns_token_swap_proposal_id = 9;
+
+  // A lock stored in Swap state. If set to true, then a finalize_swap
+  // call is in progress. In that case, new finalize_swap calls return
+  // immediately without doing any real work.
+  //
+  // The implementation of the lock should result in the lock being
+  // released when the finalize_swap method returns. If
+  // a lock is not released, upgrades of the Swap canister can
+  // release the lock in the post upgrade hook.
+  optional bool finalize_swap_in_progress = 10;
+
+  // The timestamp for the actual opening of the swap, with an optional delay
+  // (specified via params.sale_delay_seconds) after the adoption of the swap
+  // proposal. Gets set when NNS calls `open` upon the adoption of
+  // the swap proposal.
+  optional uint64 decentralization_sale_open_timestamp_seconds = 11;
+
+  // The timestamp for the actual termination of the swap (committed or aborted).
+  optional uint64 decentralization_swap_termination_timestamp_seconds = 21;
+
+  // This ticket id counter keeps track of the latest ticket id. Whenever a new
+  // ticket is created this counter is incremented. It ensures that ticket ids
+  // are unique. The ticket IDs are sequential and next_ticket_id is assigned to
+  // a  users new ticket upon successfully requesting a new ticket. It is
+  // incremented after a user requests a new ticket successfully.
+  optional uint64 next_ticket_id = 12;
+
+  // The last time the purge_old_tickets routine was completed.
+  optional uint64 purge_old_tickets_last_completion_timestamp_nanoseconds = 13;
+
+  // The next principal bytes that should be checked by the next
+  // running purge_old_tickets routine.
+  optional bytes purge_old_tickets_next_principal = 14;
+
+  // Set to true when auto-finalization is attempted. Prevents auto-finalization
+  // from being attempted more than once.
+  optional bool already_tried_to_auto_finalize = 17;
+
+  // Set when auto-finalization finishes. Calling finalize manually has no effect
+  // on this parameter.
+  optional FinalizeSwapResponse auto_finalize_swap_response = 18;
+
+  // Amount of contributions from direct participants committed to this SNS so far.
+  optional uint64 direct_participation_icp_e8s = 19;
+
+  // Amount of contributions from the Neurons' Fund committed to this SNS so far.
+  optional uint64 neurons_fund_participation_icp_e8s = 20;
+
+  // Information about the timers that perform periodic tasks of this Swap canister.
+  optional ic_nervous_system.pb.v1.Timers timers = 22;
 }
 
 // The initialisation data of the canister. Always specified on
@@ -218,36 +306,31 @@ message Init {
   // Analogous to `sns_governance_canister_id`, but for the "root"
   // canister instead of the governance canister.
   string sns_root_canister_id = 12;
-  
+
   // If the swap is aborted, control of the canister(s) should be set to these
   // principals. Must not be empty.
   repeated string fallback_controller_principal_ids = 11;
-}
 
-// Represents one NNS neuron from the community fund participating in this swap.
-message CfNeuron {
-  // The NNS neuron ID of the participating neuron.
-  fixed64 nns_neuron_id = 1;
-  // The amount of ICP that the community fund invests associated
-  // with this neuron.
-  uint64 amount_icp_e8s = 2;
-}
+  // Same as SNS ledger. Must hold the same value as SNS ledger. Whether the
+  // values match is not checked. If they don't match things will break.
+  optional uint64 transaction_fee_e8s = 13;
 
-// Represent CF participant, possibly with several neurons.
-message CfParticipant {
-  // The principal that can vote on behalf of these CF neurons.
-  string hotkey_principal = 1;
-  // Information about the participating neurons. Must not be empty.
-  repeated CfNeuron cf_neurons = 2;
-}
+  // Same as SNS governance. Must hold the same value as SNS governance. Whether
+  // the values match is not checked. If they don't match things will break.
+  optional uint64 neuron_minimum_stake_e8s = 14;
 
-// The parameters of the swap, provided in the call to 'open'. Cannot
-// be modified after the call to 'open'.
-message Params {
+  // An optional text that swap participants should confirm before they may
+  // participate in the swap. If the field is set, its value should be plain
+  // text with at least 1 and at most 1,000 characters.
+  optional string confirmation_text = 15;
+
+  // An optional set of countries that should not participate in the swap.
+  optional ic_nervous_system.pb.v1.Countries restricted_countries = 16;
+
   // The minimum number of buyers that must participate for the swap
   // to take place. Must be greater than zero.
-  uint32 min_participants = 1;
-  
+  optional uint32 min_participants = 17;
+
   // The total number of ICP that is required for this token swap to
   // take place. This number divided by the number of SNS tokens being
   // offered gives the seller's reserve price for the swap, i.e., the
@@ -255,16 +338,261 @@ message Params {
   // tokens is willing to accept. If this amount is not achieved, the
   // swap will be aborted (instead of committed) when the due date/time
   // occurs. Must be smaller than or equal to `max_icp_e8s`.
-  uint64 min_icp_e8s = 2;  
+  optional uint64 min_icp_e8s = 18;
 
   // The number of ICP that is "targeted" by this token swap. If this
-  // amount is achieved, the swap will be triggered immediately,
-  // without waiting for the due date (`end_timestamp_seconds`). This
-  // means that an investor knows the minimum number of SNS tokens
-  // received per invested ICP. Must be at least `min_participants *
-  // min_participant_icp_e8s`.
+  // amount is achieved with sufficient participation, the swap will be
+  // triggered immediately, without waiting for the due date
+  // (`end_timestamp_seconds`). This means that an investor knows the minimum
+  // number of SNS tokens received per invested ICP. If this amount is achieved
+  // without reaching sufficient_participation, the swap will abort without
+  // waiting for the due date. Must be at least
+  // `min_participants * min_participant_icp_e8s`
+  optional uint64 max_icp_e8s = 19;
+
+  // The total number of ICP that is required to be "directly contributed"
+  // for this token swap to take place. This number divided by the number of SNS tokens being
+  // offered gives the seller's reserve price for the swap, i.e., the
+  // minimum number of ICP per SNS tokens that the seller of SNS
+  // tokens is willing to accept. If this amount is not achieved, the
+  // swap will be aborted (instead of committed) when the due date/time
+  // occurs. Must be smaller than or equal to `max_icp_e8s`.
+  optional uint64 min_direct_participation_icp_e8s = 30;
+
+  // The number of ICP that is "targeted" by this token swap. If this
+  // amount is achieved with sufficient participation, the swap will be
+  // triggered immediately, without waiting for the due date
+  // (`end_timestamp_seconds`). This means that an investor knows the minimum
+  // number of SNS tokens received per invested ICP. If this amount is achieved
+  // without reaching sufficient_participation, the swap will abort without
+  // waiting for the due date. Must be at least
+  // `min_participants * min_participant_icp_e8s`.
+  optional uint64 max_direct_participation_icp_e8s = 31;
+
+  // The minimum amount of ICP that each buyer must contribute to
+  // participate. Must be greater than zero.
+  optional uint64 min_participant_icp_e8s = 20;
+
+  // The maximum amount of ICP that each buyer can contribute. Must be
+  // greater than or equal to `min_participant_icp_e8s` and less than
+  // or equal to `max_icp_e8s`. Can effectively be disabled by
+  // setting it to `max_icp_e8s`.
+  optional uint64 max_participant_icp_e8s = 21;
+
+  // The date/time when the swap should start.
+  optional uint64 swap_start_timestamp_seconds = 22;
+
+  // The date/time when the swap is due, i.e., it will automatically
+  // end and commit or abort depending on whether the parameters have
+  // been fulfilled.
+  optional uint64 swap_due_timestamp_seconds = 23;
+
+  // The number of tokens (of `init.sns_ledger_canister_id`) that are
+  // being offered. The tokens are held in escrow for the SNS
+  // governance canister.
+  //
+  // Invariant for the OPEN state:
+  // ```text
+  // state.sns_token_e8s <= token_ledger.balance_of(<swap-canister>)
+  // ```
+  optional uint64 sns_token_e8s = 24;
+
+  // The construction parameters for the basket of neurons created for all
+  // investors in the decentralization swap. Each investor, whether via
+  // the Neurons' Fund or direct, will receive `count` Neurons with
+  // increasing dissolve delays. The total number of Tokens swapped for
+  // by the investor will be evenly distributed across the basket. This is
+  // effectively a vesting schedule to ensure there is a gradual release of
+  // SNS Tokens available to all investors instead of being liquid immediately.
+  // See `NeuronBasketConstructionParameters` for more details on how
+  // the basket is configured.
+  optional NeuronBasketConstructionParameters neuron_basket_construction_parameters = 25;
+
+  // The ID of the NNS proposal submitted to launch this SNS decentralization
+  // swap.
+  optional uint64 nns_proposal_id = 26;
+
+  // The Neurons' Fund participants of this SNS decentralization swap.
+  //
+  // This field is obsolete, as Neurons' Fund participants are now determined at the end of
+  // a successful swap and cannot be specified during SNS initialization.
+  reserved 27;
+  reserved "neurons_fund_participants";
+
+  // Controls whether swap finalization should be attempted automatically in the
+  // canister heartbeat. If set to false, `finalize_swap` must be called
+  // manually. Note: it is safe to call `finalize_swap` multiple times
+  // (regardless of the value of this field).
+  optional bool should_auto_finalize = 28;
+
+  // Constraints for the Neurons' Fund participation in this swap.
+  optional NeuronsFundParticipationConstraints neurons_fund_participation_constraints = 29;
+
+  // Whether Neurons' Fund participation is requested.
+  optional bool neurons_fund_participation = 32;
+}
+
+// Constraints for the Neurons' Fund participation in an SNS swap.
+message NeuronsFundParticipationConstraints {
+  // The Neurons' Fund will not participate in this swap unless the direct
+  // contributions reach this threshold (in ICP e8s).
+  optional uint64 min_direct_participation_threshold_icp_e8s = 1;
+
+  // Maximum amount (in ICP e8s) of contributions from the Neurons' Fund to this swap.
+  optional uint64 max_neurons_fund_participation_icp_e8s = 2;
+
+  // List of intervals in which the given linear coefficients apply for scaling the
+  // ideal Neurons' Fund participation amount (down) to the effective Neurons' Fund
+  // participation amount.
+  repeated LinearScalingCoefficient coefficient_intervals = 3;
+
+  // The function used in the implementation of Matched Funding for mapping amounts of direct
+  // participation to "ideal" Neurons' Fund participation amounts. The value needs to be adjusted
+  // to a potentially smaller value due to SNS-specific participation constraints and
+  // the configuration of the Neurons' Fund at the time of the CreateServiceNervousSystem proposal
+  // execution.
+  optional IdealMatchedParticipationFunction ideal_matched_participation_function = 4;
+}
+
+// This function is called "ideal" because it serves as the guideline that the Neurons' Fund will
+// try to follow, but may deviate from in order to satisfy SNS-specific participation constraints
+// while allocating its overall participation amount among its neurons' maturity. In contrast,
+// The "effective" matched participation function `crate::neurons_fund::MatchedParticipationFunction`
+// is computed *based* on this one.
+// TODO(NNS1-1589): Until the Jira ticket gets solved, this definition needs to be synchronized with
+// that from nns/governance/proto/ic_nns_governance/pb/v1/governance.proto.
+message IdealMatchedParticipationFunction {
+  // The encoding of the "ideal" matched participation function is defined in `crate::neurons_fund`.
+  // In the future, we could change this message to represent full abstract syntactic trees
+  // comprised of elementary mathematical operators, with literals and variables as tree leaves.
+  optional string serialized_representation = 1;
+}
+
+// Some Neurons' Fund neurons might be too small, and some might be too large to participate in a
+// given SNS swap. This causes the need to adjust Neurons' Fund participation from an "ideal" amount
+// to an "effective" amount.
+// * The ideal-participation of the Neurons' Fund refers to the value dictated by some curve that
+//   specifies how direct contributions should be matched with Neurons' Fund maturity.
+// * The effective-participation of the Neurons' Fund refers to the value that the NNS Governance
+//   can actually allocate, given (1) the configuration of the Neurons' Fund at the time of
+//   execution of the corresponding CreateServiceNervousSystem proposal and (2) the amount of direct
+//   participation.
+//
+// This structure represents the coefficients of a linear transformation used for
+// mapping the Neurons' Fund ideal-participation to effective-participation on a given
+// linear (semi-open) interval. Say we have the following function for matching direct
+// participants' contributions: `f: ICP e8s -> ICP e8s`; then the *ideal* Neuron's Fund
+// participation amount corresponding to the direct participation of `x` ICP e8s is
+// `f(x)`, while the Neuron's Fund *effective* participation amount is:
+// ```
+// g(x) = (c.slope_numerator / c.slope_denominator) * f(x) + c.intercept
+// ```
+// where `c: LinearScalingCoefficient` with
+// `c.from_direct_participation_icp_e8s <= x < c.to_direct_participation_icp_e8s`.
+// Note that we represent the slope as a rational number (as opposed to floating point),
+// enabling equality comparison between two instances of this structure.
+message LinearScalingCoefficient {
+  // (Included) lower bound on the amount of direct participation (in ICP e8s) at which
+  // these coefficients apply.
+  optional uint64 from_direct_participation_icp_e8s = 1;
+  // (Excluded) upper bound on the amount of direct participation (in ICP e8s) at which
+  // these coefficients apply.
+  optional uint64 to_direct_participation_icp_e8s = 2;
+  // Numerator or the slope of the linear transformation.
+  optional uint64 slope_numerator = 3;
+  // Denominator or the slope of the linear transformation.
+  optional uint64 slope_denominator = 4;
+  // Intercept of the linear transformation (in ICP e8s).
+  optional uint64 intercept_icp_e8s = 5;
+}
+
+// Represents one NNS neuron from the Neurons' Fund participating in this swap.
+message CfNeuron {
+  // The NNS neuron ID of the participating neuron.
+  fixed64 nns_neuron_id = 1;
+  // The amount of ICP that the Neurons' Fund invests associated
+  // with this neuron.
+  uint64 amount_icp_e8s = 2;
+  // The principals that can vote, propose, and follow on behalf of this neuron.
+  optional ic_nervous_system.pb.v1.Principals hotkeys = 4;
+
+  // Idempotency flag indicating whether the neuron recipes have been created for
+  // the CfNeuron. When set to true, it signifies that the action of creating neuron
+  // recipes has been performed on this structure. If the action is retried, this flag
+  // can be checked to avoid duplicate operations.
+  optional bool has_created_neuron_recipes = 3;
+}
+
+// Represents a Neurons' Fund participant, possibly with several neurons.
+message CfParticipant {
+  // The principal that can manage the NNS neuron that participated in the Neurons' Fund.
+  optional ic_base_types.pb.v1.PrincipalId controller = 3;
+  // Information about the participating neurons. Must not be empty.
+  repeated CfNeuron cf_neurons = 2;
+
+  // The principal that can vote on behalf of these Neurons' Fund neurons.
+  // Deprecated. Please use `controller` instead
+  // TODO(NNS1-3198): Remove
+  string hotkey_principal = 1 [deprecated = true];
+}
+
+// The construction parameters for the basket of neurons created for all
+// investors in the decentralization swap.
+message NeuronBasketConstructionParameters {
+  // The number of neurons each investor will receive after the
+  // decentralization swap. The total tokens swapped for will be
+  // evenly distributed across the `count` neurons.
+  uint64 count = 1;
+
+  // The amount of additional time it takes for the next neuron to dissolve.
+  uint64 dissolve_delay_interval_seconds = 2;
+}
+
+// The parameters of the swap, provided in the call to `open`. Cannot
+// be modified after the call to `open`.
+message Params {
+  // The minimum number of buyers that must participate for the swap
+  // to take place. Must be greater than zero.
+  uint32 min_participants = 1;
+
+  // The total number of ICP that is required for this token swap to
+  // take place. This number divided by the number of SNS tokens being
+  // offered gives the seller's reserve price for the swap, i.e., the
+  // minimum number of ICP per SNS tokens that the seller of SNS
+  // tokens is willing to accept. If this amount is not achieved, the
+  // swap will be aborted (instead of committed) when the due date/time
+  // occurs. Must be smaller than or equal to `max_icp_e8s`.
+  uint64 min_icp_e8s = 2;
+
+  // The number of ICP that is "targeted" by this token swap. If this
+  // amount is achieved with sufficient participation, the swap will be
+  // triggered immediately, without waiting for the due date
+  // (`end_timestamp_seconds`). This means that an investor knows the minimum
+  // number of SNS tokens received per invested ICP. If this amount is achieved
+  // without reaching sufficient_participation, the swap will abort without
+  // waiting for the due date. Must be at least
+  // `min_participants * min_participant_icp_e8s`.
   uint64 max_icp_e8s = 3;
-  
+
+  // The total number of ICP that is required for this token swap to
+  // take place. This number divided by the number of SNS tokens being
+  // offered gives the seller's reserve price for the swap, i.e., the
+  // minimum number of ICP per SNS tokens that the seller of SNS
+  // tokens is willing to accept. If this amount is not achieved, the
+  // swap will be aborted (instead of committed) when the due date/time
+  // occurs. Must be smaller than or equal to `max_icp_e8s`.
+  optional uint64 min_direct_participation_icp_e8s = 10;
+
+  // The number of ICP that is "targeted" by this token swap. If this
+  // amount is achieved with sufficient participation, the swap will be
+  // triggered immediately, without waiting for the due date
+  // (`end_timestamp_seconds`). This means that an investor knows the minimum
+  // number of SNS tokens received per invested ICP. If this amount is achieved
+  // without reaching sufficient_participation, the swap will abort without
+  // waiting for the due date. Must be at least
+  // `min_participants * min_participant_icp_e8s`.
+  optional uint64 max_direct_participation_icp_e8s = 11;
+
   // The minimum amount of ICP that each buyer must contribute to
   // participate. Must be greater than zero.
   uint64 min_participant_icp_e8s = 4;
@@ -281,7 +609,7 @@ message Params {
   uint64 swap_due_timestamp_seconds = 6;
 
   // The number of tokens (of `init.sns_ledger_canister_id`) that are
-  // being offered. The tokens are held in escrow for the the SNS
+  // being offered. The tokens are held in escrow for the SNS
   // governance canister.
   //
   // Invariant for the OPEN state:
@@ -291,25 +619,8 @@ message Params {
   uint64 sns_token_e8s = 7;
 
   // The construction parameters for the basket of neurons created for all
-  // investors in the decentralization swap.
-  message NeuronBasketConstructionParameters {
-
-    // The number of neurons each investor will receive after the
-    // decentralization swap. The total tokens swapped for will be
-    // evenly distributed across the `count` neurons.
-    uint64 count = 1;
-
-    // The interval in seconds that the dissolve delay of each neuron in the
-    // basket will be increased by. The 0th neuron created will have its dissolve
-    // delay set to 0, and each subsequent neuron will have a dissolve delay
-    // calculated by:
-    // `(i * dissolve_delay_interval_seconds) + rand(0..dissolve_delay_interval_seconds)`
-    uint64 dissolve_delay_interval_seconds = 2;
-  }
-
-  // The construction parameters for the basket of neurons created for all
   // investors in the decentralization swap. Each investor, whether via
-  // the CommunityFund or direct, will receive `count` Neurons with
+  // the Neurons' Fund or direct, will receive `count` Neurons with
   // increasing dissolve delays. The total number of Tokens swapped for
   // by the investor will be evenly distributed across the basket. This is
   // effectively a vesting schedule to ensure there is a gradual release of
@@ -317,12 +628,29 @@ message Params {
   // See `NeuronBasketConstructionParameters` for more details on how
   // the basket is configured.
   NeuronBasketConstructionParameters neuron_basket_construction_parameters = 8;
+
+  // An optional delay, so that the actual swap does not get opened immediately
+  // after the adoption of the swap proposal.
+  optional uint64 sale_delay_seconds = 9;
 }
 
 message TransferableAmount {
+  // The amount in e8s equivalent that the participant committed to the Swap,
+  // which is held by the swap canister until the swap is committed or aborted.
   uint64 amount_e8s = 1;
+
+  // When the transfer to refund or commit funds starts.
   uint64 transfer_start_timestamp_seconds = 2;
+
+  // When the transfer to refund or commit succeeds.
   uint64 transfer_success_timestamp_seconds = 3;
+
+  // The amount that was successfully transferred when swap commits or aborts
+  // (minus fees).
+  optional uint64 amount_transferred_e8s = 4;
+
+  // The fee charged when transferring from the swap canister;
+  optional uint64 transfer_fee_paid_e8s = 5;
 }
 
 message BuyerState {
@@ -345,23 +673,40 @@ message BuyerState {
   // where `P` is the principal ID associated with this buyer's state.
   //
   // ownership
-  // * PENDING - a `BuyerState` cannot exists
+  // * PENDING - a `BuyerState` cannot exist
   // * OPEN - owned by the buyer, cannot be transferred out
   // * COMMITTED - owned by the SNS governance canister, can be transferred out
   // * ABORTED - owned by the buyer, can be transferred out
   TransferableAmount icp = 5;
+
+  // Idempotency flag indicating whether the neuron recipes have been created for
+  // the BuyerState. When set to true, it signifies that the action of creating neuron
+  // recipes has been performed on this structure. If the action is retried, this flag
+  // can be checked to avoid duplicate operations.
+  optional bool has_created_neuron_recipes = 6;
 }
 
 // Information about a direct investor.
 message DirectInvestment {
-  string buyer_principal = 1;  
+  string buyer_principal = 1;
 }
 
-// Information about a community fund investment. The NNS Governance
+// Information about a Neurons' Fund investment. The NNS Governance
 // canister is the controller of these neurons.
 message CfInvestment {
-  string hotkey_principal = 1;
+  // The principal that can manage the NNS neuron that participated in the Neurons' Fund.
+  optional ic_base_types.pb.v1.PrincipalId controller = 3;
+  // The principals that can vote, propose, and follow on behalf of this neuron.
+  // The controller of the corresponding NNS neuron is in the CfParticipant,
+  // which contains a vector of CfInvestments. This is because the controller
+  // is the same for all CfInvestments but the hotkeys may differ.
+  optional ic_nervous_system.pb.v1.Principals hotkeys = 7;
+
   fixed64 nns_neuron_id = 2;
+
+  // Deprecated. Please use `controller` instead (not `hotkeys`!)
+  // TODO(NNS1-3198): Remove
+  string hotkey_principal = 1 [deprecated = true];
 }
 
 message TimeWindow {
@@ -381,15 +726,51 @@ message SnsNeuronRecipe {
   // Attributes of the Neuron to be created from the SnsNeuronRecipe
   message NeuronAttributes {
     // The memo to be used when calculating the Neuron's staking account
-    // in the SNS Ledger. See `nervous_system_common::compute_neuron_staking_subaccount`.
-    // The memo is used along with the a principal_id of the "controller" of the
-    // neuron. In the case of the decentralization sale, that will either be the PrincipalId
-    // of NNS Governance canister for CommunityFund investors, or the PrincipalId of the
-    // direct investor.
+    // in the SNS Ledger.
+    // See `nervous_system_common::compute_neuron_staking_subaccount`.
+    // The memo is used along with the a principal_id of the "controller" of
+    // the neuron. In the case of the decentralization swap, that will either be
+    // the PrincipalId of NNS Governance canister for Neurons' Fund investors,
+    // or the PrincipalId of the direct investor.
     uint64 memo = 1;
 
     // The dissolve delay in seconds that the Neuron will be created with.
     uint64 dissolve_delay_seconds = 2;
+
+    // The list of NeuronIds that the created Neuron will follow on all SNS
+    // proposal actions known to governance at the time. Additional followees
+    // and following relations can be added after neuron creation.
+    //
+    // TODO[NNS1-1589] Due to the dependency cycle, the `swap` canister's
+    // protobuf cannot directly depend on SNS Governance NeuronId type.
+    // The followees NeuronId's are of a duplicated type, which is converted to
+    // SNS governance NeuronId at the time.
+    // of claiming.
+    repeated NeuronId followees = 3;
+  }
+
+  // The status of the SnsNeuronRecipe's creation within SNS Governance. This
+  // field is used as a journal between calls of `finalize`.
+  optional ClaimedStatus claimed_status = 5;
+
+  // The various statuses of creation that a SnsNeuronRecipe can have in an SNS.
+  enum ClaimedStatus {
+    // Unused, here for PB lint purposes.
+    CLAIMED_STATUS_UNSPECIFIED = 0;
+
+    // The Neuron is pending creation and can be claimed in SNS Governance.
+    CLAIMED_STATUS_PENDING = 1;
+
+    // The Neuron has been created successfully in SNS Governance.
+    CLAIMED_STATUS_SUCCESS = 2;
+
+    // The Neuron has previously failed to be created in SNS Governance, but can
+    // be retried in the future.
+    CLAIMED_STATUS_FAILED = 3;
+
+    // The Neuron is invalid and was not created in SNS Governance. This neuron
+    // cannot be retried without manual intervention to update its `NeuronRecipe`.
+    CLAIMED_STATUS_INVALID = 4;
   }
 }
 
@@ -397,19 +778,7 @@ message SnsNeuronRecipe {
 // === Request/Response Messages
 //
 
-message OpenRequest {
-  // The parameters of the swap.
-  Params params = 1;
-  // Community fund participation.
-  repeated CfParticipant cf_participants = 2;
-  // The ID of the proposal whose execution consists of calling this method.
-  optional uint64 open_sns_token_swap_proposal_id = 3;
-}
-
-message OpenResponse {}
-
-message GetCanisterStatusRequest {
-}
+message GetCanisterStatusRequest {}
 
 // TODO: introduce a limits on the number of buyers to include?
 message GetStateRequest {}
@@ -431,13 +800,30 @@ message GetBuyersTotalRequest {}
 
 message GetBuyersTotalResponse {
   // The total amount of ICP deposited by buyers.
-  uint64 buyers_total  = 1;
+  uint64 buyers_total = 1;
 }
 
 message DerivedState {
   uint64 buyer_total_icp_e8s = 1;
-  // Current approximate rate SNS tokens per ICP.
+  // Current number of non-Neurons' Fund swap participants
+  optional uint64 direct_participant_count = 3;
+  // Current number of Neurons' Fund swap participants. In particular, it's the
+  // number of unique controllers of the neurons participating
+  // in the Neurons' Fund.
+  optional uint64 cf_participant_count = 4;
+  // Current number of Neurons' Fund neurons participating in the swap
+  // May be greater than cf_participant_count if multiple neurons in
+  // the Neurons' Fund have the same controller.
+  optional uint64 cf_neuron_count = 5;
+  // Current approximate rate SNS tokens per ICP. Note that this should not be used for super
+  // precise financial accounting, because this is floating point.
   float sns_tokens_per_icp = 2;
+  // Current amount of contributions from direct swap participants.
+  optional uint64 direct_participation_icp_e8s = 6;
+  // Current amount that the Neurons' Fund promises to participate with if the swap were to
+  // successfully finalize now. Until the swap's success criterium is satisfied, this value is
+  // merely a progress indicator.
+  optional uint64 neurons_fund_participation_icp_e8s = 7;
 }
 
 message SetOpenTimeWindowRequest {
@@ -446,16 +832,22 @@ message SetOpenTimeWindowRequest {
   // start time.
   TimeWindow open_time_window = 1;
 }
+
 // Response if setting the open time window succeeded.
 message SetOpenTimeWindowResponse {}
 
 // Informs the swap canister that a buyer has sent funds to participate in the
 // swap.
 //
-// Only in lifecycle state 'open'.
+// Only in lifecycle state `open`.
 message RefreshBuyerTokensRequest {
   // If not specified, the caller is used.
   string buyer = 1;
+
+  // To accept the swap participation confirmation, a participant should send
+  // the confirmation text via refresh_buyer_tokens, matching the text set
+  // during SNS initialization.
+  optional string confirmation_text = 2;
 }
 message RefreshBuyerTokensResponse {
   uint64 icp_accepted_participation_e8s = 1;
@@ -466,47 +858,62 @@ message RefreshBuyerTokensResponse {
 // distributed, and, if the swap was committed, neurons created.
 message FinalizeSwapRequest {}
 
+// Response from the `finalize_swap` canister API.
 message FinalizeSwapResponse {
-  SweepResult sweep_icp = 1;
-  SweepResult sweep_sns = 2;
-  SweepResult create_neuron = 3;
-  SetModeCallResult sns_governance_normal_mode_enabled = 4;
-  SetDappControllersCallResult set_dapp_controllers_result = 5;
+  SweepResult sweep_icp_result = 1;
+
+  SweepResult sweep_sns_result = 2;
+
+  SweepResult claim_neuron_result = 3;
+
+  SetModeCallResult set_mode_call_result = 4;
+
+  SetDappControllersCallResult set_dapp_controllers_call_result = 5;
+
   SettleCommunityFundParticipationResult settle_community_fund_participation_result = 6;
+
+  SweepResult create_sns_neuron_recipes_result = 8;
+
+  SettleNeuronsFundParticipationResult settle_neurons_fund_participation_result = 9;
+
+  // Explains what (if anything) went wrong.
+  optional string error_message = 7;
 }
 
 message SweepResult {
+  // Success means that on this call to finalize, the item in the
+  // sweep succeeded.
   uint32 success = 1;
+
+  // Failure means that on this call to finalize, the item in the
+  // sweep failed but may be successful in the future.
   uint32 failure = 2;
+
+  // Skipped means that on a previous call to finalize, the item
+  // in the sweep was successful.
   uint32 skipped = 3;
+
+  // Invalid means that on this call and all future calls to finalize,
+  // this item will not be successful, and will need intervention to
+  // succeed.
+  uint32 invalid = 4;
+
+  // Global_failures does not map to individual items in the sweep, but
+  // number of global failures encountered in the sweep.
+  uint32 global_failures = 5;
 }
 
 // Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
 message SetModeCallResult {
-  reserved "ok";
-  reserved 1;
   oneof possibility {
-    // TODO ic_sns_governance.pb.v1.SetModeResponse ok = 1;
+    SetModeResult ok = 1;
     CanisterCallError err = 2;
   }
+
+  message SetModeResult {}
 }
 
-// Request struct for the method restore_dapp_controllers.
-message RestoreDappControllersRequest {}
-
-// Response of the method restore_dapp_controllers.
-// Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
-message RestoreDappControllersResponse {
-  oneof possibility {
-    // TODO(NNS1-1589): Uncomment.
-    // ic_sns_root.pb.v1.
-    SetDappControllersResponse ok = 1;
-    CanisterCallError err = 2;
-  }
-}
-
-
-// Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
+// Analogous to Rust type Result<SetDappControllersResponse, CanisterCallError>.
 message SetDappControllersCallResult {
   oneof possibility {
     // TODO(NNS1-1589): Uncomment.
@@ -528,14 +935,51 @@ message SettleCommunityFundParticipationResult {
   }
 }
 
+// The result from settling the neurons' fund participation in finalization.
+message SettleNeuronsFundParticipationResult {
+  // The successful branch of the result. On subsequent attempts to settle
+  // neurons fund participation (for example: due to some later stage of
+  // finalization failing and a manual retry is invoked), this branch
+  // will be set with the results of the original successful attempt.
+  message Ok {
+    optional uint64 neurons_fund_participation_icp_e8s = 1;
+    optional uint64 neurons_fund_neurons_count = 2;
+  }
+
+  // The failure branch of the result. This message can be set for a
+  // number of reasons not limited to
+  //    - invalid state
+  //    - replica errors
+  //    - canister errors
+  //
+  // While some of these errors are transient and can immediately retried,
+  // others require manual intervention. The error messages and logs of the
+  // canister should provide enough context to debug.
+  message Error {
+    optional string message = 1;
+  }
+
+  oneof possibility {
+    Ok ok = 1;
+    Error err = 2;
+  }
+}
+
 // TODO(NNS1-1589): Delete these copied definitions.
 
 // BEGIN NNS1-1589 HACKS
 
-// Copied from sns root.proto
+// Change control of the listed canisters to the listed principal id.
+// Copy of the type in root.proto. TODO(NNS1-1589)
 message SetDappControllersRequest {
-  repeated ic_base_types.pb.v1.PrincipalId controller_principal_ids = 1;
+  message CanisterIds {
+    repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
+  }
+  optional CanisterIds canister_ids = 1;
+
+  repeated ic_base_types.pb.v1.PrincipalId controller_principal_ids = 2;
 }
+
 message SetDappControllersResponse {
   message FailedUpdate {
     ic_base_types.pb.v1.PrincipalId dapp_canister_id = 1;
@@ -547,62 +991,63 @@ message SetDappControllersResponse {
 // Copied from nns governance.proto.
 message GovernanceError {
   enum ErrorType {
-     ERROR_TYPE_UNSPECIFIED = 0;
-     // The operation was successfully completed.
-     ERROR_TYPE_OK = 1;
-     // This operation is not available, e.g., not implemented.
-     ERROR_TYPE_UNAVAILABLE = 2;
-     // The caller is not authorized to perform this operation.
-     ERROR_TYPE_NOT_AUTHORIZED = 3;
-     // Some entity required for the operation (for example, a neuron) was not found.
-     ERROR_TYPE_NOT_FOUND = 4;
-     // The command was missing or invalid. This is a permanent error.
-     ERROR_TYPE_INVALID_COMMAND = 5;
-     // The neuron is dissolving or dissolved and the operation requires it to
-     // be not dissolving (that is, having a non-zero dissolve delay that is
-     // accumulating age).
-     ERROR_TYPE_REQUIRES_NOT_DISSOLVING = 6;
-     // The neuron is not dissolving or dissolved and the operation requires
-     // it to be dissolving (that is, having a non-zero dissolve delay with
-     // zero age that is not accumulating).
-     ERROR_TYPE_REQUIRES_DISSOLVING = 7;
-     // The neuron is not dissolving and not dissolved and the operation
-     // requires it to be dissolved (that is, having a dissolve delay of zero
-     // and an age of zero).
-     ERROR_TYPE_REQUIRES_DISSOLVED = 8;
-     // When adding or removing a hot key: the key to add was already
-     // present or the key to remove was not present or the key to add
-     // was invalid or adding another hot key would bring the total
-     // number of the maximum number of allowed hot keys per neuron.
-     ERROR_TYPE_HOT_KEY = 9;
-     // Some canister side resource is exhausted, so this operation cannot be
-     // performed.
-     ERROR_TYPE_RESOURCE_EXHAUSTED = 10;
-     // Some precondition for executing this method was not met (e.g. the
-     // neuron's dissolve time is too short). There could be a change in the
-     // state of the system such that the operation becomes allowed (e.g. the
-     // owner of the neuron increases its dissolve delay).
-     ERROR_TYPE_PRECONDITION_FAILED = 11;
-     // Executing this method failed for some reason external to the
-     // governance canister.
-     ERROR_TYPE_EXTERNAL = 12;
-     // A neuron has an ongoing ledger update and thus can't be
-     // changed.
-     ERROR_TYPE_LEDGER_UPDATE_ONGOING = 13;
-     // There wasn't enough funds to perform the operation.
-     ERROR_TYPE_INSUFFICIENT_FUNDS = 14;
-     // The principal provided was invalid.
-     ERROR_TYPE_INVALID_PRINCIPAL = 15;
-     // The proposal is defective in some way (e.g. title is too long). If the
-     // same proposal is submitted again without modification, it will be
-     // rejected regardless of changes in the system's state (e.g. increasing
-     // the neuron's dissolve delay will not make the proposal acceptable).
-     ERROR_TYPE_INVALID_PROPOSAL = 16;
-     // The neuron attempted to join the community fund while already
-     // a member.
-     ERROR_TYPE_ALREADY_JOINED_COMMUNITY_FUND = 17;
-     // The neuron attempted to leave the community fund but is not a member.
-     ERROR_TYPE_NOT_IN_THE_COMMUNITY_FUND = 18;
+    ERROR_TYPE_UNSPECIFIED = 0;
+    // The operation was successfully completed.
+    ERROR_TYPE_OK = 1;
+    // This operation is not available, e.g., not implemented.
+    ERROR_TYPE_UNAVAILABLE = 2;
+    // The caller is not authorized to perform this operation.
+    ERROR_TYPE_NOT_AUTHORIZED = 3;
+    // Some entity required for the operation (for example, a neuron) was
+    // not found.
+    ERROR_TYPE_NOT_FOUND = 4;
+    // The command was missing or invalid. This is a permanent error.
+    ERROR_TYPE_INVALID_COMMAND = 5;
+    // The neuron is dissolving or dissolved and the operation requires it to
+    // be not dissolving (that is, having a non-zero dissolve delay that is
+    // accumulating age).
+    ERROR_TYPE_REQUIRES_NOT_DISSOLVING = 6;
+    // The neuron is not dissolving or dissolved and the operation requires
+    // it to be dissolving (that is, having a non-zero dissolve delay with
+    // zero age that is not accumulating).
+    ERROR_TYPE_REQUIRES_DISSOLVING = 7;
+    // The neuron is not dissolving and not dissolved and the operation
+    // requires it to be dissolved (that is, having a dissolve delay of zero
+    // and an age of zero).
+    ERROR_TYPE_REQUIRES_DISSOLVED = 8;
+    // When adding or removing a hot key: the key to add was already
+    // present or the key to remove was not present or the key to add
+    // was invalid or adding another hot key would bring the total
+    // number of the maximum number of allowed hot keys per neuron.
+    ERROR_TYPE_HOT_KEY = 9;
+    // Some canister side resource is exhausted, so this operation cannot be
+    // performed.
+    ERROR_TYPE_RESOURCE_EXHAUSTED = 10;
+    // Some precondition for executing this method was not met (e.g. the
+    // neuron's dissolve time is too short). There could be a change in the
+    // state of the system such that the operation becomes allowed (e.g. the
+    // owner of the neuron increases its dissolve delay).
+    ERROR_TYPE_PRECONDITION_FAILED = 11;
+    // Executing this method failed for some reason external to the
+    // governance canister.
+    ERROR_TYPE_EXTERNAL = 12;
+    // A neuron has an ongoing ledger update and thus can't be
+    // changed.
+    ERROR_TYPE_LEDGER_UPDATE_ONGOING = 13;
+    // There wasn't enough funds to perform the operation.
+    ERROR_TYPE_INSUFFICIENT_FUNDS = 14;
+    // The principal provided was invalid.
+    ERROR_TYPE_INVALID_PRINCIPAL = 15;
+    // The proposal is defective in some way (e.g. title is too long). If the
+    // same proposal is submitted again without modification, it will be
+    // rejected regardless of changes in the system's state (e.g. increasing
+    // the neuron's dissolve delay will not make the proposal acceptable).
+    ERROR_TYPE_INVALID_PROPOSAL = 16;
+    // The neuron attempted to join the Neurons' Fund while already
+    // a member.
+    ERROR_TYPE_ALREADY_JOINED_COMMUNITY_FUND = 17;
+    // The neuron attempted to leave the Neurons' Fund but is not a member.
+    ERROR_TYPE_NOT_IN_THE_COMMUNITY_FUND = 18;
   }
 
   ErrorType error_type = 1;
@@ -631,12 +1076,145 @@ message SettleCommunityFundParticipation {
     // This is where the minted ICP will be sent. In principal, this could be
     // fetched using the swap canister's get_state method.
     ic_base_types.pb.v1.PrincipalId sns_governance_canister_id = 1;
+    // Total amount of contributions from direct swap participants.
+    optional uint64 total_direct_contribution_icp_e8s = 2;
+    // Total amount of contributions from the Neuron's Fund.
+    // TODO[NNS1-2570]: Ensure this field is set.
+    optional uint64 total_neurons_fund_contribution_icp_e8s = 3;
   }
 
-  // When this happens, maturity needs to be restored to CF neurons. The amounts
-  // to be refunded can be found in the ProposalData's cf_participants field.
-  message Aborted {
+  // When this happens, maturity needs to be restored to Neurons' Fund neurons.
+  // The amounts to be refunded can be found in the ProposalData's
+  // `cf_participants` field.
+  message Aborted {}
+}
+
+// Request to settle the Neurons' Fund participation in this SNS Swap.
+//
+// When a swap ends, the Swap canister notifies the Neurons' Fund of the swap's ultimate result,
+// which can be either `Committed` or `Aborted`. Note that currently, the Neurons' Fund is managed
+// by the NNS Governance canister.
+// * If the result is `Committed`:
+//   - Neurons' Fund computes the "effective" participation amount for each of its neurons (as per
+//     the Matched Funding rules). This computation is based on the total direct participation
+//     amount, which is thus a field of `Committed`.
+//   - Neurons' Fund converts the "effective" amount of maturity into ICP by:
+//     - Requesting the ICP Ledger to mint an appropriate amount of ICP tokens and sending them
+//       to the SNS treasury.
+//     - Refunding whatever maturity is left over (the maximum possible maturity is reserved by
+//       the Neurons' Fund before the swap begins).
+//   - Neurons' Fund returns the Neurons' Fund participants back to the Swap canister
+//     (see SettleNeuronsFundParticipationResponse).
+//   - The Swap canister then creates SNS neurons for the Neurons' Fund participants.
+// * If the result is Aborted, the Neurons' Fund is refunded for all maturity reserved for this SNS.
+//
+// This design assumes trust between the Neurons' Fund and the SNS Swap canisters. In the one hand,
+// the Swap trusts that the Neurons' Fund sends the correct amount of ICP to the SNS treasury,
+// and that the Neurons' Fund allocates its participants following the Matched Funding rules. On the
+// other hand, the Neurons' Fund trusts that the Swap will indeed create appropriate SNS neurons
+// for the Neurons' Fund participants.
+//
+// The justification for this trust assumption is as follows. The Neurons' Fund can be trusted as
+// it is controlled by the NNS. The SNS Swap can be trusted as it is (1) deployed by SNS-W, which is
+// also part of the NNS and (2) upgraded via an NNS proposal (unlike all other SNS canisters).
+//
+// This request may be submitted only by the Swap canister of an SNS instance created by
+// a CreateServiceNervousSystem proposal.
+//
+// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
+// manually propagated to (sns) swap.proto.
+message SettleNeuronsFundParticipationRequest {
+  // Proposal ID of the CreateServiceNervousSystem proposal that created this SNS instance.
+  optional uint64 nns_proposal_id = 1;
+
+  // Each of the possibilities here corresponds to one of two ways that a swap can terminate.
+  // See also sns_swap_pb::Lifecycle::is_terminal.
+  oneof result {
+    Committed committed = 2;
+    Aborted aborted = 3;
   }
+
+  // When this happens, the NNS Governance needs to do several things:
+  // (1) Compute the effective amount of ICP per neuron of the Neurons' Fund as a function of
+  //     `total_direct_participation_icp_e8s`. The overall Neurons' Fund participation should
+  //     equal `total_neurons_fund_contribution_icp_e8s`.
+  // (2) Mint (via the ICP Ledger) and sent to the SNS governance the amount of
+  //     `total_neurons_fund_contribution_icp_e8s`.
+  // (3) Respond to this request with `SettleNeuronsFundParticipationResponse`, providing
+  //     the set of `NeuronsFundParticipant`s with the effective amount of ICP per neuron,
+  //     as computed in step (1).
+  // (4) Refund each neuron of the Neurons' Fund with (reserved - effective) amount of ICP.
+  // Effective amounts depend on `total_direct_participation_icp_e8s` and the participation limits
+  // of a particular SNS instance, namely, each participation must be between
+  // `min_participant_icp_e8s` and `max_participant_icp_e8s`.
+  // - If a neuron of the Neurons' Fund has less than `min_participant_icp_e8s` worth of maturity,
+  //   then it is ineligible to participate.
+  // - If a neuron of the Neurons' Fund has more than `max_participant_icp_e8s` worth of maturity,
+  //   then its participation amount is limited to `max_participant_icp_e8s`.
+  // Reserved amounts are computed as the minimal upper bound on the effective amounts, i.e., when
+  // the value `total_direct_participation_icp_e8s` reaches its theoretical maximum.
+  message Committed {
+    // This is where the minted ICP will be sent.
+    ic_base_types.pb.v1.PrincipalId sns_governance_canister_id = 1;
+    // Total amount of participation from direct swap participants.
+    optional uint64 total_direct_participation_icp_e8s = 2;
+    // Total amount of participation from the Neurons' Fund.
+    // TODO[NNS1-2570]: Ensure this field is set.
+    optional uint64 total_neurons_fund_participation_icp_e8s = 3;
+  }
+
+  // When this happens, all priorly reserved maturity for this SNS instance needs to be restored to
+  // the Neurons' Fund neurons.
+  message Aborted {}
+}
+
+// Handling the Neurons' Fund and transferring some of its maturity to an SNS treasury is
+// thus the responsibility of the NNS Governance. When a swap succeeds, a Swap canister should send
+// a `settle_neurons_fund_participation` request to the NNS Governance, specifying its `result`
+// field as `committed`. The NNS Governance then computes the ultimate distribution of maturity in
+// the Neurons' Fund. However, this distribution also needs to be made available to the SNS Swap
+// that will use this information to create SNS neurons of an appropriate size for each
+// Neurons' Fund (as well as direct) participant. That is why in the `committed` case,
+// the NNS Governance provides `neurons_fund_neuron_portions`, while in the `aborted`
+// case it does not.
+//
+// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
+// manually propagated to (sns) swap.proto.
+message SettleNeuronsFundParticipationResponse {
+  // Represents one NNS neuron from the Neurons' Fund participating in this swap.
+  message NeuronsFundNeuron {
+    // The NNS neuron ID of the participating neuron.
+    optional uint64 nns_neuron_id = 1;
+    // The amount of Neurons' Fund participation associated with this neuron.
+    optional uint64 amount_icp_e8s = 2;
+    // The principal that can manage this neuron.
+    optional ic_base_types.pb.v1.PrincipalId controller = 6;
+    // The principals that can vote, propose, and follow on behalf of this neuron.
+    optional ic_nervous_system.pb.v1.Principals hotkeys = 7;
+
+    // Whether the amount maturity amount of Neurons' Fund participation associated with this neuron
+    // has been capped to reflect the maximum participation amount for this SNS swap.
+    optional bool is_capped = 4;
+
+    reserved 3;
+    reserved "hotkey_principal";
+  }
+
+  // Request was completed successfully.
+  message Ok {
+    repeated NeuronsFundNeuron neurons_fund_neuron_portions = 1;
+  }
+
+  oneof result {
+    GovernanceError err = 1;
+    Ok ok = 2;
+  }
+}
+
+// The id of a specific neuron, which equals the neuron's subaccount on
+// the ledger canister (the account that holds the neuron's staked tokens).
+message NeuronId {
+  bytes id = 1;
 }
 
 // END NNS1-1589 HACKS
@@ -650,11 +1228,324 @@ message CanisterCallError {
 // error. The refund is always on the ICP ledger, from this canister's
 // subaccount of the caller to the account of the caller.
 message ErrorRefundIcpRequest {
-  // The amount of ICP to transfer.
-  uint64 icp_e8s = 1;
-  // If specified, use this as 'fee' instead of the default.
-  uint64 fee_override_e8s = 2;
+  // Principal who originally sent the funds to us, and is now asking for any
+  // unaccepted balance to be returned.
+  ic_base_types.pb.v1.PrincipalId source_principal_id = 1;
 }
 
 message ErrorRefundIcpResponse {
+  // Request was completed successfully.
+  message Ok {
+    // The ledger transfer went through at this block height.
+    optional uint64 block_height = 1;
+  }
+
+  // Request was not successful, and no funds were transferred.
+  message Err {
+    enum Type {
+      TYPE_UNSPECIFIED = 0;
+
+      // There is something wrong with the request. If repeated, the request
+      // will always be rejected.
+      TYPE_INVALID_REQUEST = 1;
+
+      // Most likely, the canister is in the wrong Lifecycle. More generally,
+      // the system is not yet in a state where the request can be fulfilled,
+      // but it might enter a suitable state later. In this case, the same
+      // request might be accepted later.
+      TYPE_PRECONDITION = 2;
+
+      // Most likely, a request to the ledger failed, in which case, it can be
+      // assumed that no funds were transferred. In general, this is caused by
+      // something outside this canister, which usually means some other
+      // canister (such as ledger).
+      TYPE_EXTERNAL = 3;
+    }
+
+    optional Type error_type = 1;
+    optional string description = 2;
+  }
+
+  oneof result {
+    Ok ok = 1;
+    Err err = 2;
+  }
+}
+
+// Request struct for the method `get_lifecycle`
+message GetLifecycleRequest {}
+
+// Response struct for the method `get_lifecycle`
+message GetLifecycleResponse {
+  optional Lifecycle lifecycle = 1;
+  optional uint64 decentralization_sale_open_timestamp_seconds = 2;
+  optional uint64 decentralization_swap_termination_timestamp_seconds = 3;
+}
+
+message GetAutoFinalizationStatusRequest {}
+
+message GetAutoFinalizationStatusResponse {
+  // Reflects whether auto-finalization has been enabled via in the init
+  // parameters (`should_auto_finalize`).
+  optional bool is_auto_finalize_enabled = 1;
+
+  // True if and only if auto-finalization has been started.
+  optional bool has_auto_finalize_been_attempted = 2;
+
+  // Will be populated with the FinalizeSwapResponse once auto-finalization has
+  // completed.
+  optional FinalizeSwapResponse auto_finalize_swap_response = 3;
+}
+
+// Request struct for the method `get_init`
+message GetInitRequest {}
+
+// Response struct for the method `get_init`
+message GetInitResponse {
+  optional Init init = 1;
+}
+
+// Request struct for the method `get_derived_state`
+message GetDerivedStateRequest {}
+
+// Response struct for the method `get_derived_state`
+message GetDerivedStateResponse {
+  optional uint64 buyer_total_icp_e8s = 1;
+  // Current number of non-Neurons' Fund swap participants
+  optional uint64 direct_participant_count = 3;
+  // Current number of Neurons' Fund swap participants. In particular, it's the
+  // number of unique controllers of the neurons participating
+  // in the Neurons' Fund.
+  optional uint64 cf_participant_count = 4;
+  // Current number of Neurons' Fund neurons participating in the swap
+  // May be greater than cf_participant_count if multiple neurons in
+  // the Neurons' Fund have the same controller.
+  optional uint64 cf_neuron_count = 5;
+  optional double sns_tokens_per_icp = 2;
+  // Current amount of contributions from direct swap participants.
+  optional uint64 direct_participation_icp_e8s = 6;
+  // Current amount of contributions from the Neurons' Fund.
+  optional uint64 neurons_fund_participation_icp_e8s = 7;
+}
+
+// ICRC-1 Account. See https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1
+message ICRC1Account {
+  ic_base_types.pb.v1.PrincipalId owner = 1;
+  optional bytes subaccount = 2;
+}
+
+// A device for ensuring that retrying (direct) participation does not result
+// in multiple participation. Basically, this records a user's intent to
+// participate BEFORE moving any funds.
+//
+// How this is used: before any money is sent, a user's agent must first look
+// for an existing ticket. If one does not exist, then, a new one is created
+// for the current participation that is now being attempted (for
+// the first time).
+//
+// If there is already a ticket, then the new participation must be aborted.
+// The surprise existence of the ticket indicates that there is a pending
+// participation. In this case the user's agent must attempt to perform the same
+// participation as stated in the ticket before doing anything else.
+message Ticket {
+  // Unique ID of the ticket
+  uint64 ticket_id = 1;
+
+  // The account of the ticket.
+  //
+  // account.owner is the owner of this ticket.
+  ICRC1Account account = 2;
+
+  // The user-set amount of the ticket in ICP e8s
+  uint64 amount_icp_e8s = 3;
+
+  // The timestamp of creation of this ticket
+  uint64 creation_time = 4;
+}
+
+// Request struct for the method `get_open_ticket`
+message GetOpenTicketRequest {}
+
+// Response struct for the method `get_open_ticket`
+message GetOpenTicketResponse {
+  // Request was completed successfully.
+  message Ok {
+    // If there is an open swap ticket for the caller then this field
+    // contains it.
+    optional Ticket ticket = 1;
+  }
+
+  // Request was not successful, and no ticket was created.
+  message Err {
+    enum Type {
+      TYPE_UNSPECIFIED = 0;
+
+      TYPE_SALE_NOT_OPEN = 1;
+
+      TYPE_SALE_CLOSED = 2;
+    }
+
+    optional Type error_type = 1;
+  }
+
+  oneof result {
+    Ok ok = 1;
+    Err err = 2;
+  }
+}
+
+// Request struct for the method `new_sale_ticket`
+message NewSaleTicketRequest {
+  // The user-set amount of the ticket in ICP e8s
+  uint64 amount_icp_e8s = 1;
+
+  // The subaccount of the caller to be used for the ticket
+  optional bytes subaccount = 2;
+}
+
+// Response struct for the method `new_sale_ticket`
+message NewSaleTicketResponse {
+  // Request was completed successfully.
+  message Ok {
+    // The created ticket.
+    Ticket ticket = 1;
+  }
+
+  // Request was not successful, and no ticket was created.
+  message Err {
+    message InvalidUserAmount {
+      uint64 min_amount_icp_e8s_included = 1;
+      uint64 max_amount_icp_e8s_included = 2;
+    }
+
+    enum Type {
+      TYPE_UNSPECIFIED = 0;
+
+      TYPE_SALE_NOT_OPEN = 1;
+
+      TYPE_SALE_CLOSED = 2;
+
+      // There is already an open ticket associated with the caller.
+      //
+      // When this is the `error_type`, then the field existing_ticket
+      // is set and contains the ticket itself.
+      TYPE_TICKET_EXISTS = 3;
+
+      // The amount sent by the user is not within the Swap parameters.
+      //
+      // When this is the `error_type`, then the field invalid_user_amount
+      // is set and describes minimum and maximum amounts.
+      TYPE_INVALID_USER_AMOUNT = 4;
+
+      // The specified subaccount is not a valid subaccount
+      // (length != 32 bytes).
+      TYPE_INVALID_SUBACCOUNT = 5;
+
+      // The specified principal is forbidden from creating tickets.
+      TYPE_INVALID_PRINCIPAL = 6;
+    }
+
+    Type error_type = 1;
+
+    // When `error_type` is `INVALID_USER_AMOUNT` then this field
+    // describes the minimum and maximum amounts.
+    optional InvalidUserAmount invalid_user_amount = 2;
+
+    // When `error_type` is `TICKET_EXISTS` then this field
+    // contains the ticket that already exists.
+    optional Ticket existing_ticket = 3;
+  }
+
+  oneof result {
+    Ok ok = 1;
+    Err err = 2;
+  }
+}
+
+// Request struct for the method `list_direct_participants`. This method
+// paginates over all direct participants in the decentralization swap.
+// Direct participants are participants who did not participate via the
+// Neurons' Fund.
+message ListDirectParticipantsRequest {
+  // The limit of the number of Participants returned in each page, in range
+  // [0, 30,000].
+  // If no value, or a value outside of this range is requested, 30,000 will be
+  // used.
+  optional uint32 limit = 1;
+
+  // Skip the first `offset` elements when constructing the response.
+  optional uint32 offset = 2;
+}
+
+// Response struct for the method `list_direct_participants`.
+message ListDirectParticipantsResponse {
+  // The list of Participants returned from the invocation of
+  // `list_direct_participants`.
+  // The list is a page of all the buyers in the Swap canister at the time of
+  // the method call. The size of the page is equal to either:
+  // - the max page size (30,000),
+  // - the corresponding `ListDirectParticipantsRequest.limit`,
+  // - the remaining Participants, if there are fewer than `limit` participants
+  //   left.
+  //
+  // Pagination through the entire list of participants is complete if
+  // len(participants) < `ListDirectParticipantsRequest.limit`.
+  repeated Participant participants = 1;
+}
+
+// A direct Participant in the decentralization swap.
+message Participant {
+  // The PrincipalId of the participant.
+  ic_base_types.pb.v1.PrincipalId participant_id = 1;
+
+  // The BuyerState of the participant, which includes the
+  // amount of participation in e8s of a Token, and the transfer
+  // status of those tokens.
+  BuyerState participation = 2;
+}
+
+// Request struct for the method `get_sale_parameters`.
+message GetSaleParametersRequest {}
+
+// Response struct for the method `get_sale_parameters`.
+message GetSaleParametersResponse {
+  Params params = 1;
+}
+
+// Request struct for the method `list_community_fund_participants`.
+message ListCommunityFundParticipantsRequest {
+  // The maximum number of elements that will be in the response.
+  // This is capped at 10_000.
+  optional uint32 limit = 1;
+  // Skip the first `offset` elements when constructing the response
+  optional uint64 offset = 2;
+}
+
+// Response struct for the method `list_community_fund_participants`.
+message ListCommunityFundParticipantsResponse {
+  repeated CfParticipant cf_participants = 1;
+}
+
+// Request for the method `list_sns_neuron_recipes`
+message ListSnsNeuronRecipesRequest {
+  // The maximum number of elements that will be in the response.
+  // This is capped at 10_000.
+  optional uint32 limit = 1;
+  // Skip the first `offset` elements when constructing the response
+  optional uint64 offset = 2;
+}
+
+// Response for the method `list_sns_neuron_recipes`
+message ListSnsNeuronRecipesResponse {
+  repeated SnsNeuronRecipe sns_neuron_recipes = 1;
+}
+
+// Request struct for the method `notify_payment_failure`
+message NotifyPaymentFailureRequest {}
+
+// Response for the method `notify_payment_failure`
+// Returns the ticket if a ticket was found for the caller and the ticket
+// was removed successfully. Returns None if no ticket was found for the caller.
+message NotifyPaymentFailureResponse {
+  optional Ticket ticket = 1;
 }

@@ -1,0 +1,11 @@
+[Unit]
+Description=Discard unused blocks once a week
+
+[Timer]
+OnCalendar=weekly
+AccuracySec=1h
+Persistent=true
+RandomizedDelaySec=12h
+
+[Install]
+WantedBy=timers.target

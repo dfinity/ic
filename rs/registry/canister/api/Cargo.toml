@@ -1,0 +1,18 @@
+[package]
+name = "ic-registry-canister-api"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+attestation = { path = "../../../ic_os/sev/attestation" }
+der = { workspace = true, features = ["alloc", "derive", "std"] }
+ic-base-types = { path = "../../../types/base_types" }
+ic-nervous-system-chunks = { path = "../../../nervous_system/chunks" }
+ic-registry-transport = { path = "../../transport" }
+ic-utils = { path = "../../../utils" }
+candid = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }

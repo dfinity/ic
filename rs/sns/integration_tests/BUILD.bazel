@@ -1,67 +1,96 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
-load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test", "rust_ic_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    "//rs/canister_client/sender",
-    "//rs/crypto/sha",
+# See rs/nervous_system/feature_test.md
+BASE_DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/crypto/sha2",
+    "//rs/ledger_suite/common/ledger_canister_core",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icp/ledger",
+    "//rs/ledger_suite/icrc1",
+    "//rs/ledger_suite/icrc1/ledger",
+    "//rs/nervous_system/canisters",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
+    "//rs/nns/cmc",
     "//rs/nns/constants",
-    "//rs/rosetta-api/icrc1",
-    "//rs/rosetta-api/ledger_core",
+    "//rs/nns/governance/api",
+    "//rs/nns/sns-wasm",
+    "//rs/registry/subnet_type:subnet_type",
+    "//rs/rust_canisters/canister_test",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_json",
-    "//rs/rust_canisters/dfn_protobuf",
-    "//rs/sns/cli",
-    "//rs/sns/governance",
-    "//rs/sns/init",
-    "//rs/sns/test_utils",
+    "//rs/sns/governance:governance",
+    "//rs/sns/governance/api",
+    "//rs/sns/root",
+    "//rs/sns/swap",
+    "//rs/state_machine_tests",
+    "//rs/test_utilities/load_wasm",
     "//rs/types/base_types",
-    "//rs/types/ic00_types",
-    "@crate_index//:byteorder",
+    "//rs/types/management_canister_types",
+    "//rs/types/types",
+    "//rs/universal_canister/lib",
     "@crate_index//:candid",
-    "@crate_index//:hex",
     "@crate_index//:maplit",
     "@crate_index//:pretty-bytes",
+    "@crate_index//:proptest",
     "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:serde_yaml",
 ]
 
+# Each target declared in this file may choose either these (release-ready)
+# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/sns/test_utils",
+]
+
+DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/sns/test_utils:test_utils--test_feature",
+]
+
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 
-DEV_DEPENDENCIES = [
-    "//rs/canister_client",
+BASE_DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/ic-http-types",
+    "//rs/canister_client/sender",
     "//rs/crypto",
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/nervous_system/clients",
+    "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nns/common",
-    "//rs/nns/governance",
-    "//rs/nns/test_utils",
-    "//rs/rosetta-api/ledger_canister",
-    "//rs/rust_canisters/canister_test",
+    "//rs/protobuf",
     "//rs/rust_canisters/on_wire",
-    "//rs/sns/root",
-    "//rs/sns/swap",
-    "//rs/state_machine_tests",
-    "//rs/types/types",
+    "//rs/sns/governance:build_script",
+    "//rs/sns/init",
     "@crate_index//:assert_matches",
     "@crate_index//:itertools",
     "@crate_index//:lazy_static",
     "@crate_index//:num-traits",
-    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:pretty_assertions",
     "@crate_index//:rust_decimal",
+    "@crate_index//:serde_bytes",
     "@crate_index//:tokio",
-    "@wabt_rs//:wabt",
+    "@crate_index//:wat",
+]
+
+TEST_DEV_DEPENDENCIES = BASE_DEV_DEPENDENCIES + [
+    "//rs/nns/test_utils:test_utils--test_feature",
 ]
 
 MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:rust_decimal_macros",
 ]
 
@@ -69,57 +98,109 @@ ALIASES = {}
 
 rust_library(
     name = "lib",
+    testonly = True,
     srcs = glob(
         ["src/**"],
     ),
     aliases = ALIASES,
     crate_name = "ic_sns_integration_tests",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
 rust_canister(
-    name = "sns-test-dapp-canister-raw",
+    name = "sns-test-dapp-canister",
     srcs = ["test_canisters/test_dapp_canister.rs"],
+    service_file = ":test_canisters/empty.did",
     deps = [
+        # Keep sorted.
         "//rs/rust_canisters/dfn_candid",
         "//rs/rust_canisters/dfn_core",
     ],
 )
 
-optimized_canister(
-    name = "sns-test-dapp-canister",
-    wasm = "sns-test-dapp-canister-raw",
-)
-
 rust_canister(
-    name = "sns-governance-mem-test-canister-raw",
+    name = "sns-governance-mem-test-canister",
     srcs = ["test_canisters/sns_governance_mem_test_canister.rs"],
+    service_file = ":test_canisters/empty.did",
     deps = [
+        # Keep sorted.
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ledger_suite/icrc1",
         "//rs/nervous_system/common",
-        "//rs/rosetta-api/icrc1",
         "//rs/rust_canisters/dfn_core",
         "//rs/sns/governance",
         "//rs/types/base_types",
+        "@crate_index//:ic-stable-structures",
         "@crate_index//:pretty-bytes",
         "@crate_index//:prost",
-        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand",
     ],
 )
 
-optimized_canister(
-    name = "sns-governance-mem-test-canister",
-    wasm = "sns-governance-mem-test-canister-raw",
-)
+DATA_DEPS = [
+    # Keep sorted.
+    ":sns-governance-mem-test-canister",
+    ":sns-test-dapp-canister",
+    "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
+    "//rs/ledger_suite/icrc1/archive:archive_canister",
+    "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
+    "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+    "//rs/migration_canister:migration-canister",
+    "//rs/nervous_system/common/test_canister",
+    "//rs/nns/cmc:cycles-minting-canister",
+    "//rs/nns/governance:governance-canister-test",
+    "//rs/nns/gtc:genesis-token-canister",
+    "//rs/nns/handlers/root/impl:root-canister",
+    "//rs/nns/integration_tests:unstoppable-canister",
+    "//rs/nns/sns-wasm:sns-wasm-canister",
+    "//rs/node_rewards/canister:node-rewards-canister",
+    "//rs/registry/canister:registry-canister",
+    "//rs/registry/canister:registry-canister-test",
+    "//rs/sns/governance:sns-governance-canister-test.wasm.gz",
+    "//rs/sns/root:sns-root-canister",
+    "//rs/sns/swap:sns-swap-canister",
+    "//rs/universal_canister/impl:universal_canister.wasm.gz",
+    "@mainnet_canisters//:sns_ledger.wasm.gz",
+]
 
-rust_test_suite_with_extra_srcs(
+ENV = {
+    "CARGO_MANIFEST_DIR": "rs/sns/integration_tests",
+    "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
+    "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
+    "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
+    "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister)",
+    "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister)",
+    "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+    "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
+    "IC_NERVOUS_SYSTEM_COMMON_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/nervous_system/common/test_canister:test_canister)",
+    "NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
+    "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
+    "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
+    "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
+    "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister-test.wasm.gz)",
+    "SNS_GOVERNANCE_MEM_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/sns/integration_tests:sns-governance-mem-test-canister)",
+    "SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/sns/root:sns-root-canister)",
+    "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",
+    "SNS_TEST_DAPP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/integration_tests:sns-test-dapp-canister)",
+    "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
+    "UNSTOPPABLE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/integration_tests:unstoppable-canister)",
+    "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    "MAINNET_IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath @mainnet_canisters//:sns_ledger.wasm.gz)",
+    "MIGRATION_CANISTER_WASM_PATH": "$(rootpath //rs/migration_canister:migration-canister)",
+}
+
+rust_ic_test_suite_with_extra_srcs(
     name = "integration_test",
     size = "large",
     srcs = glob(
         ["src/*.rs"],
         exclude = [
             "src/lib.rs",
+            "src/golden_state_swap_upgrade_twice.rs",  # there's a dedicated :golden_state_swap_upgrade_twice target for this test below.
+            "src/upgrade_canister.rs",  # there's a dedicated :upgrade_canister_test target for this test below.
+            "src/neuron.rs",  # there's a dedicated :neuron_test target for this test below.
         ],
     ),
     aliases = ALIASES,
@@ -128,50 +209,99 @@ rust_test_suite_with_extra_srcs(
         "7",
     ],
     crate_features = ["test"],
-    data = [
-        ":sns-governance-mem-test-canister",
-        ":sns-test-dapp-canister",
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
-        "//rs/nervous_system/common/test_canister",
-        "//rs/nns/cmc:cycles-minting-canister",
-        "//rs/nns/governance:governance-canister-test",
-        "//rs/nns/gtc:genesis-token-canister",
-        "//rs/nns/handlers/root:root-canister",
-        "//rs/nns/sns-wasm:sns-wasm-canister",
-        "//rs/registry/canister:registry-canister",
-        "//rs/rosetta-api/icrc1/index:index_canister",
-        "//rs/rosetta-api/icrc1/ledger:ledger_canister",
-        "//rs/rosetta-api/ledger_canister:ledger-canister-wasm-notify-method",
-        "//rs/sns/governance:sns-governance-canister",
-        "//rs/sns/root:sns-root-canister",
-        "//rs/sns/swap:sns-swap-canister",
-    ],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/sns/integration_tests",
-        "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
-        "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
-        "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
-        "IC_ICRC1_INDEX_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index:index_canister)",
-        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
-        "IC_NERVOUS_SYSTEM_COMMON_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/nervous_system/common/test_canister:test_canister)",
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/ledger_canister:ledger-canister-wasm-notify-method)",
-        "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
-        "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root:root-canister)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
-        "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister)",
-        "SNS_GOVERNANCE_MEM_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/sns/integration_tests:sns-governance-mem-test-canister)",
-        "SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/sns/root:sns-root-canister)",
-        "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",
-        "SNS_TEST_DAPP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/integration_tests:sns-test-dapp-canister)",
-        "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
-    },
-    extra_srcs = ["src/lib.rs"],
+    data = DATA_DEPS,
+    env = ENV,
+    extra_srcs = [],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["cpu:8"],
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
-        "//rs/sns/governance:governance_test_feature",
-        "//rs/sns/governance:build_script",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES,
+)
+
+rust_ic_test(
+    name = "upgrade_canister_test",
+    size = "large",
+    srcs = ["src/upgrade_canister.rs"],
+    args = [
+        "--test-threads",
+        "7",
     ],
+    crate_features = ["test"],
+    data = DATA_DEPS,
+    env = ENV,
+    #proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "cpu:8",
+        "long_test",  # The P90 duration of this test is over 6 minutes for the week starting on 2025-08-21.
+    ],
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES,
+)
+
+rust_ic_test(
+    name = "neuron_test",
+    size = "large",
+    srcs = ["src/neuron.rs"],
+    args = [
+        "--test-threads",
+        "7",
+    ],
+    crate_features = ["test"],
+    data = DATA_DEPS,
+    env = ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "cpu:8",
+        "long_test",  # The P90 duration of this test is 6 minutes for the month starting on 2026-01-16.
+    ],
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES,
+)
+
+# To run this test,
+#
+#     bazel \
+#         test \
+#         --test_env=SSH_AUTH_SOCK \
+#         //rs/sns/integration_tests:golden_state_swap_upgrade_twice
+#
+# The unusual thing in this command is `--test_env=SSH_AUTH_SOCK`. This causes the SSH_AUTH_SOCK
+# environment variable to be "forwarded" from your shell to the sandbox where the test is run.
+# This authorizes the test to download the test data.
+#
+# Additionally, the following flags are recommended (but not required):
+#
+# --test_output=streamed
+# --test_arg=--nocapture
+#
+# These let you watch the progress of the test, rather than only being able to see the output only
+# at the end.
+#
+# See the .bazelrc for more configuration information.
+rust_ic_test_suite_with_extra_srcs(
+    name = "golden_state_swap_upgrade_twice",
+    # This uses on the order of 50 GB of disk space.
+    # Therefore, size = "large" is not large enough.
+    size = "enormous",
+    srcs = [
+        "src/golden_state_swap_upgrade_twice.rs",
+    ],
+    aliases = ALIASES,
+    args = [
+        "--test-threads",
+        "7",
+    ],
+    crate_features = ["test"],
+    data = DATA_DEPS + [
+        "@mainnet_canisters//:swap.wasm.gz",
+    ],
+    env = dict(ENV.items() + [
+        ("MAINNET_SNS_SWAP_CANISTER_WASM_PATH", "$(rootpath @mainnet_canisters//:swap.wasm.gz)"),
+    ]),
+    extra_srcs = [],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "cpu:8",
+        "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
+        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
+        "requires-network",  # Because mainnet state is downloaded (and used).
+    ],
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES + ["//rs/nns/test_utils/golden_nns_state"],
 )

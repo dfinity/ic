@@ -1,26 +1,37 @@
 use backoff::backoff::Backoff;
+use candid::Principal;
 use core::future::Future;
-use dfn_candid::{candid, candid_multi_arity};
+use dfn_candid::{candid, candid_multi_arity, candid_one};
 use ic_canister_client::{Agent, Sender};
-use ic_config::{subnet_config::SubnetConfig, Config};
-use ic_ic00_types::CanisterStatusType::Stopped;
-pub use ic_ic00_types::{
-    self as ic00, CanisterIdRecord, CanisterInstallMode, CanisterStatusResult, InstallCodeArgs,
-    ProvisionalCreateCanisterWithCyclesArgs, SetControllerArgs, IC_00,
+use ic_config::Config;
+use ic_management_canister_types::{
+    CanisterSettings, CanisterStatusArgs, CanisterStatusResult, CanisterStatusType,
+    CreateCanisterResult, DeleteCanisterArgs, ProvisionalCreateCanisterWithCyclesArgs,
+    StartCanisterArgs, StopCanisterArgs, UpdateSettingsArgs,
 };
+// The below should eventually be replaced with imports from the
+// public version of the crate above. For now, they're kept as
+// changing them would propagate to changes to state machine tests
+// which would be a bit more involved.
+pub use ic_management_canister_types_private::{
+    self as ic00, CanisterIdRecord, CanisterInstallMode, IC_00, InstallCodeArgs,
+};
+use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, CanisterStatusResultV2};
 use ic_registry_transport::pb::v1::RegistryMutation;
-use ic_replica_tests::*;
-pub use ic_test_utilities::assert_utils::assert_balance_equals;
-pub use ic_types::{ingress::WasmResult, CanisterId, Cycles, PrincipalId};
+use ic_replica_tests::{LocalTestRuntime, canister_test_async};
+pub use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
+use ic_state_machine_tests::StateMachine;
+pub use ic_types::{CanisterId, PrincipalId, ingress::WasmResult};
+pub use ic_types_cycles::Cycles;
 use on_wire::{FromWire, IntoWire, NewType};
-
-use ic_ic00_types::{CanisterSettingsArgs, CanisterStatusResultV2, UpdateSettingsArgs};
-use std::convert::TryFrom;
-use std::env;
-use std::fmt;
-use std::time::Duration;
-use std::{convert::AsRef, fs::File, io::Read, path::Path};
-use wabt::wasm2wat;
+use std::{
+    convert::{AsRef, TryFrom},
+    env, fmt,
+    fs::File,
+    io::Read,
+    path::Path,
+    time::Duration,
+};
 
 const MIN_BACKOFF_INTERVAL: Duration = Duration::from_millis(250);
 // The value must be smaller than `ic_http_handler::MAX_TCP_PEEK_TIMEOUT_SECS`.
@@ -56,7 +67,7 @@ impl Wasm {
         } else {
             format!("_{}", features.join("_"))
         };
-        format!("{}{}_WASM_PATH", bin_name, features_part)
+        format!("{bin_name}{features_part}_WASM_PATH")
             .replace('-', "_")
             .to_uppercase()
     }
@@ -66,38 +77,38 @@ impl Wasm {
     /// reads it.
     pub fn from_location_specified_by_env_var(bin_name: &str, features: &[&str]) -> Option<Wasm> {
         let var_name = Wasm::env_var_name(bin_name, features);
-        eprintln!("looking up {} at {}", bin_name, var_name);
+        eprintln!("looking up {bin_name} at {var_name}");
         match env::var(&var_name) {
             Ok(path) => {
-                let wasm = Wasm::from_file(path);
+                let wasm = Wasm::from_file(path.clone());
                 eprintln!(
-                    "Using pre-built binary for {} (size = {})",
+                    "Using pre-built binary for {} with features: {:?} (size = {}, path = {})",
                     bin_name,
-                    wasm.0.len()
+                    features,
+                    wasm.0.len(),
+                    path,
                 );
                 Some(wasm)
             }
             Err(env::VarError::NotPresent) => {
-                if env::var("CI").is_ok() {
-                    println!("Environment variables with name containing \"CANISTER\":");
-                    for (k, v) in env::vars() {
-                        if k.contains("CANISTER") {
-                            println!("  {}: {}", k, v);
-                        }
+                println!(
+                    "Environment variable {var_name} is not present; variables with name \
+                    containing \"CANISTER\":"
+                );
+                for (k, v) in env::vars() {
+                    if k.contains("CANISTER") {
+                        println!("  {k}: {v}");
                     }
-
+                }
+                if env::var("CI").is_ok() {
                     panic!(
-                        "Running on CI and expected canister env var {0}\n\
-                         Please add {1} to the following locations:\n\
-                        \tgitlab-ci/tools/cargo-build-canisters\n\
-                        \tgitlab-ci/src/canisters/wasm-build-functions.sh\n\
-                        \trs/nns/constants/src/lib.rs\n",
-                        var_name, bin_name
-                    )
+                        "Running on CI and expected canister env var {var_name}\n\
+                        Please add {bin_name} as a data dependency in the test's BUILD.bazel target:\n"
+                    );
                 }
                 None
             }
-            Err(e) => panic!("When trying to access var {}, got error {}.", var_name, e),
+            Err(e) => panic!("When trying to access var {var_name}, got error {e}."),
         }
     }
 
@@ -120,7 +131,7 @@ impl Wasm {
     }
 
     pub fn from_wat(content: &str) -> Wasm {
-        let wasm = wabt::wat2wasm(content).expect("couldn't convert wat to wasm");
+        let wasm = wat::parse_str(content).expect("couldn't convert wat to wasm");
         Wasm(wasm)
     }
 
@@ -132,8 +143,8 @@ impl Wasm {
     pub fn strip_debug_info(self) -> Self {
         // The WAT format does not have any support for custom sections. So they are
         // removed (including any debug info) when converting a WASM to a WAT.
-        let bytes =
-            wabt::wat2wasm(wasm2wat(self.0).expect("wasm2wat failed")).expect("wat2wasm failed.");
+        let bytes = wat::parse_str(wasmprinter::print_bytes(self.0).expect("wasm2wat failed"))
+            .expect("wat2wasm failed.");
         println!("Compiled canister size: {:?}", bytes.len());
         Self::from_bytes(bytes)
     }
@@ -146,7 +157,6 @@ impl Wasm {
             wasm: self,
             compute_allocation: None,
             memory_allocation: None,
-            query_allocation: None,
             // By default, give the max amount of cycles to the created canister.
             num_cycles: Some(u128::MAX),
         }
@@ -169,19 +179,28 @@ impl Wasm {
         self.0
     }
 
+    pub fn sha256_hash(&self) -> [u8; 32] {
+        ic_crypto_sha2::Sha256::hash(&self.0)
+    }
+
     /// Installs this wasm onto a pre-existing canister.
     pub async fn install_onto_canister(
         self,
         canister: &mut Canister<'_>,
+        mode: CanisterInstallMode,
         canister_init_payload: Option<Vec<u8>>,
+        memory_allocation: Option<u64>,
     ) -> Result<(), String> {
-        self.install(canister.runtime)
-            .install(canister, canister_init_payload.unwrap_or_default())
-            .await
+        let init_payload = canister_init_payload.unwrap_or_default();
+        let mut install = self.install(canister.runtime).with_mode(mode);
+        if let Some(memory_allocation) = memory_allocation {
+            install = install.with_memory_allocation(memory_allocation);
+        }
+        install.install(canister, init_payload).await
     }
 
     /// Installs this wasm onto the given pre-existing canister, with
-    /// retries.This is especially useful when the runtime is remote, and
+    /// retries. This is especially useful when the runtime is remote, and
     /// for which transient errors may happen.
     pub async fn install_with_retries_onto_canister(
         self,
@@ -189,36 +208,26 @@ impl Wasm {
         canister_init_payload: Option<Vec<u8>>,
         memory_allocation: Option<u64>,
     ) -> Result<(), String> {
-        let init_payload = canister_init_payload.unwrap_or_default();
-        let runtime = canister.runtime;
         let mut backoff = get_backoff_policy();
         loop {
-            let mut install = self
+            let canister_id = canister.canister_id();
+            let install_result = self
                 .clone()
-                .install(runtime)
-                .with_mode(CanisterInstallMode::Reinstall);
-
-            if let Some(memory_allocation) = memory_allocation {
-                install = install.with_memory_allocation(memory_allocation);
-            }
-
-            let canister_id = canister.canister_id;
-            println!(
-                "Attempting to install wasm into canister with ID: {}",
-                canister_id
-            );
-            match install.install(canister, init_payload.clone()).await {
+                .install_onto_canister(
+                    canister,
+                    CanisterInstallMode::Reinstall,
+                    canister_init_payload.clone(),
+                    memory_allocation,
+                )
+                .await;
+            match install_result {
                 Ok(()) => {
-                    println!(
-                        "Successfully installed wasm into canister with ID: {}",
-                        canister_id
-                    );
+                    println!("Successfully installed wasm into canister with ID: {canister_id}");
                     return Ok(());
                 }
                 Err(e) => {
                     eprintln!(
-                        "Installation of wasm into cansiter with ID: {} failed with: {}",
-                        canister_id, e
+                        "Installation of wasm into canister with ID: {canister_id} failed with: {e}"
                     );
                     match backoff.next_backoff() {
                         Some(interval) => {
@@ -226,8 +235,7 @@ impl Wasm {
                         }
                         None => {
                             return Err(format!(
-                                "Canister installation timed out. Last error was: {}",
-                                e
+                                "Canister installation timed out. Last error was: {e}"
                             ));
                         }
                     }
@@ -264,16 +272,44 @@ where
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum Runtime {
     Remote(RemoteTestRuntime),
     Local(LocalTestRuntime),
+    StateMachine(StateMachine),
 }
 
 impl<'a> Runtime {
     /// Returns a client-side view of the management canister.
+    /// This is used for `provisional_create_canister_with_cycles`.
+    /// More details on effective canister id can be found in Interface Spec:
+    /// https://ic-interface-spec.netlify.app/#http-effective-canister-id
     pub fn get_management_canister(&'a self) -> Canister<'a> {
+        let effective_canister_id = match self {
+            Runtime::Remote(r) => r.effective_canister_id,
+            _ => PrincipalId::default(),
+        };
         Canister {
             runtime: self,
+            effective_canister_id,
+            canister_id: IC_00,
+            wasm: None,
+        }
+    }
+
+    /// Returns a client-side view of the management canister
+    /// with given effective canister id.
+    /// This is used for all management canister methods
+    /// but `provisional_create_canister_with_cycles`.
+    /// More details on effective canister id can be found in Interface Spec:
+    /// https://ic-interface-spec.netlify.app/#http-effective-canister-id
+    pub fn get_management_canister_with_effective_canister_id(
+        &'a self,
+        effective_canister_id: PrincipalId,
+    ) -> Canister<'a> {
+        Canister {
+            runtime: self,
+            effective_canister_id,
             canister_id: IC_00,
             wasm: None,
         }
@@ -299,17 +335,56 @@ impl<'a> Runtime {
         &'a self,
         num_cycles: Option<u128>,
     ) -> Result<Canister<'a>, String> {
-        let canister_id_record: Result<CanisterIdRecord, String> = self
-            .get_management_canister()
-            .update_(
-                ic00::Method::ProvisionalCreateCanisterWithCycles.to_string(),
-                candid,
-                (ProvisionalCreateCanisterWithCyclesArgs::new(num_cycles),),
-            )
-            .await;
+        self.create_canister_with_specified_id(num_cycles, None)
+            .await
+    }
+
+    /// Creates an empty canister.
+    ///
+    /// Note that this calls ic00::Method::ProvisionalCreateCanisterWithCycles,
+    /// which is protected by a whitelist of callers. Depending on the
+    /// runtime, and depending on the replica configuration, this may not be
+    /// authorized.
+    pub async fn create_canister_with_specified_id(
+        &'a self,
+        num_cycles: Option<u128>,
+        specified_id: Option<PrincipalId>,
+    ) -> Result<Canister<'a>, String> {
+        let create_canister_result: Result<CreateCanisterResult, String> = match specified_id {
+            Some(canister_id) => {
+                self.get_management_canister_with_effective_canister_id(canister_id)
+                    .update_(
+                        ic00::Method::ProvisionalCreateCanisterWithCycles.to_string(),
+                        candid,
+                        (ProvisionalCreateCanisterWithCyclesArgs {
+                            amount: num_cycles.map(candid::Nat::from),
+                            settings: None,
+                            specified_id: specified_id.map(Principal::from),
+                            sender_canister_version: None,
+                        },),
+                    )
+                    .await
+            }
+            None => {
+                self.get_management_canister()
+                    .update_(
+                        ic00::Method::ProvisionalCreateCanisterWithCycles.to_string(),
+                        candid,
+                        (ProvisionalCreateCanisterWithCyclesArgs {
+                            amount: num_cycles.map(candid::Nat::from),
+                            settings: None,
+                            specified_id: specified_id.map(Principal::from),
+                            sender_canister_version: None,
+                        },),
+                    )
+                    .await
+            }
+        };
+        let canister_id = create_canister_result?.canister_id;
         Ok(Canister {
             runtime: self,
-            canister_id: canister_id_record?.get_canister_id(),
+            effective_canister_id: canister_id.into(),
+            canister_id: CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
             wasm: None,
         })
     }
@@ -324,13 +399,35 @@ impl<'a> Runtime {
     pub async fn create_canister_max_cycles_with_retries(&'a self) -> Result<Canister<'a>, String> {
         execute_with_retries(|| self.create_canister_with_max_cycles())
             .await
-            .map_err(|e| format!("Creation of a canister timed out. Last error was: {}", e))
+            .map_err(|e| format!("Creation of a canister timed out. Last error was: {e}"))
     }
 
-    /// Clean up the run times (if any clean up is needed)
-    pub fn stop(&self) {
-        if let Runtime::Local(r) = self {
-            r.stop();
+    pub async fn create_canister_at_id(
+        &'a self,
+        specified_id: PrincipalId,
+    ) -> Result<Canister<'a>, String> {
+        self.create_canister_with_specified_id(None, Some(specified_id))
+            .await
+    }
+
+    pub async fn create_canister_at_id_max_cycles_with_retries(
+        &'a self,
+        specified_id: PrincipalId,
+    ) -> Result<Canister<'a>, String> {
+        execute_with_retries(|| self.create_canister_at_id(specified_id))
+            .await
+            .map_err(|e| format!("Creation of a canister timed out. Last error was: {e}"))
+    }
+
+    pub async fn tick(&'a self) {
+        match self {
+            Runtime::Remote(_) | Runtime::Local(_) => {
+                tokio::time::sleep(Duration::from_millis(100)).await
+            }
+            Runtime::StateMachine(state_machine) => {
+                state_machine.tick();
+                state_machine.advance_time(Duration::from_millis(1000));
+            }
         }
     }
 }
@@ -340,6 +437,7 @@ impl<'a> Runtime {
 /// it gets, depending on how the target was set up.
 pub struct RemoteTestRuntime {
     pub agent: Agent,
+    pub effective_canister_id: PrincipalId,
 }
 
 impl RemoteTestRuntime {
@@ -348,7 +446,7 @@ impl RemoteTestRuntime {
     fn get_nonce_vec(&self) -> Vec<u8> {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        (0..8).map(move |_| rng.gen::<u8>()).collect()
+        (0..8).map(move |_| rng.r#gen::<u8>()).collect()
     }
 }
 
@@ -373,22 +471,18 @@ where
 }
 
 /// Same as local_test but running a custom Config.
-pub fn local_test_with_config<Fut, Out, F>(
-    config: Config,
-    subnet_config: SubnetConfig,
-    run: F,
-) -> Out
+pub fn local_test_with_config<Fut, Out, F>(config: Config, run: F) -> Out
 where
     Fut: Future<Output = Out>,
     F: FnOnce(Runtime) -> Fut + 'static,
 {
     let ic_config = get_ic_config();
-    canister_test_with_config_async(config, subnet_config, ic_config, |t| run(Runtime::Local(t)))
+    canister_test_with_config_async(config, ic_config, |t| run(Runtime::Local(t)))
 }
 
 /// Same as local_test but running a custom Config and applying initial Registry
 /// mutations
-pub fn local_test_with_config_with_mutations<Fut, Out, F>(
+pub fn local_test_with_config_with_mutations_on_system_subnet<Fut, Out, F>(
     config: Config,
     mutations: Vec<RegistryMutation>,
     run: F,
@@ -399,25 +493,16 @@ where
 {
     let mut ic_config = get_ic_config();
     ic_config.initial_mutations = mutations;
-    canister_test_with_config_async(
-        config,
-        SubnetConfig::default_application_subnet(),
-        ic_config,
-        |t| run(Runtime::Local(t)),
-    )
+    canister_test_with_config_async(config, ic_config, |t| run(Runtime::Local(t)))
 }
 
 /// Same as local_test but running a custom Config
-pub fn local_test_with_config_e<Fut, Out, F>(
-    config: Config,
-    subnet_config: SubnetConfig,
-    run: F,
-) -> Out
+pub fn local_test_with_config_e<Fut, Out, F>(config: Config, run: F) -> Out
 where
     Fut: Future<Output = Result<Out, String>>,
     F: FnOnce(Runtime) -> Fut + 'static,
 {
-    local_test_with_config(config, subnet_config, run).expect("local_test_with_config_e failed")
+    local_test_with_config(config, run).expect("local_test_with_config_e failed")
 }
 
 /// A representation of a canister on the IC, with or without code installed,
@@ -428,6 +513,9 @@ where
 #[derive(Clone)]
 pub struct Canister<'a> {
     runtime: &'a Runtime,
+    /// More details on effective canister id can be found in Interface Spec:
+    /// https://ic-interface-spec.netlify.app/#http-effective-canister-id
+    effective_canister_id: PrincipalId,
     canister_id: CanisterId,
 
     // If the canister has been installed, then this is the code that was used.
@@ -436,7 +524,17 @@ pub struct Canister<'a> {
     wasm: Option<Wasm>,
 }
 
-impl<'a> fmt::Debug for Canister<'a> {
+impl Canister<'_> {
+    pub fn is_runtime_local(&self) -> bool {
+        match self.runtime {
+            Runtime::Remote(_) => false,
+            Runtime::Local(_) => true,
+            Runtime::StateMachine(_) => true,
+        }
+    }
+}
+
+impl fmt::Debug for Canister<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "client-side view of canister {}", self.canister_id)
     }
@@ -446,9 +544,14 @@ impl<'a> Canister<'a> {
     pub fn new(runtime: &'a Runtime, canister_id: CanisterId) -> Self {
         Self {
             runtime,
+            effective_canister_id: canister_id.into(),
             canister_id,
             wasm: None,
         }
+    }
+
+    pub fn effective_canister_id(&self) -> PrincipalId {
+        self.effective_canister_id
     }
 
     pub fn canister_id(&self) -> CanisterId {
@@ -459,14 +562,18 @@ impl<'a> Canister<'a> {
         self.canister_id().get().into_vec()
     }
 
+    pub fn runtime(&self) -> &'a Runtime {
+        self.runtime
+    }
+
     pub fn from_vec8(runtime: &'a Runtime, canister_id_vec8: Vec<u8>) -> Canister<'a> {
+        let canister_id = CanisterId::unchecked_from_principal(
+            PrincipalId::try_from(&canister_id_vec8[..]).expect("failed to decode principal id"),
+        );
         Self {
             runtime,
-            canister_id: CanisterId::new(
-                PrincipalId::try_from(&canister_id_vec8[..])
-                    .expect("failed to decode principal id"),
-            )
-            .unwrap(),
+            effective_canister_id: canister_id.into(),
+            canister_id,
             wasm: None,
         }
     }
@@ -528,9 +635,7 @@ impl<'a> Canister<'a> {
         }
         .bytes(Input::from_inner(input).into_bytes()?)
         .await?;
-        FromWire::from_bytes(res)
-            .map_err(|e| e)
-            .map(|r: ReturnType| r.into_inner())
+        FromWire::from_bytes(res).map(|r: ReturnType| r.into_inner())
     }
 
     pub async fn update_from_sender<S, Input, ReturnType, Witness>(
@@ -552,9 +657,7 @@ impl<'a> Canister<'a> {
         }
         .bytes_with_sender(Input::from_inner(input).into_bytes()?, sender)
         .await?;
-        FromWire::from_bytes(res)
-            .map_err(|e| e)
-            .map(|r: ReturnType| r.into_inner())
+        FromWire::from_bytes(res).map(|r: ReturnType| r.into_inner())
     }
 
     pub async fn query_from_sender<S, Input, ReturnType, Witness>(
@@ -576,9 +679,7 @@ impl<'a> Canister<'a> {
         }
         .bytes_with_sender(Input::from_inner(input).into_bytes()?, sender)
         .await?;
-        FromWire::from_bytes(res)
-            .map_err(|e| e)
-            .map(|r: ReturnType| r.into_inner())
+        FromWire::from_bytes(res).map(|r: ReturnType| r.into_inner())
     }
 
     /// Runs the upgrade process, but with the new binary being identical to the
@@ -630,42 +731,50 @@ impl<'a> Canister<'a> {
         self.wasm = Some(Wasm::from_bytes(wasm));
     }
 
-    pub async fn add_controller(&self, additional_controller: PrincipalId) -> Result<(), String> {
-        let status_res: CanisterStatusResultV2 = self
+    pub async fn set_controller(&self, new_controller: PrincipalId) -> Result<(), String> {
+        self.set_controllers(vec![new_controller]).await
+    }
+
+    /// Get the controllers of the canister
+    pub async fn get_controllers(&self) -> Result<Vec<PrincipalId>, String> {
+        let status: CanisterStatusResultV2 = self
             .runtime
-            .get_management_canister()
-            .update_("canister_status", candid, (self.as_record(),))
+            .get_management_canister_with_effective_canister_id(self.canister_id().into())
+            .update_(
+                ic00::Method::CanisterStatus.to_string(),
+                candid_one,
+                CanisterStatusArgs {
+                    canister_id: Principal::from(self.canister_id()),
+                },
+            )
             .await?;
 
-        let mut controllers = status_res.controllers();
-        controllers.push(additional_controller);
+        Ok(status.controllers())
+    }
 
+    pub async fn set_controllers(&self, new_controllers: Vec<PrincipalId>) -> Result<(), String> {
         self.runtime
-            .get_management_canister()
+            .get_management_canister_with_effective_canister_id(self.canister_id().into())
             .update_(
                 ic00::Method::UpdateSettings.to_string(),
-                dfn_candid::candid_multi_arity,
+                candid_multi_arity,
                 (UpdateSettingsArgs {
-                    canister_id: self.canister_id.into(),
-                    settings: CanisterSettingsArgs {
-                        controller: None,
-                        controllers: Some(controllers),
+                    canister_id: Principal::from(self.canister_id),
+                    settings: CanisterSettings {
+                        controllers: Some(
+                            new_controllers.into_iter().map(Principal::from).collect(),
+                        ),
                         compute_allocation: None,
                         memory_allocation: None,
                         freezing_threshold: None,
+                        reserved_cycles_limit: None,
+                        log_visibility: None,
+                        wasm_memory_limit: None,
+                        wasm_memory_threshold: None,
+                        environment_variables: None,
                     },
+                    sender_canister_version: None,
                 },),
-            )
-            .await
-    }
-
-    pub async fn set_controller(&self, new_controller: PrincipalId) -> Result<(), String> {
-        self.runtime
-            .get_management_canister()
-            .update_(
-                ic00::Method::SetController.to_string(),
-                dfn_candid::candid_multi_arity,
-                (SetControllerArgs::new(self.canister_id, new_controller),),
             )
             .await
     }
@@ -684,21 +793,34 @@ impl<'a> Canister<'a> {
     }
 
     /// Tries to stop this canister, waits for it to reach the Stopped state.
+    /// This is expected to work only when the canister's controller is an anonymous user
     pub async fn stop(&self) -> Result<(), String> {
         let stop_res: Result<(), String> = self
             .runtime
-            .get_management_canister()
-            .update_("stop_canister", candid_multi_arity, (self.as_record(),))
+            .get_management_canister_with_effective_canister_id(self.canister_id().into())
+            .update_(
+                "stop_canister",
+                candid_one,
+                StopCanisterArgs {
+                    canister_id: Principal::from(self.canister_id()),
+                },
+            )
             .await;
         stop_res?;
         loop {
             let status_res: Result<CanisterStatusResult, String> = self
                 .runtime
-                .get_management_canister()
-                .update_("canister_status", candid, (self.as_record(),))
+                .get_management_canister_with_effective_canister_id(self.canister_id().into())
+                .update_(
+                    "canister_status",
+                    candid_one,
+                    CanisterStatusArgs {
+                        canister_id: Principal::from(self.canister_id()),
+                    },
+                )
                 .await;
             let status = status_res?;
-            if status.status() == Stopped {
+            if status.status == CanisterStatusType::Stopped {
                 break;
             }
         }
@@ -707,9 +829,16 @@ impl<'a> Canister<'a> {
 
     /// Tries to delete this canister.
     pub async fn delete(&self) -> Result<(), String> {
-        self.runtime
-            .get_management_canister()
-            .update_("delete_canister", candid_multi_arity, (self.as_record(),))
+        () = self
+            .runtime
+            .get_management_canister_with_effective_canister_id(self.canister_id().into())
+            .update_(
+                "delete_canister",
+                candid_one,
+                DeleteCanisterArgs {
+                    canister_id: Principal::from(self.canister_id()),
+                },
+            )
             .await?;
         Ok(())
     }
@@ -724,10 +853,23 @@ impl<'a> Canister<'a> {
     /// replace this in tests.
     pub async fn stop_then_restart(&self) -> Result<(), String> {
         self.stop().await?;
+        self.start().await
+    }
+    /// Tries to start the canister.
+    ///
+    /// This is expected to work only when the canister's controller is the
+    /// anonymous user.
+    pub async fn start(&self) -> Result<(), String> {
         let start_res: Result<(), String> = self
             .runtime
-            .get_management_canister()
-            .update_("start_canister", candid_multi_arity, (self.as_record(),))
+            .get_management_canister_with_effective_canister_id(self.canister_id().into())
+            .update_(
+                "start_canister",
+                candid_one,
+                StartCanisterArgs {
+                    canister_id: Principal::from(self.canister_id()),
+                },
+            )
             .await;
         start_res?;
         Ok(())
@@ -762,23 +904,38 @@ pub struct Install<'a> {
     pub mode: CanisterInstallMode,
     pub runtime: &'a Runtime,
     pub wasm: Wasm,
+    // The compute and memory allocation fields are not used in `install_code`
+    // requests but rather in `update_settings`. This is a bit weird as they
+    // are part of a struct called `Install`. This should probably be cleaned
+    // up in the future.
     pub compute_allocation: Option<u64>,
     pub memory_allocation: Option<u64>,
-    pub query_allocation: Option<u64>,
     pub num_cycles: Option<u128>,
 }
 
-impl<'a> Query<'a> {
+impl Query<'_> {
     pub async fn bytes(&self, payload: Vec<u8>) -> Result<Vec<u8>, String> {
         let canister = self.canister;
         match canister.runtime {
             Runtime::Local(t) => {
                 let result = t
                     .query(canister.canister_id, &self.method_name, payload)
+                    .await
                     .map_err(|e| e.to_string())?;
                 match result {
                     WasmResult::Reply(v) => Ok(v),
-                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {}", s)),
+                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {s}")),
+                }
+            }
+            Runtime::StateMachine(state_machine) => {
+                let result = state_machine
+                    .query(canister.canister_id, &self.method_name, payload)
+                    .map_err(|e| e.to_string())?;
+                state_machine.advance_time(Duration::from_millis(1));
+                state_machine.tick();
+                match result {
+                    WasmResult::Reply(v) => Ok(v),
+                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {s}")),
                 }
             }
             Runtime::Remote(c) => {
@@ -804,7 +961,23 @@ impl<'a> Query<'a> {
                     .map_err(|e| e.to_string())?;
                 match result {
                     WasmResult::Reply(v) => Ok(v),
-                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {}", s)),
+                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {s}")),
+                }
+            }
+            Runtime::StateMachine(state_machine) => {
+                let result = state_machine
+                    .execute_ingress_as(
+                        sender.get_principal_id(),
+                        canister.canister_id,
+                        &self.method_name,
+                        payload,
+                    )
+                    .map_err(|e| e.to_string())?;
+                state_machine.advance_time(Duration::from_millis(1));
+                state_machine.tick();
+                match result {
+                    WasmResult::Reply(v) => Ok(v),
+                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {s}")),
                 }
             }
             Runtime::Remote(r) => {
@@ -821,7 +994,7 @@ impl<'a> Query<'a> {
     }
 }
 
-impl<'a> Update<'a> {
+impl Update<'_> {
     pub async fn bytes(&self, payload: Vec<u8>) -> Result<Vec<u8>, String> {
         let canister = self.canister;
         match canister.runtime {
@@ -831,13 +1004,25 @@ impl<'a> Update<'a> {
                     .map_err(|e| e.to_string())?;
                 match result {
                     WasmResult::Reply(v) => Ok(v),
-                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {}", s)),
+                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {s}")),
+                }
+            }
+            Runtime::StateMachine(state_machine) => {
+                let result = state_machine
+                    .execute_ingress(canister.canister_id, &self.method_name, payload)
+                    .map_err(|e| e.to_string())?;
+                state_machine.advance_time(Duration::from_millis(1));
+                state_machine.tick();
+                match result {
+                    WasmResult::Reply(v) => Ok(v),
+                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {s}")),
                 }
             }
             Runtime::Remote(c) => {
                 let ingress_result = c
                     .agent
                     .execute_update(
+                        &CanisterId::try_from(canister.effective_canister_id()).unwrap(),
                         &canister.canister_id(),
                         &self.method_name,
                         payload,
@@ -862,7 +1047,23 @@ impl<'a> Update<'a> {
                     .map_err(|e| e.to_string())?;
                 match result {
                     WasmResult::Reply(v) => Ok(v),
-                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {}", s)),
+                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {s}")),
+                }
+            }
+            Runtime::StateMachine(state_machine) => {
+                let result = state_machine
+                    .execute_ingress_as(
+                        sender.get_principal_id(),
+                        canister.canister_id,
+                        &self.method_name,
+                        payload,
+                    )
+                    .map_err(|e| e.to_string())?;
+                state_machine.advance_time(Duration::from_millis(1));
+                state_machine.tick();
+                match result {
+                    WasmResult::Reply(v) => Ok(v),
+                    WasmResult::Reject(s) => Err(format!("Canister rejected with message: {s}")),
                 }
             }
             Runtime::Remote(r) => {
@@ -872,6 +1073,7 @@ impl<'a> Update<'a> {
                 let agent_with_sender = r.agent.new_for_test(sender.clone());
                 let ingress_result = agent_with_sender
                     .execute_update(
+                        &CanisterId::try_from(canister.effective_canister_id()).unwrap(),
                         &canister.canister_id(),
                         &self.method_name,
                         payload,
@@ -905,9 +1107,6 @@ impl<'a> Install<'a> {
             canister.canister_id,
             self.wasm.0.clone(),
             payload,
-            self.compute_allocation,
-            self.memory_allocation,
-            self.query_allocation,
         );
         eprintln!("Install args: {}", &install_args);
         match self.runtime {
@@ -916,6 +1115,35 @@ impl<'a> Install<'a> {
                 .await
                 .map_err(|e| e.to_string())
                 .map(|_| {}),
+            Runtime::StateMachine(state_machine) => {
+                let InstallCodeArgs {
+                    mode,
+                    canister_id,
+                    wasm_module,
+                    arg,
+                    sender_canister_version: _,
+                } = install_args;
+                state_machine
+                    .install_wasm_in_mode(
+                        CanisterId::unchecked_from_principal(canister_id),
+                        mode,
+                        wasm_module,
+                        arg,
+                    )
+                    .map_err(|e| e.to_string())?;
+                state_machine
+                    .update_settings(
+                        &CanisterId::unchecked_from_principal(canister_id),
+                        CanisterSettingsArgsBuilder::new()
+                            .with_compute_allocation(self.compute_allocation.unwrap_or_default())
+                            .with_memory_allocation(self.memory_allocation.unwrap_or_default())
+                            .build(),
+                    )
+                    .map_err(|e| e.to_string())?;
+                state_machine.advance_time(Duration::from_millis(1));
+                state_machine.tick();
+                Ok(())
+            }
             Runtime::Remote(c) => c.agent.install_canister(install_args).await,
         }?;
         canister.wasm = Some(self.wasm);
@@ -929,11 +1157,6 @@ impl<'a> Install<'a> {
 
     pub fn with_memory_allocation(mut self, memory_allocation: u64) -> Install<'a> {
         self.memory_allocation = Some(memory_allocation);
-        self
-    }
-
-    pub fn with_query_allocation(mut self, query_allocation: u64) -> Install<'a> {
-        self.query_allocation = Some(query_allocation);
         self
     }
 

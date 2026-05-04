@@ -1,15 +1,17 @@
-use ic_certification::{verify_certificate, CertificateValidationError};
+use ic_certification::{CertificateValidationError, verify_certified_data};
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
-use ic_interfaces_registry::RegistryTransportRecord;
-use ic_registry_transport::pb::v1::{
-    registry_mutation::Type, CertifiedResponse, RegistryAtomicMutateRequest,
+use ic_interfaces_registry::RegistryRecord;
+use ic_registry_transport::{
+    GetChunk, dechunkify_mutation_value,
+    pb::v1::{CertifiedResponse, HighCapacityRegistryAtomicMutateRequest},
 };
-use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, Time};
+use ic_types::{
+    CanisterId, RegistryVersion, SubnetId, Time, crypto::threshold_sig::ThresholdSigPublicKey,
+};
 use prost::Message;
 use serde::Deserialize;
-use std::collections::BTreeMap;
-use std::convert::TryFrom;
-use tree_deserializer::{types::Leb128EncodedU64, LabeledTreeDeserializer};
+use std::{collections::BTreeMap, convert::TryFrom, fmt::Debug};
+use tree_deserializer::{LabeledTreeDeserializer, types::Leb128EncodedU64};
 
 #[cfg(test)]
 mod tests;
@@ -37,13 +39,20 @@ pub enum CertificationError {
     MultipleSubnetDelegationsNotAllowed,
     /// The canister id is not contained in the canister ranges the subnet is allowed to issue certifications for.
     CanisterIdOutOfRange,
+    /// The provided subnet id does not match the subnet id included in the delegation.
+    SubnetIdMismatch {
+        provided_subnet_id: SubnetId,
+        delegation_subnet_id: SubnetId,
+    },
+    DechunkifyingFailed(ic_registry_transport::Error),
+    UntrustedDelegationSubnet(SubnetId),
 }
 
 #[derive(Deserialize)]
 struct CertifiedPayload {
     current_version: Leb128EncodedU64,
     #[serde(default)]
-    delta: BTreeMap<u64, Protobuf<RegistryAtomicMutateRequest>>,
+    delta: BTreeMap<u64, Protobuf<HighCapacityRegistryAtomicMutateRequest>>,
 }
 
 fn embed_certificate_error(err: CertificateValidationError) -> CertificationError {
@@ -62,6 +71,14 @@ fn embed_certificate_error(err: CertificateValidationError) -> CertificationErro
         Cve::MalformedHashTree(err) => Ce::MalformedHashTree(err),
         Cve::MultipleSubnetDelegationsNotAllowed => Ce::MultipleSubnetDelegationsNotAllowed,
         Cve::CanisterIdOutOfRange => Ce::CanisterIdOutOfRange,
+        Cve::SubnetIdMismatch {
+            provided_subnet_id,
+            delegation_subnet_id,
+        } => Ce::SubnetIdMismatch {
+            provided_subnet_id,
+            delegation_subnet_id,
+        },
+        Cve::UntrustedDelegationSubnet(subnet_id) => Ce::UntrustedDelegationSubnet(subnet_id),
     }
 }
 
@@ -86,8 +103,7 @@ fn validate_version_range(
         .try_fold(since_version, |prev_version, next_version| {
             if *next_version != prev_version + 1 {
                 Err(CertificationError::InvalidDeltas(format!(
-                    "version range not continuous: {} follows {}",
-                    next_version, prev_version,
+                    "version range not continuous: {next_version} follows {prev_version}",
                 )))
             } else {
                 Ok(*next_version)
@@ -105,15 +121,15 @@ fn validate_version_range(
 }
 
 /// Decodes registry deltas from their hash tree representation.
-pub fn decode_hash_tree(
+pub async fn decode_hash_tree(
     since_version: u64,
     hash_tree: MixedHashTree,
-) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion), CertificationError> {
+    get_chunk: &(impl GetChunk + Sync),
+) -> Result<(Vec<RegistryRecord>, RegistryVersion), CertificationError> {
     // Extract structured deltas from their tree representation.
     let labeled_tree = LabeledTree::<Vec<u8>>::try_from(hash_tree).map_err(|err| {
         CertificationError::MalformedHashTree(format!(
-            "failed to convert hash tree to labeled tree: {:?}",
-            err
+            "failed to convert hash tree to labeled tree: {err:?}"
         ))
     })?;
 
@@ -122,8 +138,7 @@ pub fn decode_hash_tree(
     ))
     .map_err(|err| {
         CertificationError::DeserError(format!(
-            "failed to unpack certified payload from the labeled tree: {}",
-            err
+            "failed to unpack certified payload from the labeled tree: {err}"
         ))
     })?;
 
@@ -131,24 +146,23 @@ pub fn decode_hash_tree(
     // format that RegistryClient wants.
     let current_version = validate_version_range(since_version, &certified_payload)?;
 
-    let changes = certified_payload
-        .delta
-        .into_iter()
-        .flat_map(|(v, mutate_req)| {
-            mutate_req.0.mutations.into_iter().map(move |m| {
-                let value = if m.mutation_type == Type::Delete as i32 {
-                    None
-                } else {
-                    Some(m.value)
-                };
-                RegistryTransportRecord {
-                    key: String::from_utf8_lossy(&m.key[..]).to_string(),
-                    value,
-                    version: RegistryVersion::from(v),
-                }
-            })
-        })
-        .collect();
+    let mut changes = vec![];
+    for (version, atomic_mutation) in certified_payload.delta {
+        let version = RegistryVersion::from(version);
+
+        for mutation in atomic_mutation.0.mutations {
+            let key = String::from_utf8_lossy(&mutation.key[..]).to_string();
+            let value: Option<Vec<u8>> = dechunkify_mutation_value(mutation, get_chunk)
+                .await
+                .map_err(CertificationError::DechunkifyingFailed)?;
+
+            changes.push(RegistryRecord {
+                key,
+                value,
+                version,
+            });
+        }
+    }
 
     Ok((changes, RegistryVersion::from(current_version)))
 }
@@ -159,16 +173,16 @@ pub fn decode_hash_tree(
 ///   * The latest version available (might be greater than the version of the
 ///     last received delta if there were too many deltas to send in one go).
 ///   * The time when the received data was last certified by the subnet.
-pub fn decode_certified_deltas(
+pub(crate) async fn decode_certified_deltas(
     since_version: u64,
     canister_id: &CanisterId,
     nns_pk: &ThresholdSigPublicKey,
     payload: &[u8],
-) -> Result<(Vec<RegistryTransportRecord>, RegistryVersion, Time), CertificationError> {
+    get_chunk: &(impl GetChunk + Sync),
+) -> Result<(Vec<RegistryRecord>, RegistryVersion, Time), CertificationError> {
     let certified_response = CertifiedResponse::decode(payload).map_err(|err| {
         CertificationError::DeserError(format!(
-            "failed to decode certified response from {}: {:?}",
-            canister_id, err
+            "failed to decode certified response from {canister_id}: {err:?}"
         ))
     })?;
 
@@ -180,14 +194,13 @@ pub fn decode_certified_deltas(
     })?;
     let mixed_hash_tree = MixedHashTree::try_from(hash_tree).map_err(|err| {
         CertificationError::DeserError(format!(
-            "failed to deserialize MixedHashTree from {}: {:?}",
-            canister_id, err
+            "failed to deserialize MixedHashTree from {canister_id}: {err:?}"
         ))
     })?;
 
     // Verify the authenticity of the root hash stored by the canister in the
     // certified_data field, and get the time on the certificate.
-    let time = verify_certificate(
+    let time = verify_certified_data(
         &certified_response.certificate[..],
         canister_id,
         nns_pk,
@@ -195,7 +208,8 @@ pub fn decode_certified_deltas(
     )
     .map_err(embed_certificate_error)?;
 
-    let (changes, current_version) = decode_hash_tree(since_version, mixed_hash_tree)?;
+    let (changes, current_version) =
+        decode_hash_tree(since_version, mixed_hash_tree, get_chunk).await?;
 
     Ok((changes, current_version, time))
 }
@@ -217,7 +231,7 @@ where
 
         struct ProtobufVisitor<T: prost::Message>(PhantomData<T>);
 
-        impl<'de, T: prost::Message + Default> serde::de::Visitor<'de> for ProtobufVisitor<T> {
+        impl<T: prost::Message + Default> serde::de::Visitor<'_> for ProtobufVisitor<T> {
             type Value = Protobuf<T>;
 
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {

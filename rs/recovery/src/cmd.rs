@@ -1,5 +1,6 @@
 use clap::Parser;
 use ic_types::ReplicaVersion;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use url::Url;
 
@@ -10,12 +11,12 @@ use crate::{
 };
 
 /// Subcommands for recovery procedures (application subnets, NNS with failover nodes, etc...)
-#[derive(Parser)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
 pub enum SubCommand {
     /// Application subnet recovery on same or failover nodes.
     AppSubnetRecovery(AppSubnetRecoveryArgs),
     /// NNS recovery on a failover IC.
-    NNSRecoveryFailoverNodes(Box<NNSRecoveryFailoverNodesArgs>),
+    NNSRecoveryFailoverNodes(NNSRecoveryFailoverNodesArgs),
     /// NNS recovery on the same nodes.
     NNSRecoverySameNodes(NNSRecoverySameNodesArgs),
 }
@@ -34,21 +35,25 @@ pub struct RecoveryToolArgs {
     pub nns_url: Url,
 
     /// replica version of ic-admin binary
-    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    #[clap(long)]
     pub replica_version: Option<ReplicaVersion>,
 
     /// The directory to perform recovery in
-    #[clap(long, parse(from_os_str))]
+    #[clap(long, default_value = "/var/lib/ic/data")]
     pub dir: PathBuf,
 
-    /// The path to a private key to be considered for SSH connections
-    #[clap(long, parse(from_os_str))]
-    pub key_file: Option<PathBuf>,
+    /// The path to a private key to be considered for admin SSH connections
+    #[clap(long)]
+    pub admin_key_file: Option<PathBuf>,
 
     /// Flag to enter test mode
     #[clap(long)]
-    pub test: bool,
+    pub test_mode: bool,
+
+    /// Flag to make the tool non interactive. No input from the user is requested.
+    #[clap(long)]
+    pub skip_prompts: bool,
 
     #[clap(subcommand)]
-    pub subcmd: SubCommand,
+    pub subcmd: Option<SubCommand>,
 }

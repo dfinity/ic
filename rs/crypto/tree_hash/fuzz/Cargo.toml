@@ -1,0 +1,36 @@
+[package]
+name = "ic-crypto-tree-hash-fuzz"
+publish = false
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+ic-canonical-state-tree-hash-test-utils = { path = "../../../canonical_state/tree_hash/test_utils" }
+ic-crypto-tree-hash = { path = ".." }
+ic-crypto-tree-hash-fuzz-check-witness-equality-utils = { path = "check_witness_equality_utils" }
+ic-protobuf = { path = "../../../protobuf" }
+libfuzzer-sys = "0.4"
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = [".", "check_witness_equality_utils"]
+
+[[bin]]
+name = "check_membership_witness_equality"
+path = "fuzz_targets/check_membership_witness_equality.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "check_absence_witness_equality"
+path = "fuzz_targets/check_absence_witness_equality.rs"
+test = false
+doc = false

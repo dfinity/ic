@@ -1,5 +1,6 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
+load("//bazel:defs.bzl", "write_info_file_var")
 
 bool_flag(
     name = "enable_malicious_code",
@@ -13,9 +14,61 @@ config_setting(
     },
 )
 
+bool_flag(
+    name = "enable_fuzzing_code",
+    build_setting_default = False,
+)
+
+config_setting(
+    name = "fuzzing_code_enabled",
+    flag_values = {
+        ":enable_fuzzing_code": "True",
+    },
+)
+
+# Flag to enable uploading performance system test results to the ES database
+# that is connected to the testnet Grafana dashboard.
+bool_flag(
+    name = "enable_upload_perf_systest_results",
+    build_setting_default = False,
+)
+
+config_setting(
+    name = "upload_perf_systest_results_enabled",
+    flag_values = {
+        ":enable_upload_perf_systest_results": "True",
+    },
+)
+
+# Allow targets to opt out of hermetic toolchains, in favor of the one provided
+# by the system
+bool_flag(
+    name = "hermetic_cc",
+    build_setting_default = True,
+)
+
+config_setting(
+    name = "use_hermetic_cc",
+    flag_values = {
+        ":hermetic_cc": "True",
+    },
+)
+
 string_flag(
-    name = "ic_version",
-    build_setting_default = "",
+    name = "timeout_value",
+    build_setting_default = "10m",
+    visibility = ["//visibility:public"],
+)
+
+write_info_file_var(
+    name = "version.txt",
+    varname = "STABLE_VERSION",
+    visibility = ["//visibility:public"],
+)
+
+write_info_file_var(
+    name = "commit_date_iso_8601.txt",
+    varname = "STABLE_COMMIT_DATE_ISO_8601",
     visibility = ["//visibility:public"],
 )
 
@@ -23,26 +76,15 @@ exports_files(
     [
         "prost_generator.sh",
         "generic_rust_bench.sh",
+        "canbench.sh",
+        "file_size_test.sh",
     ],
     visibility = ["//visibility:public"],
 )
 
-EXTERNAL_CRATES = ["external_crates.bzl"]
-
-sh_test(
-    name = "external_crates_test",
-    size = "small",
-    srcs = ["external_crates_test.sh"],
-    args = ["%s/%s" % (
-        package_name(),
-        p,
-    ) for p in EXTERNAL_CRATES],
-    data = EXTERNAL_CRATES,
-)
-
 BUILDIFIER_EXCLUDES = [
     "./.git/*",
-    "./gitlab-ci/src/git_changes/test_data/**",
+    "./ci/src/git_changes/test_data/**",
 ]
 
 buildifier(
@@ -58,24 +100,5 @@ buildifier(
     exclude_patterns = BUILDIFIER_EXCLUDES,
     lint_mode = "warn",
     mode = "diff",
-)
-
-py_test(
-    name = "buildifier_test",
-    size = "small",
-    srcs = ["buildifier_test.py"],
-    data = [
-        ":buildifier.check",
-        "//:WORKSPACE.bazel",
-    ],
-    env = {
-        "BUILDIFIER_CHECK_BIN": "$(location :buildifier.check)",
-        "WORKSPACE": "$(location //:WORKSPACE.bazel)",
-    },
-    tags = [
-        "external",  # force test to be unconditionally executed.
-        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-        "smoke",  # it should be run before committing code changes into the version control system.
-    ],
     visibility = ["//visibility:public"],
 )

@@ -1,8 +1,0 @@
-# How-To Update the GitLab CI Docker Image
-
-. Edit ./gitlab-ci/docker/Dockerfile
-. Build and test your changes locally
-. Commit your changes in your branch (git commit -a -m "Updated dockerfile to enable ...")
-. Push your branch (git push)
-
-Gitlab CI pipeline will attempt to build and test your updated Dockerfile(s).  If all tests pass the Gitlab CI yml files will be updated to use your new Docker images.

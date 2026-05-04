@@ -1,0 +1,23 @@
+[package]
+name = "icrc-ledger-agent"
+version = "0.2.0"
+description = "Functions for interacting with DFINITY's implementation of the ICRC-1 fungible token standard."
+license = "Apache-2.0"
+readme = "README.md"
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+repository = "https://github.com/dfinity/ic"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+candid = { workspace = true }
+ciborium = { workspace = true }
+hex = { workspace = true }
+ic-agent = { workspace = true }
+ic-cbor = { workspace = true }
+ic-certification = { workspace = true }
+icrc-ledger-types = { path = "../icrc-ledger-types", version = "0.2.0" }
+leb128 = { workspace = true }

@@ -1,0 +1,40 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "rate_limits_api",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "rate_limits_api",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:humantime",
+        "@crate_index//:ipnet",
+        "@crate_index//:regex",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:serde_regex",
+        "@crate_index//:serde_yaml",
+    ],
+)
+
+rust_test(
+    name = "rate_limits_api_test",
+    crate = ":rate_limits_api",
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:indoc",
+    ],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:humantime",
+        "@crate_index//:ipnet",
+        "@crate_index//:regex",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:serde_regex",
+        "@crate_index//:serde_yaml",
+    ],
+)

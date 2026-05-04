@@ -1,0 +1,53 @@
+load("//bazel/tlaplus:defs.bzl", "sany_test", "tla_module", "tlc_test")
+
+tla_module(
+    name = "spec",
+    src = "StateManager.tla",
+)
+
+tla_module(
+    name = "consensus",
+    src = "Consensus.tla",
+)
+
+tla_module(
+    name = "dsm",
+    src = "DSM.tla",
+    deps = [
+        # Keep sorted.
+        ":consensus",
+    ],
+)
+
+sany_test(
+    name = "sany",
+    module = ":spec",
+)
+
+sany_test(
+    name = "dsm_sany",
+    module = ":dsm",
+)
+
+sany_test(
+    name = "consensus_sany",
+    module = ":consensus",
+)
+
+tlc_test(
+    name = "consensus_test",
+    config = "Consensus.cfg",
+    spec = ":consensus",
+)
+
+tlc_test(
+    name = "dsm_test",
+    config = "DSM.cfg",
+    spec = ":dsm",
+)
+
+tlc_test(
+    name = "test",
+    config = "StateManager.cfg",
+    spec = ":spec",
+)

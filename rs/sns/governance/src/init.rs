@@ -1,6 +1,6 @@
 use crate::pb::v1::{
-    governance::{Mode, SnsMetadata},
     Governance, NervousSystemParameters, Neuron,
+    governance::{Mode, SnsMetadata},
 };
 use ic_base_types::PrincipalId;
 use std::collections::BTreeMap;
@@ -15,9 +15,9 @@ impl GovernanceCanisterInitPayloadBuilder {
         Self {
             proto: Governance {
                 parameters: Some(NervousSystemParameters::with_default_values()),
-                mode: Mode::Normal as i32,
+                mode: Mode::PreInitializationSwap as i32,
                 sns_metadata: Some(SnsMetadata {
-                    logo: Some("X".repeat(100)),
+                    logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
                     name: Some("ServiceNervousSystemTest".to_string()),
                     url: Some("https://internetcomputer.org".to_string()),
                     description: Some("Launch an SNS Project".to_string()),
@@ -45,6 +45,11 @@ impl GovernanceCanisterInitPayloadBuilder {
         self
     }
 
+    pub fn with_swap_canister_id(&mut self, swap_canister_id: PrincipalId) -> &mut Self {
+        self.proto.swap_canister_id = Some(swap_canister_id);
+        self
+    }
+
     pub fn with_mode(&mut self, mode: Mode) -> &mut Self {
         self.proto.set_mode(mode);
         self
@@ -62,6 +67,11 @@ impl GovernanceCanisterInitPayloadBuilder {
 
     pub fn with_sns_metadata(&mut self, sns_metadata: SnsMetadata) -> &mut Self {
         self.proto.sns_metadata = Some(sns_metadata);
+        self
+    }
+
+    pub fn with_genesis_timestamp_seconds(&mut self, genesis_timestamp_seconds: u64) -> &mut Self {
+        self.proto.genesis_timestamp_seconds = genesis_timestamp_seconds;
         self
     }
 

@@ -28,7 +28,7 @@ mod tests;
 ///   functionality may include scopes for delegated keys, canister keys and
 ///   others and that design space must not be restricted.
 #[derive(
-    Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, IntoStaticStr, EnumDiscriminants,
+    Copy, Clone, Eq, PartialEq, Debug, Deserialize, EnumDiscriminants, IntoStaticStr, Serialize,
 )]
 // Create an enum `ScopeSchemeNames` used for string matching.
 #[strum_discriminants(name(ScopeSchemeNames))]
@@ -54,7 +54,7 @@ impl std::fmt::Display for Scope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let scheme_name: &'static str = self.into();
         match self {
-            Scope::Const(variant) => write!(f, "{}:{}", scheme_name, variant),
+            Scope::Const(variant) => write!(f, "{scheme_name}:{variant}"),
         }
     }
 }
@@ -72,7 +72,7 @@ impl std::str::FromStr for Scope {
 /// String serialisation
 impl From<&Scope> for String {
     fn from(scope: &Scope) -> String {
-        format!("{}", scope)
+        format!("{scope}")
     }
 }
 
@@ -83,7 +83,7 @@ impl From<&Scope> for String {
 ///
 /// Adding a variant here requires no further code changes.
 #[derive(
-    Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, IntoStaticStr, EnumString, EnumIter,
+    Copy, Clone, Eq, PartialEq, Debug, Deserialize, EnumIter, EnumString, IntoStaticStr, Serialize,
 )]
 pub enum ConstScope {
     /// Placeholders, used for testing.
@@ -99,12 +99,12 @@ pub enum ConstScope {
 impl std::fmt::Display for ConstScope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name: &'static str = self.into();
-        write!(f, "{}", name)
+        write!(f, "{name}")
     }
 }
 /// String serialisation
 impl From<&ConstScope> for String {
     fn from(scope: &ConstScope) -> String {
-        format!("{}", scope)
+        format!("{scope}")
     }
 }

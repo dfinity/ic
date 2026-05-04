@@ -1,0 +1,9 @@
+[package]
+name = "command_runner"
+edition.workspace = true
+
+[dependencies]
+async-trait = { workspace = true }
+mockall = { workspace = true }
+tokio = { workspace = true }
+

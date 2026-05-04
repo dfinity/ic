@@ -1,56 +1,59 @@
-#![allow(clippy::unwrap_used)]
-
-use crate::keygen_utils::TestKeygenCrypto;
-use ic_base_types::NodeId;
+use assert_matches::assert_matches;
+use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_config::crypto::CryptoConfig;
-use ic_config::logger::{Config as LoggerConfig, LogTarget};
-use ic_crypto::utils::{
-    derive_node_id, get_node_keys_or_generate_if_missing, NodeKeysToGenerate, TempCryptoComponent,
-};
-use ic_crypto::{CryptoComponent, CryptoComponentFatClient};
-use ic_crypto_internal_csp::Csp;
+use ic_crypto::CryptoComponent;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::{
     get_temp_file_path, start_new_remote_csp_vault_server_for_test,
 };
-use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
+use ic_crypto_internal_seed::Seed;
+use ic_crypto_internal_tls::generate_tls_key_pair_der;
+use ic_crypto_node_key_generation::generate_node_keys_once;
+use ic_crypto_temp_crypto::{EcdsaSubnetConfig, NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_test_utils::files::temp_dir;
-use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
+use ic_crypto_test_utils_keygen::TestKeygenCrypto;
 use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
-use ic_interfaces::crypto::{KeyManager, PublicKeyRegistrationStatus};
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_test_utils_tls::x509_certificates::generate_ed25519_cert;
+use ic_interfaces::crypto::KeyManager;
+use ic_interfaces::crypto::{
+    CheckKeysWithRegistryError, IDkgKeyRotationResult, KeyRotationOutcome,
+};
+use ic_interfaces::time_source::{SysTimeSource, TimeSource};
+use ic_logger::ReplicaLogger;
 use ic_logger::replica_logger::no_op_logger;
-use ic_logger::{LoggerImpl, ReplicaLogger};
-use ic_metrics::MetricsRegistry;
-use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::crypto::{AlgorithmId, CryptoError, KeyPurpose};
-use ic_types::RegistryVersion;
+use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
+use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
+use ic_test_utilities_time::FastForwardTimeSource;
+use ic_types::crypto::{AlgorithmId, KeyPurpose};
+use ic_types::time::GENESIS;
+use ic_types::{RegistryVersion, Time};
 use ic_types_test_utils::ids::node_test_id;
-use openssl::asn1::Asn1Time;
-use rand::SeedableRng;
-use rand_chacha::ChaChaRng;
+use slog::Level;
 use std::sync::Arc;
+use std::time::Duration;
 use strum::IntoEnumIterator;
-
-mod keygen_utils;
 
 const REG_V1: RegistryVersion = RegistryVersion::new(1);
 const REG_V2: RegistryVersion = RegistryVersion::new(2);
 const NODE_ID: u64 = 42;
+const TWO_WEEKS: Duration = Duration::from_secs(2 * 7 * 24 * 60 * 60);
 
 #[test]
 fn should_successfully_construct_crypto_component_with_default_config() {
     CryptoConfig::run_with_temp_config(|config| {
+        generate_node_keys_once(&config, None).expect("error generating node public keys");
         let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-        CryptoComponent::new_with_fake_node_id(
+        CryptoComponent::new(
             &config,
             None,
             Arc::new(registry_client),
-            node_test_id(42),
             no_op_logger(),
+            None,
         );
     })
 }
@@ -61,14 +64,16 @@ fn should_successfully_construct_crypto_component_with_remote_csp_vault() {
     let socket_path = start_new_remote_csp_vault_server_for_test(tokio_rt.handle());
     let temp_dir = temp_dir(); // temp dir with correct permissions
     let crypto_root = temp_dir.path().to_path_buf();
-    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path);
+    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path, None);
+    generate_node_keys_once(&config, Some(tokio_rt.handle().clone()))
+        .expect("error generating node public keys");
     let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-    CryptoComponent::new_with_fake_node_id(
+    CryptoComponent::new(
         &config,
         Some(tokio_rt.handle().clone()),
         Arc::new(registry_client),
-        node_test_id(42),
         no_op_logger(),
+        None,
     );
 }
 
@@ -78,115 +83,16 @@ fn should_not_construct_crypto_component_if_remote_csp_vault_is_missing() {
     let socket_path = get_temp_file_path(); // no CSP vault server is running
     let temp_dir = temp_dir(); // temp dir with correct permissions
     let crypto_root = temp_dir.path().to_path_buf();
-    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path);
+    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path, None);
     let tokio_rt = new_tokio_runtime();
     let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-    CryptoComponent::new_with_fake_node_id(
+    CryptoComponent::new(
         &config,
         Some(tokio_rt.handle().clone()),
         Arc::new(registry_client),
-        node_test_id(42),
         no_op_logger(),
+        None,
     );
-}
-
-#[test]
-#[should_panic(expected = "Missing node signing public key")]
-fn should_not_construct_crypto_component_for_non_replica_process_without_keys() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-        let _crypto = CryptoComponent::new_for_non_replica_process(
-            &config,
-            None,
-            Arc::new(registry_client),
-            no_op_logger(),
-        );
-    })
-}
-
-#[test]
-fn should_successfully_construct_crypto_component_for_non_replica_process_with_default_config_and_keys(
-) {
-    CryptoConfig::run_with_temp_config(|config| {
-        // Create node keys.
-        let (_created_node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
-
-        let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-        let _crypto = CryptoComponent::new_for_non_replica_process(
-            &config,
-            None,
-            Arc::new(registry_client),
-            no_op_logger(),
-        );
-    })
-}
-
-#[test]
-fn should_provide_public_keys_via_crypto_for_non_replica_process() {
-    CryptoConfig::run_with_temp_config(|config| {
-        // Create node keys.
-        let (created_node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
-
-        let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-        let crypto = CryptoComponent::new_for_non_replica_process(
-            &config,
-            None,
-            Arc::new(registry_client),
-            no_op_logger(),
-        );
-        let retrieved_node_pks = crypto.node_public_keys();
-        assert!(all_node_keys_are_present(&retrieved_node_pks));
-        assert_eq!(created_node_pks, retrieved_node_pks);
-    })
-}
-
-// TODO(CRP-430): check/improve the test coverage of SKS checks.
-
-#[test]
-fn should_generate_all_keys_for_new_node() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        ensure_node_keys_are_generated_correctly(&node_pks, &node_id);
-
-        let crypto = local_crypto_component(&config);
-        assert_eq!(node_pks, crypto.node_public_keys());
-    })
-}
-
-#[test]
-fn should_generate_all_keys_for_new_node_with_remote_csp_vault() {
-    let tokio_rt = new_tokio_runtime();
-    let socket_path = start_new_remote_csp_vault_server_for_test(tokio_rt.handle());
-    let temp_dir = temp_dir(); // temp dir with correct permissions
-    let crypto_root = temp_dir.path().to_path_buf();
-    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path);
-
-    let (node_pks, node_id) =
-        get_node_keys_or_generate_if_missing(&config, Some(tokio_rt.handle().clone()));
-    ensure_node_keys_are_generated_correctly(&node_pks, &node_id);
-
-    let crypto = remote_crypto_component(&config, tokio_rt.handle().clone());
-    assert_eq!(node_pks, crypto.node_public_keys());
-}
-
-#[test]
-fn should_not_generate_new_keys_if_all_keys_are_present() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let (orig_node_pks, orig_node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        assert!(all_node_keys_are_present(&orig_node_pks));
-        let (new_node_pks, new_node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        assert!(all_node_keys_are_present(&new_node_pks));
-        assert_eq!(orig_node_pks, new_node_pks);
-        assert_eq!(orig_node_id, new_node_id);
-    })
-}
-
-fn all_node_keys_are_present(node_pks: &NodePublicKeys) -> bool {
-    node_pks.node_signing_pk.is_some()
-        && node_pks.committee_signing_pk.is_some()
-        && node_pks.tls_certificate.is_some()
-        && node_pks.dkg_dealing_encryption_pk.is_some()
-        && node_pks.idkg_dealing_encryption_pk.is_some()
 }
 
 #[test]
@@ -197,8 +103,10 @@ fn should_fail_check_keys_with_registry_if_no_keys_are_present_in_registry() {
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(
-        matches!(result, Err(CryptoError::PublicKeyNotFound { key_purpose, .. }) if key_purpose == KeyPurpose::NodeSigning)
+    assert_matches!(
+        result,
+        Err(CheckKeysWithRegistryError::PublicKeyNotFound { key_purpose, .. })
+        if key_purpose == KeyPurpose::NodeSigning
     );
 }
 
@@ -213,14 +121,11 @@ fn should_fail_check_keys_with_registry_if_node_signing_keys_are_missing_in_regi
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(result.is_err());
-    let is_node_signing_public_key_err = match result.unwrap_err() {
-        CryptoError::PublicKeyNotFound { key_purpose, .. } => {
-            key_purpose == KeyPurpose::NodeSigning
-        }
-        _ => false,
-    };
-    assert!(is_node_signing_public_key_err);
+    assert_matches!(
+        result,
+        Err(CheckKeysWithRegistryError::PublicKeyNotFound { key_purpose, .. })
+        if key_purpose == KeyPurpose::NodeSigning
+    )
 }
 
 #[test]
@@ -234,14 +139,11 @@ fn should_fail_check_keys_with_registry_if_committee_member_keys_are_missing_in_
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(result.is_err());
-    let is_committee_signing_public_key_err = match result.unwrap_err() {
-        CryptoError::PublicKeyNotFound { key_purpose, .. } => {
-            key_purpose == KeyPurpose::CommitteeSigning
-        }
-        _ => false,
-    };
-    assert!(is_committee_signing_public_key_err);
+    assert_matches!(
+        result,
+        Err(CheckKeysWithRegistryError::PublicKeyNotFound { key_purpose, .. })
+        if key_purpose == KeyPurpose::CommitteeSigning
+    );
 }
 
 #[test]
@@ -257,7 +159,7 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_key_is_missing
 
     assert_eq!(
         result.unwrap_err(),
-        CryptoError::PublicKeyNotFound {
+        CheckKeysWithRegistryError::PublicKeyNotFound {
             node_id: node_test_id(NODE_ID),
             key_purpose: KeyPurpose::DkgDealingEncryption,
             registry_version: REG_V1
@@ -266,8 +168,8 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_key_is_missing
 }
 
 #[test]
-fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_key_is_missing_in_registry_and_pubkey_store(
-) {
+fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_key_is_missing_in_registry_and_pubkey_store()
+ {
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all_except_idkg_dealing_encryption_key())
         .add_generated_node_signing_key_to_registry()
@@ -275,24 +177,20 @@ fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_key_is_missin
         .add_generated_dkg_dealing_enc_key_to_registry()
         .add_generated_tls_cert_to_registry()
         .build(NODE_ID, REG_V1);
-    let idkg_dealing_encryption_pk_in_public_key_store =
-        crypto.get().node_public_keys().idkg_dealing_encryption_pk;
+    let idkg_dealing_encryption_pk_in_public_key_store = crypto
+        .get()
+        .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
+        .idkg_dealing_encryption_public_key;
     assert!(idkg_dealing_encryption_pk_in_public_key_store.is_none());
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    ///////////////////////////////////////////////////////////////////////////
-    // TODO: use this assert once iDKG key rollout is finished and the iDKG
-    // key checks are no longer conditional
-    ///////////////////////////////////////////////////////////////////////////
-    // assert!(
-    //     matches!(result, Err(CryptoError::PublicKeyNotFound { key_purpose, .. }) if key_purpose == KeyPurpose::IDkgMEGaEncryption)
-    // );
-    ///////////////////////////////////////////////////////////////////////////
-    assert!(matches!(
+    assert_matches!(
         result,
-        Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
-    ));
+        Err(CheckKeysWithRegistryError::PublicKeyNotFound { key_purpose, .. })
+        if key_purpose == KeyPurpose::IDkgMEGaEncryption
+    );
 }
 
 #[test]
@@ -302,13 +200,14 @@ fn should_fail_check_keys_with_registry_if_tls_cert_is_missing_in_registry() {
         .add_generated_node_signing_key_to_registry()
         .add_generated_committee_signing_key_to_registry()
         .add_generated_dkg_dealing_enc_key_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
     assert_eq!(
         result.unwrap_err(),
-        CryptoError::TlsCertNotFound {
+        CheckKeysWithRegistryError::TlsCertNotFound {
             node_id: node_test_id(NODE_ID),
             registry_version: REG_V1
         }
@@ -338,24 +237,21 @@ fn should_fail_check_keys_with_registry_if_tls_cert_is_malformed() {
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(matches!(
+    assert_matches!(
         result,
-        Err(CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Tls,
-            key_bytes: None,
-            internal_error
-        })
-        if internal_error.contains("Error parsing DER")
-    ));
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
+        if internal_error.contains("tls_certificate_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed certificate: TlsPublicKeyCertCreationError")
+    );
 }
 
 #[test]
 fn should_fail_check_keys_with_registry_if_node_signing_secret_key_is_missing() {
     let node_signing_pk_without_corresponding_secret_key = PublicKey {
         algorithm: AlgorithmId::Ed25519 as i32,
-        key_value: [1u8; 32].to_vec(),
+        key_value: [1_u8; 32].to_vec(),
         version: 0,
         proof_data: None,
+        timestamp: None,
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
@@ -363,25 +259,26 @@ fn should_fail_check_keys_with_registry_if_node_signing_secret_key_is_missing() 
         .add_generated_committee_signing_key_to_registry()
         .add_generated_dkg_dealing_enc_key_to_registry()
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(result.is_err());
-    let is_secret_key_err = match result.unwrap_err() {
-        CryptoError::SecretKeyNotFound { algorithm, .. } => algorithm == AlgorithmId::Ed25519,
-        _ => false,
-    };
-    assert!(is_secret_key_err);
+    assert_matches!(
+        result,
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
+        if internal_error.contains("node_signing_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
+    );
 }
 
 #[test]
 fn should_fail_check_keys_with_registry_if_committee_member_secret_key_is_missing() {
     let committee_pk_without_corresponding_secret_key = PublicKey {
         algorithm: AlgorithmId::MultiBls12_381 as i32,
-        key_value: [1u8; 96].to_vec(),
+        key_value: [1_u8; 96].to_vec(),
         version: 0,
-        proof_data: Some(vec![1u8; 48]),
+        proof_data: Some(vec![1_u8; 48]),
+        timestamp: None,
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
@@ -389,18 +286,16 @@ fn should_fail_check_keys_with_registry_if_committee_member_secret_key_is_missin
         .with_committee_signing_key_in_registry(committee_pk_without_corresponding_secret_key)
         .add_generated_dkg_dealing_enc_key_to_registry()
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(result.is_err());
-    let is_secret_key_err = match result.unwrap_err() {
-        CryptoError::SecretKeyNotFound { algorithm, .. } => {
-            algorithm == AlgorithmId::MultiBls12_381
-        }
-        _ => false,
-    };
-    assert!(is_secret_key_err);
+    assert_matches!(
+        result,
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
+        if internal_error.contains("committee_signing_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
+    );
 }
 
 #[test]
@@ -415,19 +310,16 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_secret_key_is_
             dkg_dealing_enc_public_key_with_valid_pop_but_without_secret_part_in_store,
         )
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(result.is_err());
-    let is_secret_key_err = match result.unwrap_err() {
-        CryptoError::SecretKeyNotFound { algorithm, .. } => {
-            algorithm == AlgorithmId::Groth20_Bls12_381
-        }
-        _ => false,
-    };
-
-    assert!(is_secret_key_err);
+    assert_matches!(
+        result,
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
+        if internal_error.contains("dkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
+    );
 }
 
 #[test]
@@ -443,17 +335,15 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pubkey_is_malf
         .add_generated_committee_signing_key_to_registry()
         .with_dkg_dealing_enc_key_in_registry(dkg_dealing_encryption_pubkey_with_malformed_pubkey)
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_eq!(
-        result.unwrap_err(),
-        CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Groth20_Bls12_381,
-            key_bytes: Some(MALFORMED_DEALING_ENC_KEY_DATA.to_vec()),
-            internal_error: "Wrong data length 13, expected length 48.".to_string()
-        }
+    assert_matches!(
+        result,
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
+        if internal_error.contains("dkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key")
     );
 }
 
@@ -464,6 +354,7 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pop_is_missing
         algorithm: AlgorithmId::Groth20_Bls12_381 as i32,
         proof_data: None,
         key_value: b"irrelevant because pop validity is checked before pubkey validity".to_vec(),
+        timestamp: None,
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
@@ -471,17 +362,15 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pop_is_missing
         .add_generated_committee_signing_key_to_registry()
         .with_dkg_dealing_enc_key_in_registry(dkg_dealing_encryption_pubkey_with_missing_pop)
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_eq!(
-        result.unwrap_err(),
-        CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Groth20_Bls12_381,
-            key_bytes: None,
-            internal_error: "MissingProofData".to_string()
-        }
+    assert_matches!(
+        result,
+        Err(CheckKeysWithRegistryError::InternalError{ internal_error })
+        if internal_error.contains("dkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key MissingProofData\")), local_public_key_error: Some(Mismatch), secret_key_error: Some(CannotComputeKeyId) })")
     );
 }
 
@@ -492,6 +381,7 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pop_is_empty()
         algorithm: AlgorithmId::Groth20_Bls12_381 as i32,
         proof_data: Some(vec![]),
         key_value: b"irrelevant because pop validity is checked before pubkey validity".to_vec(),
+        timestamp: None,
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
@@ -499,19 +389,15 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pop_is_empty()
         .add_generated_committee_signing_key_to_registry()
         .with_dkg_dealing_enc_key_in_registry(dkg_dealing_encryption_pubkey_with_empty_pop)
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_eq!(
-        result.unwrap_err(),
-        CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Groth20_Bls12_381,
-            key_bytes: None,
-            internal_error:
-                "MalformedPop { pop_bytes: [], internal_error: \"EOF while parsing a value\" }"
-                    .to_string()
-        }
+    assert_matches!(
+        result,
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
+        if internal_error.contains("dkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key MalformedPop")
     );
 }
 
@@ -522,6 +408,7 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pop_is_malform
         algorithm: AlgorithmId::Groth20_Bls12_381 as i32,
         proof_data: Some(b"malformed pop".to_vec()),
         key_value: b"irrelevant because pop validity is checked before pubkey validity".to_vec(),
+        timestamp: None,
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
@@ -529,17 +416,15 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pop_is_malform
         .add_generated_committee_signing_key_to_registry()
         .with_dkg_dealing_enc_key_in_registry(dkg_dealing_encryption_pubkey_with_malformed_pop)
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_eq!(
-        result.unwrap_err(),
-        CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Groth20_Bls12_381,
-            key_bytes: None,
-            internal_error: "MalformedPop { pop_bytes: [109, 97, 108, 102, 111, 114, 109, 101, 100, 32, 112, 111, 112], internal_error: \"EOF while parsing a value at offset 13\" }".to_string()
-        }
+    assert_matches!(
+        result,
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
+        if internal_error.contains("dkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key MalformedPop")
     );
 }
 
@@ -550,6 +435,7 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_missing() {
         key_value: b"irrelevant because pop validity is checked before pubkey validity".to_vec(),
         version: 0,
         proof_data: None,
+        timestamp: None,
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
@@ -557,17 +443,15 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_missing() {
         .with_committee_signing_key_in_registry(committee_key_without_pop)
         .add_generated_dkg_dealing_enc_key_to_registry()
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_eq!(
-        result.unwrap_err(),
-        CryptoError::MalformedPop {
-            algorithm: AlgorithmId::MultiBls12_381,
-            pop_bytes: vec![0u8; 0],
-            internal_error: "CspPopFromPublicKeyProtoError::MissingProofData".to_string(),
-        }
+    assert_matches!(
+        result,
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
+        if internal_error.contains("committee_signing_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key (Missing proof data)\")), local_public_key_error: Some(Mismatch), secret_key_error: Some(CannotComputeKeyId) })")
     );
 }
 
@@ -578,6 +462,7 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_empty() {
         key_value: b"irrelevant because pop validity is checked before pubkey validity".to_vec(),
         version: 0,
         proof_data: Some(vec![]),
+        timestamp: None,
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
@@ -585,17 +470,15 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_empty() {
         .with_committee_signing_key_in_registry(committee_key_with_empty_pop)
         .add_generated_dkg_dealing_enc_key_to_registry()
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_eq!(
-        result.unwrap_err(),
-        CryptoError::MalformedPop {
-            algorithm: AlgorithmId::MultiBls12_381,
-            pop_bytes: vec![0u8; 0],
-            internal_error: "Wrong pop length 0, expected length 48.".to_string(),
-        }
+    assert_matches!(
+        result,
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
+        if internal_error.contains("committee_signing_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key (Malformed Pop)\")), local_public_key_error: Some(Mismatch), secret_key_error: Some(CannotComputeKeyId) })")
     );
 }
 
@@ -606,6 +489,7 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_malformed() {
         key_value: b"irrelevant because pop validity is checked before pubkey validity".to_vec(),
         version: 0,
         proof_data: Some(b"malformed pop".to_vec()),
+        timestamp: None,
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
@@ -613,43 +497,39 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_malformed() {
         .with_committee_signing_key_in_registry(committee_key_with_malformed_pop)
         .add_generated_dkg_dealing_enc_key_to_registry()
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_eq!(
-        result.unwrap_err(),
-        CryptoError::MalformedPop {
-            algorithm: AlgorithmId::MultiBls12_381,
-            pop_bytes: b"malformed pop".to_vec(),
-            internal_error: "Wrong pop length 13, expected length 48.".to_string(),
-        }
+    assert_matches!(
+        result,
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
+        if internal_error.contains("committee_signing_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key (Malformed Pop)\")), local_public_key_error: Some(Mismatch), secret_key_error: Some(CannotComputeKeyId) })")
     );
 }
 
 #[test]
 fn should_fail_check_keys_with_registry_if_tls_cert_secret_key_is_missing() {
+    let rng = &mut reproducible_rng();
     let cert_without_corresponding_secret_key = X509PublicKeyCert {
-        certificate_der: generate_ed25519_cert()
-            .1
-            .to_der()
-            .expect("Failed to convert X509 to DER"),
+        certificate_der: generate_ed25519_cert(rng).cert_der(),
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
         .add_generated_node_signing_key_to_registry()
         .add_generated_committee_signing_key_to_registry()
         .add_generated_dkg_dealing_enc_key_to_registry()
-        .with_tls_cert_in_registry(cert_without_corresponding_secret_key.clone())
+        .add_generated_idkg_dealing_enc_key_to_registry()
+        .with_tls_cert_in_registry(cert_without_corresponding_secret_key)
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_eq!(
-        result.unwrap_err(),
-        CryptoError::TlsSecretKeyNotFound {
-            certificate_der: cert_without_corresponding_secret_key.certificate_der,
-        }
+    assert_matches!(
+        result,
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
+        if internal_error.contains("tls_certificate_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     );
 }
 
@@ -672,21 +552,11 @@ fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_pubkey_algori
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    ///////////////////////////////////////////////////////////////////////////
-    // TODO: use this assert once iDKG key rollout is finished and the iDKG
-    // key checks are no longer conditional
-    ///////////////////////////////////////////////////////////////////////////
-    // assert!(
-    //     matches!(result, Err(CryptoError::MalformedPublicKey { algorithm, internal_error, ..})
-    //         if algorithm == AlgorithmId::MegaSecp256k1
-    //         && internal_error.contains("unsupported algorithm")
-    //     )
-    // );
-    ///////////////////////////////////////////////////////////////////////////
-    assert!(matches!(
+    assert_matches!(
         result,
-        Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
-    ));
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
+        if internal_error.contains("idkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key: unsupported algorithm")
+    );
 }
 
 #[test]
@@ -707,21 +577,11 @@ fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_pubkey_is_mal
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    ///////////////////////////////////////////////////////////////////////////
-    // TODO: use this assert once iDKG key rollout is finished and the iDKG
-    // key checks are no longer conditional
-    ///////////////////////////////////////////////////////////////////////////
-    // assert!(
-    //     matches!(result, Err(CryptoError::MalformedPublicKey { algorithm, internal_error, ..})
-    //         if algorithm == AlgorithmId::MegaSecp256k1
-    //         && internal_error.contains("malformed")
-    //     )
-    // );
-    ///////////////////////////////////////////////////////////////////////////
-    assert!(matches!(
+    assert_matches!(
         result,
-        Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
-    ));
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
+        if internal_error.contains("idkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key: I-DKG dealing encryption key malformed\")), local_public_key_error: Some(Mismatch), secret_key_error: Some(CannotComputeKeyId) })")
+    );
 }
 
 #[test]
@@ -741,22 +601,100 @@ fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_secret_key_is
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    ///////////////////////////////////////////////////////////////////////////
-    // TODO: use this assert once iDKG key rollout is finished and the iDKG
-    // key checks are no longer conditional
-    ///////////////////////////////////////////////////////////////////////////
-    // assert!(
-    //     matches!(result, Err(CryptoError::SecretKeyNotFound { algorithm, ..}) if algorithm == AlgorithmId::MegaSecp256k1)
-    // );
-    ///////////////////////////////////////////////////////////////////////////
-    assert!(matches!(
+    assert_matches!(
         result,
-        Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
-    ));
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
+        if internal_error.contains("idkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
+    )
 }
 
 #[test]
-fn should_succeed_check_keys_with_registry_if_all_keys_are_present() {
+fn should_log_error_if_idkg_dealing_encryption_secret_key_missing() {
+    let idkg_dealing_enc_pubkey_with_without_secret_part_in_store =
+        well_formed_idkg_dealing_encryption_pk();
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+    let time = FastForwardTimeSource::new();
+    let in_memory_logger = InMemoryReplicaLogger::new();
+    let replica_logger = ReplicaLogger::from(&in_memory_logger);
+    let crypto_component = TempCryptoComponent::builder()
+        .with_keys(NodeKeysToGenerate::all())
+        .with_registry_client_and_data(
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&registry_data) as Arc<_>,
+        )
+        .with_time_source(Arc::clone(&time) as Arc<_>)
+        .with_node_id(node_id())
+        .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
+            subnet_id(),
+            Some(node_id()),
+            Some(TWO_WEEKS),
+        ))
+        .with_logger(replica_logger)
+        .build();
+    add_public_key_to_registry(
+        idkg_dealing_enc_pubkey_with_without_secret_part_in_store,
+        crypto_component.get_node_id(),
+        KeyPurpose::IDkgMEGaEncryption,
+        Arc::clone(&registry_data),
+        REG_V2,
+    );
+    registry_client.reload();
+
+    let result = crypto_component.check_keys_with_registry(REG_V2);
+
+    assert_matches!(
+        result,
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
+        if internal_error.contains("idkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
+    );
+    let logs = in_memory_logger.drain_logs();
+
+    LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+        &Level::Error,
+        "One or more node keys from the registry are missing locally",
+    );
+}
+
+#[test]
+fn should_rotate_idkg_dealing_encryption_key_if_no_timestamp_set() {
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+    let time = FastForwardTimeSource::new();
+    let crypto_component = TempCryptoComponent::builder()
+        .with_keys(NodeKeysToGenerate::all())
+        .with_registry_client_and_data(
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&registry_data) as Arc<_>,
+        )
+        .with_time_source(Arc::clone(&time) as Arc<_>)
+        .with_node_id(node_id())
+        .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
+            subnet_id(),
+            Some(node_id()),
+            Some(TWO_WEEKS),
+        ))
+        .build();
+    registry_client.reload();
+
+    let initial_idkg_dealing_encryption_public_key = crypto_component
+        .current_node_public_keys()
+        .expect("error getting current node public keys")
+        .idkg_dealing_encryption_public_key
+        .expect("no iDKG dealing encryption public key found");
+    let rotated_idkg_dealing_encryption_public_key = crypto_component
+        .rotate_idkg_dealing_encryption_keys(REG_V1)
+        .expect("error returned when trying to rotate key");
+
+    assert_matches!(
+        rotated_idkg_dealing_encryption_public_key,
+        IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(KeyRotationOutcome::KeyRotated {new_key})
+        if !initial_idkg_dealing_encryption_public_key.equal_ignoring_timestamp(&new_key)
+    );
+}
+
+#[test]
+fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_subnet_configured() {
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
         .add_generated_node_signing_key_to_registry()
@@ -768,15 +706,11 @@ fn should_succeed_check_keys_with_registry_if_all_keys_are_present() {
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(matches!(
-        result,
-        Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
-    ));
+    assert_matches!(result, Ok(()));
 }
 
 #[test]
-fn should_succeed_check_keys_with_registry_if_idkg_key_requires_registration() {
-    // I-DKG key requires registration if it is not in the registry but in the public key store
+fn should_fail_check_keys_with_registry_if_no_idkg_key_in_registry() {
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
         .add_generated_node_signing_key_to_registry()
@@ -785,33 +719,35 @@ fn should_succeed_check_keys_with_registry_if_idkg_key_requires_registration() {
         .add_generated_tls_cert_to_registry()
         // explicitly not adding the I-DKG dealing encryption key to the registry
         .build(NODE_ID, REG_V1);
-    let idkg_dealing_encryption_pk_in_public_key_store =
-        crypto.get().node_public_keys().idkg_dealing_encryption_pk;
+    let idkg_dealing_encryption_pk_in_public_key_store = crypto
+        .get()
+        .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
+        .idkg_dealing_encryption_public_key;
     assert!(idkg_dealing_encryption_pk_in_public_key_store.is_some());
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
-
-    assert!(matches!(
+    assert_matches!(
         result,
-        Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(key))
-          if key == idkg_dealing_encryption_pk_in_public_key_store.unwrap()
-    ));
+        Err(CheckKeysWithRegistryError::PublicKeyNotFound { key_purpose, .. })
+        if key_purpose == KeyPurpose::IDkgMEGaEncryption
+    );
 }
 
 /// If this test fails it means that one of AlgorithmId and AlgorithmIdProto structs was updated but not the other.
 /// Ensure the structs are consistent and then update the test below.
 #[test]
 fn algorithm_id_should_match_algorithm_id_proto() {
-    let algorithm_id_variants = 17;
+    let algorithm_id_variants = 21;
     assert_eq!(AlgorithmId::iter().count(), algorithm_id_variants);
 
     for i in 0..algorithm_id_variants {
-        assert!(AlgorithmIdProto::from_i32(i as i32).is_some());
+        assert!(AlgorithmIdProto::try_from(i as i32).is_ok());
     }
-    assert!(AlgorithmIdProto::from_i32(algorithm_id_variants as i32).is_none());
+    assert!(AlgorithmIdProto::try_from(algorithm_id_variants as i32).is_err());
 
     assert_eq!(
-        AlgorithmId::Placeholder as i32,
+        AlgorithmId::Unspecified as i32,
         AlgorithmIdProto::Unspecified as i32
     );
     assert_eq!(
@@ -875,33 +811,27 @@ fn algorithm_id_should_match_algorithm_id_proto() {
         AlgorithmId::MegaSecp256k1 as i32,
         AlgorithmIdProto::MegaSecp256k1 as i32
     );
-}
-
-fn get_logger(log_filename: &std::path::Path) -> LoggerImpl {
-    let log_target_file = LogTarget::File(log_filename.to_path_buf());
-    let logger_config = LoggerConfig {
-        target: log_target_file,
-        ..Default::default()
-    };
-    LoggerImpl::new(&logger_config, "check_keys_with_registry_test".to_string())
+    assert_eq!(
+        AlgorithmId::ThresholdEcdsaSecp256r1 as i32,
+        AlgorithmIdProto::ThresholdEcdsaSecp256r1 as i32
+    );
+    assert_eq!(
+        AlgorithmId::ThresholdSchnorrBip340 as i32,
+        AlgorithmIdProto::ThresholdSchnorrBip340 as i32
+    );
+    assert_eq!(
+        AlgorithmId::ThresholdEd25519 as i32,
+        AlgorithmIdProto::ThresholdEd25519 as i32
+    );
+    assert_eq!(AlgorithmId::VetKD as i32, AlgorithmIdProto::Vetkd as i32);
 }
 
 #[test]
-fn should_fail_check_keys_with_registry_and_log_error_if_node_signing_public_keys_do_not_match() {
-    let temp_dir = tempfile::Builder::new()
-        .prefix("ic_crypto_")
-        .tempdir()
-        .expect("failed to create temporary crypto directory");
-    let log_filename = temp_dir.path().join("logfile");
+fn should_fail_check_keys_with_registry_if_registry_node_signing_key_has_no_matching_secret_key() {
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
-    let logger = get_logger(&log_filename);
-    let replica_logger = ReplicaLogger::from(ic_logger::replica_logger::LogEntryLogger::from(
-        logger.root.clone(),
-    ));
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::all())
-        .with_logger(replica_logger)
         .with_registry_client_and_data(
             Arc::clone(&registry_client) as Arc<_>,
             Arc::clone(&registry_data) as Arc<_>,
@@ -909,7 +839,11 @@ fn should_fail_check_keys_with_registry_and_log_error_if_node_signing_public_key
         .build();
 
     let node_signing_pk_without_corresponding_secret_key = {
-        let mut nspk = crypto_component.node_public_keys().node_signing_pk.unwrap();
+        let mut nspk = crypto_component
+            .current_node_public_keys()
+            .expect("Failed to retrieve node public keys")
+            .node_signing_public_key
+            .unwrap();
         nspk.key_value[0] ^= 0xff; // flip some bits
         nspk
     };
@@ -924,38 +858,21 @@ fn should_fail_check_keys_with_registry_and_log_error_if_node_signing_public_key
     registry_client.reload();
 
     let result = crypto_component.check_keys_with_registry(REG_V2);
-    // Drop `logger.async_log_guard` to make sure that low-priority log messages (such as
-    // `warn` that we are looking for) will be flushed to the log file on disk before we try
-    // to read it.
-    drop(logger.async_log_guard);
 
-    assert!(
-        matches!(result, Err(CryptoError::SecretKeyNotFound {algorithm, .. })
-            if algorithm == AlgorithmId::Ed25519
-        )
+    assert_matches!(
+        result,
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
+        if internal_error.contains("node_signing_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     );
-
-    let contents = std::fs::read_to_string(log_filename).expect("failed to read log file");
-    assert!(contents.contains("node signing public key mismatch between local and registry copies"));
 }
 
 #[test]
-fn should_fail_check_keys_with_registry_and_log_error_if_committee_signing_public_keys_do_not_match(
-) {
-    let temp_dir = tempfile::Builder::new()
-        .prefix("ic_crypto_")
-        .tempdir()
-        .expect("failed to create temporary crypto directory");
-    let log_filename = temp_dir.path().join("logfile");
+fn should_fail_check_keys_with_registry_if_registry_committee_signing_public_key_has_no_matching_secret_key()
+ {
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
-    let logger = get_logger(&log_filename);
-    let replica_logger = ReplicaLogger::from(ic_logger::replica_logger::LogEntryLogger::from(
-        logger.root.clone(),
-    ));
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::all())
-        .with_logger(replica_logger)
         .with_registry_client_and_data(
             Arc::clone(&registry_client) as Arc<_>,
             Arc::clone(&registry_data) as Arc<_>,
@@ -963,8 +880,9 @@ fn should_fail_check_keys_with_registry_and_log_error_if_committee_signing_publi
         .build();
     let committee_signing_pk_without_corresponding_secret_key = {
         let mut cspk = crypto_component
-            .node_public_keys()
-            .committee_signing_pk
+            .current_node_public_keys()
+            .expect("Failed to retrieve node public keys")
+            .committee_signing_public_key
             .unwrap();
         cspk.key_value[0] ^= 0xff; // flip some bits
         cspk
@@ -980,36 +898,20 @@ fn should_fail_check_keys_with_registry_and_log_error_if_committee_signing_publi
     registry_client.reload();
 
     let result = crypto_component.check_keys_with_registry(REG_V2);
-    drop(logger.async_log_guard);
-
-    assert!(
-        matches!(result, Err(CryptoError::SecretKeyNotFound {algorithm, .. })
-            if algorithm == AlgorithmId::MultiBls12_381
-        )
+    assert_matches!(
+        result,
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
+        if internal_error.contains("committee_signing_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     );
-
-    let contents = std::fs::read_to_string(log_filename).expect("failed to read log file");
-    assert!(contents
-        .contains("committee signing public key mismatch between local and registry copies"));
 }
 
 #[test]
-fn should_fail_check_keys_with_registry_and_log_error_if_dkg_dealing_encryption_keys_do_not_match()
-{
-    let temp_dir = tempfile::Builder::new()
-        .prefix("ic_crypto_")
-        .tempdir()
-        .expect("failed to create temporary crypto directory");
-    let log_filename = temp_dir.path().join("logfile");
+fn should_fail_check_keys_with_registry_if_registry_dkg_dealing_encryption_key_has_no_matching_secret_key()
+ {
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
-    let logger = get_logger(&log_filename);
-    let replica_logger = ReplicaLogger::from(ic_logger::replica_logger::LogEntryLogger::from(
-        logger.root.clone(),
-    ));
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::all())
-        .with_logger(replica_logger)
         .with_registry_client_and_data(
             Arc::clone(&registry_client) as Arc<_>,
             Arc::clone(&registry_data) as Arc<_>,
@@ -1017,8 +919,9 @@ fn should_fail_check_keys_with_registry_and_log_error_if_dkg_dealing_encryption_
         .build();
     let dkg_dealing_encryption_pk_without_corresponding_secret_key = {
         let mut ddepk = crypto_component
-            .node_public_keys()
-            .dkg_dealing_encryption_pk
+            .current_node_public_keys()
+            .expect("Failed to retrieve node public keys")
+            .dkg_dealing_encryption_public_key
             .unwrap();
         ddepk.key_value[0] ^= 0xff; // flip some bits
         ddepk
@@ -1034,46 +937,32 @@ fn should_fail_check_keys_with_registry_and_log_error_if_dkg_dealing_encryption_
     registry_client.reload();
 
     let result = crypto_component.check_keys_with_registry(REG_V2);
-    drop(logger.async_log_guard);
 
-    assert!(
-        matches!(result, Err(CryptoError::SecretKeyNotFound {algorithm, .. })
-            if algorithm == AlgorithmId::Groth20_Bls12_381
-        )
+    assert_matches!(
+        result,
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
+        if internal_error.contains("dkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     );
-
-    let contents = std::fs::read_to_string(log_filename).expect("failed to read log file");
-    assert!(contents
-        .contains("NI-DKG dealing encryption key mismatch between local and registry copies"));
 }
 
 #[test]
-fn should_fail_check_keys_with_registry_and_log_error_if_tls_certs_do_not_match() {
-    let temp_dir = tempfile::Builder::new()
-        .prefix("ic_crypto_")
-        .tempdir()
-        .expect("failed to create temporary crypto directory");
-    let log_filename = temp_dir.path().join("logfile");
+fn should_fail_check_keys_with_registry_if_registry_tls_cert_has_no_matching_secret_key() {
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
-    let logger = get_logger(&log_filename);
-    let replica_logger = ReplicaLogger::from(ic_logger::replica_logger::LogEntryLogger::from(
-        logger.root.clone(),
-    ));
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::all())
-        .with_logger(replica_logger)
         .with_registry_client_and_data(
             Arc::clone(&registry_client) as Arc<_>,
             Arc::clone(&registry_data) as Arc<_>,
         )
         .build();
-    let (tls_cert_without_corresponding_secret_key, tls_cert_der) = {
-        let mut csprng = ChaChaRng::from_seed([9u8; 32]);
-        let not_after = Asn1Time::days_from_now(31).expect("unable to create Asn1Time");
+    let (tls_cert_without_corresponding_secret_key, _tls_cert_der) = {
+        let seed = Seed::from_bytes(&[9_u8; 32]);
+        let not_before = 123_u64;
+        let not_after_unix_time = 456_u64;
         let common_name = "another_common_name";
         let (x509_cert, _key_pair) =
-            generate_tls_key_pair_der(&mut csprng, common_name, &not_after)
+            generate_tls_key_pair_der(seed, common_name, not_before, not_after_unix_time)
                 .expect("error generating TLS key pair");
         (
             ic_crypto_tls_interfaces::TlsPublicKeyCert::new_from_der(x509_cert.bytes.clone())
@@ -1093,51 +982,38 @@ fn should_fail_check_keys_with_registry_and_log_error_if_tls_certs_do_not_match(
     registry_client.reload();
 
     let result = crypto_component.check_keys_with_registry(REG_V2);
-    drop(logger.async_log_guard);
 
-    assert_eq!(
-        result.unwrap_err(),
-        CryptoError::TlsSecretKeyNotFound {
-            certificate_der: tls_cert_der,
-        }
+    assert_matches!(
+        result,
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
+        if internal_error.contains("tls_certificate_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     );
-    let contents = std::fs::read_to_string(log_filename).expect("failed to read log file");
-    assert!(contents.contains("TLS certificate mismatch between local and registry copies"));
 }
 
 #[test]
-fn should_fail_check_keys_with_registry_and_log_error_if_idkg_dealing_encryption_keys_do_not_match()
-{
-    let temp_dir = tempfile::Builder::new()
-        .prefix("ic_crypto_")
-        .tempdir()
-        .expect("failed to create temporary crypto directory");
-    let log_filename = temp_dir.path().join("logfile");
+fn should_succeed_check_keys_with_registry_if_idkg_dealing_encryption_key_timestamp_recent() {
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
-    let logger = get_logger(&log_filename);
-    let replica_logger = ReplicaLogger::from(ic_logger::replica_logger::LogEntryLogger::from(
-        logger.root.clone(),
-    ));
+    let time = FastForwardTimeSource::new();
+    time.advance_time(Duration::from_millis(2000));
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::all())
-        .with_logger(replica_logger)
         .with_registry_client_and_data(
             Arc::clone(&registry_client) as Arc<_>,
             Arc::clone(&registry_data) as Arc<_>,
         )
+        .with_time_source(Arc::clone(&time) as Arc<_>)
         .build();
-    let idkg_dealing_encryption_pk_without_corresponding_secret_key = {
-        let mut idepk = crypto_component
-            .node_public_keys()
-            .idkg_dealing_encryption_pk
-            .unwrap();
-        idepk.key_value[0] ^= 0xff; // flip some bits
-        idepk
-    };
+
+    let mut idkg_dealing_encryption_pk = crypto_component
+        .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
+        .idkg_dealing_encryption_public_key
+        .expect("no idkg dealing encryption key set");
+    idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
 
     add_public_key_to_registry(
-        idkg_dealing_encryption_pk_without_corresponding_secret_key,
+        idkg_dealing_encryption_pk,
         crypto_component.get_node_id(),
         KeyPurpose::IDkgMEGaEncryption,
         Arc::clone(&registry_data),
@@ -1145,56 +1021,429 @@ fn should_fail_check_keys_with_registry_and_log_error_if_idkg_dealing_encryption
     );
     registry_client.reload();
 
+    time.advance_time(Duration::from_millis(2000));
     let result = crypto_component.check_keys_with_registry(REG_V2);
-    drop(logger.async_log_guard);
 
-    assert!(matches!(
-        result,
-        Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
-    ));
+    assert_matches!(result, Ok(()));
+}
 
-    let contents = std::fs::read_to_string(log_filename).expect("failed to read log file");
-    assert!(
-        contents.contains("iDKG dealing encryption key mismatch between local and registry copies")
+#[test]
+fn should_rotate_idkg_dealing_encryption_key_if_timestamp_too_old() {
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+    let time = FastForwardTimeSource::new();
+    time.advance_time(Duration::from_millis(2000));
+    let crypto_component = TempCryptoComponent::builder()
+        .with_keys(NodeKeysToGenerate::all())
+        .with_registry_client_and_data(
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&registry_data) as Arc<_>,
+        )
+        .with_time_source(Arc::clone(&time) as Arc<_>)
+        .with_node_id(node_id())
+        .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
+            subnet_id(),
+            Some(node_id()),
+            Some(TWO_WEEKS),
+        ))
+        .build();
+    let mut idkg_dealing_encryption_pk = crypto_component
+        .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
+        .idkg_dealing_encryption_public_key
+        .expect("no idkg dealing encryption key set");
+    idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
+
+    add_public_key_to_registry(
+        idkg_dealing_encryption_pk.clone(),
+        crypto_component.get_node_id(),
+        KeyPurpose::IDkgMEGaEncryption,
+        Arc::clone(&registry_data),
+        REG_V2,
     );
-    assert!(contents.contains(format!("iDKG dealing encryption key of node {} is not properly set up in the registry for registry version", crypto_component.get_node_id()).as_str()));
+    registry_client.reload();
+
+    time.advance_time(TWO_WEEKS + Duration::from_secs(1));
+    let rotated_idkg_dealing_encryption_pk = crypto_component
+        .rotate_idkg_dealing_encryption_keys(REG_V2)
+        .expect("error rotating idkg dealing encryption key");
+
+    assert_matches!(
+        rotated_idkg_dealing_encryption_pk,
+        IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(KeyRotationOutcome::KeyRotated {new_key})
+        if !idkg_dealing_encryption_pk.equal_ignoring_timestamp(&new_key)
+    );
 }
 
-fn ensure_node_keys_are_generated_correctly(node_pks: &NodePublicKeys, node_id: &NodeId) {
-    assert!(all_node_keys_are_present(node_pks));
-    assert_eq!(node_pks.version, 1);
+#[test]
+fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_key_rotation_period_set() {
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+    let time = FastForwardTimeSource::new();
+    time.advance_time(Duration::from_millis(2000));
+    let crypto_component = TempCryptoComponent::builder()
+        .with_keys(NodeKeysToGenerate::all())
+        .with_registry_client_and_data(
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&registry_data) as Arc<_>,
+        )
+        .with_time_source(Arc::clone(&time) as Arc<_>)
+        .with_node_id(node_id())
+        .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(subnet_id(), Some(node_id()), None))
+        .build();
+    let mut idkg_dealing_encryption_pk = crypto_component
+        .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
+        .idkg_dealing_encryption_public_key
+        .expect("no idkg dealing encryption key set");
+    idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
 
-    let node_signing_pk = node_pks
-        .node_signing_pk
-        .as_ref()
-        .expect("Missing node signing public key");
-    let derived_node_id = derive_node_id(node_signing_pk);
-    assert_eq!(*node_id, derived_node_id);
+    add_public_key_to_registry(
+        idkg_dealing_encryption_pk,
+        crypto_component.get_node_id(),
+        KeyPurpose::IDkgMEGaEncryption,
+        Arc::clone(&registry_data),
+        REG_V2,
+    );
+    registry_client.reload();
+
+    // Set the current time such that the keys should be rotated if the configuration is set accordingly
+    time.advance_time(TWO_WEEKS + Duration::from_secs(1));
+    let result = crypto_component.check_keys_with_registry(REG_V2);
+
+    assert_matches!(result, Ok(()));
 }
 
-fn local_crypto_component(config: &CryptoConfig) -> Arc<CryptoComponentFatClient<Csp>> {
-    crypto_component(config, None)
+#[test]
+fn should_return_all_keys_registered_from_check_keys_with_registry_if_node_not_in_any_subnet() {
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+    let time = FastForwardTimeSource::new();
+    time.advance_time(Duration::from_millis(2000));
+    let crypto_component = TempCryptoComponent::builder()
+        .with_keys(NodeKeysToGenerate::all())
+        .with_registry_client_and_data(
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&registry_data) as Arc<_>,
+        )
+        .with_time_source(Arc::clone(&time) as Arc<_>)
+        .with_node_id(node_id())
+        .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(subnet_id(), None, Some(TWO_WEEKS)))
+        .build();
+    let mut idkg_dealing_encryption_pk = crypto_component
+        .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
+        .idkg_dealing_encryption_public_key
+        .expect("no idkg dealing encryption key set");
+    idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
+
+    add_public_key_to_registry(
+        idkg_dealing_encryption_pk,
+        crypto_component.get_node_id(),
+        KeyPurpose::IDkgMEGaEncryption,
+        Arc::clone(&registry_data),
+        REG_V2,
+    );
+    registry_client.reload();
+
+    // Set the current time such that the keys should be rotated if the configuration is set accordingly
+    time.advance_time(TWO_WEEKS + Duration::from_secs(1));
+    let result = crypto_component.check_keys_with_registry(REG_V2);
+
+    assert_matches!(result, Ok(()));
 }
-fn remote_crypto_component(
-    config: &CryptoConfig,
-    tokio_runtime_handle: tokio::runtime::Handle,
-) -> Arc<CryptoComponentFatClient<Csp>> {
-    crypto_component(config, Some(tokio_runtime_handle))
+
+#[test]
+fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_ecdsa_key_ids_set() {
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+    let time = FastForwardTimeSource::new();
+    time.advance_time(Duration::from_millis(2000));
+    let crypto_component = TempCryptoComponent::builder()
+        .with_keys(NodeKeysToGenerate::all())
+        .with_registry_client_and_data(
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&registry_data) as Arc<_>,
+        )
+        .with_time_source(Arc::clone(&time) as Arc<_>)
+        .with_node_id(node_id())
+        .with_ecdsa_subnet_config(EcdsaSubnetConfig::new_without_key_ids(
+            subnet_id(),
+            Some(node_id()),
+            Some(TWO_WEEKS),
+        ))
+        .build();
+    let mut idkg_dealing_encryption_pk = crypto_component
+        .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
+        .idkg_dealing_encryption_public_key
+        .expect("no idkg dealing encryption key set");
+    idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
+
+    add_public_key_to_registry(
+        idkg_dealing_encryption_pk,
+        crypto_component.get_node_id(),
+        KeyPurpose::IDkgMEGaEncryption,
+        Arc::clone(&registry_data),
+        REG_V2,
+    );
+    registry_client.reload();
+
+    // Set the current time such that the keys should be rotated if the configuration is set accordingly
+    time.advance_time(TWO_WEEKS + Duration::from_secs(1));
+    let result = crypto_component.check_keys_with_registry(REG_V2);
+
+    assert_matches!(result, Ok(()));
 }
-fn crypto_component(
-    config: &CryptoConfig,
-    tokio_runtime_handle: Option<tokio::runtime::Handle>,
-) -> Arc<CryptoComponentFatClient<Csp>> {
-    let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-    let logger = no_op_logger();
-    let metrics_registry = MetricsRegistry::new();
-    Arc::new(CryptoComponent::new(
-        config,
-        tokio_runtime_handle,
-        Arc::new(registry_client),
-        logger,
-        Some(&metrics_registry),
-    ))
+
+#[test]
+fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_ecdsa_config_specified() {
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+    let time = FastForwardTimeSource::new();
+    time.advance_time(Duration::from_millis(2000));
+    let crypto_component = TempCryptoComponent::builder()
+        .with_keys(NodeKeysToGenerate::all())
+        .with_registry_client_and_data(
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&registry_data) as Arc<_>,
+        )
+        .with_time_source(Arc::clone(&time) as Arc<_>)
+        .with_node_id(node_id())
+        .with_ecdsa_subnet_config(EcdsaSubnetConfig::new_without_chain_key_config(
+            subnet_id(),
+            Some(node_id()),
+        ))
+        .build();
+    let mut idkg_dealing_encryption_pk = crypto_component
+        .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
+        .idkg_dealing_encryption_public_key
+        .expect("no idkg dealing encryption key set");
+    idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
+
+    add_public_key_to_registry(
+        idkg_dealing_encryption_pk,
+        crypto_component.get_node_id(),
+        KeyPurpose::IDkgMEGaEncryption,
+        Arc::clone(&registry_data),
+        REG_V2,
+    );
+    registry_client.reload();
+
+    // Set the current time such that the keys should be rotated if the configuration is set accordingly
+    time.advance_time(TWO_WEEKS + Duration::from_secs(1));
+    let result = crypto_component.check_keys_with_registry(REG_V2);
+
+    assert_matches!(result, Ok(()));
+}
+
+#[test]
+fn should_return_registration_needed_from_rotate_idkg_dealing_encryption_keys_if_local_idkg_dealing_encryption_key_newer_than_in_the_registry()
+ {
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+    let time = FastForwardTimeSource::new();
+    time.advance_time(Duration::from_millis(2000));
+    let crypto_component = TempCryptoComponent::builder()
+        .with_keys(NodeKeysToGenerate::all())
+        .with_registry_client_and_data(
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&registry_data) as Arc<_>,
+        )
+        .with_time_source(Arc::clone(&time) as Arc<_>)
+        .with_node_id(node_id())
+        .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
+            subnet_id(),
+            Some(node_id()),
+            Some(TWO_WEEKS),
+        ))
+        .build();
+
+    let mut idkg_dealing_encryption_pk = crypto_component
+        .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
+        .idkg_dealing_encryption_public_key
+        .expect("no idkg dealing encryption key set");
+    idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
+
+    add_public_key_to_registry(
+        idkg_dealing_encryption_pk,
+        crypto_component.get_node_id(),
+        KeyPurpose::IDkgMEGaEncryption,
+        Arc::clone(&registry_data),
+        REG_V2,
+    );
+    registry_client.reload();
+
+    time.advance_time(Duration::from_secs(60 * 60 * 24 * 15));
+    let new_idkg_dealing_encryption_key_to_register = crypto_component
+        .rotate_idkg_dealing_encryption_keys(REG_V2)
+        .expect("Error rotating iDKG encryption key");
+
+    time.advance_time(Duration::from_secs(60 * 60 * 24));
+    let result = crypto_component
+        .rotate_idkg_dealing_encryption_keys(REG_V2)
+        .expect("error calling rotate_idkg_dealing_encryption_keys");
+
+    assert_matches!(
+        (new_idkg_dealing_encryption_key_to_register, result),
+        (
+            IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(
+                KeyRotationOutcome::KeyRotated {new_key: rotated_key}),
+            IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(
+                KeyRotationOutcome::KeyNotRotated {existing_key: key_to_register})
+        )
+        if rotated_key.equal_ignoring_timestamp(&key_to_register)
+    );
+}
+
+#[test]
+fn should_not_rotate_key_when_key_rotation_period_too_large_to_handle() {
+    let misconfigured_large_rotation_period = Duration::MAX;
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+    let in_memory_logger = InMemoryReplicaLogger::new();
+    let crypto_component = TempCryptoComponent::builder()
+        .with_keys(NodeKeysToGenerate::all())
+        .with_registry_client_and_data(
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&registry_data) as Arc<_>,
+        )
+        .with_node_id(node_id())
+        .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
+            subnet_id(),
+            Some(node_id()),
+            Some(misconfigured_large_rotation_period),
+        ))
+        .with_logger(ReplicaLogger::from(&in_memory_logger))
+        .build();
+
+    let mut idkg_dealing_encryption_pk = crypto_component
+        .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
+        .idkg_dealing_encryption_public_key
+        .expect("no idkg dealing encryption key set");
+    idkg_dealing_encryption_pk.timestamp = Some(GENESIS.as_millis_since_unix_epoch());
+
+    add_public_key_to_registry(
+        idkg_dealing_encryption_pk,
+        crypto_component.get_node_id(),
+        KeyPurpose::IDkgMEGaEncryption,
+        Arc::clone(&registry_data),
+        REG_V2,
+    );
+    registry_client.reload();
+
+    let result = crypto_component.rotate_idkg_dealing_encryption_keys(REG_V2);
+    let logs = in_memory_logger.drain_logs();
+
+    assert_matches!(result, Ok(IDkgKeyRotationResult::LatestRotationTooRecent));
+    LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+        &Level::Warning,
+        "The addition of the key's registration time (2021-05-06 19:17:10 UTC) \
+        with the key rotation period (18446744073709551.615s) would overflow a u64 of nanoseconds (year 2554). \
+        Is the key rotation period misconfigured?",
+    );
+}
+
+#[test]
+fn should_succeed_check_keys_with_registry_if_idkg_dealing_encryption_key_timestamp_only_almost_too_old()
+ {
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+    let time = FastForwardTimeSource::new();
+    time.advance_time(Duration::from_millis(2000));
+    let crypto_component = TempCryptoComponent::builder()
+        .with_keys(NodeKeysToGenerate::all())
+        .with_registry_client_and_data(
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&registry_data) as Arc<_>,
+        )
+        .with_time_source(Arc::clone(&time) as Arc<_>)
+        .with_node_id(node_id())
+        .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
+            subnet_id(),
+            Some(node_id()),
+            Some(TWO_WEEKS),
+        ))
+        .build();
+    let mut idkg_dealing_encryption_pk = crypto_component
+        .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
+        .idkg_dealing_encryption_public_key
+        .expect("no idkg dealing encryption key set");
+    idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
+
+    add_public_key_to_registry(
+        idkg_dealing_encryption_pk,
+        crypto_component.get_node_id(),
+        KeyPurpose::IDkgMEGaEncryption,
+        Arc::clone(&registry_data),
+        REG_V2,
+    );
+    registry_client.reload();
+
+    time.advance_time(TWO_WEEKS - Duration::from_secs(1));
+    let result = crypto_component.check_keys_with_registry(REG_V2);
+
+    assert_matches!(result, Ok(()));
+}
+
+#[test]
+fn should_transition_from_latest_rotation_too_recent_to_rotating_local_key_with_sys_time_source() {
+    let key_rotation_period = Duration::from_secs(5);
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+    let time: Arc<dyn TimeSource> = Arc::new(SysTimeSource::new());
+    let crypto_component = TempCryptoComponent::builder()
+        .with_keys(NodeKeysToGenerate::all())
+        .with_registry_client_and_data(
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&registry_data) as Arc<_>,
+        )
+        .with_time_source(Arc::clone(&time) as Arc<_>)
+        .with_node_id(node_id())
+        .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
+            subnet_id(),
+            Some(node_id()),
+            Some(key_rotation_period),
+        ))
+        .build();
+    let mut idkg_dealing_encryption_pk = crypto_component
+        .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
+        .idkg_dealing_encryption_public_key
+        .expect("no idkg dealing encryption key set");
+    idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
+
+    add_public_key_to_registry(
+        idkg_dealing_encryption_pk.clone(),
+        crypto_component.get_node_id(),
+        KeyPurpose::IDkgMEGaEncryption,
+        Arc::clone(&registry_data),
+        REG_V2,
+    );
+    registry_client.reload();
+
+    let result = crypto_component.rotate_idkg_dealing_encryption_keys(REG_V2);
+
+    assert_matches!(result, Ok(IDkgKeyRotationResult::LatestRotationTooRecent));
+
+    std::thread::sleep(key_rotation_period + Duration::from_secs(1));
+
+    let key_to_register = crypto_component
+        .rotate_idkg_dealing_encryption_keys(REG_V2)
+        .expect("error rotating iDKG dealing encryption key");
+    assert_matches!(
+        key_to_register,
+        IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(KeyRotationOutcome::KeyRotated {new_key})
+        if !new_key.equal_ignoring_timestamp(&idkg_dealing_encryption_pk)
+    );
+}
+
+fn get_timestamp_from_time(time: Time) -> u64 {
+    time.as_nanos_since_unix_epoch() / 1000000
 }
 
 fn new_tokio_runtime() -> tokio::runtime::Runtime {
@@ -1205,8 +1454,9 @@ fn well_formed_dkg_dealing_encryption_pk() -> PublicKey {
     let temp_crypto =
         new_temp_crypto_component(NodeKeysToGenerate::only_dkg_dealing_encryption_key());
     temp_crypto
-        .node_public_keys()
-        .dkg_dealing_encryption_pk
+        .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
+        .dkg_dealing_encryption_public_key
         .unwrap()
 }
 
@@ -1214,8 +1464,9 @@ fn well_formed_idkg_dealing_encryption_pk() -> PublicKey {
     let temp_crypto =
         new_temp_crypto_component(NodeKeysToGenerate::only_idkg_dealing_encryption_key());
     temp_crypto
-        .node_public_keys()
-        .idkg_dealing_encryption_pk
+        .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
+        .idkg_dealing_encryption_public_key
         .unwrap()
 }
 
@@ -1228,4 +1479,12 @@ fn new_temp_crypto_component(selector: NodeKeysToGenerate) -> TempCryptoComponen
         .with_node_id(dummy_node_id)
         .with_keys(selector)
         .build()
+}
+
+fn node_id() -> NodeId {
+    NodeId::from(PrincipalId::new_node_test_id(NODE_ID))
+}
+
+fn subnet_id() -> SubnetId {
+    SubnetId::new(PrincipalId::new(29, [0xfc; 29]))
 }

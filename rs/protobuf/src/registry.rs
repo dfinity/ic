@@ -1,6 +1,8 @@
+pub mod api_boundary_node;
 pub mod crypto;
 pub mod dc;
 pub mod firewall;
+pub mod hostos_version;
 pub mod nns;
 pub mod node;
 pub mod node_operator;

@@ -1,42 +1,83 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
-
-DEPENDENCIES = [
-    "//rs/config",
-    "//rs/monitoring/logger",
-    "//rs/replicated_state",
-    "//rs/sys",
-    "//rs/utils",
-    "@crate_index//:bit-vec",
-    "@crate_index//:lazy_static",
-    "@crate_index//:libc",
-    "@crate_index//:nix",
-    "@crate_index//:slog",
-]
 
 rust_library(
     name = "memory_tracker",
     srcs = glob(["src/**"]),
     crate_name = "memory_tracker",
-    version = "0.8.0",
-    deps = DEPENDENCIES,
+    version = "0.9.0",
+    deps = [
+        # Keep sorted.
+        "//rs/monitoring/logger",
+        "//rs/phantom_newtype",
+        "//rs/replicated_state",
+        "//rs/sys",
+        "//rs/types/types",
+        "@crate_index//:bit-vec",
+        "@crate_index//:libc",
+        "@crate_index//:nix",
+        "@crate_index//:slog",
+    ],
+    # In order to check the determinism of the signal handler, enable this
+    # feature and export an environment variable CHECKSUM_FILE to the file where
+    # the checksum will be written.  Then run some tests sequentially and
+    # compare the files produced by various runs. Any differences show there was
+    # some non-determinism.
+    # crate_features = ["sigsegv_handler_checksum"],
 )
 
 rust_test(
     name = "memory_tracker_test",
     crate = ":memory_tracker",
     deps = [
-        "//rs/types/types",
+        # Keep sorted.
+        "@crate_index//:proptest",
+        "@crate_index//:rstest",
         "@crate_index//:tempfile",
     ],
 )
 
-rust_binary(
+rust_bench(
     name = "memory_tracker_bench",
+    testonly = True,
     srcs = ["benches/traps.rs"],
     deps = [
+        # Keep sorted.
         ":memory_tracker",
+        "//rs/monitoring/logger",
+        "//rs/replicated_state",
+        "//rs/sys",
+        "//rs/types/types",
         "@crate_index//:criterion",
-    ] + DEPENDENCIES,
+        "@crate_index//:lazy_static",
+        "@crate_index//:libc",
+        "@crate_index//:nix",
+    ],
+)
+
+rust_bench(
+    name = "memory_ops_bench",
+    testonly = True,
+    srcs = ["benches/memory_ops.rs"],
+    data = ["benches/test-data/64KiB.txt"],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:criterion",
+        "@crate_index//:memmap2",
+        "@crate_index//:rayon",
+    ],
+)
+
+rust_bench(
+    name = "bit_vec_bench",
+    testonly = True,
+    srcs = ["benches/bit_vec.rs"],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:bit-vec",
+        "@crate_index//:criterion",
+        "@crate_index//:nix",
+    ],
 )

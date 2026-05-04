@@ -1,30 +1,29 @@
 use crate::{
-    manifest::{filter_out_zero_chunks, DiffScript},
-    CheckpointRef, StateManagerMetrics, StateSyncMetrics, StateSyncRefs,
-    CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, LABEL_COPY_CHUNKS, LABEL_COPY_FILES, LABEL_FETCH,
-    LABEL_PREALLOCATE,
-};
-use ic_logger::{debug, error, fatal, info, trace, warn, ReplicaLogger};
-use ic_registry_subnet_type::SubnetType;
-use ic_state_layout::utils::do_copy_overwrite;
-use ic_state_layout::{error::LayoutError, CheckpointLayout, ReadOnly, RwPolicy, StateLayout};
-use ic_sys::mmap::ScopedMmap;
-use ic_types::{
-    artifact::{Artifact, StateSyncMessage},
-    chunkable::{
-        ArtifactChunk, ArtifactChunkData,
-        ArtifactErrorCode::{self, ChunkVerificationFailed, ChunksMoreNeeded},
-        ChunkId, Chunkable,
+    CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, LABEL_COPY_CHUNKS, LABEL_FETCH,
+    LABEL_FETCH_MANIFEST_CHUNK, LABEL_FETCH_META_MANIFEST_CHUNK, LABEL_FETCH_STATE_CHUNK,
+    LABEL_HARDLINK_FILES, LABEL_PREALLOCATE, LABEL_PREALLOCATE_DIRECTORIES,
+    LABEL_PREALLOCATE_FILES, LABEL_STATE_SYNC_MAKE_CHECKPOINT, StateManagerMetrics,
+    StateSyncMetrics, StateSyncRefs,
+    manifest::{DiffScript, build_file_group_chunks, filter_out_zero_chunks},
+    state_sync::StateSync,
+    state_sync::types::{
+        FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET, FileGroupChunks, FileInfo,
+        MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK, Manifest, ManifestChunkIndex, MetaManifest,
+        StateSyncChunk, StateSyncMessage, decode_manifest, decode_meta_manifest,
+        state_sync_chunk_type,
     },
-    crypto::CryptoHash,
-    state_sync::{decode_manifest, Manifest, MANIFEST_CHUNK},
-    CryptoHashOfState, Height,
 };
+use ic_interfaces::p2p::state_sync::{AddChunkError, Chunk, ChunkId, Chunkable};
+use ic_logger::{ReplicaLogger, debug, error, fatal, info, trace, warn};
+use ic_state_layout::{CheckpointLayout, ReadOnly, RwPolicy, StateLayout, error::LayoutError};
+use ic_sys::mmap::ScopedMmap;
+use ic_types::{CryptoHashOfState, Height, malicious_flags::MaliciousFlags};
+use ic_utils::thread::parallel_map;
 use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     sync::{Arc, Mutex},
 };
 
@@ -34,23 +33,55 @@ pub mod cache;
 // necessary.
 const ALWAYS_VALIDATE: bool = false;
 
+type SubManifest = Vec<u8>;
 /// The state of the communication with up-to-date nodes.
 #[derive(Clone)]
 enum DownloadState {
-    /// Haven't received any chunks yet, waiting for the manifest chunk.
+    /// Haven't received any chunks yet, waiting for the meta-manifest chunk.
     Blank,
+    /// In the process of assembling the manifest.
+    Prep {
+        /// The received meta-manifest
+        meta_manifest: MetaManifest,
+        /// This field stores the sub-manifests received and can be used to reconstruct the whole manifest.
+        manifest_in_construction: BTreeMap<u32, SubManifest>,
+        /// Set of chunks that still needed to be fetched for the manifest.
+        manifest_chunks: BTreeSet<u32>,
+    },
     /// In the process of loading chunks, have some more to load.
     Loading {
+        /// The received meta-manifest
+        meta_manifest: MetaManifest,
         /// The received manifest
         manifest: Manifest,
+        state_sync_file_group: FileGroupChunks,
         /// Set of chunks that still need to be fetched. For the purpose of this
-        /// set chunk 0 is the manifest. To get indices into the manifests's
-        /// chunk table subtract 1.
+        /// set, chunk 0 is the meta-manifest.
+        ///
+        /// To get indices into the manifest's chunk table, subtract 1. Note that
+        /// it does not apply to file group chunks because they are assigned with
+        /// a dedicated chunk id range.
+        /// The manifest chunks are not part of `fetch_chunks` because they are fetched in the `Prep` phase.
         fetch_chunks: HashSet<usize>,
+        /// Tracks chunks from file group chunks that were already handled during the copy phase.
+        /// These chunks are still fetched for simplicity, but are skipped when applying file group chunks.
+        ///
+        /// Note that the set contains indices into the manifest's chunk table (`ManifestChunkIndex`).
+        copied_chunks_from_file_group: HashSet<ManifestChunkIndex>,
     },
-    /// Successfully completed and returned the artifact to P2P, nothing else to
-    /// do.
-    Complete(Box<Artifact>),
+    /// Successfully completed and delivered the state sync, nothing else to do.
+    Complete,
+}
+
+impl DownloadState {
+    pub fn as_string(&self) -> String {
+        match self {
+            DownloadState::Blank => "blank".into(),
+            DownloadState::Prep { .. } => "prep".into(),
+            DownloadState::Loading { .. } => "loading".into(),
+            DownloadState::Complete => "complete".into(),
+        }
+    }
 }
 
 /// An implementation of Chunkable trait that represents a (on-disk) state under
@@ -60,30 +91,26 @@ enum DownloadState {
 /// sync priority function.  When priority function returns "Fetch", P2P calls
 /// StateManager to construct an IncompleteState corresponding to the state
 /// artifact advert.
-pub struct IncompleteState {
+pub(crate) struct IncompleteState {
     log: ReplicaLogger,
     root: PathBuf,
+    state_sync: Arc<StateSync>,
     state_layout: StateLayout,
     height: Height,
     root_hash: CryptoHashOfState,
     state: DownloadState,
-    manifest_with_checkpoint_ref: Option<(Manifest, CheckpointRef)>,
+    manifest_with_checkpoint_layout: Option<(Manifest, CheckpointLayout<ReadOnly>)>,
     metrics: StateManagerMetrics,
     started_at: Instant,
-    own_subnet_type: SubnetType,
+    fetch_started_at: Option<Instant>,
     thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
     state_sync_refs: StateSyncRefs,
+    #[allow(dead_code)]
+    malicious_flags: MaliciousFlags,
 }
 
 impl Drop for IncompleteState {
     fn drop(&mut self) {
-        if self.state_sync_refs.remove(&self.height).is_none() {
-            warn!(
-                self.log,
-                "State sync refs does not contain incomplete state @{}.", self.height,
-            );
-        }
-
         // If state sync is aborted before completion we need to
         // measure the total duration here
         let elapsed = self.started_at.elapsed();
@@ -95,38 +122,71 @@ impl Drop for IncompleteState {
                     .with_label_values(&["aborted_blank"])
                     .observe(elapsed.as_secs_f64());
             }
+            DownloadState::Prep { .. } => {
+                self.metrics
+                    .state_sync_metrics
+                    .duration
+                    .with_label_values(&["aborted_prep"])
+                    .observe(elapsed.as_secs_f64());
+            }
             DownloadState::Loading {
+                meta_manifest: _,
                 manifest: _,
-                fetch_chunks: _,
+                state_sync_file_group,
+                fetch_chunks,
+                copied_chunks_from_file_group,
             } => {
                 self.metrics
                     .state_sync_metrics
                     .duration
                     .with_label_values(&["aborted"])
                     .observe(elapsed.as_secs_f64());
-            }
-            DownloadState::Complete(_) => {
-                // state sync duration already recorded earlier in make_checkpoint
-            }
-        }
 
-        if let DownloadState::Loading {
-            manifest: _,
-            ref fetch_chunks,
-        } = self.state
-        {
-            self.metrics
-                .state_sync_metrics
-                .remaining
-                .sub(fetch_chunks.len() as i64);
+                let remaining_file_group_chunks: HashSet<usize> = fetch_chunks
+                    .iter()
+                    .filter(|ix| (**ix as u32) >= FILE_GROUP_CHUNK_ID_OFFSET)
+                    .copied()
+                    .collect();
+
+                let mut dropped_chunks = fetch_chunks.len() - remaining_file_group_chunks.len();
+
+                let file_group_dropped_chunks = remaining_file_group_chunks
+                    .iter()
+                    .map(|ix| {
+                        state_sync_file_group.get(&(*ix as u32)).map_or(0, |vec| {
+                            if copied_chunks_from_file_group.is_empty() {
+                                vec.len()
+                            } else {
+                                // Rare case where copied chunks from file group are not empty.
+                                vec.iter()
+                                    .filter(|chunk| !copied_chunks_from_file_group.contains(chunk))
+                                    .count()
+                            }
+                        })
+                    })
+                    .sum::<usize>();
+
+                dropped_chunks += file_group_dropped_chunks;
+
+                self.metrics
+                    .state_sync_metrics
+                    .remaining
+                    .sub(dropped_chunks as i64);
+            }
+            DownloadState::Complete => {
+                // State sync duration already recorded:
+                // - in make_checkpoint() if the checkpoint already existed
+                // - after deliver_state_sync() if the checkpoint was successfully synced and delivered
+            }
         }
 
         // We need to record the download state before passing self to the cache, as
         // passing it to the cache might alter the download state
         let description = match self.state {
             DownloadState::Blank => "aborted before receiving any chunks",
+            DownloadState::Prep { .. } => "aborted before receiving the entire manifest",
             DownloadState::Loading { .. } => "aborted before receiving all the chunks",
-            DownloadState::Complete(_) => "completed successfully",
+            DownloadState::Complete => "completed successfully",
         };
 
         info!(self.log, "State sync @{} {}", self.height, description);
@@ -134,60 +194,127 @@ impl Drop for IncompleteState {
         // Pass self to the cache, taking ownership of chunks on disk
         let cache = Arc::clone(&self.state_sync_refs.cache);
         cache.write().push(self);
+
+        // Remove the active state sync reference
+        let mut active = self.state_sync_refs.active.write();
+        match active.take() {
+            Some((active_height, _hash)) => {
+                if active_height != self.height {
+                    warn!(
+                        self.log,
+                        "the active state sync reference was for a different height @{}, expected @{}",
+                        active_height,
+                        self.height,
+                    );
+                }
+            }
+            None => {
+                warn!(self.log, "the active state sync reference was None",);
+            }
+        }
     }
 }
 
 impl IncompleteState {
+    /// Determines whether to validate chunks based on three conditions:
+    /// 1. validate_data: whether validation is normally required (checkpoint_height <= started_height)
+    /// 2. ALWAYS_VALIDATE: compile-time constant (currently false)
+    /// 3. test_force_validate: test-only override to force validation (only available in debug builds)
+    fn should_validate(&self, validate_data: bool) -> bool {
+        validate_data || ALWAYS_VALIDATE || self.is_test_force_validate_enabled()
+    }
+
+    /// Returns true if test force validation is enabled (debug builds only)
+    fn is_test_force_validate_enabled(&self) -> bool {
+        #[cfg(debug_assertions)]
+        {
+            self.state_sync.is_test_force_validate()
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            false
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub(crate) fn try_new(
         log: ReplicaLogger,
         height: Height,
         root_hash: CryptoHashOfState,
-        state_layout: StateLayout,
-        manifest_with_checkpoint_ref: Option<(Manifest, CheckpointRef)>,
-        metrics: StateManagerMetrics,
-        own_subnet_type: SubnetType,
+        state_sync: Arc<StateSync>,
         thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
-        state_sync_refs: StateSyncRefs,
-    ) -> Self {
-        if state_sync_refs.insert(height, root_hash.clone()).is_some() {
-            // Currently, we don't handle two concurrent fetches of the same state
-            // correctly. This case indicates a non-deterministic bug either in StateManager
-            // or P2P. We'd rather detect this early and crash, the replica
-            // should be able to recover after a restart.
-            fatal!(log, "There is already a live state sync @{}.", height);
+    ) -> Option<IncompleteState> {
+        // The state sync manager in the p2p layer is expected not to start a new state sync when there is an ongoing state sync.
+        // Here we check it again as a last resort and return `None` if there is already an active state sync reference.
+        let mut active = state_sync.state_sync_refs.active.write();
+        if let Some((active_height, _hash)) = active.as_ref() {
+            warn!(
+                &log,
+                "Attempt to start state sync @{} while we are fetching state @{}",
+                height,
+                active_height
+            );
+            return None;
         }
-
-        Self {
+        *active = Some((height, root_hash.clone()));
+        let state_layout = state_sync.state_manager.state_layout.clone();
+        // Create the `IncompleteState` object while holding the write lock on the active state sync reference.
+        Some(Self {
             log,
-            root: state_layout
-                .state_sync_scratchpad(height)
-                .expect("failed to create directory for state sync scratchpad"),
+            root: state_layout.state_sync_scratchpad(height),
+            state_sync: state_sync.clone(),
             state_layout,
             height,
             root_hash,
             state: DownloadState::Blank,
-            manifest_with_checkpoint_ref,
-            metrics,
+            manifest_with_checkpoint_layout: state_sync
+                .state_manager
+                .latest_checkpoint_with_manifest(),
+            metrics: state_sync.state_manager.metrics.clone(),
             started_at: Instant::now(),
-            own_subnet_type,
+            fetch_started_at: None,
             thread_pool,
-            state_sync_refs,
-        }
+            state_sync_refs: state_sync.state_sync_refs.clone(),
+            malicious_flags: state_sync.state_manager.malicious_flags.clone(),
+        })
     }
 
-    /// Creates all the files listed in the manifest and resizes them to their
-    /// expected sizes.  This way we won't have to worry about creating parent
-    /// directories when we receive chunks.
-    pub(crate) fn preallocate_layout(log: &ReplicaLogger, root: &Path, manifest: &Manifest) {
-        for file_info in manifest.file_table.iter() {
-            let path = root.join(&file_info.relative_path);
+    /// Creates parent directories for all the files listed in the manifest.
+    /// Returns the number of parent directories created.
+    ///
+    /// This method must be called before hardlinking files because
+    /// the parent directory of the destination file must exist before hardlinking.
+    pub(crate) fn preallocate_layout_directories(
+        log: &ReplicaLogger,
+        root: &Path,
+        manifest: &Manifest,
+        metrics: &StateSyncMetrics,
+    ) -> usize {
+        let _timer = metrics
+            .step_duration
+            .with_label_values(&[LABEL_PREALLOCATE_DIRECTORIES])
+            .start_timer();
 
-            std::fs::create_dir_all(
-                path.parent()
-                    .expect("every file in the manifest must have a parent"),
-            )
-            .unwrap_or_else(|err| {
+        let unique_dirs = manifest
+            .file_table
+            .iter()
+            .map(|file_info| {
+                file_info
+                    .relative_path
+                    .parent()
+                    .expect("every file in the manifest must have a parent")
+            })
+            .collect::<HashSet<_>>();
+
+        info!(
+            log,
+            "state sync: preallocate_layout_directories for {} unique directories",
+            unique_dirs.len(),
+        );
+
+        for dir in &unique_dirs {
+            let path = root.join(dir);
+            std::fs::create_dir_all(&path).unwrap_or_else(|err| {
                 fatal!(
                     log,
                     "Failed to create parent directory for path {}: {}",
@@ -195,25 +322,148 @@ impl IncompleteState {
                     err
                 )
             });
-
-            let f = std::fs::File::create(&path).unwrap_or_else(|err| {
-                fatal!(log, "Failed to create file {}: {}", path.display(), err)
-            });
-            f.set_len(file_info.size_bytes).unwrap_or_else(|err| {
-                fatal!(
-                    log,
-                    "Failed to truncate file {} to size {}: {}",
-                    path.display(),
-                    file_info.size_bytes,
-                    err
-                )
-            });
         }
+        unique_dirs.len()
     }
 
-    /// Copy reusable files from previous checkpoint according to diff script.
+    /// Creates the files listed in the manifest and resizes them to their expected sizes.
+    /// If a diff script is provided, files scheduled to be hardlinked will be skipped during file creation and resizing.
+    pub(crate) fn preallocate_layout_files(
+        log: &ReplicaLogger,
+        root: &Path,
+        unique_dirs_size: usize,
+        manifest: &Manifest,
+        diff_script: Option<&DiffScript>,
+        metrics: &StateSyncMetrics,
+        thread_pool: &mut scoped_threadpool::Pool,
+    ) {
+        let _timer = metrics
+            .step_duration
+            .with_label_values(&[LABEL_PREALLOCATE_FILES])
+            .start_timer();
+
+        let num_files_to_hardlink = diff_script.map_or(0, |ds| ds.hardlink_files.len());
+        info!(
+            log,
+            "state sync: preallocate_layout_files for {} out of {} files ({} files to be hardlinked)",
+            manifest.file_table.len() - num_files_to_hardlink,
+            manifest.file_table.len(),
+            num_files_to_hardlink,
+        );
+
+        let mut by_parent: HashMap<PathBuf, Vec<&FileInfo>> =
+            HashMap::with_capacity(unique_dirs_size);
+
+        match diff_script {
+            Some(ds) => {
+                for (idx, file) in manifest.file_table.iter().enumerate() {
+                    if ds.hardlink_files.contains_key(&idx) {
+                        continue;
+                    }
+                    let parent = file
+                        .relative_path
+                        .parent()
+                        .expect("every file in the manifest must have a parent");
+                    by_parent.entry(parent.to_owned()).or_default().push(file);
+                }
+            }
+            None => {
+                for file in manifest.file_table.iter() {
+                    let parent = file
+                        .relative_path
+                        .parent()
+                        .expect("every file in the manifest must have a parent");
+                    by_parent.entry(parent.to_owned()).or_default().push(file);
+                }
+            }
+        }
+
+        parallel_map(thread_pool, by_parent.into_iter(), |(_parent, files)| {
+            for file_info in files {
+                let path = root.join(&file_info.relative_path);
+                Self::create_file_and_set_len(log, &path, file_info.size_bytes);
+            }
+        });
+    }
+
+    /// Creates a file and sets its length.
+    /// Panics if the file cannot be created or its length cannot be set.
+    fn create_file_and_set_len(log: &ReplicaLogger, path: &Path, size: u64) -> std::fs::File {
+        let f = std::fs::File::create(path)
+            .unwrap_or_else(|err| fatal!(log, "Failed to create file {}: {}", path.display(), err));
+        f.set_len(size).unwrap_or_else(|err| {
+            fatal!(
+                log,
+                "Failed to truncate file {} to size {}: {}",
+                path.display(),
+                size,
+                err
+            )
+        });
+        f
+    }
+
+    /// Marks the source file as readonly and creates a hard link to the destination.
+    ///
+    /// If the source file is writable, it will be marked as readonly.
+    /// Any existing file at the destination will be removed.
+    fn mark_readonly_and_hardlink_file(src: &Path, dst: &Path) -> std::io::Result<()> {
+        let src_metadata = src.metadata()?;
+        let mut permissions = src_metadata.permissions();
+        if !permissions.readonly() {
+            #[cfg(target_os = "linux")]
+            {
+                use std::os::unix::ffi::OsStrExt;
+                use std::os::unix::fs::MetadataExt;
+
+                // Writable source files should originate from state_sync_cache, not from existing checkpoints which are already readonly.
+                debug_assert!(
+                    !src.parent()
+                        .unwrap()
+                        .iter()
+                        .any(|p| p.as_bytes() == b"checkpoint")
+                );
+                debug_assert!(
+                    src.parent()
+                        .unwrap()
+                        .iter()
+                        .any(|p| p.as_bytes().starts_with(b"state_sync_cache"))
+                );
+
+                // Writable source files should be newly fetched, not already hardlinked from anywhere else.
+                debug_assert_eq!(src_metadata.nlink(), 1);
+            }
+
+            // Make the source file readonly to prevent accidental modifications
+            permissions.set_readonly(true);
+            std::fs::set_permissions(src, permissions).map_err(|e| {
+                std::io::Error::new(
+                    e.kind(),
+                    format!(
+                        "failed to set readonly permissions for file {}: {}",
+                        src.display(),
+                        e
+                    ),
+                )
+            })?;
+        }
+
+        // hard_link() requires the destination to not exist.
+        if dst.exists() {
+            debug_assert!(
+                false,
+                "destination file should not exist as we don't preallocate it"
+            );
+            std::fs::remove_file(dst)?;
+        }
+
+        std::fs::hard_link(src, dst)
+    }
+
+    /// Hardlink unchanged files from previous checkpoint according to diff script.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn copy_files(
+    pub(crate) fn hardlink_files(
+        &self,
         log: &ReplicaLogger,
         metrics: &StateSyncMetrics,
         thread_pool: &mut scoped_threadpool::Pool,
@@ -227,14 +477,14 @@ impl IncompleteState {
     ) {
         let _timer = metrics
             .step_duration
-            .with_label_values(&[LABEL_COPY_FILES])
+            .with_label_values(&[LABEL_HARDLINK_FILES])
             .start_timer();
 
         info!(
             log,
-            "state sync: copy_files for {} files {} validation",
-            diff_script.copy_files.len(),
-            if validate_data || ALWAYS_VALIDATE {
+            "state sync: hardlink_files for {} files {} validation",
+            diff_script.hardlink_files.len(),
+            if self.should_validate(validate_data) {
                 "with"
             } else {
                 "without"
@@ -244,7 +494,7 @@ impl IncompleteState {
         let corrupted_chunks = Arc::new(Mutex::new(Vec::new()));
 
         thread_pool.scoped(|scope| {
-            for (new_index, old_index) in diff_script.copy_files.iter() {
+            for (new_index, old_index) in diff_script.hardlink_files.iter() {
                 let src_path = root_old.join(&manifest_old.file_table[*old_index].relative_path);
                 let dst_path = root_new.join(&manifest_new.file_table[*new_index].relative_path);
                 let corrupted_chunks = Arc::clone(&corrupted_chunks);
@@ -255,7 +505,7 @@ impl IncompleteState {
                         *new_index,
                     );
 
-                    if validate_data || ALWAYS_VALIDATE {
+                    if self.should_validate(validate_data) {
 
                         let src = std::fs::File::open(&src_path).unwrap_or_else(|err| {
                             fatal!(
@@ -312,11 +562,11 @@ impl IncompleteState {
                                     byte_range.start,
                                     byte_range.end,
                                     src_data.len(),
-                                    new_chunk_idx + 1
+                                    new_chunk_idx + FILE_CHUNK_ID_OFFSET
                                 );
                                 bad_chunks.push(idx);
-                                corrupted_chunks.lock().unwrap().push(new_chunk_idx + 1);
-                                if !validate_data && ALWAYS_VALIDATE {
+                                corrupted_chunks.lock().unwrap().push(new_chunk_idx + FILE_CHUNK_ID_OFFSET);
+                                if !validate_data && (ALWAYS_VALIDATE || self.is_test_force_validate_enabled()) {
                                     error!(
                                         log,
                                         "{}: Unexpected chunk validation error for local chunk {}",
@@ -325,7 +575,7 @@ impl IncompleteState {
                                     );
                                     metrics.corrupted_chunks_critical.inc();
                                 }
-                                metrics.corrupted_chunks.with_label_values(&[LABEL_COPY_FILES]).inc();
+                                metrics.corrupted_chunks.with_label_values(&[LABEL_HARDLINK_FILES]).inc();
                                 continue;
                             }
 
@@ -343,12 +593,12 @@ impl IncompleteState {
                                     byte_range.start,
                                     byte_range.end,
                                     err,
-                                    new_chunk_idx + 1
+                                    new_chunk_idx + FILE_CHUNK_ID_OFFSET
                                 );
 
                                 bad_chunks.push(idx);
-                                corrupted_chunks.lock().unwrap().push(new_chunk_idx + 1);
-                                if !validate_data && ALWAYS_VALIDATE {
+                                corrupted_chunks.lock().unwrap().push(new_chunk_idx + FILE_CHUNK_ID_OFFSET);
+                                if !validate_data && (ALWAYS_VALIDATE || self.is_test_force_validate_enabled()) {
                                     error!(
                                         log,
                                         "{}: Unexpected chunk validation error for local chunk {}",
@@ -357,7 +607,7 @@ impl IncompleteState {
                                     );
                                     metrics.corrupted_chunks_critical.inc();
                                 }
-                                metrics.corrupted_chunks.with_label_values(&[LABEL_COPY_FILES]).inc();
+                                metrics.corrupted_chunks.with_label_values(&[LABEL_HARDLINK_FILES]).inc();
                             }
                         }
 
@@ -366,37 +616,25 @@ impl IncompleteState {
                                 == manifest_old.file_table[*old_index].size_bytes as usize
                         {
                             // All the hash sums and the file size match, so we can
-                            // simply copy the whole file.  That's much faster than
+                            // simply hardlink the whole file.  That's much faster than
                             // copying one chunk at a time.
-                            do_copy_overwrite(log, &src_path, &dst_path).unwrap_or_else(
-                                |err| {
-                                    fatal!(
-                                        log,
-                                        "Failed to copy file from {} to {}: {}",
-                                        src_path.display(),
-                                        dst_path.display(),
-                                        err
-                                    )
-                                },
-                            );
+                            Self::mark_readonly_and_hardlink_file(&src_path, &dst_path).unwrap_or_else(|err| {
+                                fatal!(
+                                    log,
+                                    "Failed to hardlink file from {} to {}: {}",
+                                    src_path.display(),
+                                    dst_path.display(),
+                                    err
+                                )
+                            });
+
                             metrics
                                 .remaining
                                 .sub(new_chunk_range.len() as i64);
                         } else {
+                            let dst = Self::create_file_and_set_len(log, &dst_path, manifest_new.file_table[*new_index].size_bytes);
                             // Copy the chunks that passed validation to the
                             // destination, the rest will be fetched and applied later.
-                            let dst = std::fs::OpenOptions::new()
-                                .write(true)
-                                .create(false)
-                                .open(&dst_path)
-                                .unwrap_or_else(|err| {
-                                    fatal!(
-                                        log,
-                                        "Failed to open file {}: {}",
-                                        dst_path.display(),
-                                        err
-                                    )
-                                });
                             for idx in old_chunk_range {
                                 if bad_chunks.contains(&idx) {
                                     continue;
@@ -411,7 +649,7 @@ impl IncompleteState {
                                     let src_offset = chunk.offset as i64;
                                     let dst_offset = chunk.offset as i64;
 
-                                    ic_utils::fs::copy_file_range_all(
+                                    ic_sys::fs::copy_file_range_all(
                                         &src,
                                         src_offset,
                                         &dst,
@@ -449,17 +687,18 @@ impl IncompleteState {
                             }
                         }
                     } else {
-                        // Since we do not validate in this else branch, we can simply copy the
+                        // Since we do not validate in this else branch, we can simply hardlink the
                         // file without any extra work
-                        do_copy_overwrite(log, &src_path, &dst_path).unwrap_or_else(|err| {
+                        Self::mark_readonly_and_hardlink_file(&src_path, &dst_path).unwrap_or_else(|err| {
                             fatal!(
                                 log,
-                                "Failed to copy file from {} to {}: {}",
+                                "Failed to hardlink file from {} to {}: {}",
                                 src_path.display(),
                                 dst_path.display(),
                                 err
                             )
                         });
+
                         metrics
                             .remaining
                             .sub(new_chunk_range.len() as i64);
@@ -467,6 +706,7 @@ impl IncompleteState {
                 });
             }
         });
+
         for chunk_idx in corrupted_chunks.lock().unwrap().iter() {
             fetch_chunks.insert(*chunk_idx);
         }
@@ -475,6 +715,7 @@ impl IncompleteState {
     /// Copy reusable chunks from previous checkpoint according to diff script.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn copy_chunks(
+        &self,
         log: &ReplicaLogger,
         metrics: &StateSyncMetrics,
         thread_pool: &mut scoped_threadpool::Pool,
@@ -495,7 +736,7 @@ impl IncompleteState {
             log,
             "state sync: copy_chunks for {} chunks {} validation",
             diff_script.copy_chunks.len(),
-            if validate_data || ALWAYS_VALIDATE {
+            if self.should_validate(validate_data) {
                 "with"
             } else {
                 "without"
@@ -515,7 +756,7 @@ impl IncompleteState {
             let src_file_index = manifest_old.chunk_table[*src_chunk_index].file_index;
             let entry = chunk_groups
                 .entry((dst_file_index as usize, src_file_index as usize))
-                .or_insert_with(Vec::new);
+                .or_default();
             entry.push((*dst_chunk_index, *src_chunk_index));
         }
 
@@ -579,14 +820,14 @@ impl IncompleteState {
                                 byte_range.start,
                                 byte_range.end,
                                 src_map.len(),
-                                *dst_chunk_index + 1
+                                *dst_chunk_index + FILE_CHUNK_ID_OFFSET
                             );
-                            corrupted_chunks.lock().unwrap().push(*dst_chunk_index + 1);
+                            corrupted_chunks.lock().unwrap().push(*dst_chunk_index + FILE_CHUNK_ID_OFFSET);
                             continue;
                         }
                         #[cfg(not(target_os = "linux"))]
                         let src_data = &src_map.as_slice()[byte_range];
-                        if validate_data || ALWAYS_VALIDATE {
+                        if self.should_validate(validate_data) {
                             #[cfg(target_os = "linux")]
                             let src_data = &src_map.as_slice()[byte_range];
 
@@ -605,11 +846,11 @@ impl IncompleteState {
                                     byte_range.start,
                                     byte_range.end,
                                     err,
-                                    *dst_chunk_index + 1
+                                    *dst_chunk_index + FILE_CHUNK_ID_OFFSET
                                 );
 
-                                corrupted_chunks.lock().unwrap().push(*dst_chunk_index + 1);
-                                if !validate_data && ALWAYS_VALIDATE {
+                                corrupted_chunks.lock().unwrap().push(*dst_chunk_index + FILE_CHUNK_ID_OFFSET);
+                                if !validate_data && (ALWAYS_VALIDATE || self.is_test_force_validate_enabled()) {
                                     error!(
                                         log,
                                         "{}: Unexpected chunk validation error for local chunk {}.",
@@ -630,7 +871,7 @@ impl IncompleteState {
                             let src_offset = src_chunk.offset as i64;
                             let dst_offset = dst_chunk.offset as i64;
 
-                            ic_utils::fs::copy_file_range_all(
+                            ic_sys::fs::copy_file_range_all(
                                 &src,
                                 src_offset,
                                 &dst,
@@ -705,24 +946,8 @@ impl IncompleteState {
         metrics.remaining.sub(1);
     }
 
-    fn build_artifact(
-        state_layout: &StateLayout,
-        height: Height,
-        root_hash: CryptoHashOfState,
-        manifest: &Manifest,
-    ) -> Artifact {
-        Artifact::StateSync(StateSyncMessage {
-            height,
-            root_hash,
-            checkpoint_root: state_layout
-                .checkpoint(height)
-                .unwrap()
-                .raw_path()
-                .to_path_buf(),
-            manifest: manifest.clone(),
-        })
-    }
-
+    // Return wether a checkpoint has been created; otherwise we must ignore state sync and proceed execution as usual.
+    #[must_use]
     fn make_checkpoint(
         log: &ReplicaLogger,
         metrics: &StateManagerMetrics,
@@ -730,51 +955,44 @@ impl IncompleteState {
         root: &Path,
         height: Height,
         state_layout: &StateLayout,
-        own_subnet_type: SubnetType,
-    ) {
-        let ro_layout = CheckpointLayout::<ReadOnly>::new(root.to_path_buf(), height)
-            .expect("failed to create checkpoint layout");
+    ) -> bool {
+        let _timer = metrics
+            .state_sync_metrics
+            .step_duration
+            .with_label_values(&[LABEL_STATE_SYNC_MAKE_CHECKPOINT])
+            .start_timer();
 
-        // Recover the state to make sure it's usable
-        if let Err(err) = crate::checkpoint::load_checkpoint_parallel(
-            &ro_layout,
-            own_subnet_type,
-            &metrics.checkpoint_metrics,
-        ) {
-            let elapsed = started_at.elapsed();
-            metrics
-                .state_sync_metrics
-                .duration
-                .with_label_values(&["unrecoverable"])
-                .observe(elapsed.as_secs_f64());
+        info!(
+            log,
+            "state sync: start to make a checkpoint from the scratchpad"
+        );
 
-            fatal!(
-                log,
-                "Failed to recover synced state {} after {:?}: {}",
-                height,
-                elapsed,
-                err
-            )
-        }
+        let scratchpad_layout =
+            CheckpointLayout::<RwPolicy<()>>::new_untracked(root.to_path_buf(), height)
+                .expect("failed to create checkpoint layout");
 
-        let scratchpad_layout = CheckpointLayout::<RwPolicy>::new(root.to_path_buf(), height)
-            .expect("failed to create checkpoint layout");
+        scratchpad_layout
+            .create_state_sync_checkpoint_marker()
+            .unwrap_or_else(|err| {
+                fatal!(
+                    log,
+                    "Failed to create state sync checkpoint marker for scratchpad @height {height}: {err}",
+                );
+            });
 
-        let elapsed = started_at.elapsed();
-        match state_layout.scratchpad_to_checkpoint(scratchpad_layout, height) {
+        match state_layout.promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, height) {
             Ok(_) => {
-                metrics
-                    .state_sync_metrics
-                    .duration
-                    .with_label_values(&["ok"])
-                    .observe(elapsed.as_secs_f64());
-
+                let elapsed = started_at.elapsed();
                 info!(
                     log,
-                    "Successfully completed sync of state {} in {:?}", height, elapsed
+                    "state sync: elapsed since start: {:?}, successfully made checkpoint at height {}",
+                    elapsed,
+                    height
                 );
+                true
             }
             Err(LayoutError::AlreadyExists(_)) => {
+                let elapsed = started_at.elapsed();
                 metrics
                     .state_sync_metrics
                     .duration
@@ -787,12 +1005,15 @@ impl IncompleteState {
                     height,
                     elapsed,
                 );
+
+                false
             }
             Err(LayoutError::IoError {
                 path,
                 message,
                 io_err,
             }) => {
+                let elapsed = started_at.elapsed();
                 metrics
                     .state_sync_metrics
                     .duration
@@ -801,7 +1022,7 @@ impl IncompleteState {
 
                 fatal!(
                     log,
-                    "Failed to promote synced state to a checkpoint {} after {:?}: {}: {} (at {})",
+                    "Failed to mark scratchpad as unverified or promote it to a checkpoint {} after {:?}: {}: {} (at {})",
                     height,
                     elapsed,
                     message,
@@ -816,19 +1037,24 @@ impl IncompleteState {
     /// Preallocates the files listed in the manifest and copies the chunks
     /// that we have locally.
     /// Returns a set of chunks that still need to be fetched
-    fn initialize_state_on_disk(&mut self, manifest_new: &Manifest) -> HashSet<usize> {
-        Self::preallocate_layout(&self.log, &self.root, manifest_new);
+    fn initialize_state_on_disk(&self, manifest_new: &Manifest) -> HashSet<usize> {
+        let unique_dirs_size = Self::preallocate_layout_directories(
+            &self.log,
+            &self.root,
+            manifest_new,
+            &self.metrics.state_sync_metrics,
+        );
 
         let state_sync_size_fetch = self
             .metrics
             .state_sync_metrics
             .size
             .with_label_values(&[LABEL_FETCH]);
-        let state_sync_size_copy_files = self
+        let state_sync_size_hardlink_files = self
             .metrics
             .state_sync_metrics
             .size
-            .with_label_values(&[LABEL_COPY_FILES]);
+            .with_label_values(&[LABEL_HARDLINK_FILES]);
         let state_sync_size_copy_chunks = self
             .metrics
             .state_sync_metrics
@@ -859,89 +1085,63 @@ impl IncompleteState {
             validate_data: bool,
         }
 
-        // Get a DiffData from the cache or checkpoint_ref, or neither
-        let diff_data: Option<DiffData> =
-            match (cache.as_ref(), self.manifest_with_checkpoint_ref.as_ref()) {
-                (Some(cache_entry), Some((checkpoint_manifest, checkpoint_ref))) => {
-                    let cache_height = cache_entry.height;
-                    let checkpoint_height = checkpoint_ref.0.height;
-                    if cache_height > checkpoint_height {
-                        // The cache will have missing chunks. However, it likely started from a
-                        // DiffScript with the same checkpoint we have now, so there should be more
-                        // relevant chunks in the cache than in the checkpoint.
-                        // This is just a heuristic however, as the cached chunks might have been
-                        // initialized with a DiffScript from an older checkpoint.
-                        Some(DiffData {
-                            manifest_old: &cache_entry.manifest,
-                            missing_chunks: cache_entry.missing_chunks.clone(),
-                            // The data at root_old will live at least as long as the
-                            // StateSyncCacheEntry, so cloning the path is safe
-                            root_old: cache_entry.path().to_path_buf(),
-                            height_old: cache_entry.height,
-                            validate_data: false,
-                        })
-                    } else {
-                        // This should be a special case that can only happen if the source of the
-                        // checkpoint is outside of state sync, as otherwise we would have cleared
-                        // the cache upon successfully syncing a state.
-                        let checkpoint_old = checkpoint_ref
-                            .0
-                            .state_layout
-                            .checkpoint(checkpoint_height)
-                            .unwrap_or_else(|err| {
-                                fatal!(
-                                    &self.log,
-                                    "Failed to get checkpoint path for height {}: {}",
-                                    checkpoint_height,
-                                    err
-                                );
-                            });
-                        Some(DiffData {
-                            manifest_old: checkpoint_manifest,
-                            missing_chunks: Default::default(),
-                            root_old: checkpoint_old.raw_path().to_path_buf(),
-                            height_old: checkpoint_height,
-                            validate_data: true,
-                        })
-                    }
-                }
-                (Some(cache_entry), None) => Some(DiffData {
-                    manifest_old: &cache_entry.manifest,
-                    missing_chunks: cache_entry.missing_chunks.clone(),
-                    root_old: cache_entry.path().to_path_buf(),
-                    height_old: cache_entry.height,
-                    validate_data: false,
-                }),
-                (None, Some((checkpoint_manifest, checkpoint_ref))) => {
-                    let checkpoint_height = checkpoint_ref.0.height;
-                    let checkpoint_old = checkpoint_ref
-                        .0
-                        .state_layout
-                        .checkpoint(checkpoint_height)
-                        .unwrap_or_else(|err| {
-                            fatal!(
-                                &self.log,
-                                "Failed to get checkpoint path for height {}: {}",
-                                checkpoint_height,
-                                err
-                            );
-                        });
+        // Get a DiffData from the cache or checkpoint_layout, or neither
+        let diff_data: Option<DiffData> = match (
+            cache.as_ref(),
+            self.manifest_with_checkpoint_layout.as_ref(),
+        ) {
+            (Some(cache_entry), Some((checkpoint_manifest, checkpoint_layout))) => {
+                let cache_height = cache_entry.height;
+                let checkpoint_height = checkpoint_layout.height();
+                if cache_height > checkpoint_height {
+                    // The cache will have missing chunks. However, it likely started from a
+                    // DiffScript with the same checkpoint we have now, so there should be more
+                    // relevant chunks in the cache than in the checkpoint.
+                    // This is just a heuristic however, as the cached chunks might have been
+                    // initialized with a DiffScript from an older checkpoint.
+                    Some(DiffData {
+                        manifest_old: &cache_entry.manifest,
+                        missing_chunks: cache_entry.missing_chunks.clone(),
+                        // The data at root_old will live at least as long as the
+                        // StateSyncCacheEntry, so cloning the path is safe
+                        root_old: cache_entry.path().to_path_buf(),
+                        height_old: cache_entry.height,
+                        validate_data: false,
+                    })
+                } else {
+                    // This should be a special case that can only happen if the source of the
+                    // checkpoint is outside of state sync, as otherwise we would have cleared
+                    // the cache upon successfully syncing a state.
                     Some(DiffData {
                         manifest_old: checkpoint_manifest,
                         missing_chunks: Default::default(),
-                        // The data in root_old will live at least as long as self.checkpoint_ref,
-                        // so cloning here is safe
-                        root_old: checkpoint_old.raw_path().to_path_buf(),
+                        root_old: checkpoint_layout.raw_path().to_path_buf(),
                         height_old: checkpoint_height,
-                        validate_data: !self
-                            .state_sync_refs
-                            .cache
-                            .read()
-                            .state_is_fetched(checkpoint_height),
+                        validate_data: checkpoint_height
+                            <= self.state_sync.state_manager.started_height(),
                     })
                 }
-                (None, None) => None,
-            };
+            }
+            (Some(cache_entry), None) => Some(DiffData {
+                manifest_old: &cache_entry.manifest,
+                missing_chunks: cache_entry.missing_chunks.clone(),
+                root_old: cache_entry.path().to_path_buf(),
+                height_old: cache_entry.height,
+                validate_data: false,
+            }),
+            (None, Some((checkpoint_manifest, checkpoint_old))) => {
+                let checkpoint_height = checkpoint_old.height();
+                Some(DiffData {
+                    manifest_old: checkpoint_manifest,
+                    missing_chunks: Default::default(),
+                    root_old: checkpoint_old.raw_path().to_path_buf(),
+                    height_old: checkpoint_height,
+                    validate_data: checkpoint_height
+                        <= self.state_sync.state_manager.started_height(),
+                })
+            }
+            (None, None) => None,
+        };
 
         if let Some(DiffData {
             manifest_old,
@@ -972,7 +1172,11 @@ impl IncompleteState {
             // diff_script contains indices into the manifest chunk table, but p2p
             // counts the manifest itself as chunk 0, so all other chunk indices are
             // shifted by 1
-            let mut fetch_chunks = diff_script.fetch_chunks.iter().map(|i| *i + 1).collect();
+            let mut fetch_chunks = diff_script
+                .fetch_chunks
+                .iter()
+                .map(|i| *i + FILE_CHUNK_ID_OFFSET)
+                .collect();
 
             let diff_bytes: u64 = diff_script
                 .fetch_chunks
@@ -981,20 +1185,20 @@ impl IncompleteState {
                 .sum();
 
             let preallocate_bytes: u64 =
-                (diff_script.zeros_chunks * crate::manifest::DEFAULT_CHUNK_SIZE) as u64;
+                (diff_script.zeros_chunks * crate::state_sync::types::DEFAULT_CHUNK_SIZE) as u64;
 
-            let copy_files_bytes: u64 = diff_script
-                .copy_files
-                .iter()
-                .map(|(i, _)| manifest_new.file_table[*i].size_bytes as u64)
+            let hardlink_files_bytes: u64 = diff_script
+                .hardlink_files
+                .keys()
+                .map(|i| manifest_new.file_table[*i].size_bytes)
                 .sum();
 
             let copy_chunks_bytes: u64 =
-                total_bytes - diff_bytes - preallocate_bytes - copy_files_bytes;
+                total_bytes - diff_bytes - preallocate_bytes - hardlink_files_bytes;
 
             state_sync_size_fetch.inc_by(diff_bytes);
             state_sync_size_preallocate.inc_by(preallocate_bytes);
-            state_sync_size_copy_files.inc_by(copy_files_bytes);
+            state_sync_size_hardlink_files.inc_by(hardlink_files_bytes);
             state_sync_size_copy_chunks.inc_by(copy_chunks_bytes);
 
             self.metrics
@@ -1003,7 +1207,17 @@ impl IncompleteState {
                 .sub(diff_script.zeros_chunks as i64);
 
             let mut thread_pool = self.thread_pool.lock().unwrap();
-            Self::copy_files(
+            Self::preallocate_layout_files(
+                &self.log,
+                &self.root,
+                unique_dirs_size,
+                manifest_new,
+                Some(&diff_script),
+                &self.metrics.state_sync_metrics,
+                &mut thread_pool,
+            );
+
+            self.hardlink_files(
                 &self.log,
                 &self.metrics.state_sync_metrics,
                 &mut thread_pool,
@@ -1016,7 +1230,18 @@ impl IncompleteState {
                 &mut fetch_chunks,
             );
 
-            Self::copy_chunks(
+            #[cfg(debug_assertions)]
+            {
+                // All files should be present with the expected size before copying chunks,
+                // either as a result of preallocation or hardlinking
+                for file in manifest_new.file_table.iter() {
+                    let path = self.root.join(&file.relative_path);
+                    let size = std::fs::metadata(&path).expect("file should exist").len();
+                    debug_assert_eq!(size, file.size_bytes);
+                }
+            }
+
+            self.copy_chunks(
                 &self.log,
                 &self.metrics.state_sync_metrics,
                 &mut thread_pool,
@@ -1036,6 +1261,15 @@ impl IncompleteState {
                 "Initializing state sync for height {} without any caches or previous checkpoints",
                 self.height
             );
+            Self::preallocate_layout_files(
+                &self.log,
+                &self.root,
+                unique_dirs_size,
+                manifest_new,
+                None,
+                &self.metrics.state_sync_metrics,
+                &mut self.thread_pool.lock().unwrap(),
+            );
             let non_zero_chunks = filter_out_zero_chunks(manifest_new);
             let diff_bytes: u64 = non_zero_chunks
                 .iter()
@@ -1051,86 +1285,166 @@ impl IncompleteState {
                 .remaining
                 .sub(zeros_chunks as i64);
 
-            non_zero_chunks.iter().map(|i| *i + 1).collect()
-        }
-    }
-}
-
-impl Chunkable for IncompleteState {
-    fn get_artifact_hash(&self) -> CryptoHash {
-        self.root_hash.get_ref().clone()
-    }
-
-    fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
-        match self.state {
-            DownloadState::Blank => Box::new(std::iter::once(MANIFEST_CHUNK)),
-            DownloadState::Complete(_) => Box::new(std::iter::empty()),
-            DownloadState::Loading {
-                manifest: _,
-                ref fetch_chunks,
-            } => {
-                #[allow(clippy::needless_collect)]
-                let ids: Vec<_> = fetch_chunks
-                    .iter()
-                    .map(|id| ChunkId::new(*id as u32))
-                    .collect();
-                Box::new(ids.into_iter())
-            }
+            non_zero_chunks
+                .iter()
+                .map(|i| *i + FILE_CHUNK_ID_OFFSET)
+                .collect()
         }
     }
 
-    fn get_artifact_identifier(&self) -> CryptoHash {
-        self.get_artifact_hash()
-    }
-
-    fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode> {
-        let ix = artifact_chunk.chunk_id.get() as usize;
-
-        let payload = match artifact_chunk.artifact_chunk_data {
-            ArtifactChunkData::SemiStructuredChunkData(ref payload) => payload,
-            other => {
-                warn!(self.log, "State sync chunk has wrong shape {:?}", other);
-                return Err(ChunkVerificationFailed);
-            }
-        };
-
+    fn add_chunk_inner(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError> {
+        #[cfg(feature = "malicious_code")]
+        let chunk = maliciously_alter_chunk_data(chunk, chunk_id, &mut self.malicious_flags);
+        let ix = chunk_id.get();
         match &mut self.state {
-            DownloadState::Complete(ref artifact) => {
+            DownloadState::Complete => {
                 debug!(
                     self.log,
-                    "Received chunk {} on completed state {}", artifact_chunk.chunk_id, self.height
+                    "Received chunk {} on completed state {}", chunk_id, self.height
                 );
 
-                Ok(*artifact.clone())
+                Ok(())
             }
-
             DownloadState::Blank => {
-                if artifact_chunk.chunk_id == MANIFEST_CHUNK {
-                    let manifest = decode_manifest(payload).map_err(|err| {
+                if chunk_id == META_MANIFEST_CHUNK {
+                    let meta_manifest = decode_meta_manifest(chunk).map_err(|err| {
                         warn!(
                             self.log,
-                            "Failed to decode manifest chunk for state {}: {}", self.height, err
+                            "Failed to decode meta-manifest chunk for state {}: {}",
+                            self.height,
+                            err
                         );
-                        ChunkVerificationFailed
+                        AddChunkError::Invalid
+                    })?;
+
+                    crate::manifest::validate_meta_manifest(&meta_manifest, &self.root_hash)
+                        .map_err(|err| {
+                            warn!(self.log, "Received invalid meta-manifest: {}", err);
+                            self.metrics
+                                .state_sync_metrics
+                                .corrupted_chunks
+                                .with_label_values(&[LABEL_FETCH_META_MANIFEST_CHUNK])
+                                .inc();
+                            AddChunkError::Invalid
+                        })?;
+                    let manifest_chunks_len = meta_manifest.sub_manifest_hashes.len();
+                    debug!(
+                        self.log,
+                        "Received META_MANIFEST chunk for state {}, got {} more chunks to download for the manifest",
+                        self.height,
+                        manifest_chunks_len
+                    );
+                    trace!(self.log, "Received meta-manifest:\n{:?}", meta_manifest);
+
+                    assert!(
+                        MANIFEST_CHUNK_ID_OFFSET
+                            .checked_add(manifest_chunks_len as u32)
+                            .is_some(),
+                        "Not enough chunk id space for manifest chunks!"
+                    );
+                    let manifest_chunks = (MANIFEST_CHUNK_ID_OFFSET
+                        ..MANIFEST_CHUNK_ID_OFFSET + manifest_chunks_len as u32)
+                        .collect();
+
+                    self.state = DownloadState::Prep {
+                        meta_manifest,
+                        manifest_in_construction: Default::default(),
+                        manifest_chunks,
+                    };
+
+                    Ok(())
+                } else {
+                    warn!(
+                        self.log,
+                        "Received non-meta-manifest chunk {} on blank state {}", ix, self.height
+                    );
+                    Err(AddChunkError::Invalid)
+                }
+            }
+            &mut DownloadState::Prep {
+                ref meta_manifest,
+                ref mut manifest_in_construction,
+                ref mut manifest_chunks,
+            } => {
+                let manifest_chunk_index = match state_sync_chunk_type(ix) {
+                    StateSyncChunk::MetaManifestChunk => {
+                        // Have already seen the meta-manifest chunk
+                        return Ok(());
+                    }
+                    StateSyncChunk::ManifestChunk(index) => index as usize,
+                    _ => {
+                        // Have not requested such chunks
+                        return Err(AddChunkError::Invalid);
+                    }
+                };
+                debug_assert!(ix >= MANIFEST_CHUNK_ID_OFFSET);
+
+                if !manifest_chunks.contains(&ix) {
+                    return Ok(());
+                }
+
+                crate::manifest::validate_sub_manifest(
+                    manifest_chunk_index,
+                    chunk.as_bytes(),
+                    meta_manifest,
+                )
+                .map_err(|err| {
+                    warn!(self.log, "Received invalid sub-manifest: {}", err);
+                    self.metrics
+                        .state_sync_metrics
+                        .corrupted_chunks
+                        .with_label_values(&[LABEL_FETCH_MANIFEST_CHUNK])
+                        .inc();
+
+                    AddChunkError::Invalid
+                })?;
+                manifest_in_construction.insert(ix, chunk.take());
+                manifest_chunks.remove(&ix);
+
+                debug!(
+                    self.log,
+                    "Received MANIFEST chunk {} for state {}, got {} more chunks to download",
+                    manifest_chunk_index,
+                    self.height,
+                    manifest_chunks.len()
+                );
+
+                if manifest_chunks.is_empty() {
+                    let length: usize = manifest_in_construction.values().map(|x| x.len()).sum();
+                    let mut encoded_manifest = Vec::with_capacity(length);
+                    // The sub-manifests are stored in a BTreeMap so the manifest can be assembled by adding each sub-manifest in order.
+                    manifest_in_construction
+                        .values()
+                        .for_each(|sub_manifest| encoded_manifest.extend(sub_manifest));
+
+                    // Since manifest version 2, the authenticity of a manifest comes from the meta-manifest hash which is signed in the CUP.
+                    // It implies severe problems if all sub-manifests pass validation but we fail to get a valid manifest from them.
+                    // The replica should panic in such situation otherwise the state sync will stall in the Prep phase.
+                    let manifest = decode_manifest(&encoded_manifest).map_err(|err| {
+                        fatal!(
+                            self.log,
+                            "Received all sub-manifests but failed to decode manifest chunk for state {}: {}", self.height, err
+                        );
                     })?;
 
                     crate::manifest::validate_manifest(&manifest, &self.root_hash).map_err(
                         |err| {
-                            warn!(self.log, "Received invalid manifest: {}", err);
-                            ChunkVerificationFailed
+                            fatal!(self.log, "Received all sub-manifests but the assembled manifest is invalid: {}", err);
                         },
                     )?;
 
                     debug!(
                         self.log,
-                        "Received MANIFEST chunk for state {}, got {} more chunks to download",
+                        "Received MANIFEST chunks for state {}, got {} more chunks to download",
                         self.height,
                         manifest.chunk_table.len()
                     );
 
                     trace!(self.log, "Received manifest:\n{}", manifest);
 
-                    let fetch_chunks = self.initialize_state_on_disk(&manifest);
+                    let meta_manifest = meta_manifest.clone();
+
+                    let mut fetch_chunks = self.initialize_state_on_disk(&manifest);
 
                     if fetch_chunks.is_empty() {
                         debug!(
@@ -1138,53 +1452,94 @@ impl Chunkable for IncompleteState {
                             "No chunks need to be fetched for state {}", self.height
                         );
 
-                        Self::make_checkpoint(
+                        if !Self::make_checkpoint(
                             &self.log,
                             &self.metrics,
                             self.started_at,
                             &self.root,
                             self.height,
                             &self.state_layout,
-                            self.own_subnet_type,
-                        );
+                        ) {
+                            self.state = DownloadState::Complete;
+                            return Ok(());
+                        }
 
-                        let artifact = Self::build_artifact(
-                            &self.state_layout,
+                        self.state_sync.deliver_state_sync(
                             self.height,
                             self.root_hash.clone(),
-                            &manifest,
+                            manifest.clone(),
+                            Arc::new(meta_manifest.clone()),
+                        );
+                        self.metrics
+                            .state_sync_metrics
+                            .duration
+                            .with_label_values(&["ok"])
+                            .observe(self.started_at.elapsed().as_secs_f64());
+
+                        self.state = DownloadState::Complete;
+                        Ok(())
+                    } else {
+                        let state_sync_file_group = build_file_group_chunks(&manifest);
+
+                        // The chunks in the chunk table should not collide with the file group chunk IDs.
+                        assert!(manifest.chunk_table.len() < FILE_GROUP_CHUNK_ID_OFFSET as usize);
+
+                        // The file group chunk IDs should not collide with the manifest chunk IDs.
+                        assert!(
+                            FILE_GROUP_CHUNK_ID_OFFSET + state_sync_file_group.len() as u32 - 1
+                                < MANIFEST_CHUNK_ID_OFFSET
                         );
 
-                        self.state = DownloadState::Complete(Box::new(artifact.clone()));
-                        self.state_sync_refs
-                            .cache
-                            .write()
-                            .register_successful_sync(self.height);
-                        Ok(artifact)
-                    } else {
+                        // Some individual chunks in file group chunks may already be handled in the copy phase.
+                        // However, we still fetch them to simplify the logic of downloading the file group chunks.
+                        // We keep track of these chunks and skip applying them after extracting them from the file group chunks.
+                        // It will be essential when files are hardlinked as read-only and cannot be overwritten in the future.
+                        let mut copied_chunks_from_file_group = HashSet::new();
+                        for (&chunk_id, chunk_table_indices) in state_sync_file_group.iter() {
+                            for &chunk_table_index in chunk_table_indices.iter() {
+                                let was_present = fetch_chunks
+                                    .remove(&(chunk_table_index as usize + FILE_CHUNK_ID_OFFSET));
+
+                                // If `remove()` returns false, this chunk was already handled during the copy phase and should not be applied after fetching.
+                                if !was_present {
+                                    copied_chunks_from_file_group.insert(chunk_table_index);
+                                }
+                            }
+
+                            // We decide to fetch all the file group chunks unconditionally for two reasons:
+                            //     1. `canister.pbuf` files typically change between checkpoints, so they are unlikely to be handled in the copy phase,
+                            //        except in the rare case where we do state sync twice for the same checkpoint (e.g., due to network interruptions).
+                            //     2. `canister.pbuf` files are small so there will be only a handful of chunks after grouping.
+                            fetch_chunks.insert(chunk_id as usize);
+                        }
+
+                        let num_fetch_chunks = fetch_chunks.len();
                         self.state = DownloadState::Loading {
+                            meta_manifest,
                             manifest,
+                            state_sync_file_group,
                             fetch_chunks,
+                            copied_chunks_from_file_group,
                         };
-                        Err(ChunksMoreNeeded)
+                        self.fetch_started_at = Some(Instant::now());
+                        info!(
+                            self.log,
+                            "state sync enters the loading phase with {} chunks to fetch",
+                            num_fetch_chunks,
+                        );
+                        Ok(())
                     }
                 } else {
-                    warn!(
-                        self.log,
-                        "Received non-manifest chunk {} on blank state {}", ix, self.height
-                    );
-                    Err(ChunkVerificationFailed)
+                    Ok(())
                 }
             }
-            DownloadState::Loading {
+            &mut DownloadState::Loading {
+                ref meta_manifest,
                 ref manifest,
                 ref mut fetch_chunks,
+                ref state_sync_file_group,
+                ref copied_chunks_from_file_group,
             } => {
-                if artifact_chunk.chunk_id == MANIFEST_CHUNK {
-                    // Have already seen the manifest chunk
-                    return Err(ChunksMoreNeeded);
-                }
-
                 debug!(
                     self.log,
                     "Received chunk {} / {} of state {}",
@@ -1193,36 +1548,86 @@ impl Chunkable for IncompleteState {
                     self.height
                 );
 
-                if !fetch_chunks.contains(&(ix)) {
-                    return Err(ChunksMoreNeeded);
+                if !fetch_chunks.contains(&(ix as usize)) {
+                    return Ok(());
                 }
 
-                let chunk_table_index = ix - 1;
+                // Each index in `chunk_table_indices` is mapped to a piece of payload bytes
+                // with its corresponding start and end position.
+                let (chunk_table_indices, payload_pieces) = match state_sync_chunk_type(ix) {
+                    StateSyncChunk::FileChunk(index) => {
+                        // If it is a normal chunk, there is only one index mapped to the whole payload.
+                        (vec![index], vec![(0, chunk.as_bytes().len())])
+                    }
+                    StateSyncChunk::FileGroupChunk(index) => {
+                        // If it is a file group chunk, divide it into pieces according to the `FileGroupChunks`.
+                        let chunk_table_indices = state_sync_file_group
+                            .get(&index)
+                            .ok_or(AddChunkError::Invalid)?
+                            .clone();
+
+                        let mut cur_offset = 0;
+                        let mut payload_pieces: Vec<(usize, usize)> = Vec::new();
+                        for chunk_table_index in &chunk_table_indices {
+                            let chunk_size = manifest.chunk_table[*chunk_table_index as usize]
+                                .size_bytes as usize;
+                            payload_pieces.push((cur_offset, cur_offset + chunk_size));
+                            cur_offset += chunk_size;
+                        }
+
+                        if cur_offset != chunk.as_bytes().len() {
+                            warn!(self.log, "Received invalid file group chunk {}", ix);
+                            return Err(AddChunkError::Invalid);
+                        }
+                        (chunk_table_indices, payload_pieces)
+                    }
+                    _ => {
+                        // meta-manifest/manifest chunks are not expected in the `Loading` phase.
+                        return Ok(());
+                    }
+                };
 
                 let log = &self.log;
                 let metrics = &self.metrics;
-                crate::manifest::validate_chunk(chunk_table_index, payload, manifest).map_err(
-                    |err| {
+
+                // If any of the chunks is invalid, the whole file group chunk is considered as invalid.
+                // In this case, none of them will be applied.
+                for (chunk_table_index, &(start, end)) in
+                    chunk_table_indices.iter().zip(payload_pieces.iter())
+                {
+                    crate::manifest::validate_chunk(
+                        *chunk_table_index as usize,
+                        &chunk.as_bytes()[start..end],
+                        manifest,
+                    )
+                    .map_err(|err| {
                         warn!(log, "Received invalid chunk: {}", err);
                         metrics
                             .state_sync_metrics
                             .corrupted_chunks
-                            .with_label_values(&[LABEL_FETCH])
+                            .with_label_values(&[LABEL_FETCH_STATE_CHUNK])
                             .inc();
-                        ChunkVerificationFailed
-                    },
-                )?;
+                        AddChunkError::Invalid
+                    })?;
+                }
 
-                Self::apply_chunk(
-                    &self.log,
-                    &self.metrics.state_sync_metrics,
-                    &self.root,
-                    chunk_table_index,
-                    payload,
-                    manifest,
-                );
+                for (chunk_table_index, &(start, end)) in
+                    chunk_table_indices.iter().zip(payload_pieces.iter())
+                {
+                    if copied_chunks_from_file_group.contains(chunk_table_index) {
+                        continue;
+                    }
+                    Self::apply_chunk(
+                        &self.log,
+                        &self.metrics.state_sync_metrics,
+                        &self.root,
+                        *chunk_table_index as usize,
+                        &chunk.as_bytes()[start..end],
+                        manifest,
+                    );
+                }
 
-                fetch_chunks.remove(&ix);
+                fetch_chunks.remove(&(ix as usize));
 
                 if fetch_chunks.is_empty() {
                     debug!(
@@ -1232,57 +1637,166 @@ impl Chunkable for IncompleteState {
                         self.height
                     );
 
-                    Self::make_checkpoint(
+                    if let Some(fetch_start_at) = self.fetch_started_at {
+                        let elapsed = fetch_start_at.elapsed();
+                        self.metrics
+                            .state_sync_metrics
+                            .step_duration
+                            .with_label_values(&[LABEL_FETCH])
+                            .observe(elapsed.as_secs_f64());
+                    } else {
+                        warn!(
+                            self.log,
+                            "The starting time of the loading phase was not properly set."
+                        )
+                    }
+
+                    if !Self::make_checkpoint(
                         &self.log,
                         &self.metrics,
                         self.started_at,
                         &self.root,
                         self.height,
                         &self.state_layout,
-                        self.own_subnet_type,
-                    );
+                    ) {
+                        self.state = DownloadState::Complete;
+                        return Ok(());
+                    }
 
-                    let artifact = Self::build_artifact(
-                        &self.state_layout,
+                    self.state_sync.deliver_state_sync(
                         self.height,
                         self.root_hash.clone(),
-                        manifest,
+                        manifest.clone(),
+                        Arc::new(meta_manifest.clone()),
                     );
+                    self.metrics
+                        .state_sync_metrics
+                        .duration
+                        .with_label_values(&["ok"])
+                        .observe(self.started_at.elapsed().as_secs_f64());
 
-                    self.state = DownloadState::Complete(Box::new(artifact.clone()));
-                    self.state_sync_refs
-                        .cache
-                        .write()
-                        .register_successful_sync(self.height);
-                    return Ok(artifact);
+                    self.state = DownloadState::Complete;
+
+                    // Delay delivery of artifact
+                    #[cfg(feature = "malicious_code")]
+                    if let Some(delay) = self.malicious_flags.delay_state_sync(self.started_at) {
+                        info!(self.log, "[MALICIOUS]: Delayed state sync by {:?}", delay);
+                    }
                 }
 
-                Err(ChunksMoreNeeded)
+                Ok(())
             }
         }
     }
+}
 
-    fn is_complete(&self) -> bool {
-        matches!(self.state, DownloadState::Complete(_))
+#[cfg(feature = "malicious_code")]
+fn maliciously_alter_chunk_data(
+    mut chunk: Chunk,
+    chunk_id: ChunkId,
+    malicious_flags: &mut MaliciousFlags,
+) -> Chunk {
+    let allowance = match malicious_flags
+        .maliciously_alter_state_sync_chunk_receiving_side
+        .as_mut()
+    {
+        Some(allowance) => allowance,
+        None => {
+            return chunk;
+        }
+    };
+
+    let ix = chunk_id.get();
+    match state_sync_chunk_type(ix) {
+        StateSyncChunk::MetaManifestChunk => {
+            if allowance.meta_manifest_chunk_error_allowance == 0 {
+                return chunk;
+            }
+            allowance.meta_manifest_chunk_error_allowance -= 1;
+            let meta_manifest = match decode_meta_manifest(chunk.as_bytes().to_vec().into()) {
+                Ok(meta_manifest) => meta_manifest,
+                Err(_) => {
+                    return chunk;
+                }
+            };
+            chunk = crate::state_sync::types::maliciously_alter_meta_manifest(meta_manifest).into();
+        }
+        StateSyncChunk::ManifestChunk(_) => {
+            if allowance.manifest_chunk_error_allowance == 0 {
+                return chunk;
+            }
+            allowance.manifest_chunk_error_allowance -= 1;
+            chunk = crate::state_sync::types::maliciously_alter_chunk_payload(
+                chunk.as_bytes().to_vec(),
+            )
+            .into();
+        }
+        _ => {
+            if allowance.state_chunk_error_allowance == 0 {
+                return chunk;
+            }
+            allowance.state_chunk_error_allowance -= 1;
+            chunk = crate::state_sync::types::maliciously_alter_chunk_payload(
+                chunk.as_bytes().to_vec(),
+            )
+            .into();
+        }
+    }
+    // Sleep for 15 seconds to allow the replica connecting to more peers for state sync.
+    // Otherwise, the first invalid chunk in the very beginning will immediately fail the state sync
+    // if there is only one peer connected.
+    // Note that this is only an issue for tests not the real system.
+    std::thread::sleep(std::time::Duration::from_secs(15));
+    chunk
+}
+
+impl Chunkable<StateSyncMessage> for IncompleteState {
+    fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
+        match self.state {
+            DownloadState::Blank => Box::new(std::iter::once(META_MANIFEST_CHUNK)),
+            DownloadState::Prep {
+                meta_manifest: _,
+                manifest_in_construction: _,
+                ref manifest_chunks,
+            } => {
+                let ids: Vec<_> = manifest_chunks.iter().map(|id| ChunkId::new(*id)).collect();
+                Box::new(ids.into_iter())
+            }
+            DownloadState::Loading {
+                meta_manifest: _,
+                manifest: _,
+                state_sync_file_group: _,
+                ref fetch_chunks,
+                copied_chunks_from_file_group: _,
+            } => {
+                let ids: Vec<_> = fetch_chunks
+                    .iter()
+                    .map(|id| ChunkId::new(*id as u32))
+                    .collect();
+                Box::new(ids.into_iter())
+            }
+            DownloadState::Complete => Box::new(std::iter::empty()),
+        }
     }
 
-    fn get_chunk_size(&self, chunk_id: ChunkId) -> usize {
-        let ix = chunk_id.get() as usize;
+    fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError> {
+        let started_at = Instant::now();
+        let state_before = self.state.as_string();
+        let result = self.add_chunk_inner(chunk_id, chunk);
+        let state_after = self.state.as_string();
+        let success = result.is_ok();
 
-        if ix == 0 {
-            // Guestimate of manifest size
-            return crate::manifest::DEFAULT_CHUNK_SIZE as usize;
-        }
-        match &self.state {
-            DownloadState::Blank | DownloadState::Complete(_) => {
-                crate::manifest::DEFAULT_CHUNK_SIZE as usize
-            }
-            DownloadState::Loading { manifest, .. } => {
-                if ix > manifest.chunk_table.len() {
-                    return 0;
-                }
-                manifest.chunk_table[ix - 1].size_bytes as usize
-            }
-        }
+        // Record metric
+        self.metrics
+            .state_sync_metrics
+            .add_chunk_duration
+            .with_label_values(&[
+                state_before.as_str(),
+                state_after.as_str(),
+                if success { "ok" } else { "err" },
+            ])
+            .observe(started_at.elapsed().as_secs_f64());
+
+        result
     }
 }

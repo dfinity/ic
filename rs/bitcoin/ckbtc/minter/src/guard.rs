@@ -1,40 +1,40 @@
-use crate::state::{mutate_state, CkBtcMinterState};
-use candid::Principal;
+use crate::state::{CkBtcMinterState, mutate_state};
+use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 const MAX_CONCURRENT: usize = 100;
 
-#[derive(Debug, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum GuardError {
     AlreadyProcessing,
     TooManyConcurrentRequests,
 }
 
 pub trait PendingRequests {
-    fn pending_requests(state: &mut CkBtcMinterState) -> &mut BTreeSet<Principal>;
+    fn pending_requests(state: &mut CkBtcMinterState) -> &mut BTreeSet<Account>;
 }
 
 pub struct PendingBalanceUpdates;
 
 impl PendingRequests for PendingBalanceUpdates {
-    fn pending_requests(state: &mut CkBtcMinterState) -> &mut BTreeSet<Principal> {
-        &mut state.update_balance_principals
+    fn pending_requests(state: &mut CkBtcMinterState) -> &mut BTreeSet<Account> {
+        &mut state.update_balance_accounts
     }
 }
-
 pub struct RetrieveBtcUpdates;
 
 impl PendingRequests for RetrieveBtcUpdates {
-    fn pending_requests(state: &mut CkBtcMinterState) -> &mut BTreeSet<Principal> {
-        &mut state.retrieve_btc_principals
+    fn pending_requests(state: &mut CkBtcMinterState) -> &mut BTreeSet<Account> {
+        &mut state.retrieve_btc_accounts
     }
 }
 
 /// Guards a block from executing twice when called by the same user and from being
 /// executed [MAX_CONCURRENT] or more times in parallel.
+#[must_use]
 pub struct Guard<PR: PendingRequests> {
-    principal: Principal,
+    account: Account,
     _marker: PhantomData<PR>,
 }
 
@@ -42,18 +42,18 @@ impl<PR: PendingRequests> Guard<PR> {
     /// Attempts to create a new guard for the current block. Fails if there is
     /// already a pending request for the specified [principal] or if there
     /// are at least [MAX_CONCURRENT] pending requests.
-    pub fn new(principal: Principal) -> Result<Self, GuardError> {
+    pub fn new(account: Account) -> Result<Self, GuardError> {
         mutate_state(|s| {
-            let principals = PR::pending_requests(s);
-            if principals.contains(&principal) {
+            let accounts = PR::pending_requests(s);
+            if accounts.contains(&account) {
                 return Err(GuardError::AlreadyProcessing);
             }
-            if principals.len() >= MAX_CONCURRENT as usize {
+            if accounts.len() >= MAX_CONCURRENT {
                 return Err(GuardError::TooManyConcurrentRequests);
             }
-            principals.insert(principal);
+            accounts.insert(account);
             Ok(Self {
-                principal,
+                account,
                 _marker: PhantomData,
             })
         })
@@ -62,79 +62,115 @@ impl<PR: PendingRequests> Guard<PR> {
 
 impl<PR: PendingRequests> Drop for Guard<PR> {
     fn drop(&mut self) {
-        mutate_state(|s| PR::pending_requests(s).remove(&self.principal));
+        mutate_state(|s| PR::pending_requests(s).remove(&self.account));
     }
 }
 
-pub fn balance_update_guard(p: Principal) -> Result<Guard<PendingBalanceUpdates>, GuardError> {
-    Guard::new(p)
+#[must_use]
+pub struct TimerLogicGuard(());
+
+impl TimerLogicGuard {
+    pub fn new() -> Option<Self> {
+        mutate_state(|s| {
+            if s.is_timer_running {
+                return None;
+            }
+            s.is_timer_running = true;
+            Some(TimerLogicGuard(()))
+        })
+    }
 }
 
-pub fn retrieve_btc_guard(p: Principal) -> Result<Guard<RetrieveBtcUpdates>, GuardError> {
-    Guard::new(p)
+impl Drop for TimerLogicGuard {
+    fn drop(&mut self) {
+        mutate_state(|s| {
+            s.is_timer_running = false;
+        });
+    }
+}
+
+pub fn balance_update_guard(account: Account) -> Result<Guard<PendingBalanceUpdates>, GuardError> {
+    Guard::new(account)
+}
+
+pub fn retrieve_btc_guard(account: Account) -> Result<Guard<RetrieveBtcUpdates>, GuardError> {
+    Guard::new(account)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::guard::{GuardError, MAX_CONCURRENT};
-    use crate::state::replace_state;
-    use crate::state::CkBtcMinterState;
-    use ic_base_types::CanisterId;
-    use ic_btc_types::Network;
-    use ic_cdk::export::Principal;
-
-    use super::balance_update_guard;
+    use super::{Account, TimerLogicGuard, balance_update_guard};
+    use crate::{
+        IC_CANISTER_RUNTIME,
+        guard::{GuardError, MAX_CONCURRENT},
+        lifecycle::init::init,
+        state::read_state,
+        test_fixtures::init_args,
+    };
+    use candid::Principal;
 
     fn test_principal(id: u64) -> Principal {
         Principal::try_from_slice(&id.to_le_bytes()).unwrap()
     }
 
-    fn test_state() -> CkBtcMinterState {
-        CkBtcMinterState {
-            btc_network: Network::Regtest,
-            ecdsa_key_name: "".to_string(),
-            ecdsa_public_key: None,
-            update_balance_principals: Default::default(),
-            retrieve_btc_principals: Default::default(),
-            retrieve_btc_min_fee: 0,
-            retrieve_btc_min_amount: 0,
-            pending_retrieve_btc_requests: Default::default(),
-            ledger_id: CanisterId::from_u64(42),
+    fn test_account(id: u64, sub: Option<u8>) -> Account {
+        Account {
+            owner: test_principal(id),
+            subaccount: sub.map(|i| [i; 32]),
         }
     }
 
     #[test]
-    fn guard_limits_one_principal() {
+    fn guard_limits_one_account() {
         // test that two guards for the same principal cannot exist in the same block
         // and that a guard is properly dropped at end of the block
 
-        replace_state(test_state());
-        let p = test_principal(0);
+        init(init_args(), &IC_CANISTER_RUNTIME);
+        // a1 and a2 are effectively the same Account
+        let a1 = test_account(0, None);
+        let a2 = test_account(0, Some(0));
         {
-            let _guard = balance_update_guard(p).unwrap();
-            let res = balance_update_guard(p).err();
+            let _guard = balance_update_guard(a1).unwrap();
+            let res = balance_update_guard(a2).err();
             assert_eq!(res, Some(GuardError::AlreadyProcessing));
         }
-        balance_update_guard(p).unwrap();
+        let _ = balance_update_guard(a1).unwrap();
     }
 
     #[test]
-    #[allow(clippy::needless_collect)]
-    fn guard_prevents_more_than_max_concurrent_principals() {
+    fn guard_prevents_more_than_max_concurrent_accounts() {
         // test that at most MAX_CONCURRENT guards can be created if each one
         // is for a different principal
 
-        replace_state(test_state());
-        let guards: Vec<_> = (0..MAX_CONCURRENT)
+        init(init_args(), &IC_CANISTER_RUNTIME);
+        let guards: Vec<_> = (0..MAX_CONCURRENT / 2)
             .map(|id| {
-                balance_update_guard(test_principal(id as u64)).unwrap_or_else(|e| {
-                    panic!("Could not create guard for principal num {}: {:#?}", id, e)
+                balance_update_guard(test_account(0, Some(id as u8))).unwrap_or_else(|e| {
+                    panic!("Could not create guard for subaccount num {id}: {e:#?}")
                 })
             })
+            .chain((MAX_CONCURRENT / 2..MAX_CONCURRENT).map(|id| {
+                balance_update_guard(test_account(id as u64, None)).unwrap_or_else(|e| {
+                    panic!("Could not create guard for principal num {id}: {e:#?}")
+                })
+            }))
             .collect();
         assert_eq!(guards.len(), MAX_CONCURRENT);
-        let pid = test_principal(MAX_CONCURRENT as u64 + 1);
-        let res = balance_update_guard(pid).err();
+        let account = test_account(MAX_CONCURRENT as u64 + 1, None);
+        let res = balance_update_guard(account).err();
         assert_eq!(res, Some(GuardError::TooManyConcurrentRequests));
+    }
+
+    #[test]
+    fn guard_timer_guard() {
+        init(init_args(), &IC_CANISTER_RUNTIME);
+        assert!(!read_state(|s| s.is_timer_running));
+
+        let guard = TimerLogicGuard::new().expect("could not grab timer logic guard");
+        assert!(TimerLogicGuard::new().is_none());
+        assert!(read_state(|s| s.is_timer_running));
+
+        drop(guard);
+        assert!(!read_state(|s| s.is_timer_running));
     }
 }

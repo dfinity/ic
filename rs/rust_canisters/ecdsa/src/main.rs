@@ -1,11 +1,14 @@
-use candid::{candid_method, CandidType, Encode};
-use dfn_core::api::{call_bytes, Funds};
-use ic_cdk::api::print;
-use ic_cdk_macros::update;
-use ic_ic00_types::{EcdsaCurve, EcdsaKeyId, Method as Ic00Method, SignWithECDSAArgs, IC_00};
+#![allow(deprecated)]
+use candid::{CandidType, Encode, candid_method};
+use ic_cdk::api::{call::call_raw, print};
+use ic_cdk::update;
+use ic_management_canister_types_private::{
+    DerivationPath, EcdsaCurve, EcdsaKeyId, IC_00, Method as Ic00Method, SignWithECDSAArgs,
+};
 use serde::{Deserialize, Serialize};
+use serde_bytes::ByteBuf;
 
-#[derive(Serialize, Deserialize, Debug, CandidType)]
+#[derive(Debug, CandidType, Deserialize, Serialize)]
 struct Options {
     derivation_path: Vec<Vec<u8>>,
     key_name: String,
@@ -27,22 +30,28 @@ async fn get_sig(options: Options) {
         "calling get sig with key {} and derivation path {:?}",
         options.key_name, options.derivation_path,
     ));
-    let response = call_bytes(
-        IC_00,
+    let response = call_raw(
+        IC_00.into(),
         &Ic00Method::SignWithECDSA.to_string(),
-        &Encode!(&SignWithECDSAArgs {
+        Encode!(&SignWithECDSAArgs {
             message_hash: [0; 32],
-            derivation_path: options.derivation_path,
+            derivation_path: DerivationPath::new(
+                options
+                    .derivation_path
+                    .into_iter()
+                    .map(ByteBuf::from)
+                    .collect()
+            ),
             key_id: EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: options.key_name,
             },
         })
         .unwrap(),
-        Funds::new(1_000_000_000_000),
+        1_000_000_000_000,
     )
     .await;
-    print(format!("got result {:?}", response));
+    print(format!("got result {response:?}"));
 }
 
 // When run on native this prints the candid service definition of this

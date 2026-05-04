@@ -1,50 +1,50 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
-load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test_suite")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
+# See rs/nervous_system/feature_test.md
 DEPENDENCIES = [
-    "//rs/crypto/getrandom_for_wasm",
-    "//rs/crypto/sha",
+    # Keep sorted.
+    "//packages/ic-secp256k1",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/nns/governance",
+    "//rs/nns/governance/api",
     "//rs/nns/gtc_accounts",
-    "//rs/rosetta-api/ledger_canister",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
     "@crate_index//:build-info",
     "@crate_index//:candid",
     "@crate_index//:hex",
-    "@crate_index//:lazy_static",
-    "@crate_index//:libsecp256k1",
     "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
     "@crate_index//:serde",
     "@crate_index//:sha3",
-    "@crate_index//:simple_asn1",
-    "@crate_index//:hex-literal",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
 ]
 
 BUILD_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:build-info-build",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nns/gtc/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
+    "@crate_index//:candid_parser",
     "@crate_index//:tempfile",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
@@ -63,39 +63,53 @@ MACRO_DEV_DEPENDENCIES = select({
 
 ALIASES = {}
 
+LIB_SRCS = glob(
+    ["src/**"],
+    # Ensures that we do not need to rebuild just because a _test.rs file
+    # changed.
+    exclude = ["**/*tests.rs"],
+)
+
 cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
     aliases = ALIASES,
     data = [],  # build script data (e.g. template files) goes here
-    version = "0.8.0",
+    version = "0.9.0",
     deps = BUILD_DEPENDENCIES,
 )
 
 rust_library(
     name = "gtc",
-    srcs = glob([
-        "src/**",
-        "gen/**",
-    ]),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_name = "ic_nns_gtc",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
+    deps = DEPENDENCIES + [":build_script"],
+)
+
+rust_library(
+    name = "gtc--test_feature",
+    srcs = LIB_SRCS,
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "ic_nns_gtc",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
     deps = DEPENDENCIES + [":build_script"],
 )
 
 rust_canister(
-    name = "genesis-token-canister-raw",
+    name = "genesis-token-canister",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":gtc"] + [":build_script"],
-)
-
-optimized_canister(
-    name = "genesis-token-canister",
-    wasm = "genesis-token-canister-raw",
+    service_file = ":canister/gtc.did",
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":gtc",
+    ],
 )
 
 rust_test(
@@ -108,14 +122,17 @@ rust_test(
 
 rust_test(
     name = "canister_unit_test",
-    crate = ":_wasm_genesis-token-canister-raw",
-    data = [":canister/gtc.did"],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/nns/gtc",
-    },
+    srcs = glob(["canister/**/*.rs"]),
+    compile_data = ["canister/gtc.did"],
+    crate_root = "canister/canister.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+        ":gtc",
+    ],
 )
 
-rust_test_suite(
+rust_ic_test_suite(
     name = "gtc_integration_test",
     srcs = glob(
         ["tests/**/*.rs"],
@@ -123,13 +140,9 @@ rust_test_suite(
     ),
     aliases = ALIASES,
     data = [
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
         "//rs/nns/gtc:genesis-token-canister",
     ],
     env = {
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
         "CARGO_MANIFEST_DIR": "rs/nns/gtc",
         "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
     },
@@ -140,13 +153,14 @@ rust_test_suite(
 generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
-    data = glob(["gen/**"]) + [
+    data = glob(["src/gen/**/*.rs"]) + [
         ":protos",
         "//rs/nns/common:protos",
         "//rs/types/base_types:protos",
     ],
     manifest_dir = "rs/nns/gtc",
     deps = [
+        # Keep sorted.
         "//rs/nns/gtc/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",

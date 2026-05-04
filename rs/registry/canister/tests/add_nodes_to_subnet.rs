@@ -3,8 +3,8 @@ use dfn_candid::candid;
 
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::{get_value_or_panic, prepare_registry, prepare_registry_with_two_node_sets},
 };
@@ -19,7 +19,7 @@ use assert_matches::assert_matches;
 
 #[test]
 fn test_the_anonymous_user_cannot_add_nodes_to_subnet() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let num_nodes_in_subnet = 4_usize;
             let (init_mutate, subnet_id, unassigned_node_ids, _) =
@@ -96,10 +96,10 @@ fn test_the_anonymous_user_cannot_add_nodes_to_subnet() {
 }
 
 #[test]
-fn test_a_canister_other_than_the_proposals_canister_cannot_add_nodes_to_subnet() {
-    local_test_on_nns_subnet(|runtime| {
+fn test_a_canister_other_than_the_governance_canister_cannot_add_nodes_to_subnet() {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
-            // An attacker got a canister that is trying to pass for the proposals
+            // An attacker got a canister that is trying to pass for the governance
             // canister...
             let attacker_canister = set_up_universal_canister(&runtime).await;
             // ... but thankfully, it does not have the right ID
@@ -125,7 +125,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_add_nodes_to_subnet(
             };
 
             // The attacker canister tries to add nodes to a subnet, pretending to be the
-            // proposals canister. This should have no effect.
+            // governance canister. This should have no effect.
             assert!(
                 !forward_call_via_universal_canister(
                     &attacker_canister,
@@ -161,7 +161,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_add_nodes_to_subnet(
 
 #[test]
 fn test_add_nodes_to_subnet_succeeds() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let num_nodes_in_subnet = 4_usize;
             let num_unassigned_nodes = 4_usize;
@@ -180,12 +180,12 @@ fn test_add_nodes_to_subnet_succeeds() {
             )
             .await;
 
-            // Install the universal canister in place of the proposals canister
-            let fake_proposal_canister = set_up_universal_canister(&runtime).await;
-            // Since it takes the id reserved for the proposal canister, it can impersonate
+            // Install the universal canister in place of the governance canister
+            let fake_governance_canister = set_up_universal_canister(&runtime).await;
+            // Since it takes the id reserved for the governance canister, it can impersonate
             // it
             assert_eq!(
-                fake_proposal_canister.canister_id(),
+                fake_governance_canister.canister_id(),
                 ic_nns_constants::GOVERNANCE_CANISTER_ID
             );
 
@@ -205,7 +205,7 @@ fn test_add_nodes_to_subnet_succeeds() {
                 make_subnet_record_key(subnet_id).as_bytes(),
             )
             .await;
-            assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet as usize);
+            assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
 
             let payload = AddNodesToSubnetPayload {
                 subnet_id: subnet_id.get(),
@@ -214,7 +214,7 @@ fn test_add_nodes_to_subnet_succeeds() {
 
             assert!(
                 forward_call_via_universal_canister(
-                    &fake_proposal_canister,
+                    &fake_governance_canister,
                     &registry,
                     "add_nodes_to_subnet",
                     Encode!(&payload).unwrap()
@@ -243,7 +243,7 @@ fn test_add_nodes_to_subnet_succeeds() {
             );
             for node_id in unassigned_node_ids {
                 let node_id = node_id.get().to_vec();
-                assert!(subnet_record.membership.iter().any(|x| *x == node_id));
+                assert!(subnet_record.membership.contains(&node_id));
             }
 
             Ok(())
@@ -255,7 +255,7 @@ fn test_add_nodes_to_subnet_succeeds() {
 /// added to the other Subnet
 #[test]
 fn test_adding_nodes_to_another_subnet_fails() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let num_nodes_in_subnet = 2_usize;
             let num_unassigned_nodes = 2_usize;
@@ -278,12 +278,12 @@ fn test_adding_nodes_to_another_subnet_fails() {
             )
             .await;
 
-            // Install the universal canister in place of the proposals canister
-            let fake_proposal_canister = set_up_universal_canister(&runtime).await;
-            // Since it takes the id reserved for the proposal canister, it can impersonate
+            // Install the universal canister in place of the governance canister
+            let fake_governance_canister = set_up_universal_canister(&runtime).await;
+            // Since it takes the id reserved for the governance canister, it can impersonate
             // it
             assert_eq!(
-                fake_proposal_canister.canister_id(),
+                fake_governance_canister.canister_id(),
                 ic_nns_constants::GOVERNANCE_CANISTER_ID
             );
 
@@ -302,7 +302,7 @@ fn test_adding_nodes_to_another_subnet_fails() {
                 make_subnet_record_key(subnet_id).as_bytes(),
             )
             .await;
-            assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet as usize);
+            assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
 
             let payload = AddNodesToSubnetPayload {
                 subnet_id: subnet_id.get(),
@@ -311,7 +311,7 @@ fn test_adding_nodes_to_another_subnet_fails() {
 
             assert!(
                 !forward_call_via_universal_canister(
-                    &fake_proposal_canister,
+                    &fake_governance_canister,
                     &registry,
                     "add_nodes_to_subnet",
                     Encode!(&payload).unwrap()

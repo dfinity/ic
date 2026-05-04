@@ -1,23 +1,23 @@
-use ic_context_logger::{ContextLogger, LogMetadata, Logger};
+use slog::{Drain, Level};
+use std::{
+    collections::HashMap,
+    io::{self, stderr},
+    str::FromStr,
+    sync::Mutex,
+    time::{Duration, Instant},
+};
+
 use ic_protobuf::log::log_entry::v1::LogEntry;
-use std::collections::HashMap;
-use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use ic_utils::str::StrEllipsize;
+
+use crate::context_logger::{ContextLogger, LogMetadata, Logger};
 
 /// A logger that logs `LogEntry`s using a `LogEntryLogger`
 pub type ReplicaLogger = ContextLogger<LogEntry, LogEntryLogger>;
 
-/// A logger that doesn't log. Used in tests.
-pub fn no_op_logger() -> ReplicaLogger {
-    LogEntryLogger::new(
-        slog::Logger::root(slog::Discard, slog::o!()),
-        slog::Level::Critical,
-        vec![],
-        HashMap::new(),
-        vec![],
-    )
-    .into()
-}
+/// The value of this constant is larger than the maximum allowed length of `8 KiB` for `UserError` description
+/// so that we don't get a pair of ellipses (`...`) if the `UserError` description is of the maximum length
+const MAX_LOG_MESSAGE_LEN_BYTES: usize = 16 * 1024;
 
 impl From<LogEntryLogger> for ReplicaLogger {
     fn from(logger: LogEntryLogger) -> Self {
@@ -30,26 +30,22 @@ pub struct LogEntryLogger {
     pub root: slog::Logger,
     // Only logs at `level` or above
     pub level: slog::Level,
-    pub debug_overrides: Vec<String>,
-    pub sampling_rates: HashMap<String, u32>,
-    pub enabled_tags: Vec<String>,
     pub last_log: Mutex<HashMap<String, Instant>>,
 }
 
 impl LogEntryLogger {
-    pub fn new(
-        root: slog::Logger,
-        level: slog::Level,
-        debug_overrides: Vec<String>,
-        sampling_rates: HashMap<String, u32>,
-        enabled_tags: Vec<String>,
-    ) -> Self {
+    pub fn new(root: slog::Logger, level: ic_config::logger::Level) -> Self {
+        let slog_level = match level {
+            ic_config::logger::Level::Critical => slog::Level::Critical,
+            ic_config::logger::Level::Error => slog::Level::Error,
+            ic_config::logger::Level::Warning => slog::Level::Warning,
+            ic_config::logger::Level::Info => slog::Level::Info,
+            ic_config::logger::Level::Debug => slog::Level::Debug,
+            ic_config::logger::Level::Trace => slog::Level::Trace,
+        };
         Self {
             root,
-            level,
-            debug_overrides,
-            sampling_rates,
-            enabled_tags,
+            level: slog_level,
             last_log: Mutex::new(HashMap::new()),
         }
     }
@@ -58,12 +54,12 @@ impl LogEntryLogger {
 impl From<slog::Logger> for LogEntryLogger {
     fn from(root: slog::Logger) -> Self {
         let level = if cfg!(debug_assertions) {
-            slog::Level::Trace
+            ic_config::logger::Level::Trace
         } else {
-            slog::Level::Info
+            ic_config::logger::Level::Info
         };
 
-        Self::new(root, level, vec![], HashMap::new(), vec![])
+        Self::new(root, level)
     }
 }
 
@@ -72,9 +68,6 @@ impl Clone for LogEntryLogger {
         Self {
             root: self.root.new(slog::o!()),
             level: self.level,
-            debug_overrides: self.debug_overrides.clone(),
-            sampling_rates: self.sampling_rates.clone(),
-            enabled_tags: self.enabled_tags.clone(),
             // `last_log` is not cloned because different instances of this
             // logger will log at disjoint module/line pairs, so these
             // instances don't need to share the same mutex, or need to both
@@ -89,18 +82,21 @@ impl Logger<LogEntry> for LogEntryLogger {
         let crate_ = get_crate(metadata.module_path);
         let module = get_module(metadata.module_path);
 
+        // truncates message to be of length at most `MAX_LOG_MESSAGE_LEN_BYTES` bytes
+        let message = message.ellipsize(MAX_LOG_MESSAGE_LEN_BYTES, 50);
+
         log_entry.level = metadata.level.as_str().to_string();
         log_entry.utc_time = get_utc_time();
-        log_entry.crate_ = crate_.clone();
-        log_entry.module = module.clone();
-        log_entry.message = message.clone();
+        log_entry.crate_.clone_from(&crate_);
+        log_entry.module.clone_from(&module);
+        log_entry.message.clone_from(&message);
         log_entry.line = metadata.line;
 
         let net_context = format!("s:{}/n:{}/", log_entry.subnet_id, log_entry.node_id);
 
         // Example:
         // s:0/n:0/ic_consensus/certifier Received 0 hash(es) to be certified in 11.26µs
-        let message = format!("{}{}/{} {}", net_context, crate_, module, message);
+        let message = format!("{net_context}{crate_}/{module} {message}");
 
         let kv = slog::o!("log_entry" => log_entry);
 
@@ -114,27 +110,8 @@ impl Logger<LogEntry> for LogEntryLogger {
         }
     }
 
-    fn is_enabled_at(&self, level: slog::Level, module_path: &'static str) -> bool {
-        if !self.debug_overrides.is_empty()
-            && level == slog::Level::Debug
-            && self.debug_overrides.contains(&module_path.to_string())
-        {
-            true
-        } else {
-            level.is_at_least(self.level)
-        }
-    }
-
-    fn should_sample<T: Into<u32>>(&self, key: String, value: T) -> bool {
-        if let Some(&sample_rate) = self.sampling_rates.get(&key) {
-            sample_rate != 0 && value.into() % sample_rate == 0
-        } else {
-            false
-        }
-    }
-
-    fn is_tag_enabled(&self, tag: String) -> bool {
-        self.enabled_tags.contains(&tag)
+    fn is_enabled_at(&self, level: slog::Level) -> bool {
+        level.is_at_least(self.level)
     }
 
     fn is_n_seconds<T: Into<i32>>(&self, seconds: T, metadata: LogMetadata) -> bool {
@@ -172,62 +149,56 @@ pub fn get_module(module_path: &'static str) -> String {
     (*path.last().unwrap_or(&"")).to_string()
 }
 
+/// A logger that doesn't log. Used in tests.
+pub fn no_op_logger() -> ReplicaLogger {
+    LogEntryLogger::new(
+        slog::Logger::root(slog::Discard, slog::o!()),
+        ic_config::logger::Level::Critical,
+    )
+    .into()
+}
+
+/// A logger that logs to stdout/stderr if the environment variable `RUST_LOG`
+/// or the input parameter specify a log level (in this order of precedence)
+/// and otherwise is a no-op.
+/// If the environment variable `LOG_TO_STDERR` is set, then the logger logs
+/// to stderr. Otherwise, it logs to stdout.
+/// Used in tests.
+pub fn test_logger(log_level: Option<Level>) -> ReplicaLogger {
+    if let Some(log_level) = std::env::var("RUST_LOG")
+        .ok()
+        .and_then(|level| Level::from_str(&level).ok())
+        .or(log_level)
+    {
+        let writer: Box<dyn io::Write + Sync + Send> = if std::env::var("LOG_TO_STDERR").is_ok() {
+            Box::new(stderr())
+        } else {
+            Box::new(slog_term::TestStdoutWriter)
+        };
+        let decorator = slog_term::PlainSyncDecorator::new(writer);
+        let drain = slog_term::FullFormat::new(decorator)
+            .build()
+            .filter_level(log_level)
+            .fuse();
+        let logger = slog::Logger::root(drain, slog::o!());
+        logger.into()
+    } else {
+        no_op_logger()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_should_sample() {
-        let mut logger = LogEntryLogger::new(
-            slog::Logger::root(slog::Discard, slog::o!()),
-            slog::Level::Critical,
-            vec![],
-            HashMap::new(),
-            vec![],
-        );
-
-        logger.sampling_rates = [
-            ("ten".into(), 10u32),
-            ("one".into(), 1u32),
-            ("zero".into(), 0u32),
-        ]
-        .iter()
-        .cloned()
-        .collect();
-
-        for i in 1u32..10u32 {
-            assert!(!logger.should_sample("ten".to_string(), i));
-            assert!(logger.should_sample("one".to_string(), i));
-            assert!(!logger.should_sample("zero".to_string(), i));
-        }
-
-        assert!(logger.should_sample("ten".to_string(), 10u32));
-    }
-
-    #[test]
-    fn test_is_tag_enabled() {
-        let logger = LogEntryLogger::new(
-            slog::Logger::root(slog::Discard, slog::o!()),
-            slog::Level::Critical,
-            vec![],
-            HashMap::new(),
-            vec!["my_tag".into()],
-        );
-
-        assert!(logger.is_tag_enabled("my_tag".to_string()));
-    }
-
-    #[test]
     fn test_is_seconds() {
         let logger = LogEntryLogger::new(
             slog::Logger::root(slog::Discard, slog::o!()),
-            slog::Level::Critical,
-            vec![],
-            HashMap::new(),
-            vec!["my_tag".into()],
+            ic_config::logger::Level::Critical,
         );
 
-        for i in 1u32..10u32 {
+        for i in 1_u32..10_u32 {
             assert!(
                 logger.is_n_seconds(
                     1,
@@ -237,12 +208,12 @@ mod tests {
                         line: std::line!(),
                         column: std::column!(),
                     }
-                ) == ((i == 1u32) || i == 6u32)
+                ) == ((i == 1_u32) || i == 6_u32)
             );
-            if i == 4u32 {
+            if i == 4_u32 {
                 std::thread::sleep(Duration::from_millis(500));
             }
-            if i == 5u32 {
+            if i == 5_u32 {
                 std::thread::sleep(Duration::from_millis(5001));
             }
         }

@@ -17,7 +17,7 @@ pub fn allocate_ports(ip_address: &str, num_ports: u16) -> Result<Vec<NodePort>,
     let mut node_port_allocation = Vec::new();
     for _ in 0..num_ports {
         let socket = bind_tcp_socket_with_reuse(SocketAddr::from((ip_address, 0)))?;
-        let local_addr = socket.local_addr()?.as_std().unwrap();
+        let local_addr = socket.local_addr()?.as_socket().unwrap();
         node_port_allocation.push(NodePort {
             socket,
             port: local_addr.port(),
@@ -34,10 +34,10 @@ pub fn allocate_ports(ip_address: &str, num_ports: u16) -> Result<Vec<NodePort>,
 fn bind_tcp_socket_with_reuse(addr: SocketAddr) -> Result<Socket, Box<dyn Error>> {
     use socket2::{Domain, Protocol, SockAddr, Type};
     let domain = match &addr {
-        SocketAddr::V4(_) => Domain::ipv4(),
-        SocketAddr::V6(_) => Domain::ipv6(),
+        SocketAddr::V4(_) => Domain::IPV4,
+        SocketAddr::V6(_) => Domain::IPV6,
     };
-    let socket = socket2::Socket::new(domain, Type::stream(), Some(Protocol::tcp()))?;
+    let socket = socket2::Socket::new(domain, Type::STREAM, Some(Protocol::TCP))?;
 
     #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
     {
@@ -52,15 +52,15 @@ fn bind_tcp_socket_with_reuse(addr: SocketAddr) -> Result<Socket, Box<dyn Error>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nix::sys::wait::{waitpid, WaitStatus};
-    use nix::unistd::{fork, ForkResult};
+    use nix::sys::wait::{WaitStatus, waitpid};
+    use nix::unistd::{ForkResult, fork};
     use rusty_fork::rusty_fork_test;
     use std::process;
 
     fn listen_helper(port_allocation: &NodePort) -> Result<(), Box<dyn Error>> {
         let socket =
             bind_tcp_socket_with_reuse(SocketAddr::from(([127, 0, 0, 1], port_allocation.port)))?;
-        let _ = socket.listen(1)?;
+        socket.listen(1)?;
         Ok(())
     }
 

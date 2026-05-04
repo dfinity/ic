@@ -1,0 +1,176 @@
+table ip filter {
+  define icmp_v4_types_accept = {
+    destination-unreachable,
+    time-exceeded,
+    echo-request,
+    echo-reply,
+  }
+
+  set rate_limit {
+    type ipv4_addr
+    size 65535
+    flags dynamic
+  }
+
+  set connection_limit {
+    type ipv4_addr
+    size 65535
+    flags dynamic
+  }
+
+  set local_networks {
+    type ipv4_addr
+    flags interval
+    elements = {
+      10.0.0.0/8,
+      172.16.0.0/12,
+      192.168.0.0/16
+    }
+  }
+
+  chain metrics_proxy {
+    ct state { new } add @rate_limit { ip saddr limit rate over 100/minute } drop comment "Maximum 100 connections per minute"
+    ct state { new } add @connection_limit { ip saddr ct count over 2 } drop comment "No more than 2 connections per source at a time"
+    accept
+  }
+
+  chain INPUT {
+    type filter hook input priority filter; policy drop;
+    iif "lo" accept
+    ct state { invalid } drop
+    ct state { established, related } accept
+    icmp type $icmp_v4_types_accept accept
+    ip saddr @local_networks ct state { new } tcp dport { 22 } accept
+    ip saddr @local_networks ct state { new } udp dport { 67 } accept
+    tcp dport { 42372 } goto metrics_proxy
+  }
+
+  chain FORWARD {
+    type filter hook forward priority filter; policy drop;
+  }
+
+  chain OUTPUT {
+    type filter hook output priority filter; policy drop;
+    oif "lo" accept
+    ct state { invalid } drop
+    ct state { established, related } accept
+    icmp type $icmp_v4_types_accept accept
+    ip daddr { 0.0.0.0/0 } ct state { new } tcp dport { 80, 443 } accept
+  }
+}
+
+table ip6 filter {
+  define icmp_v6_types_accept = {
+    destination-unreachable,
+    packet-too-big,
+    time-exceeded,
+    echo-request,
+    echo-reply,
+    nd-router-advert,
+    nd-neighbor-solicit,
+    nd-neighbor-advert,
+  }
+
+  set rate_limit {
+    type ipv6_addr
+    size 65535
+    flags dynamic
+  }
+
+  set connection_limit {
+    type ipv6_addr
+    size 65535
+    flags dynamic
+  }
+
+  set dfinity_dcs {
+    type ipv6_addr
+    flags interval
+    elements =  {
+      2602:fb2b:120::/48,             # ch1
+      2602:fb2b:100::/48,             # dm1
+      2602:fb2b:110::/48,             # fr1
+      2600:c00:2:100::/64,            # se1
+      2001:4c08:2003:b09::/64,        # sh1
+      2600:3007:4401::/48,            # tp1
+      2a00:fb01:400::/56,             # zh1
+      2a00:fb01:400:200::/64,         # zh2
+      2a05:d01c:e2c:a700::/56,        # AWS_eu-west-2_monitoring
+      2a05:d01c:d9:2b00::/56,         # AWS_eu-west-2_monitoring2
+    } # comment "DFINITY operated DC's"
+
+    # [Ref A]
+    # ic.json5.template
+    # This is used by the qemu-system instances spawned inside of the docker gitlab-runner to allow multiple deterministic dynamic on-the-fly VM "test" nodes for running automated tests. Each docker namespace has its own IP network stack so many of these can be running in parallel at the same time between different runs and they will not interfere with each other as a result.
+    # Why "Ref A"? nftables config syntax disallows newlines and comments between the last line of a set and the closing brace.
+    auto-merge     # Prevent "Conflicting Intervals" errors
+  }
+
+  set telemetry_clients {
+    type ipv6_addr
+    flags interval
+    elements =  {
+      2602:fb2b:100:12::/64, # dm1-obs
+      2602:fb2b:120:12::/64, # ch1-obs
+      2602:fb2b:110:12::/64, # fr1-obs
+    } # comment "Telemetry infrastructure"
+  }
+
+  set node_providers { # comment "Node provider allowlist. Filled out dynamically."
+    type ipv6_addr
+    flags interval
+  }
+
+  chain metrics_proxy {
+    ct state { new } add @rate_limit { ip6 saddr limit rate over 100/minute } drop comment "Maximum 100 connections per minute"
+    # 2 for host node exporter polled twice every minute, 2 for guest node exporter polled twice every minute, 2 for grace like cURL for debugging.
+    ct state { new } add @connection_limit { ip6 saddr ct count over 6 } drop comment "No more than 6 connections per source at a time"
+    accept
+  }
+
+  set local_prefix {
+    type ipv6_addr
+    flags interval
+    elements =  {
+      {{ ipv6_prefix }}
+    }
+  }
+
+  chain INPUT {
+    type filter hook input priority filter; policy drop;
+    iif "lo" accept
+    ct state { invalid } drop
+    ct state { established, related } accept
+    icmpv6 type $icmp_v6_types_accept accept
+    ip6 saddr @dfinity_dcs ct state { new } tcp dport { 22, 9100, 19531, 19100 } accept
+    ip6 saddr @telemetry_clients ct state { new } tcp dport { 9100, 19531, 19100 } accept
+    ip6 saddr @node_providers ct state { new } tcp dport { 22, 9100, 19531 } accept
+    ip6 saddr @local_prefix ct state { new } tcp dport { 9100, 19531, 19100 } accept
+    tcp dport { 42372 } goto metrics_proxy
+  }
+
+  chain FORWARD {
+    type filter hook forward priority filter; policy drop;
+  }
+
+  chain OUTPUT {
+    type filter hook output priority filter; policy drop;
+    oif "lo" accept
+    ct state { invalid } drop
+    ct state { established, related } accept
+    icmpv6 type $icmp_v6_types_accept accept
+    ip6 daddr { ::/0 } ct state { new } tcp dport { 1080 } accept
+    ip6 daddr { ::/0 } ct state { new } tcp dport { 53 } accept
+    ip6 daddr { ::/0 } ct state { new } udp dport { 53 } accept
+    ip6 daddr { ::/0 } ct state { new } udp dport { 123 } accept
+    ip6 daddr { ::/0 } ct state { new } tcp dport { 4460 } accept
+    ip6 daddr { ::/0 } ct state { new } tcp dport { 80, 8080, 443 } accept
+    # We would ordinarily add a host name in the line following this comment,
+    # but nftables starts before the network is up, so there is no DNS name
+    # resolution available at the time this file is parsed by nftables.service.
+    # The counterpart in ic.json5.template (GuestOS) *does* have a host name,
+    # because the replica service which applies the firewall rules does start
+    # well after the network is up.
+    ip6 daddr { ::/0 } ct state { new } tcp dport { 42372 } accept comment "Permit outbound connections to metrics-proxy instances so local metrics-proxy can fetch data from GuestOS metrics-proxy."
+  }
+}

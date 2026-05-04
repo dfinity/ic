@@ -4,7 +4,7 @@ use std::path::PathBuf;
 fn main() {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
         .expect("CARGO_MANIFEST_DIR env variable is not defined");
-    let out = PathBuf::from(&manifest_dir).join("../gen");
+    let out = PathBuf::from(&manifest_dir).join("../src/gen");
     let def = PathBuf::from(&manifest_dir).join("../proto");
 
     match std::fs::remove_dir_all(&out) {

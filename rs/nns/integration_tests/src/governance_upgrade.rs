@@ -4,19 +4,36 @@
 //! This is to make sure that the previous stable memory content does not have
 //! a detrimental impact on future upgrades.
 
-use canister_test::local_test_e;
+use canister_test::Project;
 use dfn_candid::candid_one;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_management_canister_types_private::{
+    CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder,
+};
+use ic_nervous_system_clients::canister_status::{CanisterStatusResult, CanisterStatusType};
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
+use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
-use ic_nns_governance::init::GovernanceCanisterInitPayloadBuilder;
-use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
-use ic_nns_governance::pb::v1::manage_neuron::RemoveHotKey;
-use ic_nns_governance::pb::v1::manage_neuron::{configure, Command, Configure};
-use ic_nns_governance::pb::v1::{ManageNeuron, ManageNeuronResponse};
-use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
-use ic_nns_test_utils::itest_helpers::set_up_governance_canister;
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
+};
+use ic_nns_governance_api::{
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
+    manage_neuron::{Configure, NeuronIdOrSubaccount, RemoveHotKey, configure},
+};
+use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    itest_helpers::{install_governance_canister, state_machine_test_on_nns_subnet},
+    state_test_helpers::{
+        ensure_canister_id_exists_at_position_with_settings,
+        setup_nns_root_with_correct_canister_id, state_machine_builder_for_nns_tests,
+        update_with_sender,
+    },
+};
+use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
+use std::time::Duration;
 
 /// This is a regression test: it used to be that, if two upgrades happened in a
 /// row, with the stable memory of the second being smaller than for the first,
@@ -24,7 +41,7 @@ use ic_nns_test_utils::itest_helpers::set_up_governance_canister;
 /// in a trap in post_upgrade.
 #[test]
 fn test_upgrade_after_state_shrink() {
-    local_test_e(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let mut governance_proto = GovernanceCanisterInitPayloadBuilder::new()
             .with_test_neurons()
             .build();
@@ -36,22 +53,27 @@ fn test_upgrade_after_state_shrink() {
             .hot_keys
             .push(hot_key);
 
-        let mut canister = set_up_governance_canister(&runtime, governance_proto).await;
+        let _registry_canister = runtime.create_canister(None).await.unwrap();
+        let mut canister = runtime.create_canister(None).await.unwrap();
+        assert_eq!(canister.canister_id(), GOVERNANCE_CANISTER_ID);
+        install_governance_canister(&mut canister, governance_proto).await;
 
         // First let's do a self-upgrade
+        canister.stop().await.unwrap();
         canister.upgrade_to_self_binary(Vec::new()).await.unwrap();
+        canister.start().await.unwrap();
 
         // Now make the state smaller
         let _remove_hot_res: ManageNeuronResponse = canister
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuron {
+                ManageNeuronRequest {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronIdProto {
                         id: TEST_NEURON_1_ID,
                     })),
                     id: None,
-                    command: Some(Command::Configure(Configure {
+                    command: Some(ManageNeuronCommandRequest::Configure(Configure {
                         operation: Some(configure::Operation::RemoveHotKey(RemoveHotKey {
                             hot_key_to_remove: Some(hot_key),
                         })),
@@ -63,8 +85,93 @@ fn test_upgrade_after_state_shrink() {
             .unwrap();
 
         // Now, one more self-upgrade
+        canister.stop().await.unwrap();
         canister.upgrade_to_self_binary(Vec::new()).await.unwrap();
+        canister.start().await.unwrap();
 
         Ok(())
     });
+}
+
+#[test]
+fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeout() {
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let governance_id = ensure_canister_id_exists_at_position_with_settings(
+        &state_machine,
+        GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![ROOT_CANISTER_ID.get()])
+                .build(),
+        ),
+    );
+
+    let unstoppable_canister =
+        Project::cargo_bin_maybe_from_env("unstoppable-canister", &[]).bytes();
+
+    state_machine
+        .install_wasm_in_mode(
+            governance_id,
+            CanisterInstallMode::Install,
+            unstoppable_canister,
+            vec![],
+        )
+        .unwrap();
+    let nns_init_payload = NnsInitPayloadsBuilder::new().build();
+    setup_nns_root_with_correct_canister_id(&state_machine, nns_init_payload.root);
+
+    let wasm_module = UNIVERSAL_CANISTER_WASM.to_vec();
+
+    let proposal = ChangeCanisterRequest {
+        stop_before_installing: true,
+        mode: CanisterInstallMode::Upgrade,
+        canister_id: GOVERNANCE_CANISTER_ID,
+        wasm_module,
+        arg: vec![],
+        chunked_canister_wasm: None,
+    };
+
+    let _: () = update_with_sender(
+        &state_machine,
+        ROOT_CANISTER_ID,
+        "change_nns_canister",
+        proposal,
+        GOVERNANCE_CANISTER_ID.get(),
+    )
+    .expect("root change_nns_canister call failed");
+
+    state_machine.tick();
+
+    // After 60 seconds, canister is still trying to stop...
+    state_machine.advance_time(Duration::from_secs(60));
+
+    state_machine.tick();
+
+    let status: CanisterStatusResult = update_with_sender(
+        &state_machine,
+        ROOT_CANISTER_ID,
+        "canister_status",
+        CanisterIdRecord::from(GOVERNANCE_CANISTER_ID),
+        PrincipalId::new_anonymous(),
+    )
+    .unwrap();
+
+    assert_eq!(status.status, CanisterStatusType::Stopping);
+
+    // canister_stop times out, we now need to make sure it got restarted
+    state_machine.advance_time(Duration::from_secs(241));
+    state_machine.tick();
+    state_machine.tick();
+
+    let status: CanisterStatusResult = update_with_sender(
+        &state_machine,
+        ROOT_CANISTER_ID,
+        "canister_status",
+        CanisterIdRecord::from(GOVERNANCE_CANISTER_ID),
+        PrincipalId::new_anonymous(),
+    )
+    .unwrap();
+
+    // Check latest status.
+    assert_eq!(status.status, CanisterStatusType::Running);
 }

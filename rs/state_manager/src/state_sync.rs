@@ -1,125 +1,274 @@
 pub(crate) mod chunkable;
+pub mod types;
 
 use super::StateManagerImpl;
-use crate::EXTRA_CHECKPOINTS_TO_KEEP;
-use ic_interfaces::{
-    artifact_manager::{ArtifactAcceptance, ArtifactClient, ArtifactProcessor, ProcessingResult},
-    artifact_pool::{ArtifactPoolError, UnvalidatedArtifact},
-    time_source::TimeSource,
+use crate::{
+    EXTRA_CHECKPOINTS_TO_KEEP, LABEL_LOAD_AND_VALIDATE_CHECKPOINT, LABEL_LOAD_CHECKPOINT,
+    LABEL_MARK_FILES_READONLY_AND_SYNC, LABEL_ON_SYNCED_CHECKPOINT, NUMBER_OF_CHECKPOINT_THREADS,
+    StateSyncRefs,
+    manifest::build_file_group_chunks,
+    state_sync::types::{FileGroupChunks, Manifest, MetaManifest, StateSyncMessage},
 };
-use ic_interfaces_state_manager::{StateManager, CERT_CERTIFIED};
-use ic_logger::{info, warn};
-use ic_types::{
-    artifact::{
-        Advert, AdvertClass, AdvertSendRequest, ArtifactKind, ArtifactTag, Priority,
-        StateSyncArtifactId, StateSyncAttribute, StateSyncFilter, StateSyncMessage,
-    },
-    chunkable::Chunkable,
-    crypto::crypto_hash,
-    Height, NodeId,
+use ic_interfaces::p2p::state_sync::{
+    Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient,
 };
+use ic_interfaces_state_manager::StateReader;
+use ic_logger::{ReplicaLogger, fatal, info, warn};
+use ic_types::{CryptoHashOfState, Height};
+use std::sync::{Arc, Mutex};
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub struct StateSyncArtifact;
+/// Maximum height difference from the last verified checkpoint before performing validation
+/// during state sync. If the difference exceeds this threshold, the synced checkpoint will
+/// be validated to prevent losing all state sync progress if it gets archived during restart.
+const MAX_HEIGHT_DIFFERENCE_WITHOUT_VALIDATION: u64 = 10_000;
 
-impl ArtifactKind for StateSyncArtifact {
-    const TAG: ArtifactTag = ArtifactTag::StateSyncArtifact;
-    type Id = StateSyncArtifactId;
-    type Message = StateSyncMessage;
-    type SerializeAs = StateSyncMessage;
-    type Attribute = StateSyncAttribute;
-    type Filter = StateSyncFilter;
-
-    fn message_to_advert(msg: &StateSyncMessage) -> Advert<StateSyncArtifact> {
-        let size: u64 = msg
-            .manifest
-            .file_table
-            .iter()
-            .map(|file_info| file_info.size_bytes)
-            .sum();
-        Advert {
-            id: StateSyncArtifactId {
-                height: msg.height,
-                hash: msg.root_hash.clone(),
-            },
-            attribute: StateSyncAttribute {
-                height: msg.height,
-                root_hash: msg.root_hash.clone(),
-            },
-            size: size as usize,
-            integrity_hash: crypto_hash(msg).get(),
-        }
-    }
+#[derive(Clone)]
+pub struct StateSync {
+    state_manager: Arc<StateManagerImpl>,
+    state_sync_refs: StateSyncRefs,
+    log: ReplicaLogger,
+    #[cfg(debug_assertions)]
+    pub test_force_validate: bool,
 }
 
-impl ArtifactClient<StateSyncArtifact> for StateManagerImpl {
-    fn check_artifact_acceptance(
-        &self,
-        msg: StateSyncMessage,
-        peer_id: &NodeId,
-    ) -> Result<ArtifactAcceptance<StateSyncMessage>, ArtifactPoolError> {
-        let height = msg.height;
-        info!(
-            self.log,
-            "Received state {} from peer {}", msg.height, peer_id
-        );
-
-        let ro_layout = self
-            .state_layout
-            .checkpoint(height)
-            .expect("failed to create checkpoint layout");
-        let state = crate::checkpoint::load_checkpoint_parallel(
-            &ro_layout,
-            self.own_subnet_type,
-            &self.metrics.checkpoint_metrics,
-        )
-        .expect("failed to recover checkpoint");
-        self.on_synced_checkpoint(state, height, msg.manifest, msg.root_hash);
-
-        Ok(ArtifactAcceptance::Processed)
+impl StateSync {
+    pub fn new(state_manager: Arc<StateManagerImpl>, log: ReplicaLogger) -> Self {
+        Self {
+            state_manager,
+            state_sync_refs: StateSyncRefs::new(log.clone()),
+            log,
+            #[cfg(debug_assertions)]
+            test_force_validate: false,
+        }
     }
 
-    fn get_validated_by_identifier(
+    #[cfg(test)]
+    fn new_for_testing(
+        state_manager: Arc<StateManagerImpl>,
+        state_sync_refs: StateSyncRefs,
+        log: ReplicaLogger,
+    ) -> Self {
+        Self {
+            state_manager,
+            state_sync_refs,
+            log,
+            #[cfg(debug_assertions)]
+            test_force_validate: false,
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    fn is_test_force_validate(&self) -> bool {
+        self.test_force_validate
+    }
+
+    /// Returns requested state as a Chunkable artifact for StateSync.
+    fn create_chunkable_state(
         &self,
-        msg_id: &StateSyncArtifactId,
-    ) -> Option<StateSyncMessage> {
-        self.states
+        id: &StateSyncArtifactId,
+    ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send>> {
+        info!(self.log, "Starting state sync @{}", id.height);
+        chunkable::IncompleteState::try_new(
+            self.log.clone(),
+            id.height,
+            CryptoHashOfState::from(id.hash.clone()),
+            Arc::new(self.clone()),
+            Arc::new(Mutex::new(scoped_threadpool::Pool::new(
+                NUMBER_OF_CHECKPOINT_THREADS,
+            ))),
+        )
+        .map(|incomplete_state| {
+            Box::new(incomplete_state) as Box<dyn Chunkable<StateSyncMessage> + Send>
+        })
+    }
+
+    /// Loads the synced checkpoint and gets the corresponding replicated state.
+    /// Delivers both to the state manager and updates the internals of the state manager.
+    fn deliver_state_sync(
+        &self,
+        height: Height,
+        root_hash: CryptoHashOfState,
+        manifest: Manifest,
+        meta_manifest: Arc<MetaManifest>,
+    ) {
+        info!(
+            self.log,
+            "Starting to deliver the synced state at height {}", height
+        );
+        let state_sync_metrics = &self.state_manager.metrics.state_sync_metrics;
+
+        let ro_layout = self
+            .state_manager
+            .state_layout
+            .checkpoint_in_verification(height)
+            .expect("failed to create checkpoint layout");
+
+        let verified_checkpoint_heights = self
+            .state_manager
+            .state_layout
+            .verified_checkpoint_heights()
+            .unwrap_or_else(|err| {
+                fatal!(self.log, "Failed to get verified checkpoint heights: {err}");
+            });
+
+        // Perform validation if no verified checkpoint exists or the last verified checkpoint is too old
+        let perform_validation = match verified_checkpoint_heights.last() {
+            None => true,
+            Some(last_checkpoint_height) => {
+                last_checkpoint_height.get() + MAX_HEIGHT_DIFFERENCE_WITHOUT_VALIDATION
+                    < height.get()
+            }
+        };
+        let state = if perform_validation {
+            let _timer = state_sync_metrics
+                .step_duration
+                .with_label_values(&[LABEL_LOAD_AND_VALIDATE_CHECKPOINT])
+                .start_timer();
+            info!(
+                self.log,
+                "Loading and validating checkpoint at {height} to mark as verified as no verified checkpoints exist or last one is too old. Current verified heights: {verified_checkpoint_heights:?}"
+            );
+            match crate::checkpoint::load_checkpoint_and_validate_parallel(
+                &ro_layout,
+                self.state_manager.own_subnet_type,
+                &self.state_manager.metrics.checkpoint_metrics,
+                self.state_manager.get_fd_factory(),
+            ) {
+                Ok(state) => state,
+                Err(err) => {
+                    fatal!(
+                        self.log,
+                        "Failed to load and finalize checkpoint or remove the unverified marker @height {height}: {err}",
+                    );
+                }
+            }
+        } else {
+            let timer = state_sync_metrics
+                .step_duration
+                .with_label_values(&[LABEL_LOAD_CHECKPOINT])
+                .start_timer();
+            info!(
+                self.log,
+                "Loading state sync checkpoint at {height} and skipping validation. The checkpoint will remain unverified."
+            );
+            let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
+            let state = match crate::checkpoint::load_checkpoint(
+                &ro_layout,
+                self.state_manager.own_subnet_type,
+                &self.state_manager.metrics.checkpoint_metrics,
+                Some(&mut thread_pool),
+                self.state_manager.get_fd_factory(),
+            ) {
+                Ok(state) => state,
+                Err(err) => {
+                    fatal!(
+                        self.log,
+                        "Failed to load checkpoint @height {height}: {err}",
+                    );
+                }
+            };
+            drop(timer);
+
+            let _timer = state_sync_metrics
+                .step_duration
+                .with_label_values(&[LABEL_MARK_FILES_READONLY_AND_SYNC])
+                .start_timer();
+
+            ro_layout
+                .mark_files_readonly_and_sync(Some(&mut thread_pool), false)
+                .unwrap_or_else(|err| {
+                    fatal!(
+                        self.log,
+                        "Failed to mark files readonly for checkpoint @height {height}: {err}",
+                    );
+                });
+            state
+        };
+
+        let _timer = state_sync_metrics
+            .step_duration
+            .with_label_values(&[LABEL_ON_SYNCED_CHECKPOINT])
+            .start_timer();
+        self.state_manager.on_synced_checkpoint(
+            state,
+            ro_layout,
+            manifest,
+            meta_manifest,
+            root_hash,
+        );
+
+        let height = self.state_manager.states.read().last_advertised;
+        let ids = self.get_all_validated_ids_by_height(height);
+        if let Some(ids) = ids.last() {
+            self.state_manager.states.write().last_advertised = ids.height;
+        }
+    }
+
+    pub fn get(&self, msg_id: &StateSyncArtifactId) -> Option<StateSyncMessage> {
+        let mut file_group_to_populate: Option<Arc<FileGroupChunks>> = None;
+
+        let state_sync_message = self
+            .state_manager
+            .states
             .read()
             .states_metadata
             .iter()
             .find_map(|(height, metadata)| {
-                if metadata.root_hash.as_ref() == Some(&msg_id.hash) {
-                    let manifest = metadata.manifest.as_ref()?;
-                    let checkpoint_root = self.state_layout.checkpoint(*height).ok()?;
+                if metadata.root_hash().map(|v| v.get_ref()) == Some(&msg_id.hash) {
+                    let manifest = metadata.manifest()?;
+                    let meta_manifest = metadata.meta_manifest()?;
+                    let checkpoint_layout = self
+                        .state_manager
+                        .state_layout
+                        .checkpoint_in_verification(*height)
+                        .ok()
+                        .filter(|layout| layout.is_verified_or_state_sync_checkpoint())?;
+                    let state_sync_file_group = match &metadata.state_sync_file_group {
+                        Some(value) => value.clone(),
+                        None => {
+                            // Note that this code path will be called at most once because the value is then populated.
+                            let computed_file_group_chunks =
+                                Arc::new(build_file_group_chunks(manifest));
+                            file_group_to_populate = Some(computed_file_group_chunks.clone());
+                            computed_file_group_chunks
+                        }
+                    };
+
                     Some(StateSyncMessage {
                         height: *height,
-                        root_hash: msg_id.hash.clone(),
-                        checkpoint_root: checkpoint_root.raw_path().to_path_buf(),
+                        root_hash: CryptoHashOfState::from(msg_id.hash.clone()),
+                        checkpoint_root: checkpoint_layout.raw_path().to_path_buf(),
+                        meta_manifest,
                         manifest: manifest.clone(),
+                        state_sync_file_group,
+                        malicious_flags: self.state_manager.malicious_flags.clone(),
                     })
                 } else {
                     None
                 }
-            })
-    }
+            });
 
-    fn has_artifact(&self, msg_id: &StateSyncArtifactId) -> bool {
-        self.states
-            .read()
-            .states_metadata
-            .iter()
-            .any(|(height, metadata)| {
-                *height == msg_id.height && metadata.root_hash.as_ref() == Some(&msg_id.hash)
-            })
+        if let Some(state_sync_file_group) = file_group_to_populate
+            && let Some(metadata) = self
+                .state_manager
+                .states
+                .write()
+                .states_metadata
+                .get_mut(&msg_id.height)
+        {
+            metadata.state_sync_file_group = Some(state_sync_file_group);
+        }
+        state_sync_message
     }
 
     // Enumerates all recent fully certified (i.e. referenced in a CUP) states that
     // is above the filter height.
-    fn get_all_validated_by_filter(
-        &self,
-        filter: &StateSyncFilter,
-    ) -> Vec<Advert<StateSyncArtifact>> {
-        let heights = match self.state_layout.checkpoint_heights() {
+    fn get_all_validated_ids_by_height(&self, height: Height) -> Vec<StateSyncArtifactId> {
+        let heights = match self
+            .state_manager
+            .state_layout
+            .verified_or_state_sync_checkpoint_heights()
+        {
             Ok(heights) => heights,
             Err(err) => {
                 warn!(
@@ -129,22 +278,33 @@ impl ArtifactClient<StateSyncArtifact> for StateManagerImpl {
                 return Vec::new();
             }
         };
-        let states = self.states.read();
+        let states = self.state_manager.states.read();
 
         heights
             .into_iter()
             .filter_map(|h| {
-                if h > filter.height {
+                if h > height {
                     let metadata = states.states_metadata.get(&h)?;
-                    let manifest = metadata.manifest.as_ref()?;
-                    let checkpoint_root = self.state_layout.checkpoint(h).ok()?;
+                    let manifest = metadata.manifest()?;
+                    let meta_manifest = metadata.meta_manifest()?;
+                    let checkpoint_root = self
+                        .state_manager
+                        .state_layout
+                        .checkpoint_verified(h)
+                        .ok()?;
                     let msg = StateSyncMessage {
                         height: h,
-                        root_hash: metadata.root_hash.as_ref()?.clone(),
+                        root_hash: metadata.root_hash()?.clone(),
                         checkpoint_root: checkpoint_root.raw_path().to_path_buf(),
                         manifest: manifest.clone(),
+                        meta_manifest,
+                        state_sync_file_group: Default::default(),
+                        malicious_flags: self.state_manager.malicious_flags.clone(),
                     };
-                    Some(StateSyncArtifact::message_to_advert(&msg))
+                    Some(StateSyncArtifactId {
+                        height: msg.height,
+                        hash: msg.root_hash.clone().get(),
+                    })
                 } else {
                     None
                 }
@@ -152,126 +312,120 @@ impl ArtifactClient<StateSyncArtifact> for StateManagerImpl {
             .collect()
     }
 
-    fn get_priority_function(
-        &self,
-    ) -> Option<
-        Box<dyn Fn(&StateSyncArtifactId, &StateSyncAttribute) -> Priority + Send + Sync + 'static>,
-    > {
-        use ic_interfaces_state_manager::StateReader;
-
-        let latest_height = self.latest_state_height();
-        let fetch_state = self.states.read().fetch_state.clone();
-        let state_sync_refs = self.state_sync_refs.clone();
-        let log = self.log.clone();
-
-        Some(Box::new(move |_artifact_id, attr| {
-            use std::cmp::Ordering;
-
-            if attr.height <= latest_height {
-                return Priority::Drop;
-            }
-
-            if let Some((max_sync_height, hash, cup_interval_length)) = &fetch_state {
-                if let Some(recorded_root_hash) = state_sync_refs.get(&attr.height) {
-                    // If this advert@h is for an ongoing state sync, we check if the hash is the
-                    // same as the hash that consensus gave us.
-                    if recorded_root_hash != attr.root_hash {
-                        warn!(
-                            log,
-                            "Received an advert for state @{} with a hash that does not match the hash of the state we are fetching: expected {:?}, got {:?}",
-                            attr.height,
-                            recorded_root_hash,
-                            attr.root_hash
-                        );
-                        return Priority::Drop;
-                    }
-
-                    // To keep the active state sync for longer time, we wait for another
-                    // `EXTRA_CHECKPOINTS_TO_KEEP` CUPs. Then a CUP beyond that can drop the
-                    // active state sync.
-                    //
-                    // Note: CUP interval length may change, and we can't predict future intervals.
-                    // The condition below is only a heuristic.
-                    if *max_sync_height
-                        > attr.height
-                            + cup_interval_length.increment() * EXTRA_CHECKPOINTS_TO_KEEP as u64
-                    {
-                        return Priority::Drop;
-                    } else {
-                        return Priority::Fetch;
-                    };
-                }
-
-                return match attr.height.cmp(max_sync_height) {
-                    Ordering::Less => Priority::Drop,
-                    // Drop the advert if the hashes do not match.
-                    Ordering::Equal if *hash != attr.root_hash => {
-                        warn!(
-                            log,
-                            "Received an advert for state {} with a hash that does not match the hash passed to fetch_state: expected {:?}, got {:?}",
-                            attr.height,
-                            *hash,
-                            attr.root_hash
-                        );
-                        Priority::Drop
-                    }
-                    // Do not fetch it for now if we're already fetching another state.
-                    Ordering::Equal if !state_sync_refs.is_empty() => Priority::Stash,
-                    Ordering::Equal => Priority::Fetch,
-                    Ordering::Greater => Priority::Stash,
-                };
-            }
-
-            Priority::Stash
-        }))
-    }
-
-    /// Get StateSync Filter for re-transmission purpose.
-    ///
-    /// Anything below or equal to the filter represents what the local
-    /// state_manager already has.
-    ///
-    /// Return the highest certified height as the filter.
-    fn get_filter(&self) -> StateSyncFilter {
-        StateSyncFilter {
-            height: *self
-                .list_state_heights(CERT_CERTIFIED)
-                .last()
-                .unwrap_or(&Height::from(0)),
+    pub fn should_download(&self, artifact_id: &StateSyncArtifactId) -> bool {
+        if artifact_id.height <= self.state_manager.latest_state_height() {
+            return false;
         }
+
+        let Some((max_sync_height, hash, _cup_interval_length)) =
+            &self.state_manager.states.read().fetch_state
+        else {
+            // the state manager is not asked to fetch any state.
+            return false;
+        };
+
+        if artifact_id.height == *max_sync_height && hash.get_ref() != &artifact_id.hash {
+            warn!(
+                self.log,
+                "Received an advert for state {} with a hash that does not match the hash passed to fetch_state: expected {:?}, got {:?}",
+                artifact_id.height,
+                *hash,
+                artifact_id.hash
+            );
+        }
+
+        artifact_id.height == *max_sync_height && hash.get_ref() == &artifact_id.hash
     }
 
-    /// Returns requested state as a Chunkable artifact for StateSync.
-    fn get_chunk_tracker(&self, id: &StateSyncArtifactId) -> Box<dyn Chunkable + Send + Sync> {
-        self.create_chunkable_state(id)
+    // Perform sanity check for the state sync artifact ID.
+    // Emit warnings if the artifact ID to cancel does not exactly match the current status of state sync refs.
+    fn sanity_check_for_cancelling_state_sync(&self, artifact_id: &StateSyncArtifactId) {
+        match self.state_sync_refs.active.read().as_ref() {
+            Some((recorded_height, recorded_hash)) => {
+                if &artifact_id.height != recorded_height
+                    || recorded_hash.get_ref() != &artifact_id.hash
+                {
+                    warn!(
+                        self.log,
+                        "Request to cancel state sync that does not match the state we are fetching: expected height @{} with hash{:?}, got height @{} with hash{:?}",
+                        artifact_id.height,
+                        artifact_id.hash,
+                        recorded_height,
+                        recorded_hash,
+                    );
+                }
+            }
+            None => {
+                warn!(
+                    self.log,
+                    "Request to cancel state sync for state @{} while there are no active state syncs.",
+                    artifact_id.height,
+                );
+            }
+        }
     }
 }
 
-impl ArtifactProcessor<StateSyncArtifact> for StateManagerImpl {
-    // Returns the states checkpointed since the last time process_changes was
-    // called.
-    fn process_changes(
-        &self,
-        _time_source: &dyn TimeSource,
-        _artifacts: Vec<UnvalidatedArtifact<StateSyncMessage>>,
-    ) -> (Vec<AdvertSendRequest<StateSyncArtifact>>, ProcessingResult) {
-        let filter = StateSyncFilter {
-            height: self.states.read().last_advertised,
-        };
-        let artifacts = self.get_all_validated_by_filter(&filter);
-        let artifacts: Vec<AdvertSendRequest<StateSyncArtifact>> = artifacts
-            .iter()
-            .cloned()
-            .map(|advert| AdvertSendRequest {
-                advert,
-                advert_class: AdvertClass::Critical,
-            })
-            .collect();
+impl StateSyncClient for StateSync {
+    type Message = StateSyncMessage;
 
-        if let Some(artifact) = artifacts.last() {
-            self.states.write().last_advertised = artifact.advert.attribute.height;
+    /// Non-blocking.
+    fn available_states(&self) -> Vec<StateSyncArtifactId> {
+        // Using height 0 here is sane because for state sync `get_all_validated_ids_by_height`
+        // return at most the number of states present on the node. Currently this is usually 1-2.
+        let height = Height::from(0);
+        self.get_all_validated_ids_by_height(height)
+    }
+
+    /// Non-blocking.
+    fn maybe_start_state_sync(
+        &self,
+        id: &StateSyncArtifactId,
+    ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send>> {
+        if self.state_sync_refs.active.read().is_some() {
+            warn!(
+                self.log,
+                "Should not attempt to start state sync when there is an active state sync",
+            );
+        }
+        if self.should_download(id) {
+            return self.create_chunkable_state(id);
+        }
+        None
+    }
+
+    /// Non-Blocking.
+    fn cancel_if_running(&self, id: &StateSyncArtifactId) -> bool {
+        // Requesting to cancel a state sync is only meaningful if the Id refers to an active state sync started with `maybe_start_state_sync`.
+        // This sanity check if the API is properly called but does not affect the decision on whether to cancel the state sync.
+        self.sanity_check_for_cancelling_state_sync(id);
+
+        // The state manager already has a newer state, we should cancel the ongoing state sync.
+        if id.height <= self.state_manager.latest_state_height() {
+            return true;
         }
 
-        (artifacts, ProcessingResult::StateUnchanged)
+        let Some((max_sync_height, _hash, cup_interval_length)) =
+            &self.state_manager.states.read().fetch_state
+        else {
+            // `fetch_state` being `None` means the previous state sync has been delivered (if any) and there are no newer states to fetch.
+            return true;
+        };
+
+        // If the state manager is asked to fetch a newer state, we should cancel the ongoing state sync.
+        // To keep the active state sync for longer time, we wait for another
+        // `EXTRA_CHECKPOINTS_TO_KEEP` CUPs. Then a CUP beyond that can drop the
+        // active state sync.
+        //
+        // Note: CUP interval length may change, and we can't predict future intervals.
+        // The condition below is only a heuristic.
+        id.height + cup_interval_length.increment() * (EXTRA_CHECKPOINTS_TO_KEEP as u64)
+            < *max_sync_height
+    }
+
+    /// Blocking. Makes synchronous file system calls.
+    fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk> {
+        let msg = self.get(id)?;
+        msg.get_chunk(chunk_id)
     }
 }

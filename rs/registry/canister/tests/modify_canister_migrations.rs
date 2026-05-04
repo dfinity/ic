@@ -2,15 +2,17 @@ use candid::Encode;
 use ic_base_types::SubnetId;
 use ic_nns_test_utils::{
     itest_helpers::{
-        local_test_on_nns_subnet, set_up_registry_canister, set_up_universal_canister,
+        set_up_registry_canister, set_up_universal_canister, state_machine_test_on_nns_subnet,
         try_call_via_universal_canister,
     },
-    registry::{get_value_or_panic, prepare_registry_with_two_node_sets, routing_table_mutation},
+    registry::{
+        get_value_or_panic, initial_routing_table_mutations, prepare_registry_with_two_node_sets,
+    },
 };
 use ic_protobuf::registry::routing_table::v1 as pb;
 use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_test_utilities::types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::CanisterId;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
@@ -33,13 +35,12 @@ async fn get_canister_migrations(canister: &canister_test::Canister<'_>) -> Cani
 
 #[test]
 fn test_modify_canister_migrations() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let (subnet_1_mutation, subnet_id_1, subnet_id_2_option, _, _) =
                 prepare_registry_with_two_node_sets(
                     /* num_nodes_in_subnet = */ 4, /* num_unassigned_nodes = */ 4, true,
                 );
-            let nns_subnet = subnet_test_id(999);
             let subnet_id_2 = subnet_id_2_option.expect("subnet 2 is not created.");
             let rt_mutation = {
                 fn range(start: u64, end: u64) -> CanisterIdRange {
@@ -50,13 +51,13 @@ fn test_modify_canister_migrations() {
                 }
 
                 let mut rt = RoutingTable::new();
-                rt.insert(range(0, 255), nns_subnet)
+                rt.insert(range(0, 255), subnet_id_2)
                     .expect("failed to update the routing table");
                 rt.insert(range(256, 511), subnet_id_1)
                     .expect("failed to update the routing table");
 
                 RegistryAtomicMutateRequest {
-                    mutations: vec![routing_table_mutation(&rt)],
+                    mutations: initial_routing_table_mutations(&rt),
                     preconditions: vec![],
                 }
             };
@@ -88,7 +89,7 @@ fn test_modify_canister_migrations() {
                         end: CanisterId::from(30),
                     },
                 ],
-                source_subnet: nns_subnet,
+                source_subnet: subnet_id_2,
                 destination_subnet: subnet_id_1,
             };
 
@@ -102,7 +103,7 @@ fn test_modify_canister_migrations() {
             .unwrap();
 
             let canister_migrations = get_canister_migrations(&registry).await;
-            let trace: Vec<SubnetId> = vec![nns_subnet, subnet_id_1];
+            let trace: Vec<SubnetId> = vec![subnet_id_2, subnet_id_1];
             assert_eq!(canister_migrations.lookup(CanisterId::from(9)), None);
             for i in 10..=11 {
                 assert_eq!(
@@ -140,7 +141,7 @@ fn test_modify_canister_migrations() {
                             start: CanisterId::from(8),
                             end: CanisterId::from(7)
                         }],
-                        source_subnet: nns_subnet,
+                        source_subnet: subnet_id_2,
                         destination_subnet: subnet_id_1,
                     })
                     .unwrap(),
@@ -160,13 +161,13 @@ fn test_modify_canister_migrations() {
                             start: CanisterId::from(7),
                             end: CanisterId::from(8)
                         }],
-                        source_subnet: nns_subnet,
+                        source_subnet: subnet_id_2,
                         destination_subnet: subnet_test_id(9999),
                     })
                     .unwrap(),
                 )
                 .await,
-                "not a known subnet",
+                "not found in the registry",
             );
 
             // Invalid request: canisters are not from the source subnet
@@ -180,13 +181,13 @@ fn test_modify_canister_migrations() {
                             start: CanisterId::from(255),
                             end: CanisterId::from(256)
                         }],
-                        source_subnet: nns_subnet,
+                        source_subnet: subnet_id_2,
                         destination_subnet: subnet_id_1,
                     })
                     .unwrap(),
                 )
                 .await,
-                "not all canisters to be migrated are hosted by the provided source subnet",
+                "Not all canisters to be migrated are hosted by the provided source subnet",
             );
 
             // Invalid request: some ranges already exist in canister migrations
@@ -200,7 +201,7 @@ fn test_modify_canister_migrations() {
                             start: CanisterId::from(11),
                             end: CanisterId::from(12)
                         }],
-                        source_subnet: nns_subnet,
+                        source_subnet: subnet_id_2,
                         destination_subnet: subnet_id_1,
                     })
                     .unwrap(),
@@ -226,7 +227,7 @@ fn test_modify_canister_migrations() {
                             start: CanisterId::from(10),
                             end: CanisterId::from(10),
                         },],
-                        source_subnet: nns_subnet,
+                        source_subnet: subnet_id_2,
                         destination_subnet: subnet_id_1,
                     })
                     .unwrap(),
@@ -249,7 +250,7 @@ fn test_modify_canister_migrations() {
 
             let payload = CompleteCanisterMigrationPayload {
                 canister_id_ranges: canister_id_ranges.clone(),
-                migration_trace: vec![nns_subnet, subnet_id_2],
+                migration_trace: vec![subnet_id_2, subnet_test_id(999)],
             };
 
             // Try to reassign the range in the routing table in a conflicting way.
@@ -273,7 +274,7 @@ fn test_modify_canister_migrations() {
 
             let payload = CompleteCanisterMigrationPayload {
                 canister_id_ranges,
-                migration_trace: vec![nns_subnet, subnet_id_1],
+                migration_trace: vec![subnet_id_2, subnet_id_1],
             };
 
             try_call_via_universal_canister(

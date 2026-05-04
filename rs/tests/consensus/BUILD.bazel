@@ -1,0 +1,499 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("//rs/tests:common.bzl", "CANISTER_SANDBOX_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_library(
+    name = "node_registration_test_common",
+    testonly = True,
+    srcs = ["node_registration_test_common/src/lib.rs"],
+    crate_name = "ic_consensus_system_test_node_registration_test_common",
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "//rs/protobuf",
+        "//rs/registry/canister",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
+rust_library(
+    name = "catch_up_test_common",
+    testonly = True,
+    srcs = ["catch_up_test_common/src/lib.rs"],
+    crate_name = "ic_consensus_system_test_catch_up_test_common",
+    deps = [
+        # Keep sorted.
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:futures",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test(
+    name = "catch_up_loop_prevention_test",
+    guestos = "malicious",
+    prometheus_vm_scrape_interval_secs = 5,
+    # TODO(NET-1683): Adjust test for faster p2p
+    tags = [
+        "long_test",
+    ],
+    test_timeout = "eternal",
+    deps = [
+        # Keep sorted.
+        ":catch_up_test_common",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test(
+    name = "catch_up_possible_test",
+    guestos = "malicious",
+    prometheus_vm_scrape_interval_secs = 5,
+    # TODO(NET-1683): Adjust test for faster p2p
+    tags = [
+        "long_test",
+    ],
+    test_timeout = "eternal",
+    deps = [
+        # Keep sorted.
+        ":catch_up_test_common",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test(
+    name = "dual_workload_test",
+    tags = [
+        "colocate",
+        "long_test",
+    ],
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:futures",
+        "@crate_index//:ic-agent",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+rust_library(
+    name = "liveness_test_common",
+    testonly = True,
+    srcs = ["liveness_test_common/src/lib.rs"],
+    crate_name = "ic_consensus_system_test_liveness_test_common",
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "@crate_index//:ic-agent",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test(
+    name = "liveness_with_equivocation_test",
+    guestos = "malicious",
+    guestos_update = "test",
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        ":liveness_test_common",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "max_ingress_payload_size_test",
+    tags = [
+        "colocate",
+    ],
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/limits",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:assert_matches",
+        "@crate_index//:futures",
+        "@crate_index//:ic-agent",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test(
+    name = "max_xnet_payload_size_test",
+    tags = [
+        "colocate",
+    ],
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:futures",
+        "@crate_index//:ic-agent",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
+    name = "node_graceful_leaving_test",
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test_nns(
+    name = "cup_explorer_test",
+    tags = [
+        "long_test",  # The P90 duration was over 6 minutes for the week starting on 2025-08-25.
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/cup_explorer",
+        "//rs/nns/constants",
+        "//rs/protobuf",
+        "//rs/registry/canister",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:prost",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:slog",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+    ],
+)
+
+RECOVERY_TOOLS_RUNTIME_DEPS = CANISTER_SANDBOX_RUNTIME_DEPS | {
+    "IC_ADMIN_PATH": "//rs/registry/admin:ic-admin",
+}
+
+system_test_nns(
+    name = "subnet_splitting_test",
+    tags = [
+        "colocate",
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        "//rs/recovery",
+        "//rs/recovery/subnet_splitting",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:reqwest",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test_nns(
+    name = "subnet_splitting_v2_test",
+    enable_metrics = True,
+    tags = [
+        "colocate",
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS | COUNTER_CANISTER_RUNTIME_DEPS,
+    deps = [
+        "//rs/canister_client",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/common",
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "//rs/nns/test_utils",
+        "//rs/registry/canister",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/xnet_test",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test(
+    name = "guestos_recovery_engine_smoke_test",
+    guestos = "recovery_dev",
+    tags = [
+        "long_test",  # the P90 duration of this test is over 6 minutes in the week starting on 2025-08-25.
+    ],
+    runtime_deps = IMPERSONATE_UPSTREAMS_RUNTIME_DEPS | {
+        "RECOVERY_ARTIFACTS_PATH": "//ic-os/guestos/envs/recovery-dev:recovery.tar.zst",
+        "RECOVERY_HASH_PATH": "//ic-os/guestos/envs/recovery-dev:recovery.tar.zst.sha256",
+        "RECOVERY_CUP_B64_PATH": "//ic-os/guestos/envs/recovery-dev:cup.proto.b64",
+        "RECOVERY_STORE_1_B64_PATH": "//ic-os/guestos/envs/recovery-dev:ic_registry_local_store_1.b64",
+        "RECOVERY_STORE_2_B64_PATH": "//ic-os/guestos/envs/recovery-dev:ic_registry_local_store_2.b64",
+    },
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "@crate_index//:ssh2",
+    ],
+)
+
+system_test(
+    name = "replica_determinism_test",
+    guestos = "malicious",
+    guestos_update = "test",
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:ic-agent",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test(
+    name = "request_auth_malicious_replica_test",
+    guestos = "malicious",
+    guestos_update = "test",
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:ic-agent",
+        "@crate_index//:k256",
+        "@crate_index//:rand",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
+    ],
+)
+
+system_test(
+    name = "safety_test",
+    guestos = "malicious",
+    guestos_update = "test",
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        ":liveness_test_common",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+    ],
+)
+
+rust_binary(
+    name = "consensus_performance_bin",
+    testonly = True,
+    srcs = ["consensus_performance.rs"],
+    crate_features = select({
+        "//bazel:upload_perf_systest_results_enabled": ["upload_perf_systest_results"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
+    name = "consensus_performance_4MB",
+    additional_colocate_tags = [
+        "system_test_benchmark",
+    ],
+    colocated_test_driver_vm_required_host_features = ["performance"],
+    colocated_test_driver_vm_resources = {
+        "vcpus": 64,
+        "memory_kibibytes": 512142680,
+        "boot_image_minimal_size_gibibytes": 500,
+    },
+    enable_head_nns_variant = False,
+    enable_metrics = True,
+    env = {
+        "MAX_INGRESS_BYTES_PER_BLOCK": "4194304",
+    },
+    prometheus_vm_required_host_features = ["performance"],
+    tags = [
+        "colocate",
+        "manual",
+    ],
+    test_driver_target = ":consensus_performance_bin",
+    test_timeout = "eternal",
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
+        "IC_VERSION_FILE": "//bazel:version.txt",
+        "JAEGER_UVM_CONFIG_IMAGE_ZST": "//rs/tests:jaeger_uvm_config_image",
+    },
+)
+
+system_test_nns(
+    name = "consensus_performance_8MB",
+    additional_colocate_tags = [
+        "system_test_benchmark",
+    ],
+    colocated_test_driver_vm_required_host_features = ["performance"],
+    colocated_test_driver_vm_resources = {
+        "vcpus": 64,
+        "memory_kibibytes": 512142680,
+        "boot_image_minimal_size_gibibytes": 500,
+    },
+    enable_head_nns_variant = False,
+    enable_metrics = True,
+    env = {
+        "MAX_INGRESS_BYTES_PER_BLOCK": "8388608",
+    },
+    prometheus_vm_required_host_features = ["performance"],
+    tags = [
+        "colocate",
+        "manual",
+    ],
+    test_driver_target = ":consensus_performance_bin",
+    test_timeout = "eternal",
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
+        "IC_VERSION_FILE": "//bazel:version.txt",
+        "JAEGER_UVM_CONFIG_IMAGE_ZST": "//rs/tests:jaeger_uvm_config_image",
+    },
+)
+
+system_test_nns(
+    name = "adding_nodes_to_subnet_test",
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "//rs/recovery",
+        "//rs/registry/canister",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test_nns(
+    name = "nidkg_performance_test",
+    colocated_test_driver_vm_required_host_features = [
+        "performance",
+        "spm",
+    ],
+    colocated_test_driver_vm_resources = {
+        "vcpus": 64,
+        "memory_kibibytes": 512142680,
+        "boot_image_minimal_size_gibibytes": 500,
+    },
+    enable_head_nns_variant = False,
+    enable_metrics = True,
+    prometheus_vm_required_host_features = ["performance"],
+    tags = [
+        "colocate",
+        "manual",
+    ],
+    test_timeout = "eternal",
+    deps = [
+        # Keep sorted.
+        "//rs/registry/canister",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:futures",
+        "@crate_index//:slog",
+    ],
+)

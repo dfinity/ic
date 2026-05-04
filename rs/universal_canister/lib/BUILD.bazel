@@ -4,23 +4,22 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/universal_canister/impl:lib",
     "@crate_index//:candid",
-    "@crate_index//:hex-literal",
+    "@crate_index//:lazy_static",
     "@crate_index//:serde",
+    "@crate_index//:sha2",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/sha",
-    "//rs/types/types",
 ]
 
 rust_library(
     name = "lib",
     srcs = glob(["src/*.rs"]),
-    compile_data = ["src/universal_canister.wasm"],
     crate_name = "ic_universal_canister",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -29,14 +28,12 @@ rust_doc_test(
     name = "lib_doc_test",
     crate = ":lib",
     deps = [
-        "//rs/crypto/sha",
-        "//rs/types/types",
+        # Keep sorted.
     ],
 )
 
 rust_test(
     name = "lib_test",
     crate = ":lib",
-    data = ["src/universal_canister.wasm"],
     deps = DEV_DEPENDENCIES,
 )

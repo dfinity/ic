@@ -1,14 +1,18 @@
 [package]
 name = "dfn_candid"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-serde = "1.0.99"
-candid = "0.8.1"
-on_wire = { path = "../on_wire" }
+candid = { workspace = true }
 dfn_core = { path = "../dfn_core" }
-ic-base-types = {path="../../types/base_types"}
+ic-base-types = { path = "../../types/base_types" }
+ic-http-types = { path = "../../../packages/ic-http-types" }
+on_wire = { path = "../on_wire" }
+serde = { workspace = true }
 
 [[bin]]
 name = "candid-test-canister"

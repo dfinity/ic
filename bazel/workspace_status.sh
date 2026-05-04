@@ -2,20 +2,28 @@
 
 set -euo pipefail
 
-function remove_url_credentials() {
-    sed -Ee 's#//[^:]*:[^@]*@#//#'
-}
+# By default, we set a hardcoded, constant version to avoid rebuilds. Only when
+# --stamp is provided do we write a meaningful version.
+if [ "$#" == "0" ]; then
+    echo "STABLE_VERSION 0000000000000000000000000000000000000000"
+    echo "STABLE_COMMIT_TIMESTAMP 4000000000" # arbitrary (constant) timestamp
+    echo "STABLE_COMMIT_DATE_ISO_8601 0000-00-00T00:00:00+00:00"
+elif [ "$#" == "1" ] && [ "$1" == "--stamp" ]; then
+    version="$(git rev-parse HEAD)"
+    # If the checkout is not clean, mark the version as dirty
+    if [ -n "$(git status --porcelain)" ]; then
+        version="$version-dirty"
+    fi
+    echo "STABLE_VERSION $version"
+    echo "STABLE_COMMIT_TIMESTAMP $(git show -s --format=%ct)"
+    echo "STABLE_COMMIT_DATE_ISO_8601 $(git show -s --format=%cI)"
+else
+    exit 1
+fi
 
-repo_url=$(git config --get remote.origin.url | remove_url_credentials)
-echo "REPO_URL $repo_url"
-
-commit_sha=$(git rev-parse HEAD)
-echo "COMMIT_SHA $commit_sha"
-
-git_branch=$(git rev-parse --abbrev-ref HEAD)
-echo "GIT_BRANCH $git_branch"
-
-git_tree_status=$(git diff-index --quiet HEAD -- && echo 'Clean' || echo 'Modified')
-echo "GIT_TREE_STATUS $git_tree_status"
-
-echo "HOME ${HOME}"
+# Used as farm metadata
+STABLE_FARM_METADATA="USER=${USER:-${HOSTUSER:-$(whoami)}}"
+if [ -n "${CI_JOB_NAME:-}" ]; then
+    STABLE_FARM_METADATA="$STABLE_FARM_METADATA;JOB_NAME=$CI_JOB_NAME"
+fi
+echo "STABLE_FARM_METADATA $STABLE_FARM_METADATA"

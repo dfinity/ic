@@ -1,1 +1,0 @@
-KERNEL=="vsock", GROUP="vsock", MODE="0660"

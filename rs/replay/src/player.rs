@@ -1,82 +1,95 @@
-use crate::ingress::IngressWithPrinter;
 use crate::{
     backup,
+    backup::{cup_file_name, rename_file},
+    ingress::IngressWithPrinter,
     validator::{InvalidArtifact, ReplayValidator},
 };
+use async_trait::async_trait;
+use candid::{Decode, Encode};
 use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl,
     consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl},
 };
-use ic_config::{
-    artifact_pool::ArtifactPoolConfig, registry_client::DataProviderConfig,
-    subnet_config::SubnetConfigs, Config,
-};
-use ic_consensus::{
-    certification::VerifierImpl,
-    consensus::{
-        batch_delivery::deliver_batches, pool_reader::PoolReader, utils::crypto_hashable_to_seed,
-    },
-};
-use ic_crypto::CryptoComponentFatClient;
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_config::{Config, artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig};
+use ic_consensus::consensus::batch_delivery::deliver_batches;
+use ic_consensus_certification::VerifierImpl;
+use ic_consensus_utils::{lookup_replica_version, membership::Membership, pool_reader::PoolReader};
+use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
+use ic_crypto_tree_hash::{Digest, Witness};
+use ic_error_types::UserError;
 use ic_execution_environment::ExecutionServices;
-use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_interfaces::{
     certification::CertificationPool,
-    execution_environment::{IngressHistoryReader, QueryHandler},
+    execution_environment::{
+        IngressHistoryReader, QueryExecutionError, QueryExecutionInput, QueryExecutionService,
+    },
     messaging::{MessageRouting, MessageRoutingError},
+    time_source::SysTimeSource,
 };
-use ic_interfaces_registry::{RegistryClient, RegistryDataProvider, RegistryTransportRecord};
+use ic_interfaces_registry::{RegistryClient, RegistryRecord, RegistryValue};
 use ic_interfaces_state_manager::{
     PermanentStateHashError, StateHashError, StateManager, StateReader,
 };
-use ic_logger::{new_replica_logger_from_config, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, new_replica_logger_from_config, warn};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_protobuf::registry::{
-    replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord,
+use ic_protobuf::{
+    registry::{replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord},
+    types::v1 as pb,
 };
+use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_client_helpers::deserialize_registry_value;
-use ic_registry_keys::{make_blessed_replica_version_key, make_subnet_record_key};
+use ic_registry_client_helpers::{deserialize_registry_value, subnet::SubnetRegistry};
+use ic_registry_keys::{make_blessed_replica_versions_key, make_subnet_record_key};
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
-use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_transport_records;
+use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_records;
+use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
+    GetChunk, dechunkify_delta, dechunkify_get_value_response_content,
     deserialize_get_changes_since_response, deserialize_get_latest_version_response,
     deserialize_get_value_response, serialize_get_changes_since_request,
     serialize_get_value_request,
 };
-use ic_replica::setup::get_subnet_type;
-use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
 use ic_types::{
-    batch::{Batch, BatchPayload, IngressPayload},
-    consensus::{catchup::CUPWithOriginalProtobuf, CatchUpPackage, HasHeight, HasVersion},
+    CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
+    RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
+    batch::{Batch, BatchContent, BatchMessages, BlockmakerMetrics},
+    consensus::{
+        CatchUpContentProtobufBytes, CatchUpPackage, HasHeight, HasVersion,
+        certification::{Certification, CertificationContent, CertificationShare},
+    },
+    crypto::{
+        CombinedThresholdSig, CombinedThresholdSigOf, Signed, randomness_from_crypto_hashable,
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+    },
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::UserQuery,
-    time::current_time,
-    CryptoHashOfState, Height, NodeId, PrincipalId, Randomness, RegistryVersion, ReplicaVersion,
-    SubnetId, Time, UserId,
+    malicious_flags::MaliciousFlags,
+    messages::{Query, QuerySource},
+    signature::ThresholdSignature,
+    time::{current_time, expiry_time_from_now},
 };
-use ic_types::{
-    consensus::CatchUpContentProtobufBytes,
-    crypto::{CombinedThresholdSig, CombinedThresholdSigOf},
-};
+use mockall::automock;
 use serde::{Deserialize, Serialize};
 use slog_async::AsyncGuard;
 use std::{
-    collections::BTreeMap,
+    collections::{HashMap, HashSet},
+    convert::Infallible,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 use tempfile::TempDir;
+use tokio::runtime::Runtime;
+use tower::ServiceExt;
 
-// Amount of time we are waiting for execution, after batches are delivered.
+/// Amount of time we are waiting for execution, after batches are delivered.
 const WAIT_DURATION: Duration = Duration::from_millis(500);
+/// The backoff duration when polling the [`StateManager`] for state hash.
+const STATE_HASH_BACKOFF_DURATION: Duration = Duration::from_secs(1);
 
 /// Represents the height, hash and registry version of the last execution state
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -95,22 +108,28 @@ pub enum ReplayError {
     UpgradeDetected(StateParams),
     /// Can't proceed because artifact validation failed after the given height.
     ValidationIncomplete(Height, Vec<InvalidArtifact>),
+    /// Can't proceed because CUP verification failed at the given height.
+    CUPVerificationFailed(Height),
+    /// Replay was successful, but manual inspection is required to choose correct state.
+    ManualInspectionRequired(StateParams),
 }
 
 pub type ReplayResult = Result<StateParams, ReplayError>;
 
 /// The main ic-replay component that sets up consensus and execution
 /// environment to replay past blocks.
-pub struct Player {
+pub(crate) struct Player {
     state_manager: Arc<StateManagerImpl>,
     message_routing: Arc<dyn MessageRouting>,
     consensus_pool: Option<ConsensusPoolImpl>,
+    membership: Option<Arc<Membership>>,
     validator: Option<ReplayValidator>,
-    http_query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
+    crypto: Arc<dyn CryptoComponentForVerificationOnly>,
+    query_handler: QueryExecutionService,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     certification_pool: Option<CertificationPoolImpl>,
     pub registry: Arc<RegistryClientImpl>,
-    local_store_path: Option<PathBuf>,
+    local_store_path: PathBuf,
     replica_version: ReplicaVersion,
     pub log: ReplicaLogger,
     _async_log_guard: AsyncGuard,
@@ -121,12 +140,13 @@ pub struct Player {
     // The target height until which the state will be replayed.
     // None means finalized height.
     replay_target_height: Option<u64>,
+    runtime: Runtime,
 }
 
 impl Player {
     /// Create and return a `Player` from a replica configuration object for
     /// restoring states from backups.
-    pub fn new_for_backup(
+    pub(crate) fn new_for_backup(
         mut cfg: Config,
         replica_version: ReplicaVersion,
         backup_spool_path: &Path,
@@ -135,27 +155,9 @@ impl Player {
         start_height: u64,
     ) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
-        let DataProviderConfig::LocalStore(local_store_from_config) = cfg
-            .registry_client
-            .data_provider
-            .as_ref()
-            .expect("No registry provider found");
 
-        if start_height == 0 {
-            let data_provider = Arc::new(LocalStoreImpl::new(registry_local_store_path));
-            // Because we use the LocalStoreImpl, we know that we get the
-            // registry in one chunk when calling get_update_since().
-            let records = data_provider
-                .get_updates_since(RegistryVersion::from(0))
-                .expect("Couldn't get the initial registry contents");
-            write_records_to_local_store(
-                local_store_from_config,
-                RegistryVersion::from(0),
-                records,
-            );
-        }
-
-        let data_provider = Arc::new(LocalStoreImpl::new(local_store_from_config));
+        let time_source = Arc::new(SysTimeSource::new());
+        let data_provider = Arc::new(LocalStoreImpl::new(registry_local_store_path));
         let registry = Arc::new(RegistryClientImpl::new(data_provider, None));
         registry
             .poll_once()
@@ -178,14 +180,26 @@ impl Player {
             .join(subnet_id.to_string())
             .join(replica_version.to_string());
         // Extract the genesis CUP and instantiate a new pool.
-        let initial_cup = backup::read_cup_at_height(&backup_dir, Height::from(start_height));
+        let cup_file = backup::cup_file_name(&backup_dir, Height::from(start_height));
+        let initial_cup_proto = backup::read_cup_proto_file(&cup_file)
+            .expect("CUP of the starting block should be valid");
         // This would create a new pool with just the genesis CUP.
-        let pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+        let pool = ConsensusPoolImpl::new(
+            NodeId::from(PrincipalId::new_anonymous()),
             subnet_id,
-            initial_cup,
+            // Note: it's important to pass the original proto which came from the command line (as
+            // opposed to, for example, a proto which was first deserialized and then serialized
+            // again). Since the proto file could have been produced and signed by nodes running a
+            // different replica version, there is a possibility that the format of
+            // `pb::CatchUpContent` has changed across the versions, in which case deserializing and
+            // serializing the proto could result in a different value of
+            // `pb::CatchUpPackage::content` which will make it impossible to validate the signature
+            // of the proto.
+            initial_cup_proto,
             artifact_pool_config,
             MetricsRegistry::new(),
             log.clone(),
+            time_source,
         );
 
         let mut player = Player::new_with_params(
@@ -204,10 +218,11 @@ impl Player {
 
     /// Create and return a `Player` from a replica configuration object for
     /// subnet recovery.
-    pub fn new(cfg: Config, subnet_id: SubnetId) -> Self {
+    pub(crate) fn new(cfg: Config, subnet_id: SubnetId) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
         let metrics_registry = MetricsRegistry::new();
         let registry = setup_registry(cfg.clone(), Some(&metrics_registry));
+        let time_source = Arc::new(SysTimeSource::new());
 
         let consensus_pool = if cfg.artifact_pool.consensus_pool_path.exists() {
             let mut artifact_pool_config = ArtifactPoolConfig::from(cfg.artifact_pool.clone());
@@ -215,8 +230,11 @@ impl Player {
             // recovery.
             artifact_pool_config.persistent_pool_read_only = true;
             let consensus_pool = ConsensusPoolImpl::from_uncached(
+                NodeId::from(PrincipalId::new_anonymous()),
                 UncachedConsensusPoolImpl::new(artifact_pool_config, log.clone()),
                 MetricsRegistry::new(),
+                log.clone(),
+                time_source,
             );
             Some(consensus_pool)
         } else {
@@ -253,57 +271,48 @@ impl Player {
         log: ReplicaLogger,
         _async_log_guard: AsyncGuard,
     ) -> Self {
-        println!("Setting default replica version {}", replica_version);
+        println!("Setting default replica version {replica_version}");
         if ReplicaVersion::set_default_version(replica_version.clone()).is_err() {
             println!("Failed to set default replica version");
         }
 
-        let subnet_type = get_subnet_type(
-            registry.as_ref(),
-            subnet_id,
-            registry.get_latest_version(),
-            &log,
-        );
-        let local_store_path = if let Some(DataProviderConfig::LocalStore(path)) =
-            cfg.registry_client.data_provider.clone()
+        let subnet_type = match registry.get_subnet_record(subnet_id, registry.get_latest_version())
         {
-            Some(path)
-        } else {
-            None
+            Ok(Some(record)) => {
+                SubnetType::try_from(record.subnet_type).expect("Failed to decode subnet type")
+            }
+            err => panic!("Failed to extract subnet type of {subnet_id:?} from registry: {err:?}"),
         };
 
         let metrics_registry = MetricsRegistry::new();
-        let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
+        let subnet_config = SubnetConfig::new(subnet_type);
 
-        let cycles_account_manager = Arc::new(CyclesAccountManager::new(
-            subnet_config.scheduler_config.max_instructions_per_message,
-            subnet_type,
-            subnet_id,
-            subnet_config.cycles_account_manager_config,
-        ));
-        let crypto = CryptoComponentFatClient::new_for_verification_only(registry.clone());
+        let crypto = ic_crypto_for_verification_only::new(registry.clone());
         let crypto = Arc::new(crypto);
 
         let verifier = Arc::new(VerifierImpl::new(crypto.clone()));
         let state_manager = Arc::new(StateManagerImpl::new(
-            verifier,
+            verifier.clone(),
             subnet_id,
             subnet_type,
             log.clone(),
             &metrics_registry,
             &cfg.state_manager,
             None,
-            ic_types::malicious_flags::MaliciousFlags::default(),
+            MaliciousFlags::default(),
         ));
+        let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
         let execution_service = ExecutionServices::setup_execution(
             log.clone(),
             &metrics_registry,
             subnet_id,
             subnet_type,
-            subnet_config.scheduler_config,
             cfg.hypervisor.clone(),
-            Arc::clone(&cycles_account_manager),
+            subnet_config,
             Arc::clone(&state_manager) as Arc<_>,
+            state_manager.get_fd_factory(),
+            completed_execution_messages_tx,
+            &state_manager.state_layout().tmp(),
         );
         let message_routing = Arc::new(MessageRoutingImpl::new(
             state_manager.clone(),
@@ -311,27 +320,29 @@ impl Player {
             execution_service.ingress_history_writer.clone(),
             execution_service.scheduler,
             cfg.hypervisor.clone(),
-            cycles_account_manager,
+            Arc::clone(&execution_service.cycles_account_manager),
             subnet_id,
             &metrics_registry,
             log.clone(),
             registry.clone(),
+            MaliciousFlags::default(),
         ));
         let certification_pool = consensus_pool.as_ref().map(|_| {
             CertificationPoolImpl::new(
+                NodeId::from(PrincipalId::new_anonymous()),
                 ArtifactPoolConfig::from(cfg.artifact_pool.clone()),
                 log.clone(),
                 metrics_registry.clone(),
             )
         });
-
-        let dummy_node_id = NodeId::from(PrincipalId::new_node_test_id(1));
+        let local_store_path = cfg.registry_client.local_store.clone();
         let validator = consensus_pool.as_ref().map(|pool| {
             ReplayValidator::new(
                 cfg,
-                dummy_node_id,
                 subnet_id,
-                crypto,
+                crypto.clone(),
+                crypto.clone(),
+                verifier,
                 pool.get_cache().clone(),
                 registry.clone(),
                 state_manager.clone(),
@@ -339,13 +350,24 @@ impl Player {
                 log.clone(),
             )
         });
-
+        let membership = consensus_pool.as_ref().map(|pool| {
+            Arc::new(Membership::new(
+                pool.get_cache(),
+                registry.clone(),
+                subnet_id,
+            ))
+        });
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .expect("failed to create a tokio runtime");
         Player {
             state_manager,
             message_routing,
             consensus_pool,
+            membership,
             validator,
-            http_query_handler: execution_service.sync_query_handler,
+            crypto,
+            query_handler: execution_service.query_execution_service,
             ingress_history_reader: execution_service.ingress_history_reader,
             certification_pool,
             registry,
@@ -357,6 +379,7 @@ impl Player {
             _async_log_guard,
             tmp_dir: None,
             replay_target_height: None,
+            runtime,
         }
     }
 
@@ -366,9 +389,9 @@ impl Player {
         self
     }
 
-    /// Replay past finalized but un-executed blocks by delivering ingress
-    /// messages for execution, and make a full checkpoint of the latest
-    /// state when they all finish.
+    /// In case a consensus pool was supplied, replay past finalized but
+    /// un-executed blocks by delivering ingress messages for execution,
+    /// and make a full checkpoint of the latest state when they all finish.
     ///
     /// It takes a function argument, which can be used to make extra ingress
     /// messages for execution, which are delivered after the last finalized
@@ -379,58 +402,21 @@ impl Player {
         &self,
         extra: F,
     ) -> ReplayResult {
-        let mut invalid_artifacts = Vec::new();
-        if let (Some(consensus_pool), Some(certification_pool)) =
-            (&self.consensus_pool, &self.certification_pool)
-        {
-            match self.verify_latest_cup() {
-                Err(ReplayError::UpgradeDetected(_)) | Ok(_) => {}
-                other => other?,
-            };
-
-            let pool_reader = &PoolReader::new(consensus_pool);
-            let finalized_height = pool_reader.get_finalized_height();
-            let target_height = Some(
-                finalized_height.min(
-                    self.replay_target_height
-                        .map(Height::from)
-                        .unwrap_or_else(|| finalized_height),
-                ),
-            );
-
-            // Validate artifacts in temporary pool
-            if let Some(validator) = self.validator.as_ref() {
-                invalid_artifacts.append(&mut validator.validate_in_tmp_pool(
-                    consensus_pool,
-                    self.get_latest_cup().cup,
-                    target_height.unwrap(),
-                )?);
-            }
-            if !invalid_artifacts.is_empty() {
-                println!("Invalid artifacts:");
-                invalid_artifacts.iter().for_each(|a| println!("{:?}", a));
-            }
-
-            let last_batch_height =
-                self.deliver_batches(self.message_routing.as_ref(), pool_reader, target_height);
-            self.wait_for_state(last_batch_height);
-            // We only want to persist the checkpoint after the latest batch.
-            self.state_manager.remove_states_below(last_batch_height);
-
-            // Redeliver certifications to state manager. It will panic if there is any
-            // mismatch.
-            print!("Redelivering certifications:");
-            for h in certification_pool.certified_heights() {
-                let certification = certification_pool
-                    .certification_at_height(h)
-                    .unwrap_or_else(|| panic!("Missing certification at height {:?}", h));
-                self.state_manager
-                    .deliver_state_certification(certification);
-                print!(" {}", h);
-            }
-            println!();
-            println!("All blocks successfully replayed.");
-        }
+        let (inspection_required, invalid_artifacts) = if let (
+            Some(consensus_pool),
+            Some(certification_pool),
+            Some(validator),
+            Some(membership),
+        ) = (
+            &self.consensus_pool,
+            &self.certification_pool,
+            &self.validator,
+            &self.membership,
+        ) {
+            self.replay_consensus_pool(consensus_pool, membership, certification_pool, validator)?
+        } else {
+            Default::default()
+        };
 
         let (latest_context_time, extra_batch_delivery) = self.deliver_extra_batch(
             self.message_routing.as_ref(),
@@ -466,27 +452,181 @@ impl Player {
         let state_params =
             self.get_latest_state_params(Some(latest_context_time), invalid_artifacts);
         println!("Latest registry version: {}", state_params.registry_version);
-        Ok(state_params)
+
+        if inspection_required {
+            Err(ReplayError::ManualInspectionRequired(state_params))
+        } else {
+            Ok(state_params)
+        }
+    }
+
+    // Validate and replay artifacts in the given consensus and certification pools.
+    fn replay_consensus_pool(
+        &self,
+        consensus_pool: &ConsensusPoolImpl,
+        membership: &Membership,
+        certification_pool: &CertificationPoolImpl,
+        validator: &ReplayValidator,
+    ) -> Result<(bool, Vec<InvalidArtifact>), ReplayError> {
+        match self.verify_latest_cup() {
+            Err(ReplayError::UpgradeDetected(_)) | Ok(_) => {}
+            other => other?,
+        };
+
+        let pool_reader = &PoolReader::new(consensus_pool);
+        let finalized_height = pool_reader.get_finalized_height();
+        let target_height = finalized_height.min(
+            self.replay_target_height
+                .map(Height::from)
+                .unwrap_or_else(|| finalized_height),
+        );
+
+        // Validate artifacts in temporary pool
+        let mut invalid_artifacts = Vec::new();
+        invalid_artifacts.append(&mut validator.validate_in_tmp_pool(
+            consensus_pool,
+            self.get_latest_cup_proto(),
+            target_height,
+        )?);
+        if !invalid_artifacts.is_empty() {
+            println!("Invalid artifacts:");
+            invalid_artifacts.iter().for_each(|a| println!("{a:?}"));
+        }
+
+        let last_batch_height = self.deliver_batches(
+            self.message_routing.as_ref(),
+            pool_reader,
+            membership,
+            Some(target_height),
+        );
+        self.wait_for_state(last_batch_height);
+
+        // Redeliver certifications to state manager. It will panic if there is any
+        // mismatch.
+        let manual_inspection_required =
+            self.redeliver_certifications(certification_pool, validator);
+
+        println!("All blocks successfully replayed.");
+        // We only want to persist the checkpoint after the latest batch.
+        self.state_manager.remove_states_below(last_batch_height);
+
+        Ok((manual_inspection_required, invalid_artifacts))
+    }
+
+    // Verify and redeliver all full certifications found in the certification pool.
+    // This function panics if for any height the hash of the full certification does not match the locally
+    // computed one or if verification of a certification (share) fails.
+    // For all locally computed state heights for which we can't find full a certification, compare the state's
+    // hash to the certification shares found at that height. See `is_manual_share_investigation_required` for details.
+    // Returns whether manual inspection is required or not.
+    fn redeliver_certifications(
+        &self,
+        certification_pool: &CertificationPoolImpl,
+        validator: &ReplayValidator,
+    ) -> bool {
+        print!("Redelivering certifications:");
+        let mut cert_heights = Vec::from_iter(certification_pool.certified_heights());
+        cert_heights.sort();
+        for (i, &h) in cert_heights.iter().enumerate() {
+            if i > 0 && cert_heights[i - 1].increment() != h {
+                println!(
+                    "\nMissing certifications starting at height {:?}",
+                    cert_heights[i - 1].increment()
+                );
+            }
+            let certification = certification_pool
+                .certification_at_height(h)
+                .unwrap_or_else(|| panic!("Missing certification at height {h:?}"));
+            validator
+                .verify_certification(&certification)
+                .map_err(|e| {
+                    panic!(
+                        "\nFailed to verify certification at height {h}: {e}. \
+                    If this is a recovery, find and delete the offending certification pool. \
+                    Delete the combined certification pool and reset the replay checkpoint. \
+                    Then restart recovery from the combine certifications step."
+                    )
+                })
+                .ok();
+            self.state_manager
+                .deliver_state_certification(certification);
+            print!(" {h}");
+        }
+        println!();
+
+        println!("Comparing uncertified state hashes to certification shares:");
+        self.registry.poll_once().ok();
+        let f = match self
+            .registry
+            .get_subnet_size(self.subnet_id, self.registry.get_latest_version())
+        {
+            Ok(Some(size)) => (size - 1) / 3,
+            err => {
+                println!("Failed to determine subnet size: {err:?}, continuing with f = 0!");
+                0
+            }
+        };
+
+        let verify = |s: &CertificationShare| {
+            validator
+                .verify_share(s)
+                .map_err(|e| {
+                    panic!(
+                        "\nFailed to verify {s:?}: {e}. \
+                If this is a recovery, find and delete the offending certification pool. \
+                Delete the combined certification pool and reset the replay checkpoint. \
+                Then restart recovery from the merge certification pools step."
+                    )
+                })
+                .is_ok()
+        };
+
+        let malicious_nodes =
+            find_malicious_nodes(certification_pool, self.get_latest_cup().height(), &verify);
+
+        // Get heights and local state hashes without a full certification
+        let mut missing_certifications = self.state_manager.list_state_hashes_to_certify();
+        missing_certifications.sort_by_key(|state_hash_metadata| state_hash_metadata.height.get());
+        missing_certifications
+            .into_iter()
+            .fold(false, |ret, state_hash_metadata| {
+                ret | is_manual_share_investigation_required(
+                    certification_pool,
+                    &malicious_nodes,
+                    state_hash_metadata.height,
+                    state_hash_metadata.hash,
+                    f,
+                )
+            })
     }
 
     // Blocks until the state at the given height is committed.
     fn wait_for_state(&self, height: Height) {
-        loop {
-            // We first check if `height` was executed. Otherwise the state manager
-            // would return a permanent error on a too big height.
-            if self.state_manager.latest_state_height() >= height {
-                if let Some(hash) = get_state_hash(&*self.state_manager, height) {
-                    println!("Latest checkpoint at height: {}", height);
-                    println!("Latest state hash: {}", hex::encode(&hash.get().0));
-                };
-                break;
-            }
+        info!(self.log, "Waiting for the state at height {height}.");
+        while self.state_manager.latest_state_height() < height {
+            info!(
+                self.log,
+                "State at height {height} hasn't been yet executed. \
+                Current state height = {}. \
+                Retrying in {WAIT_DURATION:?}.",
+                self.state_manager.latest_state_height()
+            );
+
             std::thread::sleep(WAIT_DURATION);
         }
-        println!(
-            "Latest state height is {}",
-            self.state_manager.latest_state_height()
+        info!(self.log, "The state at height {height} has been executed.");
+
+        info!(
+            self.log,
+            "Waiting until the latest checkpoint is created and verified."
         );
+        self.state_manager.flush_tip_channel();
+        info!(
+            self.log,
+            "The latest checkpoint at height {:?} has been created and verified.",
+            self.state_manager.checkpoint_heights().iter().max()
+        );
+
         assert_eq!(
             height,
             self.state_manager.latest_state_height(),
@@ -523,11 +663,11 @@ impl Player {
             } else {
                 // If the latest state height corresponds to an in-memory state only, we return the
                 // state hash of the latest CUP
-                let last_cup = self.get_latest_cup().cup;
+                let last_cup = self.get_latest_cup();
                 (last_cup.height(), last_cup.content.state_hash)
             }
         };
-        let hash = hex::encode(&hash_raw.get().0);
+        let hash = hex::encode(hash_raw.get().0);
 
         StateParams {
             height,
@@ -540,18 +680,16 @@ impl Player {
     /// Fetch registry records from the given `nns_url`, and update the local
     /// registry store with the new records.
     pub fn update_registry_local_store(&self) {
-        let local_store_path = self.local_store_path.clone().expect(
-           "update_registry_local_store can only be used with registry configured with local store");
-        println!("RegistryLocalStore path: {:?}", local_store_path);
+        println!("RegistryLocalStore path: {:?}", &self.local_store_path);
         let latest_version = self.registry.get_latest_version();
-        println!("RegistryLocalStore latest version: {}", latest_version);
+        println!("RegistryLocalStore latest version: {latest_version}");
         let records = self
             .get_changes_since(
                 latest_version.get(),
                 current_time() + Duration::from_secs(60),
             )
-            .unwrap_or_else(|err| panic!("Error in get_certified_changes_since: {}", err));
-        write_records_to_local_store(&local_store_path, latest_version, records)
+            .unwrap_or_else(|err| panic!("Error in get_certified_changes_since: {err}"));
+        write_records_to_local_store(&self.local_store_path, latest_version, records)
     }
 
     /// Deliver finalized batches since last expected batch height.
@@ -559,19 +697,19 @@ impl Player {
         &self,
         message_routing: &dyn MessageRouting,
         pool: &PoolReader<'_>,
+        membership: &Membership,
         replay_target_height: Option<Height>,
     ) -> Height {
         let expected_batch_height = message_routing.expected_batch_height();
         let last_batch_height = loop {
             match deliver_batches(
                 message_routing,
+                membership,
                 pool,
                 &*self.registry,
                 self.subnet_id,
-                self.replica_version.clone(),
                 &self.log,
                 replay_target_height,
-                None,
             ) {
                 Ok(h) => break h,
                 Err(MessageRoutingError::QueueIsFull) => std::thread::sleep(WAIT_DURATION),
@@ -580,12 +718,14 @@ impl Player {
                 }
             }
         };
-        println!(
-            "latest_batch_height = {}, batches = {}",
-            last_batch_height,
-            last_batch_height - expected_batch_height.decrement()
+
+        info!(
+            self.log,
+            "Delivered {} batches up to the height {}.",
+            last_batch_height - expected_batch_height.decrement(),
+            last_batch_height
         );
-        println!("Delivered batches up to the height {}", last_batch_height);
+
         last_batch_height
     }
 
@@ -595,71 +735,148 @@ impl Player {
         pool: Option<&ConsensusPoolImpl>,
         mut extra: F,
     ) -> (Time, Option<(Height, Vec<IngressWithPrinter>)>) {
-        let (registry_version, time, randomness) = match pool {
+        let (registry_version, time, randomness, replica_version) = match pool {
             None => (
                 self.registry.get_latest_version(),
                 ic_types::time::current_time(),
                 Randomness::from([0; 32]),
+                ReplicaVersion::default(),
             ),
             Some(pool) => {
                 let pool = PoolReader::new(pool);
                 let finalized_height = pool.get_finalized_height();
-                let last_block = pool
-                    .get_finalized_block(finalized_height)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "Finalized block is not found at height {}",
-                            finalized_height
-                        )
-                    });
+                let target_height = finalized_height.min(
+                    self.replay_target_height
+                        .map(Height::from)
+                        .unwrap_or_else(|| finalized_height),
+                );
+                let last_block = pool.get_finalized_block(target_height).unwrap_or_else(|| {
+                    panic!("Finalized block is not found at height {target_height}")
+                });
 
                 (
                     last_block.context.registry_version,
                     last_block.context.time + Duration::from_nanos(1),
-                    Randomness::from(crypto_hashable_to_seed(&last_block)),
+                    randomness_from_crypto_hashable(&last_block),
+                    last_block.version.clone(),
                 )
             }
         };
-        let batch_number = message_routing.expected_batch_height();
+
+        let extra_msgs = extra(self, time);
+        if extra_msgs.is_empty() {
+            return (time, None);
+        }
+
+        let extra_ingresses = extra_msgs
+            .iter()
+            .map(|fm| fm.ingress.clone())
+            .collect::<Vec<_>>();
+
         let mut extra_batch = Batch {
-            batch_number,
-            requires_full_state_hash: true,
-            payload: BatchPayload::default(),
+            batch_number: message_routing.expected_batch_height(),
+            batch_summary: None,
+            content: BatchContent::Data {
+                batch_messages: BatchMessages {
+                    signed_ingress_msgs: extra_ingresses,
+                    ..BatchMessages::default()
+                },
+                chain_key_data: Default::default(),
+                consensus_responses: Vec::new(),
+                requires_full_state_hash: false,
+            },
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
-            ecdsa_subnet_public_keys: BTreeMap::new(),
             registry_version,
             time,
-            consensus_responses: Vec::new(),
+            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            replica_version,
         };
-        let context_time = extra_batch.time;
-        let extra_msgs = extra(self, context_time);
-        if extra_msgs.is_empty() {
-            return (context_time, None);
-        }
-        if !extra_msgs.is_empty() {
-            extra_batch.payload.ingress = IngressPayload::from(
-                extra_msgs
-                    .iter()
-                    .map(|fm| fm.ingress.clone())
-                    .collect::<Vec<_>>(),
-            );
-            println!("extra_batch created with new ingress");
-        }
-        let batch_number = extra_batch.batch_number;
+
+        println!("extra_batch created with new ingress");
+
         loop {
             match message_routing.deliver_batch(extra_batch.clone()) {
                 Ok(()) => {
-                    println!("Delivered batch {}", batch_number);
-                    break;
+                    println!("Delivered batch {}", extra_batch.batch_number);
+                    self.wait_for_state(extra_batch.batch_number);
+
+                    // We are done once we delivered a batch for a new checkpoint
+                    if extra_batch.requires_full_state_hash() {
+                        break;
+                    }
+
+                    // If we have messages that could not be completed, we need to keep delivering
+                    // empty batches. If all messages could be completed, we need to deliver one
+                    // more batch triggering checkpoint creation.
+                    let msg_status = self.ingress_history_reader.get_latest_status();
+                    let have_incomplete_msgs =
+                        extra_msgs
+                            .iter()
+                            .any(|msg| match msg_status(&msg.ingress.id()) {
+                                IngressStatus::Unknown => true,
+                                IngressStatus::Known { state, .. } => !state.is_terminal(),
+                            });
+
+                    extra_batch = extra_batch.clone();
+                    extra_batch.content = BatchContent::Data {
+                        batch_messages: BatchMessages::default(),
+                        chain_key_data: Default::default(),
+                        consensus_responses: Vec::new(),
+                        requires_full_state_hash: !have_incomplete_msgs,
+                    };
+                    extra_batch.batch_number = message_routing.expected_batch_height();
+                    extra_batch.time += Duration::from_nanos(1);
                 }
                 Err(MessageRoutingError::QueueIsFull) => std::thread::sleep(WAIT_DURATION),
                 Err(MessageRoutingError::Ignored { .. }) => {
-                    unreachable!("Unexpected error on a valid batch number {}", batch_number);
+                    unreachable!(
+                        "Unexpected error on a valid batch number {}",
+                        extra_batch.batch_number
+                    );
                 }
             }
         }
-        (context_time, Some((extra_batch.batch_number, extra_msgs)))
+        (time, Some((extra_batch.batch_number, extra_msgs)))
+    }
+
+    fn certify_state_with_dummy_certification(&self) {
+        if self.state_manager.latest_state_height() > self.state_manager.latest_certified_height() {
+            let state_hashes = self.state_manager.list_state_hashes_to_certify();
+            let state_hash_metadata = state_hashes
+                .last()
+                .expect("There should be at least one state hash to certify");
+            self.state_manager
+                .deliver_state_certification(Self::certify_hash(
+                    self.subnet_id,
+                    &state_hash_metadata.height,
+                    &state_hash_metadata.hash,
+                ));
+        }
+    }
+
+    fn certify_hash(
+        subnet_id: SubnetId,
+        height: &Height,
+        hash: &CryptoHashOfPartialState,
+    ) -> Certification {
+        let combined_sig = CombinedThresholdSigOf::from(CombinedThresholdSig(vec![]));
+        Certification {
+            height: *height,
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+            signed: Signed {
+                content: CertificationContent { hash: hash.clone() },
+                signature: ThresholdSignature {
+                    signature: combined_sig,
+                    signer: NiDkgId {
+                        dealer_subnet: subnet_id,
+                        target_subnet: NiDkgTargetSubnet::Local,
+                        start_block_height: *height,
+                        dkg_tag: NiDkgTag::LowThreshold,
+                    },
+                },
+            },
+        }
     }
 
     /// Return latest BlessedReplicaVersions record by querying the registry
@@ -668,36 +885,13 @@ impl Player {
         &self,
         ingress_expiry: Time,
     ) -> Result<BlessedReplicaVersions, String> {
-        let key = make_blessed_replica_version_key();
-        let query = UserQuery {
-            source: UserId::from(PrincipalId::new_anonymous()),
-            receiver: REGISTRY_CANISTER_ID,
-            method_name: "get_value".to_string(),
-            method_payload: serialize_get_value_request(key.as_bytes().to_vec(), None)
-                .map_err(|err| format!("{}", err))?,
-            ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-            nonce: None,
-        };
-        match self.http_query_handler.query(
-            query,
-            self.state_manager.get_latest_state().take(),
-            Vec::new(),
-        ) {
-            Ok(wasm_result) => match wasm_result {
-                WasmResult::Reply(v) => {
-                    let bytes = deserialize_get_value_response(v)
-                        .map_err(|err| format!("{}", err))?
-                        .0;
-                    let record =
-                        deserialize_registry_value::<BlessedReplicaVersions>(Ok(Some(bytes)))
-                            .map_err(|err| format!("{}", err))?
-                            .expect("BlessedReplicaVersions does not exist");
-                    Ok(record)
-                }
-                WasmResult::Reject(e) => Err(format!("Query rejected: {}", e)),
-            },
-            Err(err) => Err(format!("Query failed: {:?}", err)),
-        }
+        self.certify_state_with_dummy_certification();
+        let perform_query = Arc::new(Mutex::new(self.query_handler.clone()));
+        self.runtime.block_on(registry_get_value(
+            &make_blessed_replica_versions_key(),
+            ingress_expiry,
+            &perform_query,
+        ))
     }
 
     /// Return the latest registry version by querying the registry canister.
@@ -705,26 +899,37 @@ impl Player {
         &self,
         ingress_expiry: Time,
     ) -> Result<RegistryVersion, String> {
-        let query = UserQuery {
-            source: UserId::from(PrincipalId::new_anonymous()),
+        let query = Query {
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::new_anonymous()),
+                ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+                nonce: None,
+                sender_info: None,
+            },
             receiver: REGISTRY_CANISTER_ID,
             method_name: "get_latest_version".to_string(),
             method_payload: Vec::new(),
-            ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-            nonce: None,
         };
-        match self.http_query_handler.query(
+        self.certify_state_with_dummy_certification();
+        let input = QueryExecutionInput {
             query,
-            self.state_manager.get_latest_state().take(),
-            Vec::new(),
-        ) {
-            Ok(wasm_result) => match wasm_result {
+            certificate_delegation_with_metadata: None,
+        };
+        match self
+            .runtime
+            .block_on(self.query_handler.clone().oneshot(input))
+            .unwrap()
+        {
+            Ok((Ok(wasm_result), _)) => match wasm_result {
                 WasmResult::Reply(v) => deserialize_get_latest_version_response(v)
                     .map(RegistryVersion::from)
-                    .map_err(|err| format!("{}", err)),
-                WasmResult::Reject(e) => Err(format!("Query rejected: {}", e)),
+                    .map_err(|err| format!("{err}")),
+                WasmResult::Reject(e) => Err(format!("Query rejected: {e}")),
             },
-            Err(err) => Err(format!("Failed run query: {:?}", err)),
+            Ok((Err(err), _)) => Err(format!("Query failed: {err:?}")),
+            Err(QueryExecutionError::CertifiedStateUnavailable) => {
+                panic!("Certified state unavailable for query call.")
+            }
         }
     }
 
@@ -739,69 +944,27 @@ impl Player {
         &self,
         version: u64,
         ingress_expiry: Time,
-    ) -> Result<Vec<RegistryTransportRecord>, String> {
-        let payload = serialize_get_changes_since_request(version).unwrap();
-        let query = UserQuery {
-            source: UserId::from(PrincipalId::new_anonymous()),
-            receiver: REGISTRY_CANISTER_ID,
-            method_name: "get_changes_since".to_string(),
-            method_payload: payload,
-            ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-            nonce: None,
-        };
-        match self.http_query_handler.query(
-            query,
-            self.state_manager.get_latest_state().take(),
-            Vec::new(),
-        ) {
-            Ok(wasm_result) => match wasm_result {
-                WasmResult::Reply(v) => deserialize_get_changes_since_response(v)
-                    .and_then(|(deltas, _)| registry_deltas_to_registry_transport_records(deltas))
-                    .map_err(|err| format!("{:?}", err)),
-                WasmResult::Reject(e) => Err(format!("Query rejected: {}", e)),
-            },
-            Err(err) => Err(format!("Failed run query: {:?}", err)),
-        }
+    ) -> Result<Vec<RegistryRecord>, String> {
+        self.certify_state_with_dummy_certification();
+
+        let perform_query = Arc::new(Mutex::new(self.query_handler.clone()));
+        self.runtime
+            .block_on(get_changes_since(version, ingress_expiry, &perform_query))
     }
 
     /// Return the SubnetRecord of this subnet at the latest registry version.
     pub fn get_subnet_record(&self, ingress_expiry: Time) -> Result<SubnetRecord, String> {
-        let subnet_record_key = make_subnet_record_key(self.subnet_id);
-        let query = UserQuery {
-            source: UserId::from(PrincipalId::new_anonymous()),
-            receiver: REGISTRY_CANISTER_ID,
-            method_name: "get_value".to_string(),
-            method_payload: serialize_get_value_request(
-                subnet_record_key.as_bytes().to_vec(),
-                None,
-            )
-            .map_err(|err| format!("{}", err))?,
-            ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-            nonce: None,
-        };
-        match self.http_query_handler.query(
-            query,
-            self.state_manager.get_latest_state().take(),
-            Vec::new(),
-        ) {
-            Ok(wasm_result) => match wasm_result {
-                WasmResult::Reply(v) => {
-                    let bytes = deserialize_get_value_response(v)
-                        .map_err(|err| format!("{}", err))?
-                        .0;
-                    let record = deserialize_registry_value::<SubnetRecord>(Ok(Some(bytes)))
-                        .map_err(|err| format!("{}", err))?
-                        .expect("SubnetRecord does not exist");
-                    Ok(record)
-                }
-                WasmResult::Reject(e) => Err(format!("Query rejected: {}", e)),
-            },
-            Err(err) => Err(format!("Failed run query: {:?}", err)),
-        }
+        self.certify_state_with_dummy_certification();
+        let perform_query = Arc::new(Mutex::new(self.query_handler.clone()));
+        self.runtime.block_on(registry_get_value(
+            &make_subnet_record_key(self.subnet_id),
+            ingress_expiry,
+            &perform_query,
+        ))
     }
 
     /// Restores the execution state starting from the given height.
-    pub fn restore(&mut self, start_height: u64) -> ReplayResult {
+    pub(crate) fn restore_from_backup(&mut self, start_height: u64) -> ReplayResult {
         let target_height = self.replay_target_height.map(Height::from);
         let backup_dir = self
             .backup_dir
@@ -811,13 +974,20 @@ impl Player {
         let start_height = Height::from(start_height);
         let mut height_to_batches =
             backup::heights_to_artifacts_metadata(&backup_dir, start_height)
-                .unwrap_or_else(|err| panic!("File scanning failed: {:?}", err));
+                .unwrap_or_else(|err| panic!("File scanning failed: {err:?}"));
         println!(
-            "Restoring the replica state of subnet {:?} starting from the height {:?}",
-            backup_dir, start_height
+            "Restoring the replica state of subnet {backup_dir:?} starting from the height {start_height:?}"
         );
+
         // Assert consistent initial state
-        self.verify_latest_cup()?;
+        if let Err(err) = self.verify_latest_cup() {
+            if let ReplayError::CUPVerificationFailed(height) = err {
+                let file = cup_file_name(&backup_dir, height);
+                println!("Invalid CUP detected: {file:?}");
+                rename_file(&file);
+            }
+            return Err(err);
+        }
 
         let mut dkg_manager = self
             .validator
@@ -830,42 +1000,63 @@ impl Player {
         loop {
             let result = backup::deserialize_consensus_artifacts(
                 self.registry.clone(),
+                self.crypto.clone(),
                 self.consensus_pool.as_mut().unwrap(),
                 &mut height_to_batches,
                 self.subnet_id,
-                self.state_manager.latest_state_height(),
                 self.validator.as_ref().unwrap(),
                 &mut dkg_manager,
                 &mut invalid_artifacts,
             );
 
+            // We don't want to replay heights strictly above the next CUP.
+            let replay_target_height = match result {
+                Err(backup::ExitPoint::CUPHeightWasFinalized(cup_height)) => {
+                    Some(target_height.unwrap_or(cup_height).min(cup_height))
+                }
+                _ => target_height,
+            };
+
             let last_batch_height = self.deliver_batches(
                 self.message_routing.as_ref(),
                 &PoolReader::new(self.consensus_pool.as_ref().unwrap()),
-                self.replay_target_height.map(Height::from),
+                self.membership.as_ref().unwrap(),
+                replay_target_height,
             );
             self.wait_for_state(last_batch_height);
-            if let Some(height) = target_height {
-                if last_batch_height >= height {
-                    println!("Target height {} reached.", height);
-                    return Ok(self.get_latest_state_params(None, invalid_artifacts));
-                }
+            if let Some(height) = target_height
+                && last_batch_height >= height
+            {
+                println!("Target height {height} reached.");
+                return Ok(self.get_latest_state_params(None, invalid_artifacts));
             }
 
             match result {
                 // Since the pool cache assumes we always have at most one CUP inside the pool,
                 // we should deliver all batches before inserting a new CUP into the pool.
-                backup::ExitPoint::CUPHeightWasFinalized(cup_height) => {
+                Err(backup::ExitPoint::CUPHeightWasFinalized(cup_height)) => {
+                    info!(
+                        self.log,
+                        "Loading the CUP at height {cup_height} from the disk, \
+                        adding it to the consensus pool, and validating it"
+                    );
                     backup::insert_cup_at_height(
                         self.consensus_pool.as_mut().unwrap(),
                         &backup_dir,
                         cup_height,
-                    );
-                    self.assert_consistency_and_clean_up()?;
+                    )?;
+                    if let Err(err) = self.assert_consistency_and_clean_up() {
+                        if let ReplayError::CUPVerificationFailed(height) = err {
+                            let file = cup_file_name(&backup_dir, height);
+                            error!(self.log, "Invalid CUP detected: {}", file.display());
+                            rename_file(&file);
+                        }
+                        return Err(err);
+                    }
                 }
                 // When we run into an NNS block referencing a newer registry version, we need to dump
                 // all changes from the registry canister into the local store and apply them.
-                backup::ExitPoint::NewerRegistryVersion(new_version) => {
+                Err(backup::ExitPoint::NewerRegistryVersion(new_version)) => {
                     self.update_registry_local_store();
                     self.registry
                         .poll_once()
@@ -873,70 +1064,72 @@ impl Player {
                     assert!(
                         self.registry.get_latest_version() >= new_version,
                         "The registry client couldn't be updated to version {:?} (highest available version is {:?})",
-                        new_version, self.registry.get_latest_version()
+                        new_version,
+                        self.registry.get_latest_version()
                     );
                     println!("Updated the registry.");
                 }
-                backup::ExitPoint::StateBehind(certified_height) => {
-                    assert!(
-                        certified_height <= self.state_manager.latest_state_height(),
-                        "The state manager didn't catch up with the expected certified height"
+                Err(backup::ExitPoint::ValidationIncomplete(last_validated_height)) => {
+                    println!(
+                        "Validation of artifacts at height {last_validated_height:?} is not complete"
                     );
-                    self.state_manager.remove_states_below(certified_height);
+                    return Err(ReplayError::ValidationIncomplete(
+                        last_validated_height,
+                        invalid_artifacts,
+                    ));
                 }
-                backup::ExitPoint::Done => {
+                Ok(_) => {
                     println!(
                         "Restored the state at the height {:?}",
                         self.state_manager.latest_state_height()
                     );
                     return Ok(self.get_latest_state_params(None, invalid_artifacts));
                 }
-                backup::ExitPoint::ValidationIncomplete(last_validated_height) => {
-                    return Err(ReplayError::ValidationIncomplete(
-                        last_validated_height,
-                        invalid_artifacts,
-                    ));
-                }
             }
         }
     }
 
-    // Checks that the restored catch-up package contains the same state hash as
-    // the one computed by the state manager from the restored artifacts and drops
-    // all states below the last CUP.
+    /// Checks that the restored catch-up package contains the same state hash as
+    /// the one computed by the state manager from the restored artifacts and drops
+    /// all states below the last CUP.
     fn assert_consistency_and_clean_up(&mut self) -> Result<StateParams, ReplayError> {
         self.verify_latest_cup()?;
         let params = self.get_latest_state_params(None, Vec::new());
         let pool = self.consensus_pool.as_mut().expect("no consensus_pool");
         let cache = pool.get_cache();
         let purge_height = cache.catch_up_package().height();
-        println!("Removing all states below height {:?}", purge_height);
+        info!(self.log, "Removing all states below height {purge_height}");
         self.state_manager.remove_states_below(purge_height);
-        use ic_interfaces::{
-            consensus_pool::{ChangeAction, MutableConsensusPool},
-            time_source::SysTimeSource,
-        };
-        pool.apply_changes(
-            &SysTimeSource::new(),
-            ChangeAction::PurgeValidatedBelow(purge_height).into(),
-        );
+        use ic_interfaces::{consensus_pool::ChangeAction, p2p::consensus::MutablePool};
+        pool.apply(ChangeAction::PurgeValidatedBelow(purge_height).into());
         Ok(params)
     }
 
-    fn get_latest_cup(&self) -> CUPWithOriginalProtobuf {
+    fn get_latest_cup(&self) -> CatchUpPackage {
         let pool = self
             .consensus_pool
             .as_ref()
             .expect("no consensus_pool")
             .get_cache();
-        pool.cup_with_protobuf()
+        pool.catch_up_package()
+    }
+
+    fn get_latest_cup_proto(&self) -> pb::CatchUpPackage {
+        let pool = self
+            .consensus_pool
+            .as_ref()
+            .expect("no consensus_pool")
+            .get_cache();
+        pool.cup_as_protobuf()
     }
 
     /// Checks that the catch-up package inside the consensus pool contains the same state hash as
     /// the one computed by the state manager. Additionally, it verifies the CUP's signature.
     pub fn verify_latest_cup(&self) -> Result<(), ReplayError> {
-        let last_cup_with_proto = self.get_latest_cup();
-        let last_cup = last_cup_with_proto.cup;
+        let last_cup = self.get_latest_cup();
+        let protobuf = self.get_latest_cup_proto();
+
+        info!(self.log, "Verifying CUP at height {}", last_cup.height());
 
         // We cannot verify the genesis CUP with this subnet's public key. And there is no state.
         if last_cup.height() == Height::from(0) {
@@ -944,37 +1137,48 @@ impl Player {
         }
 
         // Verify the CUP signature.
-        let protobuf = last_cup_with_proto.protobuf;
-        let crypto =
-            ic_crypto::CryptoComponentFatClient::new_for_verification_only(self.registry.clone());
-        crypto
-            .verify_combined_threshold_sig_by_public_key(
-                &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature)),
-                &CatchUpContentProtobufBytes(protobuf.content),
-                self.subnet_id,
-                last_cup.content.block.get_value().context.registry_version,
-            )
-            .expect("Verification of the signature on the CUP failed");
+        if let Err(err) = self.crypto.verify_combined_threshold_sig_by_public_key(
+            &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature.clone())),
+            &CatchUpContentProtobufBytes::from(&protobuf),
+            self.subnet_id,
+            last_cup.content.block.get_value().context.registry_version,
+        ) {
+            error!(
+                self.log,
+                "Verification of the signature on the CUP failed: {:?}", err
+            );
+            return Err(ReplayError::CUPVerificationFailed(last_cup.height()));
+        }
 
         if last_cup.height() < self.state_manager.latest_state_height() {
             // In subnet recovery mode we persist states but do not create newer CUPs, hence we cannot
             // assume anymore that every CUP has a corresponding checkpoint. So if we know that the
             // latest checkpoint is above the latest CUP height, we should not compare state hashes.
+            info!(
+                self.log,
+                "The state height {} is strictly above the CUP height {}. \
+                Skipping the rest of CUP verification.",
+                self.state_manager.latest_state_height(),
+                last_cup.height()
+            );
             return Ok(());
         }
 
         // Verify state hash against the state hash in the CUP
-        if get_state_hash(&*self.state_manager, last_cup.height()).expect("No hash for CUP found")
+        if self
+            .get_state_hash(last_cup.height())
+            .expect("No state hash at a current CUP height found")
             != last_cup.content.state_hash
         {
-            println!(
-                "The state hash of the CUP at height {:?} differs from the local state's hash",
+            error!(
+                self.log,
+                "The state hash of the CUP at height {} differs from the local state's hash",
                 last_cup.height()
             );
             return Err(ReplayError::StateDivergence(last_cup.height()));
         }
 
-        match ic_consensus::consensus::utils::lookup_replica_version(
+        match lookup_replica_version(
             &*self.registry,
             self.subnet_id,
             &ic_logger::replica_logger::no_op_logger(),
@@ -983,7 +1187,8 @@ impl Player {
             Some(replica_version) if replica_version != self.replica_version => {
                 println!(
                     "⚠️  Please use the replay tool of version {} to continue backup recovery from height {:?}",
-                    replica_version, last_cup.height()
+                    replica_version,
+                    last_cup.height()
                 );
                 return Err(ReplayError::UpgradeDetected(
                     self.get_latest_state_params(None, Vec::new()),
@@ -994,12 +1199,372 @@ impl Player {
 
         Ok(())
     }
+
+    fn get_state_hash(&self, height: Height) -> Option<CryptoHashOfState> {
+        get_state_hash(self.state_manager.as_ref(), &self.log, height)
+    }
+}
+
+// This is just to avoid clippy complaints about complicated return type.
+pub type PerformQueryResult = Result<(Result<WasmResult, UserError>, Time), QueryExecutionError>;
+
+#[automock]
+#[async_trait]
+pub trait PerformQuery {
+    async fn perform_query(&self, query: Query) -> Result<PerformQueryResult, Infallible>;
+}
+
+#[async_trait]
+impl PerformQuery for Arc<Mutex<QueryExecutionService>> {
+    async fn perform_query(&self, query: Query) -> Result<PerformQueryResult, Infallible> {
+        let query_execution_service = self
+            .lock()
+            // In case of Mutex poisoning (as per usual).
+            .unwrap()
+            .clone();
+        let input = QueryExecutionInput {
+            query,
+            certificate_delegation_with_metadata: None,
+        };
+        query_execution_service.oneshot(input).await
+    }
+}
+
+pub async fn public_only_for_test_get_changes_since(
+    version: u64,
+    ingress_expiry: Time,
+    perform_query: &(impl PerformQuery + Sync),
+) -> Result<Vec<RegistryRecord>, String> {
+    get_changes_since(version, ingress_expiry, perform_query).await
+}
+
+async fn get_changes_since(
+    version: u64,
+    ingress_expiry: Time,
+    perform_query: &(impl PerformQuery + Sync),
+) -> Result<Vec<RegistryRecord>, String> {
+    let payload = serialize_get_changes_since_request(version).unwrap();
+    let query = Query {
+        source: QuerySource::User {
+            user_id: UserId::from(PrincipalId::new_anonymous()),
+            ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+            nonce: None,
+            sender_info: None,
+        },
+        receiver: REGISTRY_CANISTER_ID,
+        method_name: "get_changes_since".to_string(),
+        method_payload: payload,
+    };
+    match perform_query.perform_query(query).await.unwrap() {
+        Ok((Ok(wasm_result), _time)) => match wasm_result {
+            WasmResult::Reply(v) => {
+                let (high_capacity_deltas, _version) =
+                    deserialize_get_changes_since_response(v).map_err(|err| format!("{err:?}"))?;
+
+                // Dechunkify deltas.
+                let mut inlined_deltas = vec![];
+                for delta in high_capacity_deltas {
+                    let get_chunk = GetChunkImpl { perform_query };
+
+                    let delta = dechunkify_delta(delta, &get_chunk)
+                        .await
+                        .map_err(|err| format!("{err:?}"))?;
+
+                    inlined_deltas.push(delta);
+                }
+
+                registry_deltas_to_registry_records(inlined_deltas)
+                    .map_err(|err| format!("{err:?}"))
+            }
+
+            WasmResult::Reject(e) => Err(format!("Query rejected: {e}")),
+        },
+        Ok((Err(err), _)) => Err(format!("Query failed: {err:?}")),
+        Err(QueryExecutionError::CertifiedStateUnavailable) => {
+            Err("Certified state unavailable for query call.".to_string())
+        }
+    }
+}
+
+struct GetChunkImpl<'a, PerformQueryImpl: PerformQuery + Sync> {
+    perform_query: &'a PerformQueryImpl,
+}
+
+#[async_trait]
+impl<PerformQueryImpl: PerformQuery + Sync> GetChunk for GetChunkImpl<'_, PerformQueryImpl> {
+    async fn get_chunk_without_validation(
+        &self,
+        chunk_content_sha256: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        // Construct request.
+        let request = GetChunkRequest {
+            content_sha256: Some(chunk_content_sha256.to_vec()),
+        };
+        let request = Encode!(&request).map_err(|err| {
+            format!("Unable to call get_chunk, because unable to encode request: {err}")
+        })?;
+        let request = Query {
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::new_anonymous()),
+                ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
+                nonce: None,
+                sender_info: None,
+            },
+            receiver: REGISTRY_CANISTER_ID,
+            method_name: "get_chunk".to_string(),
+            method_payload: request,
+        };
+
+        // Send request.
+        let result = self.perform_query.perform_query(request).await.unwrap();
+
+        // Handle problems with sending.
+        let result = match result {
+            Ok((ok, _version)) => ok,
+            Err(QueryExecutionError::CertifiedStateUnavailable) => {
+                return Err(format!(
+                    "Certified state unavailable for Registry get_chunk query \
+                     call with key={:?}.",
+                    String::from_utf8_lossy(chunk_content_sha256),
+                ));
+            }
+        };
+
+        // Handle more problems...
+        let result: WasmResult = result.map_err(|err| format!("Query failed: {err:?}"))?;
+
+        // Handle canister replied vs. rejected.
+        let result: Vec<u8> = match result {
+            WasmResult::Reply(ok) => ok,
+            WasmResult::Reject(err) => {
+                return Err(format!("Query rejected: {err}"));
+            }
+        };
+
+        // Unpack reply.
+        let result = Decode!(&result, Result<Chunk, String>).map_err(|err| {
+            format!("Unable to decode get_chunk response from the Registry canister: {err}")
+        })?;
+        let Chunk { content } = result
+            .map_err(|err| format!("The Registry canister replied, but with an Err: {err}"))?;
+        let content = content.ok_or_else(|| {
+            "The Registry canister replied Ok, but did not include chunk content.".to_string()
+        })?;
+
+        // Nice reply!
+        Ok(content)
+    }
+}
+
+pub async fn public_only_for_test_registry_get_value<Record>(
+    key: &str,
+    ingress_expiry: Time,
+    perform_query: &(impl PerformQuery + Sync),
+) -> Result<Record, String>
+where
+    Record: RegistryValue + Default,
+{
+    registry_get_value(key, ingress_expiry, perform_query).await
+}
+
+async fn registry_get_value<Record>(
+    key: &str,
+    ingress_expiry: Time,
+    perform_query: &(impl PerformQuery + Sync),
+) -> Result<Record, String>
+where
+    Record: RegistryValue + Default,
+{
+    // Construct request.
+    let method_payload = serialize_get_value_request(
+        key.as_bytes().to_vec(),
+        None, // latest version
+    )
+    .map_err(|err| format!("Failed to serialize get_value request where key={key}: {err}",))?;
+    let query = Query {
+        source: QuerySource::User {
+            user_id: UserId::from(PrincipalId::new_anonymous()),
+            ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+            nonce: None,
+            sender_info: None,
+        },
+        receiver: REGISTRY_CANISTER_ID,
+        method_name: "get_value".to_string(),
+        method_payload,
+    };
+
+    // Call the Registry canister's get_value method.
+    let perform_query_result = perform_query.perform_query(query).await.unwrap();
+
+    // Handle no reply.
+    let reply: Vec<u8> = match perform_query_result {
+        Ok((Ok(WasmResult::Reply(reply)), _)) => reply,
+        garbage => {
+            return Err(format!(
+                "Did not get reply from Registry get_value call where key={key}: {garbage:?}",
+            ));
+        }
+    };
+
+    // Unpack reply.
+    let reply = deserialize_get_value_response(reply).map_err(|err| {
+        format!(
+            "Unable to deserialize the reply from a Registry canister get_value \
+             method call where key={key}: {err:?}",
+        )
+    })?;
+    let Some(content) = reply.content else {
+        return Err(format!(
+            "Got a reply from Registry to get_value call, and was able to \
+             deserialize it, but no content field was populated. key={key}",
+        ));
+    };
+    let get_chunk = GetChunkImpl { perform_query };
+    let record: Vec<u8> = dechunkify_get_value_response_content(content, &get_chunk)
+        .await
+        .map_err(|err| {
+            format!("Unable to dechunkify get_value response where key={key}: {err:?}",)
+        })?;
+    let record: Record = deserialize_registry_value::<Record>(Ok(Some(record)))
+        .map_err(|err| {
+            format!("Failed to deserialize content of Registry record with key={key}: {err}",)
+        })?
+        .ok_or_else(|| format!("Registry key {key} does not exist"))?;
+
+    // Nice reply!
+    Ok(record)
+}
+
+/// Return the set of signers that created multiple valid certification shares for the same height
+fn find_malicious_nodes(
+    certification_pool: &CertificationPoolImpl,
+    latest_cup_height: Height,
+    verify: &dyn Fn(&CertificationShare) -> bool,
+) -> HashSet<NodeId> {
+    let mut malicious = HashSet::new();
+    if let Some(range) = certification_pool
+        .validated
+        .certification_shares()
+        .height_range()
+    {
+        // Do not try to verify shares below the CUP height
+        // They are not needed and we may not have the key material to do so
+        let min = std::cmp::max(range.min.get(), latest_cup_height.get());
+
+        for h in min..=range.max.get() {
+            let shares = certification_pool
+                .shares_at_height(Height::from(h))
+                .filter(verify)
+                .map(|s| (s.signed.content, s.signed.signature.signer))
+                .collect::<HashSet<_>>();
+            let signers =
+                shares
+                    .into_iter()
+                    .map(|(_, signer)| signer)
+                    .fold(HashMap::new(), |mut acc, s| {
+                        acc.entry(s).and_modify(|e| *e += 1).or_insert(1);
+                        acc
+                    });
+            signers
+                .into_iter()
+                .filter(|(_, c)| *c > 1)
+                .for_each(|(s, c)| {
+                    println!(
+                        "Node {s} created {c} shares for height {h}. Ignoring all of its shares."
+                    );
+                    malicious.insert(s);
+                });
+        }
+    }
+    malicious
+}
+
+// Find all certification shares at the given heights and count which hashes occurred how many times. Shares created
+// by malicious nodes (those creating more than one share for the same height) are ignored while counting.
+//
+// This is necessary in order to detect non-determinism:
+// Consider a subnet of size n=3f+1. Suppose f+1 honest nodes agree on one execution path, while the
+// remaining f honest nodes as well as the ic-replay tool agree on a different second path. Moreover,
+// suppose that f-2 bad nodes are unreachable, while the two reachable bad nodes pretend to follow the
+// second path. Note that an adversary would be able to create a certification for the first path from
+// the f+1 honest certification shares and the f nodes that he controls.
+//
+// For that reason, after counting certification shares, there are three possible actions:
+// 1. If there is no hash with f+1 or more certification shares, continue with the next height.
+// 2. If there is exactly one hash with f+1 or more certification shares, ensure that it matches the locally
+//    computed one, otherwise indicate that manual inspection is required.
+// 3. If there are multiple hashes with f+1 or more certification shares, then there is no perfect way to choose
+//    the correct state. Return that manual inspection is required. During this inspection:
+//    a) Repetitively run the ic-replay tool to produce full states for all hashes with f+1 or more shares.
+//    b) Inspect how these states differ, estimate how bad it would be if certifications for all of them were issued.
+//    c) Decide which of both states is "preferable" to continue the subnet from and recover the subnet from there.
+fn is_manual_share_investigation_required(
+    certification_pool: &CertificationPoolImpl,
+    malicious_nodes: &HashSet<NodeId>,
+    height: Height,
+    computed_hash: CryptoHashOfPartialState,
+    f: usize,
+) -> bool {
+    println!("{height}: {computed_hash:?}");
+    let certified_hashes =
+        get_share_certified_hashes(height, f, certification_pool, malicious_nodes);
+    match &certified_hashes[..] {
+        [share_hash] => {
+            println!("Found enough shares to produce ONE valid certification.");
+            if &computed_hash != share_hash {
+                println!("Hash mismatch! State divergence detected for outstanding shares!");
+            } else {
+                println!("Produced state hash matches certification shares!");
+            }
+            &computed_hash != share_hash
+        }
+        [] => false,
+        other => {
+            println!(
+                "Found {} different hashes with enough shares to produce valid certifications, investigate manually!",
+                other.len()
+            );
+            true
+        }
+    }
+}
+
+/// Return state hashes for the given height with at least f + 1 valid shares, excluding shares
+/// created by malicious nodes.
+fn get_share_certified_hashes(
+    height: Height,
+    f: usize,
+    certification_pool: &CertificationPoolImpl,
+    malicious_nodes: &HashSet<NodeId>,
+) -> Vec<CryptoHashOfPartialState> {
+    let shares = certification_pool
+        .shares_at_height(height)
+        .filter(|c| !malicious_nodes.contains(&c.signed.signature.signer))
+        .map(|s| (s.signed.content, s.signed.signature.signer))
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .map(|(content, _)| content.hash);
+
+    let counter = shares.fold(HashMap::new(), |mut acc, hash| {
+        acc.entry(hash).and_modify(|e| *e += 1).or_insert(1);
+        acc
+    });
+
+    if !counter.is_empty() {
+        println!("Number of unique shares per hash at this height: {counter:#?}");
+    }
+
+    // Only keep hashes with at least f+1 shares
+    counter
+        .into_iter()
+        .filter_map(|(k, v)| (v > f).then_some(k))
+        .collect::<Vec<_>>()
 }
 
 fn write_records_to_local_store(
     local_store_path: &Path,
     latest_version: RegistryVersion,
-    mut records: Vec<RegistryTransportRecord>,
+    mut records: Vec<RegistryRecord>,
 ) {
     let local_store = LocalStoreImpl::new(local_store_path);
     println!(
@@ -1025,7 +1590,7 @@ fn write_records_to_local_store(
         .enumerate()
         .try_for_each(|(i, cle)| {
             let v = latest_version + RegistryVersion::from(i as u64 + 1);
-            println!("Writing data of registry version {}", v);
+            println!("Writing data of registry version {v}");
             local_store.store(v, cle)
         })
         .expect("Writing to the file system failed: Stop.");
@@ -1035,43 +1600,461 @@ fn setup_registry(
     config: Config,
     metrics_registry: Option<&MetricsRegistry>,
 ) -> std::sync::Arc<RegistryClientImpl> {
-    let data_provider = match config
-        .registry_client
-        .data_provider
-        .expect("Data provider required")
-    {
-        DataProviderConfig::LocalStore(path) => Arc::new(LocalStoreImpl::new(path)),
-    };
+    let data_provider = Arc::new(LocalStoreImpl::new(config.registry_client.local_store));
 
     let registry = Arc::new(RegistryClientImpl::new(data_provider, metrics_registry));
     if let Err(e) = registry.fetch_and_start_polling() {
-        panic!("fetch_and_start_polling failed: {}", e);
+        panic!("fetch_and_start_polling failed: {e}");
     }
     registry
 }
 
-// Returns the state hash for the given height once it is computed. For non-checkpoints heights
-// `None` is returned.
+/// Returns the state hash for the given height once it is computed. For non-checkpoints heights
+/// [`None`] is returned.
+///
+/// Panicks when a permanent error other than `StateNotFullyCertified` is returned.
 fn get_state_hash<T>(
-    state_manager: &dyn StateManager<State = T>,
+    state_manager: &impl StateManager<State = T>,
+    log: &ReplicaLogger,
     height: Height,
 ) -> Option<CryptoHashOfState> {
+    info!(log, "Polling the state manager for height: {height}.");
+
     loop {
         match state_manager.get_state_hash_at(height) {
             Ok(hash) => return Some(hash),
             Err(StateHashError::Transient(err)) => {
-                println!("Waiting for state hash: {:?}", err);
+                warn!(
+                    log,
+                    "Waiting for state hash: {}. Retrying in {} seconds.",
+                    err,
+                    STATE_HASH_BACKOFF_DURATION.as_secs_f32()
+                );
             }
             // This only happens for partially certified heights.
             Err(StateHashError::Permanent(PermanentStateHashError::StateNotFullyCertified(h)))
                 if h == height =>
             {
-                return None
+                warn!(
+                    log,
+                    "State manager returned a `StateNotFullyCertified` error at height {height}. \
+                    Returning None."
+                );
+                return None;
             }
             Err(err) => {
-                panic!("State computation failed: {:?}", err)
+                panic!("State hash computation failed: {err}")
             }
         }
-        std::thread::sleep(WAIT_DURATION);
+
+        std::thread::sleep(STATE_HASH_BACKOFF_DURATION);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ic_crypto_sha2::Sha256;
+    use ic_crypto_tree_hash::{Digest, Witness};
+    use ic_interfaces_state_manager::TransientStateHashError;
+    use ic_interfaces_state_manager_mocks::MockStateManager;
+    use ic_logger::replica_logger::no_op_logger;
+    use ic_registry_canister_api::{Chunk, GetChunkRequest};
+    use ic_registry_transport::pb::v1::{
+        HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
+        HighCapacityRegistryValue, LargeValueChunkKeys, high_capacity_registry_value,
+    };
+    use ic_test_utilities_consensus::fake::FakeSigner;
+    use ic_test_utilities_types::ids::node_test_id;
+    use ic_types::{
+        consensus::certification::{
+            CertificationContent, CertificationMessage, CertificationShare,
+        },
+        crypto::{CryptoHash, Signed},
+        signature::ThresholdSignatureShare,
+    };
+    use pretty_assertions::assert_eq;
+    use prost::Message;
+    use std::time::SystemTime;
+
+    use super::*;
+
+    fn make_share(height: u64, hash: Vec<u8>, node_id: u64) -> CertificationMessage {
+        CertificationMessage::CertificationShare(CertificationShare {
+            height: Height::from(height),
+            height_witness: Witness::new_for_testing(Digest([0; 32])),
+            signed: Signed {
+                content: CertificationContent::new(CryptoHash(hash).into()),
+                signature: ThresholdSignatureShare::fake(node_test_id(node_id)),
+            },
+        })
+    }
+
+    #[test]
+    fn test_get_share_certified_hashes() {
+        let tmp = tempfile::tempdir().expect("Could not create a temp dir");
+        let pool = CertificationPoolImpl::new(
+            node_test_id(0),
+            ArtifactPoolConfig::new(tmp.path().to_path_buf()),
+            no_op_logger(),
+            MetricsRegistry::new(),
+        );
+        let verify = |_: &CertificationShare| true;
+        let f = 2;
+
+        // Node 7 is malicious and creates multiple shares for height 3. All of its shares should be ignored.
+        let shares = vec![
+            // Height 1:
+            // 3 shares for hash "1"
+            make_share(1, vec![1], 1),
+            make_share(1, vec![1], 2),
+            make_share(1, vec![1], 3),
+            // 3 shares for hash "2", but one of them is from malicious node 7
+            // (should be ignored)
+            make_share(1, vec![2], 4),
+            make_share(1, vec![2], 5),
+            make_share(1, vec![2], 7),
+            // Height 2:
+            // 1 share for hash "2"
+            make_share(2, vec![2], 5),
+            // Height 3:
+            // 3 shares for hash "1"
+            make_share(3, vec![1], 1),
+            make_share(3, vec![1], 2),
+            make_share(3, vec![1], 3),
+            // 4 shares for hash "2"
+            make_share(3, vec![2], 4),
+            make_share(3, vec![2], 5),
+            make_share(3, vec![2], 6),
+            make_share(3, vec![2], 7),
+            // 1 share for hash "3" by malicious node 7
+            make_share(3, vec![3], 7),
+        ];
+
+        shares.into_iter().for_each(|s| pool.validated.insert(s));
+
+        let malicious = find_malicious_nodes(&pool, Height::new(0), &verify);
+        assert_eq!(malicious.len(), 1);
+        assert_eq!(*malicious.iter().next().unwrap(), node_test_id(7));
+
+        let hashes = get_share_certified_hashes(Height::from(1), f, &pool, &malicious);
+        assert_eq!(hashes.len(), 1);
+        assert_eq!(hashes[0].get_ref().0, vec![1]);
+        assert!(!is_manual_share_investigation_required(
+            &pool,
+            &malicious,
+            Height::from(1),
+            CryptoHash(vec![1]).into(),
+            f
+        ));
+        assert!(is_manual_share_investigation_required(
+            &pool,
+            &malicious,
+            Height::from(1),
+            CryptoHash(vec![2]).into(),
+            f
+        ));
+
+        let hashes = get_share_certified_hashes(Height::from(2), f, &pool, &malicious);
+        assert!(!is_manual_share_investigation_required(
+            &pool,
+            &malicious,
+            Height::from(2),
+            CryptoHash(vec![1]).into(),
+            f
+        ));
+        assert!(hashes.is_empty());
+
+        let hashes = get_share_certified_hashes(Height::from(3), f, &pool, &malicious);
+        assert_eq!(hashes.len(), 2);
+        assert_ne!(hashes[0], hashes[1]);
+        assert!(
+            hashes
+                .into_iter()
+                .map(|h| h.get().0)
+                .all(|h| h == vec![1] || h == vec![2])
+        );
+        assert!(is_manual_share_investigation_required(
+            &pool,
+            &malicious,
+            Height::from(3),
+            CryptoHash(vec![1]).into(),
+            f
+        ));
+        assert!(is_manual_share_investigation_required(
+            &pool,
+            &malicious,
+            Height::from(3),
+            CryptoHash(vec![2]).into(),
+            f
+        ));
+        assert!(is_manual_share_investigation_required(
+            &pool,
+            &malicious,
+            Height::from(3),
+            CryptoHash(vec![3]).into(),
+            f
+        ));
+    }
+
+    #[test]
+    fn get_state_hash_returns_the_correct_hash_test() {
+        let mut state_manager = MockStateManager::new();
+        state_manager
+            .expect_get_state_hash_at()
+            .return_once(move |_| Ok(fake_state_hash()));
+
+        let state_hash = get_state_hash(&state_manager, &no_op_logger(), Height::new(1));
+
+        assert_eq!(state_hash, Some(fake_state_hash()));
+    }
+
+    #[test]
+    fn get_state_hash_retries_on_transient_errors_test() {
+        let mut counter = 0;
+        let mut state_manager = MockStateManager::new();
+        state_manager
+            .expect_get_state_hash_at()
+            .times(5)
+            .returning(move |_| {
+                counter += 1;
+                if counter < 5 {
+                    Err(StateHashError::Transient(
+                        TransientStateHashError::StateNotCommittedYet(Height::new(1)),
+                    ))
+                } else {
+                    Ok(fake_state_hash())
+                }
+            });
+
+        let state_hash = get_state_hash(&state_manager, &no_op_logger(), Height::new(1));
+
+        assert!(state_hash.is_some());
+    }
+
+    #[test]
+    #[should_panic(expected = "State hash computation failed")]
+    fn get_state_hash_panics_on_permanent_error_test() {
+        let mut state_manager = MockStateManager::new();
+        state_manager.expect_get_state_hash_at().return_once(|_| {
+            Err(StateHashError::Permanent(
+                PermanentStateHashError::StateRemoved(Height::new(1)),
+            ))
+        });
+
+        get_state_hash(&state_manager, &no_op_logger(), Height::new(1));
+    }
+
+    fn fake_state_hash() -> CryptoHashOfState {
+        CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))
+    }
+
+    // This test is maybe a bit of a mockery. Realistic testing is hard...
+    #[tokio::test]
+    async fn test_get_changes_since() {
+        // Step 1: Prepare the world.
+        //
+        // This almost entirely consists of expecting that various Registry
+        // canister methods are called. More precisely, the following calls are
+        // supposed to be made by the code under test:
+        //
+        //     1. get_changes_since - This is the main thing, ofc.
+        //
+        //     2. A couple of get_chunk calls. These are to fetch the content of
+        //        larger records received during the first call.
+        const VERSION: u64 = 42;
+        let ingress_expiry = expiry_time_from_now();
+
+        type ExpectedCall = (
+            /* method_name: */ &'static str,
+            /* request: */ Vec<u8>,
+            /* reply: */ Vec<u8>,
+        );
+        let expected_registry_canister_method_calls: [ExpectedCall; 3] = [
+            (
+                "get_changes_since",
+                serialize_get_changes_since_request(VERSION).unwrap(),
+                HighCapacityRegistryGetChangesSinceResponse {
+                    version: VERSION,
+                    deltas: vec![
+                        HighCapacityRegistryDelta {
+                            key: b"at one point had a large value".to_vec(),
+                            values: vec![
+                                HighCapacityRegistryValue {
+                                    version: 43,
+                                    content: Some(high_capacity_registry_value::Content::Value(
+                                        b"inline".to_vec(),
+                                    )),
+                                    timestamp_nanoseconds: 0,
+                                },
+                                HighCapacityRegistryValue {
+                                    version: 44,
+                                    content: Some(
+                                        high_capacity_registry_value::Content::LargeValueChunkKeys(
+                                            LargeValueChunkKeys {
+                                                chunk_content_sha256s: vec![
+                                                    Sha256::hash(b"first".as_ref()).to_vec(),
+                                                    Sha256::hash(b"second".as_ref()).to_vec(),
+                                                ],
+                                            },
+                                        ),
+                                    ),
+                                    timestamp_nanoseconds: 0,
+                                },
+                                HighCapacityRegistryValue {
+                                    version: 45,
+                                    content: Some(
+                                        high_capacity_registry_value::Content::DeletionMarker(true),
+                                    ),
+                                    timestamp_nanoseconds: 0,
+                                },
+                            ],
+                        },
+                        HighCapacityRegistryDelta {
+                            key: b"boring".to_vec(),
+                            values: vec![
+                                HighCapacityRegistryValue {
+                                    version: 43,
+                                    content: Some(high_capacity_registry_value::Content::Value(
+                                        b"herp".to_vec(),
+                                    )),
+                                    timestamp_nanoseconds: 0,
+                                },
+                                HighCapacityRegistryValue {
+                                    version: 50,
+                                    content: Some(high_capacity_registry_value::Content::Value(
+                                        b"derp".to_vec(),
+                                    )),
+                                    timestamp_nanoseconds: 0,
+                                },
+                            ],
+                        },
+                    ],
+                    error: None,
+                }
+                .encode_to_vec(),
+            ),
+            (
+                "get_chunk",
+                Encode!(&GetChunkRequest {
+                    content_sha256: Some(Sha256::hash(b"first".as_ref()).to_vec()),
+                })
+                .unwrap(),
+                {
+                    let result: Result<Chunk, String> = Ok(Chunk {
+                        content: Some(b"first".to_vec()),
+                    });
+                    Encode!(&result).unwrap()
+                },
+            ),
+            (
+                "get_chunk",
+                Encode!(&GetChunkRequest {
+                    content_sha256: Some(Sha256::hash(b"second".as_ref()).to_vec()),
+                })
+                .unwrap(),
+                {
+                    let result: Result<Chunk, String> = Ok(Chunk {
+                        content: Some(b"second".to_vec()),
+                    });
+                    Encode!(&result).unwrap()
+                },
+            ),
+        ];
+
+        let mut perform_query = MockPerformQuery::new();
+        for (i, (method_name, request, reply)) in expected_registry_canister_method_calls
+            .into_iter()
+            .enumerate()
+        {
+            perform_query
+                .expect_perform_query()
+                .withf(move |observed_query| {
+                    // Extract ingress_expiry from observed_query.
+                    let QuerySource::User {
+                        ingress_expiry: observed_ingress_expiry,
+                        ..
+                    } = &observed_query.source
+                    else {
+                        println!("{i}th query NOT a User QuerySource.");
+                        return false;
+                    };
+                    // ingress_expiry is a number of nanoseconds since the UNIX Epoch.
+                    let observed_ingress_expiry: u64 = *observed_ingress_expiry;
+
+                    // Assert that observed ingress_expiry is within the next 5 minutes.
+                    let now = Time::try_from(SystemTime::now())
+                        .unwrap()
+                        .as_nanos_since_unix_epoch();
+                    let ok = now < observed_ingress_expiry
+                        && observed_ingress_expiry < now + 5 * 60 * 1_000_000_000;
+                    if !ok {
+                        println!(
+                            "Bad ingress expiry in {i}th call to {method_name}: {observed_ingress_expiry}",
+                        );
+                        return false;
+                    }
+
+                    let expected_query = Query {
+                        source: QuerySource::User {
+                            user_id: UserId::from(PrincipalId::new_anonymous()),
+                            ingress_expiry: observed_ingress_expiry,
+                            nonce: None,
+                            sender_info: None,
+                        },
+                        receiver: REGISTRY_CANISTER_ID,
+                        method_name: method_name.to_string(),
+                        method_payload: request.clone(),
+                    };
+
+                    observed_query == &expected_query
+                })
+                .times(1)
+                .returning(move |_query| {
+                    // Yo, dawg. I heard you like Results.
+                    Ok(Ok((
+                        Ok(WasmResult::Reply(reply.clone())),
+                        Time::try_from(SystemTime::now()).unwrap(),
+                    )))
+                });
+        }
+
+        // Step 2: Run code under test (finally!).
+
+        let result = get_changes_since(VERSION, ingress_expiry, &perform_query).await;
+
+        // Step 3: Verify result(s).
+
+        assert_eq!(
+            result,
+            Ok(vec![
+                RegistryRecord {
+                    key: "at one point had a large value".to_string(),
+                    value: Some(b"inline".to_vec()),
+                    version: RegistryVersion::from(43),
+                },
+                RegistryRecord {
+                    key: "boring".to_string(),
+                    value: Some(b"herp".to_vec()),
+                    version: RegistryVersion::from(43),
+                },
+                // This is the most interesting one. This shows that monolithic
+                // blob reconstitution worked the way it's supposed to.
+                RegistryRecord {
+                    key: "at one point had a large value".to_string(),
+                    value: Some(b"firstsecond".to_vec()),
+                    version: RegistryVersion::from(44),
+                },
+                RegistryRecord {
+                    key: "at one point had a large value".to_string(),
+                    value: None,
+                    version: RegistryVersion::from(45),
+                },
+                RegistryRecord {
+                    key: "boring".to_string(),
+                    value: Some(b"derp".to_vec()),
+                    version: RegistryVersion::from(50),
+                },
+            ]),
+        );
     }
 }

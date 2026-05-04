@@ -1,0 +1,33 @@
+== SELinux
+
+SELinux is currently configured to run in enforcing mode for the sandbox and in permissive mode for the rest of the replica (Note: Technically, SELinux is running in enforcing mode, but only the sandbox has a written-out policy. Most other domains are marked as "permissive").
+
+This means that the SELinux policy is enforced only for the sandbox, and just used to monitor and log access requests on the rest of the replica.
+This approach allows us to secure the sandbox while observing how SELinux would behave under enforcing mode on the rest of the replica without actually denying access.
+
+To develop a robust SELinux policy, we need to understand all the actions a service may require and include the necessary permissions in the policy.
+Over time, we will continue refining the SELinux policy until no services violate it.
+Once achieved, we will run the entire replica in enforcing mode.
+
+== Technical details
+
+The system will (eventually) run SELinux in enforcing mode for security. This
+requires that all system objects including all files on filesystems are
+labelled appropriately. The "usual" way of setting up such a system is
+to run it in "permissive" mode first on top of an (SELinux-less) base
+install, however this would not work for our cases as we never want the
+system to be in anything else than "enforcing" mode (similarly as for
+embedded systems in general).
+
+Instead, SELinux is installed using docker into the target system, but
+without applying any file labels (which would not be possible in docker
+anyways). The labelling is then applied when extracting the docker image
+into a regular filesystem image, with labels applied as per
++/etc/selinux/default/contexts/files/file_contexts+ in the file system
+tree.
+
+Since the system has never run, some files that would have "usually" been
+created do not exist yet and are not labelled -- to account for this,
+a small number of additional permissions not foreseen in the reference
+policy are required -- this is contained in module +fixes.te+ and set
+up as part of the +prep.sh+ script called in docker.

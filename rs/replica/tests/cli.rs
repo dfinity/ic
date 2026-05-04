@@ -23,11 +23,12 @@ fn nonexistent_config_causes_failure() {
 #[test]
 fn too_many_arguments_causes_exit_code_1() {
     new_replica_command()
-        .args(&["arg1", "arg2"])
+        .args(["arg1", "arg2"])
         .assert()
-        .stderr(predicate::str::starts_with(
-            "error: Found argument 'arg1' which wasn't expected",
-        ))
+        .stderr(predicate::str::contains("error"))
+        .stderr(predicate::str::contains("unexpected argument"))
+        .stderr(predicate::str::contains("arg1"))
+        .stderr(predicate::str::contains("found"))
         .failure();
 }
 

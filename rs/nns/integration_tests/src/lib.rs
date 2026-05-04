@@ -19,19 +19,25 @@ mod autonomy;
 mod bad_input;
 
 #[cfg(test)]
+mod canister_playground;
+
+#[cfg(test)]
 mod cycles_minting_canister;
 
 #[cfg(test)]
-mod node_provider_remuneration;
+mod cycles_minting_canister_with_exchange_rate_canister;
 
 #[cfg(test)]
-mod governance_mem_test;
+mod node_provider_remuneration;
 
 #[cfg(test)]
 mod governance_get_build_metadata_test;
 
 #[cfg(test)]
 mod gtc;
+
+#[cfg(test)]
+mod http_request;
 
 #[cfg(test)]
 mod ledger;
@@ -46,7 +52,13 @@ mod node_assignment;
 mod reinstall_and_upgrade;
 
 #[cfg(test)]
+mod reset_root;
+
+#[cfg(test)]
 mod root;
+
+#[cfg(test)]
+mod rewards;
 
 #[cfg(test)]
 mod add_canister;
@@ -59,9 +71,6 @@ mod subnet_handler;
 
 #[cfg(test)]
 mod upgrades_handler;
-
-#[cfg(test)]
-mod rewards;
 
 #[cfg(test)]
 mod node_operator_handler;
@@ -94,6 +103,9 @@ mod governance_neurons;
 mod governance_time_warp;
 
 #[cfg(test)]
+mod governance_proposals;
+
+#[cfg(test)]
 mod known_neurons;
 
 #[cfg(test)]
@@ -106,4 +118,34 @@ mod list_node_providers;
 mod network_economics;
 
 #[cfg(test)]
-mod sns_token_swap_proposal;
+mod neuron_following;
+
+#[cfg(test)]
+mod neuron_voting;
+
+#[cfg(test)]
+mod uninstall_canister_by_proposal;
+
+#[cfg(test)]
+mod canister_upgrade;
+
+#[cfg(test)]
+mod subnet_rental_canister;
+
+#[cfg(test)]
+mod stop_or_start_canister;
+
+#[cfg(test)]
+mod api_boundary_node_queries;
+
+#[cfg(test)]
+mod upgrade_canisters_with_golden_nns_state;
+
+#[cfg(test)]
+mod create_service_nervous_system;
+
+#[cfg(test)]
+mod registry_get_chunk;
+
+#[cfg(test)]
+mod canister_snapshot;

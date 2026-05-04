@@ -1,0 +1,1439 @@
+#![allow(dead_code)]
+use crate::driver::{
+    action_graph::ActionGraph,
+    context::{GroupContext, ProcessContext},
+    dsl::{SubprocessFn, TestFunction},
+    event::TaskId,
+    farm::{Farm, HostFeature},
+    plan::{EvalOrder, Plan},
+    report::Outcome,
+    task::{DebugKeepaliveTask, EmptyTask},
+    task_scheduler::{TaskScheduler, TaskTable},
+    test_env_api::{
+        FarmBaseUrl, HasFarmUrl, HasGroupSetup, HasTopologySnapshot, IcNodeContainer,
+        ORCHESTRATOR_METRICS_PORT, REPLICA_METRICS_PORT,
+    },
+};
+use crate::driver::{
+    keepalive_task::{KEEPALIVE_TASK_NAME, keepalive_task},
+    metrics_setup_task::{METRICS_SETUP_TASK_NAME, metrics_setup_task},
+    metrics_sync_task::{METRICS_SYNC_TASK_NAME, metrics_sync_task},
+    report::SystemTestGroupError,
+    subprocess_task::SubprocessTask,
+    task::{SkipTestTask, Task},
+    timeout::TimeoutTask,
+    uvms_logs_stream_task::{UVMS_LOGS_STREAM_TASK_NAME, uvms_logs_stream_task},
+    vector_logging_task::{VECTOR_LOGGING_TASK_NAME, vector_logging_task},
+};
+use crate::driver::{
+    log_events,
+    pot_dsl::{PotSetupFn, SysTestFn},
+    test_env::{TestEnv, TestEnvAttribute},
+    test_setup::{GroupSetup, InfraProvider},
+};
+use crate::util::block_on;
+use anyhow::{Result, bail};
+use chrono::Utc;
+use clap::Parser;
+use itertools::Itertools;
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+use slog::{Logger, debug, info, trace};
+use std::path::PathBuf;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    iter::once,
+    time::Duration,
+};
+use tokio::runtime::{Builder, Handle, Runtime};
+
+const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 minutes
+const DEFAULT_OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 10); // 10 minutes
+pub const MAX_RUNTIME_THREADS: usize = 16;
+
+const REPORT_TASK_NAME: &str = "report";
+const SETUP_TASK_NAME: &str = "setup";
+const TEARDOWN_TASK_NAME: &str = "teardown";
+const ASSERT_NO_METRICS_ERRORS_TASK_NAME: &str = "assert_no_metrics_errors";
+const ASSERT_NO_REPLICA_RESTARTS_TASK_NAME: &str = "assert_no_replica_restarts";
+const ASSERT_NO_UNALLOWED_LOG_PATTERNS_TASK_NAME: &str = "assert_no_unallowed_log_patterns";
+const LIFETIME_GUARD_TASK_PREFIX: &str = "lifetime_guard_";
+
+#[derive(Debug, Parser)]
+pub struct CliArgs {
+    #[clap(flatten)]
+    group_dir: GroupDir,
+
+    #[clap(subcommand)]
+    pub action: SystemTestsSubcommand,
+
+    #[clap(
+        long = "keepalive",
+        help = "If set, system under test is kept alive until bazel timeout or user interrupt."
+    )]
+    pub keepalive: bool,
+
+    #[clap(
+        long = "no-farm-keepalive",
+        help = "If set, no TTL extension requests for the group (testnet) are sent to Farm. Only used in the colocated test-driver."
+    )]
+    pub no_farm_keepalive: bool,
+
+    #[clap(
+        long = "no-delete-farm-group",
+        help = "If set, Farm group is not deleted in the tear down."
+    )]
+    pub no_delete_farm_group: bool,
+
+    #[clap(
+        long = "no-group-ttl",
+        help = "If set, The group won't have a Time-To-Live set and thus won't be garbage collected"
+    )]
+    pub no_group_ttl: bool,
+
+    #[clap(
+        long = "no-summary-report",
+        help = "If set, no summary/report events are produced by the test-driver."
+    )]
+    pub no_summary_report: bool,
+
+    #[clap(
+        long = "include-tests",
+        help = "Execute only those test functions, which contain a substring and skip all the others."
+    )]
+    pub filter_tests: Option<String>,
+
+    #[clap(long = "group-base-name", help = "Group base name.")]
+    pub group_base_name: String,
+
+    #[clap(
+        long = "farm-base-url",
+        help = "Use a custom url for the Farm webservice."
+    )]
+    pub farm_base_url: Option<url::Url>,
+    #[clap(
+        long = "set-required-host-features",
+        help = "Require all host machines to have these features. Override others.",
+        value_delimiter = ',',
+        value_parser = CliArgs::parse_host_feature
+    )]
+    pub required_host_features: Option<Vec<HostFeature>>,
+
+    #[clap(
+        long = "enable-metrics",
+        help = "If set, the PrometheusVm, running Prometheus and Grafana, will be spawned."
+    )]
+    pub enable_metrics: bool,
+
+    #[clap(long = "no-logs", help = "If set, the vector vm will not be spawned.")]
+    pub no_logs: bool,
+
+    #[clap(
+        long = "exclude-logs",
+        help = "The list of regexes which will be skipped from the streaming."
+    )]
+    pub exclude_logs: Vec<Regex>,
+
+    #[clap(long, short, help = "Reduce terminal logging to mostly test output.")]
+    pub quiet: bool,
+}
+
+impl CliArgs {
+    fn validate(self) -> Result<Self> {
+        // nothing to validate at the moment
+        Ok(self)
+    }
+
+    /// A convenience method to get the task id of this subprocess, *if* it is in fact a
+    /// subprocess.
+    fn subproc_id(&self) -> Option<(TaskId, u64)> {
+        match &self.action {
+            SystemTestsSubcommand::SpawnChild { task_id, sock_id } => {
+                Some((task_id.clone(), *sock_id))
+            }
+            _ => None,
+        }
+    }
+
+    /// Convert stringified HostFeatures to HostFeatures.
+    fn parse_host_feature(s: &str) -> Result<HostFeature, serde_json::Error> {
+        let quoted_feature = format!("\"{}\"", s.trim());
+        serde_json::from_str::<HostFeature>(&quoted_feature)
+    }
+}
+
+#[derive(Clone, Debug, clap::Args)]
+pub struct GroupDir {
+    #[clap(
+        long = "working-dir",
+        help = r#"
+Path to a working directory of the test driver. The working directory contains
+all test environments including the one of the setup."#
+    )]
+    pub path: PathBuf,
+}
+
+#[derive(Clone, Debug, clap::Subcommand)]
+pub enum SystemTestsSubcommand {
+    /// run all tests in this test group
+    Run,
+
+    /// Execute only the setup function and keep the system running until the
+    /// ctrl+c is pressed.
+    ///
+    /// Not yet implemented!
+    InteractiveMode,
+
+    #[clap(hide = true)]
+    SpawnChild { task_id: TaskId, sock_id: u64 },
+}
+
+#[derive(Deserialize, Serialize)]
+struct SetupResult;
+
+impl TestEnvAttribute for SetupResult {
+    fn attribute_name() -> String {
+        String::from("setup_succeeded")
+    }
+}
+
+/// The time at which the test group started, persisted during setup so that teardown tasks
+/// (which run in separate child processes where `Utc::now()` would otherwise reflect only
+/// the teardown process start) can query log backends for the full test duration.
+#[derive(Deserialize, Serialize)]
+struct GroupStartTime(chrono::DateTime<Utc>);
+
+impl TestEnvAttribute for GroupStartTime {
+    fn attribute_name() -> String {
+        String::from("group_start_time")
+    }
+}
+
+pub fn is_task_visible_to_user(task_id: &TaskId) -> bool {
+    matches!(
+        task_id,
+        TaskId::Test(task_name)
+        if task_name.ne(REPORT_TASK_NAME)
+           && task_name.ne(KEEPALIVE_TASK_NAME)
+           && task_name.ne(UVMS_LOGS_STREAM_TASK_NAME)
+           && task_name.ne(METRICS_SETUP_TASK_NAME)
+           && task_name.ne(METRICS_SYNC_TASK_NAME)
+           && task_name.ne(VECTOR_LOGGING_TASK_NAME)
+           && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX)
+           && !task_name.starts_with("dummy(")
+    )
+}
+
+pub struct ComposeContext<'a> {
+    rh: &'a Handle,
+    group_ctx: GroupContext,
+    empty_task_counter: u64,
+    logger: Logger,
+    timeout_per_test: Duration,
+}
+
+fn subproc(
+    task_id: TaskId,
+    target_fn: impl SubprocessFn,
+    ctx: &mut ComposeContext,
+    quiet: bool,
+) -> SubprocessTask {
+    trace!(ctx.group_ctx.log(), "subproc(task_name={})", &task_id);
+    SubprocessTask::new(
+        task_id,
+        ctx.rh.clone(),
+        target_fn,
+        ctx.group_ctx.clone(),
+        quiet,
+    )
+}
+
+fn timed(
+    children: Vec<Plan<Box<dyn Task>>>,
+    ordering: EvalOrder,
+    timeout: Duration,
+    descriptor: Option<String>,
+    ctx: &mut ComposeContext,
+) -> Plan<Box<dyn Task>> {
+    trace!(
+        ctx.logger,
+        "timed(children={:?}, timeout={:?})", &children, &timeout
+    );
+    let timeout_task = TimeoutTask::new(
+        ctx.rh.clone(),
+        timeout,
+        TaskId::Timeout(descriptor.unwrap_or_else(|| {
+            children
+                .iter()
+                .map(|child| child.root_task_id().name())
+                .join(", ")
+        })),
+    );
+    Plan::Supervised {
+        supervisor: Box::from(timeout_task) as Box<dyn Task>,
+        ordering,
+        children,
+    }
+}
+
+fn compose(
+    root_task: Option<Box<dyn Task>>,
+    ordering: EvalOrder,
+    children: Vec<Plan<Box<dyn Task>>>,
+    ctx: &mut ComposeContext,
+) -> Plan<Box<dyn Task>> {
+    trace!(
+        ctx.logger,
+        "compose(root={:?}, ordering={:?}, children={:?})", &root_task, &ordering, &children
+    );
+    let root_task = match root_task {
+        Some(task) => task,
+        None => {
+            let empty_task = Box::from(EmptyTask::new(TaskId::Test(format!(
+                "dummy({})",
+                ctx.empty_task_counter
+            ))));
+            ctx.empty_task_counter += 1;
+            empty_task
+        }
+    };
+    Plan::Supervised {
+        supervisor: root_task,
+        ordering,
+        children,
+    }
+}
+
+fn compose_par(
+    root_task: Option<Box<dyn Task>>,
+    first: Plan<Box<dyn Task>>,
+    second: Plan<Box<dyn Task>>,
+    ctx: &mut ComposeContext,
+) -> Plan<Box<dyn Task>> {
+    compose(root_task, EvalOrder::Parallel, vec![first, second], ctx)
+}
+
+fn compose_seq(
+    root_task: Option<Box<dyn Task>>,
+    first: Plan<Box<dyn Task>>,
+    second: Plan<Box<dyn Task>>,
+    ctx: &mut ComposeContext,
+) -> Plan<Box<dyn Task>> {
+    compose(root_task, EvalOrder::Sequential, vec![first, second], ctx)
+}
+
+fn ensure_setup_env(gctx: GroupContext) -> TestEnv {
+    trace!(gctx.log(), "get_setup_env()");
+    let process_ctx = ProcessContext::new(gctx, String::from(SETUP_TASK_NAME)).unwrap();
+    process_ctx.group_context.ensure_setup_env().unwrap()
+}
+
+fn get_or_create_env(gctx: GroupContext, task_id: TaskId) -> Result<TestEnv> {
+    trace!(gctx.log(), "create_env(task_id={})", &task_id);
+    let process_ctx = ProcessContext::new(gctx, task_id.name()).unwrap();
+    process_ctx.group_context.create_test_env(&task_id.name())
+}
+
+/// Query ElasticSearch for IC log lines produced by the Farm group of the current test whose
+/// `MESSAGE` field matches any of the provided unallowed patterns using ElasticSearch phrase
+/// matching semantics (`match_phrase`). Each pattern can be paired with a set of exclusion
+/// phrases: a log line only counts as a match if its `MESSAGE` matches the pattern AND does
+/// not match any of the pattern's exclusions.
+/// Panics if at least one matching log line is found. Transport / parse errors are logged
+/// and treated as a soft-skip, matching the behaviour of the metrics teardown.
+fn check_unallowed_log_patterns(env: &TestEnv, patterns: &BTreeMap<String, BTreeSet<String>>) {
+    if patterns.is_empty() {
+        return;
+    }
+
+    let logger = env.logger();
+
+    let group_setup = match GroupSetup::try_read_attribute(env) {
+        Ok(g) => g,
+        Err(e) => {
+            info!(
+                logger,
+                "GroupSetup attribute is not available ({e:?}) \
+                 => skipping unallowed log pattern check."
+            );
+            return;
+        }
+    };
+    let group_name = group_setup.infra_group_name;
+    let start_time = match GroupStartTime::try_read_attribute(env) {
+        Ok(g) => g.0,
+        Err(e) => {
+            info!(
+                logger,
+                "GroupStartTime attribute is not available ({e:?}) \
+                 => skipping unallowed log pattern check."
+            );
+            return;
+        }
+    };
+    let end_time = Utc::now();
+
+    // One `should` clause per pattern: match_phrase on the pattern, minus match_phrase on
+    // any of its exclusions. A hit needs to satisfy at least one such clause.
+    let should: Vec<serde_json::Value> = patterns
+        .iter()
+        .map(|(pattern, exclusions)| {
+            let must_not: Vec<serde_json::Value> = exclusions
+                .iter()
+                .map(|e| serde_json::json!({ "match_phrase": { "MESSAGE": e } }))
+                .collect();
+            serde_json::json!({
+                "bool": {
+                    "filter": [ { "match_phrase": { "MESSAGE": pattern } } ],
+                    "must_not": must_not,
+                }
+            })
+        })
+        .collect();
+
+    let body = serde_json::json!({
+        "size": 100,
+        "query": {
+            "bool": {
+                "must": [
+                    { "match_phrase": { "ic": group_name } },
+                    { "range": { "timestamp": {
+                        "gte": start_time.to_rfc3339(),
+                        "lte": end_time.to_rfc3339(),
+                    }}},
+                ],
+                "should": should,
+                "minimum_should_match": 1,
+            }
+        },
+        "_source": ["timestamp", "ic_node", "MESSAGE"],
+    });
+
+    let url = "https://elasticsearch.testnet.dfinity.network/testnet-vector-push-*/_search?filter_path=hits.hits";
+
+    info!(
+        logger,
+        "Querying {url} for unallowed log patterns with body: {body} ..."
+    );
+
+    let client = match reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(60))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            info!(
+                logger,
+                "Failed to build reqwest client for ES query ({e:?}) \
+                 => skipping unallowed log pattern check."
+            );
+            return;
+        }
+    };
+
+    let response: Result<serde_json::Value, reqwest::Error> = block_on(async {
+        client
+            .post(url)
+            .json(&body)
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<serde_json::Value>()
+            .await
+    });
+
+    let value = match response {
+        Ok(v) => v,
+        Err(e) => {
+            info!(
+                logger,
+                "Failed to query ElasticSearch for unallowed log patterns ({e:?}) \
+                 => skipping unallowed log pattern check."
+            );
+            return;
+        }
+    };
+
+    let hits = value
+        .get("hits")
+        .and_then(|h| h.get("hits"))
+        .and_then(|h| h.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    if hits.is_empty() {
+        return;
+    }
+
+    // Group each hit to the pattern(s) it contains.
+    let mut matches_by_pattern: BTreeMap<&String, Vec<String>> = BTreeMap::new();
+    for hit in &hits {
+        let source = match hit.get("_source") {
+            Some(s) => s,
+            None => continue,
+        };
+        let message = source.get("MESSAGE").and_then(|m| m.as_str()).unwrap_or("");
+        let timestamp = source
+            .get("timestamp")
+            .and_then(|t| t.as_str())
+            .unwrap_or("");
+        let node = source.get("ic_node").and_then(|n| n.as_str()).unwrap_or("");
+        for (pattern, exclusions) in patterns {
+            if message.contains(pattern) && !exclusions.iter().any(|e| message.contains(e)) {
+                matches_by_pattern
+                    .entry(pattern)
+                    .or_default()
+                    .push(format!("[{timestamp} {node}] {message}"));
+            }
+        }
+    }
+
+    const MAX_SAMPLES_PER_PATTERN: usize = 3;
+    let mut report = String::new();
+    if matches_by_pattern.is_empty() {
+        report.push_str(&format!(
+            "\n- ElasticSearch returned {} hit(s), but none could be attributed via local MESSAGE substring matching.\n",
+            hits.len()
+        ));
+        for hit in hits.iter().take(MAX_SAMPLES_PER_PATTERN) {
+            let source = match hit.get("_source") {
+                Some(s) => s,
+                None => {
+                    report.push_str("    [missing _source]\n");
+                    continue;
+                }
+            };
+            let message = source.get("MESSAGE").and_then(|m| m.as_str()).unwrap_or("");
+            let timestamp = source
+                .get("timestamp")
+                .and_then(|t| t.as_str())
+                .unwrap_or("");
+            let node = source.get("ic_node").and_then(|n| n.as_str()).unwrap_or("");
+            report.push_str(&format!("    [{timestamp} {node}] {message}\n"));
+        }
+        if hits.len() > MAX_SAMPLES_PER_PATTERN {
+            report.push_str(&format!(
+                "    ... and {} more raw hit(s)\n",
+                hits.len() - MAX_SAMPLES_PER_PATTERN
+            ));
+        }
+    } else {
+        for (pattern, lines) in &matches_by_pattern {
+            report.push_str(&format!(
+                "\n- Pattern `{pattern}`: {} match(es)\n",
+                lines.len()
+            ));
+            for line in lines.iter().take(MAX_SAMPLES_PER_PATTERN) {
+                report.push_str(&format!("    {line}\n"));
+            }
+            if lines.len() > MAX_SAMPLES_PER_PATTERN {
+                report.push_str(&format!(
+                    "    ... and {} more\n",
+                    lines.len() - MAX_SAMPLES_PER_PATTERN
+                ));
+            }
+        }
+    }
+
+    panic!(
+        "Found unallowed log patterns in IC logs for group `{group_name}`:{report}\n\
+         If these patterns are expected in the test, create `SystemTestGroup` with \
+         `add_unallowed_log_pattern_except(\"<pattern>\", \"<exclusion>\")`, \
+         `remove_unallowed_log_pattern(\"<pattern>\")`, or \
+         `remove_all_unallowed_log_patterns()`.",
+    );
+}
+
+pub enum SystemTestSubGroup {
+    Multiple {
+        tasks: Vec<SystemTestSubGroup>,
+        ordering: EvalOrder,
+    },
+    Singleton {
+        task_fn: Box<dyn SysTestFn>,
+        task_id: TaskId,
+    },
+}
+
+impl Default for SystemTestSubGroup {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SystemTestSubGroup {
+    pub fn new() -> Self {
+        Self::Multiple {
+            tasks: vec![],
+            ordering: EvalOrder::Parallel,
+        }
+    }
+
+    pub fn add_test(self, test: TestFunction) -> Self {
+        let task_is = TaskId::Test(String::from(test.name()));
+        let singleton = Self::Singleton {
+            task_fn: test.f(),
+            task_id: task_is,
+        };
+        match self {
+            Self::Multiple { tasks, .. } if tasks.is_empty() => {
+                // This case is only to support the builder pattern
+                singleton
+            }
+            Self::Multiple { tasks, ordering } => Self::Multiple {
+                tasks: tasks.into_iter().chain(once(singleton)).collect(),
+                ordering,
+            },
+            sub_group @ Self::Singleton { .. } => {
+                Self::Multiple {
+                    tasks: once(sub_group).chain(once(singleton)).collect(),
+                    ordering: EvalOrder::Parallel, // TODO: generalize this
+                }
+            }
+        }
+    }
+
+    pub fn into_plan(self, ctx: &mut ComposeContext) -> Plan<Box<dyn Task>> {
+        match self {
+            SystemTestSubGroup::Multiple { tasks, ordering } => compose(
+                None,
+                ordering,
+                tasks
+                    .into_iter()
+                    .map(|sub_group| sub_group.into_plan(ctx))
+                    .collect(),
+                ctx,
+            ),
+            // If filtering flag `--include-tests` is set, then for all
+            // skipped test function we execute a SkipTestTask
+            SystemTestSubGroup::Singleton { task_fn, task_id } => {
+                let logger = ctx.logger.clone();
+                let group_ctx = ctx.group_ctx.clone();
+                if let Some(ref filter) = group_ctx.filter_tests
+                    && let TaskId::Test(ref name) = task_id
+                    && !name.contains(filter)
+                {
+                    return Plan::Leaf {
+                        task: Box::from(SkipTestTask::new(task_id.clone())),
+                    };
+                }
+                let closure = {
+                    let task_id = task_id.clone();
+                    let group_ctx = ctx.group_ctx.clone();
+                    move || {
+                        debug!(logger, ">>> test_fn({})", &task_id);
+                        let env = get_or_create_env(group_ctx, task_id).unwrap();
+                        // This function will only be called after setup finishes
+                        if SetupResult::try_read_attribute(&env).is_err() {
+                            panic!(
+                                "Failed to find SetupResult attribute after setup. Cancelling test function."
+                            );
+                        }
+                        task_fn(env)
+                    }
+                };
+                timed(
+                    vec![Plan::Leaf {
+                        task: Box::from(subproc(task_id, closure, ctx, false)),
+                    }],
+                    EvalOrder::Sequential,
+                    ctx.timeout_per_test,
+                    None,
+                    ctx,
+                )
+            }
+        }
+    }
+}
+
+pub struct SystemTestGroup {
+    setup: Option<Box<dyn PotSetupFn>>,
+    teardowns: Vec<Box<dyn PotSetupFn>>,
+    tests: Vec<SystemTestSubGroup>,
+    timeout_per_test: Option<Duration>,
+    overall_timeout: Option<Duration>,
+    with_farm: bool,
+    replica_metrics_to_check: BTreeMap<&'static str, /*max value of the metric =*/ u64>,
+    orchestrator_metrics_to_check: BTreeMap<&'static str, /*max value of the metric =*/ u64>,
+    /// Map from an unallowed log phrase to a set of exclusion phrases. A log line counts
+    /// as a match if its `MESSAGE` matches the pattern (ES `match_phrase`) and does not
+    /// match any of the associated exclusions.
+    unallowed_log_patterns: BTreeMap<String, BTreeSet<String>>,
+}
+
+impl Default for SystemTestGroup {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Plan<Box<dyn Task>> {
+    fn root_task_id(&self) -> TaskId {
+        match self {
+            Plan::Supervised { supervisor, .. } => supervisor.task_id(),
+            Plan::Leaf { task } => task.task_id(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CliArguments {
+    #[serde(with = "serde_regex")]
+    pub exclude_logs: Vec<Regex>,
+}
+
+impl TestEnvAttribute for CliArguments {
+    fn attribute_name() -> String {
+        "cli_arguments".to_string()
+    }
+}
+
+impl SystemTestGroup {
+    pub fn new() -> Self {
+        Self {
+            setup: Default::default(),
+            teardowns: Default::default(),
+            tests: Default::default(),
+            timeout_per_test: None,
+            overall_timeout: None,
+            with_farm: true,
+            replica_metrics_to_check: BTreeMap::from([
+                ("critical_errors", 0),
+                ("consensus_invalidated_artifacts", 0),
+                ("dkg_invalidated_artifacts", 0),
+                ("idkg_invalidated_artifacts", 0),
+                ("certification_invalidated_artifacts", 0),
+                ("canister_http_invalidated_artifacts", 0),
+            ]),
+            orchestrator_metrics_to_check: BTreeMap::from([
+                ("orchestrator_cup_deserialization_failed_total", 0),
+                ("orchestrator_state_removal_failed_total", 0),
+                ("orchestrator_tasks_failed_total", 0),
+                ("orchestrator_replica_process_start_attempts_total", 1),
+            ]),
+            unallowed_log_patterns: BTreeMap::from([
+                ("This is a bug".to_string(), BTreeSet::new()),
+                (
+                    "panicked".to_string(),
+                    BTreeSet::from([
+                        // Canisters are expected to panic:
+                        "canister".to_string(),
+                        // TODO: remove the following line after mainnet has advanced to include the `allowed_panics.rs` changes:
+                        "rs/canister_sandbox/src/replica_controller/sandboxed_execution_controller.rs:2185".to_string(),
+                        "rs/canister_sandbox/src/replica_controller/allowed_panics.rs".to_string(),
+                        "rs/state_manager/src/allowed_panics.rs".to_string(),
+                    ]),
+                ),
+            ]),
+        }
+    }
+
+    fn effective_timeout_per_test(&self) -> Duration {
+        self.timeout_per_test.unwrap_or(DEFAULT_TIMEOUT_PER_TEST)
+    }
+
+    pub fn without_farm(mut self) -> Self {
+        self.with_farm = false;
+        self
+    }
+
+    pub fn with_overall_timeout(mut self, overall_timeout: Duration) -> Self {
+        self.overall_timeout = Some(overall_timeout);
+        self
+    }
+
+    pub fn with_setup<F: PotSetupFn>(mut self, setup: F) -> Self {
+        self.setup = Some(Box::new(setup));
+        self
+    }
+
+    pub fn add_teardown<F: PotSetupFn>(mut self, teardown: F) -> Self {
+        self.teardowns.push(Box::new(teardown));
+        self
+    }
+
+    /// If the provided metric has value larger than the provided one, for any of the
+    /// nodes, the test will fail.
+    pub fn update_orchestrator_metrics_to_check(
+        mut self,
+        metric_name: &'static str,
+        max_value: u64,
+    ) -> Self {
+        self.orchestrator_metrics_to_check
+            .insert(metric_name, max_value);
+        self
+    }
+
+    pub fn remove_metrics_to_check(mut self, metric_name: &str) -> Self {
+        self.replica_metrics_to_check.remove(metric_name);
+        self.orchestrator_metrics_to_check.remove(metric_name);
+        self
+    }
+
+    pub fn remove_all_metrics_to_check(mut self) -> Self {
+        self.replica_metrics_to_check = BTreeMap::new();
+        self.orchestrator_metrics_to_check = BTreeMap::new();
+
+        self
+    }
+
+    /// Add a log-message phrase pattern that must not match any IC log line collected during
+    /// the test. After the test, ElasticSearch is queried using `match_phrase` semantics on
+    /// the `MESSAGE` field, and the test fails if at least one matching log line is found.
+    /// This is not a raw-substring search: matching depends on the indexed field's
+    /// analyzer/tokenization behavior.
+    ///
+    /// If the pattern was already registered (possibly with exclusions), its existing
+    /// exclusions are preserved.
+    pub fn add_unallowed_log_pattern(mut self, pattern: impl Into<String>) -> Self {
+        self.unallowed_log_patterns
+            .entry(pattern.into())
+            .or_default();
+        self
+    }
+
+    /// Like `add_unallowed_log_pattern` but exempts log lines whose `MESSAGE` also matches
+    /// `exclusion` (ES `match_phrase`) from triggering a failure. Multiple calls with the
+    /// same `pattern` accumulate exclusions.
+    pub fn add_unallowed_log_pattern_except(
+        mut self,
+        pattern: impl Into<String>,
+        exclusion: impl Into<String>,
+    ) -> Self {
+        self.unallowed_log_patterns
+            .entry(pattern.into())
+            .or_default()
+            .insert(exclusion.into());
+        self
+    }
+
+    /// Remove a single unallowed log pattern previously registered (either by default in
+    /// `SystemTestGroup::new` or via `add_unallowed_log_pattern` /
+    /// `add_unallowed_log_pattern_except`).
+    pub fn remove_unallowed_log_pattern(mut self, pattern: &str) -> Self {
+        self.unallowed_log_patterns.remove(pattern);
+        self
+    }
+
+    /// Remove all unallowed log patterns, disabling the ElasticSearch log-pattern check
+    /// entirely for this group.
+    pub fn remove_all_unallowed_log_patterns(mut self) -> Self {
+        self.unallowed_log_patterns = BTreeMap::new();
+        self
+    }
+
+    pub fn add_test(mut self, test: TestFunction) -> Self {
+        let task_id = TaskId::Test(String::from(test.name()));
+        self.tests.push(SystemTestSubGroup::Singleton {
+            task_fn: test.f(),
+            task_id,
+        });
+        self
+    }
+
+    fn add_group(mut self, sub_group: SystemTestSubGroup, ordering: EvalOrder) -> Self {
+        self.tests.push(match sub_group {
+            SystemTestSubGroup::Multiple { tasks, .. } => {
+                SystemTestSubGroup::Multiple { tasks, ordering }
+            }
+            _ => sub_group,
+        });
+        self
+    }
+
+    pub fn add_sequential(self, sub_group: SystemTestSubGroup) -> Self {
+        self.add_group(sub_group, EvalOrder::Sequential)
+    }
+
+    pub fn add_parallel(self, sub_group: SystemTestSubGroup) -> Self {
+        self.add_group(sub_group, EvalOrder::Parallel)
+    }
+
+    /// Add a subgroup with the specified minumal lifetime.
+    ///
+    /// Useful in experiments involving human interactions.
+    pub fn add_group_with_minimal_lifetime(
+        self,
+        sub_group: SystemTestSubGroup,
+        min_lifetime: Duration,
+    ) -> Self {
+        assert!(
+            min_lifetime <= self.effective_timeout_per_test(),
+            "min_lifetime of a SystemTestSubGroup cannot be greater than timeout_per_test"
+        );
+        if min_lifetime.is_zero() {
+            // Optimization
+            return self.add_group(sub_group, EvalOrder::Parallel);
+        }
+        let lifetime_guard_task = move |env: TestEnv| {
+            info!(
+                env.logger(),
+                ">>> {LIFETIME_GUARD_TASK_PREFIX}task(min_lifetime={min_lifetime:?})"
+            );
+            std::thread::sleep(min_lifetime);
+        };
+        let lifetime_guard_task = TestFunction::new(
+            &format!("{LIFETIME_GUARD_TASK_PREFIX}{}_sec", min_lifetime.as_secs()),
+            lifetime_guard_task,
+        );
+        let lifetime_guard_sub_group = match sub_group {
+            SystemTestSubGroup::Singleton { .. } => sub_group.add_test(lifetime_guard_task),
+            SystemTestSubGroup::Multiple {
+                tasks: _,
+                ordering: EvalOrder::Parallel,
+            } => sub_group.add_test(lifetime_guard_task),
+            SystemTestSubGroup::Multiple {
+                tasks: _,
+                ordering: EvalOrder::Sequential,
+            } => {
+                todo!()
+            }
+        };
+        self.add_group(lifetime_guard_sub_group, EvalOrder::Parallel)
+    }
+
+    /// Add a single task with the specified minimal lifetime.
+    ///
+    /// Useful in experiments involving human interactions.
+    pub fn add_task_with_minimal_lifetime(
+        self,
+        task: TestFunction,
+        min_lifetime: Duration,
+    ) -> Self {
+        let sub_group = SystemTestSubGroup::new().add_test(task);
+        self.add_group_with_minimal_lifetime(sub_group, min_lifetime)
+    }
+
+    pub fn with_timeout_per_test(mut self, t: Duration) -> Self {
+        self.timeout_per_test = Some(t);
+        self
+    }
+
+    fn make_plan(self, rh: &Handle, group_ctx: GroupContext) -> Result<Plan<Box<dyn Task>>> {
+        let logger = group_ctx.logger();
+        debug!(logger, "SystemTestGroup.make_plan");
+        let start_time = Utc::now();
+
+        let quiet = group_ctx.quiet;
+
+        let mut compose_ctx = ComposeContext {
+            rh,
+            group_ctx: group_ctx.clone(),
+            empty_task_counter: 0,
+            logger: logger.clone(),
+            timeout_per_test: self.effective_timeout_per_test(),
+        };
+
+        let uvms_logs_stream_task_id = TaskId::Test(String::from(UVMS_LOGS_STREAM_TASK_NAME));
+        let uvms_logs_stream_task = Box::from(subproc(
+            uvms_logs_stream_task_id,
+            {
+                let group_ctx = group_ctx.clone();
+                move || uvms_logs_stream_task(group_ctx)
+            },
+            &mut compose_ctx,
+            false,
+        )) as Box<dyn Task>;
+
+        let keepalive_task_id = TaskId::Test(String::from(KEEPALIVE_TASK_NAME));
+        let keepalive_task = if self.with_farm && !group_ctx.no_farm_keepalive {
+            Box::from(subproc(
+                keepalive_task_id.clone(),
+                {
+                    let group_ctx = group_ctx.clone();
+                    move || keepalive_task(group_ctx)
+                },
+                &mut compose_ctx,
+                quiet,
+            )) as Box<dyn Task>
+        } else {
+            Box::from(EmptyTask::new(keepalive_task_id)) as Box<dyn Task>
+        };
+
+        // The metrics_sync_task periodically syncs the targets in the current IC topology with Prometheus.
+        let metrics_sync_task_id = TaskId::Test(String::from(METRICS_SYNC_TASK_NAME));
+        let metrics_sync_task = if group_ctx.enable_metrics {
+            let metrics_sync_task = subproc(
+                metrics_sync_task_id,
+                {
+                    let group_ctx = group_ctx.clone();
+                    move || metrics_sync_task(group_ctx)
+                },
+                &mut compose_ctx,
+                quiet,
+            );
+            Box::from(metrics_sync_task) as Box<dyn Task>
+        } else {
+            Box::from(EmptyTask::new(metrics_sync_task_id)) as Box<dyn Task>
+        };
+
+        let vector_logging_task_id = TaskId::Test(String::from(VECTOR_LOGGING_TASK_NAME));
+        let vector_logging_task = if group_ctx.logs_enabled {
+            let group_ctx = group_ctx.clone();
+
+            let vector_logging_task = subproc(
+                vector_logging_task_id,
+                {
+                    let group_ctx = group_ctx.clone();
+                    move || vector_logging_task(group_ctx, start_time)
+                },
+                &mut compose_ctx,
+                quiet,
+            );
+
+            Box::from(vector_logging_task) as Box<dyn Task>
+        } else {
+            debug!(logger, "Not spawning vector logging task");
+            Box::from(EmptyTask::new(vector_logging_task_id)) as Box<dyn Task>
+        };
+
+        let setup_fn = self
+            .setup
+            .unwrap_or_else(|| panic!("setup function not specified for SystemTestGroup."));
+        let setup_task = subproc(
+            TaskId::Test(String::from(SETUP_TASK_NAME)),
+            {
+                let group_ctx = group_ctx.clone();
+                let logger = logger.clone();
+                move || {
+                    debug!(logger, ">>> setup_fn");
+                    let cli_arguments = CliArguments {
+                        exclude_logs: group_ctx.exclude_logs.clone(),
+                    };
+
+                    let env = ensure_setup_env(group_ctx);
+
+                    // Persist the cli arguments in case the test needs them
+                    cli_arguments.write_attribute(&env);
+
+                    // Persist the group start time so teardown tasks (which run in separate
+                    // child processes) can use it when querying log/metric backends.
+                    GroupStartTime(start_time).write_attribute(&env);
+
+                    setup_fn(env.clone());
+                    SetupResult {}.write_attribute(&env);
+                }
+            },
+            &mut compose_ctx,
+            false,
+        );
+
+        let assert_no_metric_errors_fn: Option<(String, Box<dyn PotSetupFn>)> =
+            if !self.replica_metrics_to_check.is_empty()
+                || !self.orchestrator_metrics_to_check.is_empty()
+            {
+                let teardown_fn = move |env: TestEnv| {
+                    let topology = match env.safe_topology_snapshot() {
+                        Ok(topology) => topology,
+                        Err(e) => {
+                            info!(
+                                env.logger(),
+                                "Could not get topology ({e:?}) => skipping checks of metrics."
+                            );
+                            return;
+                        }
+                    };
+
+                    for node in topology.subnets().flat_map(|subnet| subnet.nodes()) {
+                        node.assert_metrics_values(
+                            &self.replica_metrics_to_check,
+                            REPLICA_METRICS_PORT,
+                        );
+                        node.assert_metrics_values(
+                            &self.orchestrator_metrics_to_check,
+                            ORCHESTRATOR_METRICS_PORT,
+                        );
+                    }
+                };
+                Some((
+                    ASSERT_NO_METRICS_ERRORS_TASK_NAME.to_string(),
+                    Box::new(teardown_fn),
+                ))
+            } else {
+                None
+            };
+
+        let assert_no_unallowed_log_patterns_fn: Option<(String, Box<dyn PotSetupFn>)> = if self
+            .with_farm
+            && group_ctx.logs_enabled
+            && !self.unallowed_log_patterns.is_empty()
+        {
+            let unallowed_log_patterns = self.unallowed_log_patterns.clone();
+            let teardown_fn = move |env: TestEnv| {
+                check_unallowed_log_patterns(&env, &unallowed_log_patterns);
+            };
+            Some((
+                ASSERT_NO_UNALLOWED_LOG_PATTERNS_TASK_NAME.to_string(),
+                Box::new(teardown_fn),
+            ))
+        } else {
+            None
+        };
+
+        let teardown_plan: Vec<Plan<Box<dyn Task>>> = self
+            .teardowns
+            .into_iter()
+            .enumerate()
+            .map(|(i, teardown)| (format!("{TEARDOWN_TASK_NAME}_{i}"), teardown))
+            .chain(assert_no_metric_errors_fn)
+            .chain(assert_no_unallowed_log_patterns_fn)
+            .map(|(teardown_name, teardown_fn)| {
+                let logger = logger.clone();
+                let group_ctx = group_ctx.clone();
+                let teardown_task = subproc(
+                    TaskId::Test(teardown_name.clone()),
+                    move || {
+                        debug!(logger, ">>> {teardown_name}_fn");
+                        let env = ensure_setup_env(group_ctx);
+                        teardown_fn(env);
+                    },
+                    &mut compose_ctx,
+                    false,
+                );
+                timed(
+                    vec![Plan::Leaf {
+                        task: Box::from(teardown_task),
+                    }],
+                    EvalOrder::Sequential,
+                    compose_ctx.timeout_per_test,
+                    None,
+                    &mut compose_ctx,
+                )
+            })
+            .collect();
+
+        let setup_plan: Plan<Box<dyn Task>> = Plan::Leaf {
+            task: Box::from(setup_task),
+        };
+
+        // The setup_tasks always includes the setup_task which executes the setup function.
+        // In case metrics is enabled it also includes the metrics_setup_task which sets up the PrometheusVm.
+        // These tasks are executed in parallel as part of the setup_plan below.
+        let mut setup_tasks: Vec<Plan<Box<dyn Task>>> = vec![setup_plan];
+        if group_ctx.enable_metrics {
+            let metrics_setup_task_id = TaskId::Test(String::from(METRICS_SETUP_TASK_NAME));
+            let metrics_setup_task = subproc(
+                metrics_setup_task_id,
+                {
+                    let group_ctx = group_ctx.clone();
+                    move || metrics_setup_task(group_ctx)
+                },
+                &mut compose_ctx,
+                quiet,
+            );
+            let metrics_setup_task = Box::from(metrics_setup_task) as Box<dyn Task>;
+            let metrics_setup_plan = Plan::Leaf {
+                task: metrics_setup_task,
+            };
+            setup_tasks.push(metrics_setup_plan);
+        }
+
+        let setup_plan = timed(
+            setup_tasks,
+            EvalOrder::Parallel,
+            compose_ctx.timeout_per_test,
+            None,
+            &mut compose_ctx,
+        );
+
+        // normal case: no keepalive, overall timeout is active
+        if !group_ctx.keepalive {
+            let keepalive_plan = compose(
+                Some(keepalive_task),
+                EvalOrder::Sequential,
+                vec![compose(
+                    None,
+                    EvalOrder::Sequential,
+                    std::iter::once(setup_plan)
+                        .chain(
+                            self.tests
+                                .into_iter()
+                                .map(|sub_group| sub_group.into_plan(&mut compose_ctx)),
+                        )
+                        .chain(teardown_plan)
+                        .collect(),
+                    &mut compose_ctx,
+                )],
+                &mut compose_ctx,
+            );
+
+            let uvms_stream_plan = compose(
+                Some(uvms_logs_stream_task),
+                EvalOrder::Sequential,
+                vec![keepalive_plan],
+                &mut compose_ctx,
+            );
+
+            let logs_plan = compose(
+                Some(vector_logging_task),
+                EvalOrder::Sequential,
+                vec![uvms_stream_plan],
+                &mut compose_ctx,
+            );
+
+            let metrics_sync_plan = compose(
+                Some(metrics_sync_task),
+                EvalOrder::Sequential,
+                vec![logs_plan],
+                &mut compose_ctx,
+            );
+
+            let report_plan = Ok(compose(
+                Some(Box::new(EmptyTask::new(TaskId::Test(
+                    REPORT_TASK_NAME.to_string(),
+                )))),
+                EvalOrder::Sequential,
+                vec![if let Some(overall_timeout) = self.overall_timeout {
+                    timed(
+                        vec![metrics_sync_plan],
+                        EvalOrder::Sequential,
+                        overall_timeout,
+                        Some(String::from("::group")),
+                        &mut compose_ctx,
+                    )
+                } else {
+                    metrics_sync_plan
+                }],
+                &mut compose_ctx,
+            ));
+            return report_plan;
+        }
+
+        // otherwise: keepalive needs to be above report task. no overall timeout.
+        let keepalive_plan: Plan<Box<dyn Task>> = Plan::Leaf {
+            task: Box::new(DebugKeepaliveTask::new(
+                TaskId::Test(String::from("debugKeepAliveTask")),
+                group_ctx.log().clone(),
+                compose_ctx.rh.clone(),
+            )),
+        };
+
+        let uvms_stream_plan = compose(
+            Some(uvms_logs_stream_task),
+            EvalOrder::Sequential,
+            vec![keepalive_plan],
+            &mut compose_ctx,
+        );
+
+        let logs_plan = compose(
+            Some(vector_logging_task),
+            EvalOrder::Sequential,
+            vec![uvms_stream_plan],
+            &mut compose_ctx,
+        );
+
+        let metrics_sync_plan = compose(
+            Some(metrics_sync_task),
+            EvalOrder::Sequential,
+            vec![logs_plan],
+            &mut compose_ctx,
+        );
+
+        let report_plan = compose(
+            Some(Box::new(EmptyTask::new(TaskId::Test(
+                REPORT_TASK_NAME.to_string(),
+            )))),
+            EvalOrder::Sequential,
+            vec![compose(
+                None,
+                EvalOrder::Sequential,
+                std::iter::once(setup_plan)
+                    .chain(
+                        self.tests
+                            .into_iter()
+                            .map(|sub_group| sub_group.into_plan(&mut compose_ctx)),
+                    )
+                    .chain(teardown_plan)
+                    .collect(),
+                &mut compose_ctx,
+            )],
+            &mut compose_ctx,
+        );
+
+        Ok(compose(
+            Some(keepalive_task),
+            EvalOrder::Parallel,
+            vec![report_plan, metrics_sync_plan],
+            &mut compose_ctx,
+        ))
+    }
+
+    pub fn execute(self) -> Result<Outcome> {
+        // TODO: check preconditions:
+        // 0. None of the test functions (modulo the setup function) have the literal name "setup"
+        // 1. There exists at least one test after setup
+        // 2. All sub-groups are non-empty
+        // 3. The computed plan is sane (e.g., there are no timeout(timeout(x)) for some x)
+
+        // Preconditions that are already being checked:
+        // 1. CLI arguments are sane
+        // 2. Test / setup functions are not specified more than once in the group
+        let args = CliArgs::parse().validate()?;
+        let is_parent_process = matches!(args.action, SystemTestsSubcommand::Run);
+
+        let group_ctx = GroupContext::new(
+            args.group_dir.path.clone(),
+            args.subproc_id(),
+            args.filter_tests,
+            args.keepalive,
+            args.no_farm_keepalive || args.no_group_ttl,
+            args.group_base_name,
+            args.enable_metrics,
+            !args.no_logs,
+            args.exclude_logs,
+            args.quiet,
+        )?;
+
+        let with_farm = self.with_farm;
+
+        if is_parent_process {
+            let root_env = group_ctx.get_root_env().unwrap();
+            FarmBaseUrl::new_or_default(args.farm_base_url).write_attribute(&root_env);
+            if let Some(required_args) = args.required_host_features {
+                required_args.write_attribute(&root_env);
+            }
+            InfraProvider::Farm.write_attribute(&root_env);
+            if with_farm {
+                root_env.create_group_setup(group_ctx.group_base_name.clone(), args.no_group_ttl);
+            }
+            debug!(group_ctx.log(), "Created group context: {:?}", group_ctx);
+        }
+
+        // create the runtime that lives until this variable is dropped.
+        // Note: having only a runtime handle does not guarantee that the runtime is alive.
+        let runtime: Runtime = {
+            let cpus = num_cpus::get();
+            info!(group_ctx.log(), "Number of CPUs {}", cpus);
+            let workers = std::cmp::min(MAX_RUNTIME_THREADS, cpus);
+            info!(
+                group_ctx.log(),
+                "Set tokio runtime: worker_threads={}", workers,
+            );
+            Builder::new_multi_thread()
+                .worker_threads(workers)
+                .enable_all()
+                .build()
+                .unwrap()
+        };
+
+        let plan = self.make_plan(runtime.handle(), group_ctx.clone())?;
+        if is_parent_process {
+            info!(group_ctx.log(), "Generated plan: {:?}", plan);
+        }
+
+        let static_plan = plan.map(&|task| task.task_id());
+        if is_parent_process {
+            debug!(group_ctx.log(), "Generated static_plan: {:?}", &static_plan);
+        }
+
+        // create a task table, consuming the plan
+        let mut table = TaskTable::new();
+        let mut duplicate_tasks: Option<TaskId> = None;
+        plan.flatten().into_iter().for_each(|task| {
+            let tid = task.task_id();
+            if table.insert(tid.clone(), task).is_some() {
+                duplicate_tasks = Some(tid)
+            }
+        });
+        if let Some(duplicate_task_id) = duplicate_tasks {
+            bail!(SystemTestGroupError::PreconditionViolation {
+                condition:
+                    "Test function names must be unique across an entire SystemTestGroup instance"
+                        .to_string(),
+                counterexample: format!(
+                    "test function name {duplicate_task_id} is specified more than once"
+                )
+            })
+        }
+        if is_parent_process {
+            debug!(group_ctx.log(), "Generated task table: {:?}", table);
+        }
+
+        // handle the sub-command
+        match args.action {
+            SystemTestsSubcommand::Run => {
+                info!(
+                    group_ctx.log(),
+                    "Executing parent-process-specific code ..."
+                );
+
+                let action_graph = ActionGraph::from_plan(static_plan);
+                info!(group_ctx.log(), "Generated action_graph");
+
+                let mut task_scheduler = TaskScheduler {
+                    scheduled_tasks: table,
+                    action_graph,
+                    running_tasks: BTreeMap::new(),
+                    start_times: BTreeMap::new(),
+                    end_times: BTreeMap::new(),
+                    log: group_ctx.logger(),
+                    test_name: group_ctx.group_base_name.clone(),
+                };
+                info!(group_ctx.log(), "Generated task_scheduler");
+                task_scheduler.execute(args.keepalive);
+                info!(group_ctx.log(), "Task scheduler has terminated.");
+
+                // debug!(group_ctx.log(), "===== Debug Summary =====");
+                // let ag_res = task_scheduler.action_graph;
+                // for (node_index, (node, maybe_task_id)) in ag_res.task_iter().enumerate() {
+                //     if maybe_task_id.is_some() {
+                //         debug!(group_ctx.log(), "ag: node {:?}           task_id {:?}", node, maybe_task_id);
+                //     }
+                // }
+
+                let report = task_scheduler.create_report(group_ctx.group_base_name.clone());
+                if !args.no_summary_report {
+                    let event: log_events::LogEvent<_> = report.clone().into();
+                    // Emit a json log event, to be consumed by log post-processing tools.
+                    event.emit_log(group_ctx.log());
+                    info!(group_ctx.log(), "Report:\n{}", report.pretty_print());
+                }
+
+                if with_farm && !args.no_delete_farm_group {
+                    Self::delete_farm_group(group_ctx.clone());
+                }
+                if report.failure.is_empty() {
+                    Ok(Outcome::FromParentProcess(report))
+                } else {
+                    bail!(SystemTestGroupError::SystemTestFailure(report))
+                }
+            }
+            SystemTestsSubcommand::InteractiveMode => {
+                todo!()
+            }
+            SystemTestsSubcommand::SpawnChild { task_id, .. } => {
+                info!(group_ctx.log(), "Executing sub-process-specific code ...");
+                let my_task = table.get(&task_id).unwrap();
+                my_task.execute().unwrap();
+                Ok(Outcome::FromSubProcess)
+            }
+        }
+    }
+
+    pub fn execute_from_args(self) -> Result<()> {
+        let outcome = self.execute();
+
+        match outcome {
+            Ok(Outcome::FromSubProcess) => Ok(()),
+            Ok(Outcome::FromParentProcess(_)) => Ok(()),
+            Err(e) => {
+                // TODO: also print Kibana link in case of failure. This requires that the dyncamic
+                // group name (e.g., distributed_mainnet_test_bin--1673213252002) is made available
+                // to all SystemTestGroup instances, not only those used with Farm.
+                bail!("Tests failed: {e:?}");
+            }
+        }
+    }
+
+    fn delete_farm_group(ctx: GroupContext) {
+        info!(ctx.log(), "Deleting farm group.");
+        let env = ensure_setup_env(ctx);
+        let group_setup = GroupSetup::read_attribute(&env);
+        let farm_url = env.get_farm_url().unwrap();
+        let farm = Farm::new(farm_url, env.logger());
+        let group_name = group_setup.infra_group_name;
+        farm.delete_group(&group_name)
+            .expect("failed to delete the farm group");
+    }
+}

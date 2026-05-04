@@ -1,0 +1,21 @@
+[package]
+name = "ic-http-endpoints-metrics"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+axum = { workspace = true }
+ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
+ic-config = { path = "../../config" }
+ic-metrics = { path = "../../monitoring/metrics" }
+prometheus = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+
+[dev-dependencies]
+ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+reqwest = { workspace = true }

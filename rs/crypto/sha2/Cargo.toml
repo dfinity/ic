@@ -1,0 +1,13 @@
+[package]
+name = "ic-crypto-sha2"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+sha2 = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true }

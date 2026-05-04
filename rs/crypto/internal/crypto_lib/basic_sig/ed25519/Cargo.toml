@@ -1,30 +1,31 @@
 [package]
 name = "ic-crypto-internal-basic-sig-ed25519"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-base64 = "0.11.0"
-curve25519-dalek = "3.0.2"
-ed25519-consensus = "2.0.1"
-hex = "0.4.2"
-ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
+base64 = { workspace = true }
+hex = { workspace = true }
 ic-crypto-internal-seed = { path = "../../../crypto_lib/seed" }
 ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
-ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
+ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
+ic-ed25519 = { path = "../../../../../../packages/ic-ed25519" }
 ic-protobuf = { path = "../../../../../protobuf" }
 ic-types = { path = "../../../../../types/types" }
-rand = "0.8.5"
-rand_chacha = "0.3.1"
-serde = { version = "1.0.99", features = [ "derive" ] }
-simple_asn1 = "0.6.1"
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+serde = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
+assert_matches = { workspace = true }
+curve25519-dalek = { workspace = true }
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
-num-bigint = "0.4.3"
-proptest = "1.0"
-proptest-derive = "0.3.0"
-serde_cbor = "0.11.1"
-strum = "0.23.0"
-wycheproof = "0.4"
+ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
+num-bigint = { workspace = true }
+proptest = { workspace = true }
+proptest-derive = { workspace = true }
+serde_cbor = { workspace = true }
+strum = { workspace = true }
+wycheproof = { version = "0.6", default-features = false, features = ["eddsa"] }

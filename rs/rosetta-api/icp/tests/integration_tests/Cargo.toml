@@ -1,0 +1,30 @@
+[package]
+name = "icp-rosetta-integration-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+ic-icrc-rosetta-client = { path = "../../../icrc1/client" }
+ic-rosetta-api = { path = "../.." }
+icp-ledger = { path = "../../../../ledger_suite/icp" }
+ledger-canister = { path = "../../../../ledger_suite/icp/ledger" }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+ic-agent = { workspace = true }
+ic-icrc-rosetta = { path = "../../../icrc1" }
+ic-nns-constants = { path = "../../../../nns/constants" }
+ic-sender-canister = { path = "../../test_utils/sender_canister" }
+ic-test-utilities-load-wasm = { path = "../../../../test_utilities/load_wasm" }
+icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
+num-traits = { workspace = true }
+pocket-ic = { path = "../../../../../packages/pocket-ic" }
+rosetta-core = { path = "../../../common/rosetta_core" }
+serde = { workspace = true }

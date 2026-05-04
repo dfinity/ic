@@ -1,70 +1,77 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
-load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
-load("//bazel:canisters.bzl", "optimized_canister", "rust_canister")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
+# See rs/nervous_system/feature_test.md
 DEPENDENCIES = [
-    "//rs/crypto/sha",
-    "//rs/monitoring/metrics_encoder",
+    # Keep sorted.
+    "//packages/ic-http-types",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/nervous_system/canisters",
+    "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
-    "//rs/nervous_system/root",
-    "//rs/protobuf",
-    "//rs/registry/canister",
-    "//rs/rosetta-api/icrc1",
-    "//rs/rosetta-api/ledger_core",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_http_metrics",
-    "//rs/rust_canisters/dfn_protobuf",
-    "//rs/rust_canisters/on_wire",
+    "//rs/nervous_system/neurons_fund",
+    "//rs/nervous_system/proto",
+    "//rs/nervous_system/runtime",
+    "//rs/rust_canisters/canister_log",
     "//rs/sns/governance",
     "//rs/types/base_types",
-    "//rs/types/ic00_types",
+    "//rs/utils",
     "@crate_index//:build-info",
-    "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:comparable",
     "@crate_index//:hex",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-timers",
+    "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:ic-stable-structures",
+    "@crate_index//:itertools",
     "@crate_index//:lazy_static",
+    "@crate_index//:maplit",
     "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:rust_decimal",
     "@crate_index//:serde",
-    "@crate_index//:strum",
+    "@crate_index//:serde_bytes",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
-    "@crate_index//:strum_macros",
+    "@crate_index//:rust_decimal_macros",
 ]
 
 BUILD_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/types/base_types",
     "@crate_index//:build-info-build",
     "@crate_index//:prost-build",
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/config",
+    # Keep sorted.
     "//rs/nervous_system/common/test_keys",
-    "//rs/nns/common",
-    "//rs/rosetta-api/ledger_canister",
+    "//rs/nervous_system/common/test_utils",
     "//rs/sns/swap/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
-    "@crate_index//:criterion",
+    "@crate_index//:assert_matches",
+    "@crate_index//:candid_parser",
     "@crate_index//:futures",
-    "@crate_index//:maplit",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-test",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
@@ -84,7 +91,6 @@ rust_library(
     name = "swap",
     srcs = glob([
         "src/**",
-        "gen/**",
     ]),
     aliases = ALIASES,
     crate_name = "ic_sns_swap",
@@ -93,33 +99,16 @@ rust_library(
     deps = DEPENDENCIES + [":build_script"],
 )
 
-rust_library(
-    name = "swap_test_feature",
-    srcs = glob([
-        "src/**",
-        "gen/**",
-    ]),
-    aliases = ALIASES,
-    crate_features = ["test"],
-    crate_name = "ic_sns_swap",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.1.0",
-    deps = DEPENDENCIES + [
-        ":build_script",
-    ],
-)
-
 rust_canister(
-    name = "sns-swap-canister-raw",
+    name = "sns-swap-canister",
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":swap"] + [":build_script"],
-)
-
-optimized_canister(
-    name = "sns-swap-canister",
-    wasm = ":sns-swap-canister-raw",
+    service_file = ":canister/swap.did",
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":swap",
+    ],
 )
 
 rust_test(
@@ -132,21 +121,31 @@ rust_test(
 
 rust_test(
     name = "canister_unit_test",
-    crate = ":_wasm_sns-swap-canister-raw",
-    data = [":canister/swap.did"],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/sns/swap",
-    },
-    deps = ["@crate_index//:tokio"],
+    srcs = glob(["canister/**/*.rs"]),
+    compile_data = ["canister/swap.did"],
+    crate_root = "canister/canister.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+        ":swap",
+    ],
 )
 
-rust_test_suite(
+rust_test_suite_with_extra_srcs(
     name = "swap_integration_tests",
     srcs = glob(
         ["tests/**/*.rs"],
-        exclude = ["tests/check_generated_files.rs"],
+        exclude = [
+            "tests/check_generated_files.rs",
+            "tests/common/mod.rs",
+            "tests/common/doubles.rs",
+        ],
     ),
     aliases = ALIASES,
+    extra_srcs = [
+        "tests/common/mod.rs",
+        "tests/common/doubles.rs",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":swap"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
@@ -154,12 +153,14 @@ rust_test_suite(
 generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
-    data = glob(["gen/**"]) + [
+    data = glob(["src/gen/**"]) + [
         ":protos",
+        "//rs/nervous_system/proto:protos",
         "//rs/types/base_types:protos",
     ],
     manifest_dir = "rs/sns/swap",
     deps = [
+        # Keep sorted.
         "//rs/sns/swap/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",

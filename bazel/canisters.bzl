@@ -2,22 +2,36 @@
 This module defines utilities for building Rust canisters.
 """
 
+load("@rules_motoko//motoko:defs.bzl", "motoko_binary")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
-def _wasm_rust_transition_impl(_settings, _attr):
+def _wasm_rust_transition_impl(_settings, attr):
     return {
         "//command_line_option:platforms": "@rules_rust//rust/platform:wasm",
         "@rules_rust//:extra_rustc_flags": [
+            # rustc allocates a default stack size of 1MiB for Wasm, which causes stack overflow on certain
+            # recursive workloads when compiled with 1.78.0+. Hence, we set the new stack size to 3MiB
+            "-C",
+            "link-args=-z stack-size=3145728",
             "-C",
             "linker-plugin-lto",
             "-C",
-            "opt-level=z",
+            "opt-level=" + attr.opt,
             "-C",
             "debug-assertions=no",
             "-C",
             "debuginfo=0",
             "-C",
             "lto",
+            "-C",
+            # If combined with -C lto, -C embed-bitcode=no will cause rustc to abort at start-up,
+            # because the combination is invalid.
+            # See: https://doc.rust-lang.org/rustc/codegen-options/index.html#embed-bitcode
+            #
+            # embed-bitcode is disabled by default by rules_rust.
+            "embed-bitcode=yes",
+            "-C",
+            "target-feature=+bulk-memory",
         ],
     }
 
@@ -45,39 +59,149 @@ wasm_rust_binary_rule = rule(
     implementation = _wasm_binary_impl,
     attrs = {
         "binary": attr.label(mandatory = True, cfg = wasm_rust_transition),
-        "_whitelist_function_transition": attr.label(default = "@bazel_tools//tools/whitelists/function_transition_whitelist"),
+        "_allowlist_function_transition": attr.label(default = "@bazel_tools//tools/allowlists/function_transition_allowlist"),
+        "opt": attr.string(mandatory = True),
     },
 )
 
-def rust_canister(name, **kwargs):
-    """Defines a rust program that builds into a WebAssembly module.
+def rust_canister(name, service_file, visibility = ["//visibility:public"], testonly = False, opt = "3", **kwargs):
+    """Defines a Rust program that builds into a WebAssembly module.
+
+    The following targets are generated:
+        <name>.raw: the raw Wasm module as built by rustc
+        <name>.wasm.gz: the Wasm module, shrunk, with metadata, gzipped.
 
     Args:
       name: the name of the target that produces a Wasm module.
-      **kwargs: additional arguments to pass a rust_binary rule.
+      service_file: the label pointing the canister candid interface file.
+      visibility: visibility of the Wasm target
+      opt: opt-level for the Wasm target
+      testonly: testonly attribute for Wasm target
+      **kwargs: additional arguments to pass a rust_binary.
     """
-    wasm_name = "_wasm_" + name.replace(".", "_")
-    kwargs.setdefault("visibility", ["//visibility:public"])
 
+    # Tags for the wasm build (popped because not relevant to bin base build)
+    tags = kwargs.pop("tags", [])
+    tags.append("canister")
+
+    # The option to keep the name section is only required for wasm finalization.
+    keep_name_section = kwargs.pop("keep_name_section", False)
+
+    # Sanity checking (no '.' in name)
+    if name.count(".") > 0:
+        fail("name '{}' should not include dots".format(name))
+
+    # Rust binary build (not actually built by default, but transitioned & used in the
+    # wasm build)
+    # NOTE: '_wasm_' is a misnommer since it's not a wasm build but used for legacy
+    # reasons (some targets depend on this)
+    bin_name = "_wasm_" + name.replace(".", "_")
     rust_binary(
-        name = wasm_name,
+        name = bin_name,
         crate_type = "bin",
+        tags = ["manual"],  # don't include in wildcards like //pkg/...
+        visibility = ["//visibility:private"],  # shouldn't be used
+        testonly = testonly,
         **kwargs
     )
 
+    # The actual wasm build, unoptimized
+    wasm_name = name + ".raw"
     wasm_rust_binary_rule(
-        name = name,
-        binary = ":" + wasm_name,
+        name = wasm_name,
+        binary = ":" + bin_name,
+        opt = opt,
+        visibility = visibility,
+        testonly = testonly,
+        tags = tags,
     )
 
-def optimized_canister(name, wasm):
-    """Invokes canister WebAssembly module optimizer.
+    # The finalized wasm (optimized, versioned, etc)
+    final_name = name + ".wasm.gz"
+    finalize_wasm(
+        name = final_name,
+        src_wasm = wasm_name,
+        service_file = service_file,
+        version_file = "//bazel:version.txt",
+        visibility = visibility,
+        testonly = testonly,
+        keep_name_section = keep_name_section,
+    )
+
+    native.alias(
+        name = name,
+        actual = final_name,
+        visibility = visibility,
+    )
+
+    # DID service related targets
+    native.alias(
+        name = name + ".didfile",
+        actual = service_file,
+        visibility = visibility,
+    )
+
+def motoko_canister(name, entry, deps, **kwargs):
+    """Defines a Motoko program that builds into a WebAssembly module.
+
+    Args:
+      name: the name of the target that produces a Wasm module.
+      entry: path to this canister's main Motoko source file.
+      deps: list of actor dependencies, e.g., external_actor targets from @rules_motoko.
+      **kwargs: additional arguments to pass to motoko_binary (like `moc_flags`).
+    """
+
+    raw_wasm = entry.replace(".mo", ".raw")
+    raw_did = entry.replace(".mo", ".did")
+    final_name = name + ".wasm.gz"
+
+    native.alias(
+        name = name + ".didfile",
+        actual = raw_did,
+    )
+
+    motoko_binary(
+        name = name + "_raw",
+        entry = entry,
+        idl_out = raw_did,
+        wasm_out = raw_wasm,
+        deps = deps,
+        **kwargs
+    )
+
+    finalize_wasm(
+        name = final_name,
+        src_wasm = raw_wasm,
+        version_file = "//bazel:version.txt",
+        testonly = False,
+    )
+
+    native.alias(
+        name = name,
+        actual = final_name,
+    )
+
+def finalize_wasm(*, name, src_wasm, service_file = None, version_file, testonly, visibility = ["//visibility:public"], keep_name_section = False):
+    """Generates an output file name `name + '.wasm.gz'`.
+
+    The input file is shrunk, annotated with metadata, and gzipped. The canister
+    metadata consists of:
+        'icp:public git_commit_id': version used in the build
+        'icp:public candid:service': the canister's candid service description
     """
     native.genrule(
-        name = name,
-        srcs = [wasm],
-        outs = [name + ".wasm"],
-        message = "Shrinking canister " + name,
-        exec_tools = ["@crate_index//:ic-wasm__ic-wasm"],
-        cmd_bash = "$(location @crate_index//:ic-wasm__ic-wasm) $< -o $@ shrink",
+        name = "_" + name + "_finalize",
+        srcs = [src_wasm, version_file] + ([service_file] if not (service_file == None) else []),
+        outs = [name],
+        visibility = visibility,
+        testonly = testonly,
+        message = "Finalizing canister " + name,
+        tools = ["@crate_index//:ic-wasm__ic-wasm", "@pigz"],
+        cmd_bash = " && ".join([
+            "{ic_wasm} {input_wasm} -o $@.shrunk shrink {keep_name_section}",
+            "{ic_wasm} $@.shrunk -o $@.meta metadata candid:service {keep_name_section} --visibility public --file " + "$(location {})".format(service_file) if not (service_file == None) else "cp $@.shrunk $@.meta",  # if service_file is None, don't include a service file
+            "{ic_wasm} $@.meta -o $@.ver metadata git_commit_id {keep_name_section} --visibility public --file {version_file}",
+            "{pigz} --processes 16 --no-name $@.ver --stdout > $@",
+        ])
+            .format(input_wasm = "$(location {})".format(src_wasm), ic_wasm = "$(location @crate_index//:ic-wasm__ic-wasm)", version_file = "$(location {})".format(version_file), pigz = "$(location @pigz)", keep_name_section = "--keep-name-section" if keep_name_section else ""),
     )

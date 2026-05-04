@@ -1,0 +1,13 @@
+- canister_id: ryjl3-tyaaa-aaaaa-aaaba-cai
+  methods_regex: ^canister_method$
+  limit: 2500/1s
+  incident_id: 66485a09-f034-4781-972f-42b798c3f3c6
+  description: "Protecting Canister Method 1"
+
+- canister_id: ryjl3-tyaaa-aaaaa-aaaba-cai
+  methods_regex: ^(canister_method1|canister_method2)$
+  request_types:
+    - call
+  limit: 5/1min
+  incident_id: 66485a09-f034-4781-972f-42b798c3f3c6
+  description: "Protecting Canister Method 1 and 2 for Calls"

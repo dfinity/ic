@@ -6,15 +6,13 @@ use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes};
 use serde::{Deserialize, Serialize};
 
-// These are the base error types used by ni_dkg
-// TODO(CRP-574): Move these up, out of dkg.
 pub use super::dkg_errors::{
     InternalError, InvalidArgumentError, KeyNotFoundError, MalformedDataError, MalformedPopError,
     MalformedPublicKeyError, MalformedSecretKeyError, SizeError,
 };
 
 /// The receiver set isn't properly indexed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct MisnumberedReceiverError {
     pub receiver_index: NodeIndex,
     pub number_of_receivers: NumberOfNodes,
@@ -45,16 +43,15 @@ impl From<MisnumberedReceiverError> for CspDkgVerifyDealingError {
 }
 
 /// Creation of a forward-secure keypair during DKG failed.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CspDkgCreateFsKeyError {
-    /// Precondition error: The AlgorithmId does not correspond to a NiDkg
-    /// variant.
-    UnsupportedAlgorithmId(AlgorithmId),
     InternalError(InternalError),
+    DuplicateKeyId(String),
+    TransientInternalError(String),
 }
 
 /// Verification of a DKG forward-secure key failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CspDkgVerifyFsKeyError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -65,17 +62,21 @@ pub enum CspDkgVerifyFsKeyError {
 }
 
 /// Updating the forward-secure epoch for DKG failed.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CspDkgUpdateFsEpochError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
     UnsupportedAlgorithmId(AlgorithmId),
     FsKeyNotInSecretKeyStoreError(KeyNotFoundError),
     TransientInternalError(InternalError),
+    /// Precondition error: The encryption key was not found.
+    KeyNotFoundError(KeyNotFoundError),
+    /// The public key could not be parsed.
+    MalformedPublicKeyError(MalformedDataError),
 }
 
 /// Encrypting or zero-knowledge proving during DKG failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum EncryptAndZKProveError {
     /// One of the receiver public keys is invalid.
     MalformedFsPublicKeyError {
@@ -87,7 +88,7 @@ pub enum EncryptAndZKProveError {
 }
 
 /// Forward-secure decryption during DKG failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum DecryptError {
     /// The ciphertext was malformed
     MalformedCiphertext(&'static str),
@@ -103,14 +104,14 @@ pub enum DecryptError {
         secret_key_epoch: Epoch,
     },
     /// One of the forward-secure-encryption chunks failed to decrypt.
-    InvalidChunk,
+    InvalidChunk(String),
     /// Hardware error: This machine cannot handle this request because some
     /// parameter was too large.
     SizeError(SizeError),
 }
 
 /// Creation of a DKG dealing failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CspDkgCreateDealingError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -131,8 +132,8 @@ pub enum CspDkgCreateDealingError {
     /// Hardware error: This machine cannot handle this request because some
     /// parameter was too large.
     SizeError(SizeError),
-    // An internal error, e.g. an RPC error.
-    InternalError(InternalError),
+    /// Transient internal error, e.g. an RPC error.
+    TransientInternalError(InternalError),
 }
 
 impl From<EncryptAndZKProveError> for CspDkgCreateDealingError {
@@ -153,7 +154,7 @@ impl From<EncryptAndZKProveError> for CspDkgCreateDealingError {
 }
 
 /// Creation of a DKG resharing dealing failed.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CspDkgCreateReshareDealingError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -171,6 +172,8 @@ pub enum CspDkgCreateReshareDealingError {
         receiver_index: NodeIndex,
         error: MalformedPublicKeyError,
     },
+    /// Error computing the KeyId of the secret key to be reshared.
+    ReshareKeyIdComputationError(InternalError),
     /// Precondition error: The key encryption key was not in the secret key
     /// store.
     ReshareKeyNotInSecretKeyStoreError(KeyNotFoundError),
@@ -180,8 +183,8 @@ pub enum CspDkgCreateReshareDealingError {
     /// Hardware error: This machine cannot handle this request because some
     /// parameter was too large.
     SizeError(SizeError),
-    // An internal error, e.g. an RPC error.
-    InternalError(InternalError),
+    /// Transient internal error, e.g. an RPC error.
+    TransientInternalError(InternalError),
 }
 
 impl From<EncryptAndZKProveError> for CspDkgCreateReshareDealingError {
@@ -227,54 +230,15 @@ impl From<CspDkgCreateDealingError> for CspDkgCreateReshareDealingError {
             CspDkgCreateDealingError::SizeError(error) => {
                 CspDkgCreateReshareDealingError::SizeError(error)
             }
-            CspDkgCreateDealingError::InternalError(error) => {
-                CspDkgCreateReshareDealingError::InternalError(error)
-            }
-        }
-    }
-}
-
-impl From<CspDkgCreateReshareDealingError> for CspDkgCreateDealingError {
-    fn from(error: CspDkgCreateReshareDealingError) -> Self {
-        match error {
-            CspDkgCreateReshareDealingError::UnsupportedAlgorithmId(error) => {
-                CspDkgCreateDealingError::UnsupportedAlgorithmId(error)
-            }
-            CspDkgCreateReshareDealingError::InvalidThresholdError(error) => {
-                CspDkgCreateDealingError::InvalidThresholdError(error)
-            }
-            CspDkgCreateReshareDealingError::ReshareKeyNotInSecretKeyStoreError(_) => {
-                panic!("This error cannot be converted")
-            }
-            CspDkgCreateReshareDealingError::MalformedReshareSecretKeyError(_) => {
-                panic!("This error cannot be converted")
-            }
-            CspDkgCreateReshareDealingError::MisnumberedReceiverError {
-                receiver_index,
-                number_of_receivers,
-            } => CspDkgCreateDealingError::MisnumberedReceiverError {
-                receiver_index,
-                number_of_receivers,
-            },
-            CspDkgCreateReshareDealingError::MalformedFsPublicKeyError {
-                receiver_index,
-                error,
-            } => CspDkgCreateDealingError::MalformedFsPublicKeyError {
-                receiver_index,
-                error,
-            },
-            CspDkgCreateReshareDealingError::SizeError(error) => {
-                CspDkgCreateDealingError::SizeError(error)
-            }
-            CspDkgCreateReshareDealingError::InternalError(error) => {
-                CspDkgCreateDealingError::InternalError(error)
+            CspDkgCreateDealingError::TransientInternalError(error) => {
+                CspDkgCreateReshareDealingError::TransientInternalError(error)
             }
         }
     }
 }
 
 /// Verification of a DKG dealing failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CspDkgVerifyDealingError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -306,7 +270,7 @@ pub enum CspDkgVerifyDealingError {
 }
 
 /// Verification of a DKG resharing dealing failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CspDkgVerifyReshareDealingError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -376,7 +340,7 @@ impl From<CspDkgVerifyDealingError> for CspDkgVerifyReshareDealingError {
 }
 
 /// Creation of a DKG transcript failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CspDkgCreateTranscriptError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -398,7 +362,7 @@ pub enum CspDkgCreateTranscriptError {
 }
 
 /// Creation of a DKG transcript after resharing failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CspDkgCreateReshareTranscriptError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -425,9 +389,11 @@ pub enum CspDkgCreateReshareTranscriptError {
 }
 
 /// A call to retain existing threshold keys failed.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CspDkgRetainThresholdKeysError {
-    // An internal error, e.g. an RPC error.
+    /// A key ID could not be computed from the public coefficients.
+    KeyIdInstantiationError(String),
+    /// An internal error, e.g. an RPC error.
     TransientInternalError(InternalError),
 }
 
@@ -458,7 +424,7 @@ impl From<CspDkgCreateTranscriptError> for CspDkgCreateReshareTranscriptError {
 }
 
 /// Loading a private key from a DKG transcript failed.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CspDkgLoadPrivateKeyError {
     /// The AlgorithmId does not correspond to a NiDkg variant
     UnsupportedAlgorithmId(AlgorithmId),
@@ -477,8 +443,14 @@ pub enum CspDkgLoadPrivateKeyError {
         ciphertext_epoch: Epoch,
         secret_key_epoch: Epoch,
     },
-    // A transient internal error, e.g. an RPC error.
+    /// The ID of the threshold key could not be computed from the public coefficients.
+    KeyIdInstantiationError(String),
+    /// An internal error occurred.
+    InternalError(InternalError),
+    /// A transient internal error, e.g. an RPC error.
     TransientInternalError(InternalError),
+    /// The public key could not be parsed.
+    MalformedPublicKeyError(MalformedDataError),
 }
 
 impl CspDkgVerifyReshareDealingError {
@@ -529,12 +501,36 @@ pub mod dealing {
     impl From<InvalidDealingError> for InvalidArgumentError {
         fn from(error: InvalidDealingError) -> InvalidArgumentError {
             match error {
-          InvalidDealingError::UnexpectedShare { receiver_index, number_of_receivers } => InvalidArgumentError{ message: format!("Expected receiver indices 0..{} inclusive but found {}.", number_of_receivers.get()-1, receiver_index) },
-          InvalidDealingError::MissingShare { receiver_index } => InvalidArgumentError{ message: format!("Missing share for receiver {}", receiver_index) },
-          InvalidDealingError::MalformedShare { receiver_index } => InvalidArgumentError{ message: format!("Malformed share for receiver {}", receiver_index) },
-          InvalidDealingError::ThresholdMismatch { threshold, public_coefficients_len } => InvalidArgumentError{ message: format!("The reshared public coefficients don't match the threshold\n  Threshold: {}\n  Public coefficients len: {}", threshold, public_coefficients_len) },
-          InvalidDealingError::ReshareMismatch { old, new } => InvalidArgumentError{ message: format!("The reshared public key does not match the preexisting key.\n  Old: {:?}\n  New: {:?}", old, new) },
-        }
+                InvalidDealingError::UnexpectedShare {
+                    receiver_index,
+                    number_of_receivers,
+                } => InvalidArgumentError {
+                    message: format!(
+                        "Expected receiver indices 0..{} inclusive but found {}.",
+                        number_of_receivers.get() - 1,
+                        receiver_index
+                    ),
+                },
+                InvalidDealingError::MissingShare { receiver_index } => InvalidArgumentError {
+                    message: format!("Missing share for receiver {receiver_index}"),
+                },
+                InvalidDealingError::MalformedShare { receiver_index } => InvalidArgumentError {
+                    message: format!("Malformed share for receiver {receiver_index}"),
+                },
+                InvalidDealingError::ThresholdMismatch {
+                    threshold,
+                    public_coefficients_len,
+                } => InvalidArgumentError {
+                    message: format!(
+                        "The reshared public coefficients don't match the threshold\n  Threshold: {threshold}\n  Public coefficients len: {public_coefficients_len}"
+                    ),
+                },
+                InvalidDealingError::ReshareMismatch { old, new } => InvalidArgumentError {
+                    message: format!(
+                        "The reshared public key does not match the preexisting key.\n  Old: {old:?}\n  New: {new:?}"
+                    ),
+                },
+            }
         }
     }
 }

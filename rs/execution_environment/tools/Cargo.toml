@@ -1,0 +1,21 @@
+[package]
+name = "icp-config"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+clap = { workspace = true }
+eyre = "0.6.8"
+ic-config = { path = "../../config" }
+ic-embedders = { path = "../../embedders" }
+ic-replicated-state = { path = "../../replicated_state" }
+ic-types = { path = "../../types/types" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[[bin]]
+name = "icp_config"
+path = "src/icp_config.rs"

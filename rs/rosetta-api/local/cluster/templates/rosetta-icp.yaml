@@ -1,0 +1,101 @@
+{{- range $.Values.icpRosettaServices }}
+# Only add the service if:
+# - It's the latest image and deployLatest is true, OR
+# - It's a local image and useLocallyBuilt is true
+{{- if or (and (not .isLocallyBuilt) $.Values.icpConfig.deployLatest) (and .isLocallyBuilt $.Values.icpConfig.useLocallyBuilt) }}
+{{- if $.Values.usePersistentVolumes }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .name }}-pvc
+  namespace: {{ .namespace }}
+spec:
+  accessModes:
+    {{- range $.Values.persistentVolume.accessModes }}
+    - {{ . }}
+    {{- end }}
+  storageClassName: {{ $.Values.persistentVolume.storageClass }}
+  resources:
+    requests:
+      storage: {{ $.Values.persistentVolume.size }}
+---
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .name }}
+  namespace: {{ .namespace }}
+  labels:
+    app: {{ .name }}
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "{{ .containerPort }}"
+spec:
+  selector:
+    app: {{ .name }}
+  ports:
+    - name: http
+      protocol: TCP
+      port: {{ .containerPort }}
+      targetPort: {{ .containerPort }}
+      nodePort: {{ .nodePort }}
+  type: NodePort
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .name }}
+  namespace: {{ .namespace }}
+spec:
+  replicas: {{ $.Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .name }}
+    spec:
+      containers:
+      - name: {{ .name }}
+        image: "{{ .image }}"
+        imagePullPolicy: IfNotPresent
+        args:
+          - "--mainnet"
+          - "--expose-metrics"
+          - "--store-location"
+          - {{ $.Values.icpConfig.storeLocation | quote }}
+          - "--token-symbol"
+          - {{ $.Values.icpConfig.tokenSymbol | quote }}
+          - "--canister-id"
+          - {{ $.Values.icpConfig.canisterId | quote }}
+          - "--port"
+          - {{ .containerPort | quote}}
+        ports:
+        - containerPort: {{ .containerPort }}
+        volumeMounts:
+          {{- range $.Values.volumeMounts }}
+          - name: {{ .name }}
+            mountPath: {{ .mountPath }}
+          {{- end }}
+        resources:
+          limits:
+            memory: {{ .resources.limits.memory }}
+            cpu: {{ .resources.limits.cpu }}
+          requests:
+            memory: {{ .resources.requests.memory }}
+            cpu: {{ .resources.requests.cpu }}
+      volumes:
+        {{- $serviceName := .name }}
+        {{- range $.Values.volumes }}
+        - name: {{ .name }}
+          {{- if $.Values.usePersistentVolumes }}
+          persistentVolumeClaim:
+            claimName: {{ $serviceName }}-pvc
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- end }}
+---
+{{- end }}
+{{- end }}

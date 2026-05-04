@@ -4,16 +4,13 @@
 # table description. The actual disk image is wrapped up into a tar file
 # because the raw image file is sparse.
 #
-# The input partition images are also expected to be given as tar files,
-# where each tar archive must contain a single file named "partition.img".
+# The input partition images are also expected to be given as tzst files,
 #
 # Call example:
-#   build_disk_image -p partitions.csv -o disk.img.tar part1.tar part2.tar ...
+#   build_disk_image -p partitions.csv -o disk.img.tar part1.tzst part2.tzst ...
 #
 import argparse
-import atexit
 import os
-import shutil
 import subprocess
 import sys
 import tarfile
@@ -99,7 +96,13 @@ def _copyfile(source, target, size):
         size -= len(data)
 
 
-def write_partition_image_from_tar(gpt_entry, image_file, partition_tf):
+def write_partition_image_from_tzst(gpt_entry, image_file, partition_tzst):
+    tmpdir = tempfile.mkdtemp()
+
+    partition_tf = os.path.join(tmpdir, "partition.tar")
+    subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
+
+    partition_tf = tarfile.open(partition_tf, mode="r:")
     base = gpt_entry["start"] * 512
     with os.fdopen(os.open(image_file, os.O_RDWR), "wb+") as target:
         for member in partition_tf:
@@ -107,8 +110,8 @@ def write_partition_image_from_tar(gpt_entry, image_file, partition_tf):
                 continue
             if member.size > gpt_entry["size"] * 512:
                 raise RuntimeError("Image too large for partition %s" % gpt_entry["name"])
+            source = partition_tf.extractfile(member)
             if member.type == tarfile.GNUTYPE_SPARSE:
-                source = partition_tf.extractfile(member)
                 for offset, size in member.sparse:
                     if size == 0:
                         continue
@@ -120,11 +123,32 @@ def write_partition_image_from_tar(gpt_entry, image_file, partition_tf):
                 _copyfile(source, target, member.size)
 
 
+def select_partition_file(name, partition_files):
+    for partition_file in partition_files:
+        if name in os.path.basename(partition_file):
+            return partition_file
+
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-o", "--out", help="Target (tar) file to write disk image to", type=str)
     parser.add_argument("-p", "--partition_table", help="CSV file describing the partition table", type=str)
-    parser.add_argument("partitions", metavar="partition", type=str, nargs="+", help="Partitions to write, in order")
+    parser.add_argument("-s", "--expanded-size", help="Optional size to grow the image to", required=False, type=str)
+    parser.add_argument(
+        "--populate-b-partitions",
+        help="Whether to populate the B partition set with the same content as the A partition set "
+        "(mostly for testing). The default behavior is to leave the B partitions empty.",
+    )
+    parser.add_argument(
+        "partitions",
+        metavar="partition",
+        type=str,
+        nargs="*",
+        help="Partitions to write. These must match the CSV partition table entries.",
+    )
+    parser.add_argument("--dflate", help="Path to our dflate tool", type=str)
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -137,30 +161,49 @@ def main():
     validate_partition_table(gpt_entries)
 
     tmpdir = tempfile.mkdtemp()
-    atexit.register(lambda: shutil.rmtree(tmpdir))
 
     disk_image = os.path.join(tmpdir, "disk.img")
     prepare_diskimage(gpt_entries, disk_image)
 
-    for index in range(len(partition_files)):
-        write_partition_image_from_tar(gpt_entries[index], disk_image, tarfile.open(partition_files[index], mode="r:"))
+    for entry in gpt_entries:
+        # Skip over any partitions starting with "B_". These are empty in our
+        # published images, and stay this way until a live system upgrades
+        # into them.
+        if not args.populate_b_partitions and entry["name"].startswith("B_"):
+            continue
 
+        name = entry["name"]
+        # Remove the prefix from any partitions before doing a lookup.
+        for prefix in ("A_", "B_"):
+            if name.startswith(prefix):
+                name = name[len(prefix) :]
+
+        partition_file = select_partition_file(name, partition_files)
+
+        if partition_file:
+            write_partition_image_from_tzst(entry, disk_image, partition_file)
+        else:
+            print("No partition file for '%s' found, leaving empty" % name)
+
+    # Provide additional space for vda10, the final partition, for immediate QEMU use
+    if args.expanded_size:
+        subprocess.run(["truncate", "--size", args.expanded_size, disk_image], check=True)
+
+    # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
+    # If dflate is ever misbehaving, it can be replaced with:
+    # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
     subprocess.run(
         [
-            "tar",
-            "cf",
+            args.dflate,
+            "--input",
+            disk_image,
+            "--output",
             out_file,
-            "--sort=name",
-            "--owner=root:0",
-            "--group=root:0",
-            "--mtime=UTC 1970-01-01 00:00:00",
-            "--sparse",
-            "-C",
-            tmpdir,
-            "disk.img",
         ],
         check=True,
     )
+
+    # tempfile cleanup is handled by proc_wrapper.sh
 
 
 if __name__ == "__main__":

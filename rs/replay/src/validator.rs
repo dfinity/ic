@@ -1,37 +1,50 @@
-use std::sync::{Arc, RwLock};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{Arc, RwLock},
+};
 
 use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, dkg_pool::DkgPoolImpl};
-use ic_config::{artifact_pool::ArtifactPoolConfig, Config};
-use ic_consensus::consensus::{
-    dkg_key_manager::DkgKeyManager, pool_reader::PoolReader, validator::Validator, ConsensusCrypto,
-    Membership, ValidatorMetrics,
+use ic_config::{Config, artifact_pool::ArtifactPoolConfig};
+use ic_consensus::consensus::validator::Validator;
+use ic_consensus_certification::CertificationCrypto;
+use ic_consensus_dkg::DkgKeyManager;
+use ic_consensus_utils::{
+    active_high_threshold_nidkg_id, crypto::ConsensusCrypto, membership::Membership,
+    pool_reader::PoolReader, registry_version_at_height,
 };
-use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifact,
-    consensus_pool::{
-        ChangeAction, ConsensusPool, ConsensusPoolCache, HeightIndexedPool, MutableConsensusPool,
-    },
+    certification::Verifier,
+    consensus_pool::{ChangeAction, ConsensusPool, ConsensusPoolCache, HeightIndexedPool},
     messaging::MessageRouting,
+    p2p::consensus::{MutablePool, UnvalidatedArtifact},
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::types::v1 as pb;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    Height, NodeId, PrincipalId, SubnetId,
     artifact::ConsensusMessageId,
-    consensus::{Block, CatchUpPackage, ConsensusMessage, ConsensusMessageHash, HasBlockHash},
+    consensus::{
+        Block, ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable, HasBlockHash,
+        HasCommittee,
+        certification::{Certification, CertificationShare},
+    },
     crypto::CryptoHashOf,
     replica_config::ReplicaConfig,
-    Height, NodeId, SubnetId,
 };
+use rayon::ThreadPoolBuilder;
 use serde::{Deserialize, Serialize};
 
 use crate::{mocks::MockPayloadBuilder, player::ReplayError};
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+const MAX_VALIDATION_THREADS: usize = 8;
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct InvalidArtifact {
     pub id: ConsensusMessageId,
     pub block_hash: Option<CryptoHashOf<Block>>,
@@ -65,7 +78,7 @@ impl InvalidArtifact {
 
     fn bytes_to_hex_string(&self, v: &[u8]) -> String {
         v.iter().fold(String::new(), |mut hash, byte| {
-            hash.push_str(&format!("{:X}", byte));
+            hash.push_str(&format!("{byte:X}"));
             hash
         })
     }
@@ -75,8 +88,13 @@ pub struct ReplayValidator {
     cfg: Config,
     pub replica_cfg: ReplicaConfig,
     validator: Validator,
-    crypto: Arc<dyn ConsensusCrypto>,
+    verifier: Arc<dyn Verifier>,
+    membership: Arc<Membership>,
+    pool_cache: Arc<dyn ConsensusPoolCache>,
+    consensus_crypto: Arc<dyn ConsensusCrypto>,
+    certification_crypto: Arc<dyn CertificationCrypto>,
     metrics_registry: MetricsRegistry,
+    registry: Arc<dyn RegistryClient>,
     log: ReplicaLogger,
     time_source: Arc<dyn TimeSource>,
 }
@@ -84,9 +102,10 @@ pub struct ReplayValidator {
 impl ReplayValidator {
     pub fn new(
         cfg: Config,
-        node_id: NodeId,
         subnet_id: SubnetId,
-        crypto: Arc<dyn ConsensusCrypto>,
+        consensus_crypto: Arc<dyn ConsensusCrypto>,
+        certification_crypto: Arc<dyn CertificationCrypto>,
+        verifier: Arc<dyn Verifier>,
         pool_cache: Arc<dyn ConsensusPoolCache>,
         registry: Arc<dyn RegistryClient>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -94,22 +113,36 @@ impl ReplayValidator {
         log: ReplicaLogger,
     ) -> Self {
         let metrics_registry = MetricsRegistry::new();
-        let membership = Membership::new(pool_cache, registry.clone(), subnet_id);
+        let membership = Arc::new(Membership::new(
+            pool_cache.clone(),
+            registry.clone(),
+            subnet_id,
+        ));
         let time_source = Arc::new(SysTimeSource::new());
-        let dkg_pool = RwLock::new(DkgPoolImpl::new(metrics_registry.clone()));
+        let dkg_pool = RwLock::new(DkgPoolImpl::new(
+            metrics_registry.clone(),
+            log.clone(),
+            Height::from(0),
+        ));
+        let node_id = NodeId::from(PrincipalId::new_node_test_id(1));
         let replica_cfg = ReplicaConfig::new(node_id, subnet_id);
+        let thread_pool = ThreadPoolBuilder::new()
+            .num_threads(MAX_VALIDATION_THREADS)
+            .build()
+            .expect("Failed to create thread pool");
 
         let validator = Validator::new(
             replica_cfg.clone(),
-            Arc::new(membership),
-            registry,
-            Arc::clone(&crypto),
+            membership.clone(),
+            registry.clone(),
+            consensus_crypto.clone(),
             Arc::new(MockPayloadBuilder {}) as Arc<_>,
             state_manager,
             message_routing,
             Arc::new(dkg_pool) as Arc<_>,
+            Arc::new(thread_pool),
             log.clone(),
-            ValidatorMetrics::new(metrics_registry.clone()),
+            &metrics_registry,
             time_source.clone(),
         );
 
@@ -117,7 +150,12 @@ impl ReplayValidator {
             cfg,
             replica_cfg,
             validator,
-            crypto,
+            verifier,
+            membership,
+            registry,
+            pool_cache,
+            consensus_crypto,
+            certification_crypto,
             metrics_registry,
             log,
             time_source,
@@ -133,7 +171,7 @@ impl ReplayValidator {
     pub fn new_key_manager(&self, pool_reader: &PoolReader) -> DkgKeyManager {
         DkgKeyManager::new(
             self.metrics_registry.clone(),
-            self.crypto.clone(),
+            self.consensus_crypto.clone(),
             self.log.clone(),
             pool_reader,
         )
@@ -161,10 +199,10 @@ impl ReplayValidator {
 
     /// Return a new consensus pool in a temp directory. Validated artifacts of the given pool are inserted as
     /// unvalidated artifacts into the new pool.
-    pub fn get_new_unvalidated(
+    fn get_new_unvalidated(
         &self,
         consensus_pool: &dyn ConsensusPool,
-        cup: CatchUpPackage,
+        cup: pb::CatchUpPackage,
     ) -> ConsensusPoolImpl {
         let tmp_dir = tempfile::Builder::new()
             .prefix("replay_artifact_pool_")
@@ -182,12 +220,14 @@ impl ReplayValidator {
         let artifact_pool_config = ArtifactPoolConfig::from(cfg.artifact_pool);
 
         // This creates a new pool with just the genesis CUP.
-        let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+        let mut pool = ConsensusPoolImpl::new(
+            self.replica_cfg.node_id,
             self.replica_cfg.subnet_id,
             cup,
             artifact_pool_config,
             MetricsRegistry::new(),
             self.log.clone(),
+            self.time_source.clone(),
         );
 
         let validated = consensus_pool.validated();
@@ -208,17 +248,57 @@ impl ReplayValidator {
         }
     }
 
+    /// Verify the given certification against the state of the registry version at that height.
+    /// We do not verify that the certification contains the same state hash as our local one.
+    /// We treat transient errors as permanent.
+    pub fn verify_certification(&self, certification: &Certification) -> Result<(), String> {
+        let registry_version =
+            registry_version_at_height(self.pool_cache.as_ref(), certification.height)
+                .unwrap_or_else(|| self.registry.get_latest_version());
+
+        self.verifier
+            .validate(self.replica_cfg.subnet_id, certification, registry_version)
+            .map_err(|e| format!("{e:?}"))
+    }
+
+    /// Verify the given certification share against the membership defined by the local consensus pool cache
+    /// We do not verify that the certification contains the same state hash as our local one.
+    /// We treat transient errors as permanent.
+    pub fn verify_share(&self, share: &CertificationShare) -> Result<(), String> {
+        let signer = share.signed.signature.signer;
+        match self.membership.node_belongs_to_threshold_committee(
+            signer,
+            share.height,
+            Certification::committee(),
+        ) {
+            // In case of an error, we simply skip this artifact.
+            Err(e) => Err(format!("Failed to determine membership: {e:?}")),
+            // If the signer does not belong to the signers committee at the
+            // given height, reject this artifact.
+            Ok(false) => Err("Signer does not belong to committee.".into()),
+            // The signer is valid.
+            Ok(true) => {
+                // Verify the signature.
+                let dkg_id = active_high_threshold_nidkg_id(self.pool_cache.as_ref(), share.height)
+                    .ok_or_else(|| "Failed to get active transcript.".to_string())?;
+                self.certification_crypto
+                    .verify(&share.signed, dkg_id)
+                    .map_err(|e| e.to_string())
+            }
+        }
+    }
+
     /// Validate the given consensus pool and apply resulting changes, until no more changes are found.
     /// Discovered invalid artifacts are returned. An error is returned if validation stops before the
     /// target finalized height is reached.
     pub fn validate(
         &self,
         pool: &mut ConsensusPoolImpl,
+        expected: &mut HashMap<ConsensusMessageHash, PathBuf>,
         dkg: &mut DkgKeyManager,
         target_height: Height,
     ) -> Result<Vec<InvalidArtifact>, ReplayError> {
         let validator = self.get_validator();
-        let time = self.get_timesource();
 
         let mut invalid_artifacts = Vec::new();
 
@@ -230,7 +310,7 @@ impl ReplayValidator {
             };
 
             changes.iter().for_each(|action| match action {
-                ChangeAction::HandleInvalid(ref a, ref s) => {
+                ChangeAction::HandleInvalid(a, s) => {
                     let block_hash = match a {
                         ConsensusMessage::Finalization(f) => Some(f.block_hash().clone()),
                         ConsensusMessage::Notarization(n) => Some(n.block_hash().clone()),
@@ -246,24 +326,24 @@ impl ReplayValidator {
                         },
                     );
                 }
-                ChangeAction::MoveToValidated(_) => {}
+                ChangeAction::MoveToValidated(a) => {
+                    let hash = a.get_cm_hash();
+                    expected.remove(&hash);
+                }
                 other => {
-                    println!("Unexpected change action: {:?}", other);
+                    println!("Unexpected change action: {other:?}");
                 }
             });
 
             if changes.is_empty() {
                 break;
             } else {
-                pool.apply_changes(time.as_ref(), changes);
+                pool.apply(changes);
             }
         }
 
         let new_height = PoolReader::new(pool).get_finalized_height();
-        println!(
-            "Validated artifacts up to new finalized height: {}",
-            new_height
-        );
+        println!("Validated artifacts up to new finalized height: {new_height}");
 
         if new_height < target_height {
             Err(ReplayError::ValidationIncomplete(
@@ -277,14 +357,14 @@ impl ReplayValidator {
 
     /// Validate the given consensus pool by moving its artifacts to the unvalidated section of a
     /// temp pool, and doing validation there.
-    pub fn validate_in_tmp_pool(
+    pub(crate) fn validate_in_tmp_pool(
         &self,
         consensus_pool: &dyn ConsensusPool,
-        cup: CatchUpPackage,
+        cup: pb::CatchUpPackage,
         target_height: Height,
     ) -> Result<Vec<InvalidArtifact>, ReplayError> {
         let mut pool = self.get_new_unvalidated(consensus_pool, cup);
         let mut dkg = self.new_key_manager(&PoolReader::new(&pool));
-        self.validate(&mut pool, &mut dkg, target_height)
+        self.validate(&mut pool, &mut HashMap::new(), &mut dkg, target_height)
     }
 }

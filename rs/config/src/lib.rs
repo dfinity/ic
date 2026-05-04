@@ -8,13 +8,14 @@ pub mod subnet_config;
 
 pub mod adapters;
 pub mod artifact_pool;
-pub mod consensus;
+pub mod bitcoin_payload_builder_config;
 pub mod crypto;
 pub mod embedders;
 pub mod execution_environment;
 pub mod firewall;
 pub mod flag_status;
 pub mod http_handler;
+pub mod initial_ipv4_config;
 pub mod logger;
 pub mod message_routing;
 pub mod metrics;
@@ -22,6 +23,7 @@ pub mod nns_registry_replicator;
 pub mod registration;
 pub mod registry_client;
 pub mod state_manager;
+pub mod tracing;
 pub mod transport;
 
 pub use config::*;

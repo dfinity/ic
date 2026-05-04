@@ -1,0 +1,76 @@
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
+use ic_interfaces_state_manager::{
+    CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateHashMetadata,
+    StateManager, StateReader,
+};
+use ic_replicated_state::ReplicatedState;
+use ic_types::{
+    CryptoHashOfState, Height, batch::BatchSummary, consensus::certification::Certification,
+    state_manager::StateManagerResult,
+};
+use mockall::*;
+use std::sync::Arc;
+
+mock! {
+    pub StateManager {}
+
+    impl StateReader for StateManager {
+        type State = ReplicatedState;
+
+        fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<ReplicatedState>>>;
+
+        fn get_latest_state(&self) -> Labeled<Arc<ReplicatedState>>;
+
+        fn get_latest_certified_state(&self) -> Option<Labeled<Arc<ReplicatedState>>>;
+
+        fn latest_state_height(&self) -> Height;
+
+        fn latest_certified_height(&self) -> Height;
+
+        fn read_certified_state(
+            &self,
+            _paths: &LabeledTree<()>,
+        ) -> Option<(Arc<ReplicatedState>, MixedHashTree, Certification)>;
+
+        fn read_certified_state_with_exclusion<'a>(
+            &self,
+            _paths: &'a LabeledTree<()>,
+            _exclusion: Option<&'a MatchPatternPath>,
+        ) -> Option<(Arc<ReplicatedState>, MixedHashTree, Certification)>;
+
+        fn get_certified_state_snapshot(&self) -> Option<Box<dyn CertifiedStateSnapshot<State = <MockStateManager as StateReader>::State> + 'static>>;
+    }
+
+    impl StateManager for StateManager {
+        fn tip_height(&self) -> Height;
+
+        fn take_tip(&self) -> (Height, ReplicatedState);
+
+        fn take_tip_at(&self, h: Height) -> StateManagerResult<ReplicatedState>;
+
+        fn get_state_hash_at(&self, height: Height) -> Result<CryptoHashOfState, StateHashError>;
+
+        fn fetch_state(&self, height: Height, root_hash: CryptoHashOfState, cup_interval_length: Height);
+
+        fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata>;
+
+        fn list_state_heights_to_certify(&self) -> Vec<Height>;
+
+        fn deliver_state_certification(&self, certification: Certification);
+
+        fn remove_states_below(&self, height: Height);
+
+        fn remove_inmemory_states_below(&self, height: Height, extra_heights_to_keep: &std::collections::BTreeSet<Height>);
+
+        fn update_fast_forward_height(&self, height: Height);
+
+        fn commit_and_certify(
+            &self,
+            state: ReplicatedState,
+            scope: CertificationScope,
+            batch_summary: Option<BatchSummary>,
+        );
+
+        fn report_diverged_checkpoint(&self, height: Height);
+    }
+}

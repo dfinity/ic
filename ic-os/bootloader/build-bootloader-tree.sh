@@ -4,9 +4,11 @@
 # the /boot/grub and /boot/efi portions. From this, the grub and
 # efi partitions of the disk image can be built.
 
-set -eo pipefail
+set -euxo pipefail
 
-while getopts "o:t:v:p:x:" OPT; do
+trap 'sudo rm -rf "${TMP_DIR}"' EXIT
+
+while getopts "o:" OPT; do
     case "${OPT}" in
         o)
             OUT_FILE="${OPTARG}"
@@ -18,19 +20,30 @@ while getopts "o:t:v:p:x:" OPT; do
     esac
 done
 
-TMPDIR=$(mktemp -d -t build-image-XXXXXXXXXXXX)
-trap "rm -rf ${TMPDIR}" exit
+TMP_DIR=$(mktemp -d --tmpdir="/tmp/containers" build-image-XXXXXXXXXXXX)
 
-mkdir -p "${TMPDIR}"/boot/grub
-cp -r /usr/lib/grub/x86_64-efi "${TMPDIR}"/boot/grub
-mkdir -p "${TMPDIR}"/boot/efi/EFI/Boot
-faketime "1970-1-1 0" grub-mkimage -p "(,gpt2)/" -O x86_64-efi -o "${TMPDIR}"/boot/efi/EFI/Boot/bootx64.efi \
-    boot linux search normal configfile \
-    part_gpt btrfs ext2 fat iso9660 loopback \
-    test keystatus gfxmenu regexp probe \
-    efi_gop efi_uga all_video gfxterm font \
-    echo read ls cat png jpeg halt reboot loadenv
+BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:6015f66923d7afbc53558d7ccffd325d43b4e249f41a6e93eef074c9505d2233"
 
-tar cf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 "--mtime=UTC 1970-01-01 00:00:00" -C "${TMPDIR}" boot
+podman --root "${TMP_DIR}/root" --runroot "${TMP_DIR}/runroot" build --iidfile "${TMP_DIR}/iidfile" - <<<"
+    FROM $BASE_IMAGE
+    USER root:root
+    RUN apt-get -y update && apt-get -y --no-install-recommends install grub-efi faketime
+    RUN mkdir -p /build/boot/grub
+    RUN cp -r /usr/lib/grub/x86_64-efi /build/boot/grub
+    RUN mkdir -p /build/boot/efi/EFI/Boot
+    RUN grub-mkimage --version
+    RUN apt list --installed | grep grub
+    RUN faketime -f '1970-1-1 0:0:0' grub-mkimage -p '(,gpt2)/' -O x86_64-efi -o /build/boot/efi/EFI/Boot/bootx64.efi \
+        boot linux search normal configfile \
+        part_gpt btrfs ext2 fat iso9660 loopback \
+        test keystatus gfxmenu regexp probe \
+        efi_gop efi_uga all_video gfxterm font \
+        echo read ls cat png jpeg halt reboot loadenv lvm
+"
 
-rm -rf "${TMPDIR}"
+IMAGE_ID=$(cut -d':' -f2 <"${TMP_DIR}/iidfile")
+CONTAINER_NAME="${IMAGE_ID}_container"
+
+podman --root "${TMP_DIR}/root" --runroot "${TMP_DIR}/runroot" create --name "${CONTAINER_NAME}" "${IMAGE_ID}"
+podman --root "${TMP_DIR}/root" --runroot "${TMP_DIR}/runroot" export "${CONTAINER_NAME}" | tar --strip-components=1 -C "${TMP_DIR}" -x build
+tar cf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 "--mtime=UTC 1970-01-01 00:00:00" -C "${TMP_DIR}" boot

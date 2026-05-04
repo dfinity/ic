@@ -5,10 +5,10 @@ use crate::visitor::{Control, Visitor};
 use std::collections::BTreeMap;
 
 /// Pattern defines a rule to filter a tree.
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Pattern(PatternKind);
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 enum PatternKind {
     // Match everything unconditionally.
     All,
@@ -91,7 +91,7 @@ impl<'a, V> SubtreeVisitor<'a, V> {
     }
 }
 
-impl<'a, V> Visitor for SubtreeVisitor<'a, V>
+impl<V> Visitor for SubtreeVisitor<'_, V>
 where
     V: Visitor,
 {
@@ -104,7 +104,7 @@ where
     fn enter_edge(&mut self, name: &[u8]) -> Result<Control, V::Output> {
         let next_item = match self.pos.last().expect("unbalanced tree traversal") {
             p @ PatternKind::All => *p,
-            PatternKind::Any(p) => &*p,
+            PatternKind::Any(p) => p,
             PatternKind::MatchFinite(map) => match map.get(name) {
                 Some(pattern) => pattern,
                 None => {
@@ -115,7 +115,7 @@ where
                 if name < &from[..] || &to[..] <= name {
                     return Ok(Control::Skip);
                 }
-                &*pattern
+                pattern
             }
         };
 

@@ -1,0 +1,13 @@
+[Unit]
+Description=Ensure that /var/lib/chrony is set up
+Before=chrony.service
+
+[Service]
+User=_chrony
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/usr/bin/true
+StateDirectory=chrony
+
+[Install]
+WantedBy=chrony.service

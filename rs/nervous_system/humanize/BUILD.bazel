@@ -1,0 +1,33 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/nervous_system/proto",
+    "@crate_index//:humantime",
+    "@crate_index//:lazy_static",
+    "@crate_index//:regex",
+    "@crate_index//:serde",
+]
+
+DEV_DEPENDENCIES = DEPENDENCIES + [
+    "@crate_index//:serde_yaml",
+]
+
+rust_library(
+    name = "humanize",
+    srcs = glob(
+        ["src/**"],
+        exclude = ["src/**/*tests.rs"],
+    ),
+    crate_name = "ic_nervous_system_humanize",
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "humanize_test",
+    srcs = glob(["src/**/*.rs"]),
+    deps = DEV_DEPENDENCIES,
+)

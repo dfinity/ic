@@ -1,0 +1,66 @@
+= CLI to Generate Proposals for NNS-controlled canisters
+
+== About
+
+This is a command-line tool to automatically generate install or upgrade proposals for NNS-controlled canisters, like ckBTC or ckETH.
+
+IMPORTANT: The part about the motivation of the proposal is not automated and must be filled out manually.
+
+== Usage
+Ideally, only the motivation of the proposal should be filled out manually and the rest should be automated. The envisioned workflow is as follows:
+
+. Generate all required files for the proposal using `make_proposal` (see examples below).
+. Fill out the motivation section of the proposal.
+. Let the proposal and associated files be peer-reviewed.
+. Submit the proposal to the NNS.
+
+
+.Generate a proposal to upgrade the ckETH ledger like in link:https://dashboard.internetcomputer.org/proposal/126397[126397]
+====
+[source,shell]
+----
+mkdir ~/proposal
+bazel run //rs/cross-chain/proposal-cli:make_proposal -- upgrade cketh-ledger --from 5ecbd59c6c9f9f874d4340f9fbbd96af07aa2576 --to 6a8e5fca2c6b4e12966638c444e994e204b42989 --args "(variant {Upgrade})" --output-dir ~/proposal
+----
+
+To also generate the `ic-admin` command required to submit the proposal, the previous command can be extended with the `ic-admin` subcommand as follows:
+[source,shell]
+----
+bazel run //rs/cross-chain/proposal-cli:make_proposal -- upgrade cketh-ledger --from 5ecbd59c6c9f9f874d4340f9fbbd96af07aa2576 --to 6a8e5fca2c6b4e12966638c444e994e204b42989 --args "(variant {Upgrade})" --output-dir ~/proposal ic-admin --use-hsm --key-id 01 --slot 0 --pin '$(cat ~/.hsm-pin)' --proposer 17212304975669116357
+----
+====
+
+=== What it does
+
+. Blobless clone of the IC repo in a temporary directory and checkout the commit specified in `to`.
+. Retrieves the mainnet canister ID corresponding to the given canister (`ss2fx-dyaaa-aaaar-qacoq-cai` in the above example)
+. Retrieves the ID of the last upgrade proposal that was executed (if any).
+. Generates the release notes as the output of `git log` between the commits specified in `from` and `to` for the relevant directory (`rs/ledger_suite/icrc1/ledger` in the above example)
+. Generates the canister artifacts and computes the hash of the generated compressed wasm.
+. Candid encoding of the given uprade arguments or use default empty ones.
+. Generates a proposal summary based on the previous information, where only the Motivation section remains to be (manually) filled out.
+. Generates a shell script to submit the proposal using the `ic-admin` command-line tool.
+
+== Create a Forum Topic
+
+As part of the Voting Neuron Grants season 2, teams submitting canister upgrade proposals are required to https://forum.dfinity.org/t/nns-proposal-discussions/34492[create a forum topic] for every proposal or group of proposals in the https://forum.dfinity.org/c/governance/nns-proposal-discussions/76[NNS proposal discussions] category with the tag https://forum.dfinity.org/tags/c/governance/nns-proposal-discussions/76/application-canister-mgmt[Application-canister-mgmt].
+
+Once the proposal is published, the corresponding proposal ID can be used to create an appropriate forum topic.
+
+NOTE: Using this functionality requires having an API key and username for the https://forum.dfinity.org/[DFINITY developer forum]. See the https://docs.discourse.org/[Discourse API] for more information.
+
+.Create a new forum topic for a single canister upgrade proposal (ckETH minter)
+====
+[source,shell]
+----
+bazel run //rs/cross-chain/proposal-cli:make_proposal -- create-forum-post --api-key "1234" --api-user "team" 136787
+----
+====
+
+.Create a new forum topic for multiple canister upgrade proposals (ckBTC ledger suite)
+====
+[source,shell]
+----
+bazel run //rs/cross-chain/proposal-cli:make_proposal -- create-forum-post --api-key "1234" --api-user "team" 137359 137360 137361
+----
+====

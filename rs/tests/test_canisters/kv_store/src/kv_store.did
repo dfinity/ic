@@ -1,0 +1,6 @@
+type List = record { val: opt text; cert: blob; tree: blob };
+service : {
+    "get": (text) -> (opt text);
+    "get_cert": (text) -> (List) query;
+    "put": (text, text) -> ();
+}

@@ -1,20 +1,23 @@
 use super::RawHttpRequestVal;
-use crate::{crypto::SignedBytesWithoutDomainSeparator, CountBytes};
-use ic_crypto_sha::Sha256;
+use crate::{CountBytes, crypto::SignedBytesWithoutDomainSeparator};
+use ic_base_types::hash_of_map;
+use ic_crypto_sha2::Sha256;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::proxy::ProxyDecodeError;
-use serde::{de::Deserializer, ser::Serializer, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::Deserializer, ser::Serializer};
 use std::{
-    collections::BTreeMap,
     convert::{AsRef, TryFrom},
     error::Error,
     fmt,
 };
 
-/// The length of a [`MessageId`] is 32: https://sdk.dfinity.org/docs/interface-spec/index.html#api-request-id)
+/// The length of a [`MessageId`] is 32: `<https://internetcomputer.org/docs/current/references/ic-interface-spec#request-id>`
 pub const EXPECTED_MESSAGE_ID_LENGTH: usize = 32;
 
 /// The ID used to uniquely identify a user's ingress message.
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct MessageId([u8; EXPECTED_MESSAGE_ID_LENGTH]);
 
 // Because we can't use #[serde(with = "serde_bytes")] with derive(Deserialize)
@@ -29,14 +32,13 @@ impl<'a> Deserialize<'a> for MessageId {
     fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
         struct MessageIdVisitor;
 
-        impl<'de> serde::de::Visitor<'de> for MessageIdVisitor {
+        impl serde::de::Visitor<'_> for MessageIdVisitor {
             type Value = MessageId;
 
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
                 write!(
                     formatter,
-                    "a message id: a blob with with {} bytes",
-                    EXPECTED_MESSAGE_ID_LENGTH
+                    "a message id: a blob with with {EXPECTED_MESSAGE_ID_LENGTH} bytes"
                 )
             }
 
@@ -74,7 +76,7 @@ impl SignedBytesWithoutDomainSeparator for MessageId {
 
 impl fmt::Display for MessageId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{}", hex::encode(&self.0))
+        write!(f, "0x{}", hex::encode(self.0))
     }
 }
 
@@ -107,18 +109,18 @@ impl From<[u8; EXPECTED_MESSAGE_ID_LENGTH]> for MessageId {
     }
 }
 
-fn hash_string(value: String) -> Vec<u8> {
-    Sha256::hash(&value.into_bytes()).to_vec()
+fn hash_string(value: &str) -> Vec<u8> {
+    Sha256::hash(value.as_bytes()).to_vec()
 }
 
-fn hash_bytes(value: Vec<u8>) -> Vec<u8> {
-    Sha256::hash(&value).to_vec()
+fn hash_bytes<T: AsRef<[u8]>>(value: T) -> Vec<u8> {
+    Sha256::hash(value.as_ref()).to_vec()
 }
 
 fn hash_u64(value: u64) -> Vec<u8> {
     // We need at most ⌈ 64 / 7 ⌉ = 10 bytes to encode a 64 bit
     // integer in LEB128.
-    let mut buf = [0u8; 10];
+    let mut buf = [0_u8; 10];
     let mut n = value;
     let mut i = 0;
 
@@ -135,55 +137,37 @@ fn hash_u64(value: u64) -> Vec<u8> {
         }
     }
 
-    hash_bytes(buf[..=i].to_vec())
+    hash_bytes(&buf[..=i])
 }
 
 // arrays, encoded as the concatenation of the hashes of the encodings of the
 // array elements.
-fn hash_array(elements: Vec<RawHttpRequestVal>) -> Vec<u8> {
+fn hash_array(elements: &[RawHttpRequestVal<'_>]) -> Vec<u8> {
     let mut hasher = Sha256::new();
     elements
-        .into_iter()
+        .iter()
         // Hash the encoding of all the array elements.
         .for_each(|e| hasher.write(hash_val(e).as_slice()));
     hasher.finish().to_vec() // hash the concatenation of the hashes.
 }
 
-fn hash_val(val: RawHttpRequestVal) -> Vec<u8> {
+fn hash_val(val: &RawHttpRequestVal<'_>) -> Vec<u8> {
     match val {
         RawHttpRequestVal::String(string) => hash_string(string),
         RawHttpRequestVal::Bytes(bytes) => hash_bytes(bytes),
-        RawHttpRequestVal::U64(integer) => hash_u64(integer),
+        RawHttpRequestVal::U64(integer) => hash_u64(*integer),
         RawHttpRequestVal::Array(elements) => hash_array(elements),
+        RawHttpRequestVal::Map(map) => {
+            hash_of_map(map, |key, value| hash_key_val(key, value)).to_vec()
+        }
     }
 }
 
-fn hash_key_val(key: String, val: RawHttpRequestVal) -> Vec<u8> {
+pub(crate) fn hash_key_val(key: &str, val: &RawHttpRequestVal<'_>) -> Vec<u8> {
     let mut key_hash = hash_string(key);
     let mut val_hash = hash_val(val);
     key_hash.append(&mut val_hash);
     key_hash
-}
-
-/// Describes `hash_of_map` as specified in the public spec.
-pub(crate) fn hash_of_map<S: ToString>(map: &BTreeMap<S, RawHttpRequestVal>) -> [u8; 32] {
-    let mut hashes: Vec<Vec<u8>> = Vec::new();
-    for (key, val) in map.iter() {
-        hashes.push(hash_key_val(key.to_string(), val.clone()));
-    }
-
-    // Computes hash by first sorting by "field name" hash, which is the
-    // same as sorting by concatenation of H(field name) · H(field value)
-    // (although in practice it's actually more stable in the presence of
-    // duplicated field names).  Then concatenate all the hashes.
-    hashes.sort();
-
-    let mut hasher = Sha256::new();
-    for hash in hashes {
-        hasher.write(&hash);
-    }
-
-    hasher.finish()
 }
 
 impl From<&MessageId> for u32 {
@@ -214,8 +198,7 @@ impl fmt::Display for MessageIdError {
                 expected_length,
             } => write!(
                 f,
-                "Expected a message id of length {} bytes, but got {} bytes instead.",
-                expected_length, given_length
+                "Expected a message id of length {expected_length} bytes, but got {given_length} bytes instead."
             ),
         }
     }
@@ -241,19 +224,48 @@ impl From<MessageIdError> for ProxyDecodeError {
 mod tests {
     use super::super::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, RawHttpRequestVal,
-        SignedIngress,
+        RawSignedSenderInfo, SignedIngress,
     };
     use super::*;
-    use crate::{time::current_time_and_expiry_time, CanisterId, PrincipalId, Time};
+    use crate::messages::{Delegation, SignedDelegation};
+    use crate::{CanisterId, PrincipalId, Time, time::expiry_time_from_now};
     use hex_literal::hex;
+
+    #[test]
+    /// The test covers all the supported values of `RawHttpRequestVal` and calculates the `hash_of_map` for a nested map.
+    /// The expected hash serves as a guard against any future changes to the `hash_of_map` function, ensuring its stability.
+    fn test_hash_of_map() {
+        use RawHttpRequestVal::*;
+        use maplit::btreemap;
+
+        let inner_map_0 = btreemap! {
+            "key_string_0" => String("test_string_0"),
+        };
+        let inner_map_1 = btreemap! {
+            "key_string_1" => String("test_string_1"),
+        };
+        let inner_map_2 = btreemap! {
+            "key_string_2" => String("test_string_2"),
+        };
+
+        let outer_map = btreemap! {
+            "key_bytes" => Bytes(&[1; 10]),
+            "key_string" => String("test_string"),
+            "key_u64" => U64(42),
+            "key_array" => Array(vec![Map(inner_map_0), Map(inner_map_1)]),
+            "key_inner" => Map(inner_map_2)
+        };
+
+        assert_eq!(
+            hash_of_map(&outer_map, |key, value| { hash_key_val(key, value) }),
+            hex!("ace3c6e84b170c6235faff2ee1152d831c332a7e3c932fb7d129f973d6913ff2")
+        );
+    }
 
     #[test]
     fn message_id_icf_key_val_reference_1() {
         assert_eq!(
-            hash_key_val(
-                "request_type".to_string(),
-                RawHttpRequestVal::String("call".to_string())
-            ),
+            hash_key_val("request_type", &RawHttpRequestVal::String("call")),
             hex!(
                 "
                 769e6f87bdda39c859642b74ce9763cdd37cb1cd672733e8c54efaa33ab78af9
@@ -288,7 +300,7 @@ mod tests {
     #[test]
     fn message_id_string_reference_1() {
         assert_eq!(
-            hash_string("request_type".to_string()),
+            hash_string("request_type"),
             hex!("769e6f87bdda39c859642b74ce9763cdd37cb1cd672733e8c54efaa33ab78af9"),
         );
     }
@@ -296,7 +308,7 @@ mod tests {
     #[test]
     fn message_id_string_reference_2() {
         assert_eq!(
-            hash_string("call".to_string()),
+            hash_string("call"),
             hex!("7edb360f06acaef2cc80dba16cf563f199d347db4443da04da0c8173e3f9e4ed"),
         );
     }
@@ -304,7 +316,7 @@ mod tests {
     #[test]
     fn message_id_string_reference_3() {
         assert_eq!(
-            hash_string("callee".to_string()),
+            hash_string("callee"),
             hex!("92ca4c0ced628df1e7b9f336416ead190bd0348615b6f71a64b21d1b68d4e7e2"),
         );
     }
@@ -312,7 +324,7 @@ mod tests {
     #[test]
     fn message_id_string_reference_4() {
         assert_eq!(
-            hash_string("method_name".to_string()),
+            hash_string("method_name"),
             hex!("293536232cf9231c86002f4ee293176a0179c002daa9fc24be9bb51acdd642b6"),
         );
     }
@@ -320,7 +332,7 @@ mod tests {
     #[test]
     fn message_id_string_reference_5() {
         assert_eq!(
-            hash_string("hello".to_string()),
+            hash_string("hello"),
             hex!("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"),
         );
     }
@@ -328,7 +340,7 @@ mod tests {
     #[test]
     fn message_id_string_reference_6() {
         assert_eq!(
-            hash_string("arg".to_string()),
+            hash_string("arg"),
             hex!("b25f03dedd69be07f356a06fe35c1b0ddc0de77dcd9066c4be0c6bbde14b23ff"),
         );
     }
@@ -336,7 +348,7 @@ mod tests {
     #[test]
     fn message_id_array_reference_1() {
         assert_eq!(
-            hash_array(vec![RawHttpRequestVal::String("a".to_string())]),
+            hash_array(&[RawHttpRequestVal::String("a")]),
             // hash(hash("a"))
             hex!("bf5d3affb73efd2ec6c36ad3112dd933efed63c4e1cbffcfa88e2759c144f2d8"),
         );
@@ -345,9 +357,9 @@ mod tests {
     #[test]
     fn message_id_array_reference_2() {
         assert_eq!(
-            hash_array(vec![
-                RawHttpRequestVal::String("a".to_string()),
-                RawHttpRequestVal::String("b".to_string()),
+            hash_array(&[
+                RawHttpRequestVal::String("a"),
+                RawHttpRequestVal::String("b"),
             ]),
             // hash(concat(hash("a"), hash("b"))
             hex!("e5a01fee14e0ed5c48714f22180f25ad8365b53f9779f79dc4a3d7e93963f94a"),
@@ -357,9 +369,9 @@ mod tests {
     #[test]
     fn message_id_array_reference_3() {
         assert_eq!(
-            hash_array(vec![
-                RawHttpRequestVal::Bytes(vec![97]), // "a" as a byte string.
-                RawHttpRequestVal::String("b".to_string()),
+            hash_array(&[
+                RawHttpRequestVal::Bytes(&[97]), // "a" as a byte string.
+                RawHttpRequestVal::String("b"),
             ]),
             // hash(concat(hash("a"), hash("b"))
             hex!("e5a01fee14e0ed5c48714f22180f25ad8365b53f9779f79dc4a3d7e93963f94a"),
@@ -369,9 +381,9 @@ mod tests {
     #[test]
     fn message_id_array_reference_4() {
         assert_eq!(
-            hash_array(vec![RawHttpRequestVal::Array(vec![
-                RawHttpRequestVal::String("a".to_string())
-            ])]),
+            hash_array(&[RawHttpRequestVal::Array(vec![RawHttpRequestVal::String(
+                "a"
+            )])]),
             // hash(hash(hash("a"))
             hex!("eb48bdfa15fc43dbea3aabb1ee847b6e69232c0f0d9705935e50d60cce77877f"),
         );
@@ -380,9 +392,9 @@ mod tests {
     #[test]
     fn message_id_array_reference_5() {
         assert_eq!(
-            hash_array(vec![RawHttpRequestVal::Array(vec![
-                RawHttpRequestVal::String("a".to_string()),
-                RawHttpRequestVal::String("b".to_string())
+            hash_array(&[RawHttpRequestVal::Array(vec![
+                RawHttpRequestVal::String("a"),
+                RawHttpRequestVal::String("b")
             ])]),
             // hash(hash(concat(hash("a"), hash("b")))
             hex!("029fd80ca2dd66e7c527428fc148e812a9d99a5e41483f28892ef9013eee4a19"),
@@ -392,12 +404,12 @@ mod tests {
     #[test]
     fn message_id_array_reference_6() {
         assert_eq!(
-            hash_array(vec![
+            hash_array(&[
                 RawHttpRequestVal::Array(vec![
-                    RawHttpRequestVal::String("a".to_string()),
-                    RawHttpRequestVal::String("b".to_string())
+                    RawHttpRequestVal::String("a"),
+                    RawHttpRequestVal::String("b")
                 ]),
-                RawHttpRequestVal::Bytes(vec![97]), // "a" in bytes
+                RawHttpRequestVal::Bytes(&[97]), // "a" in bytes
             ]),
             // hash(concat(hash(concat(hash("a"), hash("b")), hash(100))
             hex!("aec3805593d9ec6df50da070597f73507050ce098b5518d0456876701ada7bb7"),
@@ -409,7 +421,7 @@ mod tests {
         assert_eq!(
             // D    I    D    L    \0   \253 *"
             // 68   73   68   76   0    253  42
-            hash_bytes(vec![68, 73, 68, 76, 0, 253, 42]),
+            hash_bytes([68, 73, 68, 76, 0, 253, 42]),
             hex!("6c0b2ae49718f6995c02ac5700c9c789d7b7862a0d53e6d40a73f1fcd2f70189")
         );
     }
@@ -424,6 +436,7 @@ mod tests {
         expiry_time: Time,
         sender_sig: Vec<u8>,
         sender_pubkey: Vec<u8>,
+        sender_info: Option<RawSignedSenderInfo>,
     ) -> SignedIngress {
         let update = HttpCanisterUpdate {
             canister_id: Blob(receiver.get().into_vec()),
@@ -431,14 +444,21 @@ mod tests {
             arg: Blob(method_payload),
             sender: Blob(vec![0; 29]),
             ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
-            nonce: None,
+            nonce: Some(Blob(vec![9, 8, 7, 6, 5, 4, 3, 2, 1])),
+            sender_info,
         };
         let content = HttpCallContent::Call { update };
         let envelope = HttpRequestEnvelope::<HttpCallContent> {
             content,
-            sender_pubkey: Some(Blob(sender_pubkey)),
+            sender_pubkey: Some(Blob(sender_pubkey.clone())),
             sender_sig: Some(Blob(sender_sig)),
-            sender_delegation: None,
+            sender_delegation: Some(vec![SignedDelegation::new(
+                Delegation::new(
+                    vec![7; 32],
+                    Time::from_nanos_since_unix_epoch(1_736_000_100),
+                ),
+                vec![8; 64],
+            )]),
         };
         SignedIngress::try_from(envelope).unwrap()
     }
@@ -449,25 +469,31 @@ mod tests {
     /// on two messages containing different public keys and signatures and
     /// asserts that the computed MessageIds should be the same.
     fn message_id_icf_reference() {
-        let expiry_time = current_time_and_expiry_time().1;
+        let receiver = CanisterId::unchecked_from_principal(
+            PrincipalId::try_from(&[0, 0, 0, 0, 0, 0, 4, 210][..]).unwrap(),
+        );
+        let method_name = "hello".to_string();
+        let method_payload = b"DIDL\x00\xFD*".to_vec();
+        let expiry_time = expiry_time_from_now();
+
         let signed_ingress1 = signed_ingress(
-            CanisterId::new(PrincipalId::try_from(&[0, 0, 0, 0, 0, 0, 4, 210][..]).unwrap())
-                .unwrap(),
-            "hello".to_string(),
-            b"DIDL\x00\xFD*".to_vec(),
+            receiver,
+            method_name.clone(),
+            method_payload.clone(),
             expiry_time,
             vec![3; 32],
             vec![6; 32],
+            None,
         );
         let message_id1 = signed_ingress1.id();
         let signed_ingress2 = signed_ingress(
-            CanisterId::new(PrincipalId::try_from(&[0, 0, 0, 0, 0, 0, 4, 210][..]).unwrap())
-                .unwrap(),
-            "hello".to_string(),
-            b"DIDL\x00\xFD*".to_vec(),
+            receiver,
+            method_name,
+            method_payload,
             expiry_time,
             vec![1; 32],
             vec![5; 32],
+            None,
         );
         let message_id2 = signed_ingress2.id();
         assert_eq!(message_id1, message_id2);
@@ -484,5 +510,90 @@ mod tests {
         let value = bincode::deserialize::<MessageId>(&bytes);
         assert!(value.is_ok());
         assert_eq!(value.unwrap(), id);
+    }
+
+    #[test]
+    fn message_id_changes_when_sender_info_is_present() {
+        let receiver =
+            CanisterId::unchecked_from_principal(PrincipalId::try_from(&[42; 8][..]).unwrap());
+        let method_name = "some_method".to_string();
+        let method_payload = b"".to_vec();
+        let expiry_time = Time::from_nanos_since_unix_epoch(1_000);
+        let sender_sig = vec![1; 32];
+        let sender_pubkey = vec![2; 32];
+
+        let ingress_without_sender_info = signed_ingress(
+            receiver,
+            method_name.clone(),
+            method_payload.clone(),
+            expiry_time,
+            sender_sig.clone(),
+            sender_pubkey.clone(),
+            None,
+        );
+        let ingress_with_sender_info = signed_ingress(
+            receiver,
+            method_name,
+            method_payload,
+            expiry_time,
+            sender_sig,
+            sender_pubkey,
+            Some(RawSignedSenderInfo {
+                info: Blob(vec![1, 2, 3]),
+                signer: Blob(vec![42; 8]),
+                sig: Blob(vec![4, 5, 6]),
+            }),
+        );
+        assert_ne!(
+            ingress_without_sender_info.id(),
+            ingress_with_sender_info.id(),
+            "MessageId should change when sender_info is present"
+        );
+    }
+
+    #[test]
+    fn message_id_stability_signed_ingress_without_sender_info() {
+        let canister_id = CanisterId::unchecked_from_principal(
+            PrincipalId::try_from(&[0, 0, 0, 0, 0, 0, 4, 210][..]).unwrap(),
+        );
+        let signed_ingress = signed_ingress(
+            canister_id,
+            "hello".to_string(),
+            b"DIDL\x00\xFD*".to_vec(),
+            Time::from_nanos_since_unix_epoch(123_456_789),
+            vec![3; 32],
+            vec![6; 32],
+            None,
+        );
+
+        assert_eq!(
+            hex::encode(signed_ingress.id().as_bytes()),
+            "0703bb3182c23d1896dabceb73070a251eeada02b1695db197d718e51f8ed0ec"
+        );
+    }
+
+    #[test]
+    fn message_id_stability_signed_ingress() {
+        let canister_id = CanisterId::unchecked_from_principal(
+            PrincipalId::try_from(&[0, 0, 0, 0, 0, 0, 4, 210][..]).unwrap(),
+        );
+        let signed_ingress = signed_ingress(
+            canister_id,
+            "hello".to_string(),
+            b"DIDL\x00\xFD*".to_vec(),
+            Time::from_nanos_since_unix_epoch(123_456_789),
+            vec![3; 32],
+            vec![6; 32],
+            Some(RawSignedSenderInfo {
+                info: Blob(vec![1, 2, 3]),
+                signer: Blob(vec![42; 8]),
+                sig: Blob(vec![4, 5, 6]),
+            }),
+        );
+
+        assert_eq!(
+            hex::encode(signed_ingress.id().as_bytes()),
+            "4146b2fe2839ecbe7004eb5c18ab349c1896efabd6126722d9ea19333dc9329e"
+        );
     }
 }

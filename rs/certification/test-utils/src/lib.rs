@@ -1,29 +1,30 @@
 use ic_crypto_internal_seed::Seed;
-use rand::{thread_rng, Rng};
+use rand::{CryptoRng, Rng, RngCore, thread_rng};
 use serde::Serialize;
 
 use ic_crypto_internal_threshold_sig_bls12381::api::{
-    combine_signatures, combined_public_key, keygen, sign_message,
+    combine_signatures, combined_public_key, generate_threshold_key, sign_message,
 };
-use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_crypto_tree_hash::{
-    flatmap, Digest, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, MixedHashTree,
-    WitnessGenerator,
+    Digest, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, MixedHashTree,
+    WitnessGenerator, flatmap,
 };
 use ic_crypto_utils_threshold_sig_der::public_key_to_der;
 use ic_types::messages::Blob;
 use ic_types::{
+    CanisterId, CryptoHashOfPartialState, NumberOfNodes, SubnetId,
     consensus::certification::CertificationContent,
     crypto::Signable,
-    crypto::{threshold_sig::ThresholdSigPublicKey, CryptoHash},
     crypto::{CombinedThresholdSig, CombinedThresholdSigOf},
-    CanisterId, CryptoHashOfPartialState, NumberOfNodes, SubnetId,
+    crypto::{CryptoHash, threshold_sig::ThresholdSigPublicKey},
 };
+
+pub use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
 
 const REPLICA_TIME: u64 = 1234567;
 
-#[derive(serde::Serialize)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Certificate {
     tree: MixedHashTree,
     signature: Blob,
@@ -31,13 +32,27 @@ pub struct Certificate {
     pub delegation: Option<CertificateDelegation>,
 }
 
-#[derive(serde::Serialize, Debug, Clone)]
+impl Certificate {
+    pub fn tree(&self) -> MixedHashTree {
+        self.tree.clone()
+    }
+
+    pub fn signature(&self) -> Blob {
+        self.signature.clone()
+    }
+
+    pub fn delegation(&self) -> Option<CertificateDelegation> {
+        self.delegation.clone()
+    }
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct CertificateDelegation {
     pub subnet_id: Blob,
     pub certificate: Blob,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum CertificateData {
     CustomTree(LabeledTree<Vec<u8>>),
     CanisterData {
@@ -55,8 +70,10 @@ impl CertificateData {
         &self,
         subnet_pub_key: Option<ThresholdSigPublicKey>,
         time: Option<u64>,
+        canister_ranges_format: CanisterRangesFormat,
+        subnet_type: Option<&str>,
     ) -> LabeledTree<Vec<u8>> {
-        let encoded_time = encoded_time(time.unwrap_or(REPLICA_TIME));
+        let time = time.unwrap_or(REPLICA_TIME);
         match self {
             CertificateData::CustomTree(tree) => tree.clone(),
             CertificateData::CanisterData {
@@ -68,28 +85,172 @@ impl CertificateData {
                         Label::from("certified_data") => LabeledTree::Leaf(certified_data.to_vec()),
                     ])
                 ]),
-                Label::from("time") => LabeledTree::Leaf(encoded_time)
+                Label::from("time") => LabeledTree::Leaf(encoded_time(time))
             ]),
             CertificateData::SubnetData {
                 subnet_id,
                 canister_id_ranges,
             } => {
-                let public_key = subnet_pub_key.expect("no delegation public_key. Note: Subnet data cannot be used at the lowest certificate level");
-                LabeledTree::SubTree(flatmap![
-                    Label::from("subnet") => LabeledTree::SubTree(flatmap![
-                        Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
-                            Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(canister_id_ranges)),
-                            Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&public_key.into_bytes()).unwrap()),
-                        ])
-                    ]),
-                    Label::from("time") => LabeledTree::Leaf(encoded_time)
-                ])
+                const MAX_RANGES_PER_ROUTING_TABLE_LEAF: usize = 5;
+
+                let public_key = subnet_pub_key.expect(
+                    "no delegation public_key. \
+                    Note: Subnet data cannot be used at the lowest certificate level",
+                );
+
+                let (with_flat_canister_ranges, with_tree_canister_ranges) =
+                    match canister_ranges_format {
+                        CanisterRangesFormat::Flat => (true, false),
+                        CanisterRangesFormat::Tree => (false, true),
+                    };
+
+                create_certificate_labeled_tree_with_subnet_type(
+                    canister_id_ranges,
+                    *subnet_id,
+                    public_key,
+                    MAX_RANGES_PER_ROUTING_TABLE_LEAF,
+                    time,
+                    with_tree_canister_ranges,
+                    with_flat_canister_ranges,
+                    subnet_type,
+                )
             }
         }
     }
 }
 
-#[derive(Debug, Clone)]
+pub fn create_certificate_labeled_tree(
+    canister_id_ranges: &Vec<(CanisterId, CanisterId)>,
+    subnet_id: SubnetId,
+    subnet_public_key: ThresholdSigPublicKey,
+    max_ranges_per_routing_table_leaf: usize,
+    time: u64,
+    with_tree_canister_ranges: bool,
+    with_flat_canister_ranges: bool,
+) -> LabeledTree<Vec<u8>> {
+    create_certificate_labeled_tree_with_subnet_type(
+        canister_id_ranges,
+        subnet_id,
+        subnet_public_key,
+        max_ranges_per_routing_table_leaf,
+        time,
+        with_tree_canister_ranges,
+        with_flat_canister_ranges,
+        None,
+    )
+}
+
+pub fn create_certificate_labeled_tree_with_subnet_type(
+    canister_id_ranges: &Vec<(CanisterId, CanisterId)>,
+    subnet_id: SubnetId,
+    subnet_public_key: ThresholdSigPublicKey,
+    max_ranges_per_routing_table_leaf: usize,
+    time: u64,
+    with_tree_canister_ranges: bool,
+    with_flat_canister_ranges: bool,
+    subnet_type: Option<&str>,
+) -> LabeledTree<Vec<u8>> {
+    let mut subnet_subtree = vec![(
+        Label::from("public_key"),
+        LabeledTree::Leaf(public_key_to_der(&subnet_public_key.into_bytes()).unwrap()),
+    )];
+
+    if with_flat_canister_ranges {
+        subnet_subtree.push((
+            Label::from("canister_ranges"),
+            LabeledTree::Leaf(serialize_to_cbor(canister_id_ranges)),
+        ));
+    }
+
+    if let Some(subnet_type) = subnet_type {
+        subnet_subtree.push((
+            Label::from("type"),
+            LabeledTree::Leaf(subnet_type.as_bytes().to_vec()),
+        ));
+    }
+
+    let mut subtree = vec![
+        (Label::from("time"), LabeledTree::Leaf(encoded_time(time))),
+        (
+            Label::from("subnet"),
+            LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(FlatMap::from_key_values(subnet_subtree))
+            ]),
+        ),
+    ];
+
+    if with_tree_canister_ranges {
+        subtree.push((
+            Label::from("canister_ranges"),
+            create_canister_ranges_subtree(
+                canister_id_ranges,
+                subnet_id,
+                max_ranges_per_routing_table_leaf,
+            ),
+        ))
+    }
+
+    LabeledTree::SubTree(FlatMap::from_key_values(subtree))
+}
+
+pub fn create_canister_ranges_subtree(
+    canister_id_ranges: &[(CanisterId, CanisterId)],
+    subnet_id: SubnetId,
+    max_ranges_per_routing_table_leaf: usize,
+) -> LabeledTree<Vec<u8>> {
+    let canister_ranges_subnet_0_subtree = LabeledTree::SubTree(FlatMap::from_key_values(
+        canister_id_ranges
+            .chunks(max_ranges_per_routing_table_leaf)
+            .map(|chunk| {
+                (
+                    Label::from(chunk[0].0),
+                    LabeledTree::Leaf(serialize_to_cbor(&chunk)),
+                )
+            })
+            .collect(),
+    ));
+
+    LabeledTree::SubTree(flatmap![
+        Label::from(subnet_id.get_ref().to_vec()) => canister_ranges_subnet_0_subtree,
+    ])
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum CanisterRangesFormat {
+    Flat,
+    Tree,
+}
+
+#[derive(Clone, Debug)]
+/// A `CertificateBuilder` can be used to construct a valid certificate with an
+/// optional delegation, if the signing subnet is not the root subnet.
+///
+/// An example of building a certificate:
+///
+/// ```compile_fail
+/// use ic_certification_test_utils::{CertificateBuilder, CertificateData};
+/// use ic_crypto_tree_hash::Digest;
+///
+/// let (_cert, _pk, _cbor) = CertificateBuilder::new(CertificateData::CanisterData {
+///     canister_id: canister_test_id(1),
+///     certified_data: Digest::try_from(vec![42; 32]).unwrap(),
+/// })
+/// .with_delegation(CertificateBuilder::new(CertificateData::SubnetData {
+///     subnet_id: subnet_test_id(1),
+///     canister_id_ranges: vec![(canister_test_id(0), canister_test_id(10))],
+/// }))
+/// .build();
+/// ```
+///
+/// The builder returns the certificate (with the optional delegation), the
+/// public root key (which can be used for verification purposes) and finally
+/// a CBOR encoded version of the certificate.
+///
+/// The outer builder should contain the data you're interested in certifying
+/// while the nested builder should contain the `SubnetData` signaling which
+/// canister ranges the subnet is delegated to sign for by the root of trust.
+/// In this example, some dummy `CanisterData` is certified but anything
+/// could be used, e.g. a custom hash tree.
 pub struct CertificateBuilder {
     public_key: ThresholdSigPublicKey,
     secret_key: SecretKeyBytes,
@@ -99,29 +260,40 @@ pub struct CertificateBuilder {
     subnet_id: Option<SubnetId>,
     delegation: Option<Box<CertificateBuilder>>,
     time: Option<u64>,
+    canister_ranges_format: CanisterRangesFormat,
+    subnet_type: Option<String>,
 }
 
 impl CertificateBuilder {
     pub fn new(data: CertificateData) -> Self {
-        let mut seed: [u8; 32] = [0; 32];
-        thread_rng().fill(&mut seed);
+        Self::new_with_rng(data, &mut thread_rng())
+    }
 
-        let (public_coefficients, secret_key_bytes) =
-            keygen(Seed::from_bytes(&seed), NumberOfNodes::new(1), &[true; 1]).unwrap();
-        let public_key = ThresholdSigPublicKey::from(CspThresholdSigPublicKey::from(
-            combined_public_key(&public_coefficients).unwrap(),
-        ));
+    pub fn new_with_rng<R: Rng + RngCore + CryptoRng>(data: CertificateData, rng: &mut R) -> Self {
+        let (public_key, secret_key) = generate_root_of_trust(rng);
 
         CertificateBuilder {
             public_key,
-            secret_key: secret_key_bytes.get(0).unwrap().unwrap(),
+            secret_key,
             data,
             delegatee_pub_key: None,
             override_sig: None,
             subnet_id: None,
             delegation: None,
             time: None,
+            canister_ranges_format: CanisterRangesFormat::Flat,
+            subnet_type: None,
         }
+    }
+
+    pub fn with_root_of_trust(
+        mut self,
+        public_key: ThresholdSigPublicKey,
+        secret_key: SecretKeyBytes,
+    ) -> Self {
+        self.public_key = public_key;
+        self.secret_key = secret_key;
+        self
     }
 
     pub fn with_time(mut self, time: u64) -> Self {
@@ -131,6 +303,16 @@ impl CertificateBuilder {
 
     pub fn with_delegation_subnet_id(mut self, subnet_id: SubnetId) -> Self {
         self.subnet_id = Some(subnet_id);
+        self
+    }
+
+    pub fn with_canister_ranges_format(mut self, format: CanisterRangesFormat) -> Self {
+        self.canister_ranges_format = format;
+        self
+    }
+
+    pub fn with_subnet_type(mut self, subnet_type: &str) -> Self {
+        self.subnet_type = Some(subnet_type.to_string());
         self
     }
 
@@ -164,7 +346,12 @@ impl CertificateBuilder {
     /// a tuple of (Certificate, ThresholdSigPublicKey, Vec<u8> containing the cbor encoded certificate)
     pub fn build(&self) -> (Certificate, ThresholdSigPublicKey, Vec<u8>) {
         let mut b = HashTreeBuilderImpl::new();
-        let tree = &self.data.get_tree(self.delegatee_pub_key, self.time);
+        let tree = &self.data.get_tree(
+            self.delegatee_pub_key,
+            self.time,
+            self.canister_ranges_format,
+            self.subnet_type.as_deref(),
+        );
         hash_full_tree(&mut b, tree);
 
         let witness_gen = b.witness_generator().unwrap();
@@ -198,12 +385,14 @@ impl CertificateBuilder {
         if let Some(subnet_id) = self.subnet_id {
             return subnet_id;
         }
-        if let Some(delegation_builder) = &self.delegation {
-            if let CertificateData::SubnetData { subnet_id, .. } = delegation_builder.data {
-                return subnet_id;
-            }
+        if let Some(delegation_builder) = &self.delegation
+            && let CertificateData::SubnetData { subnet_id, .. } = delegation_builder.data
+        {
+            return subnet_id;
         }
-        panic!("No subnet_id present. Either set a delegation with SubnetData or set the subnet_id manually using 'with_delegation_subnet_id'")
+        panic!(
+            "No subnet_id present. Either set a delegation with SubnetData or set the subnet_id manually using 'with_delegation_subnet_id'"
+        )
     }
 
     fn build_delegation(&self) -> Option<CertificateDelegation> {
@@ -215,6 +404,24 @@ impl CertificateBuilder {
                 subnet_id: Blob(self.get_subnet_id().get().to_vec()),
             })
     }
+}
+
+pub fn generate_root_of_trust<R: Rng + CryptoRng>(
+    rng: &mut R,
+) -> (ThresholdSigPublicKey, SecretKeyBytes) {
+    let mut seed: [u8; 32] = [0; 32];
+    rng.fill(&mut seed);
+
+    let (public_coefficients, secret_key_bytes) = generate_threshold_key(
+        Seed::from_bytes(&seed),
+        NumberOfNodes::new(1),
+        NumberOfNodes::new(1),
+    )
+    .unwrap();
+    let public_key = ThresholdSigPublicKey::from(CspThresholdSigPublicKey::from(
+        combined_public_key(&public_coefficients).unwrap(),
+    ));
+    (public_key, secret_key_bytes.first().unwrap().clone())
 }
 
 pub fn serialize_to_cbor<T: Serialize>(payload: &T) -> Vec<u8> {
@@ -230,7 +437,7 @@ pub fn encoded_time(time: u64) -> Vec<u8> {
     encoded_time
 }
 
-fn hash_full_tree(b: &mut HashTreeBuilderImpl, t: &LabeledTree<Vec<u8>>) {
+pub fn hash_full_tree(b: &mut HashTreeBuilderImpl, t: &LabeledTree<Vec<u8>>) {
     match t {
         LabeledTree::Leaf(bytes) => {
             b.start_leaf();

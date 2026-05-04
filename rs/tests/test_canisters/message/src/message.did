@@ -1,0 +1,11 @@
+type ForwardParams = record {
+  method : text;
+  cycles : nat;
+  receiver : principal;
+  payload : blob;
+};
+service : {
+  forward : (ForwardParams) -> (blob);
+  read : () -> (opt text) query;
+  store : (text) -> ();
+}

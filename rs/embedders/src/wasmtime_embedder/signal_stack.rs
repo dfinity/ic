@@ -1,4 +1,4 @@
-// Stack grows down. Allocs start at stack_add + stacksize - 1
+// Stack grows down. Allocs start at stack_addr + stacksize - 1
 //
 // +--------------------+
 // |    frame n         | | Stack growth
@@ -13,19 +13,21 @@
 // +--------------------+
 
 use libc::MAP_FAILED;
-use libc::{mmap, mprotect, munmap};
-use libc::{sigaltstack, SIGSTKSZ, SS_DISABLE};
-use libc::{sysconf, _SC_PAGESIZE};
+use libc::{_SC_PAGESIZE, sysconf};
 use libc::{MAP_ANON, MAP_PRIVATE, PROT_NONE, PROT_READ, PROT_WRITE};
+use libc::{SIGSTKSZ, SS_DISABLE, sigaltstack};
+use libc::{mmap, mprotect, munmap};
 
 use std::io::Error;
 use std::mem::MaybeUninit;
 use std::ptr;
 
 unsafe fn get_act_sigstack() -> libc::stack_t {
-    let mut prev_stack = std::mem::MaybeUninit::<libc::stack_t>::uninit();
-    sigaltstack(std::ptr::null(), prev_stack.as_mut_ptr());
-    prev_stack.assume_init()
+    unsafe {
+        let mut prev_stack = std::mem::MaybeUninit::<libc::stack_t>::uninit();
+        sigaltstack(std::ptr::null(), prev_stack.as_mut_ptr());
+        prev_stack.assume_init()
+    }
 }
 
 pub struct ScopedSignalStack {
@@ -33,22 +35,21 @@ pub struct ScopedSignalStack {
     prev_stack: libc::stack_t,
 }
 
-//impl !Send for ScopedSignalStack {}
-//impl !Sync for ScopedSignalStack {}
-
 impl ScopedSignalStack {
     unsafe fn new(stack: libc::stack_t) -> Self {
-        let mut prev_stack = MaybeUninit::<libc::stack_t>::uninit();
-        let res = sigaltstack(&stack, prev_stack.as_mut_ptr());
-        if res != 0 {
-            panic!(
-                "Setting sigaltstack failed. errno: {}",
-                Error::last_os_error()
-            );
-        }
-        Self {
-            stack,
-            prev_stack: prev_stack.assume_init(),
+        unsafe {
+            let mut prev_stack = MaybeUninit::<libc::stack_t>::uninit();
+            let res = sigaltstack(&stack, prev_stack.as_mut_ptr());
+            if res != 0 {
+                panic!(
+                    "Setting sigaltstack failed. errno: {}",
+                    Error::last_os_error()
+                );
+            }
+            Self {
+                stack,
+                prev_stack: prev_stack.assume_init(),
+            }
         }
     }
 }
@@ -89,11 +90,11 @@ impl WasmtimeSignalStack {
     pub fn new() -> Self {
         unsafe {
             let page_size = sysconf(_SC_PAGESIZE) as usize;
-            // 2020-04-21: wasmtime now overwrites the signal stack if the size is less
-            // than 64k. Thus we set it to 64k to avoid that. Current wasmtime work in
-            // progress indicates this behavior will change in the future. We will keep our
-            // own stack until the behavior stabilizes.
-            let signal_stack_size = std::cmp::max(SIGSTKSZ, 64 * 1024);
+            // Wasmtime overwrites the signal stack if the size is less than
+            // 256k. Thus we set it to 256k to avoid that. Current wasmtime work
+            // in progress indicates this behavior will change in the future. We
+            // will keep our own stack until the behavior stabilizes.
+            let signal_stack_size = std::cmp::max(SIGSTKSZ, 256 * 1024);
             debug_assert_eq!(signal_stack_size % page_size, 0);
             let mem_size = page_size + signal_stack_size;
             let mem = mmap(
@@ -134,7 +135,7 @@ impl WasmtimeSignalStack {
     }
 
     pub unsafe fn register(&mut self) -> ScopedSignalStack {
-        ScopedSignalStack::new(self.stack)
+        unsafe { ScopedSignalStack::new(self.stack) }
     }
 }
 

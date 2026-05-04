@@ -7,7 +7,7 @@ mod tests;
 
 /// A set of dealers for non-interactive DKG. Satisfies invariants, see
 /// `NiDkgDealers::new`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct NiDkgDealers {
     dealers: BTreeSet<NodeId>,
     // The count equals `dealers.len()`.
@@ -23,7 +23,7 @@ impl NiDkgDealers {
     /// * Dealers are not empty (error: `DealersEmpty`)
     /// * The number of dealers fits into `NodeIndex` (error: `TooManyDealers`)
     ///
-    /// If an invariant is not satisifed, the `Err` as indicated above is
+    /// If an invariant is not satisfied, the `Err` as indicated above is
     /// returned.
     pub fn new(dealers: BTreeSet<NodeId>) -> Result<Self, NiDkgConfigValidationError> {
         Self::ensure_dealers_not_empty(&dealers)?;

@@ -1,11 +1,20 @@
 [package]
 name = "ic-wasm-types"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-ic-crypto-sha = { path = "../../crypto/sha" }
-ic-protobuf = { path = "../../protobuf" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
+ic-heap-bytes = { path = "../../../packages/ic-heap-bytes" }
 ic-sys = { path = "../../sys" }
+ic-types = { path = "../types" }
 ic-utils = { path = "../../utils" }
-serde = { version = "1.0.99", features = ["derive"] }
+ic-validate-eq = { path = "../../utils/validate_eq" }
+ic-validate-eq-derive = { path = "../../utils/validate_eq_derive" }
+serde = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

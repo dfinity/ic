@@ -1,0 +1,19 @@
+[package]
+name = "ic-crypto-test-utils-csp"
+description = "Test utilities for crypto service provider"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-base-types = { path = "../../../types/base_types" }
+ic-crypto-internal-csp = { path = "../../internal/crypto_service_provider" }
+ic-crypto-internal-threshold-sig-bls12381 = { path = "../../internal/crypto_lib/threshold_sig/bls12_381" }
+ic-crypto-internal-threshold-sig-canister-threshold-sig = { path = "../../internal/crypto_lib/threshold_sig/canister_threshold_sig" }
+ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
+ic-crypto-node-key-validation = { path = "../../../crypto/node_key_validation" }
+ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
+ic-protobuf = { path = "../../../protobuf" }
+ic-types = { path = "../../../types/types" }
+mockall = { workspace = true }

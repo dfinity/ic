@@ -1,0 +1,25 @@
+
+[package]
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+name = "ic-query-stats"
+version.workspace = true
+
+[dependencies]
+crossbeam-channel = { workspace = true }
+ic-config = { path = "../config" }
+ic-interfaces = { path = "../interfaces" }
+ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
+ic-logger = { path = "../monitoring/logger" }
+ic-metrics = { path = "../monitoring/metrics" }
+ic-replicated-state = { path = "../replicated_state" }
+ic-types = { path = "../types/types" }
+prometheus = { workspace = true }
+slog = { workspace = true }
+
+[dev-dependencies]
+ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
+ic-test-utilities-state = { path = "../test_utilities/state" }
+ic-types-test-utils = { path = "../types/types_test_utils" }

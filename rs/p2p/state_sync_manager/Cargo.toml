@@ -1,0 +1,40 @@
+[package]
+name = "ic-state-sync-manager"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+axum = { workspace = true }
+bytes = { workspace = true }
+futures = { workspace = true }
+ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
+ic-base-types = { path = "../../types/base_types" }
+ic-interfaces = { path = "../../interfaces" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-protobuf = { path = "../../protobuf" }
+ic-quic-transport = { path = "../quic_transport" }
+prometheus = { workspace = true }
+prost = { workspace = true }
+rand = { workspace = true }
+slog = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-metrics = { workspace = true }
+tokio-util = { workspace = true }
+zstd = { workspace = true }
+
+[dev-dependencies]
+ic-memory-transport = { path = "../memory_transport" }
+ic-p2p-test-utils = { path = "../test_utils" }
+ic-state-manager = { path = "../../state_manager" }
+ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+ic-types = { path = "../../types/types" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
+mockall = { workspace = true }
+turmoil = { workspace = true }

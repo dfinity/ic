@@ -29,16 +29,14 @@ impl From<PublicKey> for PublicKeyBytes {
 }
 
 impl PublicKey {
-    /// Deserializes a `PublicKey` from a *trusted* source.
+    /// Deserializes a `PublicKey` with caching
     ///
-    /// # Security Notice
-    /// This uses the "unchecked" G2 deserialization (no subgroup check),
-    /// so should only be used on `PublicKeyBytes` obtained
-    /// from a known, trusted source.
-    pub fn from_trusted_bytes(
+    /// This is useful if it is expected that the same point will
+    /// be seen again, for example a peer's public key
+    pub fn deserialize_cached(
         bytes: &PublicKeyBytes,
     ) -> Result<Self, ThresholdSigPublicKeyBytesConversionError> {
-        G2Projective::deserialize_unchecked(&bytes.0)
+        G2Affine::deserialize_cached(&bytes.0)
             .map_err(|_| ThresholdSigPublicKeyBytesConversionError::Malformed {
                 key_bytes: Some(bytes.0.to_vec()),
                 internal_error: "Invalid public key".to_string(),
@@ -50,7 +48,7 @@ impl PublicKey {
 impl TryFrom<&PublicKeyBytes> for PublicKey {
     type Error = ThresholdSigPublicKeyBytesConversionError;
     fn try_from(bytes: &PublicKeyBytes) -> Result<Self, Self::Error> {
-        G2Projective::deserialize(&bytes.0)
+        G2Affine::deserialize(&bytes.0)
             .map_err(|_| ThresholdSigPublicKeyBytesConversionError::Malformed {
                 key_bytes: Some(bytes.0.to_vec()),
                 internal_error: "Invalid public key".to_string(),
@@ -61,19 +59,22 @@ impl TryFrom<&PublicKeyBytes> for PublicKey {
 
 impl From<SecretKey> for SecretKeyBytes {
     fn from(key: SecretKey) -> Self {
-        Self(key.serialize())
+        Self::from(&key)
     }
 }
 impl From<&SecretKey> for SecretKeyBytes {
     fn from(key: &SecretKey) -> Self {
-        Self(key.serialize())
+        let mut bytes = key.serialize();
+        Self(ic_crypto_secrets_containers::SecretArray::new_and_zeroize_argument(&mut bytes))
     }
 }
 impl TryFrom<&SecretKeyBytes> for SecretKey {
     type Error = ClibThresholdSignError;
     fn try_from(bytes: &SecretKeyBytes) -> Result<SecretKey, ClibThresholdSignError> {
-        Scalar::deserialize(&bytes.0).map_err(|_| ClibThresholdSignError::MalformedSecretKey {
-            algorithm: AlgorithmId::ThresBls12_381,
+        Scalar::deserialize(&bytes.0.expose_secret()).map_err(|_| {
+            ClibThresholdSignError::MalformedSecretKey {
+                algorithm: AlgorithmId::ThresBls12_381,
+            }
         })
     }
 }
@@ -91,7 +92,7 @@ impl From<IndividualSignature> for IndividualSignatureBytes {
 impl TryFrom<&IndividualSignatureBytes> for IndividualSignature {
     type Error = CryptoError;
     fn try_from(bytes: &IndividualSignatureBytes) -> Result<IndividualSignature, CryptoError> {
-        G1Projective::deserialize(&bytes.0).map_err(|_| CryptoError::MalformedSignature {
+        G1Affine::deserialize(&bytes.0).map_err(|_| CryptoError::MalformedSignature {
             algorithm: AlgorithmId::ThresBls12_381,
             sig_bytes: bytes.0.to_vec(),
             internal_error: "Invalid individual signature".to_string(),
@@ -112,93 +113,11 @@ impl From<CombinedSignature> for CombinedSignatureBytes {
 impl TryFrom<&CombinedSignatureBytes> for CombinedSignature {
     type Error = CryptoError;
     fn try_from(bytes: &CombinedSignatureBytes) -> Result<CombinedSignature, CryptoError> {
-        G1Projective::deserialize(&bytes.0).map_err(|_| CryptoError::MalformedSignature {
+        G1Affine::deserialize(&bytes.0).map_err(|_| CryptoError::MalformedSignature {
             algorithm: AlgorithmId::ThresBls12_381,
             sig_bytes: bytes.0.to_vec(),
             internal_error: "Invalid combined signature".to_string(),
         })
-    }
-}
-
-impl From<SecretKeyBytes> for String {
-    fn from(bytes: SecretKeyBytes) -> String {
-        base64::encode(&bytes.0[..])
-    }
-}
-impl TryFrom<&str> for SecretKeyBytes {
-    type Error = CryptoError;
-
-    fn try_from(string: &str) -> Result<Self, CryptoError> {
-        let bytes = base64::decode(string).map_err(|e| CryptoError::MalformedSecretKey {
-            algorithm: AlgorithmId::ThresBls12_381,
-            internal_error: format!("Secret key is not a valid base64 encoded string: {}", e),
-        })?;
-        if bytes.len() != SecretKeyBytes::SIZE {
-            return Err(CryptoError::MalformedSecretKey {
-                algorithm: AlgorithmId::ThresBls12_381,
-                internal_error: "Secret key length is incorrect".to_string(),
-            });
-        }
-        let mut buffer = [0u8; SecretKeyBytes::SIZE];
-        buffer.copy_from_slice(&bytes);
-        Ok(SecretKeyBytes(buffer))
-    }
-}
-impl TryFrom<&String> for SecretKeyBytes {
-    type Error = CryptoError;
-    fn try_from(string: &String) -> Result<Self, CryptoError> {
-        Self::try_from(string as &str)
-    }
-}
-
-impl From<IndividualSignatureBytes> for String {
-    fn from(bytes: IndividualSignatureBytes) -> String {
-        base64::encode(&bytes.0[..])
-    }
-}
-impl TryFrom<&str> for IndividualSignatureBytes {
-    type Error = CryptoError;
-
-    fn try_from(string: &str) -> Result<Self, CryptoError> {
-        let signature = base64::decode(string).map_err(|e| CryptoError::MalformedSignature {
-            algorithm: AlgorithmId::ThresBls12_381,
-            sig_bytes: string.as_bytes().to_vec(),
-            internal_error: format!("Signature is not a valid base64 encoded string: {}", e),
-        })?;
-        if signature.len() != IndividualSignatureBytes::SIZE {
-            return Err(CryptoError::MalformedSignature {
-                algorithm: AlgorithmId::ThresBls12_381,
-                sig_bytes: string.as_bytes().to_vec(),
-                internal_error: "Signature length is incorrect".to_string(),
-            });
-        }
-        let mut buffer = [0u8; IndividualSignatureBytes::SIZE];
-        buffer.copy_from_slice(&signature);
-        Ok(IndividualSignatureBytes(buffer))
-    }
-}
-impl TryFrom<&String> for IndividualSignatureBytes {
-    type Error = CryptoError;
-    fn try_from(signature: &String) -> Result<Self, CryptoError> {
-        Self::try_from(signature as &str)
-    }
-}
-
-impl From<CombinedSignatureBytes> for String {
-    fn from(bytes: CombinedSignatureBytes) -> String {
-        base64::encode(&bytes.0[..])
-    }
-}
-impl TryFrom<&str> for CombinedSignatureBytes {
-    type Error = CryptoError;
-
-    fn try_from(string: &str) -> Result<Self, CryptoError> {
-        let signature = base64::decode(string).map_err(|e| CryptoError::MalformedSignature {
-            algorithm: AlgorithmId::ThresBls12_381,
-            sig_bytes: string.as_bytes().to_vec(),
-            internal_error: format!("Signature is not a valid base64 encoded string: {}", e),
-        })?;
-        Self::try_from(&signature)
     }
 }
 
@@ -213,14 +132,8 @@ impl TryFrom<&Vec<u8>> for CombinedSignatureBytes {
                 internal_error: "Signature length is incorrect".to_string(),
             });
         }
-        let mut buffer = [0u8; CombinedSignatureBytes::SIZE];
+        let mut buffer = [0_u8; CombinedSignatureBytes::SIZE];
         buffer.copy_from_slice(sig_bytes);
         Ok(CombinedSignatureBytes(buffer))
-    }
-}
-impl TryFrom<&String> for CombinedSignatureBytes {
-    type Error = CryptoError;
-    fn try_from(signature: &String) -> Result<Self, CryptoError> {
-        Self::try_from(signature as &str)
     }
 }

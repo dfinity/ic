@@ -1,0 +1,11 @@
+[package]
+name = "ledger-canister-protobuf-generator"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-utils-rustfmt = { path = "../../../utils/rustfmt" }
+prost-build = { workspace = true }

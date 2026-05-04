@@ -1,259 +1,335 @@
+use super::super::message_pool::tests::*;
+use super::super::message_pool::{Class, InboundReference};
 use super::*;
-use ic_test_utilities::mock_time;
-use ic_test_utilities::types::{
-    arbitrary,
-    ids::{canister_test_id, message_test_id, user_test_id},
-    messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
-};
-use ic_types::{messages::RequestOrResponse, QueueIndex, Time};
+use crate::canister_state::DEFAULT_QUEUE_CAPACITY;
+use crate::canister_state::queues::pb_queues;
+use assert_matches::assert_matches;
+use ic_protobuf::proxy::ProxyDecodeError;
+use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
+use ic_test_utilities_types::messages::IngressBuilder;
 use proptest::prelude::*;
 
 #[test]
-fn input_queue_constructor_test() {
-    let capacity: usize = 14;
-    let mut queue = InputQueue::new(capacity);
-    assert_eq!(queue.num_messages(), 0);
-    assert!(queue.is_empty());
+fn canister_queue_constructor_test() {
+    const CAPACITY: usize = 14;
+    let mut queue = InputQueue::new(CAPACITY);
+
+    assert_eq!(0, queue.len());
+    assert!(!queue.has_used_slots());
+    assert_eq!(CAPACITY, queue.capacity);
+    assert_eq!(CAPACITY, queue.available_request_slots());
+    assert_eq!(CAPACITY, queue.available_response_slots());
+    assert_eq!(Ok(()), queue.check_has_request_slot());
+    assert_eq!(0, queue.reserved_slots());
+    assert_eq!(Err(()), queue.check_has_reserved_response_slot());
+    assert_eq!(queue.peek(), None);
     assert_eq!(queue.pop(), None);
 }
 
+// Pushing a request succeeds if there is space.
 #[test]
-fn input_queue_with_message_is_not_empty() {
-    let mut input_queue = InputQueue::new(1);
+fn canister_queue_push_request_succeeds() {
+    const CAPACITY: usize = 1;
+    let mut queue = InputQueue::new(CAPACITY);
 
-    input_queue
-        .push(RequestBuilder::default().build().into())
-        .expect("could push");
-    assert_ne!(input_queue.num_messages(), 0);
-    assert!(!input_queue.is_empty());
+    let reference = new_request_reference(13, Class::BestEffort);
+    queue.push_request(reference);
+
+    assert_eq!(1, queue.len());
+    assert!(queue.has_used_slots());
+    assert_eq!(CAPACITY - 1, queue.available_request_slots());
+    assert_eq!(
+        Err(StateError::QueueFull { capacity: CAPACITY }),
+        queue.check_has_request_slot()
+    );
+    assert_eq!(CAPACITY, queue.available_response_slots());
+    assert_eq!(0, queue.reserved_slots());
+    assert_eq!(Err(()), queue.check_has_reserved_response_slot());
+
+    // Peek, then pop the request.
+    assert_eq!(Some(reference), queue.peek());
+    assert_eq!(Some(reference), queue.pop());
+
+    assert_eq!(0, queue.len());
+    assert!(!queue.has_used_slots());
+    assert_eq!(CAPACITY, queue.available_request_slots());
+    assert_eq!(Ok(()), queue.check_has_request_slot());
+    assert_eq!(CAPACITY, queue.available_response_slots());
+    assert_eq!(0, queue.reserved_slots());
+    assert_eq!(Err(()), queue.check_has_reserved_response_slot());
 }
 
+// Reserving a slot, then pushing a response succeeds if there is space.
 #[test]
-fn input_queue_with_reservation_is_not_empty() {
-    let mut input_queue = InputQueue::new(1);
-    input_queue.reserve_slot().unwrap();
+fn canister_queue_push_response_succeeds() {
+    use Class::*;
 
-    assert_eq!(input_queue.num_messages(), 0);
-    assert!(!input_queue.is_empty());
+    const CAPACITY: usize = 1;
+    let mut queue = CanisterQueue::new(CAPACITY);
+
+    // Reserve a slot.
+    queue.try_reserve_response_slot().unwrap();
+
+    assert_eq!(0, queue.len());
+    assert!(queue.has_used_slots());
+    assert_eq!(CAPACITY, queue.available_request_slots());
+    assert_eq!(Ok(()), queue.check_has_request_slot());
+    assert_eq!(CAPACITY - 1, queue.available_response_slots());
+    assert_eq!(1, queue.reserved_slots());
+    assert_eq!(Ok(()), queue.check_has_reserved_response_slot());
+
+    // Push response into reseerved slot.
+    let reference = new_response_reference(13, GuaranteedResponse);
+    queue.push_response(reference);
+
+    assert_eq!(1, queue.len());
+    assert!(queue.has_used_slots());
+    assert_eq!(CAPACITY, queue.available_request_slots());
+    assert_eq!(Ok(()), queue.check_has_request_slot());
+    assert_eq!(CAPACITY - 1, queue.available_response_slots());
+    assert_eq!(0, queue.reserved_slots());
+    assert_eq!(Err(()), queue.check_has_reserved_response_slot());
+
+    // Peek, then pop the response reference.
+    assert_eq!(Some(reference), queue.peek());
+    assert_eq!(Some(reference), queue.pop());
+
+    assert_eq!(0, queue.len());
+    assert!(!queue.has_used_slots());
+    assert_eq!(CAPACITY, queue.available_request_slots());
+    assert_eq!(Ok(()), queue.check_has_request_slot());
+    assert_eq!(CAPACITY, queue.available_response_slots());
+    assert_eq!(0, queue.reserved_slots());
+    assert_eq!(Err(()), queue.check_has_reserved_response_slot());
 }
 
-/// Test affirming success on popping pushed messages.
+/// Test that overfilling an output queue with requests results in failed
+/// pushes; also verifies that pushes below capacity succeed.
 #[test]
-fn input_queue_pushed_messages_get_popped() {
-    let capacity: usize = 4;
-    let mut input_queue = InputQueue::new(capacity);
-    let mut msg_queue = VecDeque::new();
-    for _ in 0..capacity {
-        let req: RequestOrResponse = RequestBuilder::default().build().into();
-        msg_queue.push_back(req.clone());
-        assert_eq!(Ok(()), input_queue.push(req));
-    }
-    while !msg_queue.is_empty() {
-        assert_eq!(input_queue.pop(), msg_queue.pop_front());
-    }
-    assert_eq!(None, msg_queue.pop_front());
-    assert_eq!(None, input_queue.pop());
-}
-
-// Pushing a message succeeds if there is space.
-#[test]
-fn input_queue_push_succeeds() {
-    let capacity: usize = 4;
-    let mut input_queue = InputQueue::new(capacity);
-    input_queue
-        .push(RequestBuilder::default().build().into())
-        .unwrap();
-
-    assert_eq!(1, input_queue.num_messages());
-}
-
-/// Test that overfilling an input queue with messages and reservations
-/// results in failed pushes and reservations; also verifies that
-/// pushes and reservations below capacity succeeds.
-#[test]
-fn input_queue_push_to_full_queue_fails() {
+#[should_panic(expected = "assertion failed: self.request_slots < self.capacity")]
+fn canister_queue_push_request_to_full_queue_fails() {
     // First fill up the queue.
-    let capacity: usize = 4;
-    let mut input_queue = InputQueue::new(capacity);
-    for _ in 0..capacity / 2 {
-        input_queue
-            .push(RequestBuilder::default().build().into())
-            .unwrap();
+    const CAPACITY: usize = 2;
+    let mut queue = CanisterQueue::new(CAPACITY);
+    for i in 0..CAPACITY {
+        queue.push_request(new_request_reference(i as u64, Class::BestEffort));
     }
-    for _index in capacity / 2..capacity {
-        input_queue.reserve_slot().unwrap();
-    }
-    assert_eq!(input_queue.num_messages(), capacity / 2);
 
-    // Now push an extraneous message in.
+    assert_eq!(CAPACITY, queue.len());
+    assert!(queue.has_used_slots());
+    assert_eq!(0, queue.available_request_slots());
     assert_eq!(
-        input_queue
-            .push(RequestBuilder::default().build().into(),)
-            .map_err(|(err, _)| err),
-        Err(StateError::QueueFull { capacity })
+        Err(StateError::QueueFull { capacity: CAPACITY }),
+        queue.check_has_request_slot()
     );
-    // Or try to reserve a slot.
+    assert_eq!(CAPACITY, queue.available_response_slots());
+    assert_eq!(0, queue.reserved_slots());
+    assert_eq!(Err(()), queue.check_has_reserved_response_slot());
+
+    queue.push_request(new_request_reference(13, Class::BestEffort));
+}
+
+/// Test that overfilling an output queue with slot reservations results in
+/// failed slot reservations; also verifies that slot reservations below
+/// capacity succeed.
+#[test]
+fn canister_queue_try_reserve_response_slot_in_full_queue_fails() {
+    use Class::*;
+
+    const CAPACITY: usize = 2;
+    let mut queue = CanisterQueue::new(CAPACITY);
+
+    // Reserve all response slots.
+    for _ in 0..CAPACITY {
+        queue.try_reserve_response_slot().unwrap();
+    }
+
+    assert_eq!(0, queue.len());
+    assert!(queue.has_used_slots());
+    assert_eq!(CAPACITY, queue.available_request_slots());
+    assert_eq!(Ok(()), queue.check_has_request_slot());
+    assert_eq!(0, queue.available_response_slots());
+    assert_eq!(CAPACITY, queue.reserved_slots());
+    assert_eq!(Ok(()), queue.check_has_reserved_response_slot());
+
+    // Trying to reserve a slot fails.
     assert_eq!(
-        input_queue.reserve_slot(),
-        Err(StateError::QueueFull { capacity })
+        Err(StateError::QueueFull { capacity: CAPACITY }),
+        queue.try_reserve_response_slot()
+    );
+
+    // Fill the queue with responses.
+    for i in 0..CAPACITY {
+        let class = if i % 2 == 0 {
+            BestEffort
+        } else {
+            GuaranteedResponse
+        };
+        queue.push_response(new_response_reference(i as u64, class));
+    }
+
+    assert_eq!(2, queue.len());
+    assert!(queue.has_used_slots());
+    assert_eq!(CAPACITY, queue.available_request_slots());
+    assert_eq!(Ok(()), queue.check_has_request_slot());
+    assert_eq!(0, queue.available_response_slots());
+    assert_eq!(0, queue.reserved_slots());
+    assert_eq!(Err(()), queue.check_has_reserved_response_slot());
+
+    // Trying to reserve a slot still fails.
+    assert_eq!(
+        Err(StateError::QueueFull { capacity: CAPACITY }),
+        queue.try_reserve_response_slot()
+    );
+}
+
+/// Test that a queue can be filled with both requests and responses at the
+/// same time.
+#[test]
+fn canister_queue_full_duplex() {
+    // First fill up the queue.
+    const CAPACITY: usize = 2;
+    let mut queue = InputQueue::new(CAPACITY);
+    for i in 0..CAPACITY as u64 {
+        queue.push_request(new_request_reference(i * 2, Class::BestEffort));
+        queue.try_reserve_response_slot().unwrap();
+        queue.push_response(new_response_reference(i * 2 + 1, Class::BestEffort));
+    }
+
+    assert_eq!(2 * CAPACITY, queue.len());
+    assert!(queue.has_used_slots());
+    assert_eq!(0, queue.available_request_slots());
+    assert_eq!(
+        Err(StateError::QueueFull { capacity: CAPACITY }),
+        queue.check_has_request_slot()
+    );
+    assert_eq!(0, queue.available_response_slots());
+    assert_eq!(
+        Err(StateError::QueueFull { capacity: CAPACITY }),
+        queue.try_reserve_response_slot(),
     );
 }
 
 #[test]
-fn input_push_without_reservation_fails() {
+#[should_panic(expected = "No reserved response slot")]
+fn canister_queue_push_without_reserved_slot_panics() {
     let mut queue = InputQueue::new(10);
-    queue
-        .push(ResponseBuilder::default().build().into())
-        .unwrap_err();
+    queue.push_response(new_response_reference(13, Class::BestEffort));
 }
 
-#[test]
-fn input_queue_available_slots_is_correct() {
-    let capacity = 2;
-    let mut input_queue = InputQueue::new(capacity);
-    assert_eq!(input_queue.available_slots(), 2);
-    input_queue
-        .push(RequestBuilder::default().build().into())
-        .unwrap();
-    assert_eq!(input_queue.available_slots(), 1);
-    input_queue.reserve_slot().unwrap();
-    assert_eq!(input_queue.available_slots(), 0);
-    assert!(input_queue.check_has_slot().is_err())
+/// Generator for an arbitrary inbound message reference.
+fn arbitrary_message_reference() -> impl Strategy<Value = InboundReference> + Clone {
+    prop_oneof![
+        any::<u64>().prop_map(|r#gen| new_request_reference(r#gen, Class::GuaranteedResponse)),
+        any::<u64>().prop_map(|r#gen| new_request_reference(r#gen, Class::BestEffort)),
+        any::<u64>().prop_map(|r#gen| new_response_reference(r#gen, Class::GuaranteedResponse)),
+        any::<u64>().prop_map(|r#gen| new_response_reference(r#gen, Class::BestEffort)),
+    ]
 }
 
-#[test]
-fn input_queue_decode_with_non_empty_deadlines_fails() {
-    let mut q = InputQueue::new(super::super::DEFAULT_QUEUE_CAPACITY);
-    for _ in 0..2 {
-        let _ = q.push(RequestOrResponse::Request(
-            RequestBuilder::default().build().into(),
-        ));
+#[test_strategy::proptest]
+fn canister_queue_push_and_pop(
+    #[strategy(proptest::collection::vec_deque(arbitrary_message_reference(), 10..20))]
+    mut references: VecDeque<InboundReference>,
+) {
+    // Create a queue with large enough capacity.
+    let mut queue = InputQueue::new(20);
+
+    // Push all references onto the queue.
+    for reference in references.iter() {
+        match reference {
+            reference if reference.kind() == Kind::Request => {
+                queue.push_request(*reference);
+            }
+            reference => {
+                queue.try_reserve_response_slot().unwrap();
+                queue.push_response(*reference);
+            }
+        }
+        prop_assert_eq!(Ok(()), queue.check_invariants());
     }
-    let mut proto_queue: pb_queues::InputOutputQueue = (&q).into();
-    proto_queue
-        .deadline_range_ends
-        .push(pb_queues::MessageDeadline {
-            deadline: 0,
-            index: 0,
-        });
-    assert!(TryInto::<InputQueue>::try_into(proto_queue).is_err());
-}
 
-#[test]
-fn output_queue_constructor_test() {
-    let mut queue = OutputQueue::new(14);
-    assert_eq!(queue.num_messages(), 0);
-    assert_eq!(queue.pop(), None);
-}
-
-#[test]
-fn output_queue_with_message_is_not_empty() {
-    let mut queue = OutputQueue::new(14);
-
-    queue
-        .push_request(RequestBuilder::default().build().into(), mock_time())
-        .expect("could push");
-    assert_eq!(queue.num_messages(), 1);
-    assert!(!queue.is_empty());
-}
-
-#[test]
-fn output_queue_with_reservation_is_not_empty() {
-    let mut queue = OutputQueue::new(14);
-    queue.reserve_slot().unwrap();
-
-    assert_eq!(queue.num_messages(), 0);
-    assert!(!queue.is_empty());
-}
-
-/// Test that overfilling an output queue with messages and reservations
-/// results in failed pushes and reservations; also verifies that
-/// pushes and reservations below capacity succeeds.
-#[test]
-fn output_queue_push_to_full_queue_fails() {
-    // First fill up the queue.
-    let capacity: usize = 4;
-    let mut output_queue = OutputQueue::new(capacity);
-    for _index in 0..capacity / 2 {
-        output_queue
-            .push_request(RequestBuilder::default().build().into(), mock_time())
-            .unwrap();
+    // Check the contents of the queue via `peek` and `pop`.
+    while let Some(r) = queue.peek() {
+        let reference = references.pop_front();
+        prop_assert_eq!(reference, Some(r));
+        prop_assert_eq!(reference, queue.pop());
     }
-    for _index in capacity / 2..capacity {
-        output_queue.reserve_slot().unwrap();
+
+    // All references should have been consumed.
+    prop_assert!(references.is_empty());
+}
+
+#[test_strategy::proptest]
+fn encode_roundtrip(
+    #[strategy(proptest::collection::vec_deque(arbitrary_message_reference(), 10..20))]
+    references: VecDeque<InboundReference>,
+    #[strategy(0..3)] reserved_slots: i32,
+) {
+    let mut queue = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
+
+    // Push all references onto the queue.
+    for reference in references.iter() {
+        match reference {
+            reference if reference.kind() == Kind::Request => {
+                queue.push_request(*reference);
+            }
+            reference => {
+                queue.try_reserve_response_slot().unwrap();
+                queue.push_response(*reference);
+            }
+        }
+        prop_assert_eq!(Ok(()), queue.check_invariants());
     }
-    assert_eq!(output_queue.num_messages(), capacity / 2);
+    // And make `reserved_slots` additional reservations.
+    for _ in 0..reserved_slots {
+        queue.try_reserve_response_slot().unwrap();
+    }
+    prop_assert_eq!(Ok(()), queue.check_invariants());
 
-    // Now push an extraneous message in
-    assert_eq!(
-        output_queue
-            .push_request(RequestBuilder::default().build().into(), mock_time(),)
-            .map_err(|(err, _)| err),
-        Err(StateError::QueueFull { capacity })
-    );
-    // Or try to reserve a slot.
-    assert_eq!(
-        output_queue.reserve_slot(),
-        Err(StateError::QueueFull { capacity })
-    );
+    let encoded: pb_queues::CanisterQueue = (&queue).into();
+    let decoded = encoded.try_into().unwrap();
+
+    prop_assert_eq!(queue, decoded);
 }
 
 #[test]
-#[should_panic(expected = "called `Result::unwrap()` on an `Err` value")]
-fn output_push_without_reserved_slot_fails() {
-    let mut queue = OutputQueue::new(10);
-    queue.push_response(ResponseBuilder::default().build().into());
-}
+fn decode_inbound_message_in_output_queue_fails() {
+    // Input queue with a request.
+    let mut queue = InputQueue::new(DEFAULT_QUEUE_CAPACITY);
+    queue.push_request(new_request_reference(13, Class::BestEffort));
+    let encoded: pb_queues::CanisterQueue = (&queue).into();
 
-#[test]
-fn output_queue_available_slots_is_correct() {
-    let capacity = 2;
-    let mut output_queue = OutputQueue::new(capacity);
-    assert_eq!(output_queue.available_slots(), 2);
-    output_queue
-        .push_request(RequestBuilder::default().build().into(), mock_time())
-        .unwrap();
-    assert_eq!(output_queue.available_slots(), 1);
-    output_queue.reserve_slot().unwrap();
-    assert_eq!(output_queue.available_slots(), 0);
-    assert!(output_queue.check_has_slot().is_err())
-}
-
-/// An explicit example of deadlines in OutputQueue, where we manually fill
-/// and empty the queue, while checking whether we find what we'd expect.
-/// This test also ensures `push_request` and `push_response` don't increment
-/// the queue index, but `pop` does (by 1).
-#[test]
-fn output_queue_explicit_push_and_pop_test() {
-    let mut q = OutputQueue::new(100);
-    assert_eq!(0, q.num_messages());
-
-    let test_request = Arc::<Request>::from(RequestBuilder::default().build());
-    let test_response = Arc::<Response>::from(ResponseBuilder::default().build());
-    let deadline1 = Time::from_nanos_since_unix_epoch(3_u64);
-    let deadline2 = Time::from_nanos_since_unix_epoch(7_u64);
-
-    q.push_request(test_request.clone(), deadline1).unwrap();
-    q.reserve_slot().unwrap();
-    q.push_response(test_response);
-    q.push_request(test_request.clone(), deadline1).unwrap();
-    q.push_request(test_request, deadline2).unwrap();
-
-    assert_eq!(4, q.num_messages());
-    assert_eq!(0, q.index.get());
-    assert_eq!(
-        VecDeque::from(vec![
-            (deadline1, QueueIndex::from(3_u64)),
-            (deadline2, QueueIndex::from(4_u64)),
-        ]),
-        q.deadline_range_ends
+    // Cannot be decoded as an output queue.
+    assert_matches!(
+        OutputQueue::try_from(encoded.clone()),
+        Err(ProxyDecodeError::Other(_))
     );
 
-    let timeout_index = q.timeout_index;
-    assert!(matches!(q.pop().unwrap(), RequestOrResponse::Request(_)));
-    assert_eq!(3, q.num_messages());
-    assert_eq!(1, q.index.get());
-    assert_eq!(timeout_index, q.timeout_index);
+    // But can be decoded as an input queue.
+    assert_eq!(queue, encoded.try_into().unwrap());
+}
+
+#[test]
+fn decode_with_invalid_response_slots_fails() {
+    // Queue with two inbound responses.
+    let mut queue = InputQueue::new(DEFAULT_QUEUE_CAPACITY);
+    queue.try_reserve_response_slot().unwrap();
+    queue.push_response(new_response_reference(13, Class::BestEffort));
+    queue.try_reserve_response_slot().unwrap();
+    queue.push_response(new_response_reference(14, Class::BestEffort));
+    let encoded: pb_queues::CanisterQueue = (&queue).into();
+
+    // Can be decoded as is.
+    assert_eq!(queue, encoded.clone().try_into().unwrap());
+
+    // But fails to decode with a too low `response_slots` value.
+    let mut too_few_response_slots = encoded.clone();
+    too_few_response_slots.response_slots = 1;
+    assert_matches!(
+        InputQueue::try_from(too_few_response_slots),
+        Err(ProxyDecodeError::Other(_))
+    );
 }
 
 /// This ensures `debug_asserts` are enabled, because we are passively testing invariants
@@ -263,300 +339,6 @@ fn output_queue_explicit_push_and_pop_test() {
 #[should_panic]
 fn ensure_debug_asserts_enabled() {
     debug_assert!(false);
-}
-
-proptest! {
-    /// Checks `push_request` enforces sorted deadlines by inserting requests with random
-    /// deadlines and then checking whether `deadline_range_ends` is sorted.
-    fn output_queue_push_request_enforces_sorted_deadlines(
-        (requests, deadlines) in (2..=10_usize)
-        .prop_flat_map(|num_requests| {
-            (
-                proptest::collection::vec(
-                    arbitrary::request().prop_map(|request| Arc::from(request)),
-                    num_requests,
-                ),
-                proptest::collection::vec(
-                    (0..=1000_u64).prop_map(|t| Time::from_nanos_since_unix_epoch(t)),
-                    num_requests,
-                ),
-            )
-        })
-    ) {
-        let mut q = OutputQueue::new(super::super::DEFAULT_QUEUE_CAPACITY);
-        let mut expected_deadline_range_ends = VecDeque::<(Time, QueueIndex)>::new();
-
-        let mut index = QueueIndex::from(1);
-        for (request, deadline) in requests
-            .into_iter()
-            .zip(deadlines.into_iter())
-        {
-            q.push_request(request, deadline).unwrap();
-
-            if let Some((first_deadline, end)) = expected_deadline_range_ends.front_mut() {
-                if *first_deadline >= deadline {
-                    *end = index;
-                }
-            } else {
-                expected_deadline_range_ends.push_back((deadline, index));
-            }
-
-            index.inc_assign();
-        }
-
-        prop_assert_eq!(expected_deadline_range_ends, q.deadline_range_ends);
-    }
-}
-
-prop_compose! {
-    /// Generator for an arbitrary `OutputQueue` where nothing is timed out. An arbitrary number
-    /// of execution rounds is simulated by starting with round boundaries (in terms of messages
-    /// pushed onto the queue by the end of the respective round) [1, 2, ... num_msgs]; and removing
-    /// a random subset thereof.
-    fn arb_output_queue_no_timeout(num_msgs: std::ops::RangeInclusive<usize>) (
-        index in 0..10_u64,
-        (msgs, indices_to_remove) in num_msgs
-        .prop_flat_map(|num_msgs| {
-            (
-                proptest::collection::vec(arbitrary::request_or_response(), num_msgs),
-                proptest::collection::vec(any::<usize>(), 0..=num_msgs),
-            )
-        })
-    ) -> OutputQueue {
-
-        let mut q = OutputQueue::new(super::super::DEFAULT_QUEUE_CAPACITY);
-        q.index = index.into();
-
-        // Boundaries of execution rounds.
-        let mut range_ends = (0..=msgs.len()).collect::<Vec<usize>>();
-        for i in indices_to_remove {
-            range_ends.remove(i % range_ends.len());
-        }
-        range_ends.push(usize::MAX);
-
-        // Push messages on the queue. The deadlines start at 10 so that
-        // there is some room to pick a random time from that won't time out
-        // anything.
-        let mut round = 0;
-        for (i, msg) in msgs.into_iter().enumerate() {
-            if range_ends[round] == i {
-                round += 1;
-            }
-            match msg {
-                RequestOrResponse::Request(request) => {
-                    q.push_request(
-                        request,
-                        Time::from_nanos_since_unix_epoch((10 + round) as u64),
-                    ).unwrap();
-                }
-                RequestOrResponse::Response(response) => {
-                    q.reserve_slot().unwrap();
-                    q.push_response(response);
-                }
-            }
-        }
-        q.check_invariants();
-
-        q
-    }
-}
-
-prop_compose! {
-    /// Generator for an arbitrary time in the interval [min_deadline - 5, max_deadline + 5]
-    /// for an arbitrary `OutputQueue`. Returns 0 if there are no deadlines in the queue.
-    fn arb_time_for_output_queue_timeouts(q: &OutputQueue) (
-        time in {
-            // Find time for timing out in [min_deadline-5, max_deadline+5].
-            if let (Some((min_deadline, _)), Some((max_deadline, _))) =
-                (q.deadline_range_ends.front(), q.deadline_range_ends.back())
-            {
-                let min_deadline = min_deadline.as_nanos_since_unix_epoch();
-                let max_deadline = max_deadline.as_nanos_since_unix_epoch();
-                min_deadline - 5 ..= max_deadline + 5
-            } else {
-                0..=0_u64
-            }
-        },
-    ) -> Time {
-        Time::from_nanos_since_unix_epoch(time)
-    }
-}
-
-prop_compose! {
-    /// Generator for an arbitrary `OutputQueue` where requests are (partially) timed out.
-    /// The time for timing out is chosen in the interval [min_deadline - 5, max_deadline+ 5]
-    /// such that it encompasses edge cases.
-    fn arb_output_queue() (
-        (time, num_pop, mut q) in arb_output_queue_no_timeout(5..=20)
-        .prop_flat_map(|q| (arb_time_for_output_queue_timeouts(&q), 0..3_u64, Just(q)))
-
-    ) -> OutputQueue {
-        q.time_out_requests(time).count();
-        q.check_invariants();
-
-        // Pop a few messages to somewhat randomize `timeout_index`.
-        for _ in 0..num_pop {
-            q.pop();
-        }
-
-        q
-    }
-}
-
-proptest! {
-    /// Check timing out requests using an iterator. This uses a random time and then
-    /// checks that requests whose deadline has expired are extracted from the queue,
-    /// but the corresponding responses remain.
-    #[test]
-    fn output_queue_test_time_out_requests(
-        (time, mut q) in arb_output_queue()
-        .prop_flat_map(|q| (arb_time_for_output_queue_timeouts(&q), Just(q)))
-    ) {
-        let mut ref_q = q.clone();
-
-        let mut timed_out_requests = q
-            .time_out_requests(time)
-            .map(|request| RequestOrResponse::Request(request))
-            .collect::<VecDeque<_>>();
-
-        q.check_invariants();
-
-        // Check there are no `None` at or after `timeout_index`.
-        if !timed_out_requests.is_empty() {
-            prop_assert!(q
-                .queue
-                .queue
-                .iter()
-                .skip((q.timeout_index - q.index).get() as usize)
-                .all(|msg| msg.is_some()));
-        }
-
-        while let Some((deadline, _)) = ref_q.deadline_range_ends.front() {
-            if *deadline > time {
-                break;
-            }
-            match ref_q.peek() {
-                Some(RequestOrResponse::Response(_)) => {
-                    prop_assert_eq!(ref_q.pop(), q.pop());
-                }
-                Some(RequestOrResponse::Request(_)) => {
-                    prop_assert_eq!(ref_q.pop(), timed_out_requests.pop_front());
-                }
-                None => unreachable!(),
-            }
-        }
-
-        prop_assert_eq!(ref_q, q);
-    }
-}
-
-proptest! {
-    /// Check timing out requests on two queues, where one undergoes a serialize/
-    /// deserialize roundtrip first and comparing. Since `timeout_index` is not
-    /// persisted, the roundtrip will reset it.
-    #[test]
-    fn output_queue_time_out_requests_with_index_reset(
-        (time, q) in arb_output_queue()
-        .prop_flat_map(|q| (arb_time_for_output_queue_timeouts(&q), Just(q)))
-    ) {
-        let mut ref_q = q.clone();
-
-        // Do a roundtrip conversion which will reset the timeout_index.
-        let proto_queue: pb_queues::InputOutputQueue = (&q).into();
-        let mut q: OutputQueue = proto_queue.try_into().expect("bad conversion");
-
-        prop_assert!(ref_q.time_out_requests(time).eq(q.time_out_requests(time)));
-    }
-
-    /// Check whether the conversion to and from the protobuf version
-    /// works for arbitrary output queues.
-    #[test]
-    fn output_queue_roundtrip_conversions(
-        q in arb_output_queue()
-    ) {
-        let proto_queue: pb_queues::InputOutputQueue = (&q).into();
-        let deserialized_q: OutputQueue = proto_queue.try_into().expect("bad conversion");
-
-        prop_assert_eq!(q, deserialized_q);
-    }
-}
-
-/// Generates a simple `OutputQueue` holding a specified number of requests,
-/// each with a unique deadline.
-fn generate_test_queue(num_requests: usize) -> OutputQueue {
-    let mut q = OutputQueue::new(super::super::DEFAULT_QUEUE_CAPACITY);
-    for t in 0..num_requests {
-        q.push_request(
-            RequestBuilder::default().build().into(),
-            Time::from_nanos_since_unix_epoch(t as u64),
-        )
-        .unwrap();
-    }
-    q
-}
-
-#[test]
-fn output_queue_decode_with_deadlines_not_strictly_sorted_fails() {
-    let mut q = generate_test_queue(2);
-
-    // Check duplicate deadline range end causes error.
-    let deadline = q.deadline_range_ends[0].0;
-    q.deadline_range_ends[0].0 = q.deadline_range_ends[1].0;
-    let proto_queue: pb_queues::InputOutputQueue = (&q).into();
-    assert!(OutputQueue::try_from(proto_queue).is_err());
-
-    // Check swapped deadline range ends cause error.
-    q.deadline_range_ends[1].0 = deadline;
-    let proto_queue: pb_queues::InputOutputQueue = (&q).into();
-    assert!(OutputQueue::try_from(proto_queue).is_err());
-}
-
-#[test]
-fn output_queue_decode_with_deadline_indices_not_strictly_sorted_fails() {
-    let mut q = generate_test_queue(2);
-
-    // Check duplicate deadline range end causes error.
-    let index = q.deadline_range_ends[0].1;
-    q.deadline_range_ends[0].1 = q.deadline_range_ends[1].1;
-    let proto_queue: pb_queues::InputOutputQueue = (&q).into();
-    assert!(OutputQueue::try_from(proto_queue).is_err());
-
-    // Check swapped deadline range ends cause error.
-    q.deadline_range_ends[1].1 = index;
-    let proto_queue: pb_queues::InputOutputQueue = (&q).into();
-    assert!(OutputQueue::try_from(proto_queue).is_err());
-}
-
-#[test]
-fn output_queue_decode_with_deadlines_index_out_of_bounds_fails() {
-    let mut q = generate_test_queue(1);
-    q.index = 1.into();
-
-    // Check deadline index before the queue causes error.
-    q.deadline_range_ends[0].1 = 0.into();
-    let proto_queue: pb_queues::InputOutputQueue = (&q).into();
-    assert!(OutputQueue::try_from(proto_queue).is_err());
-
-    // Check deadline index after the queue causes error.
-    q.deadline_range_ends[0].1 = 3.into();
-    let proto_queue: pb_queues::InputOutputQueue = (&q).into();
-    assert!(OutputQueue::try_from(proto_queue).is_err());
-}
-
-#[test]
-fn output_queue_decode_with_none_head_fails() {
-    let mut q = OutputQueue::new(super::super::DEFAULT_QUEUE_CAPACITY);
-    for _ in 0..2 {
-        q.push_request(RequestBuilder::default().build().into(), mock_time())
-            .unwrap();
-    }
-    q.queue.queue.front_mut().unwrap().take();
-
-    let proto_queue: pb_queues::InputOutputQueue = (&q).into();
-    assert!(matches!(
-        OutputQueue::try_from(proto_queue).err(),
-        Some(ProxyDecodeError::Other(_))
-    ));
 }
 
 #[test]
@@ -571,6 +353,7 @@ fn msg_from_number(num: u64) -> Ingress {
     IngressBuilder::default()
         .source(user_test_id(num))
         .receiver(canister_test_id(num))
+        .effective_canister_id(Some(canister_test_id(num)))
         .method_name(num.to_string())
         .message_id(message_test_id(num))
         .build()
@@ -592,24 +375,6 @@ fn empty_and_len_agree_on_non_empty() {
 }
 
 #[test]
-fn order_is_fifo() {
-    let mut q = IngressQueue::default();
-    let msg1 = msg_from_number(1);
-    let msg2 = msg_from_number(2);
-    q.push(msg1.clone());
-    q.push(msg2.clone());
-
-    assert_eq!(q.size(), 2);
-    assert_eq!(q.pop(), Some(msg1.into()));
-
-    assert_eq!(q.size(), 1);
-    assert_eq!(q.pop(), Some(msg2.into()));
-
-    assert_eq!(q.size(), 0);
-    assert_eq!(q.pop(), None);
-}
-
-#[test]
 fn ingress_filter() {
     let mut queue = IngressQueue::default();
     let msg1 = msg_from_number(1);
@@ -619,9 +384,195 @@ fn ingress_filter() {
     queue.push(msg2.clone());
     queue.push(msg3.clone());
 
-    queue.filter_messages(|ingress| *ingress != Arc::new(msg2.clone()));
+    assert_eq!(IngressQueue::size_bytes(&queue.queues), queue.count_bytes());
+    assert!(!queue.all_messages(|ingress| ingress != &msg2));
+
+    queue.retain_messages(|ingress| ingress != &msg2);
     assert_eq!(queue.size(), 2);
+    assert_eq!(IngressQueue::size_bytes(&queue.queues), queue.count_bytes());
+    assert!(queue.all_messages(|ingress| ingress != &msg2));
+
     assert_eq!(queue.pop(), Some(msg1.into()));
-    assert_eq!(queue.size(), 1);
+    assert_eq!(IngressQueue::size_bytes(&queue.queues), queue.count_bytes());
+
     assert_eq!(queue.pop(), Some(msg3.into()));
+    assert_eq!(IngressQueue::size_bytes(&queue.queues), queue.count_bytes());
+
+    assert_eq!(queue.pop(), None);
+}
+
+#[test]
+fn ingress_queue_empty() {
+    let mut queue = IngressQueue::default();
+    assert_eq!(queue.peek(), None);
+    assert_eq!(queue.pop(), None);
+    assert_eq!(queue.size(), 0);
+    assert_eq!(queue.ingress_schedule_size(), 0);
+    assert!(queue.is_empty());
+}
+
+#[test]
+fn ingress_queue_round_robin_order() {
+    let mut queue = IngressQueue::default();
+    // First ingress for canister A
+    let mut msg11 = msg_from_number(1);
+    msg11.message_id = message_test_id(11);
+    queue.push(msg11.clone());
+    // First ingress for canister B
+    let mut msg21 = msg_from_number(2);
+    msg21.message_id = message_test_id(21);
+    queue.push(msg21.clone());
+    // Second ingress for canister A
+    let mut msg22 = msg_from_number(2);
+    msg22.message_id = message_test_id(22);
+    queue.push(msg22.clone());
+    // Second ingress for canister B
+    let mut msg12 = msg_from_number(1);
+    msg12.message_id = message_test_id(12);
+    queue.push(msg12.clone());
+
+    // We have 4 ingress messages for 2 canisters in the queue.
+    assert_eq!(queue.size(), 4);
+    assert_eq!(queue.ingress_schedule_size(), 2);
+    assert!(!queue.is_empty());
+
+    // The message on the front of queue is first message for canister A.
+    assert_eq!(queue.peek(), Some(msg11.clone().into()));
+    assert_eq!(queue.pop(), Some(msg11.into()));
+
+    // We have 3 ingress messages for 2 canisters in the queue.
+    assert_eq!(queue.size(), 3);
+    assert_eq!(queue.ingress_schedule_size(), 2);
+    assert!(!queue.is_empty());
+
+    // The message on the front of queue is first message for canister B.
+    assert_eq!(queue.peek(), Some(msg21.clone().into()));
+    assert_eq!(queue.pop(), Some(msg21.into()));
+
+    // We have 2 ingress messages for 2 canisters in the queue.
+    assert_eq!(queue.size(), 2);
+    assert_eq!(queue.ingress_schedule_size(), 2);
+    assert!(!queue.is_empty());
+
+    // The message on the front of queue is second message for canister A.
+    assert_eq!(queue.peek(), Some(msg12.clone().into()));
+    assert_eq!(queue.pop(), Some(msg12.into()));
+
+    // We have 1 ingress message for 1 canister in the queue.
+    assert_eq!(queue.size(), 1);
+    assert_eq!(queue.ingress_schedule_size(), 1);
+    assert!(!queue.is_empty());
+
+    // The message on the front of queue is second message for canister B.
+    assert_eq!(queue.peek(), Some(msg22.clone().into()));
+    assert_eq!(queue.pop(), Some(msg22.into()));
+
+    // The queue is empty.
+    assert_eq!(queue.size(), 0);
+    assert_eq!(queue.ingress_schedule_size(), 0);
+    assert!(queue.is_empty());
+
+    assert_eq!(queue.peek(), None);
+    assert_eq!(queue.pop(), None);
+}
+
+#[test]
+fn ingress_queue_round_robin_order_with_skipping_ingress_input() {
+    let mut queue = IngressQueue::default();
+    // First ingress for canister A
+    let mut msg11 = msg_from_number(1);
+    msg11.message_id = message_test_id(11);
+    queue.push(msg11.clone());
+    // First ingress for canister B
+    let mut msg21 = msg_from_number(2);
+    msg21.message_id = message_test_id(21);
+    queue.push(msg21.clone());
+    // Second ingress for canister A
+    let mut msg22 = msg_from_number(2);
+    msg22.message_id = message_test_id(22);
+    queue.push(msg22.clone());
+    // Second ingress for canister B
+    let mut msg12 = msg_from_number(1);
+    msg12.message_id = message_test_id(12);
+    queue.push(msg12.clone());
+
+    // We have 4 ingress messages for 2 canisters in the queue.
+    assert_eq!(queue.size(), 4);
+    assert_eq!(queue.ingress_schedule_size(), 2);
+    assert!(!queue.is_empty());
+
+    // The message on the front of queue is first message for canister A.
+    assert_eq!(queue.peek(), Some(msg11.clone().into()));
+    assert_eq!(queue.pop(), Some(msg11.into()));
+
+    // We have 3 ingress messages for 2 canisters in the queue.
+    assert_eq!(queue.size(), 3);
+    assert_eq!(queue.ingress_schedule_size(), 2);
+    assert!(!queue.is_empty());
+
+    // The message on the front of queue is first message for canister B.
+    assert_eq!(queue.peek(), Some(msg21.clone().into()));
+    assert_eq!(queue.pop(), Some(msg21.into()));
+
+    // We have 2 ingress messages for 2 canisters in the queue.
+    assert_eq!(queue.size(), 2);
+    assert_eq!(queue.ingress_schedule_size(), 2);
+    assert!(!queue.is_empty());
+
+    // The message on the front of queue is second message for canister A.
+    assert_eq!(queue.peek(), Some(msg12.clone().into()));
+
+    // We are skipping the canister A.
+    queue.skip_ingress_input();
+
+    // We still have 2 ingress messages for 2 canisters in the queue.
+    assert_eq!(queue.size(), 2);
+    assert_eq!(queue.ingress_schedule_size(), 2);
+    assert!(!queue.is_empty());
+
+    // The message on the front of queue is second message for canister B.
+    assert_eq!(queue.peek(), Some(msg22.clone().into()));
+    assert_eq!(queue.pop(), Some(msg22.into()));
+
+    // We have 1 ingress message for 1 canister in the queue.
+    assert_eq!(queue.size(), 1);
+    assert_eq!(queue.ingress_schedule_size(), 1);
+    assert!(!queue.is_empty());
+
+    // The message on the front of queue is second message for canister A.
+    assert_eq!(queue.peek(), Some(msg12.clone().into()));
+    assert_eq!(queue.pop(), Some(msg12.into()));
+
+    // The queue is empty.
+    assert_eq!(queue.size(), 0);
+    assert_eq!(queue.ingress_schedule_size(), 0);
+    assert!(queue.is_empty());
+
+    assert_eq!(queue.peek(), None);
+    assert_eq!(queue.pop(), None);
+}
+
+#[test]
+fn serialize_deserialize_ingress_queue() {
+    let mut queue = IngressQueue::default();
+
+    let number_of_messages_per_canister = 5;
+    let number_of_canisters = 10;
+
+    for i in 0..number_of_messages_per_canister {
+        for j in 0..number_of_canisters {
+            let mut ingress = msg_from_number(j);
+            ingress.message_id = message_test_id(i * number_of_canisters + j);
+            queue.push(ingress);
+        }
+    }
+
+    let pb_vec_ingress: Vec<ic_protobuf::state::ingress::v1::Ingress> = (&queue.clone()).into();
+    let mut queue_deserialized = IngressQueue::try_from(pb_vec_ingress).unwrap();
+
+    while !queue.is_empty() {
+        assert_eq!(queue.pop(), queue_deserialized.pop());
+    }
+
+    assert!(queue_deserialized.is_empty());
 }

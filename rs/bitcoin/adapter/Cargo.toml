@@ -1,40 +1,65 @@
 [package]
 name = "ic-btc-adapter"
-version = "0.1.0"
-edition = "2021"
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-bitcoin = { version = "0.28.1", features = ["default", "use-serde", "rand"] }
-clap = { version = "3.1.6", features = ["derive"] }
-futures = "0.3.17"
+bitcoin = { workspace = true }
+clap = { workspace = true }
+futures = { workspace = true }
 hashlink = "0.8.0"
-hex = "0.4.2"
-http = "0.2"
-ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics_server" }
-ic-async-utils = { path = "../../async_utils" }
+hex = { workspace = true }
+http = { workspace = true }
+hyper-util = { workspace = true }
+ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics/server" }
+ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
 ic-btc-service = { path = "../service" }
 ic-btc-validation = { path = "../validation" }
 ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-parking_lot = "0.12.1"
-prost = "0.10.4"
-rand = "0.8.3"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-slog = "2.7.0"
-slog-async = "2.7.0"
-thiserror = "1.0.26"
-tokio = { version = "1.15.0", features = ["full", "macros"] }
+lmdb-rkv = { workspace = true }
+parking_lot = { workspace = true }
+primitive-types = "0.12"
+prometheus = { workspace = true }
+prost = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
+slog-async = { workspace = true }
+static_assertions = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
 tokio-socks = "0.5.1"
-tonic = "0.7.2"
-tower = { version = "0.4.11", features = ["util"], optional = true }
+tonic = { workspace = true }
+tower = { workspace = true, optional = true }
 
 [dev-dependencies]
-tempfile = "3.3.0"
+criterion = { workspace = true }
+flate2 = { workspace = true }
+ic-btc-adapter-client = { path = "../client" }
+ic-btc-adapter-test-utils = { path = "./test_utils" }
+ic-btc-replica-types = { path = "../replica_types" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
+ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
+ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+sha2 = { workspace = true }
+scrypt = { version = "0.11.0", default-features = false }
+tempfile = { workspace = true }
+
+[[bench]]
+name = "e2e"
+harness = false
+
+[[bin]]
+name = "ic-btc-adapter"
+path = "bin/ic-btc-adapter/main.rs"
 
 [[bin]]
 name = "adapter-stress-test"
-path = "src/stress_test.rs"
+path = "bin/adapter-stress-test.rs"
 required-features = ["tower"]

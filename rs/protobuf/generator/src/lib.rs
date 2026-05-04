@@ -13,14 +13,14 @@ fn base_config(out: &Path, prefix: &str) -> Config {
         .unwrap_or_else(|e| panic!("Failed to create directory {}: {}", proto_out.display(), e));
     config.out_dir(&proto_out);
     // Use BTreeMap for all proto map fields.
-    config.btree_map(&["."]);
+    config.btree_map(["."]);
     config.protoc_arg("--experimental_allow_proto3_optional");
     config
 }
 
 /// Derives fields for protobuf log messages and optional fields
 macro_rules! add_log_proto_derives {
-    ($prost_build:expr, $message_type:ident, $package:expr, $log_entry_field:ident $(,$message_field:ident)*) => {{
+    ($prost_build:expr_2021, $message_type:ident, $package:expr_2021, $log_entry_field:ident $(,$message_field:ident)*) => {{
         $prost_build.type_attribute(
             std::concat!($package, ".", std::stringify!($message_type)),
             "#[derive(serde::Serialize, serde::Deserialize)]"
@@ -48,8 +48,9 @@ pub fn generate_prost_files(def: &Path, out: &Path) {
     build_messaging_proto(def, out);
     build_state_proto(def, out);
     build_p2p_proto(def, out);
+    build_transport_proto(def, out);
     build_bitcoin_proto(def, out);
-    build_canister_http_proto(def, out);
+    build_determinism_test_proto(def, out);
     rustfmt(out).unwrap_or_else(|e| {
         panic!(
             "failed to rustfmt on files at directory {}: {}",
@@ -68,12 +69,6 @@ fn build_log_proto(def: &Path, out: &Path) {
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
 
-    add_log_proto_derives!(
-        config,
-        ReplicaConfig,
-        "log.replica_config.v1",
-        replica_config
-    );
     add_log_proto_derives!(
         config,
         ConsensusLogEntry,
@@ -116,23 +111,6 @@ fn build_log_proto(def: &Path, out: &Path) {
         signature_shares,
         signature_inputs,
         log_id
-    );
-
-    add_log_proto_derives!(
-        config,
-        P2PLogEntry,
-        "log.p2p_log_entry.v1",
-        p2p,
-        event,
-        src,
-        dest,
-        artifact_id,
-        chunk_id,
-        advert,
-        request,
-        artifact,
-        height,
-        disconnect_elapsed
     );
 
     add_log_proto_derives!(
@@ -183,17 +161,9 @@ fn build_log_proto(def: &Path, out: &Path) {
 
     add_log_proto_derives!(
         config,
-        ExecutionLogEntry,
-        "log.execution_log_entry.v1",
-        execution,
-        canister_id
-    );
-
-    add_log_proto_derives!(
-        config,
-        MaliciousBehaviourLogEntry,
-        "log.malicious_behaviour_log_entry.v1",
-        malicious_behaviour
+        MaliciousBehaviorLogEntry,
+        "log.malicious_behavior_log_entry.v1",
+        malicious_behavior
     );
 
     compile_protos(config, def, &[def.join("log/log_entry/v1/log_entry.proto")]);
@@ -208,12 +178,12 @@ fn build_registry_proto(def: &Path, out: &Path) {
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
     config.type_attribute(
-        ".registry.crypto.v1.EcdsaCurve",
-        "#[derive(candid::CandidType)]",
+        ".registry.crypto.v1.PublicKey",
+        "#[derive(Eq, Hash, PartialOrd, Ord)]",
     );
     config.type_attribute(
-        ".registry.crypto.v1.EcdsaKeyId",
-        "#[derive(candid::CandidType, Eq)]",
+        ".registry.crypto.v1.X509PublicKeyCert",
+        "#[derive(Eq, Hash, PartialOrd, Ord)]",
     );
     config.type_attribute(
         ".registry.node_operator",
@@ -226,6 +196,10 @@ fn build_registry_proto(def: &Path, out: &Path) {
     config.type_attribute(
         ".registry.node",
         "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
+        ".registry.node.v1.NodeRewardType",
+        "#[derive(strum::EnumIter)]",
     );
     config.type_attribute(
         ".registry.firewall",
@@ -244,7 +218,11 @@ fn build_registry_proto(def: &Path, out: &Path) {
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
     config.type_attribute(
-        ".registry.subnet.v1.EcdsaConfig",
+        ".registry.subnet.v1.SubnetFeatures",
+        "#[derive(candid::CandidType, Eq)]",
+    );
+    config.type_attribute(
+        ".registry.subnet.v1.ResourceLimits",
         "#[derive(candid::CandidType, Eq)]",
     );
     config.type_attribute(
@@ -252,22 +230,44 @@ fn build_registry_proto(def: &Path, out: &Path) {
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
 
+    for type_name in [
+        "GuestLaunchMeasurement",
+        "GuestLaunchMeasurements",
+        "GuestLaunchMeasurementMetadata",
+    ] {
+        config.type_attribute(
+            format!(".registry.replica_version.v1.{type_name}"),
+            "#[derive(Eq, candid::CandidType, comparable::Comparable)]",
+        );
+    }
+
+    config.type_attribute(
+        ".registry.hostos_version",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
     config.type_attribute(
         ".registry.node_rewards.v2",
         "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]",
     );
-
     config.type_attribute(
         ".registry.dc",
         "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]",
     );
-
     config.type_attribute(
         ".registry.unassigned_nodes_config",
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
+    config.type_attribute(
+        ".registry.node.v1.ConnectionEndpoint",
+        "#[derive(Eq, PartialOrd, Ord)]",
+    );
+    config.type_attribute(
+        ".registry.api_boundary_node.v1.ApiBoundaryNodeRecord",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
 
     let registry_files = [
+        def.join("registry/api_boundary_node/v1/api_boundary_node.proto"),
         def.join("registry/crypto/v1/crypto.proto"),
         def.join("registry/node_operator/v1/node_operator.proto"),
         def.join("registry/nns/v1/nns.proto"),
@@ -277,6 +277,7 @@ fn build_registry_proto(def: &Path, out: &Path) {
         def.join("registry/provisional_whitelist/v1/provisional_whitelist.proto"),
         def.join("registry/subnet/v1/subnet.proto"),
         def.join("registry/replica_version/v1/replica_version.proto"),
+        def.join("registry/hostos_version/v1/hostos_version.proto"),
         def.join("registry/node_rewards/v1/node_rewards.proto"),
         def.join("registry/node_rewards/v2/node_rewards.proto"),
         def.join("registry/dc/v1/dc.proto"),
@@ -330,8 +331,10 @@ fn build_state_proto(def: &Path, out: &Path) {
         def.join("state/ingress/v1/ingress.proto"),
         def.join("state/metadata/v1/metadata.proto"),
         def.join("state/canister_state_bits/v1/canister_state_bits.proto"),
+        def.join("state/canister_snapshot_bits/v1/canister_snapshot_bits.proto"),
         def.join("state/queues/v1/queues.proto"),
         def.join("state/sync/v1/manifest.proto"),
+        def.join("state/stats/v1/stats.proto"),
         def.join("state/v1/metadata.proto"),
     ];
 
@@ -341,16 +344,70 @@ fn build_state_proto(def: &Path, out: &Path) {
 /// Generates Rust structs from types Protobuf messages.
 fn build_types_proto(def: &Path, out: &Path) {
     let mut config = base_config(out, "types");
-    config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
+    for path in [
+        ".types.v1.CanisterId",
+        ".types.v1.CatchUpPackage",
+        ".types.v1.NiDkgId",
+        ".types.v1.NodeId",
+        ".types.v1.PrincipalId",
+        ".types.v1.SubnetId",
+        ".types.v1.ThresholdSignature",
+        ".types.v1.ThresholdSignatureShare",
+        ".types.v1.EcdsaKeyId",
+        ".types.v1.SchnorrKeyId",
+        ".types.v1.VetKdKeyId",
+        ".types.v1.EcdsaCurve",
+        ".types.v1.SchnorrAlgorithm",
+        ".types.v1.VetKdCurve",
+        ".types.v1.MasterPublicKeyId",
+    ] {
+        config.type_attribute(path, "#[derive(serde::Serialize, serde::Deserialize)]");
+    }
     config.type_attribute(".types.v1.CatchUpPackage", "#[derive(Eq, Hash)]");
     config.type_attribute(".types.v1.SubnetId", "#[derive(Eq, Hash)]");
     config.type_attribute(".types.v1.NiDkgId", "#[derive(Eq, Hash)]");
     config.type_attribute(".types.v1.PrincipalId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.MasterPublicKeyId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.EcdsaKeyId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.SchnorrKeyId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.VetKdKeyId", "#[derive(Eq, Hash)]");
+    config.type_attribute(".types.v1.EcdsaCurve", "#[derive(candid::CandidType)]");
+    config.type_attribute(".types.v1.EcdsaKeyId", "#[derive(candid::CandidType)]");
+    config.type_attribute(
+        ".types.v1.ConsensusMessage",
+        "#[allow(clippy::large_enum_variant)]",
+    );
+    config.type_attribute(
+        ".types.v1.StrippedConsensusMessage",
+        "#[allow(clippy::large_enum_variant)]",
+    );
+    config.type_attribute(
+        ".types.v1.PreSignatureInCreation",
+        "#[allow(clippy::large_enum_variant)]",
+    );
+    config.type_attribute(
+        ".types.v1.PreSignature",
+        "#[allow(clippy::large_enum_variant)]",
+    );
+    config.type_attribute(".types.v1.Artifact", "#[allow(clippy::large_enum_variant)]");
+    config.type_attribute(
+        ".types.v1.GossipChunk",
+        "#[allow(clippy::large_enum_variant)]",
+    );
+    config.type_attribute(
+        ".types.v1.GossipMessage",
+        "#[allow(clippy::large_enum_variant)]",
+    );
     let files = [
+        def.join("types/v1/management_canister_types.proto"),
         def.join("types/v1/types.proto"),
         def.join("types/v1/dkg.proto"),
         def.join("types/v1/consensus.proto"),
-        def.join("types/v1/ecdsa.proto"),
+        def.join("types/v1/idkg.proto"),
+        def.join("types/v1/signature.proto"),
+        def.join("types/v1/canister_http.proto"),
+        def.join("types/v1/artifact.proto"),
+        def.join("types/v1/errors.proto"),
     ];
     compile_protos(config, def, &files);
 }
@@ -363,11 +420,20 @@ fn build_crypto_proto(def: &Path, out: &Path) {
     compile_protos(config, def, &files);
 }
 
-/// Generates Rust structs from crypto Protobuf messages.
+/// Generates Rust structs from p2p Protobuf messages.
 fn build_p2p_proto(def: &Path, out: &Path) {
-    let mut config = base_config(out, "p2p");
-    config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
-    let files = [def.join("p2p/v1/p2p.proto")];
+    let config = base_config(out, "p2p");
+    let files = [
+        def.join("p2p/v1/state_sync_manager.proto"),
+        def.join("p2p/v1/consensus_manager.proto"),
+    ];
+    compile_protos(config, def, &files);
+}
+
+/// Generates Rust structs from transport Protobuf messages.
+fn build_transport_proto(def: &Path, out: &Path) {
+    let config = base_config(out, "transport");
+    let files = [def.join("transport/v1/quic.proto")];
     compile_protos(config, def, &files);
 }
 
@@ -379,15 +445,14 @@ fn build_bitcoin_proto(def: &Path, out: &Path) {
     compile_protos(config, def, &files);
 }
 
-/// Generates Rust structs from HTTP from canister adapter Protobuf messages.
-fn build_canister_http_proto(def: &Path, out: &Path) {
-    let mut config = base_config(out, "canister_http");
-    config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
-    let files = [def.join("canister_http/v1/canister_http.proto")];
-    compile_protos(config, def, &files);
+/// Generates Rust structs from `determinism_test` Protobuf messages.
+fn build_determinism_test_proto(def: &Path, out: &Path) {
+    let files = [def.join("determinism_test/v1/determinism_test.proto")];
+    compile_protos(base_config(out, "determinism_test"), def, &files);
 }
 
 /// Compiles the given `proto_files`.
 fn compile_protos<P: AsRef<Path>>(mut config: Config, def: &Path, proto_files: &[P]) {
+    // https://github.com/tokio-rs/prost/issues/661
     config.compile_protos(proto_files, &[def]).unwrap();
 }

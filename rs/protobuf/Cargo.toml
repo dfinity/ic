@@ -1,19 +1,26 @@
 [package]
 name = "ic-protobuf"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-bincode = "1.2.1"
-candid = "0.8.1"
+bincode = { workspace = true }
+candid = { workspace = true }
+comparable = { workspace = true }
 erased-serde = "0.3.11"
-prost = "0.10.4"
-serde = { version = "1.0", features = ["derive"] }
-slog = {version = "2.5", features = ["nested-values"]}
-serde_json = "1.0"
-maplit = "1.0.2"
+ic-error-types = { path = "../../packages/ic-error-types" }
+prost = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+strum = { workspace = true }
+slog = { workspace = true }
 
 [dev-dependencies]
+hex = { workspace = true }
 ic-protobuf-generator = { path = "./generator" }
 ic-test-utilities-compare-dirs = { path = "../test_utilities/compare_dirs" }
-tempfile = "3.1.0"
+maplit = "1.0.2"
+tempfile = { workspace = true }

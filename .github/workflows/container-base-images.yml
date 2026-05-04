@@ -1,0 +1,162 @@
+# Workflow for building IC Base Container Images
+# On master branch the images are pushed to DockerHub and references updated in automated PR
+
+name: Container IC Base Images
+
+on:
+  schedule:
+    - cron: "0 8 * * 4"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/container-base-images.yml'
+      - '**/Dockerfile.base'
+      - '**/packages.common'
+      - '**/packages.dev'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build-base-image:
+    name: Build Base Container Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      packages: write
+      contents: write
+    strategy:
+      matrix:
+        include:
+          - IMAGE: "guestos-base"
+            CONTEXT: "ic-os/guestos/context"
+            REFFILE: "ic-os/guestos/context/docker-base.prod"
+            BUILD_ARGS: ""
+          - IMAGE: "guestos-base-dev"
+            CONTEXT: "ic-os/guestos/context"
+            REFFILE: "ic-os/guestos/context/docker-base.dev"
+            BUILD_ARGS: "PACKAGE_FILES=packages.common packages.dev"
+          - IMAGE: "hostos-base"
+            CONTEXT: "ic-os/hostos/context"
+            REFFILE: "ic-os/hostos/context/docker-base.prod"
+            BUILD_ARGS: ""
+          - IMAGE: "hostos-base-dev"
+            CONTEXT: "ic-os/hostos/context"
+            REFFILE: "ic-os/hostos/context/docker-base.dev"
+            BUILD_ARGS: "PACKAGE_FILES=packages.common packages.dev"
+          - IMAGE: "setupos-base"
+            CONTEXT: "ic-os/setupos/context"
+            REFFILE: "ic-os/setupos/context/docker-base.prod"
+            BUILD_ARGS: ""
+          - IMAGE: "setupos-base-dev"
+            CONTEXT: "ic-os/setupos/context"
+            REFFILE: "ic-os/setupos/context/docker-base.dev"
+            BUILD_ARGS: "PACKAGE_FILES=packages.common packages.dev"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Get Current Date
+        id: date
+        run: echo "DATE=$(date '+%Y-%m-%d-%H')" >> $GITHUB_ENV
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@a530e948adbeb357dbca95a7f8845d385edf4438 # v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set IS_BRANCH_IMAGE
+        id: is_branch_image
+        run: echo "IS_BRANCH_IMAGE=${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_PUSH_BASE_IMAGE') }}" >> $GITHUB_ENV
+
+      - name: Build Base Image
+        uses: docker/build-push-action@eb539f44b153603ccbfbd98e2ab9d4d0dcaf23a4 # v5
+        id: build-base-image
+        with:
+          context: ${{ matrix.CONTEXT }}
+          file: ${{ matrix.CONTEXT }}/Dockerfile.base
+          # Only push to GHCR if we are targeting dfinity/ic, from dfinity/ic
+          # on master, or with the CI_PUSH_BASE_IMAGE label
+          push: |
+            ${{ (github.repository == 'dfinity/ic' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) &&
+            (github.ref_name == 'master' || env.IS_BRANCH_IMAGE == 'true') }}
+          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.IMAGE }}${{ case(env.IS_BRANCH_IMAGE == 'true', '-branch', '') }}:${{ env.DATE }}
+          build-args: ${{ matrix.BUILD_ARGS }}
+
+      - name: Collect SHA256 Digest
+        shell: bash
+        run: |
+          set -xeuo pipefail
+          mkdir -p "$(dirname artifacts/${{ matrix.REFFILE }})"
+          echo ghcr.io/dfinity/${{matrix.IMAGE}}@${{ steps.build-base-image.outputs.imageid }} \
+            > artifacts/${{ matrix.REFFILE }}
+
+      - name: Upload SHA256 Digest Artifact
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: sha256-${{ matrix.IMAGE }}
+          path: artifacts
+          retention-days: 1
+
+  update-ref-files-pr:
+    name: Update Reference Files PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: CREATE_PR
+    needs: [build-base-image]
+    # Only open a PR if we are in dfinity/ic
+    # on master
+    if: |
+      github.repository == 'dfinity/ic' &&
+      github.ref_name == 'master'
+    steps:
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Get Current Date
+        id: date
+        run: echo "DATE=$(date '+%Y-%m-%d-%H%M')" >> $GITHUB_ENV
+
+      - name: Download SHA256 Digest Artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: artifacts
+          pattern: sha256-*
+          merge-multiple: true
+
+      - name: Update Base Image Refs
+        shell: bash
+        run: |
+          set -xeuo pipefail
+          find artifacts
+          rsync -rv artifacts/ .
+          rm -rf artifacts
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          base: master
+          branch: base-image-refs-update-${{ env.DATE }}
+          delete-branch: true
+          title: "chore: Update Base Image Refs [${{ env.DATE }}]"
+          body: |
+            Updating base container image references.
+
+            Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          draft: false

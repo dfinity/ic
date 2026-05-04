@@ -5,31 +5,54 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/sha2",
+    "//rs/protobuf",
+    "//rs/types/base_types",
+    "@crate_index//:candid",
+    "@crate_index//:mockall",
+    "@crate_index//:prost",
+    "@crate_index//:serde",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:async-trait",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/nervous_system/common/test_keys",
+    "//rs/registry/keys",
+    "@crate_index//:lazy_static",
+    "@crate_index//:pretty_assertions",
+    "@crate_index//:tokio",
+]
+
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+]
 
 rust_library(
     name = "transport",
     srcs = glob([
         "src/**",
-        "gen/**",
     ]),
     crate_name = "ic_registry_transport",
-    proc_macro_deps = [
-    ],
-    version = "0.8.0",
-    deps = [
-        "//rs/protobuf",
-        "@crate_index//:bytes",
-        "@crate_index//:candid",
-        "@crate_index//:prost",
-        "@crate_index//:serde",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES,
 )
 
 rust_test(
     name = "lib_tests",
     crate = ":transport",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
 
 generated_files_check(
@@ -38,9 +61,10 @@ generated_files_check(
     data = [
         ":protos",
         "//rs/protobuf:protos",
-    ] + glob(["gen/**"]),
+    ] + glob(["src/gen/**"]),
     manifest_dir = "rs/registry/transport",
     deps = [
+        # Keep sorted.
         "//rs/registry/transport/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",

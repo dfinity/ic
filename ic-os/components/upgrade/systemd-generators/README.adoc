@@ -1,0 +1,14 @@
+= Dynamic file system mounts
+
+The exact partitions used for the +/boot+ and +/var+ filesystems depends on
+what root partition the system is running from:
+
+* A: +/dev/vda4+ -> +/boot+, +/dev/vda5+ -> +/+, +/dev/vda6+ -> +/var+
+* B: +/dev/vda7+ -> +/boot+, +/dev/vda8+ -> +/+, +/dev/vda9+ -> +/var+
+
+The system will be informed via bootloader command line whether it is
+running as A or B. Since the root filesystem is conceptually supposed to
+be immutable, the dynamic mappings cannot be stored in +/etc/fstab+.
+This is addressed using a generator in the +mount-generator+ file:
+Systemd runs these during early boot, and it will dynamically generate an
+appropriate +boot.mount+ unit based on the boot command-line.

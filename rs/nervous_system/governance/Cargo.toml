@@ -1,0 +1,12 @@
+[package]
+name = "ic-nervous-system-governance"
+version = "0.0.1"
+authors = ["The Internet Computer Project Developers"]
+edition.workspace = true
+
+[dependencies]
+ic-base-types = { path = "../../types/base_types" }
+ic-stable-structures = { workspace = true }
+ic_principal = { workspace = true }
+maplit = "1.0.2"
+num-traits = { workspace = true }

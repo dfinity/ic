@@ -1,6 +1,7 @@
 //! Convert DKG error types to and from other error types.
-use super::*;
-use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
+use ic_types::crypto::threshold_sig::ni_dkg::errors::{
+    MalformedFsEncryptionPublicKeyError, create_transcript_error::DkgCreateTranscriptError,
+};
 
 use crate::api::ni_dkg_errors::{
     CspDkgCreateReshareTranscriptError, CspDkgCreateTranscriptError, CspDkgLoadPrivateKeyError,
@@ -15,17 +16,6 @@ impl From<CspDkgCreateTranscriptError> for DkgCreateTranscriptError {
     }
 }
 
-impl From<DkgCreateEphemeralError> for CryptoError {
-    // Placeholder implementation
-    fn from(create_ephemeral_error: DkgCreateEphemeralError) -> CryptoError {
-        match create_ephemeral_error {
-            DkgCreateEphemeralError::MalformedSecretKeyError(error) => {
-                panic!("Internal error from CSP: {:?}", error)
-            }
-        }
-    }
-}
-
 impl From<CspDkgLoadPrivateKeyError> for DkgLoadTranscriptError {
     fn from(csp_load_private_key_error: CspDkgLoadPrivateKeyError) -> Self {
         let panic_prefix = "NI-DKG load_transcript error on loading private key - ";
@@ -33,7 +23,7 @@ impl From<CspDkgLoadPrivateKeyError> for DkgLoadTranscriptError {
             CspDkgLoadPrivateKeyError::MalformedTranscriptError(error) => {
                 // Forward to the caller because the argument is malformed.
                 DkgLoadTranscriptError::InvalidTranscript(InvalidArgumentError {
-                    message: format!("{}", error),
+                    message: format!("{error}"),
                 })
             }
             CspDkgLoadPrivateKeyError::InvalidTranscriptError(error) => {
@@ -43,19 +33,18 @@ impl From<CspDkgLoadPrivateKeyError> for DkgLoadTranscriptError {
             CspDkgLoadPrivateKeyError::KeyNotFoundError(error) => {
                 // This would be an IDKM implementation error, since KeyNotFoundError is mapped
                 // to `Ok(())` and ignored in load_transcript
-                panic!("{}KeyNotFoundError: {:?}", panic_prefix, error);
+                panic!("{panic_prefix}KeyNotFoundError: {error:?}");
             }
             CspDkgLoadPrivateKeyError::UnsupportedAlgorithmId(algorithm_id) => {
                 // This would be an IDKM implementation error, so we panic:
                 panic!(
-                    "{}UnsupportedAlgorithmId: The algorithm id {:?} is unsupported.",
-                    panic_prefix, algorithm_id
+                    "{panic_prefix}UnsupportedAlgorithmId: The algorithm id {algorithm_id:?} is unsupported."
                 );
             }
             CspDkgLoadPrivateKeyError::MalformedSecretKeyError(error) => {
                 // This would be an implementation error, since we inserted a key that is
                 // malformed:
-                panic!("{}MalformedSecretKeyError: {:?}", panic_prefix, error);
+                panic!("{panic_prefix}MalformedSecretKeyError: {error:?}");
             }
             CspDkgLoadPrivateKeyError::EpochTooOldError {
                 ciphertext_epoch,
@@ -63,10 +52,7 @@ impl From<CspDkgLoadPrivateKeyError> for DkgLoadTranscriptError {
             } => {
                 // This would be an IDKM implementation error, since EpochTooOldError is mapped
                 // to `Ok(())` and ignored in load_transcript
-                panic!(
-                    "{}EpochTooOldError: {}/{}",
-                    panic_prefix, ciphertext_epoch, secret_key_epoch
-                );
+                panic!("{panic_prefix}EpochTooOldError: {ciphertext_epoch}/{secret_key_epoch}");
             }
             CspDkgLoadPrivateKeyError::TransientInternalError(e) => {
                 DkgLoadTranscriptError::TransientInternalError(
@@ -75,56 +61,23 @@ impl From<CspDkgLoadPrivateKeyError> for DkgLoadTranscriptError {
                     },
                 )
             }
-        }
-    }
-}
-
-impl From<DkgCreateDealingError> for CryptoError {
-    fn from(create_dealing_error: DkgCreateDealingError) -> Self {
-        match create_dealing_error {
-            DkgCreateDealingError::MalformedPublicKeyError(error) => CryptoError::InvalidArgument {
-                message: format!("CSP error: {:?}", error),
-            },
-            DkgCreateDealingError::KeyNotFoundError(error) => CryptoError::InvalidArgument {
-                message: format!("CSP error: {:?}", error),
-            },
-            DkgCreateDealingError::MalformedSecretKeyError(error) => {
-                panic!("Internal error from CSP: {:?}", error)
+            CspDkgLoadPrivateKeyError::MalformedPublicKeyError(error) => {
+                // Forward to the caller because the argument is malformed.
+                DkgLoadTranscriptError::MalformedFsEncryptionPublicKey(
+                    MalformedFsEncryptionPublicKeyError {
+                        internal_error: error.to_string(),
+                    },
+                )
             }
-            DkgCreateDealingError::UnsupportedThresholdParameters(error) => {
-                CryptoError::InvalidArgument {
-                    message: format!("CSP error: {:?}", error),
-                }
+            CspDkgLoadPrivateKeyError::InternalError(e) => {
+                DkgLoadTranscriptError::InternalError(ic_types::crypto::error::InternalError {
+                    internal_error: e.internal_error,
+                })
             }
-            DkgCreateDealingError::SizeError(error) => CryptoError::InvalidArgument {
-                message: format!("CSP error: {:?}", error),
-            },
-        }
-    }
-}
-
-impl From<DkgCreateReshareDealingError> for CryptoError {
-    fn from(create_reshare_dealing_error: DkgCreateReshareDealingError) -> Self {
-        match create_reshare_dealing_error {
-            DkgCreateReshareDealingError::MalformedPublicKeyError(error) => {
-                CryptoError::InvalidArgument {
-                    message: format!("CSP error: {:?}", error),
-                }
+            CspDkgLoadPrivateKeyError::KeyIdInstantiationError(message) => {
+                // Forward to the caller because the argument is invalid.
+                DkgLoadTranscriptError::InvalidTranscript(InvalidArgumentError { message })
             }
-            DkgCreateReshareDealingError::KeyNotFoundError(error) => CryptoError::InvalidArgument {
-                message: format!("CSP error: {:?}", error),
-            },
-            DkgCreateReshareDealingError::MalformedSecretKeyError(error) => {
-                panic!("Internal error from CSP: {:?}", error)
-            }
-            DkgCreateReshareDealingError::UnsupportedThresholdParameters(error) => {
-                CryptoError::InvalidArgument {
-                    message: format!("CSP error: {:?}", error),
-                }
-            }
-            DkgCreateReshareDealingError::SizeError(error) => CryptoError::InvalidArgument {
-                message: format!("CSP error: {:?}", error),
-            },
         }
     }
 }
@@ -145,34 +98,34 @@ impl From<CspDkgCreateReshareTranscriptError> for DkgCreateTranscriptError {
                 // This is a violation of the precondition that the dealings must be verified,
                 // so we panic:
                 panic!(
-                        "{}Precondition violated: dealings have not been verified. InvalidDealingError for dealing with index {}: {:?}",
-                        panic_prefix, dealer_index, error
-                    );
+                    "{panic_prefix}Precondition violated: dealings have not been verified. InvalidDealingError for dealing with index {dealer_index}: {error:?}"
+                );
             }
             CspDkgCreateReshareTranscriptError::UnsupportedAlgorithmId(algorithm_id) => {
                 // This would be an IDKM implementation error, so we panic:
                 panic!(
-                    "{}UnsupportedAlgorithmId: The algorithm id {:?} is unsupported.",
-                    panic_prefix, algorithm_id
+                    "{panic_prefix}UnsupportedAlgorithmId: The algorithm id {algorithm_id:?} is unsupported."
                 );
             }
             CspDkgCreateReshareTranscriptError::InvalidThresholdError(error) => {
                 // This would be an IDKM implementation error, since the threshold invariants
                 // are checked upon config creation.
-                panic!("{}InvalidThresholdError: {:?}", panic_prefix, error);
+                panic!("{panic_prefix}InvalidThresholdError: {error:?}");
             }
             CspDkgCreateReshareTranscriptError::InsufficientDealingsError(error) => {
                 // This would be an IDKM implementation error, the required number of dealings
                 // are checked there.
-                panic!("{}InsufficientDealingsError: {:?}", panic_prefix, error);
+                panic!("{panic_prefix}InsufficientDealingsError: {error:?}");
             }
             CspDkgCreateReshareTranscriptError::ResharingFailed(_) => {
                 // This is impossible if dealings are verified properly, thus we panic:
-                panic!("{}Precondition violated: dealings have not been verified. ResharingFailed: {:?}", panic_prefix, error);
+                panic!(
+                    "{panic_prefix}Precondition violated: dealings have not been verified. ResharingFailed: {error:?}"
+                );
             }
             CspDkgCreateReshareTranscriptError::SizeError(error) => {
                 // Will not happen in practice, so we panic:
-                panic!("{}SizeError: {:?}", panic_prefix, error);
+                panic!("{panic_prefix}SizeError: {error:?}");
             }
         }
     }

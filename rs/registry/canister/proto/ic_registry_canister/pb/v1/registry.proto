@@ -2,8 +2,7 @@ syntax = "proto3";
 
 package ic_registry_canister.pb.v1;
 
-import "ic_registry_transport/pb/v1/transport.proto";
-import "ic_nns_common/pb/v1/types.proto";
+import "ic_base_types/pb/v1/types.proto";
 
 message ChangelogEntry {
     // The version that this mutation produced.
@@ -68,11 +67,12 @@ message RegistryStableStorage {
     // details.
     Version version = 2;
 
-    // Only present if version == VERSION_UNSPECIFIED.
-    repeated ic_registry_transport.pb.v1.RegistryDelta deltas = 1;
-
-    // Only present if version == VERSION_1.
+    // This replaced the deltas field in VERSION_1, which has been in place
+    // since at least mid 2021.
     repeated ChangelogEntry changelog = 3;
+
+    reserved "deltas";
+    reserved 1;
 }
 
 // A container for the what gets written to stable storage,
@@ -91,4 +91,27 @@ message RegistryCanisterStableStorage {
 // rewarded for providing nodes to the Internet Computer for the month.
 message NodeProvidersMonthlyXdrRewards {
     map<string, uint64> rewards = 1;
+    // Registry version at which rewards were calculated
+    optional uint64 registry_version = 2;
+}
+
+// Maps the supplied PrincipalId (of a canister) to the subnet to which the canister is assigned to.
+// There is no guarantee that the canister exists, even if a subnet ID is returned.
+message GetSubnetForCanisterRequest {
+    ic_base_types.pb.v1.PrincipalId principal = 1;
+}
+
+// The subnet id of a canister.
+message SubnetForCanister {
+    ic_base_types.pb.v1.PrincipalId subnet_id = 1;
+}
+
+// API boundary nodes IDs request payload.
+message GetApiBoundaryNodeIdsRequest {
+
+}
+
+// The API boundary node ids.
+message ApiBoundaryNodeIdRecord {
+    ic_base_types.pb.v1.PrincipalId id = 1;
 }

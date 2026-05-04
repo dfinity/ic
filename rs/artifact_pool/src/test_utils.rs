@@ -8,28 +8,27 @@
 //! the tests in this module can be used to test the Pool implementation.
 
 use crate::consensus_pool::{MutablePoolSection, PoolSectionOp, PoolSectionOps};
-use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::consensus_pool::{
-    HeightIndexedPool, HeightRange, PoolSection, ValidatedConsensusArtifact,
+    HeightIndexedPool, HeightRange, PoolSection, PurgeableArtifactType, ValidatedConsensusArtifact,
 };
 use ic_logger::ReplicaLogger;
-use ic_test_utilities::{
-    consensus::{fake::*, make_genesis},
-    mock_time,
-    types::ids::node_test_id,
-};
+use ic_test_utilities_consensus::{fake::*, make_genesis};
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
-    artifact::{ConsensusMessage, ConsensusMessageId},
-    consensus::{
-        dkg::Summary, Block, BlockPayload, BlockProposal, Finalization, FinalizationContent,
-        FinalizationShare, Notarization, NotarizationContent, NotarizationShare, RandomBeacon,
-        RandomBeaconContent, RandomBeaconShare, RandomTape, RandomTapeContent, RandomTapeShare,
-    },
-    crypto::{ThresholdSigShare, ThresholdSigShareOf},
-    signature::*,
     Height,
+    artifact::ConsensusMessageId,
+    consensus::{
+        Block, BlockPayload, BlockProposal, ConsensusMessage, ConsensusMessageHashable,
+        EquivocationProof, Finalization, FinalizationContent, FinalizationShare, Notarization,
+        NotarizationContent, NotarizationShare, RandomBeacon, RandomBeaconContent,
+        RandomBeaconShare, RandomTape, RandomTapeContent, RandomTapeShare, Rank, dkg::DkgSummary,
+    },
+    crypto::{BasicSigOf, CryptoHash, CryptoHashOf, ThresholdSigShare, ThresholdSigShareOf},
+    signature::*,
+    time::UNIX_EPOCH,
 };
 use std::{
+    collections::HashSet,
     panic,
     path::{Path, PathBuf},
     time::Duration,
@@ -67,7 +66,7 @@ where
             let mut ops = PoolSectionOps::new();
             ops.insert(ValidatedConsensusArtifact {
                 msg,
-                timestamp: mock_time(),
+                timestamp: UNIX_EPOCH,
             });
             pool.mutate(ops);
         }
@@ -97,15 +96,21 @@ where
     })
 }
 
-pub(crate) fn make_summary(genesis_height: Height) -> Summary {
-    let mut summary = Summary::fake();
+pub(crate) fn make_summary(genesis_height: Height) -> DkgSummary {
+    let mut summary = DkgSummary::fake();
     summary.height = genesis_height;
     summary
 }
 
-fn fake_block_proposal(h: Height) -> BlockProposal {
-    let parent = make_genesis(make_summary(h.decrement())).content.block;
-    BlockProposal::fake(Block::from_parent(parent.as_ref()), node_test_id(0))
+pub(crate) fn fake_block_proposal(height: Height) -> BlockProposal {
+    fake_block_proposal_with_rank(height, Rank(0))
+}
+
+pub(crate) fn fake_block_proposal_with_rank(height: Height, rank: Rank) -> BlockProposal {
+    let parent = make_genesis(make_summary(height.decrement())).content.block;
+    let mut block = Block::from_parent(parent.as_ref());
+    block.rank = rank;
+    BlockProposal::fake(block, node_test_id(0))
 }
 
 pub(crate) fn fake_random_beacon(h: Height) -> RandomBeacon {
@@ -128,15 +133,16 @@ where
     T: PoolTestHelper,
 {
     T::run_persistent_pool_test("test_as_height_indexed_pool", |config, log| {
-        let rb_ops = random_beacon_ops();
+        let rb_ops = random_beacon_ops(/*heights=*/ 3..19);
         let fz_ops = finalization_ops();
         let nz_ops = notarization_ops();
-        let bp_ops = block_proposal_ops();
+        let bp_ops = block_proposal_ops(/*heights=*/ 1..18);
         let rbs_ops = random_beacon_share_ops();
         let nzs_ops = notarization_share_ops();
         let fzs_ops = finalization_share_ops();
         let rt_ops = random_tape_ops();
         let rts_ops = random_tape_share_ops();
+        let ep_ops = equivocation_proof_ops(/*heights=*/ 1..18);
 
         // Insert a bunch of items and test that the pool returns them
         {
@@ -168,11 +174,14 @@ where
 
             pool.mutate(rts_ops.clone());
             match_ops_to_results(&rts_ops, pool.random_tape_share(), true);
+
+            pool.mutate(ep_ops.clone());
+            match_ops_to_results(&ep_ops, pool.equivocation_proof(), false);
         }
 
         // Test the matching after a reboot.
         {
-            let pool = T::new_consensus_pool(config, log);
+            let pool = T::new_consensus_pool(config.clone(), log.clone());
             match_ops_to_results(&rb_ops, pool.random_beacon(), false);
             match_ops_to_results(&fz_ops, pool.finalization(), false);
             match_ops_to_results(&nz_ops, pool.notarization(), false);
@@ -182,6 +191,88 @@ where
             match_ops_to_results(&fzs_ops, pool.finalization_share(), true);
             match_ops_to_results(&rt_ops, pool.random_tape(), false);
             match_ops_to_results(&rts_ops, pool.random_tape_share(), true);
+            match_ops_to_results(&ep_ops, pool.equivocation_proof(), false);
+        }
+
+        // Test purging shares below
+        {
+            fn count_total<T>(pool: &dyn HeightIndexedPool<T>) -> usize {
+                pool.get_all().count()
+            }
+
+            fn count<T>(pool: &dyn HeightIndexedPool<T>, range: HeightRange) -> usize {
+                pool.get_by_height_range(range).count()
+            }
+
+            let mut pool = T::new_consensus_pool(config, log);
+            let finalized_height = pool.finalization().max_height().unwrap();
+            let range_to_delete = HeightRange::new(Height::from(0), finalized_height.decrement());
+
+            // Only notarization shares, finalization shares and equivocation
+            // proofs should be deleted
+            let expected_count = [
+                count_total(pool.random_beacon_share()),
+                count_total(pool.notarization_share())
+                    - count(pool.notarization_share(), range_to_delete),
+                count_total(pool.finalization_share())
+                    - count(pool.finalization_share(), range_to_delete),
+                count_total(pool.random_tape_share()),
+                count_total(pool.equivocation_proof())
+                    - count(pool.equivocation_proof(), range_to_delete),
+            ];
+
+            let mut expected_to_be_purged = Vec::new();
+            expected_to_be_purged.extend(
+                pool.notarization_share()
+                    .get_by_height_range(range_to_delete)
+                    .map(|n| n.get_id()),
+            );
+            expected_to_be_purged.extend(
+                pool.finalization_share()
+                    .get_by_height_range(range_to_delete)
+                    .map(|n| n.get_id()),
+            );
+            expected_to_be_purged.extend(
+                pool.equivocation_proof()
+                    .get_by_height_range(range_to_delete)
+                    .map(|n| n.get_id()),
+            );
+
+            let mut ops = PoolSectionOps::new();
+            ops.purge_type_below(PurgeableArtifactType::NotarizationShare, finalized_height);
+            ops.purge_type_below(PurgeableArtifactType::FinalizationShare, finalized_height);
+            ops.purge_type_below(PurgeableArtifactType::EquivocationProof, finalized_height);
+            let purged = pool.mutate(ops);
+
+            assert_eq!(expected_to_be_purged.len(), purged.len());
+            let expected_set = HashSet::<_>::from_iter(expected_to_be_purged);
+            let purged_set = HashSet::<_>::from_iter(purged);
+            assert_eq!(expected_set, purged_set);
+
+            assert!(count(pool.random_beacon_share(), range_to_delete) > 0);
+            assert_eq!(count_total(pool.random_beacon_share()), expected_count[0]);
+            assert_eq!(count(pool.notarization_share(), range_to_delete), 0);
+            assert_eq!(count_total(pool.notarization_share()), expected_count[1]);
+            assert_eq!(count(pool.finalization_share(), range_to_delete), 0);
+            assert_eq!(count_total(pool.finalization_share()), expected_count[2]);
+            assert!(count(pool.random_tape_share(), range_to_delete) > 0);
+            assert_eq!(count_total(pool.random_tape_share()), expected_count[3]);
+            assert_eq!(count(pool.equivocation_proof(), range_to_delete), 0);
+            assert_eq!(count_total(pool.equivocation_proof()), expected_count[4]);
+
+            let expected_to_be_purged = pool
+                .block_proposal()
+                .get_by_height_range(range_to_delete)
+                .map(|n| n.get_id())
+                .collect::<HashSet<_>>();
+            assert!(!expected_to_be_purged.is_empty());
+
+            let mut ops = PoolSectionOps::new();
+            ops.purge_below(finalized_height);
+            let purged = pool.mutate(ops);
+            let purged_set = HashSet::<_>::from_iter(purged);
+
+            assert!(expected_to_be_purged.is_subset(&purged_set));
         }
     })
 }
@@ -195,7 +286,7 @@ where
     T::run_persistent_pool_test(
         "test_block_proposal_and_payload_correspondence",
         |config, log| {
-            let insert_ops = block_proposal_ops();
+            let insert_ops = block_proposal_ops(/*heights=*/ 1..18);
             let msgs = insert_ops
                 .ops
                 .iter()
@@ -203,7 +294,7 @@ where
                     if let PoolSectionOp::Insert(artifact) = op {
                         &artifact.msg
                     } else {
-                        panic!("Expect Insert but found {:?}", op)
+                        panic!("Expect Insert but found {op:?}")
                     }
                 })
                 .collect::<Vec<_>>();
@@ -269,7 +360,7 @@ where
     T::run_persistent_pool_test(
         "test_iterating_while_inserting_doesnt_see_new_updates",
         |config, log| {
-            let rb_ops = random_beacon_ops();
+            let rb_ops = random_beacon_ops(/*heights=*/ 3..19);
             let mut pool = T::new_consensus_pool(config, log);
             pool.mutate(rb_ops);
             let iter = pool.random_beacon().get_all();
@@ -306,7 +397,7 @@ where
     T: PoolTestHelper,
 {
     T::run_persistent_pool_test("test_iterator_can_outlive_the_pool", |config, log| {
-        let rb_ops = random_beacon_ops();
+        let rb_ops = random_beacon_ops(/*heights=*/ 3..19);
         let iter;
 
         // Create a pool in this inner scope, which will be destroyed
@@ -343,7 +434,7 @@ where
             let path = config
                 .persistent_pool_validated_persistent_db_path()
                 .clone();
-            let rb_ops = random_beacon_ops();
+            let rb_ops = random_beacon_ops(/*heights=*/ 3..19);
             {
                 let mut pool = T::new_consensus_pool(config, log);
                 pool.mutate(rb_ops);
@@ -360,7 +451,7 @@ where
     T: PoolTestHelper,
 {
     T::run_persistent_pool_test("test_purge_survives_reboot", |config, log| {
-        let time_0 = mock_time() + Duration::from_secs(1234);
+        let time_0 = UNIX_EPOCH + Duration::from_secs(1234);
         // create a pool and insert an artifact
         {
             let mut pool = T::new_consensus_pool(config.clone(), log.clone());
@@ -393,27 +484,56 @@ where
 }
 
 // Support functions for the tests
-pub(crate) fn random_beacon_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
+pub(crate) fn random_beacon_ops(
+    heights: impl IntoIterator<Item = u64>,
+) -> PoolSectionOps<ValidatedConsensusArtifact> {
     let mut ops = PoolSectionOps::new();
-    for i in 3..19 {
-        let random_beacon = fake_random_beacon(Height::from(i));
+    for height in heights {
+        let random_beacon = fake_random_beacon(Height::from(height));
         let msg = ConsensusMessage::RandomBeacon(random_beacon);
         ops.insert(ValidatedConsensusArtifact {
             msg,
-            timestamp: mock_time(),
+            timestamp: UNIX_EPOCH,
         });
     }
     ops
 }
 
-fn block_proposal_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
+pub(crate) fn block_proposal_ops(
+    heights: impl IntoIterator<Item = u64>,
+) -> PoolSectionOps<ValidatedConsensusArtifact> {
     let mut ops = PoolSectionOps::new();
-    for i in 1..18 {
-        let block_proposal = fake_block_proposal(Height::from(i));
+    for height in heights {
+        let block_proposal = fake_block_proposal(Height::from(height));
         let msg = ConsensusMessage::BlockProposal(block_proposal);
         ops.insert(ValidatedConsensusArtifact {
             msg,
-            timestamp: mock_time(),
+            timestamp: UNIX_EPOCH,
+        });
+    }
+    ops
+}
+
+fn equivocation_proof_ops(
+    heights: impl IntoIterator<Item = u64>,
+) -> PoolSectionOps<ValidatedConsensusArtifact> {
+    let block = fake_block_proposal(Height::from(1));
+    let mut ops = PoolSectionOps::new();
+    for height in heights {
+        let equivocation_proof = EquivocationProof {
+            signer: node_test_id(0),
+            version: block.content.get_value().version.clone(),
+            height: Height::new(height),
+            subnet_id: subnet_test_id(0),
+            hash1: CryptoHashOf::new(CryptoHash(vec![height as u8])),
+            signature1: BasicSigOf::new(ic_types::crypto::BasicSig(vec![])),
+            hash2: CryptoHashOf::new(CryptoHash(vec![1, height as u8])),
+            signature2: BasicSigOf::new(ic_types::crypto::BasicSig(vec![])),
+        };
+        let msg = ConsensusMessage::EquivocationProof(equivocation_proof);
+        ops.insert(ValidatedConsensusArtifact {
+            msg,
+            timestamp: UNIX_EPOCH,
         });
     }
     ops
@@ -430,7 +550,7 @@ fn finalization_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
         let msg = ConsensusMessage::Finalization(Finalization { content, signature });
         ops.insert(ValidatedConsensusArtifact {
             msg,
-            timestamp: mock_time(),
+            timestamp: UNIX_EPOCH,
         });
     }
     ops
@@ -447,7 +567,7 @@ fn notarization_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
         let msg = ConsensusMessage::Notarization(Notarization { content, signature });
         ops.insert(ValidatedConsensusArtifact {
             msg,
-            timestamp: mock_time(),
+            timestamp: UNIX_EPOCH,
         });
     }
     ops
@@ -467,14 +587,14 @@ fn random_beacon_share_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
             let msg = ConsensusMessage::RandomBeaconShare(RandomBeaconShare { content, signature });
             ops.insert(ValidatedConsensusArtifact {
                 msg,
-                timestamp: mock_time(),
+                timestamp: UNIX_EPOCH,
             });
         }
     }
     ops
 }
 
-fn notarization_share_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
+pub(crate) fn notarization_share_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
     let mut ops = PoolSectionOps::new();
     for i in 4..16 {
         let height = Height::from(i);
@@ -486,14 +606,14 @@ fn notarization_share_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
             let msg = ConsensusMessage::NotarizationShare(NotarizationShare { content, signature });
             ops.insert(ValidatedConsensusArtifact {
                 msg,
-                timestamp: mock_time(),
+                timestamp: UNIX_EPOCH,
             });
         }
     }
     ops
 }
 
-fn finalization_share_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
+pub(crate) fn finalization_share_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
     let mut ops = PoolSectionOps::new();
     for i in 5..14 {
         let height = Height::from(i);
@@ -505,7 +625,7 @@ fn finalization_share_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
             let msg = ConsensusMessage::FinalizationShare(FinalizationShare { content, signature });
             ops.insert(ValidatedConsensusArtifact {
                 msg,
-                timestamp: mock_time(),
+                timestamp: UNIX_EPOCH,
             });
         }
     }
@@ -519,7 +639,7 @@ fn random_tape_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
         let msg = ConsensusMessage::RandomTape(random_tape);
         ops.insert(ValidatedConsensusArtifact {
             msg,
-            timestamp: mock_time(),
+            timestamp: UNIX_EPOCH,
         });
     }
     ops
@@ -537,7 +657,7 @@ fn random_tape_share_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
             let msg = ConsensusMessage::RandomTapeShare(RandomTapeShare { content, signature });
             ops.insert(ValidatedConsensusArtifact {
                 msg,
-                timestamp: mock_time(),
+                timestamp: UNIX_EPOCH,
             });
         }
     }
@@ -635,7 +755,7 @@ fn make_random_beacon_at_height(i: u64) -> ValidatedConsensusArtifact {
     let random_beacon = fake_random_beacon(Height::from(i));
     ValidatedConsensusArtifact {
         msg: ConsensusMessage::RandomBeacon(random_beacon),
-        timestamp: mock_time(),
+        timestamp: UNIX_EPOCH,
     }
 }
 

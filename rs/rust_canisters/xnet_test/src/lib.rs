@@ -1,8 +1,7 @@
 use candid::{CandidType, Deserialize};
+use ic_management_canister_types::CanisterId;
+use serde::Serialize;
 use std::time::Duration;
-
-/// Id of a canister is an opaque blob.
-pub type CanisterId = Vec<u8>;
 
 /// Configuration of the network: the outer vector enumerates canisters
 /// installed on the same subnet.
@@ -10,13 +9,23 @@ pub type CanisterId = Vec<u8>;
 /// This message is used as request payload for "start" call.
 pub type NetworkTopology = Vec<Vec<CanisterId>>;
 
+/// Arguments for the "start" call of this canister.
+#[derive(Clone, Debug, Default, CandidType, Deserialize)]
+pub struct StartArgs {
+    pub network_topology: NetworkTopology,
+    pub canister_to_subnet_rate: u64,
+    pub request_payload_size_bytes: u64,
+    pub call_timeouts_seconds: Vec<Option<u32>>,
+    pub response_payload_size_bytes: u64,
+}
+
 /// Metrics observed by this canister.
 ///
 /// This message is used as reply payload for "metrics" query.
-#[derive(Default, CandidType, Deserialize, Debug)]
+#[derive(Clone, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct Metrics {
-    /// Number of requests sent.
-    pub requests_sent: usize,
+    /// Number of calls attempted (whether successful or not).
+    pub calls_attempted: usize,
 
     /// Number of times a call failed synchronously (e.g. due to a full canister
     /// output queue or running out of cycles).
@@ -29,7 +38,7 @@ pub struct Metrics {
     /// Number of sequence number errors.
     pub seq_errors: usize,
 
-    /// Observed message rountrip latencies.
+    /// Observed message roundtrip latencies.
     pub latency_distribution: LatencyDistribution,
 
     /// Rotating buffer collecting log messages.
@@ -39,7 +48,7 @@ pub struct Metrics {
 impl Metrics {
     /// Adds the observations of `other` to `self`.
     pub fn merge(&mut self, other: &Metrics) {
-        self.requests_sent += other.requests_sent;
+        self.calls_attempted += other.calls_attempted;
         self.call_errors += other.call_errors;
         self.reject_responses += other.reject_responses;
         self.seq_errors += other.seq_errors;
@@ -47,14 +56,19 @@ impl Metrics {
         self.log.push_str("-----\n");
         self.log.push_str(&other.log);
     }
+
+    /// Returns the number of requests sent successfully.
+    pub fn requests_sent(&self) -> usize {
+        self.calls_attempted - self.call_errors
+    }
 }
 
 /// Latency distribution implements a cumulative histogram used to record
-/// message rountrip latencies.
+/// message roundtrip latencies.
 ///
 /// The latency is measured using IC time, which is not guaranteed to be
 /// particularly accurate.
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct LatencyDistribution {
     buckets: Vec<(i64, usize)>,
     sum_millis: usize,
@@ -67,7 +81,7 @@ impl Default for LatencyDistribution {
         // [10ms, 20ms, 50ms, 100ms, 200ms, 500ms, 1s, 2s, 5s, ..., 5000s, i64::MAX]
         Self {
             buckets: (1..6)
-                .flat_map(|p| MUL.iter().map(move |n| n * 10i64.pow(p)))
+                .flat_map(|p| MUL.iter().map(move |n| n * 10_i64.pow(p)))
                 .chain(std::iter::once(i64::MAX))
                 .map(|n| (n, 0))
                 .collect(),

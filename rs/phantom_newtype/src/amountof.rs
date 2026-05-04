@@ -1,10 +1,11 @@
 use crate::displayer::{DisplayProxy, DisplayerOf};
+use ic_heap_bytes::DeterministicHeapBytes;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 /// `AmountOf<Unit>` provides a type-safe way to keep an amount of
 /// some `Unit`.
@@ -181,7 +182,7 @@ impl<Unit, Repr: Copy> AmountOf<Unit, Repr> {
     /// let three_apples = AmountOf::<Apple, u64>::from(3);
     /// assert_eq!(9, (three_apples * 3).get());
     /// ```
-    pub fn get(&self) -> Repr {
+    pub const fn get(&self) -> Repr {
         self.0
     }
 }
@@ -217,7 +218,7 @@ impl<Unit, Repr> AmountOf<Unit, Repr>
 where
     Unit: DisplayerOf<AmountOf<Unit, Repr>>,
 {
-    /// `display` provides a machanism to implement a custom display
+    /// `display` provides a mechanism to implement a custom display
     /// for phantom types.
     ///
     /// ```
@@ -296,6 +297,28 @@ where
     }
 }
 
+impl<Unit, Repr> num_traits::SaturatingAdd for AmountOf<Unit, Repr>
+where
+    Repr: num_traits::SaturatingAdd,
+{
+    /// Saturating addition. Computes `self + other`, saturating
+    /// at the relevant high or low boundary of the type.
+    fn saturating_add(&self, rhs: &Self) -> Self {
+        Self(self.0.saturating_add(&rhs.0), PhantomData)
+    }
+}
+
+impl<Unit, Repr> num_traits::SaturatingSub for AmountOf<Unit, Repr>
+where
+    Repr: num_traits::SaturatingSub,
+{
+    /// Saturating subtraction. Computes `self - other`, saturating
+    /// at the relevant high or low boundary of the type.
+    fn saturating_sub(&self, rhs: &Self) -> Self {
+        Self(self.0.saturating_sub(&rhs.0), PhantomData)
+    }
+}
+
 impl<Unit, Repr> AddAssign for AmountOf<Unit, Repr>
 where
     Repr: AddAssign,
@@ -365,6 +388,17 @@ where
 
     fn sub(self, rhs: Self) -> Self {
         Self(self.0 - rhs.0, PhantomData)
+    }
+}
+
+impl<Unit, Repr> Neg for AmountOf<Unit, Repr>
+where
+    Repr: Neg<Output = Repr>,
+{
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        Self(-self.0, PhantomData)
     }
 }
 
@@ -473,6 +507,17 @@ where
     }
 }
 
+impl<Unit, Repr> std::str::FromStr for AmountOf<Unit, Repr>
+where
+    Repr: std::str::FromStr,
+{
+    type Err = Repr::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse::<Repr>().map(Self::from)
+    }
+}
+
 // Derived serde `impl Serialize` produces an extra `unit` value for
 // phantom data, e.g. `AmountOf::<Meters>::from(10)` is serialized
 // into json as `[10, null]` by default.
@@ -532,5 +577,11 @@ impl<Unit, Repr: slog::Value> slog::Value for AmountOf<Unit, Repr> {
         serializer: &mut dyn slog::Serializer,
     ) -> slog::Result {
         self.0.serialize(record, key, serializer)
+    }
+}
+
+impl<Unit, Repr: DeterministicHeapBytes> DeterministicHeapBytes for AmountOf<Unit, Repr> {
+    fn deterministic_heap_bytes(&self) -> usize {
+        self.0.deterministic_heap_bytes()
     }
 }

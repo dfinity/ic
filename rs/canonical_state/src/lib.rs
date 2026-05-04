@@ -129,16 +129,15 @@
 //! behavior.
 
 pub mod encoding;
-pub mod hash_tree;
-pub mod lazy_tree;
+pub mod lazy_tree_conversion;
 pub mod size_limit_visitor;
 pub mod subtree_visitor;
 mod traversal;
 pub mod visitor;
 
 pub use ic_certification_version::{
-    all_supported_versions, CertificationVersion, UnsupportedCertificationVersion,
-    CURRENT_CERTIFICATION_VERSION, MAX_SUPPORTED_CERTIFICATION_VERSION,
+    CURRENT_CERTIFICATION_VERSION, CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION,
+    MIN_SUPPORTED_CERTIFICATION_VERSION, UnsupportedCertificationVersion, all_supported_versions,
 };
 
 #[cfg(test)]
@@ -147,6 +146,6 @@ mod test_visitors;
 /// Label applied to tree edges in the Canonical State.
 pub type Label = Vec<u8>;
 
-pub use lazy_tree::conversion::LabelLike;
+pub use lazy_tree_conversion::LabelLike;
 pub use traversal::traverse;
 pub use visitor::{Control, Visitor};

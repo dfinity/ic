@@ -1,87 +1,107 @@
 //! The consensus public interface.
 use crate::{
+    batch_payload::ProposalContext,
     canister_http::{
-        CanisterHttpPayloadValidationError, CanisterHttpPermanentValidationError,
-        CanisterHttpTransientValidationError,
+        CanisterHttpPayloadValidationError, CanisterHttpPayloadValidationFailure,
+        InvalidCanisterHttpPayloadReason,
     },
-    consensus_pool::{ChangeSet, ConsensusPool},
+    chain_key::{ChainKeyPayloadValidationFailure, InvalidChainKeyPayloadReason},
     ingress_manager::{
-        IngressPayloadValidationError, IngressPermanentError, IngressTransientError,
+        IngressPayloadValidationError, IngressPayloadValidationFailure, InvalidIngressPayloadReason,
     },
-    messaging::{InvalidXNetPayload, XNetPayloadValidationError, XNetTransientValidationError},
+    messaging::{InvalidXNetPayload, XNetPayloadValidationError, XNetPayloadValidationFailure},
+    query_stats::{InvalidQueryStatsPayloadReason, QueryStatsPayloadValidationFailure},
     self_validating_payload::{
-        InvalidSelfValidatingPayload, SelfValidatingPayloadValidationError,
-        SelfValidatingTransientValidationError,
+        InvalidSelfValidatingPayloadReason, SelfValidatingPayloadValidationError,
+        SelfValidatingPayloadValidationFailure,
     },
-    validation::ValidationError,
+    validation::{ValidationError, ValidationResult},
 };
 use ic_base_types::{NumBytes, SubnetId};
 use ic_types::{
-    artifact::{ConsensusMessageAttribute, ConsensusMessageFilter, ConsensusMessageId, PriorityFn},
+    Height, Time,
+    batch::{BatchPayload, ValidationContext},
+    consensus::{Payload, block_maker::SubnetRecords},
     registry::RegistryClientError,
 };
 
-/// Consensus artifact processing interface.
-pub trait Consensus: Send {
-    /// Inspect the input [ConsensusPool] to build a [ChangeSet] of actions to
-    /// be executed.
-    ///
-    /// The caller is then expected to apply the returned [ChangeSet] to the
-    /// input of this call, namely [ConsensusPool]. The reason that consensus
-    /// does not directly mutate the objects are:
-    ///
-    /// 1. The actual mutation may need to be coupled with other things,
-    /// performed in a single transaction, and so on. So it is better to leave
-    /// it to the caller to decide.
-    ///
-    /// 2. Because [ConsensusPool] is passed as an read-only reference, the
-    /// caller is free to run other readers concurrently should it choose to.
-    /// But this is a minor point.
-    fn on_state_change(&self, consensus_pool: &dyn ConsensusPool) -> ChangeSet;
+pub mod errors;
+
+#[derive(Debug, Default)]
+/// Contains a payload together with an estimate how many bytes the payload would take when sent
+/// over wire. This is not necessarily the same as, or even close to, the size of the structure
+/// in the memory.
+pub struct PayloadWithSizeEstimate<T> {
+    pub payload: T,
+    pub wire_size_estimate: NumBytes,
 }
 
-/// Consensus to gossip interface.
-pub trait ConsensusGossip: Send + Sync {
-    /// Return a priority function that matches the given consensus pool.
-    fn get_priority_function(
+/// The [`PayloadBuilder`] is responsible for creating and validating payload that
+/// is included in consensus blocks.
+pub trait PayloadBuilder: Send + Sync {
+    /// Produces a payload that is valid given `past_payloads` and `context`.
+    ///
+    /// `past_payloads` contains the `Payloads` from all blocks above the
+    /// certified height provided in `context`, in descending block height
+    /// order.
+    fn get_payload(
         &self,
-        consensus_pool: &dyn ConsensusPool,
-    ) -> PriorityFn<ConsensusMessageId, ConsensusMessageAttribute>;
+        height: Height,
+        past_payloads: &[(Height, Time, Payload)],
+        context: &ValidationContext,
+        subnet_records: &SubnetRecords,
+    ) -> BatchPayload;
 
-    /// Return a filter that represents what artifacts are needed.
-    fn get_filter(&self) -> ConsensusMessageFilter;
+    /// Checks whether the provided `payload` is valid given `past_payloads` and
+    /// `context`.
+    ///
+    /// `past_payloads` contains the `Payloads` from all blocks above the
+    /// certified height provided in `context`, in descending block height
+    /// order.
+    fn validate_payload(
+        &self,
+        height: Height,
+        proposal_context: &ProposalContext,
+        payload: &Payload,
+        past_payloads: &[(Height, Time, Payload)],
+    ) -> ValidationResult<PayloadValidationError>;
 }
 
 #[derive(Debug)]
-pub enum PayloadPermanentError {
-    XNetPayloadValidationError(InvalidXNetPayload),
-    IngressPayloadValidationError(IngressPermanentError),
+pub enum InvalidPayloadReason {
+    InvalidXNetPayload(InvalidXNetPayload),
+    InvalidIngressPayload(InvalidIngressPayloadReason),
+    InvalidSelfValidatingPayload(InvalidSelfValidatingPayloadReason),
+    InvalidCanisterHttpPayload(InvalidCanisterHttpPayloadReason),
+    InvalidQueryStatsPayload(InvalidQueryStatsPayloadReason),
+    InvalidChainKeyPayload(InvalidChainKeyPayloadReason),
+    /// The overall block size is too large, even though the individual payloads are valid
     PayloadTooBig {
         expected: NumBytes,
         received: NumBytes,
     },
-    SelfValidatingPayloadValidationError(InvalidSelfValidatingPayload),
-    CanisterHttpPayloadValidationError(CanisterHttpPermanentValidationError),
 }
 
 #[derive(Debug)]
-pub enum PayloadTransientError {
-    XNetPayloadValidationError(XNetTransientValidationError),
-    IngressPayloadValidationError(IngressTransientError),
+pub enum PayloadValidationFailure {
+    XNetPayloadValidationFailed(XNetPayloadValidationFailure),
+    IngressPayloadValidationFailed(IngressPayloadValidationFailure),
+    SelfValidatingPayloadValidationFailed(SelfValidatingPayloadValidationFailure),
+    CanisterHttpPayloadValidationFailed(CanisterHttpPayloadValidationFailure),
+    QueryStatsPayloadValidationFailed(QueryStatsPayloadValidationFailure),
+    ChainKeyPayloadValidationFailed(ChainKeyPayloadValidationFailure),
     RegistryUnavailable(RegistryClientError),
     SubnetNotFound(SubnetId),
-    SelfValidatingPayloadValidationError(SelfValidatingTransientValidationError),
-    CanisterHttpPayloadValidationError(CanisterHttpTransientValidationError),
 }
 
 /// Payload validation error
-pub type PayloadValidationError = ValidationError<PayloadPermanentError, PayloadTransientError>;
+pub type PayloadValidationError = ValidationError<InvalidPayloadReason, PayloadValidationFailure>;
 
 impl From<IngressPayloadValidationError> for PayloadValidationError {
     fn from(err: IngressPayloadValidationError) -> Self {
         err.map(
-            PayloadPermanentError::IngressPayloadValidationError,
-            PayloadTransientError::IngressPayloadValidationError,
+            InvalidPayloadReason::InvalidIngressPayload,
+            PayloadValidationFailure::IngressPayloadValidationFailed,
         )
     }
 }
@@ -89,8 +109,8 @@ impl From<IngressPayloadValidationError> for PayloadValidationError {
 impl From<XNetPayloadValidationError> for PayloadValidationError {
     fn from(err: XNetPayloadValidationError) -> Self {
         err.map(
-            PayloadPermanentError::XNetPayloadValidationError,
-            PayloadTransientError::XNetPayloadValidationError,
+            InvalidPayloadReason::InvalidXNetPayload,
+            PayloadValidationFailure::XNetPayloadValidationFailed,
         )
     }
 }
@@ -98,8 +118,8 @@ impl From<XNetPayloadValidationError> for PayloadValidationError {
 impl From<SelfValidatingPayloadValidationError> for PayloadValidationError {
     fn from(err: SelfValidatingPayloadValidationError) -> Self {
         err.map(
-            PayloadPermanentError::SelfValidatingPayloadValidationError,
-            PayloadTransientError::SelfValidatingPayloadValidationError,
+            InvalidPayloadReason::InvalidSelfValidatingPayload,
+            PayloadValidationFailure::SelfValidatingPayloadValidationFailed,
         )
     }
 }
@@ -107,8 +127,8 @@ impl From<SelfValidatingPayloadValidationError> for PayloadValidationError {
 impl From<CanisterHttpPayloadValidationError> for PayloadValidationError {
     fn from(err: CanisterHttpPayloadValidationError) -> Self {
         err.map(
-            PayloadPermanentError::CanisterHttpPayloadValidationError,
-            PayloadTransientError::CanisterHttpPayloadValidationError,
+            InvalidPayloadReason::InvalidCanisterHttpPayload,
+            PayloadValidationFailure::CanisterHttpPayloadValidationFailed,
         )
     }
 }

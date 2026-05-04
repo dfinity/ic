@@ -1,12 +1,14 @@
 use std::collections::BTreeMap;
 
-use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
+use ic_management_canister_types_private::EcdsaKeyId;
 use ic_protobuf::registry::crypto::v1::EcdsaSigningSubnetList;
 use ic_registry_keys::{
-    get_ecdsa_key_id_from_signing_subnet_list_key, ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX,
+    ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX, get_ecdsa_key_id_from_signing_subnet_list_key,
 };
-use ic_types::{subnet_id_try_from_protobuf, RegistryVersion, SubnetId};
+use ic_types::{
+    RegistryVersion, SubnetId, registry::RegistryClientError, subnet_id_try_from_protobuf,
+};
 
 use crate::deserialize_registry_value;
 
@@ -34,7 +36,11 @@ impl<T: RegistryClient + ?Sized> EcdsaKeysRegistry for T {
                 deserialize_registry_value::<EcdsaSigningSubnetList>(bytes)?.unwrap_or_default();
             let mut subnets = vec![];
             for subnet_proto in subnets_proto.subnets.into_iter() {
-                subnets.push(subnet_id_try_from_protobuf(subnet_proto)?);
+                subnets.push(subnet_id_try_from_protobuf(subnet_proto).map_err(|err| {
+                    RegistryClientError::DecodeError {
+                        error: err.to_string(),
+                    }
+                })?);
             }
             let key_id = get_ecdsa_key_id_from_signing_subnet_list_key(&registry_key)?;
             if !subnets.is_empty() {

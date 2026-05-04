@@ -1,0 +1,243 @@
+= Consensus Testing Framework
+
+We want to simulate multiple nodes running our consensus protocol in a controlled and deterministic environment without using the real networking code.
+The main objective is to test consensus implementation by isolating potential problems within the consensus code base.
+Additionally, a simulated environment also allows us to test consensus in different settings, by changing message delivery order, simulating adversarial behaviors, and so on.
+
+== Architecture
+
+=== Consensus Driver
+
+A `ConsensusDriver` combines consensus with an artifact pool and a timer.
+
+Its main interface is a `step` function that steps through consensus protocol by calling `on_state_change` repeatedly until no more changes are produced.
+We consider the call to the `step` an atomic execution of a node that cannot be broken down further into smaller actions.
+
+[source,rust]
+----
+step(&self) -> Vec<OutputMessage>
+----
+
+=== Consensus Instance
+
+A `ConsensusInstance` combines `ConsensusDriver` with its mocked dependencies, as well as input and output message queues.
+Inputs and outputs are both represented as priority queues based on event timestamp (a concept introduced below).
+A `ConsensusInstance` simulates the behavior of a single node in a sub-network.
+
+=== Consensus Runner
+
+A `ConsensusRunner` manages the execution of a collection of `ConsensusInstance` in a broadcast network, relaying messages that are sent from one to the others.
+To ensure that any tests written with the consensus runner are reproducible, it has to use deterministic message delivery and execution strategies,
+which may come from pseudo-randomness seeded by a fixed seed.
+An obvious implementation choice is to run everything a single thread, but multi-threaded execution is also possible.
+
+The relationship between these components are pictured in the diagram below:
+
+.Consensus Testing Framework (assuming 3 instances running)
+[plantuml]
+....
+package ConsensusRunner <<Rectangle>> {
+
+package Instance_1 <<Rectangle>> {
+  package ConsensusDriver_1 <<Rectangle>> {
+    package Consensus_1 <<Rectangle>> {
+    }
+    package Pool_1 <<Rectangle>> {
+    }
+  }
+  queue InputQueue_1 {
+  }
+  queue OutputQueue_1 {
+  }
+}
+
+package Instance_2 <<Rectangle>> {
+  package ConsensusDriver_2 <<Rectangle>> {
+    package Consensus_2 <<Rectangle>> {
+    }
+    package Pool_2 <<Rectangle>> {
+    }
+  }
+  queue InputQueue_2 {
+  }
+  queue OutputQueue_2 {
+  }
+}
+
+package Instance_3 <<Rectangle>> {
+  package ConsensusDriver_3 <<Rectangle>> {
+    package Consensus_3 <<Rectangle>> {
+    }
+    package Pool_3 <<Rectangle>> {
+    }
+  }
+  queue InputQueue_3 {
+  }
+  queue OutputQueue_3 {
+  }
+}
+
+}
+....
+
+
+Messages produced by the `step` execution of a `ConsensusInstance` are first enqueued to its output queue.
+The `ConsensusRunner` then delivers messages from output queues to input queues of all instances, which are ready for execution.
+Delivery and execution strategies can be customized to accommodate different simulation requirements.
+The overall requirement is to ensure a certain degree of fairness, i.e., each instance is given a fair chance to run and to receive and send messages.
+This can be relaxed if we want to simulate instances being stuck or left behind in execution.
+
+A `ConsensusRunner` is instantiated with a termination predicate called `StopPredicate` that will be evaluated against each instance.
+The `ConsensusRunner` terminates successfully when `StopPredicate` evaluates to true for all instances.
+Otherwise it either continues to run if new messages are produced, or becomes stalled when there are no input messages for any instances.
+
+== Timing Requirement
+
+For certain properties, the IC consensus protocol makes assumptions on the maximum time &delta; in which messages reach peers.
+In order to better understand how the protocol works with respect to &delta;, we assume there is a virtual global clock in our simulation, and attach a timestamp to all input and output messages.
+More formally we make the following rules, where `m~in(i)~` denotes a message `m` in the input queue of node `i`, or `m~out(i)~` in the output queue.
+
+1. A timestamp `timestamp(m)` is associated with every message `m`.
+2. A node always processes input messages in increasing order of their timestamps, a property that must maintained throughout the lifetime of a node. This implies a newly delivered message must have a timestamp greater than all past messages executed by a node (but not necessarily greater than existing messages pending in its input queue).
+3. The execution of a message `m~in(i)~` may also take time `&epsilon; &ge; 0`. For any output message `n~out(i)~` produced as a result of executing `m~in(i)~`, we have `timestamp(n~out(i)~) = timestamp(m~in(i)~) + &epsilon;`.
+4. A node may also execute its own output message as input, but we assume that by the time a message reaches the output queue, the node has already finished executing it.
+5. When an output message `m~out(i)~` is delivered to node `j`, it becomes `m~in(j)~`, and `timestamp(m~in(j)~) > timestamp(m~out(i)~)`.
+6. Additionally, we may require that `∀ j≠i, timestamp(m~in(j)~) < timestamp(m~out(i)~) + &delta;` if we want to maintain a global upper bound on &delta;.
+
+Any delivery and execution strategy must adhere to these rules in order for the simulation to be sound.
+
+A simulation should always start with an estimated upper bound that is &delta;, which is to help initialize the blockmaker delay and notary wait delay with appropriate values.
+
+The actual simulation may allow a certain percentage of messages to take longer than the upper bound &delta; to deliver, as a means to study the behavior of our protocol under such conditions.
+
+== Execution Strategy
+
+Once an instance receives new messages in its input queue, it can start executing.
+To satisfy the timing requirement, we also associate a local clock for each node instance `i`, called `clock~i~`.
+All nodes have to process messages in a monotonic order as described below:
+
+1. Pick an instance whose input queue is not empty.
+2. Pick a message `m~in(i)~` with smallest timestamp value, and insert into consensus pool of the `ConsensusDriver`.
+3. Update `clock~i~ = timestamp(m~in(i)~)`.
+4. Run the `step` function of the `ConsensusDriver`.
+5. Move outgoing messages `n~out(i)~` to output queue, and assign `timestamp(n~out(i)~) = clock~i~ + &epsilon;`.
+
+Despite that messages are executed in the order of their timestamps, how we choose the next instance to execute in fact will impact timestamps of future inputs.
+Therefore, there is still room to design different execution strategies with a common interface given below:
+
+[source,rust]
+----
+pub trait ExecutionStrategy {
+    fn execute_next(&self, runner: &ConsensusRunner) -> bool;
+}
+----
+
+It returns true if one or more instances were executed, or false if none was able to run, which only happens when all input queues are empty.
+
+Additionally, an execution strategy has to meet the following requirements:
+
+1. All messages delivered to the input queue of an instance should eventually be consumed, otherwise we risk starvation which shouldn't happen in our simulation.
+2. Execution has to take care of local timers, which uses the same time unit as the global clock. Because timer events are local, they go directly to the input queue.
+
+=== Global message order
+
+Always choose an instance `i` with an input queue that contains the least `timestamp(m~in(i)~)` value globally.
+This ensure that all input messages are always executed in order, for all nodes.
+
+=== Global clock order
+
+Always choose an instance `i` with a non-empty input queue and the least `clock~i~` value.
+Note that this does not produce the same execution sequence as the global message order.
+
+=== Random execute
+
+Choose the next instance randomly.
+
+== Delivery Strategy
+
+One way to satisfy the timing requirement is to implement the message delivery that respects a pre-determined upper bound &delta;:
+
+1. Pick an instance `i` whose output queue is not empty.
+2. Pick a message `m~out(j)~` from this output queue, let `t~i~ = timestamp(m~out(j)~)`
+3. For all other instances `j ≠ i`, insert a copy `m~in(j)~` to its input queue, with a new timestamp `t~j~` that satisfies the following conditions:
+   * `t~i~ < t~j~ < t~i~ + &delta;`
+   * `clock~j~ < t~j~`
+4. Note that it may be possible that there is no valid choice of `t~j~` due to conflicting requirements, in which case the delivery strategy is not sound.
+
+It is up to the implementation of a `DeliveryStrategy` to decide how to pick the next message, and how timestamps are calculated.
+Its interface is given below:
+
+[source,rust]
+----
+pub trait DeliveryStrategy {
+    fn deliver_next(&self, runner: &ConsensusRunner) -> bool;
+}
+----
+
+The `deliver_next` function is supposed to dequeue a single message and deliver it according to the steps outlined above.
+It returns `true` if a message is delivered, or `false` if all output queues are empty.
+
+=== Sequential
+
+Pick the next message that has the least `timestamp(m~out(i)~)` value among all nodes, and always set receiving timestamp to be 1 unit greater than this timestamp.
+It ensures globally that messages are always received in the order they are sent.
+
+=== Random receiving
+
+Pick the next message that has the least `timestamp(m~out(i)~)` value among all nodes, and set the receiving timestamp randomly.
+It does not ensure that messages are received in the order they are sent.
+
+=== Random graph
+
+We can impose a random graph network topology and simulate a more realistic network latency when messages are gossiped through this network.
+Pick the next message that has the least `timestamp(m~out(i)~)` value among all nodes, and sets receiving timestamp according to network topology.
+
+== Combining execution and delivery strategies
+
+NOTE: It is unclear how the combination impacts the outcome of our simulation, but it does affect overall message ordering.
+
+=== Lockstep
+
+We alternate between execution and delivery, and run through a strategy until it returns `false` before switching.
+
+=== Interleaving
+
+We alternate between execution and delivery, and run them only a single step.
+
+== Testing Scenarios
+
+=== Single node runs through N rounds
+
+A single node is able to run through consensus by itself, and finalizes at least N rounds.
+
+=== Multiple nodes run through N rounds
+
+Multiple nodes are able to run through consensus with any combination of the delivery and execution strategies discussed above, and all of them finalizes at least N rounds, with the same sequence of finalized blocks/batches.
+
+=== Majority nodes run through N rounds
+
+We can simulate random node failures (e.g. choose a very large message receiving timestamp) for a small number of nodes, and still be able to observe round progression for non-affected nodes.
+The success of this test is subject to initial configurations including group size, threshold, and total number of nodes.
+
+=== Network stall and recovery
+
+We can simulate failures (e.g. choose a very large message receiving timestamp) for a significant portion of all nodes, and observe the remaining nodes can no longer progress into the next round.
+Once failed nodes are restored (clock has caught up to processing messages), we should observe nodes start making progress again.
+
+=== Dropped messages
+
+P2P layer provides a guarantee that a message eventually should reach all honest nodes in the network.
+Therefore it is not our duty to simulate message loss in general because it is not a realistic assumption to make, and the outcome does not provide additional insights.
+
+However, some messages could still get lost because nodes has already removed them from their local artifact pool because they reach everyone.
+This does not affect messages that are never purged such as random beacon and finalized blocks and their signatures.
+We could in theory simulate message drops according to their type and content within this framework, but it is unclear that:
+
+1. How realistic it is without involving real p2p.
+2. How the outcome could help us to improve consensus.
+
+Therefore we choose not to provide such simulations.
+
+=== Adversarial simulation
+
+(TODO)

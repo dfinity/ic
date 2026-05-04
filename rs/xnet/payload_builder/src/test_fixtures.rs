@@ -4,31 +4,31 @@ use super::*;
 use ic_base_types::PrincipalId;
 use ic_interfaces_state_manager::CertificationScope;
 use ic_protobuf::registry::{
-    node::v1::{connection_endpoint::Protocol, ConnectionEndpoint, NodeRecord},
+    node::v1::{ConnectionEndpoint, NodeRecord},
     subnet::v1::SubnetListRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_replicated_state::{
-    metadata_state::StreamMap, testing::ReplicatedStateTesting, ReplicatedState, Stream,
+    ReplicatedState, Stream,
+    metadata_state::StreamMap,
+    testing::{ReplicatedStateTesting, StreamTesting},
 };
-use ic_test_utilities::{
-    mock_time,
-    state_manager::FakeStateManager,
-    types::{
-        ids::{
-            canister_test_id, node_test_id, subnet_test_id, NODE_1, NODE_2, NODE_3, NODE_4,
-            SUBNET_0, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5,
-        },
-        messages::RequestBuilder,
-    },
-};
+use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_registry::test_subnet_record;
+use ic_test_utilities_types::{
+    ids::{
+        NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_0, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5,
+        SUBNET_6, canister_test_id, node_test_id, subnet_test_id,
+    },
+    messages::RequestBuilder,
+};
 use ic_types::{
-    messages::CallbackId,
-    xnet::{CertifiedStreamSlice, StreamIndex, StreamIndexedQueue},
     Height, NumBytes, RegistryVersion, SubnetId,
+    messages::CallbackId,
+    time::UNIX_EPOCH,
+    xnet::{CertifiedStreamSlice, StreamIndex, StreamIndexedQueue},
 };
 use maplit::btreemap;
 use std::collections::BTreeMap;
@@ -67,6 +67,13 @@ pub(crate) const OPERATOR_2: PrincipalId = PrincipalId::new(1, [2; 29]);
 pub(crate) fn get_xnet_state_for_testing(
     state_manager: &FakeStateManager,
 ) -> (Vec<XNetPayload>, BTreeMap<SubnetId, ExpectedIndices>) {
+    get_xnet_state_for_testing_with_subnet_type(state_manager, None)
+}
+
+pub(crate) fn get_xnet_state_for_testing_with_subnet_type(
+    state_manager: &FakeStateManager,
+    own_subnet_type: Option<SubnetType>,
+) -> (Vec<XNetPayload>, BTreeMap<SubnetId, ExpectedIndices>) {
     // A `ReplicatedState` with existing streams for `SUBNET_1` and `SUBNET_2`.
     let stream_1 = generate_stream(&StreamConfig {
         message_begin: 10,
@@ -80,9 +87,10 @@ pub(crate) fn get_xnet_state_for_testing(
         signal_end: 5,
     });
 
-    put_replicated_state_for_testing(
+    put_replicated_state_for_testing_with_subnet_type(
         state_manager,
         btreemap![SUBNET_1 => stream_1, SUBNET_2 => stream_2],
+        own_subnet_type,
     );
 
     // An `XNetPayload` with `CertifiedStreamSlices` from `SUBNET_1` and `SUBNET_3`.
@@ -168,9 +176,24 @@ pub(crate) fn put_replicated_state_for_testing(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     streams: StreamMap,
 ) {
-    let (_height, mut state) = state_manager.take_tip();
+    put_replicated_state_for_testing_with_subnet_type(state_manager, streams, None);
+}
+
+pub(crate) fn put_replicated_state_for_testing_with_subnet_type(
+    state_manager: &dyn StateManager<State = ReplicatedState>,
+    streams: StreamMap,
+    own_subnet_type: Option<SubnetType>,
+) {
+    let (mut height, mut state) = state_manager.take_tip();
+    while height < CERTIFIED_HEIGHT.decrement() {
+        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
+        (height, state) = state_manager.take_tip();
+    }
     state.with_streams(streams);
-    state_manager.commit_and_certify(state, CERTIFIED_HEIGHT, CertificationScope::Metadata);
+    if let Some(subnet_type) = own_subnet_type {
+        state.metadata.own_subnet_type = subnet_type;
+    }
+    state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 }
 
 /// Creates a `CertifiedStreamSlice` from the given subnet, containing a stream
@@ -180,10 +203,14 @@ pub(crate) fn make_certified_stream_slice(
     config: StreamConfig,
 ) -> CertifiedStreamSlice {
     let state_manager = FakeStateManager::new();
-    let (_height, mut state) = state_manager.take_tip();
+    let (mut height, mut state) = state_manager.take_tip();
+    while height < CERTIFIED_HEIGHT.decrement() {
+        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
+        (height, state) = state_manager.take_tip();
+    }
     let stream = generate_stream(&config);
     state.with_streams(btreemap![from => stream]);
-    state_manager.commit_and_certify(state, CERTIFIED_HEIGHT, CertificationScope::Metadata);
+    state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
     state_manager
         .encode_certified_stream_slice(
             from,
@@ -223,7 +250,7 @@ pub(crate) fn generate_stream(config: &StreamConfig) -> Stream {
 /// Generates a `ValidationContext` at `REGISTRY_VERSION` and
 /// `CERTIFIED_HEIGHT`.
 pub(crate) fn get_validation_context_for_test() -> ValidationContext {
-    let time = mock_time();
+    let time = UNIX_EPOCH;
     ValidationContext {
         registry_version: REGISTRY_VERSION,
         certified_height: CERTIFIED_HEIGHT,
@@ -237,7 +264,17 @@ pub(crate) fn get_validation_context_for_test() -> ValidationContext {
 /// expected index or else 0).
 pub(crate) fn get_registry_and_urls_for_test(
     subnet_count: u8,
+    expected_indices: BTreeMap<SubnetId, ExpectedIndices>,
+) -> (Arc<FakeRegistryClient>, Vec<String>) {
+    get_registry_and_urls_for_test_with_subnet_types(subnet_count, expected_indices, btreemap![])
+}
+
+/// Like `get_registry_and_urls_for_test`, but with configurable subnet types.
+/// Subnets not present in `subnet_types` default to `SubnetType::Application`.
+pub(crate) fn get_registry_and_urls_for_test_with_subnet_types(
+    subnet_count: u8,
     mut expected_indices: BTreeMap<SubnetId, ExpectedIndices>,
+    subnet_types: BTreeMap<SubnetId, SubnetType>,
 ) -> (Arc<FakeRegistryClient>, Vec<String>) {
     let mut urls = vec![];
     let mut subnets: Vec<Vec<u8>> = vec![];
@@ -265,6 +302,9 @@ pub(crate) fn get_registry_and_urls_for_test(
         subnets.push(subnet_id.get().into_vec());
 
         let mut subnet_record = test_subnet_record();
+        if let Some(&subnet_type) = subnet_types.get(&subnet_id) {
+            subnet_record.subnet_type = i32::from(subnet_type);
+        }
         subnet_record.membership = vec![node_id.get().into_vec()];
 
         // Set node to subnet assignment.
@@ -280,7 +320,6 @@ pub(crate) fn get_registry_and_urls_for_test(
         let xnet_endpoint = ConnectionEndpoint {
             ip_addr: node_ip.clone(),
             port: xnet_port as u32,
-            protocol: Protocol::Http1 as i32,
         };
         data_provider
             .add(
@@ -288,7 +327,6 @@ pub(crate) fn get_registry_and_urls_for_test(
                 REGISTRY_VERSION,
                 Some(NodeRecord {
                     xnet: Some(xnet_endpoint.clone()),
-                    xnet_api: vec![xnet_endpoint.clone()],
                     ..Default::default()
                 }),
             )
@@ -305,6 +343,24 @@ pub(crate) fn get_registry_and_urls_for_test(
         ));
     }
 
+    // Register subnet records for any additional subnets in `subnet_types` that
+    // were not already covered by `subnet_count`.
+    for (&subnet_id, &subnet_type) in &subnet_types {
+        if subnets.iter().any(|s| s == &subnet_id.get().into_vec()) {
+            continue;
+        }
+        subnets.push(subnet_id.get().into_vec());
+        let mut subnet_record = test_subnet_record();
+        subnet_record.subnet_type = i32::from(subnet_type);
+        data_provider
+            .add(
+                &make_subnet_record_key(subnet_id),
+                REGISTRY_VERSION,
+                Some(subnet_record),
+            )
+            .expect("Could not add subnet record.");
+    }
+
     // Add lists of subnets.
     data_provider
         .add(
@@ -312,28 +368,29 @@ pub(crate) fn get_registry_and_urls_for_test(
             REGISTRY_VERSION,
             Some(SubnetListRecord { subnets }),
         )
-        .expect("Coult not add subnet list record.");
+        .expect("Could not add subnet list record.");
 
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::new(data_provider)));
     registry_client.update_to_latest_version();
     (registry_client, urls)
 }
 
-/// Generates a `RegistryClient` at version zero, i.e. with no records.
-pub fn get_empty_registry_for_test() -> Arc<dyn RegistryClient> {
-    let data_provider = ProtoRegistryDataProvider::new();
-    // We add a node record for the local node as this is required for the
-    // XNetPayloadBuilder to start.
-    data_provider
-        .add(
-            &make_node_record_key(LOCAL_NODE),
-            REGISTRY_VERSION,
-            Some(NodeRecord::default()),
-        )
-        .expect("Could not add node record.");
-    let registry_client = Arc::new(FakeRegistryClient::new(Arc::new(data_provider)));
-    registry_client.update_to_latest_version();
-    registry_client
+/// Generates a `RegistryClient` with a local node record and subnet records
+/// for `SUBNET_1` through `SUBNET_4` (all as `Application`), plus a cloud engine
+/// `SUBNET_6` which should be ignored by the payload builder.
+pub fn get_simple_registry_for_test() -> Arc<dyn RegistryClient> {
+    let (registry, _) = get_registry_and_urls_for_test_with_subnet_types(
+        0,
+        btreemap![],
+        btreemap![
+            SUBNET_1 => SubnetType::Application,
+            SUBNET_2 => SubnetType::Application,
+            SUBNET_3 => SubnetType::Application,
+            SUBNET_4 => SubnetType::Application,
+            SUBNET_6 => SubnetType::CloudEngine,
+        ],
+    );
+    registry
 }
 
 /// Adds a node record with the given values to the given data provider.
@@ -346,7 +403,6 @@ fn add_node_record_with_node_operator_id(
     let xnet_endpoint = ConnectionEndpoint {
         ip_addr: node_ip,
         port: 2197,
-        protocol: Protocol::Http1 as i32,
     };
 
     data_provider
@@ -354,8 +410,7 @@ fn add_node_record_with_node_operator_id(
             &make_node_record_key(node_id),
             REGISTRY_VERSION,
             Some(NodeRecord {
-                xnet: Some(xnet_endpoint.clone()),
-                xnet_api: vec![xnet_endpoint],
+                xnet: Some(xnet_endpoint),
                 node_operator_id: node_operator_id.to_vec(),
                 ..Default::default()
             }),

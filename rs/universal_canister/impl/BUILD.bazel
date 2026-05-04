@@ -1,0 +1,82 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+LIB_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:candid",
+    "@crate_index//:hex-literal",
+    "@crate_index//:serde",
+]
+
+DEPENDENCIES = [
+    # Keep sorted.
+    ":lib",
+    "@crate_index//:lazy_static",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = []
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "lib",
+    srcs = glob(["src/*.rs"]),
+    crate_name = "universal_canister",
+    version = "0.9.0",
+    deps = LIB_DEPENDENCIES,
+)
+
+rust_canister(
+    name = "universal_canister",
+    srcs = glob(["src/*.rs"]),
+    aliases = ALIASES,
+    crate_features = ["heartbeat"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":interface.did",
+    deps = LIB_DEPENDENCIES + DEPENDENCIES,
+)
+
+genrule(
+    name = "universal_canister_serialized_module",
+    testonly = False,
+    srcs = [":universal_canister"],
+    outs = ["universal_canister.module"],
+    cmd_bash = " && ".join([
+        "{pigz} --decompress --no-name {input_wasm} --stdout > $@.unzip",
+        "{instrument_wasm} $@.unzip -a serialized-module > $@",
+    ])
+        .format(
+        input_wasm = "$(location :universal_canister)",
+        instrument_wasm = "$(location //rs/embedders:instrument-wasm)",
+        pigz = "$(location @pigz)",
+    ),
+    message = "Compiling universal canister with Wasmtime",
+    tools = [
+        "//rs/embedders:instrument-wasm",
+        "@pigz",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+rust_canister(
+    name = "universal_canister_no_heartbeat",
+    srcs = glob(["src/*.rs"]),
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":interface.did",
+    deps = LIB_DEPENDENCIES + DEPENDENCIES,
+)
+
+rust_test(
+    name = "universal_canister_test",
+    srcs = glob(["src/*.rs"]),
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = LIB_DEPENDENCIES + DEPENDENCIES + DEV_DEPENDENCIES,
+)

@@ -1,0 +1,31 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "canister_profiler",
+    srcs = [
+        "src/lib.rs",
+        "src/stats.rs",
+    ],
+    crate_name = "ic_canister_profiler",
+    version = "0.9.0",
+    deps =
+        select({
+            "@rules_rust//rust/platform:wasm32-unknown-unknown": ["@crate_index//:ic0"],
+            "//conditions:default": [],
+        }) + [
+            "@crate_index//:ic-metrics-encoder",
+        ],
+)
+
+rust_doc_test(
+    name = "canister_profiler_doc_test",
+    crate = ":canister_profiler",
+)
+
+rust_test(
+    name = "canister_profiler_test",
+    srcs = ["tests/tests.rs"],
+    deps = [":canister_profiler"],
+)

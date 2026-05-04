@@ -1,35 +1,40 @@
 //! The DKG public interface.
-use crate::artifact_pool::UnvalidatedArtifact;
+use crate::validation::ValidationError;
 use ic_types::{
-    artifact::{DkgMessageAttribute, DkgMessageId, PriorityFn},
-    consensus::dkg,
-    crypto::CryptoHashOf,
     Height,
+    consensus::dkg::{
+        self, DkgPayloadCreationError, DkgPayloadValidationFailure, InvalidDkgPayloadReason,
+    },
 };
-use std::time::Duration;
 
-/// An interface for distributed key generation.
-pub trait Dkg: Send {
-    fn on_state_change(&self, dkg_pool: &dyn DkgPool) -> ChangeSet;
+/// Dkg errors.
+pub type DkgPayloadValidationError =
+    ValidationError<InvalidDkgPayloadReason, DkgPayloadValidationFailure>;
+
+impl From<InvalidDkgPayloadReason> for DkgPayloadValidationError {
+    fn from(err: InvalidDkgPayloadReason) -> Self {
+        DkgPayloadValidationError::InvalidArtifact(err)
+    }
 }
 
-/// Methods related to gossiping DKG.
-pub trait DkgGossip: Send + Sync {
-    fn get_priority_function(
-        &self,
-        dkg_pool: &dyn DkgPool,
-    ) -> PriorityFn<DkgMessageId, DkgMessageAttribute>;
+impl From<DkgPayloadValidationFailure> for DkgPayloadValidationError {
+    fn from(err: DkgPayloadValidationFailure) -> Self {
+        DkgPayloadValidationError::ValidationFailed(err)
+    }
+}
+
+impl From<DkgPayloadCreationError> for DkgPayloadValidationError {
+    fn from(err: DkgPayloadCreationError) -> Self {
+        DkgPayloadValidationError::ValidationFailed(
+            DkgPayloadValidationFailure::PayloadCreationFailed(err),
+        )
+    }
 }
 
 /// The DkgPool is used to store messages that are exchanged between nodes in
 /// the process of executing dkg.
 pub trait DkgPool: Send + Sync {
     fn get_validated(&self) -> Box<dyn Iterator<Item = &dkg::Message> + '_>;
-    /// Returns the validated entries older than the age threshold
-    fn get_validated_older_than(
-        &self,
-        age_threshold: Duration,
-    ) -> Box<dyn Iterator<Item = &dkg::Message> + '_>;
     fn get_unvalidated(&self) -> Box<dyn Iterator<Item = &dkg::Message> + '_>;
     /// The start height of the currently _computed_ DKG interval; the invariant
     /// we want to maintain for all messages in validated and unvalidated
@@ -40,29 +45,19 @@ pub trait DkgPool: Send + Sync {
     fn validated_contains(&self, msg: &dkg::Message) -> bool;
 }
 
-/// Trait containing only mutable functions wrt. DkgPool
-pub trait MutableDkgPool: DkgPool {
-    /// Inserts a dkg message into the unvalidated part of the pool.
-    fn insert(&mut self, msg: UnvalidatedArtifact<dkg::Message>);
-
-    /// Applies a set of change actions to the pool.
-    fn apply_changes(&mut self, change_set: ChangeSet);
-}
-
-/// Various actions that can be perfomed in DKG.
-#[allow(clippy::large_enum_variant)]
+/// Various actions that can be performed in DKG.
 #[derive(Debug)]
 pub enum ChangeAction {
     AddToValidated(dkg::Message),
     MoveToValidated(dkg::Message),
     RemoveFromUnvalidated(dkg::Message),
-    HandleInvalid(CryptoHashOf<dkg::Message>, String),
+    HandleInvalid(dkg::DkgMessageId, String),
     Purge(Height),
 }
 
-pub type ChangeSet = Vec<ChangeAction>;
+pub type Mutations = Vec<ChangeAction>;
 
-impl From<ChangeAction> for ChangeSet {
+impl From<ChangeAction> for Mutations {
     fn from(change_action: ChangeAction) -> Self {
         vec![change_action]
     }

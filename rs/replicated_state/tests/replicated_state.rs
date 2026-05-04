@@ -1,764 +1,776 @@
+use assert_matches::assert_matches;
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_btc_types::NetworkSnakeCase;
-use ic_btc_types_internal::{
-    BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
-    CanisterGetSuccessorsRequestInitial, CanisterGetSuccessorsResponseComplete,
-    GetSuccessorsRequest, GetSuccessorsResponse,
+use ic_btc_replica_types::{
+    BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, BitcoinReject,
+    GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, Network, SendTransactionRequest,
 };
-use ic_ic00_types::{BitcoinGetSuccessorsResponse, Payload as _};
-use ic_registry_subnet_features::SubnetFeatures;
+use ic_error_types::RejectCode;
+use ic_management_canister_types_private::{
+    BitcoinGetSuccessorsResponse, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
+    Payload as _,
+};
+use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
-use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::BitcoinGetSuccessorsContext,
-    replicated_state::PeekableOutputIterator, replicated_state::ReplicatedStateMessageRouting,
-    BitcoinStateError, CanisterState, InputQueueType, ReplicatedState, SchedulerState, StateError,
-    SystemState,
+    CanisterState, ExecutionTask, IngressHistoryState, InputSource, ReplicatedState,
+    SchedulerState, StateError, SystemState,
+    canister_state::canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
+    canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
+    metadata_state::{
+        subnet_call_context_manager::{
+            BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, InstallCodeCallId,
+            StopCanisterCall, SubnetCallContext,
+        },
+        testing::NetworkTopologyTesting,
+    },
+    replicated_state::{
+        MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting,
+        testing::ReplicatedStateTesting,
+    },
+    testing::{CanisterQueuesTesting, FakeDropMessageMetrics, SystemStateTesting},
 };
-use ic_test_utilities::mock_time;
-use ic_test_utilities::state::{
-    arb_replicated_state_with_queues, get_running_canister, register_callback,
+use ic_test_utilities_state::{ExecutionStateBuilder, arb_replicated_state_with_output_queues};
+use ic_test_utilities_types::ids::{SUBNET_1, canister_test_id, message_test_id, user_test_id};
+use ic_test_utilities_types::messages::IngressBuilder;
+use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
+use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::messages::{
+    CallbackId, CanisterCall, CanisterMessage, MAX_RESPONSE_COUNT_BYTES, Payload, Refund,
+    RejectContext, Request, RequestOrResponse, Response, SubnetMessage,
 };
-use ic_test_utilities::types::ids::canister_test_id;
-use ic_test_utilities::types::{
-    ids::{subnet_test_id, user_test_id},
-    messages::{RequestBuilder, ResponseBuilder},
-};
-use ic_types::{
-    messages::{CallbackId, Payload, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES},
-    CountBytes, Cycles,
-};
+use ic_types::time::{CoarseTime, UNIX_EPOCH};
+use ic_types::xnet::StreamIndex;
+use ic_types::{CountBytes, MemoryAllocation, SnapshotId, Time};
+use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
+use maplit::btreemap;
 use proptest::prelude::*;
-use std::str::FromStr;
+use std::collections::{BTreeMap, VecDeque};
+use std::mem::size_of;
+use std::sync::Arc;
+use strum::IntoEnumIterator;
 
 const SUBNET_ID: SubnetId = SubnetId::new(PrincipalId::new(29, [0xfc; 29]));
 const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
 const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(13);
+const SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY: i64 = i64::MAX / 2;
+const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
 
-const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
-
-const MAX_CANISTER_MEMORY_SIZE: NumBytes = NumBytes::new(u64::MAX / 2);
-const SUBNET_AVAILABLE_MEMORY: i64 = i64::MAX / 2;
-
-fn replicated_state_test<F, R>(f: F) -> R
-where
-    F: FnOnce(ReplicatedState) -> R,
-{
-    let scheduler_state = SchedulerState::default();
-    let system_state = SystemState::new_running(
-        CANISTER_ID,
-        user_test_id(24).get(),
-        INITIAL_CYCLES,
-        NumSeconds::from(100_000),
-    );
-    let canister_state = CanisterState::new(system_state, None, scheduler_state);
-    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
-    state.put_canister_state(canister_state);
-
-    f(state)
+fn request_from(canister_id: CanisterId) -> Request {
+    RequestBuilder::default()
+        .sender(canister_id)
+        .receiver(CANISTER_ID)
+        .build()
 }
 
-fn assert_total_memory_taken(queues_memory_usage: usize, state: &ReplicatedState) {
-    assert_eq!(queues_memory_usage as u64, state.total_memory_taken().get());
+fn best_effort_request_from(canister_id: CanisterId) -> Request {
+    RequestBuilder::default()
+        .sender(canister_id)
+        .receiver(CANISTER_ID)
+        .deadline(SOME_DEADLINE)
+        .build()
 }
 
-fn assert_total_memory_taken_with_messages(queues_memory_usage: usize, state: &ReplicatedState) {
+fn request_to(canister_id: CanisterId) -> Request {
+    RequestBuilder::default()
+        .sender(CANISTER_ID)
+        .receiver(canister_id)
+        .build()
+}
+
+fn best_effort_request_to(canister_id: CanisterId) -> Request {
+    RequestBuilder::default()
+        .sender(CANISTER_ID)
+        .receiver(canister_id)
+        .deadline(SOME_DEADLINE)
+        .build()
+}
+
+fn response_from(canister_id: CanisterId) -> Response {
+    ResponseBuilder::default()
+        .respondent(canister_id)
+        .originator(CANISTER_ID)
+        .build()
+}
+
+fn response_to(canister_id: CanisterId) -> Response {
+    ResponseBuilder::default()
+        .respondent(CANISTER_ID)
+        .originator(canister_id)
+        .build()
+}
+
+fn best_effort_response_to(canister_id: CanisterId) -> Response {
+    ResponseBuilder::default()
+        .respondent(CANISTER_ID)
+        .originator(canister_id)
+        .deadline(SOME_DEADLINE)
+        .build()
+}
+
+fn time_out_messages(state: &mut ReplicatedState) -> usize {
+    let metrics = FakeDropMessageMetrics::default();
+    state.time_out_messages(&metrics);
+    metrics.timed_out_messages.borrow().values().sum()
+}
+
+/// Fixture using `SUBNET_ID` as its own subnet ID and `CANISTER_ID` as the ID
+/// for the model canister used to send requests (responses) to and from.
+/// Such messages are generated by the functions `request_from` et. al.
+struct ReplicatedStateFixture {
+    state: ReplicatedState,
+}
+
+impl ReplicatedStateFixture {
+    fn new() -> ReplicatedStateFixture {
+        Self::with_canisters(&[CANISTER_ID])
+    }
+
+    pub fn with_canisters(canister_ids: &[CanisterId]) -> ReplicatedStateFixture {
+        Self::with_wasm_metadata(canister_ids, WasmMetadata::new(BTreeMap::new()))
+    }
+
+    pub fn with_wasm_metadata(
+        canister_ids: &[CanisterId],
+        wasm_metadata: WasmMetadata,
+    ) -> ReplicatedStateFixture {
+        let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+        for canister_id in canister_ids {
+            let scheduler_state = SchedulerState::default();
+            let system_state = SystemState::new_running_for_testing(
+                *canister_id,
+                user_test_id(24).get(),
+                Cycles::new(1 << 36),
+                NumSeconds::from(100_000),
+            );
+            let execution_state = ExecutionStateBuilder::default()
+                .with_wasm_metadata(wasm_metadata.clone())
+                .build();
+            state.put_canister_state(CanisterState::new(
+                system_state,
+                Some(execution_state),
+                scheduler_state,
+                CanisterSnapshots::default(),
+            ));
+        }
+        ReplicatedStateFixture { state }
+    }
+
+    fn push_input(
+        &mut self,
+        msg: RequestOrResponse,
+    ) -> Result<bool, (StateError, RequestOrResponse)> {
+        self.state.push_input(
+            msg,
+            &mut SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY.clone(),
+        )
+    }
+
+    fn pop_input(&mut self) -> Option<CanisterMessage> {
+        self.state
+            .canister_state_make_mut(&CANISTER_ID)
+            .unwrap()
+            .pop_input()
+    }
+
+    fn push_output_request(
+        &mut self,
+        request: Request,
+        time: Time,
+    ) -> Result<(), (StateError, Arc<Request>)> {
+        self.state
+            .canister_state_make_mut(&CANISTER_ID)
+            .unwrap()
+            .push_output_request(request.into(), time)
+    }
+
+    fn push_output_response(&mut self, response: Response) {
+        self.state
+            .canister_state_make_mut(&CANISTER_ID)
+            .unwrap()
+            .push_output_response(response.into());
+    }
+
+    fn pop_output(&mut self) -> Option<RequestOrResponse> {
+        self.state
+            .canister_state_make_mut(&CANISTER_ID)
+            .unwrap()
+            .output_into_iter()
+            .pop()
+    }
+
+    /// Push the message to a stream.
+    fn push_to_stream(&mut self, msgs: Vec<RequestOrResponse>) {
+        let mut streams = self.state.take_streams();
+        for msg in msgs.into_iter() {
+            streams.entry(SUBNET_ID).or_default().push(msg.into());
+        }
+        self.state.put_streams(streams);
+    }
+
+    /// Discard the next `count` messages from the same stream as `push_to_stream` uses.
+    fn discard_from_stream(&mut self, count: u64) {
+        let mut streams = self.state.take_streams();
+        let stream = streams.entry(SUBNET_ID).or_default();
+        let old_begin = stream.messages_begin();
+        stream.discard_messages_before(StreamIndex::from(old_begin.get() + count), &vec![].into());
+        self.state.put_streams(streams);
+    }
+
+    fn stop_canister(&mut self) {
+        let mut msg = CanisterCall::Ingress(Arc::new(
+            IngressBuilder::new().method_name("stop_canister").build(),
+        ));
+        let call_id = self
+            .state
+            .metadata
+            .subnet_call_context_manager
+            .push_stop_canister_call(StopCanisterCall {
+                call: msg.clone(),
+                effective_canister_id: CANISTER_ID,
+                time: self.state.time(),
+            });
+        let canister = self.state.canister_state_make_mut(&CANISTER_ID).unwrap();
+        canister.system_state.begin_stopping(&mut msg, call_id);
+        assert!(canister.system_state.try_stop_canister(|_| false).0);
+    }
+
+    fn memory_taken(&self) -> MemoryTaken {
+        self.state.memory_taken()
+    }
+
+    fn guaranteed_response_message_memory_taken(&self) -> NumBytes {
+        self.state.guaranteed_response_message_memory_taken()
+    }
+
+    fn best_effort_message_memory_taken(&self) -> NumBytes {
+        self.state.best_effort_message_memory_taken()
+    }
+
+    fn remote_subnet_input_schedule(&self, canister: &CanisterId) -> &VecDeque<CanisterId> {
+        self.state
+            .canister_state(canister)
+            .unwrap()
+            .system_state
+            .queues()
+            .remote_sender_schedule()
+    }
+
+    fn local_subnet_input_schedule(&self, canister: &CanisterId) -> &VecDeque<CanisterId> {
+        self.state
+            .canister_state(canister)
+            .unwrap()
+            .system_state
+            .queues()
+            .local_sender_schedule()
+    }
+
+    fn time_out_messages(&mut self) -> usize {
+        time_out_messages(&mut self.state)
+    }
+
+    fn enforce_best_effort_message_limit(&mut self, limit: NumBytes) -> (usize, NumBytes) {
+        let metrics = FakeDropMessageMetrics::default();
+        self.state
+            .enforce_best_effort_message_limit(limit, &metrics);
+        let shed_messages = metrics.shed_messages.borrow().values().sum();
+        let shed_message_bytes: usize = metrics.shed_message_bytes.borrow().values().sum();
+        (shed_messages, (shed_message_bytes as u64).into())
+    }
+
+    fn canister_balance(&self, canister_id: &CanisterId) -> Option<Cycles> {
+        self.state
+            .canister_state(canister_id)?
+            .system_state
+            .balance()
+            .into()
+    }
+
+    fn take_all_refunds(&mut self) -> Vec<Refund> {
+        let mut refunds = Vec::with_capacity(self.state.refunds().len());
+        self.state.take_refunds(|refund| {
+            refunds.push(*refund);
+            true
+        });
+        assert!(self.state.refunds().is_empty());
+        refunds
+    }
+}
+
+fn assert_execution_memory_taken(total_memory_usage: usize, fixture: &ReplicatedStateFixture) {
     assert_eq!(
-        queues_memory_usage as u64,
-        state.total_memory_taken_with_messages().get()
+        total_memory_usage as u64,
+        fixture.memory_taken().execution().get()
     );
 }
 
-fn assert_message_memory_taken(queues_memory_usage: usize, state: &ReplicatedState) {
+fn assert_message_memory_taken(
+    guaranteed_response_memory_usage: usize,
+    best_effort_memory_usage: usize,
+    fixture: &ReplicatedStateFixture,
+) {
+    let guaranteed_response_memory_usage = guaranteed_response_memory_usage as u64;
+    let best_effort_memory_usage = best_effort_memory_usage as u64;
     assert_eq!(
-        queues_memory_usage as u64,
-        state.message_memory_taken().get()
+        guaranteed_response_memory_usage,
+        fixture.memory_taken().guaranteed_response_messages().get()
+    );
+    assert_eq!(
+        guaranteed_response_memory_usage,
+        fixture.guaranteed_response_message_memory_taken().get()
+    );
+    assert_eq!(
+        best_effort_memory_usage,
+        fixture.memory_taken().best_effort_messages().get()
+    );
+    assert_eq!(
+        best_effort_memory_usage,
+        fixture.best_effort_message_memory_taken().get()
+    );
+    assert_eq!(
+        guaranteed_response_memory_usage + best_effort_memory_usage,
+        fixture.memory_taken().messages_total().get()
     );
 }
 
-fn assert_subnet_available_memory(
-    initial_available_memory: i64,
-    queues_memory_usage: usize,
+fn assert_canister_history_memory_taken(
+    canister_history_memory_usage: usize,
+    fixture: &ReplicatedStateFixture,
+) {
+    assert_eq!(
+        canister_history_memory_usage as u64,
+        fixture.memory_taken().canister_history().get(),
+    );
+}
+
+fn assert_wasm_custom_sections_memory_taken(
+    wasm_custom_sections_memory_usage: u64,
+    fixture: &ReplicatedStateFixture,
+) {
+    assert_eq!(
+        wasm_custom_sections_memory_usage,
+        fixture.memory_taken().wasm_custom_sections().get()
+    );
+}
+
+fn assert_subnet_available_guaranteed_response_memory(
+    initial_available_guaranteed_response_memory: i64,
+    guaranteed_response_memory_usage: usize,
     actual: i64,
 ) {
     assert_eq!(
-        initial_available_memory - queues_memory_usage as i64,
+        initial_available_guaranteed_response_memory - guaranteed_response_memory_usage as i64,
         actual
     );
 }
 
 #[test]
-fn total_memory_taken_by_canister_queues() {
-    replicated_state_test(|mut state| {
-        let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
+fn memory_taken_by_canister_queues() {
+    let mut fixture = ReplicatedStateFixture::new();
+    let mut subnet_available_guaranteed_response_memory =
+        SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY;
 
-        // Zero memory used initially.
-        assert_eq!(0, state.total_memory_taken().get());
+    // Zero memory used initially.
+    assert_execution_memory_taken(0, &fixture);
+    assert_message_memory_taken(0, 0, &fixture);
+    assert_canister_history_memory_taken(0, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
 
-        // Push a request into a canister input queue.
-        state
+    // Push a request into a canister input queue.
+    assert!(
+        fixture
+            .state
             .push_input(
-                RequestBuilder::default()
-                    .sender(OTHER_CANISTER_ID)
-                    .receiver(CANISTER_ID)
-                    .build()
-                    .into(),
-                MAX_CANISTER_MEMORY_SIZE,
-                &mut subnet_available_memory,
+                request_from(OTHER_CANISTER_ID).into(),
+                &mut subnet_available_guaranteed_response_memory,
             )
-            .unwrap();
-
-        // Reserved memory for one response.
-        assert_total_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
-        assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &state);
-        assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
-        assert_subnet_available_memory(
-            SUBNET_AVAILABLE_MEMORY,
-            MAX_RESPONSE_COUNT_BYTES,
-            subnet_available_memory,
-        );
-
-        assert!(state
-            .canister_state_mut(&CANISTER_ID)
             .unwrap()
-            .pop_input()
-            .is_some());
+    );
 
-        // Unchanged memory usage.
-        assert_total_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
-        assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &state);
-        assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
+    // Reserved memory for one response.
+    assert_execution_memory_taken(0, &fixture);
+    assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, 0, &fixture);
+    assert_canister_history_memory_taken(0, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
+    assert_subnet_available_guaranteed_response_memory(
+        SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY,
+        MAX_RESPONSE_COUNT_BYTES,
+        subnet_available_guaranteed_response_memory,
+    );
 
-        // Push a response into the output queue.
-        let response = ResponseBuilder::default()
-            .respondent(CANISTER_ID)
-            .originator(OTHER_CANISTER_ID)
-            .build();
-        state
-            .canister_state_mut(&CANISTER_ID)
+    // Pop input request.
+    assert!(fixture.pop_input().is_some());
+
+    // Unchanged memory usage.
+    assert_execution_memory_taken(0, &fixture);
+    assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, 0, &fixture);
+    assert_canister_history_memory_taken(0, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
+
+    // Push a response into the output queue.
+    let response = response_to(OTHER_CANISTER_ID);
+    fixture.push_output_response(response.clone());
+
+    // Memory used by response only.
+    assert_execution_memory_taken(0, &fixture);
+    assert_message_memory_taken(response.count_bytes(), 0, &fixture);
+    assert_canister_history_memory_taken(0, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
+
+    // Push a best-effort request into a canister input queue.
+    let request = best_effort_request_from(OTHER_CANISTER_ID);
+    assert!(
+        fixture
+            .state
+            .push_input(
+                request.clone().into(),
+                &mut subnet_available_guaranteed_response_memory
+            )
             .unwrap()
-            .push_output_response(response.clone().into());
+    );
 
-        // Memory used by response only.
-        assert_total_memory_taken(response.count_bytes(), &state);
-        assert_total_memory_taken_with_messages(response.count_bytes(), &state);
-        assert_message_memory_taken(response.count_bytes(), &state);
-    })
+    // Best-effort memory used by the response (no reservation).
+    assert_execution_memory_taken(0, &fixture);
+    assert_message_memory_taken(response.count_bytes(), request.count_bytes(), &fixture);
+    assert_canister_history_memory_taken(0, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
+    assert_subnet_available_guaranteed_response_memory(
+        SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY,
+        MAX_RESPONSE_COUNT_BYTES,
+        subnet_available_guaranteed_response_memory,
+    );
+
+    // Pop input request.
+    assert!(fixture.pop_input().is_some());
+
+    // Zero best-effort memory usage.
+    assert_execution_memory_taken(0, &fixture);
+    assert_message_memory_taken(response.count_bytes(), 0, &fixture);
+    assert_canister_history_memory_taken(0, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
 }
 
 #[test]
-fn total_memory_taken_by_subnet_queues() {
-    replicated_state_test(|mut state| {
-        let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
+fn memory_taken_by_subnet_queues() {
+    let mut fixture = ReplicatedStateFixture::new();
+    let mut subnet_available_guaranteed_response_memory =
+        SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY;
 
-        // Zero memory used initially.
-        assert_eq!(0, state.total_memory_taken().get());
+    // Zero memory used initially.
+    assert_execution_memory_taken(0, &fixture);
+    assert_message_memory_taken(0, 0, &fixture);
+    assert_canister_history_memory_taken(0, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
 
-        // Push a request into the subnet input queues. Should ignore the
-        // `max_canister_memory_size` argument.
-        state
+    // Push a guaranteed resoibse request into the subnet input queues.
+    assert!(
+        fixture
+            .state
             .push_input(
-                RequestBuilder::default()
-                    .sender(CANISTER_ID)
-                    .receiver(SUBNET_ID.into())
-                    .build()
-                    .into(),
-                0.into(),
-                &mut subnet_available_memory,
+                request_to(SUBNET_ID.into()).into(),
+                &mut subnet_available_guaranteed_response_memory,
             )
-            .unwrap();
+            .unwrap()
+    );
 
-        // Reserved memory for one response.
-        assert_total_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
-        assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &state);
-        assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
-        assert_subnet_available_memory(
-            SUBNET_AVAILABLE_MEMORY,
-            MAX_RESPONSE_COUNT_BYTES,
-            subnet_available_memory,
-        );
+    // Reserved memory for one response.
+    assert_execution_memory_taken(0, &fixture);
+    assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, 0, &fixture);
+    assert_canister_history_memory_taken(0, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
+    assert_subnet_available_guaranteed_response_memory(
+        SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY,
+        MAX_RESPONSE_COUNT_BYTES,
+        subnet_available_guaranteed_response_memory,
+    );
 
-        assert!(state.pop_subnet_input().is_some());
+    // Pop subnet input request.
+    assert!(fixture.state.pop_subnet_input().is_some());
 
-        // Unchanged memory usage.
-        assert_total_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
-        assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &state);
-        assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
+    // Unchanged memory usage.
+    assert_execution_memory_taken(0, &fixture);
+    assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, 0, &fixture);
+    assert_canister_history_memory_taken(0, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
 
-        // Push a response into the subnet output queues.
-        let response = ResponseBuilder::default()
-            .respondent(SUBNET_ID.into())
-            .originator(CANISTER_ID)
-            .build();
-        state.push_subnet_output_response(response.clone().into());
+    // Push a response into the subnet output queues.
+    let response = response_from(SUBNET_ID.into());
+    fixture
+        .state
+        .push_subnet_output_response(response.clone().into());
 
-        // Memory used by response only.
-        assert_total_memory_taken(response.count_bytes(), &state);
-        assert_total_memory_taken_with_messages(response.count_bytes(), &state);
-        assert_message_memory_taken(response.count_bytes(), &state);
-    })
-}
+    // Memory used by response only.
+    assert_execution_memory_taken(0, &fixture);
+    assert_message_memory_taken(response.count_bytes(), 0, &fixture);
+    assert_canister_history_memory_taken(0, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
 
-#[test]
-fn total_memory_taken_by_stream_responses() {
-    replicated_state_test(|mut state| {
-        // Zero memory used initially.
-        assert_eq!(0, state.total_memory_taken().get());
-
-        // Push a request and a response into a stream.
-        let mut streams = state.take_streams();
-        streams.push(
-            SUBNET_ID,
-            RequestBuilder::default()
-                .sender(CANISTER_ID)
-                .receiver(OTHER_CANISTER_ID)
-                .build()
-                .into(),
-        );
-        let response: RequestOrResponse = ResponseBuilder::default()
-            .respondent(CANISTER_ID)
-            .originator(OTHER_CANISTER_ID)
-            .build()
-            .into();
-        streams.push(SUBNET_ID, response.clone());
-        state.put_streams(streams);
-
-        // Memory only used by response, not request.
-        assert_total_memory_taken(response.count_bytes(), &state);
-        assert_total_memory_taken_with_messages(response.count_bytes(), &state);
-        assert_message_memory_taken(response.count_bytes(), &state);
-    })
-}
-
-#[test]
-fn system_subnet_total_memory_taken_by_canister_queues() {
-    replicated_state_test(|mut state| {
-        // Make it a system subnet.
-        state.metadata.own_subnet_type = SubnetType::System;
-
-        let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
-
-        // Zero memory used initially.
-        assert_eq!(0, state.total_memory_taken().get());
-
-        // Push a request into a canister input queue.
-        state
+    // Push a best-effort request into the subnet input queues.
+    let request = best_effort_request_to(SUBNET_ID.into());
+    assert!(
+        fixture
+            .state
             .push_input(
-                RequestBuilder::default()
-                    .sender(OTHER_CANISTER_ID)
-                    .receiver(CANISTER_ID)
-                    .build()
-                    .into(),
-                MAX_CANISTER_MEMORY_SIZE,
-                &mut subnet_available_memory,
+                request.clone().into(),
+                &mut subnet_available_guaranteed_response_memory
             )
-            .unwrap();
+            .unwrap()
+    );
 
-        // System subnets don't account for messages in `total_memory_taken()`.
-        assert_total_memory_taken(0, &state);
-        // But do in other `memory_taken()` methods.
-        assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &state);
-        assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
-        // And `&mut subnet_available_memory` is updated by the push.
-        assert_subnet_available_memory(
-            SUBNET_AVAILABLE_MEMORY,
-            MAX_RESPONSE_COUNT_BYTES,
-            subnet_available_memory,
-        );
-    })
+    // Best-effort memory used by the response (no reservation).
+    assert_execution_memory_taken(0, &fixture);
+    assert_message_memory_taken(response.count_bytes(), request.count_bytes(), &fixture);
+    assert_canister_history_memory_taken(0, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
+    assert_subnet_available_guaranteed_response_memory(
+        SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY,
+        MAX_RESPONSE_COUNT_BYTES,
+        subnet_available_guaranteed_response_memory,
+    );
+
+    // Pop subnet input request.
+    assert!(fixture.state.pop_subnet_input().is_some());
+
+    // Zero best-effort memory usage.
+    assert_execution_memory_taken(0, &fixture);
+    assert_message_memory_taken(response.count_bytes(), 0, &fixture);
+    assert_canister_history_memory_taken(0, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
 }
 
 #[test]
-fn system_subnet_total_memory_taken_by_subnet_queues() {
-    replicated_state_test(|mut state| {
-        // Make it a system subnet.
-        state.metadata.own_subnet_type = SubnetType::System;
+fn memory_taken_by_wasm_custom_sections() {
+    let mut custom_sections: BTreeMap<String, CustomSection> = BTreeMap::new();
+    custom_sections.insert(
+        String::from("candid"),
+        CustomSection::new(CustomSectionType::Private, vec![0; 10 * 1024]),
+    );
+    let wasm_metadata = WasmMetadata::new(custom_sections);
+    let wasm_metadata_memory = wasm_metadata.memory_usage();
 
-        let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
+    let mut fixture = ReplicatedStateFixture::with_wasm_metadata(&[CANISTER_ID], wasm_metadata);
+    let mut subnet_available_guaranteed_response_memory =
+        SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY;
 
-        // Zero memory used initially.
-        assert_eq!(0, state.total_memory_taken().get());
+    // Only memory for wasm custom sections is used initially.
+    assert_execution_memory_taken(wasm_metadata_memory.get() as usize, &fixture);
+    assert_wasm_custom_sections_memory_taken(wasm_metadata_memory.get(), &fixture);
 
-        // Push a request into the subnet input queues. Should ignore the
-        // `max_canister_memory_size` argument.
-        state
+    // Push a request into a canister input queue.
+    assert!(
+        fixture
+            .state
             .push_input(
-                RequestBuilder::default()
-                    .sender(CANISTER_ID)
-                    .receiver(SUBNET_ID.into())
-                    .build()
-                    .into(),
-                0.into(),
-                &mut subnet_available_memory,
+                request_from(OTHER_CANISTER_ID).into(),
+                &mut subnet_available_guaranteed_response_memory,
             )
-            .unwrap();
+            .unwrap()
+    );
 
-        // System subnets don't account for subnet queue messages in `total_memory_taken()`.
-        assert_total_memory_taken(0, &state);
-        // But do in other `memory_taken()` methods.
-        assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &state);
-        assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
-        // And `&mut subnet_available_memory` is updated by the push.
-        assert_subnet_available_memory(
-            SUBNET_AVAILABLE_MEMORY,
-            MAX_RESPONSE_COUNT_BYTES,
-            subnet_available_memory,
-        );
-    })
+    // Reserved memory for one response.
+    assert_execution_memory_taken(wasm_metadata_memory.get() as usize, &fixture);
+    assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, 0, &fixture);
+    assert_canister_history_memory_taken(0, &fixture);
+    assert_wasm_custom_sections_memory_taken(wasm_metadata_memory.get(), &fixture);
+    assert_subnet_available_guaranteed_response_memory(
+        SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY,
+        MAX_RESPONSE_COUNT_BYTES,
+        subnet_available_guaranteed_response_memory,
+    );
 }
 
 #[test]
-fn system_subnet_total_memory_taken_by_stream_responses() {
-    replicated_state_test(|mut state| {
-        // Make it a system subnet.
-        state.metadata.own_subnet_type = SubnetType::System;
+fn memory_taken_by_canister_history() {
+    let mut fixture = ReplicatedStateFixture::with_wasm_metadata(
+        &[CANISTER_ID],
+        WasmMetadata::new(BTreeMap::new()),
+    );
 
-        // Zero memory used initially.
-        assert_eq!(0, state.total_memory_taken().get());
+    // No memory is used initially.
+    assert_execution_memory_taken(0, &fixture);
+    assert_message_memory_taken(0, 0, &fixture);
+    assert_canister_history_memory_taken(0, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
 
-        // Push a request and a response into a stream.
-        let mut streams = state.take_streams();
-        streams.push(
-            SUBNET_ID,
-            RequestBuilder::default()
-                .sender(CANISTER_ID)
-                .receiver(OTHER_CANISTER_ID)
-                .build()
-                .into(),
-        );
-        let response: RequestOrResponse = ResponseBuilder::default()
-            .respondent(CANISTER_ID)
-            .originator(OTHER_CANISTER_ID)
-            .build()
-            .into();
-        streams.push(SUBNET_ID, response.clone());
-        state.put_streams(streams);
+    // Memory for two canister changes.
+    let canister_history_memory: usize =
+        2 * (size_of::<CanisterChange>() + 2 * size_of::<PrincipalId>());
 
-        // System subnets don't account for stream responses in `total_memory_taken()`.
-        assert_total_memory_taken(0, &state);
-        // But do in other `memory_taken()` methods.
-        assert_total_memory_taken_with_messages(response.count_bytes(), &state);
-        assert_message_memory_taken(response.count_bytes(), &state);
-    })
+    // Push two canister changes into canister history.
+    let canister_state = fixture.state.canister_state_make_mut(&CANISTER_ID).unwrap();
+    canister_state.system_state.add_canister_change(
+        Time::from_nanos_since_unix_epoch(0),
+        CanisterChangeOrigin::from_user(user_test_id(42).get()),
+        CanisterChangeDetails::canister_creation(
+            vec![canister_test_id(777).get(), user_test_id(42).get()],
+            None,
+        ),
+    );
+    canister_state.system_state.add_canister_change(
+        Time::from_nanos_since_unix_epoch(16),
+        CanisterChangeOrigin::from_user(user_test_id(123).get()),
+        CanisterChangeDetails::controllers_change(vec![
+            canister_test_id(0).get(),
+            canister_test_id(1).get(),
+        ]),
+    );
+    assert_execution_memory_taken(canister_history_memory, &fixture);
+    assert_canister_history_memory_taken(canister_history_memory, &fixture);
+
+    // Test small fixed memory allocation.
+    let canister_state = fixture.state.canister_state_make_mut(&CANISTER_ID).unwrap();
+    canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(2));
+    assert_execution_memory_taken(canister_history_memory, &fixture);
+    assert_canister_history_memory_taken(canister_history_memory, &fixture);
+
+    // Test large fixed memory allocation.
+    let canister_state = fixture.state.canister_state_make_mut(&CANISTER_ID).unwrap();
+    canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(888));
+    assert_execution_memory_taken(888, &fixture);
+    assert_canister_history_memory_taken(canister_history_memory, &fixture);
+
+    // Reset canister memory allocation.
+    let canister_state = fixture.state.canister_state_make_mut(&CANISTER_ID).unwrap();
+    canister_state.system_state.memory_allocation = MemoryAllocation::default();
+
+    // Test a system subnet.
+    fixture.state.metadata.own_subnet_type = SubnetType::System;
+
+    assert_execution_memory_taken(canister_history_memory, &fixture);
+    assert_canister_history_memory_taken(canister_history_memory, &fixture);
 }
 
 #[test]
-fn push_subnet_queues_input_respects_subnet_available_memory() {
-    replicated_state_test(|mut state| {
-        let initial_available_memory = MAX_RESPONSE_COUNT_BYTES as i64;
-        let mut subnet_available_memory = initial_available_memory;
+fn push_subnet_queues_input_respects_subnet_available_guaranteed_response_memory() {
+    let mut fixture = ReplicatedStateFixture::new();
+    let initial_available_guaranteed_response_memory = MAX_RESPONSE_COUNT_BYTES as i64;
+    let mut subnet_available_guaranteed_response_memory =
+        initial_available_guaranteed_response_memory;
 
-        // Zero memory used initially.
-        assert_eq!(0, state.total_memory_taken().get());
+    // Zero memory used initially.
+    assert_execution_memory_taken(0, &fixture);
+    assert_message_memory_taken(0, 0, &fixture);
+    assert_canister_history_memory_taken(0, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
 
-        // Push a request into the subnet input queues. Should ignore the
-        // `max_canister_memory_size` argument.
-        state
+    // Push a guarnteed response request into the subnet input queues.
+    assert!(
+        fixture
+            .state
             .push_input(
-                RequestBuilder::default()
-                    .sender(OTHER_CANISTER_ID)
-                    .receiver(SUBNET_ID.into())
-                    .build()
-                    .into(),
-                0.into(),
-                &mut subnet_available_memory,
+                request_to(SUBNET_ID.into()).into(),
+                &mut subnet_available_guaranteed_response_memory,
             )
-            .unwrap();
+            .unwrap()
+    );
 
-        // Reserved memory for one response.
-        assert_total_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
-        assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &state);
-        assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &state);
-        assert_subnet_available_memory(
-            initial_available_memory,
-            MAX_RESPONSE_COUNT_BYTES,
-            subnet_available_memory,
-        );
+    // Reserved memory for one response.
+    assert_execution_memory_taken(0, &fixture);
+    assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, 0, &fixture);
+    assert_canister_history_memory_taken(0, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
+    assert_subnet_available_guaranteed_response_memory(
+        initial_available_guaranteed_response_memory,
+        MAX_RESPONSE_COUNT_BYTES,
+        subnet_available_guaranteed_response_memory,
+    );
 
-        // Push a second request into the subnet input queues.
-        let request: RequestOrResponse = RequestBuilder::default()
-            .sender(CANISTER_ID)
-            .receiver(SUBNET_ID.into())
-            .build()
-            .into();
-        let res = state.push_input(request.clone(), 0.into(), &mut subnet_available_memory);
+    // Push a second guaranteed response request into the subnet input queues.
+    let res = fixture.state.push_input(
+        request_to(SUBNET_ID.into()).into(),
+        &mut subnet_available_guaranteed_response_memory,
+    );
 
-        // No more memory for a second request.
-        assert_eq!(
-            Err((
-                StateError::OutOfMemory {
-                    requested: (MAX_RESPONSE_COUNT_BYTES as u64).into(),
-                    available: 0.into()
-                },
-                request
-            )),
-            res
-        );
+    // No more memory for a second guaranteed response request.
+    assert_eq!(
+        Err((
+            StateError::OutOfMemory {
+                requested: (MAX_RESPONSE_COUNT_BYTES as u64).into(),
+                available: 0.into()
+            },
+            request_to(SUBNET_ID.into()).into(),
+        )),
+        res
+    );
 
-        // Unchanged memory usage.
-        assert_eq!(
-            MAX_RESPONSE_COUNT_BYTES as u64,
-            state.total_memory_taken().get()
-        );
-        assert_eq!(0, subnet_available_memory);
-    })
+    // Unchanged memory usage.
+    assert_execution_memory_taken(0, &fixture);
+    assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, 0, &fixture);
+    assert_canister_history_memory_taken(0, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
+    assert_eq!(0, subnet_available_guaranteed_response_memory);
+
+    // Push a best-effort request into the subnet input queues.
+    let request = best_effort_request_to(SUBNET_ID.into());
+    assert!(
+        fixture
+            .state
+            .push_input(
+                request.clone().into(),
+                &mut subnet_available_guaranteed_response_memory
+            )
+            .unwrap()
+    );
+
+    // Best-effort memory consumed by the request; otherwise, memory usage unchanged.
+    assert_execution_memory_taken(0, &fixture);
+    assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, request.count_bytes(), &fixture);
+    assert_canister_history_memory_taken(0, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
+    assert_eq!(0, subnet_available_guaranteed_response_memory);
 }
 
 #[test]
 fn push_input_queues_respects_local_remote_subnet() {
-    // Local and remote IDs.
-    let local_canister_id = CanisterId::from_u64(1);
-    let local_subnet_id = subnet_test_id(2);
-    let remote_canister_id = CanisterId::from_u64(0x101);
-
-    // Create replicated state.
-    let scheduler_state = SchedulerState::default();
-    let system_state = SystemState::new_running(
-        local_canister_id,
-        user_test_id(24).get(),
-        INITIAL_CYCLES,
-        NumSeconds::from(100_000),
-    );
-    let canister_state = CanisterState::new(system_state, None, scheduler_state);
-    let mut state = ReplicatedState::new(local_subnet_id, SubnetType::Application);
-    state.put_canister_state(canister_state);
+    let mut fixture = ReplicatedStateFixture::new();
 
     // Assert the queues are empty.
-    assert_eq!(
-        state
-            .canister_state_mut(&local_canister_id)
-            .unwrap()
-            .system_state
-            .queues_mut()
-            .pop_input(),
-        None
-    );
-    assert_eq!(state.canister_state(&remote_canister_id), None);
+    assert!(fixture.pop_input().is_none());
+    assert!(fixture.state.canister_state(&OTHER_CANISTER_ID).is_none());
 
     // Push message from the remote canister, should be in the remote subnet
     // queue.
-    state
-        .push_input(
-            RequestBuilder::default()
-                .sender(remote_canister_id)
-                .receiver(local_canister_id)
-                .build()
-                .into(),
-            (u64::MAX / 2).into(),
-            &mut (i64::MAX / 2),
-        )
-        .unwrap();
-    assert_eq!(
-        state
-            .canister_state(&local_canister_id)
+    assert!(
+        fixture
+            .push_input(request_from(OTHER_CANISTER_ID).into())
             .unwrap()
-            .system_state
-            .queues()
-            .get_remote_subnet_input_schedule()
-            .len(),
-        1
     );
+    assert_eq!(fixture.remote_subnet_input_schedule(&CANISTER_ID).len(), 1);
 
     // Push message from the local canister, should be in the local subnet queue.
-    state
-        .push_input(
-            RequestBuilder::default()
-                .sender(local_canister_id)
-                .receiver(local_canister_id)
-                .build()
-                .into(),
-            (u64::MAX / 2).into(),
-            &mut (i64::MAX / 2),
-        )
-        .unwrap();
-    assert_eq!(
-        state
-            .canister_state(&local_canister_id)
+    assert!(
+        fixture
+            .push_input(request_from(CANISTER_ID).into())
             .unwrap()
-            .system_state
-            .queues()
-            .get_local_subnet_input_schedule()
-            .len(),
-        1
     );
+    assert_eq!(fixture.local_subnet_input_schedule(&CANISTER_ID).len(), 1);
 
     // Push message from the local subnet, should be in the local subnet queue.
-    state
-        .push_input(
-            RequestBuilder::default()
-                .sender(CanisterId::new(local_subnet_id.get()).unwrap())
-                .receiver(local_canister_id)
-                .build()
-                .into(),
-            (u64::MAX / 2).into(),
-            &mut (i64::MAX / 2),
-        )
-        .unwrap();
-    assert_eq!(
-        state
-            .canister_state(&local_canister_id)
+    assert!(
+        fixture
+            .push_input(request_from(CanisterId::unchecked_from_principal(SUBNET_ID.get())).into())
             .unwrap()
-            .system_state
-            .queues()
-            .get_local_subnet_input_schedule()
-            .len(),
-        2
     );
+    assert_eq!(fixture.local_subnet_input_schedule(&CANISTER_ID).len(), 2);
 }
 
 #[test]
-fn validate_response_fails_when_unknown_callback_id() {
-    let canister_a_id = canister_test_id(0);
-    let canister_b_id = canister_test_id(1);
-    let mut canister_a = get_running_canister(canister_a_id);
+fn subnet_queue_push_input_response() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
 
-    // Creating response from canister B to canister A.
-    let response = RequestOrResponse::Response(
-        ResponseBuilder::new()
-            .originator(canister_a_id)
-            .respondent(canister_b_id)
-            .originator_reply_callback(CallbackId::from(1))
-            .build()
-            .into(),
-    );
+    let response = response_to(SUBNET_ID.into());
     assert_eq!(
-        canister_a.push_input(
-            response.clone(),
-            MAX_CANISTER_MEMORY_SIZE,
-            &mut SUBNET_AVAILABLE_MEMORY.clone(),
-            SubnetType::Application,
-            InputQueueType::RemoteSubnet,
+        state.push_input(
+            response.clone().into(),
+            &mut SUBNET_AVAILABLE_GUARANTEED_RESPONSE_MEMORY.clone()
         ),
         Err((
-            StateError::NonMatchingResponse {
-                err_str: "unknown callback id".to_string(),
-                originator: canister_a_id,
-                callback_id: CallbackId::from(1),
-                respondent: canister_b_id
-            },
-            response
-        ))
-    );
-}
-
-#[test]
-fn validate_responses_against_callback_details() {
-    let canister_a_id = canister_test_id(0);
-    let canister_b_id = canister_test_id(1);
-    let canister_c_id = canister_test_id(2);
-
-    let mut canister_a = get_running_canister(canister_a_id);
-
-    // Creating the CallContext and registering the callback for a request from canister A -> canister B.
-    let callback_id_1 = CallbackId::from(1);
-    register_callback(&mut canister_a, canister_a_id, canister_b_id, callback_id_1);
-
-    // Creating the CallContext and registering the callback for a request from canister A -> canister C.
-    let callback_id_2 = CallbackId::from(2);
-    register_callback(&mut canister_a, canister_a_id, canister_c_id, callback_id_2);
-
-    // Reserving slots in the input queue for the corresponding responses.
-    // Request from canister A to canister B.
-    assert_eq!(
-        canister_a.push_output_request(
-            RequestBuilder::new()
-                .sender(canister_a_id)
-                .receiver(canister_b_id)
-                .sender_reply_callback(callback_id_1)
-                .build()
-                .into(),
-            mock_time(),
-        ),
-        Ok(())
-    );
-    // Request from canister A to canister C.
-    assert_eq!(
-        canister_a.push_output_request(
-            RequestBuilder::new()
-                .sender(canister_a_id)
-                .receiver(canister_c_id)
-                .sender_reply_callback(callback_id_2)
-                .build()
-                .into(),
-            mock_time(),
-        ),
-        Ok(())
-    );
-
-    // Creating invalid response from canister C to canister A.
-    // Using the callback_id from canister A -> B.
-    let response = RequestOrResponse::Response(
-        ResponseBuilder::new()
-            .originator(canister_a_id)
-            .respondent(canister_c_id)
-            .originator_reply_callback(callback_id_1)
-            .build()
-            .into(),
-    );
-    assert_eq!(
-        canister_a.push_input(
-            response.clone(),
-            MAX_CANISTER_MEMORY_SIZE,
-            &mut SUBNET_AVAILABLE_MEMORY.clone(),
-            SubnetType::Application,
-            InputQueueType::RemoteSubnet,
-        ),
-        Err((StateError::NonMatchingResponse { err_str: format!(
-            "invalid details, expected => [originator => {}, respondent => {}], but got response with",
-            canister_a_id, canister_b_id,
-        ), originator: response.receiver(), callback_id: callback_id_1, respondent: response.sender()}, response))
-    );
-
-    // Creating valid response from canister C to canister A.
-    // Pushing the response in canister A's input queue is successful.
-    let response = RequestOrResponse::Response(
-        ResponseBuilder::new()
-            .originator(canister_a_id)
-            .respondent(canister_c_id)
-            .originator_reply_callback(callback_id_2)
-            .build()
-            .into(),
-    );
-    assert_eq!(
-        canister_a.push_input(
-            response,
-            MAX_CANISTER_MEMORY_SIZE,
-            &mut SUBNET_AVAILABLE_MEMORY.clone(),
-            SubnetType::Application,
-            InputQueueType::RemoteSubnet,
-        ),
-        Ok(())
-    );
-
-    // Creating valid response from canister B to canister A.
-    // Pushing the response in canister A's input queue is successful.
-    let response = RequestOrResponse::Response(
-        ResponseBuilder::new()
-            .originator(canister_a_id)
-            .respondent(canister_b_id)
-            .originator_reply_callback(callback_id_1)
-            .build()
-            .into(),
-    );
-    assert_eq!(
-        canister_a.push_input(
-            response,
-            MAX_CANISTER_MEMORY_SIZE,
-            &mut SUBNET_AVAILABLE_MEMORY.clone(),
-            SubnetType::Application,
-            InputQueueType::RemoteSubnet,
-        ),
-        Ok(())
-    );
-}
-
-#[test]
-fn push_request_bitcoin_respects_bitcoin_feature_flag() {
-    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
-
-    let request = BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequest {
-        processed_block_hashes: vec![vec![10; 32]],
-        anchor: vec![10; 32],
-    });
-
-    // Bitcoin feature is disabled, enqueueing a request should fail.
-    assert_eq!(
-        state.push_request_bitcoin(request.clone()),
-        Err(StateError::BitcoinStateError(
-            BitcoinStateError::FeatureNotEnabled
-        ))
-    );
-
-    // Bitcoin feature is paused, enqueueing a request should fail.
-    state.metadata.own_subnet_features =
-        SubnetFeatures::from_str("bitcoin_testnet_paused").unwrap();
-    assert_eq!(
-        state.push_request_bitcoin(request.clone()),
-        Err(StateError::BitcoinStateError(
-            BitcoinStateError::FeatureNotEnabled
-        ))
-    );
-
-    // Bitcoin feature is enabled, enqueueing a request should succeed.
-    state.metadata.own_subnet_features = SubnetFeatures::from_str("bitcoin_testnet").unwrap();
-    state.push_request_bitcoin(request).unwrap();
-}
-
-#[test]
-fn push_response_bitcoin_respects_bitcoin_feature_flag() {
-    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
-
-    let response = BitcoinAdapterResponse {
-        response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
-            GetSuccessorsResponse::default(),
-        ),
-        callback_id: 0,
-    };
-
-    // Bitcoin feature is disabled, enqueueing a response should fail.
-    assert_eq!(
-        state.push_response_bitcoin(response.clone()),
-        Err(StateError::BitcoinStateError(
-            BitcoinStateError::FeatureNotEnabled
-        ))
-    );
-
-    // Enable bitcoin feature and push two requests.
-    state.metadata.own_subnet_features = SubnetFeatures::from_str("bitcoin_testnet").unwrap();
-    state
-        .push_request_bitcoin(BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
-            GetSuccessorsRequest {
-                processed_block_hashes: vec![vec![10; 32]],
-                anchor: vec![10; 32],
-            },
-        ))
-        .unwrap();
-    state
-        .push_request_bitcoin(BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
-            GetSuccessorsRequest {
-                processed_block_hashes: vec![vec![20; 32]],
-                anchor: vec![20; 32],
-            },
-        ))
-        .unwrap();
-
-    // Pushing a response when bitcoin feature is enabled should succeed.
-    state.push_response_bitcoin(response).unwrap();
-
-    // Pause bitcoin feature, responses should still be enqueued successfully.
-    state.metadata.own_subnet_features =
-        SubnetFeatures::from_str("bitcoin_testnet_paused").unwrap();
-    state
-        .push_response_bitcoin(BitcoinAdapterResponse {
-            response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
-                GetSuccessorsResponse::default(),
+            StateError::non_matching_response(
+                "Management canister does not accept canister responses",
+                &response
             ),
-            callback_id: 1,
-        })
-        .unwrap();
-}
-
-#[test]
-fn state_equality_with_bitcoin() {
-    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
-
-    // Enable bitcoin feature.
-    state.metadata.own_subnet_features = SubnetFeatures::from_str("bitcoin_testnet").unwrap();
-
-    let original_state = state.clone();
-
-    state
-        .push_request_bitcoin(BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
-            GetSuccessorsRequest {
-                processed_block_hashes: vec![vec![10; 32]],
-                anchor: vec![10; 32],
-            },
+            response.into()
         ))
-        .unwrap();
-
-    // The bitcoin state is different and so the states cannot be equal.
-    assert_ne!(original_state, state);
+    );
 }
 
 #[test]
@@ -767,17 +779,15 @@ fn insert_bitcoin_response_non_matching() {
 
     assert_eq!(
         state.push_response_bitcoin(BitcoinAdapterResponse {
-            response: BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(
-                CanisterGetSuccessorsResponseComplete {
+            response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
+                GetSuccessorsResponseComplete {
                     blocks: vec![],
                     next: vec![],
                 },
             ),
             callback_id: 0,
         }),
-        Err(StateError::BitcoinStateError(
-            BitcoinStateError::NonMatchingResponse { callback_id: 0 }
-        ))
+        Err(StateError::BitcoinNonMatchingResponse { callback_id: 0 })
     );
 }
 
@@ -785,224 +795,1028 @@ fn insert_bitcoin_response_non_matching() {
 fn insert_bitcoin_response() {
     let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
 
-    state
-        .metadata
-        .subnet_call_context_manager
-        .push_bitcoin_get_successors_request(BitcoinGetSuccessorsContext {
+    state.metadata.subnet_call_context_manager.push_context(
+        SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
             request: RequestBuilder::default().build(),
-            payload: CanisterGetSuccessorsRequestInitial {
-                network: NetworkSnakeCase::Regtest,
+            payload: GetSuccessorsRequestInitial {
+                network: Network::BitcoinRegtest,
                 anchor: vec![],
                 processed_block_hashes: vec![],
             },
-        });
+            time: UNIX_EPOCH,
+        }),
+    );
 
-    let response = CanisterGetSuccessorsResponseComplete {
+    let response = GetSuccessorsResponseComplete {
         blocks: vec![],
         next: vec![],
     };
 
     state
         .push_response_bitcoin(BitcoinAdapterResponse {
-            response: BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(
-                response.clone(),
-            ),
+            response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(response.clone()),
             callback_id: 0,
         })
         .unwrap();
 
     assert_eq!(
-        state.consensus_queue[0].response_payload,
+        state.consensus_queue[0].payload,
         Payload::Data(BitcoinGetSuccessorsResponse::Complete(response).encode())
     );
 }
 
-proptest! {
-    #[test]
-    fn peek_and_next_consistent(
-        (mut replicated_state, _, total_requests) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, Some(8))
-    ) {
-        let mut output_iter = replicated_state.output_into_iter();
+#[test]
+fn insert_bitcoin_get_successor_reject_response() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
 
-        let mut num_requests = 0;
-        while let Some((queue_id, msg)) = output_iter.peek() {
-            num_requests += 1;
-            assert_eq!(Some((queue_id, msg.clone())), output_iter.next());
-        }
+    state.metadata.subnet_call_context_manager.push_context(
+        SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
+            request: RequestBuilder::default().build(),
+            payload: GetSuccessorsRequestInitial {
+                network: Network::BitcoinRegtest,
+                anchor: vec![],
+                processed_block_hashes: vec![],
+            },
+            time: UNIX_EPOCH,
+        }),
+    );
 
-        drop(output_iter);
-        assert_eq!(total_requests, num_requests);
-        assert_eq!(replicated_state.output_message_count(), 0);
+    let error_message = "Request failed with error.".to_string();
+    let response = BitcoinReject {
+        message: error_message.clone(),
+        reject_code: RejectCode::SysTransient,
+    };
+
+    state
+        .push_response_bitcoin(BitcoinAdapterResponse {
+            response: BitcoinAdapterResponseWrapper::GetSuccessorsReject(response.clone()),
+            callback_id: 0,
+        })
+        .unwrap();
+    assert_eq!(
+        state.consensus_queue[0].payload,
+        Payload::Reject(RejectContext::new(RejectCode::SysTransient, error_message))
+    );
+}
+
+#[test]
+fn insert_bitcoin_send_transaction_reject_response() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+
+    state.metadata.subnet_call_context_manager.push_context(
+        SubnetCallContext::BitcoinSendTransactionInternal(BitcoinSendTransactionInternalContext {
+            request: RequestBuilder::default().build(),
+            payload: SendTransactionRequest {
+                network: Network::BitcoinRegtest,
+                transaction: vec![],
+            },
+            time: UNIX_EPOCH,
+        }),
+    );
+
+    let error_message = "Request failed with error.".to_string();
+    let response = BitcoinReject {
+        message: error_message.clone(),
+        reject_code: RejectCode::SysTransient,
+    };
+
+    state
+        .push_response_bitcoin(BitcoinAdapterResponse {
+            response: BitcoinAdapterResponseWrapper::SendTransactionReject(response.clone()),
+            callback_id: 0,
+        })
+        .unwrap();
+    assert_eq!(
+        state.consensus_queue[0].payload,
+        Payload::Reject(RejectContext::new(RejectCode::SysTransient, error_message))
+    );
+}
+
+#[test]
+fn time_out_messages_updates_subnet_input_schedules_correctly() {
+    let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID, OTHER_CANISTER_ID]);
+
+    // Enqueue 3 outgoing requests from `CANISTER_ID`:
+    // - one to self.
+    // - one to a another local canister.
+    // - one to a remote canister.
+    let remote_canister_id = CanisterId::from_u64(123);
+    for (i, receiver) in [CANISTER_ID, OTHER_CANISTER_ID, remote_canister_id]
+        .iter()
+        .enumerate()
+    {
+        let mut request = Request {
+            payment: Cycles::new(13),
+            ..best_effort_request_to(*receiver)
+        };
+        request.sender_reply_callback = CallbackId::from(i as u64);
+        fixture.push_output_request(request, UNIX_EPOCH).unwrap();
     }
 
-    /// Replicated state with multiple canisters, each with multiple output queues
-    /// of size 1. Some messages are consumed, some (size 1) queues are excluded.
-    ///
-    /// Expect consumed + excluded to equal initial size. Expect the messages in
-    /// excluded queues to be left in the state.
-    #[test]
-    fn peek_and_next_consistent_with_ignore(
-        (mut replicated_state, _, total_requests) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, None),
-        start in 0..=1,
-        exclude_step in 2..=5,
-    ) {
+    // Time out everything, then check that subnet input schedules are as expected.
+    fixture.state.metadata.batch_time = Time::from_nanos_since_unix_epoch(u64::MAX);
+    assert_eq!(3, fixture.time_out_messages());
+    assert!(fixture.state.refunds().is_empty());
+
+    assert_eq!(2, fixture.local_subnet_input_schedule(&CANISTER_ID).len());
+    for canister_id in [CANISTER_ID, OTHER_CANISTER_ID] {
+        assert!(
+            fixture
+                .local_subnet_input_schedule(&CANISTER_ID)
+                .contains(&canister_id)
+        );
+    }
+    assert_eq!(
+        fixture.remote_subnet_input_schedule(&CANISTER_ID),
+        &VecDeque::from(vec![remote_canister_id])
+    );
+}
+
+#[test]
+fn time_out_messages_generates_refunds() {
+    let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID, OTHER_CANISTER_ID]);
+    let remote_canister_id = CanisterId::from_u64(123);
+
+    // Enqueue an inbound best-effort request from `remote_canister_id`.
+    let request = Request {
+        payment: Cycles::new(13),
+        ..best_effort_request_from(remote_canister_id)
+    };
+    assert_eq!(Ok(true), fixture.push_input(request.into()));
+
+    // Time it out.
+    fixture.state.metadata.batch_time = Time::from_nanos_since_unix_epoch(u64::MAX);
+    assert_eq!(1, fixture.time_out_messages());
+
+    // Check that a refund to `remote_canister_id` was generated.
+    assert_eq!(
+        [Refund::anonymous(remote_canister_id, Cycles::new(13))],
+        *fixture.take_all_refunds()
+    );
+}
+
+#[test]
+fn time_out_messages_in_subnet_queues() {
+    let mut fixture = ReplicatedStateFixture::new();
+
+    // Enqueue 2 incoming best-effort requests for `SUBNET_ID`.
+    for i in 0..2 {
+        let request = Request {
+            deadline: CoarseTime::from_secs_since_unix_epoch(1000 + i as u32),
+            payment: Cycles::new(13),
+            ..best_effort_request_to(SUBNET_ID.into())
+        };
+        assert!(fixture.push_input(request.into()).unwrap());
+    }
+
+    // Time out the first request.
+    let second_request_deadline = CoarseTime::from_secs_since_unix_epoch(1001);
+    fixture.state.metadata.batch_time = second_request_deadline.into();
+    assert_eq!(1, fixture.time_out_messages());
+    assert_eq!(
+        [Refund::anonymous(CANISTER_ID, Cycles::new(13))],
+        *fixture.take_all_refunds()
+    );
+
+    // Second request should still be in the queue.
+    assert_matches!(
+        fixture.state.pop_subnet_input(),
+        Some(SubnetMessage::Request(request)) if request.deadline == second_request_deadline
+    );
+    assert_eq!(None, fixture.state.pop_subnet_input());
+}
+
+#[test]
+fn enforce_best_effort_message_limit() {
+    let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID, OTHER_CANISTER_ID]);
+
+    // Enqueue 4 best-effort incoming requests of increasing sizes for
+    // `CANISTER_ID`, `OTHER_CANISTER_ID` and `own_subnet_id` (i.e. subnet queues).
+    let own_subnet_id = CanisterId::from(fixture.state.metadata.own_subnet_id);
+    let mut message_sizes = Vec::new();
+    for (i, receiver) in [CANISTER_ID, OTHER_CANISTER_ID, CANISTER_ID, own_subnet_id]
+        .iter()
+        .enumerate()
+    {
+        let request = Request {
+            method_name: String::from_utf8(vec![b'x'; i * 10 + 1]).unwrap(),
+            payment: Cycles::new(1 << i),
+            ..best_effort_request_to(*receiver)
+        };
+        message_sizes.push(NumBytes::from(request.count_bytes() as u64));
+        assert!(fixture.push_input(request.into()).unwrap());
+    }
+
+    assert_eq!(
+        (0, 0.into()),
+        fixture.enforce_best_effort_message_limit(u64::MAX.into()),
+    );
+    assert!(fixture.state.refunds().is_empty());
+
+    let best_effort_memory_usage = fixture.state.best_effort_message_memory_taken();
+    assert_eq!(
+        (0, 0.into()),
+        fixture.enforce_best_effort_message_limit(best_effort_memory_usage),
+    );
+    assert!(fixture.state.refunds().is_empty());
+
+    // Enforce a limit equal to the mean message size. This should shed everything
+    // but the first message we enqueued.
+    let mean_message_size = best_effort_memory_usage / 4;
+    assert_eq!(
+        (3, message_sizes[1] + message_sizes[2] + message_sizes[3]),
+        fixture.enforce_best_effort_message_limit(mean_message_size),
+    );
+    let expected_refunds = [Refund::anonymous(
+        CANISTER_ID,
+        Cycles::new((1 << 1) + (1 << 2) + (1 << 3)),
+    )];
+    assert_eq!(expected_refunds, *fixture.take_all_refunds());
+
+    // A second identical call should be a no-op.
+    assert_eq!(
+        (0, 0.into()),
+        fixture.enforce_best_effort_message_limit(mean_message_size),
+    );
+    assert!(fixture.state.refunds().is_empty());
+
+    // Pop the remaining message.
+    assert!(fixture.pop_input().is_some());
+
+    // There should now be no more inbound or outbound messages left.
+    assert!(fixture.pop_input().is_none());
+    assert!(fixture.state.output_into_iter().next().is_none());
+}
+
+#[test]
+fn push_best_effort_response_for_non_existent_canister_succeeds() {
+    // A replicated state with no canisters installed.
+    let mut fixture = ReplicatedStateFixture::with_canisters(&[]);
+
+    // Pushing a guaranteed response fails.
+    let response = response_to(CANISTER_ID);
+    assert!(fixture.push_input(response.into()).is_err());
+
+    // Pushing a best-effort response succeeds (i.e. dropped silently).
+    let mut best_effort_response = response_to(CANISTER_ID);
+    best_effort_response.deadline = SOME_DEADLINE;
+    assert_eq!(Ok(false), fixture.push_input(best_effort_response.into()));
+}
+
+#[test]
+fn split() {
+    // We will be splitting subnet A into A' and B.
+    const SUBNET_A: SubnetId = SUBNET_ID;
+    const SUBNET_B: SubnetId = SUBNET_1;
+
+    const CANISTER_1: CanisterId = CANISTER_ID;
+    const CANISTER_2: CanisterId = OTHER_CANISTER_ID;
+    const CANISTERS: [CanisterId; 2] = [CANISTER_1, CANISTER_2];
+
+    // Retain `CANISTER_1` on `SUBNET_A`, migrate `CANISTER_2` to `SUBNET_B`.
+    let routing_table = RoutingTable::try_from(btreemap! {
+        CanisterIdRange {start: CANISTER_1, end: CANISTER_1} => SUBNET_A,
+        CanisterIdRange {start: CANISTER_2, end: CANISTER_2} => SUBNET_B,
+    })
+    .unwrap();
+
+    // Fixture with 2 canisters.
+    let mut fixture = ReplicatedStateFixture::with_canisters(&CANISTERS);
+
+    // Give the canisters non-default priorities.
+    fixture
+        .state
+        .metadata
+        .subnet_schedule
+        .get_mut(CANISTER_1)
+        .accumulated_priority = 1.into();
+    fixture
+        .state
+        .metadata
+        .subnet_schedule
+        .get_mut(CANISTER_2)
+        .accumulated_priority = 2.into();
+
+    // Stream with a couple of requests. The details don't matter, should be
+    // retained unmodified on subnet A' only.
+    fixture.push_to_stream(vec![
+        request_to(CANISTER_1).into(),
+        request_to(CANISTER_2).into(),
+    ]);
+
+    // Makes an `IngressHistoryState` with one `Received` message addressed to each
+    // of `canisters`.
+    let make_ingress_history = |canisters: &[CanisterId]| {
+        let mut ingress_history = IngressHistoryState::default();
+        for (i, canister) in CANISTERS.iter().enumerate() {
+            if canisters.contains(canister) {
+                ingress_history.insert(
+                    message_test_id(i as u64),
+                    IngressStatus::Known {
+                        receiver: canister.get(),
+                        user_id: user_test_id(i as u64),
+                        time: UNIX_EPOCH,
+                        state: IngressState::Received,
+                    },
+                    UNIX_EPOCH,
+                    NumBytes::from(u64::MAX),
+                    |_| {},
+                );
+            }
+        }
+        ingress_history
+    };
+    // Ingress history: 2 `Received` messages, addressed to canisters 1 and 2.
+    // Should be retained on both sides after phase 1, split after phase 2.
+    fixture.state.metadata.ingress_history = make_ingress_history(&CANISTERS);
+
+    // Subnet queues. Should be preserved on subnet A' only.
+    assert!(
+        fixture
+            .push_input(
+                RequestBuilder::default()
+                    .sender(CANISTER_1)
+                    .receiver(SUBNET_A.into())
+                    .build()
+                    .into(),
+            )
+            .unwrap()
+    );
+
+    // Set up input schedules. Add a couple of input messages to each canister.
+    for sender in CANISTERS {
+        for receiver in CANISTERS {
+            assert!(
+                fixture
+                    .push_input(
+                        RequestBuilder::default()
+                            .sender(sender)
+                            .receiver(receiver)
+                            .build()
+                            .into(),
+                    )
+                    .unwrap()
+            );
+        }
+    }
+    for canister in CANISTERS {
+        assert_eq!(2, fixture.local_subnet_input_schedule(&canister).len());
+        assert_eq!(0, fixture.remote_subnet_input_schedule(&canister).len());
+    }
+
+    // Add some refunds. Should be retained on subnet A' only.
+    fixture.state.add_refund(CANISTER_1, Cycles::new(100));
+    fixture.state.add_refund(CANISTER_2, Cycles::new(200));
+
+    //
+    // Split off subnet A', phase 1.
+    //
+    let mut state_a = fixture
+        .state
+        .clone()
+        .split(SUBNET_A, &routing_table, None)
+        .unwrap();
+
+    // Start off with the original state.
+    let mut expected = fixture.state.clone();
+    // Only `CANISTER_1` should be left.
+    expected.take_canister_state(&CANISTER_2);
+    // And the split marker should be set.
+    expected.metadata.split_from = Some(SUBNET_A);
+    // Otherwise, the state should be the same.
+    assert_eq!(expected, state_a);
+
+    //
+    // Subnet A', phase 2.
+    //
+    state_a.after_split();
+
+    // `CANISTER_2` should have been removed from the schedule.
+    expected.metadata.subnet_schedule.remove(&CANISTER_2);
+    // Ingress history should only contain the message to `CANISTER_1`.
+    expected.metadata.ingress_history = make_ingress_history(&[CANISTER_1]);
+    // The input schedules of `CANISTER_1` should have been repartitioned.
+    let mut canister_state = expected.take_canister_state(&CANISTER_1).unwrap();
+    Arc::make_mut(&mut canister_state)
+        .system_state
+        .split_input_schedules(&CANISTER_1, expected.canister_states());
+    expected.put_canister_state(canister_state);
+    // And the split marker should be reset.
+    expected.metadata.split_from = None;
+    // Everything else should be the same as in phase 1.
+    assert_eq!(expected, state_a);
+
+    //
+    // Split off subnet B, phase 1.
+    //
+    let mut state_b = fixture
+        .state
+        .clone()
+        .split(SUBNET_B, &routing_table, None)
+        .unwrap();
+
+    // Subnet B state is based off of an empty state.
+    let mut expected = ReplicatedState::new(SUBNET_B, fixture.state.metadata.own_subnet_type);
+    // Only `CANISTER_2` should be left, with no scheduling priority.
+    expected.put_canister_state(fixture.state.canister_state(&CANISTER_2).unwrap().clone());
+    expected.metadata.subnet_schedule.remove(&CANISTER_2);
+    // The full ingress history should be preserved.
+    expected.metadata.ingress_history = fixture.state.metadata.ingress_history.clone();
+    // And the split marker should be set.
+    expected.metadata.split_from = Some(SUBNET_A);
+    // Otherwise, the state should be the same.
+    assert_eq!(expected, state_b);
+
+    //
+    // Subnet B, phase 2.
+    //
+
+    // Loading `state_b` will populate the scheduling priority for `CANISTER_2`.
+    state_b.canister_priority_mut(CANISTER_2);
+
+    state_b.after_split();
+
+    // Ingress history should only contain the message to `CANISTER_2`.
+    expected.metadata.ingress_history = make_ingress_history(&[CANISTER_2]);
+    // The input schedules of `CANISTER_2` should have been repartitioned.
+    let mut canister_state = expected.take_canister_state(&CANISTER_2).unwrap();
+    Arc::make_mut(&mut canister_state)
+        .system_state
+        .split_input_schedules(&CANISTER_2, expected.canister_states());
+    expected.put_canister_state(canister_state);
+    // And the split marker should be reset.
+    expected.metadata.split_from = None;
+    // The canister priority for `CANISTER_1` is gone, as it was not persisted.
+    expected.metadata.subnet_schedule.remove(&CANISTER_1);
+    // Everything else should be the same as in phase 1.
+    assert_eq!(expected, state_b);
+}
+
+#[test]
+fn online_split() {
+    // We will be splitting subnet A into A' and B.
+    const SUBNET_A: SubnetId = SUBNET_ID;
+    const SUBNET_B: SubnetId = SUBNET_1;
+
+    const CANISTER_1: CanisterId = CanisterId::from_u64(1);
+    const CANISTER_2_U64: u64 = 2;
+    const CANISTER_2: CanisterId = CanisterId::from_u64(CANISTER_2_U64);
+    const CANISTERS: [CanisterId; 2] = [CANISTER_1, CANISTER_2];
+
+    // Fixture with 2 canisters.
+    let mut fixture = ReplicatedStateFixture::with_canisters(&CANISTERS);
+
+    // Retain `CANISTER_1` on `SUBNET_A`, migrate `CANISTER_2` to `SUBNET_B`.
+    let routing_table = RoutingTable::try_from(btreemap! {
+        CanisterIdRange {start: CanisterId::from_u64(0), end: CanisterId::from_u64(CANISTER_2_U64 - 1)} => SUBNET_A,
+        CanisterIdRange {start: CanisterId::from_u64(CANISTER_2_U64), end: CanisterId::from_u64(CANISTER_2_U64)} => SUBNET_B,
+        CanisterIdRange {start: CanisterId::from_u64(CANISTER_2_U64 + 1), end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1)} => SUBNET_A,
+    })
+    .unwrap();
+    fixture
+        .state
+        .metadata
+        .network_topology
+        .set_routing_table(routing_table.clone());
+
+    // Stream with a couple of requests. The details don't matter, should be
+    // retained unmodified on subnet A' only.
+    fixture.push_to_stream(vec![
+        request_to(CANISTER_1).into(),
+        request_to(CANISTER_2).into(),
+    ]);
+
+    // Set up input schedules. Add a couple of input messages to each canister.
+    for sender in CANISTERS {
+        for receiver in CANISTERS {
+            assert!(
+                fixture
+                    .push_input(
+                        RequestBuilder::default()
+                            .sender(sender)
+                            .receiver(receiver)
+                            .build()
+                            .into(),
+                    )
+                    .unwrap()
+            );
+        }
+    }
+    for canister in CANISTERS {
+        assert_eq!(2, fixture.local_subnet_input_schedule(&canister).len());
+        assert_eq!(0, fixture.remote_subnet_input_schedule(&canister).len());
+    }
+
+    // Subnet queues. Should be preserved on subnet A' only.
+    assert!(
+        fixture
+            .push_input(
+                RequestBuilder::default()
+                    .sender(CANISTER_1)
+                    .receiver(SUBNET_A.into())
+                    .build()
+                    .into(),
+            )
+            .unwrap()
+    );
+
+    // Add some refunds. Should be retained on subnet A' only.
+    fixture.state.add_refund(CANISTER_1, Cycles::new(100));
+    fixture.state.add_refund(CANISTER_2, Cycles::new(200));
+
+    // Take snapshots of both canisters.
+    let mut take_shapshot = |canister_id| {
+        let canister = fixture.state.canister_state_make_mut(&canister_id).unwrap();
+        let snapshot = CanisterSnapshot::from_canister(canister, UNIX_EPOCH).unwrap();
+        let snapshot_id =
+            SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
+        canister
+            .canister_snapshots
+            .push(snapshot_id, snapshot.into());
+        snapshot_id
+    };
+    let canister_1_snapshot_id = take_shapshot(CANISTER_1);
+    let canister_2_snapshot_id = take_shapshot(CANISTER_2);
+
+    // Add aborted `install_code` tasks to both canisters.
+    let mut add_aborted_install_code_task = |canister_id| {
+        let canister = fixture.state.canister_state_make_mut(&canister_id).unwrap();
+        canister
+            .system_state
+            .task_queue
+            .enqueue(ExecutionTask::AbortedInstallCode {
+                message: CanisterCall::Request(RequestBuilder::default().build().into()),
+                call_id: InstallCodeCallId::new(3_u64),
+                prepaid_execution_cycles: CompoundCycles::new(
+                    Cycles::new(3),
+                    CanisterCyclesCostSchedule::Normal,
+                ),
+            });
+    };
+    add_aborted_install_code_task(CANISTER_1);
+    add_aborted_install_code_task(CANISTER_2);
+
+    //
+    // Split off subnet A'.
+    //
+    let state_a = fixture
+        .state
+        .clone()
+        .online_split(SUBNET_A, SUBNET_B)
+        .unwrap();
+
+    // Start off with the original state (plus new routing table).
+    let mut expected = fixture.state.clone();
+    // Only `CANISTER_1` should be left.
+    expected.remove_canister(&CANISTER_2);
+    // The input schedules of `CANISTER_1` should have been repartitioned.
+    let mut canister_state_arc = expected.take_canister_state(&CANISTER_1).unwrap();
+    let canister_state = Arc::make_mut(&mut canister_state_arc);
+    canister_state
+        .system_state
+        .split_input_schedules(&CANISTER_1, expected.canister_states());
+    // The snapshot of `CANISTER_2` should have been deleted.
+    canister_state
+        .canister_snapshots
+        .remove(canister_2_snapshot_id);
+    expected.put_canister_state(canister_state_arc);
+
+    // And the split marker should be set.
+    expected.metadata.subnet_split_from = Some(SUBNET_A);
+
+    // Everything else should be unchanged.
+    assert_eq!(expected, state_a);
+
+    //
+    // Split off subnet B.
+    //
+    let state_b = fixture
+        .state
+        .clone()
+        .online_split(SUBNET_B, SUBNET_A)
+        .unwrap();
+
+    // Start off with the original state.
+    let mut expected = fixture.state.clone();
+    // New subnet ID.
+    expected.metadata.own_subnet_id = SUBNET_B;
+    // Only `CANISTER_2` should be hosted.
+    expected.remove_canister(&CANISTER_1);
+    // The input schedules of `CANISTER_2` should have been repartitioned.
+    let mut canister_state_arc = expected.take_canister_state(&CANISTER_2).unwrap();
+    let canister_state = Arc::make_mut(&mut canister_state_arc);
+    canister_state
+        .system_state
+        .split_input_schedules(&CANISTER_2, expected.canister_states());
+    // The in-progress `install_code` task should have been silently dropped.
+    canister_state.system_state.task_queue = Default::default();
+    // The snapshot of `CANISTER_1` should have been deleted.
+    canister_state
+        .canister_snapshots
+        .remove(canister_1_snapshot_id);
+    expected.put_canister_state(canister_state_arc);
+
+    // Streams, subnet queues and refunds should be empty.
+    expected.take_streams();
+    expected.put_subnet_queues(Default::default());
+    expected.take_refunds(|_| true);
+
+    // And the split marker should be set.
+    expected.metadata.subnet_split_from = Some(SUBNET_A);
+
+    // Everything else should be unchanged.
+    assert_eq!(expected, state_b);
+}
+
+#[test]
+fn input_source_roundtrip() {
+    use ic_protobuf::state::queues::v1::canister_queues as pb;
+
+    for initial in InputSource::iter() {
+        let encoded = pb::NextInputQueue::from(&initial);
+        let round_trip = InputSource::from(encoded);
+
+        assert_eq!(initial, round_trip);
+    }
+}
+
+#[test]
+fn compatibility_for_input_source() {
+    // If this fails, you are making a potentially incompatible change to `NextInputQueue`.
+    // See note [Handling changes to Enums in Replicated State] for how to proceed.
+    assert_eq!(
+        InputSource::iter().map(|x| x as i32).collect::<Vec<i32>>(),
+        [0, 1, 2]
+    );
+}
+
+#[test]
+fn ready_for_migration() {
+    let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID, OTHER_CANISTER_ID]);
+
+    // Canister is running, not ready for migration.
+    assert!(!fixture.state.ready_for_migration(&CANISTER_ID));
+
+    fixture
+        .push_input(best_effort_request_from(OTHER_CANISTER_ID).into())
+        .unwrap();
+    fixture.stop_canister();
+
+    // Input queue is not empty, not ready for migration.
+    assert!(!fixture.state.ready_for_migration(&CANISTER_ID));
+
+    fixture.pop_input().unwrap();
+    fixture.push_output_response(best_effort_response_to(OTHER_CANISTER_ID));
+
+    // Output queue is not empty, not ready for migration.
+    assert!(!fixture.state.ready_for_migration(&CANISTER_ID));
+
+    // Empty output queue.
+    let response = fixture.pop_output().unwrap();
+    assert!(fixture.state.ready_for_migration(&CANISTER_ID));
+
+    // Put best-effort response into the stream, still ready for migration.
+    fixture.push_to_stream(vec![response]);
+    assert!(fixture.state.ready_for_migration(&CANISTER_ID));
+
+    // Put a guaranteed response from a different canister into the stream, still ready for migration.
+    fixture.push_to_stream(vec![response_from(OTHER_CANISTER_ID).into()]);
+    assert!(fixture.state.ready_for_migration(&CANISTER_ID));
+
+    // Put a guaranteed response from the canister into the stream, not ready for migration.
+    fixture.push_to_stream(vec![response_to(OTHER_CANISTER_ID).into()]);
+    assert!(!fixture.state.ready_for_migration(&CANISTER_ID));
+
+    // Remove some messages from the stream, but not the guaranteed response, still not ready for migration.
+    fixture.discard_from_stream(2);
+    assert!(!fixture.state.ready_for_migration(&CANISTER_ID));
+
+    // Remove the guaranteed response from the stream, ready for migration.
+    fixture.discard_from_stream(1);
+    assert!(fixture.state.ready_for_migration(&CANISTER_ID));
+}
+
+#[test]
+fn credit_refund() {
+    let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID]);
+    let initial_balance = fixture.canister_balance(&CANISTER_ID).unwrap();
+
+    // Refund 10 cycles to `CANISTER_ID`.
+    let credited = fixture
+        .state
+        .credit_refund(&Refund::anonymous(CANISTER_ID, Cycles::new(10)));
+    assert!(credited);
+    assert_eq!(
+        Some(initial_balance + Cycles::new(10)),
+        fixture.canister_balance(&CANISTER_ID)
+    );
+
+    // Refunding to a non-existent canister is a no-op.
+    let credited = fixture
+        .state
+        .credit_refund(&Refund::anonymous(OTHER_CANISTER_ID, Cycles::new(11)));
+    assert!(!credited);
+    assert_eq!(
+        Some(initial_balance + Cycles::new(10)),
+        fixture.canister_balance(&CANISTER_ID)
+    );
+    assert_eq!(None, fixture.canister_balance(&OTHER_CANISTER_ID));
+}
+
+#[test_strategy::proptest]
+fn peek_and_next_consistent(
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)))]
+    state_and_queues: (
+        ReplicatedState,
+        VecDeque<VecDeque<RequestOrResponse>>,
+        usize,
+    ),
+) {
+    let (mut replicated_state, _, total_requests) = state_and_queues;
+
+    let mut output_iter = replicated_state.output_into_iter();
+
+    let mut num_requests = 0;
+    while let Some(msg) = output_iter.peek() {
+        num_requests += 1;
+        prop_assert_eq!(Some(msg.clone()), output_iter.next());
+    }
+
+    drop(output_iter);
+    prop_assert_eq!(total_requests, num_requests);
+    prop_assert_eq!(replicated_state.output_message_count(), 0);
+}
+
+/// Replicated state with multiple canisters, each with multiple output queues
+/// of size 1. Some messages are consumed, some (size 1) queues are excluded.
+///
+/// Expect consumed + excluded to equal initial size. Expect the messages in
+/// excluded queues to be left in the state.
+#[test_strategy::proptest]
+fn peek_and_next_consistent_with_exclude_queue(
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None))] state_and_queues: (
+        ReplicatedState,
+        VecDeque<VecDeque<RequestOrResponse>>,
+        usize,
+    ),
+    #[strategy(0..=1)] start: i32,
+    #[strategy(2..=5)] exclude_step: i32,
+) {
+    let (mut replicated_state, _, total_requests) = state_and_queues;
+
+    let mut output_iter = replicated_state.output_into_iter();
+
+    let mut i = start;
+    let mut excluded = 0;
+    let mut consumed = 0;
+    while let Some(msg) = output_iter.peek() {
+        i += 1;
+        if i % exclude_step == 0 {
+            output_iter.exclude_queue();
+            excluded += 1;
+        } else {
+            prop_assert_eq!(Some(msg.clone()), output_iter.next());
+            consumed += 1;
+        }
+    }
+
+    drop(output_iter);
+    prop_assert_eq!(total_requests, excluded + consumed);
+    prop_assert_eq!(replicated_state.output_message_count(), excluded);
+}
+
+#[test_strategy::proptest]
+fn iter_yields_correct_elements(
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None))] state_and_queues: (
+        ReplicatedState,
+        VecDeque<VecDeque<RequestOrResponse>>,
+        usize,
+    ),
+) {
+    let (mut replicated_state, mut raw_requests, _total_requests) = state_and_queues;
+
+    let mut output_iter = replicated_state.output_into_iter();
+
+    for msg in &mut output_iter {
+        let mut requests = raw_requests.pop_front().unwrap();
+        while requests.is_empty() {
+            requests = raw_requests.pop_front().unwrap();
+        }
+
+        if let Some(raw_msg) = requests.pop_front() {
+            prop_assert_eq!(
+                &msg,
+                &raw_msg,
+                "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.",
+                msg,
+                raw_msg
+            );
+        } else {
+            prop_assert!(
+                false,
+                "Pop yielded an element that was not contained in the respective queue"
+            );
+        }
+
+        raw_requests.push_back(requests);
+    }
+
+    drop(output_iter);
+    // Ensure that actually all elements have been consumed.
+    prop_assert_eq!(
+        raw_requests
+            .iter()
+            .map(|requests| requests.len())
+            .sum::<usize>(),
+        0
+    );
+    prop_assert_eq!(replicated_state.output_message_count(), 0);
+}
+
+#[test_strategy::proptest]
+fn iter_with_exclude_queue_yields_correct_elements(
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, None))] state_and_queues: (
+        ReplicatedState,
+        VecDeque<VecDeque<RequestOrResponse>>,
+        usize,
+    ),
+    #[strategy(0..=1)] start: i32,
+    #[strategy(2..=5)] ignore_step: i32,
+) {
+    let (mut replicated_state, mut raw_requests, total_requests) = state_and_queues;
+
+    let mut consumed = 0;
+    let mut ignored_requests = Vec::new();
+    // Check whether popping elements with ignores in between yields the expected messages
+    {
         let mut output_iter = replicated_state.output_into_iter();
 
         let mut i = start;
-        let mut excluded = 0;
-        let mut consumed = 0;
-        while let Some((queue_id, msg)) = output_iter.peek() {
-            i += 1;
-            if i % exclude_step == 0 {
-                output_iter.exclude_queue();
-                excluded += 1;
-            } else {
-                assert_eq!(Some((queue_id, msg.clone())), output_iter.next());
-                consumed += 1;
-            }
-        }
-
-        drop(output_iter);
-        assert_eq!(total_requests, excluded + consumed);
-        assert_eq!(replicated_state.output_message_count(), excluded);
-    }
-
-    #[test]
-    fn iter_yields_correct_elements(
-       (mut replicated_state, mut raw_requests, _total_requests) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, None),
-    ) {
-        let mut output_iter = replicated_state.output_into_iter();
-
-        for (_, msg) in &mut output_iter {
+        while let Some(msg) = output_iter.peek() {
             let mut requests = raw_requests.pop_front().unwrap();
             while requests.is_empty() {
                 requests = raw_requests.pop_front().unwrap();
             }
 
+            i += 1;
+            if i % ignore_step == 0 {
+                // Popping the front of the requests will amount to the same as ignoring as
+                // we use queues of size one in this test.
+                let popped = requests.pop_front().unwrap();
+                prop_assert_eq!(msg, &popped);
+                output_iter.exclude_queue();
+                ignored_requests.push(popped);
+                // We push the queue to the front as the canister gets another chance if one
+                // of its queues are ignored in the current implementation.
+                raw_requests.push_front(requests);
+                continue;
+            }
+
+            let msg = output_iter.next().unwrap();
             if let Some(raw_msg) = requests.pop_front() {
-                assert_eq!(msg, raw_msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw_msg);
+                consumed += 1;
+                prop_assert_eq!(
+                    &msg,
+                    &raw_msg,
+                    "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.",
+                    msg,
+                    raw_msg
+                );
             } else {
-                panic!("Pop yielded an element that was not contained in the respective queue");
+                prop_assert!(
+                    false,
+                    "Pop yielded an element that was not contained in the respective queue"
+                );
             }
 
             raw_requests.push_back(requests);
         }
-
-        drop(output_iter);
-        // Ensure that actually all elements have been consumed.
-        assert_eq!(raw_requests.iter().map(|requests| requests.len()).sum::<usize>(), 0);
-        assert_eq!(replicated_state.output_message_count(), 0);
     }
 
-    #[test]
-    fn iter_with_ignore_yields_correct_elements(
-       (mut replicated_state, mut raw_requests, total_requests) in arb_replicated_state_with_queues(SUBNET_ID, 10, 10, None),
-        start in 0..=1,
-        ignore_step in 2..=5,
-    ) {
-        let mut consumed = 0;
-        let mut ignored_requests = Vec::new();
-        // Check whether popping elements with ignores in between yields the expected messages
+    let remaining_output = replicated_state.output_message_count();
+
+    prop_assert_eq!(remaining_output, total_requests - consumed);
+    prop_assert_eq!(remaining_output, ignored_requests.len());
+
+    for raw in ignored_requests {
+        let queues = if let Some(canister) = replicated_state.canister_state_make_mut(&raw.sender())
         {
-            let mut output_iter = replicated_state.output_into_iter();
+            canister.system_state.queues_mut()
+        } else {
+            replicated_state.subnet_queues_mut()
+        };
 
-            let mut i = start;
-            while let Some((_, msg)) = output_iter.peek() {
-
-                let mut requests = raw_requests.pop_front().unwrap();
-                while requests.is_empty() {
-                    requests = raw_requests.pop_front().unwrap();
-                }
-
-                i += 1;
-                if i % ignore_step == 0 {
-                    // Popping the front of the requests will amount to the same as ignoring as
-                    // we use queues of size one in this test.
-                    let popped = requests.pop_front().unwrap();
-                    assert_eq!(*msg, popped);
-                    output_iter.exclude_queue();
-                    ignored_requests.push(popped);
-                    // We push the queue to the front as the canister gets another chance if one
-                    // of its queues are ignored in the current implementation.
-                    raw_requests.push_front(requests);
-                    continue;
-                }
-
-                let (_, msg) = output_iter.next().unwrap();
-                if let Some(raw_msg) = requests.pop_front() {
-                    consumed += 1;
-                    assert_eq!(msg, raw_msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw_msg);
-                } else {
-                    panic!("Pop yielded an element that was not contained in the respective queue");
-                }
-
-                raw_requests.push_back(requests);
-            }
-        }
-
-        let remaining_output = replicated_state.output_message_count();
-
-        assert_eq!(remaining_output, total_requests - consumed);
-        assert_eq!(remaining_output, ignored_requests.len());
-
-        for raw in ignored_requests {
-            let queues = if let Some(canister) = replicated_state.canister_states.get_mut(&raw.sender()) {
-                canister.system_state.queues_mut()
-            } else {
-                replicated_state.subnet_queues_mut()
-            };
-
-            let msg = queues.pop_canister_output(&raw.receiver()).unwrap();
-            assert_eq!(raw, msg);
-        }
-
-        assert_eq!(replicated_state.output_message_count(), 0);
-
+        let msg = queues.pop_canister_output(&raw.receiver()).unwrap();
+        prop_assert_eq!(raw, msg);
     }
 
-    #[test]
-    fn peek_next_loop_terminates(
-        (mut replicated_state, _, _) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, Some(8)),
-    ) {
+    prop_assert_eq!(replicated_state.output_message_count(), 0);
+}
+
+#[test_strategy::proptest]
+fn ignore_leaves_state_untouched(
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)))]
+    state_and_queues: (
+        ReplicatedState,
+        VecDeque<VecDeque<RequestOrResponse>>,
+        usize,
+    ),
+) {
+    let (mut replicated_state, _, _) = state_and_queues;
+
+    let expected_state = replicated_state.clone();
+    {
         let mut output_iter = replicated_state.output_into_iter();
 
         while output_iter.peek().is_some() {
-            output_iter.next();
+            output_iter.exclude_queue();
         }
     }
 
-    #[test]
-    fn ignore_leaves_state_untouched(
-        (mut replicated_state, _, _) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, Some(8)),
-    ) {
-        let expected_state = replicated_state.clone();
-        {
-            let mut output_iter = replicated_state.output_into_iter();
+    prop_assert_eq!(expected_state, replicated_state);
+}
 
-            while output_iter.peek().is_some() {
-                output_iter.exclude_queue();
-            }
+#[test_strategy::proptest]
+fn peek_next_loop_with_exclude_queue_terminates(
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)))]
+    state_and_queues: (
+        ReplicatedState,
+        VecDeque<VecDeque<RequestOrResponse>>,
+        usize,
+    ),
+    #[strategy(0..=1)] start: i32,
+    #[strategy(2..=5)] ignore_step: i32,
+) {
+    let (mut replicated_state, _, _) = state_and_queues;
+
+    let mut output_iter = replicated_state.output_into_iter();
+
+    let mut i = start;
+    while output_iter.peek().is_some() {
+        i += 1;
+        if i % ignore_step == 0 {
+            output_iter.exclude_queue();
+            continue;
         }
-
-        assert_eq!(expected_state, replicated_state);
+        output_iter.next();
     }
+}
 
-    #[test]
-    fn peek_next_loop_with_ignores_terminates(
-        (mut replicated_state, _, _) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, Some(8)),
-        start in 0..=1,
-        ignore_step in 2..=5,
-    ) {
-        let mut output_iter = replicated_state.output_into_iter();
+#[test_strategy::proptest]
+fn iter_with_stale_entries_terminates(
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)))]
+    state_and_queues: (
+        ReplicatedState,
+        VecDeque<VecDeque<RequestOrResponse>>,
+        usize,
+    ),
+    #[strategy(any::<u32>())] batch_time_seconds: u32,
+) {
+    let (mut replicated_state, _, total_requests) = state_and_queues;
 
-        let mut i = start;
-        while output_iter.peek().is_some() {
-            i += 1;
-            if i % ignore_step == 0 {
-                output_iter.exclude_queue();
-                continue;
-            }
-            output_iter.next();
-        }
+    const NANOS_PER_SEC: u64 = 1_000_000_000;
+    replicated_state.metadata.batch_time =
+        Time::from_nanos_since_unix_epoch(batch_time_seconds as u64 * NANOS_PER_SEC);
+    let timed_out_messages = time_out_messages(&mut replicated_state);
+
+    // Just consume all output messages.
+    //
+    // We cannot check the exact ordering because timing out some messages messes it
+    // up, both across canisters and across a cainster's output queues.
+    let output_messages = replicated_state.output_into_iter().count();
+
+    // All messages have either been timed out or output.
+    prop_assert_eq!(total_requests, timed_out_messages + output_messages);
+    prop_assert_eq!(replicated_state.output_message_count(), 0);
+}
+
+#[test_strategy::proptest]
+fn peek_next_loop_with_stale_entries_terminates(
+    #[strategy(arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)))]
+    state_and_queues: (
+        ReplicatedState,
+        VecDeque<VecDeque<RequestOrResponse>>,
+        usize,
+    ),
+    #[strategy(any::<u32>())] batch_time_seconds: u32,
+) {
+    let (mut replicated_state, _, total_requests) = state_and_queues;
+
+    const NANOS_PER_SEC: u64 = 1_000_000_000;
+    replicated_state.metadata.batch_time =
+        Time::from_nanos_since_unix_epoch(batch_time_seconds as u64 * NANOS_PER_SEC);
+    let timed_out_messages = time_out_messages(&mut replicated_state);
+
+    let mut output_iter = replicated_state.output_into_iter();
+
+    let mut output_messages = 0;
+    while let Some(msg) = output_iter.peek() {
+        output_messages += 1;
+        prop_assert_eq!(Some(msg.clone()), output_iter.next());
     }
+    drop(output_iter);
+
+    // All messages have either been timed out or output.
+    prop_assert_eq!(total_requests, timed_out_messages + output_messages);
+    prop_assert_eq!(replicated_state.output_message_count(), 0);
 }

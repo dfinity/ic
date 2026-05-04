@@ -1,17 +1,27 @@
 use crate::CountBytes;
-use ic_btc_types_internal::BitcoinAdapterResponse;
-use ic_protobuf::types::v1 as pb;
+use ic_btc_replica_types::BitcoinAdapterResponse;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
+use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
-/// The theoretical maximum for the size of a bitcoin block.
-///
-/// If in the future, the bitcoin network decides to increase the block size,
-/// this value needs to be increased too.
-pub const MAX_BITCOIN_BLOCK_SIZE: u64 = 4 * 1024 * 1024;
+// The theoretical maximum for the size of a bitcoin block.
+//
+// If in the future, the bitcoin network decides to increase the block size,
+// this value needs to be increased too.
+const MAX_BITCOIN_BLOCK_IN_BYTES: u64 = 4_000_000;
+
+// An additional buffer for metadata that's added with a bitcoin block (e.g. next block hashes).
+const BITCOIN_PAYLOAD_BUFFER_IN_BYTES: u64 = 100_000;
+
+/// The maximum size of a bitcoin payload.
+pub const MAX_BITCOIN_PAYLOAD_IN_BYTES: u64 =
+    MAX_BITCOIN_BLOCK_IN_BYTES + BITCOIN_PAYLOAD_BUFFER_IN_BYTES;
 
 /// Payload that contains SelfValidating messages.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct SelfValidatingPayload(pub(super) Vec<BitcoinAdapterResponse>);
 
 impl SelfValidatingPayload {
@@ -25,7 +35,8 @@ impl SelfValidatingPayload {
 
     /// Returns true if the payload is empty
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        let SelfValidatingPayload(responses) = &self;
+        responses.is_empty()
     }
 }
 
@@ -38,12 +49,12 @@ impl From<&SelfValidatingPayload> for pb::SelfValidatingPayload {
 }
 
 impl TryFrom<pb::SelfValidatingPayload> for SelfValidatingPayload {
-    type Error = String;
+    type Error = ProxyDecodeError;
 
     fn try_from(value: pb::SelfValidatingPayload) -> Result<Self, Self::Error> {
         let mut responses = vec![];
         for r in value.bitcoin_testnet_payload.into_iter() {
-            responses.push(BitcoinAdapterResponse::try_from(r).map_err(|err| err.to_string())?);
+            responses.push(BitcoinAdapterResponse::try_from(r)?);
         }
         Ok(Self(responses))
     }
@@ -51,6 +62,7 @@ impl TryFrom<pb::SelfValidatingPayload> for SelfValidatingPayload {
 
 impl CountBytes for SelfValidatingPayload {
     fn count_bytes(&self) -> usize {
-        self.0.iter().map(|x| x.count_bytes()).sum()
+        let SelfValidatingPayload(responses) = &self;
+        responses.iter().map(|x| x.count_bytes()).sum()
     }
 }

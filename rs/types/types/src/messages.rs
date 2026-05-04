@@ -9,30 +9,44 @@ mod read_state;
 mod webauthn;
 
 pub use self::http::{
-    Authentication, Certificate, CertificateDelegation, Delegation, HasCanisterId, HttpCallContent,
-    HttpCanisterUpdate, HttpQueryContent, HttpQueryResponse, HttpQueryResponseReply, HttpReadState,
+    Authentication, Certificate, CertificateDelegation, CertificateDelegationFormat,
+    CertificateDelegationMetadata, Delegation, HasCanisterId, HttpCallContent, HttpCanisterUpdate,
+    HttpQueryContent, HttpQueryResponse, HttpQueryResponseReply, HttpReadState,
     HttpReadStateContent, HttpReadStateResponse, HttpReply, HttpRequest, HttpRequestContent,
-    HttpRequestEnvelope, HttpRequestError, HttpStatusResponse, HttpUserQuery, RawHttpRequestVal,
-    ReplicaHealthStatus, SignedDelegation,
+    HttpRequestEnvelope, HttpRequestError, HttpSignedQueryResponse, HttpStatusResponse,
+    HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, RawSignedSenderInfo,
+    ReplicaHealthStatus, SenderInfoContent, SignedDelegation, SignedSenderInfo,
 };
-use crate::{user_id_into_protobuf, user_id_try_from_protobuf, Cycles, Funds, NumBytes, UserId};
+use crate::methods::Callback;
+pub use crate::methods::SystemMethod;
+use crate::time::CoarseTime;
+use crate::{NumBytes, UserId, user_id_into_protobuf, user_id_try_from_option};
 pub use blob::Blob;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
+use ic_management_canister_types_private::CanisterChangeOrigin;
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
+use ic_types_cycles::Cycles;
 pub use ingress_messages::{
-    extract_effective_canister_id, Ingress, ParseIngressError, SignedIngress, SignedIngressContent,
+    Ingress, ParseIngressError, SenderInfo, SignedIngress, SignedIngressContent,
+    extract_effective_canister_id,
 };
 pub use inter_canister::{
-    CallContextId, CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
+    CallContextId, CallbackId, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE, Payload, Refund,
+    RejectContext, Request, RequestMetadata, RequestOrResponse, Response, StreamMessage,
 };
-pub use message_id::{MessageId, MessageIdError, EXPECTED_MESSAGE_ID_LENGTH};
-pub use query::{AnonymousQuery, AnonymousQueryResponse, AnonymousQueryResponseReply, UserQuery};
+pub use message_id::{EXPECTED_MESSAGE_ID_LENGTH, MessageId, MessageIdError};
+use phantom_newtype::Id;
+pub use query::{Query, QuerySource};
 pub use read_state::ReadState;
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
+use std::fmt::{self, Debug, Display, Formatter};
 use std::mem::size_of;
+use std::{convert::TryFrom, sync::Arc};
+use strum_macros::EnumIter;
 pub use webauthn::{WebAuthnEnvelope, WebAuthnSignature};
 
 /// Same as [MAX_INTER_CANISTER_PAYLOAD_IN_BYTES], but of a primitive type
@@ -63,12 +77,17 @@ pub const MAX_INTER_CANISTER_PAYLOAD_IN_BYTES: NumBytes =
 pub const MAX_XNET_PAYLOAD_IN_BYTES: NumBytes =
     NumBytes::new(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 * 21 / 20); // 2.1 MiB
 
+/// Error margin (in percentage points) of the deterministic payload size
+/// estimate, relative to the actual byte size of the encoded slice.
+pub const MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT: u64 = 5;
+
 /// Maximum byte size of a valid inter-canister `Response`.
-pub const MAX_RESPONSE_COUNT_BYTES: usize =
-    size_of::<RequestOrResponse>() + MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
+pub const MAX_RESPONSE_COUNT_BYTES: usize = size_of::<RequestOrResponse>()
+    + size_of::<Response>()
+    + MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
 
 /// An end user's signature.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct UserSignature {
     /// The actual signature. End users should sign the `MessageId` computed
     /// from the message that they are signing.
@@ -80,21 +99,30 @@ pub struct UserSignature {
     pub sender_delegation: Option<Vec<SignedDelegation>>,
 }
 
+pub struct StopCanisterCallIdTag;
+pub type StopCanisterCallId = Id<StopCanisterCallIdTag, u64>;
+
 /// Stores info needed for processing and tracking requests to
 /// stop canisters.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum StopCanisterContext {
     Ingress {
         sender: UserId,
         message_id: MessageId,
+        call_id: Option<StopCanisterCallId>,
     },
     Canister {
         sender: CanisterId,
         reply_callback: CallbackId,
+        // TODO(EXC-1450): Make call_id non-optional.
+        call_id: Option<StopCanisterCallId>,
         /// The cycles that the request to stop the canister contained.  Stored
         /// here so that they can be returned to the caller in the eventual
         /// reply.
         cycles: Cycles,
+        /// Deadline of the the stop canister call, if any (copied from request).
+        deadline: CoarseTime,
     },
 }
 
@@ -112,30 +140,70 @@ impl StopCanisterContext {
             StopCanisterContext::Canister { cycles, .. } => cycles.take(),
         }
     }
+
+    pub fn call_id(&self) -> &Option<StopCanisterCallId> {
+        match &self {
+            StopCanisterContext::Ingress { call_id, .. } => call_id,
+            StopCanisterContext::Canister { call_id, .. } => call_id,
+        }
+    }
+}
+
+impl From<(&mut CanisterCall, StopCanisterCallId)> for StopCanisterContext {
+    fn from(input: (&mut CanisterCall, StopCanisterCallId)) -> Self {
+        let (msg, call_id) = input;
+        assert_eq!(
+            msg.method_name(),
+            "stop_canister",
+            "Converting a CanisterCall into StopCanisterContext should only happen with stop_canister calls."
+        );
+        match msg {
+            CanisterCall::Request(req) => StopCanisterContext::Canister {
+                sender: req.sender,
+                reply_callback: req.sender_reply_callback,
+                call_id: Some(call_id),
+                cycles: Arc::make_mut(req).payment.take(),
+                deadline: req.deadline,
+            },
+            CanisterCall::Ingress(ingress) => StopCanisterContext::Ingress {
+                sender: ingress.source,
+                message_id: ingress.message_id.clone(),
+                call_id: Some(call_id),
+            },
+        }
+    }
 }
 
 impl From<&StopCanisterContext> for pb::StopCanisterContext {
     fn from(item: &StopCanisterContext) -> Self {
         match item {
-            StopCanisterContext::Ingress { sender, message_id } => Self {
+            StopCanisterContext::Ingress {
+                sender,
+                message_id,
+                call_id,
+            } => Self {
                 context: Some(pb::stop_canister_context::Context::Ingress(
                     pb::stop_canister_context::Ingress {
                         sender: Some(user_id_into_protobuf(*sender)),
                         message_id: message_id.as_bytes().to_vec(),
+                        call_id: call_id.map(|id| id.get()),
                     },
                 )),
             },
             StopCanisterContext::Canister {
                 sender,
                 reply_callback,
+                call_id,
                 cycles,
+                deadline,
             } => Self {
                 context: Some(pb::stop_canister_context::Context::Canister(
                     pb::stop_canister_context::Canister {
                         sender: Some(pb_types::CanisterId::from(*sender)),
                         reply_callback: reply_callback.get(),
-                        funds: Some((&Funds::new(*cycles)).into()),
+                        call_id: call_id.map(|id| id.get()),
                         cycles: Some((*cycles).into()),
+                        deadline_seconds: deadline.as_secs_since_unix_epoch(),
                     },
                 )),
             },
@@ -149,47 +217,34 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
         let stop_canister_context =
             match try_from_option_field(value.context, "StopCanisterContext::context")? {
                 pb::stop_canister_context::Context::Ingress(
-                    pb::stop_canister_context::Ingress { sender, message_id },
+                    pb::stop_canister_context::Ingress {
+                        sender,
+                        message_id,
+                        call_id,
+                    },
                 ) => StopCanisterContext::Ingress {
-                    sender: user_id_try_from_protobuf(try_from_option_field(
+                    sender: user_id_try_from_option(
                         sender,
                         "StopCanisterContext::Ingress::sender",
-                    )?)?,
+                    )?,
                     message_id: MessageId::try_from(message_id.as_slice())?,
+                    call_id: call_id.map(StopCanisterCallId::from),
                 },
                 pb::stop_canister_context::Context::Canister(
                     pb::stop_canister_context::Canister {
                         sender,
                         reply_callback,
-                        funds,
+                        call_id,
                         cycles,
+                        deadline_seconds,
                     },
-                ) => {
-                    // To maintain backwards compatibility we fall back to reading from `funds` if
-                    // `cycles` is not set.
-                    let cycles = match try_from_option_field(
-                        cycles,
-                        "StopCanisterContext::Canister::cycles",
-                    ) {
-                        Ok(cycles) => cycles,
-                        Err(_) => {
-                            let mut funds: Funds = try_from_option_field(
-                                funds,
-                                "StopCanisterContext::Canister::funds",
-                            )?;
-                            funds.take_cycles()
-                        }
-                    };
-
-                    StopCanisterContext::Canister {
-                        sender: try_from_option_field(
-                            sender,
-                            "StopCanisterContext::Canister::sender",
-                        )?,
-                        reply_callback: CallbackId::from(reply_callback),
-                        cycles,
-                    }
-                }
+                ) => StopCanisterContext::Canister {
+                    sender: try_from_option_field(sender, "StopCanisterContext::Canister::sender")?,
+                    reply_callback: CallbackId::from(reply_callback),
+                    call_id: call_id.map(StopCanisterCallId::from),
+                    cycles: try_from_option_field(cycles, "StopCanisterContext::Canister::cycles")?,
+                    deadline: CoarseTime::from_secs_since_unix_epoch(deadline_seconds),
+                },
             };
         Ok(stop_canister_context)
     }
@@ -198,7 +253,8 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
 /// Bytes representation of signed HTTP requests, using CBOR as a serialization
 /// format. Use `TryFrom` or `TryInto` to convert between `SignedRequestBytes`
 /// and other types, corresponding to serialization/deserialization.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct SignedRequestBytes(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl AsRef<[u8]> for SignedRequestBytes {
@@ -254,13 +310,266 @@ impl SignedRequestBytes {
     }
 }
 
+/// A wrapper around ingress messages and canister requests/responses.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum CanisterMessage {
+    /// A response as an input for Execution consists of the response itself plus
+    /// its associated callback.
+    Response {
+        response: Arc<Response>,
+        callback: Arc<Callback>,
+    },
+    Request(Arc<Request>),
+    Ingress(Arc<Ingress>),
+}
+
+impl Display for CanisterMessage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            CanisterMessage::Ingress(ingress) => {
+                write!(f, "Ingress, method name {},", ingress.method_name)
+            }
+            CanisterMessage::Request(request) => {
+                write!(f, "Request, method name {},", request.method_name)
+            }
+            CanisterMessage::Response { .. } => write!(f, "Response"),
+        }
+    }
+}
+
+/// A wrapper around ingress messages and canister requests/responses as
+/// management canister inputs.
+///
+/// As opposed to `CanisterMessage`, there is no `Callback` associated with
+/// a `Response`, as the management canister manages its own callbacks.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum SubnetMessage {
+    Request(Arc<Request>),
+    Response(Arc<Response>),
+    Ingress(Arc<Ingress>),
+}
+
+impl SubnetMessage {
+    /// Helper function to extract the effective canister id.
+    pub fn effective_canister_id(&self) -> Option<CanisterId> {
+        match &self {
+            SubnetMessage::Ingress(ingress) => ingress.effective_canister_id,
+            SubnetMessage::Request(request) => request.extract_effective_canister_id(),
+            SubnetMessage::Response { .. } => None,
+        }
+    }
+}
+
+/// A wrapper around a canister request and an ingress message.
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub enum CanisterCall {
+    Request(Arc<Request>),
+    Ingress(Arc<Ingress>),
+}
+
+impl CanisterCall {
+    pub fn sender(&self) -> &PrincipalId {
+        match self {
+            CanisterCall::Request(msg) => msg.sender.as_ref(),
+            CanisterCall::Ingress(msg) => msg.source.as_ref(),
+        }
+    }
+
+    pub fn method_payload(&self) -> &[u8] {
+        match self {
+            CanisterCall::Request(msg) => msg.method_payload.as_slice(),
+            CanisterCall::Ingress(msg) => msg.method_payload.as_slice(),
+        }
+    }
+
+    pub fn method_name(&self) -> &str {
+        match self {
+            CanisterCall::Request(request) => request.method_name.as_str(),
+            CanisterCall::Ingress(ingress) => ingress.method_name.as_str(),
+        }
+    }
+
+    /// Returns the cycles received with this message.
+    pub fn cycles(&self) -> Cycles {
+        match self {
+            CanisterCall::Request(request) => request.payment,
+            CanisterCall::Ingress(_) => Cycles::zero(),
+        }
+    }
+
+    /// Deducts the specified fee from the payment of this message.
+    pub fn deduct_cycles(&mut self, fee: Cycles) {
+        match self {
+            CanisterCall::Request(request) => Arc::make_mut(request).payment -= fee,
+            CanisterCall::Ingress(_) => {} // Ingress messages don't have payments
+        }
+    }
+
+    /// Extracts the cycles received with this message.
+    pub fn take_cycles(&mut self) -> Cycles {
+        match self {
+            CanisterCall::Request(request) => Arc::make_mut(request).payment.take(),
+            CanisterCall::Ingress(_) => Cycles::zero(),
+        }
+    }
+
+    /// Returns the sender info of the message if it is an ingress message with a sender info.
+    pub fn sender_info(&self) -> Option<&SenderInfo> {
+        match self {
+            CanisterCall::Request(_) => None,
+            CanisterCall::Ingress(msg) => msg.sender_info.as_ref(),
+        }
+    }
+
+    pub fn canister_change_origin(&self, canister_version: Option<u64>) -> CanisterChangeOrigin {
+        match self {
+            CanisterCall::Ingress(msg) => CanisterChangeOrigin::from_user(msg.source.get()),
+            CanisterCall::Request(msg) => {
+                CanisterChangeOrigin::from_canister(msg.sender.into(), canister_version)
+            }
+        }
+    }
+
+    /// Returns the deadline of canister requests, `NO_DEADLINE` for ingress
+    /// messages.
+    pub fn deadline(&self) -> CoarseTime {
+        match self {
+            CanisterCall::Request(request) => request.deadline,
+            CanisterCall::Ingress(_) => NO_DEADLINE,
+        }
+    }
+}
+
+impl TryFrom<CanisterMessage> for CanisterCall {
+    type Error = ();
+
+    fn try_from(msg: CanisterMessage) -> Result<Self, Self::Error> {
+        match msg {
+            CanisterMessage::Request(msg) => Ok(CanisterCall::Request(msg)),
+            CanisterMessage::Ingress(msg) => Ok(CanisterCall::Ingress(msg)),
+            CanisterMessage::Response { .. } => Err(()),
+        }
+    }
+}
+
+/// A canister task can be thought of as a special system message that the IC
+/// sends to the canister to execute its heartbeat or the global timer method.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, EnumIter)]
+pub enum CanisterTask {
+    Heartbeat = 1,
+    GlobalTimer = 2,
+    OnLowWasmMemory = 3,
+}
+
+impl From<CanisterTask> for SystemMethod {
+    fn from(task: CanisterTask) -> Self {
+        match task {
+            CanisterTask::Heartbeat => SystemMethod::CanisterHeartbeat,
+            CanisterTask::GlobalTimer => SystemMethod::CanisterGlobalTimer,
+            CanisterTask::OnLowWasmMemory => SystemMethod::CanisterOnLowWasmMemory,
+        }
+    }
+}
+
+impl Display for CanisterTask {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Heartbeat => write!(f, "Heartbeat task"),
+            Self::GlobalTimer => write!(f, "Global timer task"),
+            Self::OnLowWasmMemory => write!(f, "On low Wasm memory task"),
+        }
+    }
+}
+
+impl From<&CanisterTask> for pb::execution_task::CanisterTask {
+    fn from(task: &CanisterTask) -> Self {
+        match task {
+            CanisterTask::Heartbeat => pb::execution_task::CanisterTask::Heartbeat,
+            CanisterTask::GlobalTimer => pb::execution_task::CanisterTask::Timer,
+            CanisterTask::OnLowWasmMemory => pb::execution_task::CanisterTask::OnLowWasmMemory,
+        }
+    }
+}
+
+impl TryFrom<pb::execution_task::CanisterTask> for CanisterTask {
+    type Error = ProxyDecodeError;
+
+    fn try_from(task: pb::execution_task::CanisterTask) -> Result<Self, Self::Error> {
+        match task {
+            pb::execution_task::CanisterTask::Unspecified => {
+                Err(ProxyDecodeError::ValueOutOfRange {
+                    typ: "CanisterTask",
+                    err: format!("Unknown value for canister task {task:?}"),
+                })
+            }
+            pb::execution_task::CanisterTask::Heartbeat => Ok(CanisterTask::Heartbeat),
+            pb::execution_task::CanisterTask::Timer => Ok(CanisterTask::GlobalTimer),
+            pb::execution_task::CanisterTask::OnLowWasmMemory => Ok(CanisterTask::OnLowWasmMemory),
+        }
+    }
+}
+
+/// A wrapper around canister messages and tasks.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum CanisterMessageOrTask {
+    Message(CanisterMessage),
+    Task(CanisterTask),
+}
+
+impl Display for CanisterMessageOrTask {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Message(msg) => std::fmt::Display::fmt(msg, f),
+            Self::Task(task) => std::fmt::Display::fmt(task, f),
+        }
+    }
+}
+
+/// A wrapper around canister calls and tasks that are executed in
+/// replicated mode.
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub enum CanisterCallOrTask {
+    Update(CanisterCall),
+    Query(CanisterCall),
+    Task(CanisterTask),
+}
+
+impl CanisterCallOrTask {
+    pub fn cycles(&self) -> Cycles {
+        match self {
+            CanisterCallOrTask::Update(msg) | CanisterCallOrTask::Query(msg) => msg.cycles(),
+            CanisterCallOrTask::Task(_) => Cycles::zero(),
+        }
+    }
+
+    pub fn caller(&self) -> Option<PrincipalId> {
+        match self {
+            CanisterCallOrTask::Update(msg) | CanisterCallOrTask::Query(msg) => Some(*msg.sender()),
+            CanisterCallOrTask::Task(_) => None,
+        }
+    }
+
+    /// Returns the deadline of canister requests, `NO_DEADLINE` for ingress
+    /// messages and tasks.
+    pub fn deadline(&self) -> CoarseTime {
+        match self {
+            CanisterCallOrTask::Update(msg) | CanisterCallOrTask::Query(msg) => msg.deadline(),
+            CanisterCallOrTask::Task(_) => NO_DEADLINE,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::time::current_time_and_expiry_time;
+    use crate::exhaustive::ExhaustiveSet;
+    use crate::{Time, time::expiry_time_from_now};
+    use assert_matches::assert_matches;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use maplit::btreemap;
     use serde_cbor::Value;
     use std::{convert::TryFrom, io::Cursor};
+    use strum::IntoEnumIterator;
 
     fn debug_blob(v: Vec<u8>) -> String {
         format!("{:?}", Blob(v))
@@ -281,10 +590,9 @@ mod tests {
         );
         assert!(
             long_debug.starts_with("Blob{100 bytes;"),
-            "long_debug: {}",
-            long_debug
+            "long_debug: {long_debug}"
         );
-        assert!(long_debug.ends_with("63}"), "long_debug: {}", long_debug); // 99 = 16*6 + 3
+        assert!(long_debug.ends_with("63}"), "long_debug: {long_debug}"); // 99 = 16*6 + 3
     }
 
     fn format_blob(v: Vec<u8>) -> String {
@@ -306,11 +614,10 @@ mod tests {
         );
         assert!(
             long_str.starts_with("Blob{100 bytes;"),
-            "long_str: {}",
-            long_str
+            "long_str: {long_str}"
         );
         // The last printed byte is 39, which is 16*2 + 7
-        assert!(long_str.ends_with("27…}"), "long_str: {}", long_str);
+        assert!(long_str.ends_with("27…}"), "long_str: {long_str}");
     }
 
     /// Makes sure that `val` deserializes to `obj`
@@ -338,7 +645,7 @@ mod tests {
 
     #[test]
     fn decoding_submit_call() {
-        let (_, expiry_time) = current_time_and_expiry_time();
+        let expiry_time = expiry_time_from_now();
         assert_cbor_de_equal(
             &HttpRequestEnvelope::<HttpCallContent> {
                 content: HttpCallContent::Call {
@@ -349,6 +656,7 @@ mod tests {
                         sender: Blob(vec![0x04]),
                         nonce: None,
                         ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                        sender_info: None,
                     },
                 },
                 sender_pubkey: Some(Blob(vec![])),
@@ -372,7 +680,7 @@ mod tests {
 
     #[test]
     fn decoding_submit_call_arg() {
-        let (_, expiry_time) = current_time_and_expiry_time();
+        let expiry_time = expiry_time_from_now();
         assert_cbor_de_equal(
             &HttpRequestEnvelope::<HttpCallContent> {
                 content: HttpCallContent::Call {
@@ -383,6 +691,7 @@ mod tests {
                         sender: Blob(vec![0x04]),
                         nonce: None,
                         ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                        sender_info: None,
                     },
                 },
                 sender_pubkey: Some(Blob(vec![])),
@@ -405,8 +714,8 @@ mod tests {
     }
 
     #[test]
-    fn decoding_submit_call_with_nonce() {
-        let (_, expiry_time) = current_time_and_expiry_time();
+    fn decoding_submit_call_with_nonce_and_sender_info() {
+        let expiry_time = expiry_time_from_now();
         assert_cbor_de_equal(
             &HttpRequestEnvelope::<HttpCallContent> {
                 content: HttpCallContent::Call {
@@ -417,6 +726,11 @@ mod tests {
                         sender: Blob(vec![0x04]),
                         nonce: Some(Blob(vec![1, 2, 3, 4, 5])),
                         ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                        sender_info: Some(RawSignedSenderInfo {
+                            info: Blob(vec![1, 2, 3]),
+                            signer: Blob(vec![42; 8]),
+                            sig: Blob(vec![4, 5, 6]),
+                        }),
                     },
                 },
                 sender_pubkey: Some(Blob(vec![])),
@@ -432,6 +746,11 @@ mod tests {
                     text("sender") => bytes(&[0x04][..]),
                     text("ingress_expiry") => integer(expiry_time.as_nanos_since_unix_epoch()),
                     text("nonce") => bytes(&[1, 2, 3, 4, 5][..]),
+                    text("sender_info") => Value::Map(btreemap! {
+                        text("info") => bytes(&[1, 2, 3][..]),
+                        text("signer") => bytes(&[42; 8][..]),
+                        text("sig") => bytes(&[4, 5, 6][..]),
+                    }),
                 }),
                 text("sender_pubkey") => bytes(b""),
                 text("sender_sig") => bytes(b""),
@@ -441,7 +760,7 @@ mod tests {
 
     #[test]
     fn serialize_via_bincode() {
-        let expiry_time = current_time_and_expiry_time().1;
+        let expiry_time = expiry_time_from_now();
         let update = HttpRequestEnvelope::<HttpCallContent> {
             content: HttpCallContent::Call {
                 update: HttpCanisterUpdate {
@@ -451,6 +770,11 @@ mod tests {
                     sender: Blob(vec![0x04]),
                     nonce: None,
                     ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                    sender_info: Some(RawSignedSenderInfo {
+                        info: Blob(vec![1, 2, 3]),
+                        signer: Blob(vec![42; 8]),
+                        sig: Blob(vec![4, 5, 6]),
+                    }),
                 },
             },
             sender_pubkey: Some(Blob(vec![2; 32])),
@@ -460,12 +784,48 @@ mod tests {
         let signed_ingress = SignedIngress::try_from(update).unwrap();
         let bytes = bincode::serialize(&signed_ingress).unwrap();
         let signed_ingress1 = bincode::deserialize::<SignedIngress>(&bytes);
-        assert!(signed_ingress1.is_ok());
+        assert_matches!(signed_ingress1, Ok(signed_ingress1) if signed_ingress == signed_ingress1);
     }
 
     #[test]
+    fn serialize_request_via_bincode() {
+        let request = Request {
+            receiver: CanisterId::from(13),
+            sender: CanisterId::from(17),
+            sender_reply_callback: CallbackId::from(100),
+            payment: Cycles::from(100_000_000_u128),
+            method_name: "method".into(),
+            method_payload: vec![0_u8, 1_u8, 2_u8, 3_u8, 4_u8, 5_u8],
+            metadata: RequestMetadata::new(13, Time::from_nanos_since_unix_epoch(17)),
+            deadline: CoarseTime::from_secs_since_unix_epoch(169),
+        };
+        let bytes = bincode::serialize(&request).unwrap();
+        let request1 = bincode::deserialize::<Request>(&bytes);
+        assert_matches!(request1, Ok(request1) if request == request1);
+    }
+
+    #[test]
+    fn serialize_response_via_bincode() {
+        let response = Response {
+            originator: CanisterId::from(13),
+            respondent: CanisterId::from(17),
+            originator_reply_callback: CallbackId::from(100),
+            refund: Cycles::from(100_000_000_u128),
+            response_payload: Payload::Data(vec![0_u8, 1_u8, 2_u8, 3_u8, 4_u8, 5_u8]),
+            deadline: CoarseTime::from_secs_since_unix_epoch(169),
+        };
+        let bytes = bincode::serialize(&response).unwrap();
+        let response1 = bincode::deserialize::<Response>(&bytes);
+        assert_matches!(response1, Ok(response1) if response == response1);
+    }
+
+    #[test]
+    /// Allowing bincode::deserialize_from here since
+    /// 1. It's only being used in a test
+    /// 2. The deserialized_from is used on data that has just been serialized before the method.
+    #[allow(clippy::disallowed_methods)]
     fn serialize_via_bincode_without_signature() {
-        let expiry_time = current_time_and_expiry_time().1;
+        let expiry_time = expiry_time_from_now();
         let update = HttpRequestEnvelope::<HttpCallContent> {
             content: HttpCallContent::Call {
                 update: HttpCanisterUpdate {
@@ -475,6 +835,7 @@ mod tests {
                     sender: Blob(vec![0x04]),
                     nonce: None,
                     ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
+                    sender_info: None,
                 },
             },
             sender_pubkey: None,
@@ -486,5 +847,35 @@ mod tests {
         let mut buffer = Cursor::new(&bytes);
         let signed_ingress1: SignedIngress = bincode::deserialize_from(&mut buffer).unwrap();
         assert_eq!(signed_ingress, signed_ingress1);
+    }
+
+    #[test]
+    fn canister_task_proto_round_trip() {
+        for initial in CanisterTask::iter() {
+            let encoded = pb::execution_task::CanisterTask::from(&initial);
+            let round_trip = CanisterTask::try_from(encoded).unwrap();
+
+            assert_eq!(initial, round_trip);
+        }
+    }
+
+    #[test]
+    fn compatibility_for_canister_task() {
+        // If this fails, you are making a potentially incompatible change to `CanisterTask`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        assert_eq!(
+            CanisterTask::iter().map(|x| x as i32).collect::<Vec<i32>>(),
+            [1, 2, 3]
+        );
+    }
+
+    #[test]
+    fn stop_canister_context_proto_round_trip() {
+        for initial in StopCanisterContext::exhaustive_set(&mut reproducible_rng()) {
+            let encoded = pb::StopCanisterContext::from(&initial);
+            let round_trip = StopCanisterContext::try_from(encoded).unwrap();
+
+            assert_eq!(initial, round_trip);
+        }
     }
 }

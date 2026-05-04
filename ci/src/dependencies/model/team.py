@@ -1,0 +1,17 @@
+from enum import IntEnum
+
+
+class Team(IntEnum):
+    NODE_TEAM = 1
+    BOUNDARY_NODE_TEAM = 2
+    TRUST_TEAM = 3
+    OISY_TEAM = 4
+    SDK_TEAM = 5
+    DEFI_TEAM = 6
+    DSM_TEAM = 7
+    GOVERNANCE_TEAM = 8
+    CONSENSUS_TEAM = 9
+    IDENTITY_TEAM = 10
+    INTEGRATIONS_TEAM = 11
+    PRODUCT_ENABLEMENT_TEAM = 12
+    UTOPIA_RND_TEAM = 13

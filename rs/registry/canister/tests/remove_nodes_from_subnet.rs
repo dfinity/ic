@@ -8,8 +8,8 @@ use dfn_candid::candid;
 use ic_base_types::{NodeId, SubnetId};
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::{get_value_or_panic, prepare_registry, prepare_registry_with_two_node_sets},
 };
@@ -22,7 +22,7 @@ use registry_canister::{
 
 #[test]
 fn test_the_anonymous_user_cannot_remove_nodes_from_subnet() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let num_nodes_in_subnet = 4_usize;
             let (init_mutate, subnet_id, _, _) = prepare_registry(num_nodes_in_subnet, 0);
@@ -99,10 +99,10 @@ fn test_the_anonymous_user_cannot_remove_nodes_from_subnet() {
 }
 
 #[test]
-fn test_a_canister_other_than_the_proposals_canister_cannot_remove_nodes_from_subnet() {
-    local_test_on_nns_subnet(|runtime| {
+fn test_a_canister_other_than_the_governance_canister_cannot_remove_nodes_from_subnet() {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
-            // An attacker got a canister that is trying to pass for the proposals
+            // An attacker got a canister that is trying to pass for the governance
             // canister...
             let attacker_canister = set_up_universal_canister(&runtime).await;
             // ... but thankfully, it does not have the right ID
@@ -136,7 +136,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_remove_nodes_from_su
             };
 
             // The attacker canister tries to add nodes to a subnet, pretending to be the
-            // proposals canister. This should have no effect.
+            // governance canister. This should have no effect.
             assert!(
                 !forward_call_via_universal_canister(
                     &attacker_canister,
@@ -168,7 +168,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_remove_nodes_from_su
 
 #[test]
 fn test_remove_nodes_from_subnet_succeeds() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let num_nodes_in_subnet1 = 4_usize;
             let num_nodes_in_subnet2 = 4_usize;
@@ -192,12 +192,12 @@ fn test_remove_nodes_from_subnet_succeeds() {
             )
             .await;
 
-            // Install the universal canister in place of the proposals canister
-            let fake_proposal_canister = set_up_universal_canister(&runtime).await;
-            // Since it takes the id reserved for the proposal canister, it can impersonate
+            // Install the universal canister in place of the governance canister
+            let fake_governance_canister = set_up_universal_canister(&runtime).await;
+            // Since it takes the id reserved for the governance canister, it can impersonate
             // it
             assert_eq!(
-                fake_proposal_canister.canister_id(),
+                fake_governance_canister.canister_id(),
                 ic_nns_constants::GOVERNANCE_CANISTER_ID
             );
 
@@ -230,7 +230,7 @@ fn test_remove_nodes_from_subnet_succeeds() {
 
             assert!(
                 forward_call_via_universal_canister(
-                    &fake_proposal_canister,
+                    &fake_governance_canister,
                     &registry,
                     "remove_nodes_from_subnet",
                     Encode!(&payload).unwrap()
@@ -264,7 +264,7 @@ fn test_remove_nodes_from_subnet_succeeds() {
 /// `remove_nodes_from_subnet`
 #[test]
 fn test_removing_unassigned_nodes_from_subnet_does_nothing() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let num_nodes_in_subnet = 2_usize;
             let num_unassigned_nodes = 2_usize;
@@ -283,12 +283,12 @@ fn test_removing_unassigned_nodes_from_subnet_does_nothing() {
             )
             .await;
 
-            // Install the universal canister in place of the proposals canister
-            let fake_proposal_canister = set_up_universal_canister(&runtime).await;
-            // Since it takes the id reserved for the proposal canister, it can impersonate
+            // Install the universal canister in place of the governance canister
+            let fake_governance_canister = set_up_universal_canister(&runtime).await;
+            // Since it takes the id reserved for the governance canister, it can impersonate
             // it
             assert_eq!(
-                fake_proposal_canister.canister_id(),
+                fake_governance_canister.canister_id(),
                 ic_nns_constants::GOVERNANCE_CANISTER_ID
             );
 
@@ -305,7 +305,7 @@ fn test_removing_unassigned_nodes_from_subnet_does_nothing() {
                 make_subnet_record_key(subnet_id).as_bytes(),
             )
             .await;
-            assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet as usize);
+            assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
 
             let payload = RemoveNodesFromSubnetPayload {
                 node_ids: unassigned_node_ids.clone(),
@@ -313,7 +313,7 @@ fn test_removing_unassigned_nodes_from_subnet_does_nothing() {
 
             assert!(
                 forward_call_via_universal_canister(
-                    &fake_proposal_canister,
+                    &fake_governance_canister,
                     &registry,
                     "remove_nodes_from_subnet",
                     Encode!(&payload).unwrap()

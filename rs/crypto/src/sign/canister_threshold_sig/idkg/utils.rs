@@ -1,55 +1,37 @@
 //! Utilities useful for implementations of IDkgProtocol
-#[cfg(test)]
-mod tests;
 
 mod errors;
 pub use errors::*;
 
-use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, IDkgDealingInternal, MEGaPublicKey};
+use ic_crypto_internal_csp::keygen::utils::{
+    MEGaPublicKeyFromProtoError, mega_public_key_from_proto,
+};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{IDkgDealingInternal, MEGaPublicKey};
 use ic_interfaces_registry::RegistryClient;
-use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
-use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
+use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_registry_client_helpers::crypto::CryptoRegistry;
+use ic_types::crypto::KeyPurpose;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyOpeningError,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{IDkgReceivers, IDkgTranscript};
-use ic_types::crypto::KeyPurpose;
+use ic_types::crypto::canister_threshold_sig::idkg::{BatchSignedIDkgDealing, IDkgTranscript};
 use ic_types::{NodeId, NodeIndex, RegistryVersion};
-use std::collections::BTreeMap;
 use std::convert::TryFrom;
-use std::sync::Arc;
 
-/// Query the registry for the MEGa public keys of all receivers.
-///
-/// The returned map is keyed by the index of the receiver.
-pub fn idkg_encryption_keys_from_registry(
-    receivers: &IDkgReceivers,
-    registry: &Arc<dyn RegistryClient>,
-    registry_version: RegistryVersion,
-) -> Result<BTreeMap<NodeIndex, MEGaPublicKey>, MegaKeyFromRegistryError> {
-    receivers
-        .iter()
-        .map(|(index, receiver)| {
-            let enc_pubkey = get_mega_pubkey(&receiver, registry, registry_version)?;
-            Ok((index, enc_pubkey))
-        })
-        .collect()
-}
+#[cfg(test)]
+mod tests;
 
 /// Query the registry for the MEGa public key of `node_id` receiver.
-pub fn get_mega_pubkey(
+pub fn retrieve_mega_public_key_from_registry(
     node_id: &NodeId,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
 ) -> Result<MEGaPublicKey, MegaKeyFromRegistryError> {
-    let pk_proto = registry
-        .get_crypto_key_for_node(*node_id, KeyPurpose::IDkgMEGaEncryption, registry_version)
-        .map_err(MegaKeyFromRegistryError::RegistryError)?
-        .ok_or(MegaKeyFromRegistryError::PublicKeyNotFound {
-            registry_version,
-            node_id: *node_id,
-        })?;
+    let pk_proto = fetch_idkg_dealing_encryption_public_key_from_registry(
+        node_id,
+        registry,
+        registry_version,
+    )?;
     let mega_pubkey = mega_public_key_from_proto(&pk_proto).map_err(|e| match e {
         MEGaPublicKeyFromProtoError::UnsupportedAlgorithm { algorithm_id } => {
             MegaKeyFromRegistryError::UnsupportedAlgorithm { algorithm_id }
@@ -64,33 +46,22 @@ pub fn get_mega_pubkey(
     Ok(mega_pubkey)
 }
 
-pub enum MEGaPublicKeyFromProtoError {
-    UnsupportedAlgorithm {
-        algorithm_id: Option<AlgorithmIdProto>,
-    },
-    MalformedPublicKey {
-        key_bytes: Vec<u8>,
-    },
+/// Query the registry for the proto of the MEGa public key of `node_id` receiver.
+pub fn fetch_idkg_dealing_encryption_public_key_from_registry(
+    node_id: &NodeId,
+    registry: &dyn RegistryClient,
+    registry_version: RegistryVersion,
+) -> Result<PublicKey, MegaKeyFromRegistryError> {
+    registry
+        .get_crypto_key_for_node(*node_id, KeyPurpose::IDkgMEGaEncryption, registry_version)
+        .map_err(MegaKeyFromRegistryError::RegistryError)?
+        .ok_or(MegaKeyFromRegistryError::PublicKeyNotFound {
+            registry_version,
+            node_id: *node_id,
+        })
 }
 
-/// Deserialize a Protobuf public key to a MEGaPublicKey.
-pub fn mega_public_key_from_proto(
-    proto: &PublicKeyProto,
-) -> Result<MEGaPublicKey, MEGaPublicKeyFromProtoError> {
-    let curve_type = match AlgorithmIdProto::from_i32(proto.algorithm) {
-        Some(AlgorithmIdProto::MegaSecp256k1) => Ok(EccCurveType::K256),
-        alg_id => Err(MEGaPublicKeyFromProtoError::UnsupportedAlgorithm {
-            algorithm_id: alg_id,
-        }),
-    }?;
-
-    MEGaPublicKey::deserialize(curve_type, &proto.key_value).map_err(|_| {
-        MEGaPublicKeyFromProtoError::MalformedPublicKey {
-            key_bytes: proto.key_value.clone(),
-        }
-    })
-}
-
+#[derive(Debug)]
 pub enum IDkgDealingExtractionError {
     MissingDealingInTranscript { dealer_id: NodeId },
     SerializationError { internal_error: String },
@@ -135,24 +106,34 @@ impl From<IDkgDealingExtractionError> for IDkgVerifyOpeningError {
     }
 }
 
-/// Finds in `transcript` the dealing of the dealer `dealer_id`, and returns
-/// this dealing together with the index that corresponds to the dealer.
-pub fn index_and_dealing_of_dealer(
+/// Finds in `transcript` the dealing of the dealer `dealer_id` and converts it
+/// to internal representation, and returns this dealing together with the index
+/// that corresponds to the dealer.
+pub(crate) fn index_and_dealing_of_dealer(
     dealer_id: NodeId,
     transcript: &IDkgTranscript,
 ) -> Result<(NodeIndex, IDkgDealingInternal), IDkgDealingExtractionError> {
+    let (index, signed_dealing) = index_and_batch_signed_dealing_of_dealer(dealer_id, transcript)?;
+    let internal_dealing = IDkgDealingInternal::try_from(signed_dealing).map_err(|e| {
+        IDkgDealingExtractionError::SerializationError {
+            internal_error: format!(
+                "Error deserializing a signed dealing: {e:?} of dealer {dealer_id:?}"
+            ),
+        }
+    })?;
+    Ok((index, internal_dealing))
+}
+
+/// Finds in `transcript` the dealing of the dealer `dealer_id`, and returns
+/// this dealing together with the index that corresponds to the dealer.
+pub(crate) fn index_and_batch_signed_dealing_of_dealer(
+    dealer_id: NodeId,
+    transcript: &IDkgTranscript,
+) -> Result<(NodeIndex, &BatchSignedIDkgDealing), IDkgDealingExtractionError> {
     let (index, signed_dealing) = transcript
         .verified_dealings
         .iter()
         .find(|(_index, signed_dealing)| signed_dealing.dealer_id() == dealer_id)
         .ok_or(IDkgDealingExtractionError::MissingDealingInTranscript { dealer_id })?;
-    let internal_dealing = IDkgDealingInternal::try_from(signed_dealing).map_err(|e| {
-        IDkgDealingExtractionError::SerializationError {
-            internal_error: format!(
-                "Error deserializing a signed dealing: {:?} of dealer {:?}",
-                e, dealer_id
-            ),
-        }
-    })?;
-    Ok((*index, internal_dealing))
+    Ok((*index, signed_dealing))
 }

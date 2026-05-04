@@ -1,18 +1,25 @@
-use crate::pb::v1::governance_error::ErrorType;
-use crate::pb::v1::neuron::DissolveState;
-use crate::pb::v1::proposal::Action;
-use crate::pb::v1::{
-    manage_neuron, Ballot, Empty, GovernanceError, Neuron, NeuronId, NeuronPermission,
-    NeuronPermissionList, NeuronPermissionType, Vote,
+use crate::{
+    logs::ERROR,
+    pb::v1::{
+        Ballot, Empty, GovernanceError, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+        NeuronPermissionType, ProposalId, Topic, Vote,
+        governance_error::ErrorType,
+        manage_neuron,
+        neuron::{DissolveState, FolloweesForTopic, TopicFollowees},
+        proposal::Action,
+    },
 };
 use ic_base_types::PrincipalId;
-use ic_icrc1::Subaccount;
-use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashSet};
-use std::convert::{TryFrom, TryInto};
-use std::fmt::{Display, Formatter};
-use std::iter::FromIterator;
-use std::str::FromStr;
+use ic_canister_log::log;
+use icrc_ledger_types::icrc1::account::Subaccount;
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, HashSet},
+    convert::{TryFrom, TryInto},
+    fmt::{Display, Formatter},
+    iter::FromIterator,
+    str::FromStr,
+};
 
 /// The maximum number of neurons returned by the method `list_neurons`.
 pub const MAX_LIST_NEURONS_RESULTS: u32 = 100;
@@ -21,7 +28,7 @@ pub const MAX_LIST_NEURONS_RESULTS: u32 = 100;
 pub const DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER: u64 = 100;
 
 /// The state of a neuron
-#[derive(Debug, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum NeuronState {
     /// In this state, the neuron is not dissolving and has a specific
     /// `dissolve_delay` that is larger than zero.
@@ -38,7 +45,7 @@ pub enum NeuronState {
     Dissolved,
 }
 /// The status of an invocation of `remove_permission`.
-#[derive(Debug, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum RemovePermissionsStatus {
     /// This status indicates all PermissionTypes for a PrincipalId
     /// were removed from a neuron's permission list and therefore
@@ -51,6 +58,24 @@ pub enum RemovePermissionsStatus {
 }
 
 impl Neuron {
+    pub const PERMISSIONS_RELATED_TO_VOTING: &'static [NeuronPermissionType] = &[
+        NeuronPermissionType::Vote,
+        NeuronPermissionType::SubmitProposal,
+        NeuronPermissionType::ManageVotingPermission,
+    ];
+
+    pub const PERMISSIONS_FOR_NEURONS_FUND_NNS_NEURON_CONTROLLER:
+        &'static [NeuronPermissionType] = &[
+        NeuronPermissionType::ManageVotingPermission,
+        NeuronPermissionType::SubmitProposal,
+        NeuronPermissionType::Vote,
+    ];
+
+    pub const PERMISSIONS_FOR_NEURONS_FUND_NNS_NEURON_HOTKEY: &'static [NeuronPermissionType] = &[
+        NeuronPermissionType::SubmitProposal,
+        NeuronPermissionType::Vote,
+    ];
+
     // Utility methods on neurons.
 
     /// Returns the neuron's state.
@@ -114,30 +139,42 @@ impl Neuron {
         false
     }
 
-    /// Returns true if the principalId has at least all (i.e. has a superset)
-    /// the permissions to act on this neuron (i.e., self).
-    pub(crate) fn is_authorized_with_permissions(
+    /// Returns Ok if the caller has ManagePrincipals, or if the caller has
+    /// ManageVotingPermission and the permissions to change relate to voting.
+    pub(crate) fn check_principal_authorized_to_change_permissions(
         &self,
-        principal_id: &PrincipalId,
-        permissions: &NeuronPermissionList,
-    ) -> bool {
-        let found_neuron_permission = self
-            .permissions
+        caller: &PrincipalId,
+        permissions_to_change: NeuronPermissionList,
+    ) -> Result<(), GovernanceError> {
+        // If the permissions to change are exclusively voting related,
+        // ManagePrincipals or ManageVotingPermission is sufficient.
+        // Otherwise, only ManagePrincipals is sufficient.
+        let sufficient_permissions = if permissions_to_change.is_exclusively_voting_related() {
+            vec![
+                NeuronPermissionType::ManagePrincipals,
+                NeuronPermissionType::ManageVotingPermission,
+            ]
+        } else {
+            vec![NeuronPermissionType::ManagePrincipals]
+        };
+
+        // The caller is authorized if they have any of the sufficient permissions
+        let caller_authorized = sufficient_permissions
             .iter()
-            .find(|neuron_permission| neuron_permission.principal == Some(*principal_id));
+            .any(|sufficient_permission| self.is_authorized(caller, *sufficient_permission));
 
-        if let Some(neuron_permission) = found_neuron_permission {
-            // Check that the found permissions contains each of the requested permissions
-            for permission in &permissions.permissions {
-                if !neuron_permission.permission_type.contains(permission) {
-                    return false;
-                }
-            }
-
-            return true;
+        if caller_authorized {
+            Ok(())
+        } else {
+            let caller_permissions = self.permissions_for_principal(caller);
+            Err(GovernanceError::new_with_message(
+                ErrorType::NotAuthorized,
+                format!(
+                    "Caller '{caller:?}' is not authorized to modify permissions {permissions_to_change} for neuron '{}' as it does not have any of {sufficient_permissions:?}. (Caller's permissions are {caller_permissions})",
+                    self.id.as_ref().expect("Neuron must have a NeuronId"),
+                ),
+            ))
         }
-
-        false
     }
 
     /// Returns the voting power of the neuron.
@@ -153,6 +190,7 @@ impl Neuron {
     ///   and is applied against the total voting power of the neuron. It is represented
     ///   as a percent in the range of 0 and 100 where 0 will result in 0 voting power,
     ///   and 100 will result in unadjusted voting power.
+    ///
     /// max_dissolve_delay_seconds and max_neuron_age_for_age_bonus are defined in
     /// the nervous system parameters.
     pub fn voting_power(
@@ -164,7 +202,7 @@ impl Neuron {
         max_age_bonus_percentage: u64,
     ) -> u64 {
         // We compute the stake adjustments in u128.
-        let stake = self.stake_e8s() as u128;
+        let stake = self.voting_power_stake_e8s() as u128;
         // Dissolve delay is capped to max_dissolve_delay_seconds, but we cap it
         // again here to make sure, e.g., if this changes in the future.
         let d = std::cmp::min(
@@ -213,52 +251,142 @@ impl Neuron {
         std::cmp::min(vad_stake, u64::MAX as u128) as u64
     }
 
-    /// Given the specified `ballots`, determine how the neuron would
-    /// vote on a proposal of `action` based on which neurons this
-    /// neuron follows on this action (or on the default action if this
-    /// neuron doesn't specify any followees for `action`).
-    pub(crate) fn would_follow_ballots(
+    fn get_followee_neuron_ids_for_topic(&self, topic: Topic) -> Vec<NeuronId> {
+        let Some(TopicFollowees {
+            topic_id_to_followees,
+        }) = &self.topic_followees
+        else {
+            // This neuron does not follow any topics.
+            return vec![];
+        };
+
+        let Some(FolloweesForTopic { followees, .. }) =
+            topic_id_to_followees.get(&i32::from(topic))
+        else {
+            // This neuron does not follow on this topic.
+            return vec![];
+        };
+
+        followees
+            .iter()
+            .filter_map(|followee| {
+                let Some(neuron_id) = followee.neuron_id.clone() else {
+                    log!(
+                        ERROR,
+                        "Topic followee of a neuron does not have a neuron ID: {:?}",
+                        self
+                    );
+                    return None;
+                };
+
+                Some(neuron_id)
+            })
+            .collect()
+    }
+
+    fn get_followee_neuron_ids_for_function(&self, function_id: u64) -> Vec<NeuronId> {
+        self.followees
+            .get(&function_id)
+            .map(|followees_message| followees_message.followees.clone())
+            .unwrap_or_default()
+    }
+
+    fn get_followee_neuron_ids(&self, function_id: u64, topic: Topic) -> Vec<NeuronId> {
+        // Try to get relevant followees from topic following, if available.
+        let mut followees = self.get_followee_neuron_ids_for_topic(topic);
+
+        if !followees.is_empty() {
+            return followees;
+        }
+
+        // If no followees for the topic, try to get legacy, function-based followees.
+        followees = self.get_followee_neuron_ids_for_function(function_id);
+
+        if !followees.is_empty() {
+            return followees;
+        }
+
+        // If the function is not critical, and this neuron does not have followees
+        // specifically for the function, then fall back to the "catch-all" following.
+        //
+        // Despite the fact that this branch handles legacy following, the criticality
+        // of individual functions is determined based on the topic.
+        if !topic.is_critical() {
+            let catchall_function_id = u64::from(&Action::Unspecified(Empty {}));
+            followees = self.get_followee_neuron_ids_for_function(catchall_function_id);
+        }
+
+        followees
+    }
+
+    /// Given the specified `ballots` and `topic`, determine how the neuron would vote on a proposal
+    /// of `action` based on which neurons this neuron follows on this action
+    /// (or on the default action if this neuron doesn't specify any followees for `action`).
+    ///
+    /// This function handles the case `topic == Topic::Unspecified` by falling back to legacy
+    /// non-critical following (for which the legacy catch-all mechanism applies if no specific
+    /// following rules were set for this neuron and `proposal_id`).
+    pub(crate) fn vote_from_ballots_following(
         &self,
-        action: u64,
+        function_id: u64,
+        topic: Topic,
         ballots: &BTreeMap<String, Ballot>,
+        proposal_id: &ProposalId,
     ) -> Vote {
-        // Compute the list of followees for this action. If no
-        // following is specified for the action, use the followees
-        // from the 'Unspecified' action.
-        let unspecified_key = u64::from(&Action::Unspecified(Empty {}));
-        if let Some(followees) = self
-            .followees
-            .get(&(action))
-            .or_else(|| self.followees.get(&unspecified_key))
-            // extract plain vector from 'Followees' proto
-            .map(|x| &x.followees)
-        {
-            // If, for some reason, a list of followees is specified
-            // but empty (this is not normal), don't vote 'no', as
-            // would be the natural result of the algorithm below, but
-            // instead don't cast a vote.
-            if followees.is_empty() {
-                return Vote::Unspecified;
-            }
-            let mut yes: usize = 0;
-            let mut no: usize = 0;
-            for f in followees.iter() {
-                if let Some(f_vote) = ballots.get(&f.to_string()) {
-                    if f_vote.vote == (Vote::Yes as i32) {
-                        yes += 1;
-                    } else if f_vote.vote == (Vote::No as i32) {
-                        no += 1;
-                    }
-                }
-            }
-            if 2 * yes > followees.len() {
-                return Vote::Yes;
-            }
-            if 2 * no >= followees.len() {
-                return Vote::No;
+        // Step 1: Who are the relevant followees?
+
+        // Step 1.1. Try to get relevant followees from topic following, if available.
+        let followees = self.get_followee_neuron_ids(function_id, topic);
+
+        if followees.is_empty() {
+            return Vote::Unspecified;
+        }
+
+        // Step 2: Count followee votes.
+
+        let mut yes: usize = 0;
+        let mut no: usize = 0;
+        for neuron_id in &followees {
+            let Some(ballot) = ballots.get(&neuron_id.to_string()) else {
+                continue;
+            };
+
+            let followee_vote = Vote::try_from(ballot.vote);
+
+            debug_assert!(
+                followee_vote.is_ok(),
+                "Cannot convert ballot vote to Vote for {ballot:?}"
+            );
+
+            let Ok(followee_vote) = Vote::try_from(ballot.vote) else {
+                log!(
+                    ERROR,
+                    "Skipping followee neuron {} with an invalid vote {} for proposal {}",
+                    neuron_id,
+                    ballot.vote,
+                    proposal_id.id,
+                );
+                continue;
+            };
+
+            if followee_vote == Vote::Yes {
+                yes += 1;
+            } else if followee_vote == Vote::No {
+                no += 1;
             }
         }
-        // No followees specified.
+
+        // Step 3: Use vote counts to decide which Vote option to return.
+
+        // If a majority of followees voted Yes, return Yes.
+        if yes.saturating_mul(2) > followees.len() {
+            return Vote::Yes;
+        }
+        // If a majority for Yes can never be achieved, return No.
+        if no.saturating_mul(2) >= followees.len() {
+            return Vote::No;
+        }
+        // Otherwise, we are still open to going either way.
         Vote::Unspecified
     }
 
@@ -329,17 +457,7 @@ impl Neuron {
                     let new_delay = std::cmp::min(additional_delay, max_dissolve_delay_seconds);
                     self.dissolve_state = Some(DissolveState::DissolveDelaySeconds(new_delay));
                     // We transition from `Dissolved` to `NotDissolving`: reset age.
-                    //
-                    // We set the age to ts as, at this point in
-                    // time, the neuron exited the dissolving
-                    // state and entered the dissolved state.
-                    //
-                    // This way of setting the age of neuron
-                    // transitioning from dissolved to non-dissolving
-                    // creates an incentive to increase the
-                    // dissolve delay of a dissolved neuron
-                    // instead of dissolving it.
-                    self.aging_since_timestamp_seconds = ts;
+                    self.aging_since_timestamp_seconds = now_seconds;
                     Ok(())
                 }
             }
@@ -467,7 +585,7 @@ impl Neuron {
                 if current_dd > desired_dd {
                     return Err(GovernanceError::new_with_message(
                         ErrorType::InvalidCommand,
-                        "Can't set a dissolve delay that is smaller than the current dissolve delay."
+                        "Can't set a dissolve delay that is smaller than the current dissolve delay.",
                     ));
                 }
 
@@ -489,6 +607,14 @@ impl Neuron {
             manage_neuron::configure::Operation::StopDissolving(_) => {
                 self.stop_dissolving(now_seconds)
             }
+            manage_neuron::configure::Operation::ChangeAutoStakeMaturity(change) => {
+                if change.requested_setting_for_auto_stake_maturity {
+                    self.auto_stake_maturity = Some(true);
+                } else {
+                    self.auto_stake_maturity = None;
+                }
+                Ok(())
+            }
         }
     }
 
@@ -505,6 +631,17 @@ impl Neuron {
     pub fn stake_e8s(&self) -> u64 {
         self.cached_neuron_stake_e8s
             .saturating_sub(self.neuron_fees_e8s)
+    }
+
+    /// Returns the current stake of this Neuron as used as an input
+    /// for the voting power calculation.
+    ///
+    /// It it is determined as the sum of staked tokens and staked maturity
+    /// minus fees occurred for rejected proposals made by this neuron.
+    fn voting_power_stake_e8s(&self) -> u64 {
+        self.cached_neuron_stake_e8s
+            .saturating_sub(self.neuron_fees_e8s)
+            .saturating_add(self.staked_maturity_e8s_equivalent.unwrap_or(0))
     }
 
     /// Updates the stake of this neuron to `new_stake` and adjust this neuron's
@@ -539,7 +676,7 @@ impl Neuron {
             // = neuron.aging_since_timestamp_seconds.
         }
 
-        self.cached_neuron_stake_e8s = new_stake_e8s as u64;
+        self.cached_neuron_stake_e8s = new_stake_e8s;
     }
 
     /// Returns a neuron's subaccount or an error if there is none (a neuron
@@ -614,7 +751,7 @@ impl Neuron {
                 )
             })?;
 
-        let mut existing_permission = self
+        let existing_permission = self
             .permissions
             .get_mut(existing_permission_position)
             .expect("Expected permission to exist");
@@ -629,7 +766,7 @@ impl Neuron {
         for permission_type in &permission_types_to_remove {
             let permission_type_is_present = remaining_permission_types.remove(permission_type);
             if !permission_type_is_present {
-                missing_permissions.insert(NeuronPermissionType::from_i32(*permission_type));
+                missing_permissions.insert(NeuronPermissionType::try_from(*permission_type).ok());
             }
         }
 
@@ -637,8 +774,7 @@ impl Neuron {
             return Err(GovernanceError::new_with_message(
                 ErrorType::AccessControlList,
                 format!(
-                    "PrincipalId {} was missing permissions {:?} when removing {:?}",
-                    principal_id, missing_permissions, permission_types_to_remove
+                    "PrincipalId {principal_id} was missing permissions {missing_permissions:?} when removing {permission_types_to_remove:?}"
                 ),
             ));
         }
@@ -655,6 +791,52 @@ impl Neuron {
 
         Ok(RemovePermissionsStatus::SomePermissionTypesRemoved)
     }
+
+    /// Returns true if this neuron is vesting, false otherwise
+    pub fn is_vesting(&self, now: u64) -> bool {
+        self.vesting_period_seconds
+            .map(|vesting_period_seconds| {
+                self.created_timestamp_seconds + vesting_period_seconds >= now
+            })
+            .unwrap_or_default()
+    }
+
+    // Returns the permissions that a given principal has for this neuron.
+    pub fn permissions_for_principal(&self, principal: &PrincipalId) -> NeuronPermissionList {
+        NeuronPermissionList {
+            permissions: self
+                .permissions
+                .iter()
+                .filter(|permission| permission.principal == Some(*principal))
+                .flat_map(|permissions| &permissions.permission_type)
+                .cloned()
+                .collect(),
+        }
+    }
+
+    /// "NF neurons" are defined as neurons where the NNS governance canister
+    /// has the the `ManagePrincipals` permission and is the only principal that
+    /// does.
+    pub fn is_neurons_fund_controlled(&self) -> bool {
+        let principals_with_manage_principals_permission = self
+            .permissions
+            .iter()
+            .filter_map(|p| {
+                let manage_principals_present = p.permission_type.iter().any(|permission| {
+                    NeuronPermissionType::try_from(*permission).ok()
+                        == Some(NeuronPermissionType::ManagePrincipals)
+                });
+                if manage_principals_present {
+                    p.principal
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        principals_with_manage_principals_permission
+            == vec![PrincipalId::from(ic_nns_constants::GOVERNANCE_CANISTER_ID)]
+    }
 }
 
 /// A neuron's ID that is defined as the neuron's subaccount on the ledger canister.
@@ -664,9 +846,23 @@ impl NeuronId {
             Ok(subaccount) => Ok(subaccount),
             Err(e) => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidNeuronId,
-                format!("Could not convert NeuronId to Subaccount {}", e),
+                format!("Could not convert NeuronId to Subaccount {e}"),
             )),
         }
+    }
+
+    /// A test method to help generate NeuronId's where the subaccount does not matter.
+    /// This should only be used in tests.
+    pub fn new_test_neuron_id(id: u64) -> NeuronId {
+        let mut subaccount = [0; std::mem::size_of::<Subaccount>()];
+        let id = &id.to_be_bytes();
+        subaccount[0] = id.len().try_into().unwrap();
+        subaccount[1..1 + id.len()].copy_from_slice(id);
+        NeuronId::from(subaccount)
+    }
+
+    pub fn test_neuron_ids<const N: usize>() -> [NeuronId; N] {
+        core::array::from_fn(|i| NeuronId::new_test_neuron_id(10 + i as u64))
     }
 }
 
@@ -686,7 +882,7 @@ impl FromStr for NeuronId {
             Ok(id) => Ok(NeuronId { id }),
             Err(e) => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidNeuronId,
-                format!("Could not convert {} to NeuronId", e),
+                format!("Could not convert {e} to NeuronId"),
             )),
         }
     }
@@ -711,236 +907,4 @@ impl PartialOrd for NeuronId {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use proptest::prelude::proptest;
-
-    #[test]
-    fn test_voting_power_fully_boosted() {
-        let base_stake = 100;
-        let neuron = Neuron {
-            cached_neuron_stake_e8s: base_stake,
-            neuron_fees_e8s: 0,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(100)),
-            aging_since_timestamp_seconds: 0,
-            voting_power_percentage_multiplier: 100,
-            ..Neuron::default()
-        };
-
-        assert_eq!(
-            neuron.voting_power(100, 100, 100, 100, 25),
-            base_stake
-            * 2 // dissolve_delay boost
-            * 5 / 4 // voting power boost
-        );
-    }
-
-    #[test]
-    fn test_voting_power_with_bonus_thresholds_zero() {
-        let base_stake = 100;
-        let neuron = Neuron {
-            cached_neuron_stake_e8s: base_stake,
-            neuron_fees_e8s: 0,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(100)),
-            aging_since_timestamp_seconds: 0,
-            voting_power_percentage_multiplier: 100,
-            ..Neuron::default()
-        };
-
-        assert_eq!(
-            neuron.voting_power(
-                100, // now_seconds
-                // These are the operative data of this test.
-                // In an earlier implementation, these would have cause divide by zero.
-                0,   // max_dissolve_delay_seconds
-                0,   // max_neuron_age_for_age_bonus
-                100, // max_dissolve_delay_bonus_percentage
-                25   // max_age_bonus_percentage
-            ),
-            base_stake
-        );
-    }
-
-    proptest! {
-        /// Tests that the voting power is increased by max_dissolve_delay_bonus_percentage
-        /// when the neuron's dissolve delay == max_dissolve_delay_seconds.
-        #[test]
-        fn test_voting_power_dissolve_delay_boost(
-            base_stake in 0u64..1_000_000,
-            dissolve_delay_seconds in 1u64..1_000_000,  // Needs to be > 0 due to values of 0 causing the dissolve delay bonus to never apply.
-            max_dissolve_delay_bonus_percentage in 0u64..1_000_000,
-        ) {
-            let neuron = Neuron {
-                cached_neuron_stake_e8s: base_stake,
-                neuron_fees_e8s: 0,
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
-                aging_since_timestamp_seconds: 0,
-                voting_power_percentage_multiplier: 100,
-                ..Neuron::default()
-            };
-
-            assert_eq!(
-                neuron.voting_power(
-                    0, // now_seconds
-                    dissolve_delay_seconds,
-                    100, // max_neuron_age_for_age_bonus
-                    max_dissolve_delay_bonus_percentage,
-                    25 // max_age_bonus_percentage
-                ),
-                base_stake + (base_stake * max_dissolve_delay_bonus_percentage / 100)
-            );
-        }
-
-        /// Tests that the voting power is increased by max_age_bonus_percentage
-        /// when the neuron's age == max_neuron_age_for_age_bonus.
-        #[test]
-        fn test_voting_power_age_boost(
-            base_stake in 0u64..1_000_000,
-            max_neuron_age_for_age_bonus in 1u64..1_000_000,  // Needs to be > 0 due to values of 0 causing the age bonus to never apply.
-            max_age_bonus_percentage in 0u64..1_000_000,
-        ) {
-            let neuron = Neuron {
-                cached_neuron_stake_e8s: base_stake,
-                neuron_fees_e8s: 0,
-                dissolve_state: None,
-                aging_since_timestamp_seconds: 0,
-                voting_power_percentage_multiplier: 100,
-                ..Neuron::default()
-            };
-
-            assert_eq!(
-                neuron.voting_power(
-                    max_neuron_age_for_age_bonus,
-                    100, // max_dissolve_delay_seconds
-                    max_neuron_age_for_age_bonus,
-                    100, // max_dissolve_delay_bonus_percentage
-                    max_age_bonus_percentage
-                ),
-                base_stake + (base_stake * max_age_bonus_percentage / 100)
-            );
-        }
-
-        /// Tests that the voting power is increased by half of max_dissolve_delay_bonus_percentage
-        /// when the neuron's dissolve delay == max_dissolve_delay_seconds / 2.
-        #[test]
-        fn test_voting_power_dissolve_delay_boost_half(
-            base_stake in 0u64..1_000_000,
-            dissolve_delay_seconds in 0u64..1_000_000,
-            max_dissolve_delay_bonus_percentage in 0u64..1_000_000,
-        ) {
-            let neuron = Neuron {
-                cached_neuron_stake_e8s: base_stake,
-                neuron_fees_e8s: 0,
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
-                aging_since_timestamp_seconds: 0,
-                voting_power_percentage_multiplier: 100,
-                ..Neuron::default()
-            };
-
-            assert_eq!(
-                neuron.voting_power(
-                    0, // now_seconds
-                    dissolve_delay_seconds * 2,
-                    100, // max_neuron_age_for_age_bonus
-                    max_dissolve_delay_bonus_percentage,
-                    25 // max_age_bonus_percentage
-                ),
-                base_stake + (base_stake * max_dissolve_delay_bonus_percentage / 100 / 2)
-            );
-        }
-
-        /// Tests that the voting power is increased by half of max_age_bonus_percentage
-        /// when the neuron's age == max_neuron_age_for_age_bonus / 2.
-        #[test]
-        fn test_voting_power_age_boost_half(
-            base_stake in 0u64..1_000_000,
-            age in 0u64..1_000_000,
-            max_age_bonus_percentage in 0u64..1_000_000,
-        ) {
-            let neuron = Neuron {
-                cached_neuron_stake_e8s: base_stake,
-                neuron_fees_e8s: 0,
-                dissolve_state: None,
-                aging_since_timestamp_seconds: 0,
-                voting_power_percentage_multiplier: 100,
-                ..Neuron::default()
-            };
-
-            assert_eq!(
-                neuron.voting_power(
-                    age, // now_seconds
-                    100, // max_dissolve_delay_seconds
-                    age * 2, // max_neuron_age_for_age_bonus
-                    100, // max_dissolve_delay_bonus_percentage
-                    max_age_bonus_percentage // max_age_bonus_percentage
-                ),
-                base_stake + (base_stake * max_age_bonus_percentage / 100 / 2)
-            );
-        }
-
-        /// Tests that the voting power is not increased when the neuron meets
-        /// neither bonus criteria (age or disolve delay)
-        #[test]
-        fn test_voting_power_not_eligible_for_boost(
-            base_stake in 0u64..1_000_000,
-            max_dissolve_delay_seconds in 1u64..1_000_000,
-            max_dissolve_delay_bonus_percentage in 1u64..1_000_000,
-            age in 0u64..1_000_000,
-            max_age_bonus_percentage in 1u64..1_000_000,
-        ) {
-            let neuron = Neuron {
-                cached_neuron_stake_e8s: base_stake,
-                neuron_fees_e8s: 0,
-                dissolve_state: None,
-                aging_since_timestamp_seconds: age,
-                voting_power_percentage_multiplier: 100,
-                ..Neuron::default()
-            };
-
-            assert_eq!(
-                neuron.voting_power(
-                    age,
-                    max_dissolve_delay_seconds,
-                    max_age_bonus_percentage,
-                    max_dissolve_delay_bonus_percentage,
-                    max_age_bonus_percentage
-                ),
-                base_stake
-            );
-        }
-
-        /// This makes up random data and puts it into Neuron::voting_power,
-        /// which has asserts internally. This is testing that those asserts do not fire regardless of the inputs.
-        #[test]
-        fn test_no_voting_power_calculation_causes_panic(
-            base_stake in 0u64..1_000_000,
-            neuron_fees_e8s in 0u64..1_000_000,
-            aging_since_timestamp_seconds in 0u64..1_000_000,
-            voting_power_percentage_multiplier in 0u64..1_000_000,
-
-            now_seconds in 0u64..1_000_000,
-            dissolve_delay_seconds in 0u64..1_000_000,
-            max_dissolve_delay_seconds in 0u64..1_000_000,
-            max_neuron_age_for_age_bonus in 0u64..1_000_000,
-            max_dissolve_delay_bonus_percentage in 0u64..1_000_000,
-            max_age_bonus_percentage in 0u64..1_000_000,
-        ) {
-            let neuron = Neuron {
-                cached_neuron_stake_e8s: base_stake,
-                neuron_fees_e8s,
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
-                aging_since_timestamp_seconds,
-                voting_power_percentage_multiplier,
-                ..Neuron::default()
-            };
-
-            neuron.voting_power(
-                now_seconds,
-                max_dissolve_delay_seconds,
-                max_neuron_age_for_age_bonus,
-                max_dissolve_delay_bonus_percentage,
-                max_age_bonus_percentage
-            );
-        }
-    }
-}
+mod tests;

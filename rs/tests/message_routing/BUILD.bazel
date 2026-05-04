@@ -1,0 +1,150 @@
+load("//rs/tests:common.bzl", "MAINNET_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+exports_files([
+    "memory_safety.wasm",
+])
+
+system_test_nns(
+    name = "global_reboot_test",
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {
+        "XNET_TEST_CANISTER_WASM_PATH": "//rs/rust_canisters/xnet_test:xnet-test-canister",
+    },
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/xnet_test",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-management-canister-types",
+        "@crate_index//:itertools",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test(
+    name = "memory_safety_test",
+    compile_data = [
+        "memory_safety.wasm",
+    ],
+    tags = [
+        "long_test",
+    ],
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-utils",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
+    name = "rejoin_test",
+    tags = [
+        "long_test",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/rejoin_test_lib",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "rejoin_test_large_state",
+    enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
+    tags = [
+        "system_test_large",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {
+        "STATESYNC_TEST_CANISTER_WASM_PATH": "//rs/rust_canisters/statesync_test:statesync-test-canister",
+    },
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/rejoin_test_lib",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "rejoin_test_long_rounds",
+    enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
+    enable_metrics = True,
+    tags = [
+        "manual",  # TODO: replace with "system_test_large" when the test has been made to work with d28780e
+    ],
+    test_timeout = "eternal",
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {
+        "STATESYNC_TEST_CANISTER_WASM_PATH": "//rs/rust_canisters/statesync_test:statesync-test-canister",
+    },
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/rejoin_test_lib",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "state_sync_malicious_chunk_test",
+    enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
+    guestos = "malicious",
+    tags = [
+        "system_test_large",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {
+        "STATESYNC_TEST_CANISTER_WASM_PATH": "//rs/rust_canisters/statesync_test:statesync-test-canister",
+    },
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/rejoin_test_lib",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test(
+    name = "queues_compatibility_test",
+    env = MAINNET_ENV,
+    runtime_deps = {
+        "REPLICATED_STATE_TEST_BINARY_PATH": "//rs/replicated_state:replicated_state_test_binary",
+        "STATE_LAYOUT_TEST_BINARY_PATH": "//rs/state_layout:state_layout_test_binary",
+    },
+    deps = [
+        "//rs/recovery",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+        "@crate_index//:tempfile",
+    ],
+)

@@ -6,28 +6,19 @@
 //!
 //! See RFC 8017 (https://www.rfc-editor.org/rfc/rfc8017.txt)
 //! for information about the signature format
-use ic_crypto_internal_basic_sig_der_utils as der_utils;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use num_traits::{FromPrimitive, Zero};
-use rsa::{PublicKey, PublicKeyParts};
+use rsa::traits::PublicKeyParts;
+use rsa::{Pkcs1v15Sign, pkcs8};
 use serde::{Deserialize, Deserializer, Serialize};
 
-/// The object identifier for RSA public keys
-///
-/// See [RFC 8017](https://tools.ietf.org/html/rfc8017).
-pub fn algorithm_identifier() -> der_utils::PkixAlgorithmIdentifier {
-    der_utils::PkixAlgorithmIdentifier::new_with_null_param(simple_asn1::oid!(
-        1, 2, 840, 113549, 1, 1, 1
-    ))
-}
-
 /// A RSA public key usable for signature verification
-#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize)]
 pub struct RsaPublicKey {
     der: Vec<u8>,
     #[serde(skip_serializing)]
-    key: rsa::RSAPublicKey,
+    key: rsa::RsaPublicKey,
 }
 
 impl<'de> Deserialize<'de> for RsaPublicKey {
@@ -61,7 +52,7 @@ impl RsaPublicKey {
 
         let pkcs1 =
             to_der(&ASN1Block::Sequence(0, blocks)).map_err(|e| CryptoError::InvalidArgument {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             })?;
 
         let oid = ASN1Block::ObjectIdentifier(0, oid!(1, 2, 840, 113549, 1, 1, 1));
@@ -70,7 +61,7 @@ impl RsaPublicKey {
         let blocks = vec![alg, octet_string];
 
         to_der(&ASN1Block::Sequence(0, blocks)).map_err(|e| CryptoError::InvalidArgument {
-            message: format!("{:?}", e),
+            message: format!("{e:?}"),
         })
     }
 
@@ -96,11 +87,11 @@ impl RsaPublicKey {
     pub fn from_der_spki(bytes: &[u8]) -> CryptoResult<Self> {
         use rsa::BigUint;
 
-        let parsed =
-            rsa::RSAPublicKey::from_pkcs8(bytes).map_err(|e| CryptoError::MalformedPublicKey {
+        let parsed: rsa::RsaPublicKey = pkcs8::DecodePublicKey::from_public_key_der(bytes)
+            .map_err(|e| CryptoError::MalformedPublicKey {
                 algorithm: AlgorithmId::RsaSha256,
                 key_bytes: Some(bytes.to_vec()),
-                internal_error: format!("Parsing RSA key failed {:?}", e),
+                internal_error: format!("Parsing RSA key failed {e:?}"),
             })?;
 
         let two = BigUint::from_i8(2).expect("Unable to create 2 BigUint");
@@ -160,17 +151,17 @@ impl RsaPublicKey {
     /// the IC for webauthn (https://docs.dfinity.systems/spec/public/#webauthn)
     pub fn verify_pkcs1_sha256(&self, message: &[u8], signature: &[u8]) -> CryptoResult<()> {
         let digest = Sha256::hash(message);
-        let padding = rsa::PaddingScheme::PKCS1v15Sign {
-            hash: Some(rsa::Hash::SHA2_256),
-        };
 
-        match self.key.verify(padding, &digest, signature) {
+        match &self
+            .key
+            .verify(Pkcs1v15Sign::new::<sha2::Sha256>(), &digest, signature)
+        {
             Ok(_) => Ok(()),
             Err(e) => Err(CryptoError::SignatureVerification {
                 algorithm: AlgorithmId::RsaSha256,
                 public_key_bytes: self.as_der().to_vec(),
                 sig_bytes: signature.to_vec(),
-                internal_error: format!("{:?}", e),
+                internal_error: format!("{e:?}"),
             }),
         }
     }

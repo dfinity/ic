@@ -1,55 +1,47 @@
 use crate::args::ReplicaArgs;
 use clap::Parser;
-use ic_config::{
-    crypto::CryptoConfig, registry_client::DataProviderConfig, Config, ConfigSource, SAMPLE_CONFIG,
-};
+use ic_config::{Config, ConfigSource, SAMPLE_CONFIG, crypto::CryptoConfig};
 use ic_crypto::CryptoComponent;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{fatal, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, fatal, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::consensus::catchup::{CUPWithOriginalProtobuf, CatchUpPackage};
-use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
-use std::convert::TryFrom;
-use std::env;
-use std::path::PathBuf;
-use std::sync::Arc;
+use ic_types::{
+    NodeId, RegistryVersion, ReplicaVersion, SubnetId, consensus::catchup::CatchUpPackage,
+};
+use std::{env, path::PathBuf, sync::Arc};
 
 /// Parse command-line args into `ReplicaArgs`
 pub fn parse_args() -> Result<ReplicaArgs, clap::Error> {
     let args_result = ReplicaArgs::try_parse_from(env::args());
 
-    args_result.map(|args| {
+    args_result.inspect(|args| {
         if args.print_sample_config {
-            print!("{}", SAMPLE_CONFIG);
+            print!("{SAMPLE_CONFIG}");
             std::process::exit(0);
         }
-        args
     })
 }
 
 /// Set the Replica version passed in via command-line
 pub fn set_replica_version(args: &Result<ReplicaArgs, clap::Error>, logger: &ReplicaLogger) {
-    match args {
-        Ok(args) => {
-            info!(
+    if let Ok(args) = args {
+        info!(
+            logger,
+            "Setting replica version to: {}",
+            args.replica_version.as_ref()
+        );
+        if ReplicaVersion::set_default_version(args.replica_version.clone()).is_err() {
+            warn!(
                 logger,
-                "Setting replica version to: {}",
-                args.replica_version.as_ref()
+                "Failed to set replica version, defaulting to: {}",
+                ReplicaVersion::default().as_ref()
             );
-            if ReplicaVersion::set_default_version(args.replica_version.clone()).is_err() {
-                warn!(
-                    logger,
-                    "Failed to set replica version, defaulting to: {}",
-                    ReplicaVersion::default().as_ref()
-                );
-            }
         }
-        Err(_) => (),
     }
 }
 
@@ -57,15 +49,11 @@ pub fn set_replica_version(args: &Result<ReplicaArgs, clap::Error>, logger: &Rep
 pub fn get_catch_up_package(
     replica_args: &Result<ReplicaArgs, clap::Error>,
     logger: &ReplicaLogger,
-) -> Option<CUPWithOriginalProtobuf> {
+) -> Option<pb::CatchUpPackage> {
     match replica_args {
         Ok(args) => Some(
             pb::CatchUpPackage::read_from_file(args.catch_up_package.clone()?)
-                .and_then(|protobuf| {
-                    CatchUpPackage::try_from(&protobuf)
-                        .map(|cup| CUPWithOriginalProtobuf { cup, protobuf })
-                })
-                .map_err(|e| panic!("Failed to load CUP at startup {:?}", e))
+                .map_err(|e| panic!("Failed to load CUP at startup {e:?}"))
                 .unwrap(),
         ),
         Err(_) => {
@@ -126,8 +114,7 @@ pub fn get_subnet_id(
         tries += 1;
         if tries > 10 {
             panic!(
-                "Failed to find a subnet for node {} at registry version {}",
-                node_id, registry_version
+                "Failed to find a subnet for node {node_id} at registry version {registry_version}"
             );
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -136,10 +123,10 @@ pub fn get_subnet_id(
 
 /// Return the subnet type of the given subnet.
 pub fn get_subnet_type(
-    registry: &dyn RegistryClient,
+    logger: &ReplicaLogger,
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
-    logger: &ReplicaLogger,
+    registry: &dyn RegistryClient,
 ) -> SubnetType {
     loop {
         match registry.get_subnet_record(subnet_id, registry_version) {
@@ -188,35 +175,24 @@ pub fn get_config_source(replica_args: &Result<ReplicaArgs, clap::Error>) -> Con
     }
 }
 
-/// Create the consensus pool directory (if none exists)
-pub fn create_consensus_pool_dir(config: &Config) {
-    std::fs::create_dir_all(&config.artifact_pool.consensus_pool_path).unwrap_or_else(|err| {
-        panic!(
-            "Failed to create consensus pool directory {}: {}",
-            config.artifact_pool.consensus_pool_path.display(),
-            err
-        )
-    });
-}
-
 pub fn setup_crypto_registry(
-    config: Config,
+    config: &Config,
     tokio_runtime_handle: tokio::runtime::Handle,
-    metrics_registry: Option<&MetricsRegistry>,
+    metrics_registry: &MetricsRegistry,
     logger: ReplicaLogger,
 ) -> (std::sync::Arc<RegistryClientImpl>, CryptoComponent) {
-    let data_provider = match config
-        .registry_client
-        .data_provider
-        .expect("No data provider was provided in the registry client configuration.")
-    {
-        DataProviderConfig::LocalStore(path) => Arc::new(LocalStoreImpl::new(path)),
-    };
-    let registry = Arc::new(RegistryClientImpl::new(data_provider, metrics_registry));
+    let data_provider = Arc::new(LocalStoreImpl::new(
+        config.registry_client.local_store.clone(),
+    ));
+
+    let registry = Arc::new(RegistryClientImpl::new(
+        data_provider,
+        Some(metrics_registry),
+    ));
 
     // The registry must be initialized before setting up the crypto component
     if let Err(e) = registry.fetch_and_start_polling() {
-        panic!("fetch_and_start_polling failed: {}", e);
+        panic!("fetch_and_start_polling failed: {e}");
     }
 
     // TODO(RPL-49): pass in registry_client
@@ -246,7 +222,7 @@ fn get_config_source_or_abort(args: &[String]) -> ConfigSource {
         ["-"] => ConfigSource::StdIn,
         ["--help"] => abort_print_usage(args),
         ["--sample-config"] => {
-            print!("{}", SAMPLE_CONFIG);
+            print!("{SAMPLE_CONFIG}");
             std::process::exit(0);
         }
         [arg] if arg.starts_with("--config=") => {
@@ -294,7 +270,7 @@ pub fn setup_crypto_provider(
     tokio_runtime_handle: tokio::runtime::Handle,
     registry: Arc<dyn RegistryClient>,
     replica_logger: ReplicaLogger,
-    metrics_registry: Option<&MetricsRegistry>,
+    metrics_registry: &MetricsRegistry,
 ) -> CryptoComponent {
     CryptoConfig::check_dir_has_required_permissions(&config.crypto_root).unwrap();
     CryptoComponent::new(
@@ -302,6 +278,6 @@ pub fn setup_crypto_provider(
         Some(tokio_runtime_handle),
         registry,
         replica_logger,
-        metrics_registry,
+        Some(metrics_registry),
     )
 }

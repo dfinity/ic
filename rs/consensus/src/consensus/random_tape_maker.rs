@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 //! Some canisters may want to use randomness, for example a lottery canister.
 //! Since a canister is executed on many replicas and we want the different
 //! replicas to have the same state, we must use agreed-upon pseudo-randomness.
@@ -9,33 +7,46 @@
 //! How it works:
 //!
 //! 1. We deliver both the payload for finalized block at height h together with
-//! a random tape at height h. This is handled by the finalizer.
+//!    a random tape at height h. This is handled by the finalizer.
 //!
 //! 2. As soon as we finalize a block at height h, we start to create the random
-//! tape for height h+1. This is handled by random tape maker.
+//!    tape for height h+1. This is handled by random tape maker.
 //!
 //! 3. For security purpose, when the payload of height h is executed, it should
-//! not access random tape at the same height. This is because the random tape
-//! at h may be already known before a block at h is finalized, creating a
-//! window for a malicious blockmaker to launch an attack. To mitigate this
-//! attack, accessing randomness in a canister has to be an async call, where
-//! the randomness of height h+1 will be returned when the next block/batch/
-//! random tape is delivered.
+//!    not access random tape at the same height. This is because the random tape
+//!    at h may be already known before a block at h is finalized, creating a
+//!    window for a malicious blockmaker to launch an attack. To mitigate this
+//!    attack, accessing randomness in a canister has to be an async call, where
+//!    the randomness of height h+1 will be returned when the next block/batch/
+//!    random tape is delivered.
 
-use crate::consensus::{
+use ic_consensus_utils::{
+    active_low_threshold_nidkg_id,
+    crypto::ConsensusCrypto,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
-    prelude::*,
-    utils::active_low_threshold_transcript,
-    ConsensusCrypto,
 };
 use ic_interfaces::messaging::MessageRouting;
-use ic_logger::{error, trace, ReplicaLogger};
-use ic_types::replica_config::ReplicaConfig;
-use std::cmp::{max, min};
-use std::sync::Arc;
+use ic_logger::{ReplicaLogger, error, trace};
+use ic_types::{
+    Height,
+    consensus::{HasCommittee, RandomTape, RandomTapeContent, RandomTapeShare},
+    replica_config::ReplicaConfig,
+};
+use std::{
+    cmp::{max, min},
+    sync::Arc,
+};
 
-pub struct RandomTapeMaker {
+// In some cases, expected_height might fall too much behind the finalized
+// height; for example, when a node is attempting to catch up via a CUP during
+// whose creation other nodes finalized many heights. To prevent overworking
+// consensus in such cases, random_tape_maker and share_aggregator check at most
+// the below given amount of heights to see if the node should create or
+// aggregate random tape shares.
+pub(crate) const RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE: u64 = 16;
+
+pub(crate) struct RandomTapeMaker {
     replica_config: ReplicaConfig,
     membership: Arc<Membership>,
     crypto: Arc<dyn ConsensusCrypto>,
@@ -121,10 +132,10 @@ impl RandomTapeMaker {
     ) -> Option<RandomTapeShare> {
         let content = RandomTapeContent::new(height);
 
-        if let Some(transcript) = active_low_threshold_transcript(pool.as_cache(), height) {
+        if let Some(dkg_id) = active_low_threshold_nidkg_id(pool.as_cache(), height) {
             match self
                 .crypto
-                .sign(&content, self.replica_config.node_id, transcript.dkg_id)
+                .sign(&content, self.replica_config.node_id, dkg_id)
             {
                 Ok(signature) => Some(RandomTapeShare { content, signature }),
                 Err(err) => {
@@ -164,6 +175,7 @@ impl RandomTapeMaker {
             next_batch_height + RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE,
             finalized_height + 1,
         );
+
         (next_batch_height..=max_height)
             .filter(|h| self.should_create_share(pool, Height::from(*h)))
             .filter_map(|h| self.create_random_tape_share(Height::from(h), pool))
@@ -174,13 +186,13 @@ impl RandomTapeMaker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::{
-        add_all_to_validated,
-        mocks::{dependencies, Dependencies},
-    };
-    use ic_interfaces::consensus_pool::MutableConsensusPool;
+    use crate::consensus::add_all_to_validated;
+    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_interfaces::{p2p::consensus::MutablePool, time_source::TimeSource};
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::{consensus::fake::*, message_routing::FakeMessageRouting};
+    use ic_test_utilities::message_routing::FakeMessageRouting;
+    use ic_test_utilities_consensus::fake::*;
+    use ic_types::consensus::{ConsensusMessage, HasHeight};
 
     // Returns the vector of heights for which `changes` contains a ChangeAction
     // that adds a random tape share for that height to the validated pool.
@@ -221,7 +233,10 @@ mod tests {
 
             // After adding our random tape share for height 2, we should not create
             // any more shares
-            pool.apply_changes(time_source.as_ref(), add_all_to_validated(shares));
+            pool.apply(add_all_to_validated(
+                time_source.get_relative_time(),
+                shares,
+            ));
             let shares = random_tape_maker.on_state_change(&PoolReader::new(&pool));
             assert_eq!(shares.len(), 0);
 
@@ -242,7 +257,10 @@ mod tests {
             // when we advance the pool by three heights again (advancing the finalized
             // height to 7), but we add a full random tape for height 7, we should
             // only construct a share for heights 6 and 8.
-            pool.apply_changes(time_source.as_ref(), add_all_to_validated(shares));
+            pool.apply(add_all_to_validated(
+                time_source.get_relative_time(),
+                shares,
+            ));
             let mut round = pool.prepare_round().dont_add_random_tape();
             round.advance();
             round.advance();
@@ -264,7 +282,10 @@ mod tests {
             // 8 already was delivered so there is no need to construct random tape 8
             // anymore. We therefore expect the random tape maker to only add a
             // share for height 10.
-            pool.apply_changes(time_source.as_ref(), add_all_to_validated(shares));
+            pool.apply(add_all_to_validated(
+                time_source.get_relative_time(),
+                shares,
+            ));
             let mut round = pool.prepare_round().dont_add_random_tape();
             round.advance();
             round.advance();

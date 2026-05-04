@@ -1,0 +1,10 @@
+[Unit]
+Description=IPv4 connectivity timer
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=60s
+Unit=ipv4-connectivity-check.service
+
+[Install]
+WantedBy=timers.target

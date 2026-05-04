@@ -11,7 +11,7 @@ fn main() {
             ),
         },
     };
-    let out = PathBuf::from(&manifest_dir).join("../gen");
+    let out = PathBuf::from(&manifest_dir).join("../src/gen");
     let def = PathBuf::from(&manifest_dir).join("../proto");
     match std::fs::remove_dir_all(&out) {
         Ok(_) => (),

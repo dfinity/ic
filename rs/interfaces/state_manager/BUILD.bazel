@@ -6,8 +6,9 @@ rust_library(
     name = "state_manager",
     srcs = glob(["src/**"]),
     crate_name = "ic_interfaces_state_manager",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/crypto/tree_hash",
         "//rs/phantom_newtype",
         "//rs/types/types",

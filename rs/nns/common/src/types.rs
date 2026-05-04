@@ -1,44 +1,26 @@
+use crate::pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto};
 use candid::{CandidType, Deserialize};
-use dfn_core::api::CanisterId;
+use ic_base_types::CanisterId;
 use serde::Serialize;
-
-use std::cmp::Eq;
-use std::cmp::PartialEq;
-use std::convert::TryFrom;
-use std::fmt::{self, Debug, Display, Formatter};
-use std::hash::Hash;
-use std::num::ParseIntError;
-use std::str::FromStr;
-
-use crate::pb::v1::{
-    CanisterId as CanisterIdProto, NeuronId as NeuronIdProto, ProposalId as ProposalIdProto,
+use std::{
+    cmp::{Eq, PartialEq},
+    fmt::{self, Debug, Display, Formatter},
+    hash::Hash,
+    num::ParseIntError,
+    str::FromStr,
 };
-
-impl From<CanisterId> for CanisterIdProto {
-    fn from(id: CanisterId) -> Self {
-        CanisterIdProto {
-            serialized_id: id.get().as_slice().to_vec(),
-        }
-    }
-}
-
-impl From<CanisterIdProto> for CanisterId {
-    fn from(id: CanisterIdProto) -> Self {
-        CanisterId::try_from(id.serialized_id).unwrap()
-    }
-}
 
 // A unique Id for a Neuron.
 #[derive(
-    CandidType,
-    Clone,
     Copy,
-    Debug,
-    Serialize,
-    Deserialize,
+    Clone,
     Eq,
-    Hash,
     PartialEq,
+    Hash,
+    Debug,
+    CandidType,
+    Deserialize,
+    Serialize,
     comparable::Comparable,
 )]
 pub struct NeuronId(pub u64);
@@ -57,6 +39,12 @@ impl From<NeuronId> for NeuronIdProto {
 
 pub type NeuronIdParseError = ic_base_types::PrincipalIdParseError;
 
+impl NeuronIdProto {
+    pub fn from_u64(id: u64) -> Self {
+        Self { id }
+    }
+}
+
 impl FromStr for NeuronId {
     type Err = ParseIntError;
     fn from_str(src: &str) -> Result<Self, Self::Err> {
@@ -67,7 +55,7 @@ impl FromStr for NeuronId {
 
 /// Proposal IDs are simply u64. All proposals are public, therefore it is a
 /// non-goal to make IDs hard to guess.
-#[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Hash, Default, CandidType, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default, CandidType, Deserialize)]
 pub struct ProposalId(pub u64);
 
 impl From<ProposalIdProto> for ProposalId {
@@ -84,7 +72,7 @@ impl From<ProposalId> for ProposalIdProto {
 
 impl Debug for ProposalId {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -94,10 +82,33 @@ impl Display for ProposalId {
     }
 }
 
+/// The reason for why an exchange rate proposal is created.
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+pub enum UpdateIcpXdrConversionRatePayloadReason {
+    /// The timestamp of the rate stored in the CMC is older than the execution interval.
+    OldRate,
+    /// The relative difference between the rate in the CMC and the rate the conversion rate provider retrieved exceeds
+    /// a threshold defined by the conversion rate provider.
+    DivergedRate,
+    /// Used to restart the cycles minting canister automatic exchange rate update mechanism
+    /// that calls the exchange rate canister.
+    EnableAutomaticExchangeRateUpdates,
+}
+
 /// The payload of a proposal to update the ICP/XDR conversion rate in the CMC.
-#[derive(CandidType, Default, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct UpdateIcpXdrConversionRatePayload {
     pub data_source: String,
     pub timestamp_seconds: u64,
     pub xdr_permyriad_per_icp: u64,
+    pub reason: Option<UpdateIcpXdrConversionRatePayloadReason>,
+}
+
+// A proposal payload to call a canister.
+#[derive(Clone, Debug, candid::CandidType, candid::Deserialize, serde::Serialize)]
+pub struct CallCanisterRequest {
+    pub canister_id: CanisterId,
+    pub method_name: String,
+    #[serde(with = "serde_bytes")]
+    pub payload: Vec<u8>,
 }

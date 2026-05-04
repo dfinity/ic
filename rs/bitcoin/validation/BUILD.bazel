@@ -8,19 +8,36 @@ rust_library(
     crate_name = "ic_btc_validation",
     version = "0.1.0",
     deps = [
-        "@crate_index//:bitcoin",
+        # Keep sorted.
+        "@crate_index//:bitcoin_dogecoin",
     ],
 )
 
 rust_test(
-    name = "validation_tests",
-    srcs = glob(["**/*.rs"]),
+    name = "validation_test",
     crate = ":validation",
-    data = ["tests/data/headers.csv"],
+    data = [
+        # Keep sorted.
+        "tests/data/headers.csv",
+        "@dogecoin_adapter_mainnet_headers//file",
+        "@dogecoin_adapter_mainnet_headers_auxpow_parsed//file",
+        "@dogecoin_adapter_mainnet_headers_parsed//file",
+        "@dogecoin_adapter_testnet_headers//file",
+        "@dogecoin_adapter_testnet_headers_auxpow_parsed//file",
+        "@dogecoin_adapter_testnet_headers_parsed//file",
+    ],
     env = {
-        "CARGO_MANIFEST_DIR": "rs/bitcoin/validation",
+        "DOGE_MAINNET_HEADERS_0_700000_RAW_DATA_PATH": "$(rootpath @dogecoin_adapter_mainnet_headers//file)",
+        "DOGE_MAINNET_HEADERS_1_15000_PARSED_DATA_PATH": "$(rootpath @dogecoin_adapter_mainnet_headers_parsed//file)",
+        "DOGE_MAINNET_HEADERS_521337_536336_AUXPOW_PARSED_DATA_PATH": "$(rootpath @dogecoin_adapter_mainnet_headers_auxpow_parsed//file)",
+        "DOGE_TESTNET_HEADERS_0_2000000_RAW_DATA_PATH": "$(rootpath @dogecoin_adapter_testnet_headers//file)",
+        "DOGE_TESTNET_HEADERS_1_15000_PARSED_DATA_PATH": "$(rootpath @dogecoin_adapter_testnet_headers_parsed//file)",
+        "DOGE_TESTNET_HEADERS_293100_308099_AUXPOW_PARSED_DATA_PATH": "$(rootpath @dogecoin_adapter_testnet_headers_auxpow_parsed//file)",
     },
     deps = [
+        # Keep sorted.
         "@crate_index//:csv",
+        "@crate_index//:hex",
+        "@crate_index//:rstest",
     ],
 )

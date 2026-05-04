@@ -1,60 +1,57 @@
 [package]
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
 name = "ic-replica-tests"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
 
 [dependencies]
-futures = "0.3.13"
-ic-async-utils = { path = "../async_utils" }
+ic-base-types = { path = "../types/base_types" }
+ic-btc-interface = { workspace = true }
+ic-btc-replica-types = { path = "../bitcoin/replica_types" }
 ic-btc-service = { path = "../bitcoin/service" }
-ic-btc-types = { path = "../bitcoin/types/public" }
-ic-btc-types-internal = { path = "../bitcoin/types/internal" }
-ic-config = { path = "../config" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
-ic-error-types = { path = "../types/error_types" }
+ic-config = { path = "../config" }
+ic-error-types = { path = "../../packages/ic-error-types" }
 ic-execution-environment = { path = "../execution_environment" }
-ic-ic00-types = { path = "../types/ic00_types" }
-ic-replica = { path = "../replica" }
+ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
+ic-interfaces = { path = "../interfaces" }
+ic-interfaces-registry = { path = "../interfaces/registry" }
+ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
+ic-metrics = { path = "../monitoring/metrics" }
+ic-prep = { path = "../prep" }
+ic-protobuf = { path = "../protobuf" }
 ic-registry-client-fake = { path = "../registry/fake" }
-ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
-ic-interfaces = { path = "../interfaces" }
-ic-interfaces-p2p = { path = "../interfaces/p2p" }
-ic-interfaces-registry = { path = "../interfaces/registry" }
-ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
-ic-logger = { path = "../monitoring/logger" }
-ic-metrics = { path = "../monitoring/metrics" }
-ic-prep = { path = "../prep" }
-ic-protobuf = { path = "../protobuf" }
+ic-replica = { path = "../replica" }
 ic-replicated-state = { path = "../replicated_state" }
-ic-state-manager = { path = "../state_manager" }
+ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-test-utilities = { path = "../test_utilities" }
-ic-crypto = { path = "../crypto" }
+ic-test-utilities-logger = { path = "../test_utilities/logger" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
+ic-tracing = { path = "../monitoring/tracing" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
-ic-base-types = { path = "../types/base_types" }
-rand = "0.8.4"
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
-slog-scope = "4.1.2"
-tempfile = "3.3.0"
-tonic = "0.7.2"
-tokio = { version = "1.15.0", features = ["full"] }
-prometheus = { version = "0.12.0", features = [ "process" ] }
-prost = "0.10.4"
-tower = { version = "0.4.11", features = ["util"] }
-wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
+prost = { workspace = true }
+rand = { workspace = true }
+slog-scope = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+tonic = { workspace = true }
+tower = { workspace = true }
+tracing-subscriber = { workspace = true }
+wat = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.3.0"
-candid = "0.8.1"
-canister-test = { path = "../rust_canisters/canister_test" }
-ic-crypto-sha = { path = "../crypto/sha" }
-ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
-ic-state-machine-tests = { path = "../state_machine_tests" }
+assert_matches = { workspace = true }
+candid = { workspace = true }
+ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-sys = { path = "../sys" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-types-cycles = { path = "../types/cycles" }
 maplit = "1.0.2"
-predicates = "1.0.1"

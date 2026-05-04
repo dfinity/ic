@@ -6,13 +6,14 @@
 use crate::{
     adapters::AdaptersConfig,
     artifact_pool::ArtifactPoolTomlConfig,
+    bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig,
     config_parser::{ConfigError, ConfigSource, ConfigValidate},
-    consensus::ConsensusConfig,
     crypto::CryptoConfig,
     execution_environment::Config as HypervisorConfig,
-    firewall::Config as FirewallConfig,
-    http_handler,
+    firewall::BoundaryNodeConfig as BoundaryNodeFirewallConfig,
+    firewall::ReplicaConfig as ReplicaFirewallConfig,
     http_handler::Config as HttpHandlerConfig,
+    initial_ipv4_config::IPv4Config,
     logger::Config as LoggerConfig,
     message_routing::Config as MessageRoutingConfig,
     metrics::Config as MetricsConfig,
@@ -20,15 +21,16 @@ use crate::{
     registration::Config as RegistrationConfig,
     registry_client::Config as RegistryClientConfig,
     state_manager::Config as StateManagerConfig,
+    tracing::Config as TracingConfig,
     transport::TransportConfig,
 };
-use ic_types::malicious_behaviour::MaliciousBehaviour;
+use ic_types::malicious_behavior::MaliciousBehavior;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, convert::TryFrom, path::PathBuf};
+use std::{collections::HashSet, path::PathBuf};
 
 /// The config struct for the replica.  Just consists of `Config`s for
 /// the components.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Config {
     pub registry_client: RegistryClientConfig,
     pub transport: TransportConfig,
@@ -37,9 +39,9 @@ pub struct Config {
     pub http_handler: HttpHandlerConfig,
     pub metrics: MetricsConfig,
     pub artifact_pool: ArtifactPoolTomlConfig,
-    pub consensus: ConsensusConfig,
     pub crypto: CryptoConfig,
     pub logger: LoggerConfig,
+    pub tracing: TracingConfig,
     // If `orchestrator_logger` is not specified in the configuration file, it
     // defaults to the value specified for `logger`.
     pub orchestrator_logger: LoggerConfig,
@@ -47,40 +49,48 @@ pub struct Config {
     // defaults to the value specified for `logger`.
     pub csp_vault_logger: LoggerConfig,
     pub message_routing: MessageRoutingConfig,
-    pub malicious_behaviour: MaliciousBehaviour,
-    pub firewall: FirewallConfig,
+    pub malicious_behavior: MaliciousBehavior,
+    pub firewall: ReplicaFirewallConfig,
+    pub boundary_node_firewall: BoundaryNodeFirewallConfig,
     pub registration: RegistrationConfig,
     pub nns_registry_replicator: NnsRegistryReplicatorConfig,
     pub adapters_config: AdaptersConfig,
+    pub bitcoin_payload_builder_config: BitcoinPayloadBuilderConfig,
+    pub initial_ipv4_config: IPv4Config,
+    pub domain: String,
 }
 
 /// Mirrors the Config struct except that fields are made optional. This is
 /// meant for use with config_parser, where sections can be omitted.
-#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct ConfigOptional {
     pub registry_client: Option<RegistryClientConfig>,
     pub transport: Option<TransportConfig>,
     pub state_manager: Option<StateManagerConfig>,
     pub hypervisor: Option<HypervisorConfig>,
-    pub http_handler: Option<http_handler::ExternalConfig>,
+    pub http_handler: Option<HttpHandlerConfig>,
     pub metrics: Option<MetricsConfig>,
     pub artifact_pool: Option<ArtifactPoolTomlConfig>,
-    pub consensus: Option<ConsensusConfig>,
     pub crypto: Option<CryptoConfig>,
     pub logger: Option<LoggerConfig>,
+    pub tracing: Option<TracingConfig>,
     pub orchestrator_logger: Option<LoggerConfig>,
     pub csp_vault_logger: Option<LoggerConfig>,
     pub message_routing: Option<MessageRoutingConfig>,
-    pub malicious_behaviour: Option<MaliciousBehaviour>,
-    pub firewall: Option<FirewallConfig>,
+    pub malicious_behavior: Option<MaliciousBehavior>,
+    pub firewall: Option<ReplicaFirewallConfig>,
+    pub boundary_node_firewall: Option<BoundaryNodeFirewallConfig>,
     pub registration: Option<RegistrationConfig>,
     pub nns_registry_replicator: Option<NnsRegistryReplicatorConfig>,
     pub adapters_config: Option<AdaptersConfig>,
+    pub bitcoin_payload_builder_config: Option<BitcoinPayloadBuilderConfig>,
+    pub initial_ipv4_config: Option<IPv4Config>,
+    pub domain: Option<String>,
 }
 
 impl Config {
     /// Return a [Config] with default settings that put all paths under a
-    /// 'parent_dir', with the given 'subnet_id'.
+    /// 'parent_dir'.
     ///
     /// It is an alternative way to construct a Config than parsing
     /// a configuration file.
@@ -94,17 +104,23 @@ impl Config {
             http_handler: HttpHandlerConfig::default(),
             metrics: MetricsConfig::default(),
             artifact_pool: ArtifactPoolTomlConfig::new(parent_dir.join("consensus_pool"), None),
-            consensus: ConsensusConfig::default(),
             crypto: CryptoConfig::new(parent_dir.join("crypto")),
             logger: logger.clone(),
+            tracing: TracingConfig::default(),
             orchestrator_logger: logger.clone(),
             csp_vault_logger: logger,
             message_routing: MessageRoutingConfig::default(),
-            malicious_behaviour: MaliciousBehaviour::default(),
-            firewall: FirewallConfig::default(),
+            malicious_behavior: MaliciousBehavior::default(),
+            firewall: ReplicaFirewallConfig::new(parent_dir.join("replica_firewall")),
+            boundary_node_firewall: BoundaryNodeFirewallConfig::new(
+                parent_dir.join("boundary_node_firewall"),
+            ),
             registration: RegistrationConfig::default(),
             nns_registry_replicator: NnsRegistryReplicatorConfig::default(),
             adapters_config: AdaptersConfig::default(),
+            bitcoin_payload_builder_config: BitcoinPayloadBuilderConfig::default(),
+            initial_ipv4_config: IPv4Config::default(),
+            domain: String::default(),
         }
     }
 
@@ -140,29 +156,32 @@ impl Config {
             transport: cfg.transport.unwrap_or(default.transport),
             state_manager: cfg.state_manager.unwrap_or(default.state_manager),
             hypervisor: cfg.hypervisor.unwrap_or(default.hypervisor),
-            http_handler: HttpHandlerConfig::try_from(cfg.http_handler).map_err(|msg| {
-                ConfigError::ValidationError {
-                    source: source.clone(),
-                    message: msg.to_string(),
-                }
-            })?,
+            http_handler: cfg.http_handler.unwrap_or(default.http_handler),
             metrics: cfg.metrics.unwrap_or(default.metrics),
             artifact_pool: cfg.artifact_pool.unwrap_or(default.artifact_pool),
-            consensus: cfg.consensus.unwrap_or(default.consensus),
             crypto: cfg.crypto.unwrap_or(default.crypto),
             logger,
+            tracing: cfg.tracing.unwrap_or(default.tracing),
             orchestrator_logger,
             csp_vault_logger,
             message_routing: cfg.message_routing.unwrap_or(default.message_routing),
-            malicious_behaviour: cfg
-                .malicious_behaviour
-                .unwrap_or(default.malicious_behaviour),
+            malicious_behavior: cfg.malicious_behavior.unwrap_or(default.malicious_behavior),
             firewall: cfg.firewall.unwrap_or(default.firewall),
+            boundary_node_firewall: cfg
+                .boundary_node_firewall
+                .unwrap_or(default.boundary_node_firewall),
             registration: cfg.registration.unwrap_or(default.registration),
             nns_registry_replicator: cfg
                 .nns_registry_replicator
                 .unwrap_or(default.nns_registry_replicator),
             adapters_config: cfg.adapters_config.unwrap_or(default.adapters_config),
+            bitcoin_payload_builder_config: cfg
+                .bitcoin_payload_builder_config
+                .unwrap_or(default.bitcoin_payload_builder_config),
+            initial_ipv4_config: cfg
+                .initial_ipv4_config
+                .unwrap_or(default.initial_ipv4_config),
+            domain: cfg.domain.unwrap_or_default(),
         })
     }
 
@@ -171,7 +190,7 @@ impl Config {
         let default_config = Config::new(tmpdir);
 
         Config::load_with_default(&config_source, default_config).unwrap_or_else(|err| {
-            eprintln!("Failed to load config:\n  {}", err);
+            eprintln!("Failed to load config:\n  {err}");
             std::process::exit(1);
         })
     }
@@ -188,7 +207,7 @@ impl ConfigValidate for ConfigOptional {
             if let Some(uds_path) = &adapters_config.bitcoin_testnet_uds_path {
                 same_uds_paths |= !uds_paths.insert(uds_path.clone());
             }
-            if let Some(uds_path) = &adapters_config.canister_http_uds_path {
+            if let Some(uds_path) = &adapters_config.https_outcalls_uds_path {
                 same_uds_paths |= !uds_paths.insert(uds_path.clone());
             }
             if same_uds_paths {
@@ -215,8 +234,7 @@ mod tests {
         let result = json5::from_str::<Config>(&sample_config_without_csp_vault_type);
         assert!(
             result.is_ok(),
-            "JSON5 parsing failed with error: {:?}",
-            result
+            "JSON5 parsing failed with error: {result:?}"
         );
 
         let temp_dir = tempdir_deleted_at_end_of_scope().expect("Failed creating a temp file.");
@@ -228,8 +246,7 @@ mod tests {
         let result = Config::load_with_default(&source, default_config);
         assert!(
             result.is_ok(),
-            "load_with_default failed with error: {:?}",
-            result
+            "load_with_default failed with error: {result:?}"
         );
         // Check that `crypto_root` is from `SAMPLE_CONFIG`, not from `CryptoConfig::default()`.
         assert_eq!(

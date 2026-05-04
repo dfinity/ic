@@ -1,10 +1,9 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
-use ic_crypto::threshold_sig_public_key_from_der;
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_pem_file;
 use ic_registry_client::client::RegistryVersion;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use serde_json::Value;
-use std::fmt;
 use std::{collections::HashSet, fs::File, io::BufReader, path::PathBuf};
 use thiserror::Error;
 use url::Url;
@@ -17,7 +16,7 @@ pub struct CliArgs {
     source: CommandArg,
 }
 
-#[derive(Parser, Debug, Clone)]
+#[derive(Clone, Debug, Parser)]
 #[clap(name = "ic-regedit", about = "Registry (Local Store) Editor.", version)]
 pub enum CommandArg {
     Snapshot {
@@ -36,8 +35,29 @@ pub enum CommandArg {
         keys: Option<String>,
 
         /// Path to the local store (may not be specified together with --url).
-        #[clap(parse(from_os_str))]
         local_store_path: PathBuf,
+    },
+    CanisterToProto {
+        /// Url to a node hosting the registry canister (may not be specified
+        /// together with --local-store).
+        #[clap(long)]
+        url: Url,
+
+        /// Path to the local store (may not be specified together with --url).
+        path: PathBuf,
+
+        /// The registry version where the delta starts. (default: 0)
+        #[clap(short, long, allow_hyphen_values = true)]
+        start_version: Option<u64>,
+
+        /// The registry version where the delta ends. (default: latest registry version)
+        #[clap(short, long, allow_hyphen_values = true)]
+        latest_version: Option<u64>,
+
+        /// Optional path to the threshold public key of the root subnet
+        /// (a.k.a. NNS public key). One way to get this key is via
+        /// "ic-admin --nns-url https://nns.ic0.app  get-subnet-public-key"
+        nns_public_key: Option<PathBuf>,
     },
     ShowDiff {
         /// The registry version of the snapshot. (default: latest available
@@ -46,11 +66,9 @@ pub enum CommandArg {
         version: Option<i64>,
 
         /// Path to the local store (may not be specified together with --url).
-        #[clap(parse(from_os_str))]
         local_store_path: PathBuf,
 
         /// Path to the local store (may not be specified together with --url).
-        #[clap(parse(from_os_str))]
         snapshot_file: PathBuf,
     },
     ApplyUpdate {
@@ -60,23 +78,21 @@ pub enum CommandArg {
         amend: bool,
 
         /// Path to the local store (may not be specified together with --url).
-        #[clap(parse(from_os_str))]
         local_store_path: PathBuf,
 
         /// Path to the local store (may not be specified together with --url).
-        #[clap(parse(from_os_str))]
         snapshot_file: PathBuf,
     },
     CanisterSnapshot {
         /// Url to a node hosting the registry canister (may not be specified
         /// together with --local-store).
-        #[clap(long, parse(try_from_str = url::Url::parse))]
+        #[clap(long)]
         url: Url,
 
         /// Optional path to the threshold public key of the root subnet
         /// (a.k.a. NNS public key). One way to get this key is via
         /// "ic-admin --nns-url https://nns.ic0.app  get-subnet-public-key"
-        #[clap(long, parse(from_os_str))]
+        #[clap(long)]
         nns_public_key: Option<PathBuf>,
 
         /// The registry version of the snapshot. (default: latest available
@@ -96,13 +112,12 @@ pub enum CommandArg {
     CanisterShowDiff {
         /// Url to a node hosting the registry canister (may not be specified
         /// together with --local-store).
-        #[clap(long, parse(try_from_str = url::Url::parse))]
+        #[clap(long)]
         url: Url,
 
         /// Optional path to the threshold public key of the root subnet
         /// (a.k.a. NNS public key). One way to get this key is via
         /// "ic-admin --nns-url https://nns.ic0.app  get-subnet-public-key"
-        #[clap(parse(from_os_str))]
         nns_public_key: Option<PathBuf>,
 
         /// The registry version of the snapshot. (default: latest available
@@ -111,7 +126,6 @@ pub enum CommandArg {
         version: Option<i64>,
 
         /// Path to the local store (may not be specified together with --url).
-        #[clap(parse(from_os_str))]
         snapshot_file: PathBuf,
     },
 }
@@ -130,6 +144,23 @@ impl CliArgs {
                 Command::Snapshot {
                     registry_spec: RegistrySpec { version, source },
                     projection,
+                }
+            }
+            CommandArg::CanisterToProto {
+                start_version,
+                latest_version,
+                url,
+                nns_public_key,
+                path,
+            } => {
+                let nns_key_material = get_key_material(nns_public_key)?;
+                let source_spec = SourceSpec::Canister(url, nns_key_material);
+
+                Command::CanisterToProto {
+                    start_version: start_version.unwrap_or_default().into(),
+                    latest_version: latest_version.map(RegistryVersion::from),
+                    source_spec,
+                    path,
                 }
             }
             CommandArg::ShowDiff {
@@ -254,23 +285,29 @@ pub enum ArgError {
     JsonError(PathBuf, serde_json::Error),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct RegistrySpec {
     pub version: VersionSpec,
     pub source: SourceSpec,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum SourceSpec {
     LocalStore(PathBuf),
     Canister(Url, Option<ThresholdSigPublicKey>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum Command {
     Snapshot {
         registry_spec: RegistrySpec,
         projection: Projection,
+    },
+    CanisterToProto {
+        start_version: RegistryVersion,
+        latest_version: Option<RegistryVersion>,
+        source_spec: SourceSpec,
+        path: PathBuf,
     },
     ShowDiff {
         registry_spec: RegistrySpec,
@@ -283,7 +320,7 @@ pub enum Command {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum VersionSpec {
     RelativeToLatest(u64),
     Absolute(RegistryVersion),
@@ -300,43 +337,11 @@ impl From<Option<i64>> for VersionSpec {
     }
 }
 
-// This code is taken from rs/prep/src/prep_state_directory.rs
-fn parse_threshold_sig_key<P: AsRef<std::path::Path> + fmt::Debug>(pem_file: P) -> Result<Vec<u8>> {
-    let buf =
-        std::fs::read(&pem_file).with_context(|| format!("failed to read from {:?}", &pem_file))?;
-    let s = String::from_utf8_lossy(&buf);
-    let lines: Vec<_> = s.trim_end().lines().collect();
-    let n = lines.len();
-
-    if n < 3 {
-        bail!("input file is too short: {:?}", &pem_file);
-    }
-
-    if !lines[0].starts_with("-----BEGIN PUBLIC KEY-----") {
-        bail!(
-            "PEM file doesn't start with BEGIN PUBLIC KEY block: {:?}",
-            &pem_file
-        );
-    }
-    if !lines[n - 1].starts_with("-----END PUBLIC KEY-----") {
-        bail!(
-            "PEM file doesn't end with END PUBLIC KEY block: {:?}",
-            &pem_file
-        );
-    }
-
-    let decoded = base64::decode(&lines[1..n - 1].join(""))
-        .with_context(|| format!("failed to decode base64 from: {:?}", &pem_file))?;
-
-    Ok(decoded)
-}
-
 fn get_key_material(nns_public_key: Option<PathBuf>) -> Result<Option<ThresholdSigPublicKey>> {
-    if let Some(nns_pk) = nns_public_key {
-        let encoded_nns_pk = parse_threshold_sig_key(nns_pk)?;
-        return Ok(Some(threshold_sig_public_key_from_der(
-            encoded_nns_pk.as_slice(),
-        )?));
+    if let Some(nns_pk) = &nns_public_key {
+        let pk = parse_threshold_sig_key_from_pem_file(nns_pk)
+            .with_context(|| format!("failed to parse threshold sig key from {:?}", nns_pk))?;
+        return Ok(Some(pk));
     }
     Ok(None)
 }

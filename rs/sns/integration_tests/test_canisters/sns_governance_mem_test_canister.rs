@@ -1,3 +1,6 @@
+// TODO: Jira ticket NNS1-3556
+#![allow(static_mut_refs)]
+
 //! This is a special-purpose canister to create a large Governance proto and
 //! serialize it to stable memory in a format that is compatible with the real
 //! governance canister.
@@ -8,37 +11,38 @@
 
 use dfn_core::println;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1::Subaccount;
-use ic_nervous_system_common::stable_mem_utils::BufferedStableMemWriter;
-use ic_sns_governance::governance::HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES;
-use ic_sns_governance::pb::v1::governance::{NeuronInFlightCommand, SnsMetadata};
-use ic_sns_governance::pb::v1::nervous_system_function::{
-    FunctionType, GenericNervousSystemFunction,
+use ic_nervous_system_common::memory_manager_upgrade_storage::store_protobuf;
+use ic_sns_governance::{
+    governance::HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
+    pb::v1::{
+        Ballot, Governance as GovernanceProto, Motion, NervousSystemFunction,
+        NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionType,
+        Proposal, ProposalData, ProposalId, Topic, WaitForQuietState,
+        governance::{Mode, NeuronInFlightCommand, SnsMetadata},
+        nervous_system_function::{FunctionType, GenericNervousSystemFunction},
+        neuron::{DissolveState, Followees},
+        proposal::Action,
+    },
+    proposal::{
+        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, PROPOSAL_SUMMARY_BYTES_MAX, PROPOSAL_TITLE_BYTES_MAX,
+        PROPOSAL_URL_CHAR_MAX,
+    },
+    types::NativeAction,
 };
-use ic_sns_governance::pb::v1::neuron::{DissolveState, Followees};
-use ic_sns_governance::pb::v1::proposal::Action;
-use ic_sns_governance::pb::v1::{
-    Ballot, Governance as GovernanceProto, Motion, NervousSystemFunction, NervousSystemParameters,
-    Neuron, NeuronId, NeuronPermission, NeuronPermissionType, Proposal, ProposalData, ProposalId,
-    WaitForQuietState,
+use ic_stable_structures::{
+    DefaultMemoryImpl,
+    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
 };
-use ic_sns_governance::proposal::{
-    MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, PROPOSAL_SUMMARY_BYTES_MAX, PROPOSAL_TITLE_BYTES_MAX,
-    PROPOSAL_URL_CHAR_MAX,
-};
-use ic_sns_governance::types::native_action_ids;
+use icrc_ledger_types::icrc1::account::Subaccount;
 use pretty_bytes::converter;
-use prost::Message;
-use rand::{rngs::StdRng, RngCore, SeedableRng};
-use std::collections::BTreeMap;
+use rand::{RngCore, SeedableRng, rngs::StdRng};
+use std::{cell::RefCell, collections::BTreeMap};
 
 const LOG_PREFIX: &str = "[Governance mem test] ";
 
 const MAX_POSSIBLE_HEAP_SIZE_IN_PAGES: usize = 4 * 1024 * 1024 / 64;
 
 const WASM_PAGE_SIZE_BYTES: usize = 65536;
-
-const BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100 MiB
 
 const SIZE_OF_NEURON_ID: usize = std::mem::size_of::<Subaccount>();
 
@@ -62,6 +66,20 @@ const DEFAULT_CONTROLLER: PrincipalId = PrincipalId::new(
     [0; PrincipalId::MAX_LENGTH_IN_BYTES],
 );
 
+/// Constants to define memory segments.  Must not change.
+const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
+
+thread_local! {
+    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
+        MemoryManager::init(DefaultMemoryImpl::default())
+    );
+
+    // The memory where the governance reads and writes its state during an upgrade.
+    pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
+        RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
+
+}
+
 static mut GOVERNANCE: Option<GovernanceProto> = None;
 
 /// Returns the number of wasm32 pages consumed.
@@ -74,7 +92,7 @@ fn heap_size_num_pages() -> usize {
     0
 }
 
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn canister_init() {
     dfn_core::printer::hook();
     println!("{}Executing canister_init...", LOG_PREFIX);
@@ -82,23 +100,21 @@ fn canister_init() {
     println!("{}Completed execution of canister_init", LOG_PREFIX);
 }
 
-#[export_name = "canister_pre_upgrade"]
+#[unsafe(export_name = "canister_pre_upgrade")]
 fn canister_pre_upgrade() {
     println!("{}Executing canister_pre_upgrade...", LOG_PREFIX);
-    let mut writer = BufferedStableMemWriter::new(BUFFER_SIZE);
     unsafe {
-        GOVERNANCE
-            .as_ref()
-            .unwrap()
-            .encode(&mut writer)
-            .expect("Could not serialize to stable memory");
+        UPGRADES_MEMORY.with_borrow(|memory| {
+            store_protobuf(memory, GOVERNANCE.as_ref().unwrap())
+                .expect("Failed to encode protobuf pre_upgrade")
+        });
     }
-    writer.flush(); // or `drop(writer)`
+
     println!("{}Completed execution of canister_pre_upgrade", LOG_PREFIX);
 }
 
 /// Canister post_upgrade should never run
-#[export_name = "canister_post_upgrade"]
+#[unsafe(export_name = "canister_post_upgrade")]
 fn canister_post_upgrade() {
     unimplemented!()
 }
@@ -123,11 +139,11 @@ fn pretty_bytes(bytes: usize) -> String {
 /// once and reuse the list as needed.
 fn generate_neuron_ids(max_number_of_neurons: u64) -> Vec<NeuronId> {
     // Seed required for randomness in canister execution environment
-    let mut rng = StdRng::from_seed([0u8; 32]);
+    let mut rng = StdRng::from_seed([0_u8; 32]);
 
     let mut neuron_ids = vec![];
     for _ in 0..max_number_of_neurons {
-        let mut bytes = [0u8; SIZE_OF_NEURON_ID];
+        let mut bytes = [0_u8; SIZE_OF_NEURON_ID];
         rng.fill_bytes(&mut bytes);
         neuron_ids.push(NeuronId {
             id: Vec::from(bytes),
@@ -157,12 +173,13 @@ fn generate_generic_nervous_system_functions(
 ) -> BTreeMap<u64, NervousSystemFunction> {
     let mut functions_map = BTreeMap::new();
     for i in 0..max_number_of_generic_functions {
-        let id = i as u64 + 1000; // Valid ids for GenericNervousSystemFunction start at 1000
+        let id = i + 1000; // Valid ids for GenericNervousSystemFunction start at 1000
         let nervous_system_function = NervousSystemFunction {
             id,
             name: "GenericNervousSystemFunction".to_string(),
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: Some(i32::from(Topic::DaoCommunitySettings)),
                     target_canister_id: Some(CanisterId::from_u64(id).get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(CanisterId::from_u64(id).get()),
@@ -255,12 +272,18 @@ fn allocate_proposal_data(
 ) -> ProposalData {
     // As Proposal Actions are keyed on u64, below is a map of those keys to ~estimated~ payload size
     let payload_size: usize = match action {
-        native_action_ids::UNSPECIFIED => 10_000, // Max size of motion_text payload = 10_000 bytes
-        native_action_ids::MANAGE_NERVOUS_SYSTEM_PARAMETERS => 280, // sizeof(NervousSystemParameter) = 280 bytes
-        native_action_ids::UPGRADE_SNS_CONTROLLER_CANISTER => 1_500_000, // Governance wasm is 1.5 MB
-        native_action_ids::ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION => 200, // sizeof(NervousSystemFunction) = ~200 bytes
-        native_action_ids::REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION => 8, // sizeof(u64) = 8 bytes
-        native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION => 1_000_000, // Estimate of average payload size = 1MB
+        x if x == NativeAction::Unspecified as u64 || x == NativeAction::Motion as u64 => 10_000, // Max size of motion_text payload = 10_000 bytes
+        x if x == NativeAction::ManageNervousSystemParameters as u64 => 280, // sizeof(NervousSystemParameter) = 280 bytes
+        x if x == NativeAction::UpgradeSnsControlledCanister as u64 => 1_500_000, // Governance wasm is 1.5 MB
+        x if x == NativeAction::AddGenericNervousSystemFunction as u64 => 200, // sizeof(NervousSystemFunction) = ~200 bytes
+        x if x == NativeAction::RemoveGenericNervousSystemFunction as u64 => 8, // sizeof(u64) = 8 bytes
+        x if x == NativeAction::ExecuteGenericNervousSystemFunction as u64 => 1_000_000, // Estimate of average payload size = 1MB
+        x if x == NativeAction::ManageSnsMetadata as u64 => 2 * 1024 * 1024,
+        x if x == NativeAction::UpgradeSnsToNextVersion as u64 => 100,
+        x if x == NativeAction::TransferSnsTreasuryFunds as u64 => 100,
+        x if x == NativeAction::RegisterDappCanisters as u64 => 100,
+        x if x == NativeAction::DeregisterDappCanisters as u64 => 100,
+        x if x == NativeAction::ManageLedgerParameters as u64 => 100,
         _ => panic!("Undefined proposal action"),
     };
 
@@ -311,11 +334,12 @@ fn populate_canister_state() {
         root_canister_id: Some(CanisterId::from_u64(2).get()),
         swap_canister_id: Some(CanisterId::from_u64(3).get()),
         sns_metadata: Some(SnsMetadata {
-            logo: Some("X".repeat(100)),
+            logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
             name: Some("ServiceNervousSystem-Test".to_string()),
             description: Some("A project to spin up a ServiceNervousSystem".to_string()),
             url: Some("https://internetcomputer.org".to_string()),
         }),
+        mode: Mode::Normal.into(),
         ..Default::default()
     };
 
@@ -393,7 +417,10 @@ fn populate_canister_state() {
         max_number_of_neurons,
         max_followee_per_function,
         max_number_of_principals_per_neuron,
-        pretty_bytes((wasm_pages_after_neurons - wasm_pages_after_nervous_system_functions) * WASM_PAGE_SIZE_BYTES)
+        pretty_bytes(
+            (wasm_pages_after_neurons - wasm_pages_after_nervous_system_functions)
+                * WASM_PAGE_SIZE_BYTES
+        )
     );
 
     // Generate Proposal required data
@@ -401,7 +428,7 @@ fn populate_canister_state() {
 
     let settled_proposal_count_per_action = nervous_system_parameters
         .max_proposals_to_keep_per_action
-        .unwrap() as u32;
+        .unwrap();
 
     // Insert settled proposals first as they occupy less memory due to ballots being removed from
     // the proposal after settlement.
@@ -445,7 +472,7 @@ fn populate_canister_state() {
         // Open proposals have ballots, for the worst case we assume every neuron votes
         // on every open proposal
         proto.proposals.insert(
-            proposal_id as u64,
+            proposal_id,
             allocate_proposal_data(proposal_id, *action_iter.next().unwrap(), Some(&ballots)),
         );
         proposal_id += 1;

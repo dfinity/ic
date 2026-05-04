@@ -2,28 +2,34 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::fmt;
 
-use serde::Deserialize;
-
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
-use ic_crypto_utils_threshold_sig::verify_combined;
+use ic_crypto_utils_threshold_sig::{verify_combined, verify_combined_with_cache};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_types::{
+    CanisterId, CryptoHashOfPartialState, PrincipalId, SubnetId, Time,
     consensus::certification::CertificationContent,
     crypto::{
-        threshold_sig::ThresholdSigPublicKey, CombinedThresholdSig, CombinedThresholdSigOf,
-        CryptoHash,
+        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash,
+        threshold_sig::ThresholdSigPublicKey,
     },
     messages::{Blob, Certificate},
-    CanisterId, CryptoHashOfPartialState, PrincipalId, SubnetId, Time,
 };
-use tree_deserializer::{types::Leb128EncodedU64, LabeledTreeDeserializer};
+use serde::Deserialize;
+use tree_deserializer::{LabeledTreeDeserializer, types::Leb128EncodedU64};
+
+/// Information about the delegation subnet, extracted during certificate verification.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DelegationSubnetInfo {
+    pub subnet_id: SubnetId,
+    pub subnet_type: Option<String>,
+}
 
 #[cfg(test)]
 mod tests;
 
 /// Describes an error that occurred during parsing and validation of the result
 /// of a `RegistryCanister::get_certified_changes_since()` method call.
-#[derive(Debug)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum CertificateValidationError {
     /// Failed to deserialize some part of the certificate.
     DeserError(String),
@@ -42,14 +48,21 @@ pub enum CertificateValidationError {
     MultipleSubnetDelegationsNotAllowed,
     /// The given canister id is not contained in the ranges specified by the subnet delegation.
     CanisterIdOutOfRange,
+    /// The given subnet id does not match the subnet id in the delegation.
+    SubnetIdMismatch {
+        provided_subnet_id: SubnetId,
+        delegation_subnet_id: SubnetId,
+    },
+    /// The delegation originates from a subnet that is not trusted for delegations (e.g., a cloud engine).
+    UntrustedDelegationSubnet(SubnetId),
 }
 
 impl fmt::Display for CertificateValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::DeserError(err) => write!(f, "failed to deserialize certificate: {}", err),
+            Self::DeserError(err) => write!(f, "failed to deserialize certificate: {err}"),
             Self::InvalidSignature(err) => {
-                write!(f, "failed to verify threshold signature: {}", err)
+                write!(f, "failed to verify threshold signature: {err}")
             }
             Self::CertifiedDataMismatch {
                 certified,
@@ -61,7 +74,7 @@ impl fmt::Display for CertificateValidationError {
                 hex::encode(&computed[..])
             ),
 
-            Self::MalformedHashTree(err) => write!(f, "hash tree in not well-formed: {}", err),
+            Self::MalformedHashTree(err) => write!(f, "hash tree in not well-formed: {err}"),
             Self::MultipleSubnetDelegationsNotAllowed => write!(
                 f,
                 "expected certificate with a maximum of one delegations but found nested delegations in the certificate"
@@ -72,11 +85,24 @@ impl fmt::Display for CertificateValidationError {
                     "canister id does not match the canister id range specified in the certificate"
                 )
             }
+            Self::SubnetIdMismatch {
+                provided_subnet_id,
+                delegation_subnet_id,
+            } => write!(
+                f,
+                "provided subnet id {provided_subnet_id} does not match subnet id in delegation {delegation_subnet_id}",
+            ),
+            Self::UntrustedDelegationSubnet(subnet_id) => {
+                write!(
+                    f,
+                    "the source subnet {subnet_id} is not trusted for delegations"
+                )
+            }
         }
     }
 }
 
-/// Verifies a certificate.
+/// Verifies a certificate and its certified data.
 ///
 /// Verification ensures that
 /// * the certificate is well-formed and contains a tree, a signature, and
@@ -100,54 +126,82 @@ impl fmt::Display for CertificateValidationError {
 /// * the public key is well-formed.
 ///
 /// Returns the certificate's timestamp, if verification is successful.
-pub fn verify_certificate(
+pub fn verify_certified_data(
     certificate: &[u8],
     canister_id: &CanisterId,
     root_pk: &ThresholdSigPublicKey,
     certified_data: &[u8],
 ) -> Result<Time, CertificateValidationError> {
-    #[derive(Deserialize, Debug)]
+    verify_certified_data_internal(certificate, canister_id, root_pk, certified_data, false)
+        .map(|(time, _subnet_type)| time)
+}
+
+/// Does the same as [`verify_certified_data`] but keeps some verified signatures in cache
+/// for efficiency.
+pub fn verify_certified_data_with_cache(
+    certificate: &[u8],
+    canister_id: &CanisterId,
+    root_pk: &ThresholdSigPublicKey,
+    certified_data: &[u8],
+) -> Result<Time, CertificateValidationError> {
+    verify_certified_data_internal(certificate, canister_id, root_pk, certified_data, true)
+        .map(|(time, _subnet_type)| time)
+}
+
+/// Does the same as [`verify_certified_data_with_cache`] but additionally rejects
+/// delegations from cloud engine subnets.
+///
+/// This is intended for use in canister signature verification (ICCSA), where
+/// delegations from cloud engine subnets must not be accepted.
+pub fn verify_certified_data_with_cache_for_canister_sig(
+    certificate: &[u8],
+    canister_id: &CanisterId,
+    root_pk: &ThresholdSigPublicKey,
+    certified_data: &[u8],
+) -> Result<Time, CertificateValidationError> {
+    let (time, delegation_info) =
+        verify_certified_data_internal(certificate, canister_id, root_pk, certified_data, true)?;
+    if let Some(info) = delegation_info
+        && matches!(info.subnet_type.as_deref(), None | Some("cloud_engine"))
+    {
+        return Err(CertificateValidationError::UntrustedDelegationSubnet(
+            info.subnet_id,
+        ));
+    }
+    Ok(time)
+}
+
+/// Verifies a certificate and its certified data with optional signature cache.
+/// Internal implementation used by `pub` functions.
+/// More details are given in [`verify_certified_data`].
+fn verify_certified_data_internal(
+    certificate: &[u8],
+    canister_id: &CanisterId,
+    root_pk: &ThresholdSigPublicKey,
+    certified_data: &[u8],
+    use_signature_cache: bool,
+) -> Result<(Time, Option<DelegationSubnetInfo>), CertificateValidationError> {
+    #[derive(Debug, Deserialize)]
     struct CanisterView {
         certified_data: Blob,
     }
 
-    #[derive(Deserialize, Debug)]
+    #[derive(Debug, Deserialize)]
     struct ReplicaState {
         time: Leb128EncodedU64,
         canister: BTreeMap<CanisterId, CanisterView>,
     }
 
-    let certificate: Certificate = parse_certificate(certificate)?;
+    let (verified_certificate, delegation_info) =
+        verify_certificate_internal(certificate, canister_id, root_pk, use_signature_cache)?;
 
-    let key = if let Some(delegation) = &certificate.delegation {
-        let subnet_id = PrincipalId::try_from(&*delegation.subnet_id)
-            .map(SubnetId::from)
-            .map_err(|err| {
-                CertificateValidationError::DeserError(format!(
-                    "failed to parse delegation subnet id: {}",
-                    err
-                ))
-            })?;
-        verify_delegation_certificate(
-            &delegation.certificate,
-            &subnet_id,
-            root_pk,
-            Some(canister_id),
-        )?
-    } else {
-        *root_pk
-    };
-
-    verify_certificate_signature(&certificate, &key)?;
-
-    let replica_labeled_tree = parse_tree(certificate.tree)?;
+    let replica_labeled_tree = parse_tree(verified_certificate.tree)?;
     let replica_state = ReplicaState::deserialize(LabeledTreeDeserializer::new(
         &replica_labeled_tree,
     ))
     .map_err(|err| {
         CertificateValidationError::DeserError(format!(
-            "failed to unpack replica state from a labeled tree: {}",
-            err
+            "failed to unpack replica state from a labeled tree: {err}"
         ))
     })?;
 
@@ -157,8 +211,7 @@ pub fn verify_certificate(
         .map(|canister| canister.certified_data.clone())
         .ok_or_else(|| {
             CertificateValidationError::MalformedHashTree(format!(
-                "cannot find certified_data for canister {} in the tree",
-                canister_id
+                "cannot find certified_data for canister {canister_id} in the tree"
             ))
         })?;
 
@@ -169,29 +222,160 @@ pub fn verify_certificate(
         });
     }
 
-    Ok(Time::from_nanos_since_unix_epoch(replica_state.time.0))
+    Ok((
+        Time::from_nanos_since_unix_epoch(replica_state.time.0),
+        delegation_info,
+    ))
+}
+
+/// Verifies a certificate.
+///
+/// Verification ensures that
+/// * the certificate is well-formed and contains a tree, a signature, and
+///   optionally a delegation with a certificate and a subnet ID,
+/// * if a delegation is present, that the delegation certificate is valid for
+///   the delegation subnet for the canister with ID `canister_id` w.r.t. the
+///   `root_pk` (see below for details on verifying a delegation certificate).
+/// * the signature is valid, either w.r.t. `root_pk` or w.r.t
+///   the delegation key if a delegation is present,
+///
+/// Verification of the delegation certificate ensures that
+/// * the certificate is well-formed and contains a tree, a signature, and
+///   _no_ further delegation, i.e., it comes directly from the root subnet,
+/// * the signature is valid w.r.t. `root_pk`,
+/// * the tree is well-formed and contains time as well as subnet information
+///   (i.e., a public_key and canister ranges) for the given subnet,
+/// * the canister ranges are well-formed and contain the `canister_id`, and
+/// * the public key is well-formed.
+///
+/// Returns the verified certificate, if verification is successful.
+pub fn verify_certificate(
+    certificate: &[u8],
+    canister_id: &CanisterId,
+    root_pk: &ThresholdSigPublicKey,
+) -> Result<Certificate, CertificateValidationError> {
+    verify_certificate_internal(certificate, canister_id, root_pk, false)
+        .map(|(cert, _subnet_type)| cert)
+}
+
+/// Does the same as [`verify_certificate`] but keeps some verified signatures in cache
+/// for efficiency.
+pub fn verify_certificate_with_cache(
+    certificate: &[u8],
+    canister_id: &CanisterId,
+    root_pk: &ThresholdSigPublicKey,
+) -> Result<Certificate, CertificateValidationError> {
+    verify_certificate_internal(certificate, canister_id, root_pk, true)
+        .map(|(cert, _subnet_type)| cert)
+}
+
+/// Verifies a certificate for a read state on the subnet endpoint (i.e. a
+/// certificate returned by /api/v2/subnet/<subnet_id>/read_state).
+///
+/// See doc comments of `verify_certificate` for more details.
+///
+/// In case a delegation is present, then the delegation certificate is valid
+/// for the subnet id that is provided, i.e. the provided subnet id must
+/// match the delegation subnet id.
+///
+/// Additionally the delegation certificate is valid without doing any check
+/// on the canister ranges included in the certificate.
+pub fn verify_certificate_for_subnet_read_state(
+    certificate: &[u8],
+    subnet_id: &SubnetId,
+    root_pk: &ThresholdSigPublicKey,
+) -> Result<Certificate, CertificateValidationError> {
+    let certificate: Certificate = parse_certificate(certificate)?;
+    let key = if let Some(delegation) = &certificate.delegation {
+        let delegation_subnet_id = PrincipalId::try_from(&*delegation.subnet_id)
+            .map(SubnetId::from)
+            .map_err(|err| {
+                CertificateValidationError::DeserError(format!(
+                    "failed to parse delegation subnet id: {err}"
+                ))
+            })?;
+        if subnet_id != &delegation_subnet_id {
+            return Err(CertificateValidationError::SubnetIdMismatch {
+                provided_subnet_id: *subnet_id,
+                delegation_subnet_id,
+            });
+        }
+
+        let (key, _delegation_info) = verify_delegation_certificate(
+            &delegation.certificate,
+            subnet_id,
+            root_pk,
+            None,
+            false,
+        )?;
+        key
+    } else {
+        *root_pk
+    };
+
+    verify_certificate_signature(&certificate, &key, false)?;
+    Ok(certificate)
+}
+
+/// Verifies a certificate with optional signature cache.
+/// Internal implementation used by `pub` functions.
+/// More details are given in [`verify_certificate`].
+fn verify_certificate_internal(
+    certificate: &[u8],
+    canister_id: &CanisterId,
+    root_pk: &ThresholdSigPublicKey,
+    use_signature_cache: bool,
+) -> Result<(Certificate, Option<DelegationSubnetInfo>), CertificateValidationError> {
+    let certificate: Certificate = parse_certificate(certificate)?;
+    let (key, delegation_info) = if let Some(delegation) = &certificate.delegation {
+        let subnet_id = PrincipalId::try_from(&*delegation.subnet_id)
+            .map(SubnetId::from)
+            .map_err(|err| {
+                CertificateValidationError::DeserError(format!(
+                    "failed to parse delegation subnet id: {err}"
+                ))
+            })?;
+        let (key, info) = verify_delegation_certificate(
+            &delegation.certificate,
+            &subnet_id,
+            root_pk,
+            Some(canister_id),
+            use_signature_cache,
+        )?;
+        (key, Some(info))
+    } else {
+        (*root_pk, None)
+    };
+
+    verify_certificate_signature(&certificate, &key, use_signature_cache)?;
+    Ok((certificate, delegation_info))
 }
 
 /// Verifies a delegation certificate.
 ///
-/// See the documentation of `verify_certificate` for more details.
-fn verify_delegation_certificate(
+/// See the documentation of [`verify_certificate`] for more details.
+pub fn verify_delegation_certificate(
     certificate: &[u8],
     subnet_id: &SubnetId,
     root_pk: &ThresholdSigPublicKey,
     canister_id: Option<&CanisterId>,
-) -> Result<ThresholdSigPublicKey, CertificateValidationError> {
-    #[derive(Deserialize, Debug)]
+    use_signature_cache: bool,
+) -> Result<(ThresholdSigPublicKey, DelegationSubnetInfo), CertificateValidationError> {
+    #[derive(Debug, Deserialize)]
     struct SubnetView {
-        canister_ranges: Blob,
+        canister_ranges: Option<Blob>,
         public_key: Blob,
+        r#type: Option<String>, // added in V25 certifications
     }
 
-    #[derive(Deserialize, Debug)]
+    type TreeCanisterRanges = BTreeMap<CanisterId, Blob>;
+
+    #[derive(Debug, Deserialize)]
     struct SubnetCertificateData {
         #[allow(unused)] // currently delegation timestamps are not checked
         time: Leb128EncodedU64,
         subnet: BTreeMap<SubnetId, SubnetView>,
+        canister_ranges: Option<BTreeMap<SubnetId, TreeCanisterRanges>>,
     }
 
     let certificate: Certificate = parse_certificate(certificate)?;
@@ -202,51 +386,103 @@ fn verify_delegation_certificate(
         return Err(CertificateValidationError::MultipleSubnetDelegationsNotAllowed);
     };
 
-    verify_certificate_signature(&certificate, root_pk)?;
+    verify_certificate_signature(&certificate, root_pk, use_signature_cache)?;
 
     let replica_labeled_tree = parse_tree(certificate.tree)?;
     let subnet_state =
         SubnetCertificateData::deserialize(LabeledTreeDeserializer::new(&replica_labeled_tree))
             .map_err(|err| {
                 CertificateValidationError::DeserError(format!(
-                    "failed to unpack replica state from a labeled tree: {}",
-                    err
+                    "failed to unpack replica state from a labeled tree: {err}"
                 ))
             })?;
 
     let subnet_info = subnet_state.subnet.get(subnet_id).ok_or_else(|| {
         CertificateValidationError::MalformedHashTree(format!(
-            "cannot find subnet information for subnet {} in the tree",
-            subnet_id
+            "cannot find subnet information for subnet {subnet_id} in the tree"
         ))
     })?;
-    let canister_id_ranges: Vec<(CanisterId, CanisterId)> =
-        serde_cbor::from_slice(&subnet_info.canister_ranges).map_err(|err| {
-            CertificateValidationError::DeserError(format!(
-                "failed to unpack canister range: {}",
-                err
-            ))
-        })?;
 
+    // canister ranges could be found in two places. Either in the
+    // `/subnet/<subnet_id>/canister_ranges` leaf or in the
+    // `/canister_ranges/<subnet_id>` subtree.
     if let Some(canister_id) = canister_id {
-        if !&canister_id_ranges
-            .iter()
-            .any(|(range_start, range_end)| (range_start..=range_end).contains(&canister_id))
-        {
-            return Err(CertificateValidationError::CanisterIdOutOfRange);
+        if subnet_info.canister_ranges.is_none() && subnet_state.canister_ranges.is_none() {
+            return Err(CertificateValidationError::MalformedHashTree(String::from(
+                "state tree doesn't have canister ranges",
+            )));
+        }
+
+        let canister_id_ranges_contain = |canister_id, canister_id_ranges: Vec<_>| {
+            canister_id_ranges
+                .iter()
+                .any(|(range_start, range_end)| (range_start..=range_end).contains(&canister_id))
+        };
+
+        // Check `/subnet/<subnet_id>/canister_ranges`
+        if let Some(canister_ranges) = &subnet_info.canister_ranges {
+            let canister_id_ranges = serde_cbor::from_slice(canister_ranges).map_err(|err| {
+                CertificateValidationError::DeserError(format!(
+                    "failed to unpack canister range: {err}"
+                ))
+            })?;
+
+            if !canister_id_ranges_contain(canister_id, canister_id_ranges) {
+                return Err(CertificateValidationError::CanisterIdOutOfRange);
+            }
+        }
+
+        // Check `/canister_ranges/<subnet_id>`
+        if let Some(canister_ranges_per_subnet_id) = &subnet_state.canister_ranges {
+            let canister_ranges =
+                canister_ranges_per_subnet_id
+                    .get(subnet_id)
+                    .ok_or_else(|| {
+                        CertificateValidationError::MalformedHashTree(format!(
+                            "cannot find canister ranges for subnet {subnet_id} in the tree"
+                        ))
+                    })?;
+
+            // Find the leaf which *might* cover the canister ID.
+            let Some((_canister_id, canister_ranges)) = canister_ranges
+                .range((
+                    std::ops::Bound::Unbounded,
+                    std::ops::Bound::Included(canister_id),
+                ))
+                .last()
+            else {
+                return Err(CertificateValidationError::CanisterIdOutOfRange);
+            };
+
+            let canister_id_ranges = serde_cbor::from_slice(canister_ranges).map_err(|err| {
+                CertificateValidationError::DeserError(format!(
+                    "failed to unpack canister range: {err}",
+                ))
+            })?;
+
+            if !canister_id_ranges_contain(canister_id, canister_id_ranges) {
+                return Err(CertificateValidationError::CanisterIdOutOfRange);
+            }
         }
     }
 
     let public_key = parse_threshold_sig_key_from_der(&subnet_info.public_key).map_err(|err| {
-        CertificateValidationError::DeserError(format!("failed to deserialize public key: {}", err))
+        CertificateValidationError::DeserError(format!("failed to deserialize public key: {err}"))
     })?;
-    Ok(public_key)
+
+    Ok((
+        public_key,
+        DelegationSubnetInfo {
+            subnet_id: *subnet_id,
+            subnet_type: subnet_info.r#type.clone(),
+        },
+    ))
 }
 
 /// Validates a subnet delegation certificate.
 ///
 /// Returns `Ok(())` iff the verification of a delegation certificate
-/// as described in the documentation of `verify_certificate` is successful
+/// as described in the documentation of [`verify_certificate`] is successful
 /// for subnet with ID `subnet_id`, with the exception that no canister ID
 /// range check is performed.
 pub fn validate_subnet_delegation_certificate(
@@ -254,20 +490,29 @@ pub fn validate_subnet_delegation_certificate(
     subnet_id: &SubnetId,
     root_pk: &ThresholdSigPublicKey,
 ) -> Result<(), CertificateValidationError> {
-    verify_delegation_certificate(certificate, subnet_id, root_pk, None).map(|_public_key| ())
+    verify_delegation_certificate(certificate, subnet_id, root_pk, None, false).map(|_| ())
+}
+
+/// Does the same as [`validate_subnet_delegation_certificate`] but keeps some
+/// verified signatures in cache for efficiency.
+pub fn validate_subnet_delegation_certificate_with_cache(
+    certificate: &[u8],
+    subnet_id: &SubnetId,
+    root_pk: &ThresholdSigPublicKey,
+) -> Result<(), CertificateValidationError> {
+    verify_delegation_certificate(certificate, subnet_id, root_pk, None, true).map(|_| ())
 }
 
 fn parse_certificate(certificate: &[u8]) -> Result<Certificate, CertificateValidationError> {
     serde_cbor::from_slice(certificate).map_err(|err| {
-        CertificateValidationError::DeserError(format!("failed to decode certificate: {}", err))
+        CertificateValidationError::DeserError(format!("failed to decode certificate: {err}"))
     })
 }
 
 fn parse_tree(tree: MixedHashTree) -> Result<LabeledTree<Vec<u8>>, CertificateValidationError> {
     LabeledTree::<Vec<u8>>::try_from(tree).map_err(|err| {
         CertificateValidationError::MalformedHashTree(format!(
-            "failed to convert hash tree to labeled tree: {:?}",
-            err
+            "failed to convert hash tree to labeled tree: {err:?}"
         ))
     })
 }
@@ -275,11 +520,17 @@ fn parse_tree(tree: MixedHashTree) -> Result<LabeledTree<Vec<u8>>, CertificateVa
 fn verify_certificate_signature(
     certificate: &Certificate,
     key: &ThresholdSigPublicKey,
+    use_signature_cache: bool,
 ) -> Result<(), CertificateValidationError> {
     let digest = CryptoHashOfPartialState::from(CryptoHash(certificate.tree.digest().to_vec()));
     let content = CertificationContent::new(digest.clone());
     let sig = CombinedThresholdSigOf::new(CombinedThresholdSig(certificate.signature.to_vec()));
-    verify_combined(&content, &sig, key).map_err(|err| {
+    let threshold_sig_verification_fn = if use_signature_cache {
+        verify_combined_with_cache
+    } else {
+        verify_combined
+    };
+    threshold_sig_verification_fn(&content, &sig, key).map_err(|err| {
         CertificateValidationError::InvalidSignature(format!(
             "certificate_tree_hash={:?}, sig={:?}, pk={:?}, error={:?}",
             digest, certificate.signature, key, err

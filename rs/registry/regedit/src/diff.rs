@@ -1,8 +1,8 @@
 use crate::{
     json, protobuf,
-    snapshot::{Snapshot, SPECIAL_FIELD_PREFIX, VERSION_FIELD},
+    snapshot::{SPECIAL_FIELD_PREFIX, Snapshot, VERSION_FIELD},
 };
-use anyhow::{anyhow, ensure, Result};
+use anyhow::{Result, anyhow, ensure};
 use ic_base_types::RegistryVersion;
 use ic_registry_local_store::{ChangelogEntry, KeyMutation};
 use serde_json::Value;
@@ -11,7 +11,7 @@ use thiserror::Error;
 
 pub const DELETED_MARKER: &str = "(deleted)";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Diff(pub Value);
 
 pub fn make_diff(base_snapshot: Snapshot, new_snapshot: Snapshot) -> Result<Diff> {

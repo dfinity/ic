@@ -4,28 +4,38 @@ use assert_matches::assert_matches;
 use async_trait::async_trait;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
+use ic_crypto_sha2::Sha256;
+use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::NervousSystemError;
 use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_governance::canister_state::CanisterRandomnessGenerator;
 use ic_nns_governance::{
-    governance::{Environment, Governance, CMC},
-    pb::v1::{
-        governance_error::ErrorType,
-        manage_neuron::{
-            claim_or_refresh::{By, MemoAndController},
-            ClaimOrRefresh, Command,
-        },
-        manage_neuron_response::Command as CommandResponse,
-        neuron, proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
-        ManageNeuron, ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NnsFunction,
-        Proposal,
+    governance::{
+        Environment, Governance, HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES, HeapGrowthPotential,
     },
+    pb::v1::{
+        GovernanceError, InstallCode, ManageNeuron, Motion, Proposal,
+        governance_error::ErrorType,
+        install_code::CanisterInstallMode,
+        manage_neuron::{
+            ClaimOrRefresh, Command,
+            claim_or_refresh::{By, MemoAndController},
+        },
+        proposal,
+    },
+    proposals::execute_nns_function::ValidExecuteNnsFunction,
 };
-use ledger_canister::{AccountIdentifier, Tokens};
-use maplit::hashmap;
+use ic_nns_governance_api::{
+    self as api, ManageNeuronResponse, manage_neuron_response::Command as CommandResponse,
+};
+use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
+use maplit::btreemap;
 use std::convert::TryFrom;
-
-use ic_nns_governance::governance::{HeapGrowthPotential, HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES};
-use ledger_canister::Subaccount;
+use std::sync::Arc;
 
 struct DegradedEnv {}
 #[async_trait]
@@ -34,15 +44,11 @@ impl Environment for DegradedEnv {
         111000222
     }
 
-    fn random_u64(&mut self) -> u64 {
-        4 // https://xkcd.com/221
-    }
-
-    fn random_byte_array(&mut self) -> [u8; 32] {
-        unimplemented!()
-    }
-
-    fn execute_nns_function(&self, _: u64, _: &ExecuteNnsFunction) -> Result<(), GovernanceError> {
+    fn execute_nns_function(
+        &self,
+        _: u64,
+        _: &ValidExecuteNnsFunction,
+    ) -> Result<(), GovernanceError> {
         unimplemented!()
     }
 
@@ -51,7 +57,7 @@ impl Environment for DegradedEnv {
     }
 
     async fn call_canister_method(
-        &mut self,
+        &self,
         _target: CanisterId,
         _method_name: &str,
         _request: Vec<u8>,
@@ -61,7 +67,7 @@ impl Environment for DegradedEnv {
 }
 
 #[async_trait]
-impl Ledger for DegradedEnv {
+impl IcpLedger for DegradedEnv {
     async fn transfer_funds(
         &self,
         _: u64,
@@ -69,6 +75,17 @@ impl Ledger for DegradedEnv {
         _: Option<Subaccount>,
         _: AccountIdentifier,
         _: u64,
+    ) -> Result<u64, NervousSystemError> {
+        unimplemented!()
+    }
+
+    async fn icrc2_transfer_from(
+        &self,
+        _from: Account,
+        _to: Account,
+        _amount_e8s: u64,
+        _fee_e8s: u64,
+        _memo: u64,
     ) -> Result<u64, NervousSystemError> {
         unimplemented!()
     }
@@ -84,11 +101,30 @@ impl Ledger for DegradedEnv {
     fn canister_id(&self) -> CanisterId {
         unimplemented!()
     }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: icrc_ledger_types::icrc1::account::Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<candid::Nat, NervousSystemError> {
+        unimplemented!()
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        unimplemented!()
+    }
 }
 
 #[async_trait]
 impl CMC for DegradedEnv {
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
         unimplemented!()
     }
 }
@@ -96,31 +132,31 @@ impl CMC for DegradedEnv {
 /// Constructs a test principal id from an integer.
 /// Convenience functions to make creating neurons more concise.
 fn principal(i: u64) -> PrincipalId {
-    PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
+    PrincipalId::try_from(format!("SID{i}").as_bytes().to_vec()).unwrap()
 }
 
 /// Constructs a fixture with 2 neurons of different stakes and no
 /// following. Neuron 2 has a greater stake.
-fn fixture_two_neurons_second_is_bigger() -> GovernanceProto {
-    GovernanceProto {
-        economics: Some(NetworkEconomics::default()),
-        neurons: hashmap! {
-            1 => Neuron {
+fn fixture_two_neurons_second_is_bigger() -> api::Governance {
+    api::Governance {
+        economics: Some(api::NetworkEconomics::default()),
+        neurons: btreemap! {
+            1 => api::Neuron {
                 id: Some(NeuronId {id: 1}),
                 controller: Some(principal(1)),
                 cached_neuron_stake_e8s: 23,
                 account: b"a__4___8__12__16__20__24__28__32".to_vec(),
                 // One year
-                dissolve_state: Some(neuron::DissolveState::DissolveDelaySeconds(31557600)),
+                dissolve_state: Some(api::neuron::DissolveState::DissolveDelaySeconds(31557600)),
                 ..Default::default()
             },
-            2 => Neuron {
+            2 => api::Neuron {
                 id: Some(NeuronId {id: 2}),
                 controller: Some(principal(2)),
                 cached_neuron_stake_e8s: 5100,
                 account:  b"b__4___8__12__16__20__24__28__32".to_vec(),
                 // One year
-                dissolve_state: Some(neuron::DissolveState::DissolveDelaySeconds(31557600)),
+                dissolve_state: Some(api::neuron::DissolveState::DissolveDelaySeconds(31557600)),
                 ..Default::default()
              },
         },
@@ -131,9 +167,10 @@ fn fixture_two_neurons_second_is_bigger() -> GovernanceProto {
 fn degraded_governance() -> Governance {
     Governance::new(
         fixture_two_neurons_second_is_bigger(),
-        Box::new(DegradedEnv {}),
-        Box::new(DegradedEnv {}),
-        Box::new(DegradedEnv {}),
+        Arc::new(DegradedEnv {}),
+        Arc::new(DegradedEnv {}),
+        Arc::new(DegradedEnv {}),
+        Box::new(CanisterRandomnessGenerator::new()),
     )
 }
 
@@ -146,8 +183,8 @@ fn test_heap_soft_limit_is_3_and_half_gigibyte() {
     )
 }
 
-#[test]
-fn test_cannot_submit_motion_in_degraded_mode() {
+#[tokio::test]
+async fn test_cannot_submit_motion_in_degraded_mode() {
     let mut gov = degraded_governance();
 
     // Now let's send a proposal
@@ -163,13 +200,12 @@ fn test_cannot_submit_motion_in_degraded_mode() {
             })),
             ..Default::default()
         },
-    ),
-    Err(e) if e.error_type == ErrorType::ResourceExhausted as i32
-    );
+    ).await,
+    Err(e) if e.error_type == ErrorType::ResourceExhausted as i32);
 }
 
-#[test]
-fn test_can_submit_nns_canister_upgrade_in_degraded_mode() {
+#[tokio::test]
+async fn test_can_submit_nns_canister_upgrade_in_degraded_mode() {
     let mut gov = degraded_governance();
 
     // Now let's send a proposal
@@ -181,13 +217,19 @@ fn test_can_submit_nns_canister_upgrade_in_degraded_mode() {
             &Proposal {
                 title: Some("A Reasonable Title".to_string()),
                 summary: "proposal 1".to_string(),
-                action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                    nns_function: NnsFunction::NnsCanisterUpgrade as i32,
-                    payload: Vec::new(),
+                action: Some(proposal::Action::InstallCode(InstallCode {
+                    canister_id: Some(GOVERNANCE_CANISTER_ID.get()),
+                    wasm_module: Some(vec![1, 2, 3]),
+                    install_mode: Some(CanisterInstallMode::Upgrade as i32),
+                    arg: Some(vec![4, 5, 6]),
+                    skip_stopping_before_installing: None,
+                    wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+                    arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
                 })),
                 ..Default::default()
             },
-        ),
+        )
+        .await,
         Ok(_)
     );
 }

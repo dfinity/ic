@@ -1,11 +1,16 @@
 use crate::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
+use ic_protobuf::types::v1::RejectCode as pbRejectCode;
 use ic_types::{
+    CanisterId, Height, NodeId, RegistryVersion, SubnetId, Time, UserId,
     crypto::{AlgorithmId, KeyPurpose, UserPublicKey},
-    messages::{CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response},
-    time::UNIX_EPOCH,
+    messages::{
+        CallbackId, NO_DEADLINE, Payload, Refund, RejectContext, Request, RequestMetadata,
+        RequestOrResponse, Response, StreamMessage,
+    },
+    time::{CoarseTime, UNIX_EPOCH},
     xnet::StreamIndex,
-    CanisterId, Cycles, Height, IDkgId, NodeId, RegistryVersion, SubnetId, Time, UserId,
 };
+use ic_types_cycles::Cycles;
 use proptest::prelude::*;
 use std::{convert::TryInto, time::Duration};
 use strum::IntoEnumIterator;
@@ -93,27 +98,42 @@ prop_compose! {
 }
 
 prop_compose! {
-    /// Returns an arbitrary [`IDkgId`].
-    pub fn dkg_id() (
-      instance_id in height(),
-      subnet_id in subnet_id()
-    ) -> IDkgId {
-        IDkgId {
-            instance_id,
-            subnet_id,
+    /// Returns an arbitrary ['RequestMetadata'].
+    pub fn request_metadata()(
+        call_tree_depth in any::<u64>(),
+        call_tree_start_time_nanos in any::<u64>(),
+    ) -> RequestMetadata {
+        RequestMetadata::new(
+            call_tree_depth,
+            Time::from_nanos_since_unix_epoch(call_tree_start_time_nanos),
+        )
+    }
+}
+
+prop_compose! {
+    /// Returns an arbitrary deadline that is equal to `NO_DEADLINE` half the time.
+    pub fn deadline() (
+      deadline in any::<u32>(),
+    ) -> CoarseTime {
+        if deadline % 2 == 1 {
+            NO_DEADLINE
+        } else {
+            CoarseTime::from_secs_since_unix_epoch(deadline)
         }
     }
 }
 
 prop_compose! {
-    /// Returns an arbitrary [`Request`].
-    pub fn request()(
+    /// Generates an arbitrary [`Request`], with or without a populated `deadline` field.
+    pub fn request_with_config(populate_deadline: bool)(
         receiver in canister_id(),
         sender in canister_id(),
         cycles_payment in any::<u64>(),
         method_name in "[a-zA-Z]{1,6}",
         callback in any::<u64>(),
         method_payload in prop::collection::vec(any::<u8>(), 0..16),
+        metadata in request_metadata(),
+        deadline in deadline(),
     ) -> Request {
         Request {
             receiver,
@@ -122,7 +142,25 @@ prop_compose! {
             payment: Cycles::from(cycles_payment),
             method_name,
             method_payload,
+            metadata,
+            deadline: if populate_deadline { deadline } else { NO_DEADLINE },
         }
+    }
+}
+
+prop_compose! {
+    /// Returns an arbitrary [`Request`].
+    ///
+    /// This is what should be used for generating arbitrary requests almost everywhere;
+    /// the only exception is when specifically testing for a certain certification version,
+    /// in which case `request_with_config()` should be used.
+    pub fn request()(
+        // Always populate all fields, regardless of e.g. current certification version.
+        // `ic_canonical_state` should not be using this generator; and all other crates /
+        // proptests should be able to deal with all fields being populated.
+        request in request_with_config(true),
+    ) -> Request {
+        request
     }
 }
 
@@ -132,32 +170,68 @@ pub fn response_payload() -> impl Strategy<Value = Payload> {
         // Data payload.
         prop::collection::vec(any::<u8>(), 0..16).prop_flat_map(|data| Just(Payload::Data(data))),
         // Reject payload.
-        (1u64..5, "[a-zA-Z]{1,6}").prop_flat_map(|(code, message)| Just(Payload::Reject(
-            RejectContext {
-                code: code.try_into().unwrap(),
+        (1_i32..5, "[a-zA-Z]{1,6}").prop_flat_map(|(code, message)| Just(Payload::Reject(
+            RejectContext::new(
+                pbRejectCode::try_from(code).unwrap().try_into().unwrap(),
                 message
-            }
+            )
         )))
     ]
 }
 
 prop_compose! {
-    /// Returns an arbitrary [`Response`].
-    pub fn response()(
+    /// Returns an arbitrary [`Response`], with or without a populated `deadline` field.
+    pub fn response_with_config(populate_deadline: bool)(
         originator in canister_id(),
         respondent in canister_id(),
         callback in any::<u64>(),
         cycles_refund in any::<u64>(),
         response_payload in response_payload(),
+        deadline in deadline(),
     ) -> Response {
         Response {
             originator,
             respondent,
             originator_reply_callback: CallbackId::from(callback),
             refund: Cycles::from(cycles_refund),
-            response_payload
+            response_payload,
+            deadline: if populate_deadline { deadline } else { NO_DEADLINE },
         }
     }
+}
+
+prop_compose! {
+    /// Returns an arbitrary [`Response`].
+    ///
+    /// This is what should be used for generating arbitrary requests almost everywhere;
+    /// the only exception is when specifically testing for a certain certification version,
+    /// in which case `response_with_config()` should be used.
+    pub fn response()(
+        response in response_with_config(true),
+    ) -> Response {
+        response
+    }
+}
+
+prop_compose! {
+    /// Returns an arbitrary [`Refund`].
+    pub fn refund() (
+        recipient in canister_id(),
+        cycles in 1_u64..,
+    ) -> Refund {
+        Refund::anonymous(recipient, Cycles::from(cycles))
+    }
+}
+
+/// Produces an arbitrary [`StreamMessage`], including or not anonymous `Refunds`.
+pub fn stream_message_with_config(
+    including_anonymous_refund: bool,
+) -> impl Strategy<Value = StreamMessage> {
+    prop_oneof![
+        1 => request_with_config(true).prop_flat_map(|req| Just(StreamMessage::from(req))),
+        1 => response_with_config(true).prop_flat_map(|rep| Just(StreamMessage::from(rep))),
+        including_anonymous_refund as u32 => refund().prop_flat_map(|refund| Just(StreamMessage::from(refund))),
+    ]
 }
 
 /// Produces an arbitrary [`RequestOrResponse`].

@@ -5,11 +5,11 @@ use ic_crypto_internal_csp::api::NiDkgCspClient;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspFsEncryptionPublicKey, CspNiDkgDealing,
 };
-use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use utils::{
-    csp_encryption_pubkey, dealer_index_in_dealers_or_panic, epoch,
-    index_in_resharing_committee_or_panic, DkgEncPubkeyRegistryQueryError,
+    DkgEncPubkeyRegistryQueryError, csp_encryption_pubkey, dealer_index_in_dealers_or_panic, epoch,
+    index_in_resharing_committee_or_panic,
 };
 pub use verification::verify_dealing;
 
@@ -25,7 +25,7 @@ mod creation {
     pub fn create_dealing<C: NiDkgCspClient>(
         self_node_id: &NodeId,
         ni_dkg_csp_client: &C,
-        registry: &Arc<dyn RegistryClient>,
+        registry: &dyn RegistryClient,
         config: &NiDkgConfig,
     ) -> Result<NiDkgDealing, DkgCreateDealingError> {
         ensure_dealer_eligibility(self_node_id, config)?;
@@ -104,7 +104,6 @@ mod creation {
     ) -> Result<CspNiDkgDealing, DkgCreateDealingError> {
         Ok(ni_dkg_csp_client.create_dealing(
             AlgorithmId::NiDkg_Groth20_Bls12_381,
-            config.dkg_id(),
             dealer_index_in_dealers_or_panic(config.dealers(), *self_node_id),
             config.threshold().get(),
             epoch(config.registry_version()),
@@ -119,7 +118,7 @@ mod verification {
 
     pub fn verify_dealing<C: NiDkgCspClient>(
         ni_dkg_csp_client: &C,
-        registry: &Arc<dyn RegistryClient>,
+        registry: &dyn RegistryClient,
         config: &NiDkgConfig,
         dealer: &NodeId,
         dealing: &NiDkgDealing,
@@ -162,7 +161,6 @@ mod verification {
         if let Some(transcript) = config.resharing_transcript() {
             Ok(ni_dkg_csp_client.verify_resharing_dealing(
                 AlgorithmId::NiDkg_Groth20_Bls12_381,
-                config.dkg_id(),
                 index_in_resharing_committee_or_panic(dealer, &transcript.committee),
                 config.threshold().get(),
                 epoch,
@@ -173,7 +171,6 @@ mod verification {
         } else {
             Ok(ni_dkg_csp_client.verify_dealing(
                 AlgorithmId::NiDkg_Groth20_Bls12_381,
-                config.dkg_id(),
                 dealer_index_in_dealers_or_panic(config.dealers(), *dealer),
                 config.threshold().get(),
                 epoch,
@@ -194,7 +191,7 @@ fn is_eligible_dealer(node_id: &NodeId, config: &NiDkgConfig) -> bool {
 
 fn csp_dealing_encryption_pubkeys(
     receivers: &NiDkgReceivers,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
 ) -> Result<BTreeMap<NodeIndex, CspFsEncryptionPublicKey>, DkgEncPubkeyRegistryQueryError> {
     let mut enc_pubkeys = BTreeMap::new();

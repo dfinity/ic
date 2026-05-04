@@ -19,6 +19,7 @@ fn should_fail_constructing_threshold_sig_pubkey_from_protobuf_with_wrong_algori
         key_value: key_value.to_vec(),
         version: 0,
         proof_data: None,
+        timestamp: None,
     };
 
     assert_eq!(
@@ -43,6 +44,7 @@ fn should_fail_constructing_threshold_sig_pubkey_from_protobuf_with_wrong_length
         key_value: key_value.to_vec(),
         version: 0,
         proof_data: None,
+        timestamp: None,
     };
 
     assert_eq!(

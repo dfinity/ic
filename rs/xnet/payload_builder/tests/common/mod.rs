@@ -2,30 +2,30 @@
 #![allow(dead_code)]
 
 use ic_config::state_manager::Config;
-use ic_interfaces::{certification::Verifier, certified_stream_store::CertifiedStreamStore};
+use ic_crypto_tree_hash::{Digest, Witness};
+use ic_interfaces::certification::Verifier;
+use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_state_manager::*;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{testing::ReplicatedStateTesting, Stream};
+use ic_replicated_state::{Stream, testing::ReplicatedStateTesting};
 use ic_state_manager::StateManagerImpl;
-use ic_test_utilities::{
-    consensus::fake::{Fake, FakeVerifier},
-    types::ids::{SUBNET_1, SUBNET_42},
-};
+use ic_test_utilities_consensus::fake::{Fake, FakeVerifier};
 use ic_test_utilities_metrics::{
-    fetch_gauge, fetch_histogram_stats, fetch_int_counter_vec, HistogramStats, MetricVec,
+    HistogramStats, MetricVec, fetch_gauge, fetch_histogram_stats, fetch_int_counter_vec,
 };
+use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_42};
 use ic_types::{
+    Height, SubnetId,
     consensus::certification::{Certification, CertificationContent},
     crypto::Signed,
     signature::ThresholdSignature,
     xnet::{CertifiedStreamSlice, StreamIndex},
-    Height, SubnetId,
 };
 use ic_xnet_payload_builder::certified_slice_pool::{
-    UnpackedStreamSlice, METRIC_POOL_SIZE_BYTES, METRIC_TAKE_COUNT, METRIC_TAKE_GCED_MESSAGES,
-    METRIC_TAKE_MESSAGES, METRIC_TAKE_SIZE_BYTES,
+    METRIC_POOL_SIZE_BYTES, METRIC_TAKE_COUNT, METRIC_TAKE_GCED_MESSAGES, METRIC_TAKE_MESSAGES,
+    METRIC_TAKE_SIZE_BYTES, UnpackedStreamSlice,
 };
 use std::{convert::TryFrom, sync::Arc};
 use tempfile::{Builder, TempDir};
@@ -41,16 +41,22 @@ pub struct StateManagerFixture {
     pub metrics: MetricsRegistry,
     pub temp_dir: TempDir,
     pub log: ReplicaLogger,
+    pub subnet_type: SubnetType,
 }
 
 impl StateManagerFixture {
-    /// Creates a new `Fixture` around an empty state.
-    pub fn new(log: ReplicaLogger) -> Self {
-        Self::with_subnet_type(SubnetType::Application, log)
+    /// Creates a new `StateManagerFixture` for `OWN_SUBNET`.
+    pub fn local(log: ReplicaLogger) -> Self {
+        Self::for_subnet(OWN_SUBNET, SubnetType::Application, log)
+    }
+
+    /// Creates a new `StateManagerFixture` for `REMOTE_SUBNET`.
+    pub fn remote(log: ReplicaLogger) -> Self {
+        Self::for_subnet(REMOTE_SUBNET, SubnetType::Application, log)
     }
 
     /// Creates a new `Fixture` around an empty state.
-    pub fn with_subnet_type(subnet_type: SubnetType, log: ReplicaLogger) -> Self {
+    pub fn for_subnet(subnet_id: SubnetId, subnet_type: SubnetType, log: ReplicaLogger) -> Self {
         let temp_dir = Builder::new().prefix("test").tempdir().unwrap();
         let config = Config::new(temp_dir.path().into());
         let metrics = MetricsRegistry::new();
@@ -58,7 +64,7 @@ impl StateManagerFixture {
 
         let state_manager = StateManagerImpl::new(
             verifier,
-            OWN_SUBNET,
+            subnet_id,
             subnet_type,
             log.clone(),
             &metrics,
@@ -73,6 +79,7 @@ impl StateManagerFixture {
             metrics,
             temp_dir,
             log,
+            subnet_type,
         }
     }
 
@@ -87,7 +94,7 @@ impl StateManagerFixture {
 
         height.inc_assign();
         self.state_manager
-            .commit_and_certify(state, height, CertificationScope::Metadata);
+            .commit_and_certify(state, CertificationScope::Metadata, None);
         certify_height(&self.state_manager, height);
         self.certified_height = height;
 
@@ -159,11 +166,18 @@ fn certify_height(state_manager: &impl StateManager, h: Height) -> Certification
     let hash = state_manager
         .list_state_hashes_to_certify()
         .into_iter()
-        .find_map(|(height, hash)| if height == h { Some(hash) } else { None })
+        .find_map(|state_hash_metadata| {
+            if state_hash_metadata.height == h {
+                Some(state_hash_metadata.hash)
+            } else {
+                None
+            }
+        })
         .expect("no hash to certify");
 
     let certification = Certification {
         height: h,
+        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
         signed: Signed {
             content: CertificationContent::new(hash),
             signature: ThresholdSignature::fake(),
@@ -219,11 +233,10 @@ pub fn assert_opt_slice_pairs_eq(
 }
 
 fn opt_slice_to_string(slice: Option<CertifiedStreamSlice>) -> String {
-    slice.map(slice_to_string).unwrap_or_else(|| "None".into())
+    slice.map_or_else(|| "None".into(), slice_to_string)
 }
 
 fn slice_to_string(slice: CertifiedStreamSlice) -> String {
     UnpackedStreamSlice::try_from(slice.clone())
-        .map(|unpacked| format!("{:?}", unpacked))
-        .unwrap_or(format!("{:?}", slice))
+        .map_or_else(|_| format!("{slice:?}"), |unpacked| format!("{unpacked:?}"))
 }

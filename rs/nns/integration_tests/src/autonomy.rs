@@ -4,21 +4,21 @@
 use assert_matches::assert_matches;
 use dfn_candid::candid_multi_arity;
 use ic_error_types::ErrorCode;
-use ic_ic00_types::CanisterIdRecord;
+use ic_management_canister_types_private::CanisterIdRecord;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
 };
 
 #[test]
 fn test_that_the_anonymous_user_cannot_stop_any_nns_canister() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_canisters =
             NnsCanisters::set_up(&runtime, NnsInitPayloadsBuilder::new().build()).await;
 
         for canister in &nns_canisters.all_canisters() {
             let res: Result<(), String> = runtime
-                .get_management_canister()
+                .get_management_canister_with_effective_canister_id(canister.canister_id().into())
                 .update_(
                     "stop_canister",
                     candid_multi_arity,

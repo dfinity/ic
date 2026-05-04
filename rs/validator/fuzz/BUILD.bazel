@@ -1,0 +1,27 @@
+load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary")
+
+package(default_visibility = ["//visibility:private"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/types/types",
+    "//rs/validator/http_request_arbitrary",
+    "//rs/validator/ingress_message",
+    "@crate_index//:libfuzzer-sys",
+]
+
+MACRO_DEPENDENCIES = []
+
+rust_fuzz_test_binary(
+    name = "validate_request",
+    srcs = ["fuzz_targets/validate_request.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_fuzz_test_binary(
+    name = "signed_ingress",
+    srcs = ["fuzz_targets/signed_ingress.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)

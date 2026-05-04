@@ -1,7 +1,0 @@
-dist/
-dist-prod/
-node_modules/
-coverage/
-src/
-bin/
-junit.xml

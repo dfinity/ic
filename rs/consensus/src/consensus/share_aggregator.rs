@@ -2,17 +2,27 @@
 //! of shares into full objects. That is, it constructs Random Beacon objects
 //! from random beacon shares, Notarizations from notarization shares and
 //! Finalizations from finalization shares.
-use crate::consensus::{
-    membership::Membership, pool_reader::PoolReader, prelude::*, utils, ConsensusCrypto,
+use crate::consensus::random_tape_maker::RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE;
+use ic_consensus_utils::{
+    active_high_threshold_nidkg_id, active_low_threshold_nidkg_id, aggregate,
+    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
+    registry_version_at_height,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_logger::ReplicaLogger;
-use std::cmp::min;
-use std::sync::Arc;
+use ic_types::{
+    Height,
+    consensus::{
+        CatchUpContent, ConsensusMessage, ConsensusMessageHashable, FinalizationContent, HasHeight,
+        RandomTapeContent,
+    },
+    crypto::Signed,
+};
+use std::{cmp::min, sync::Arc};
 
 /// The ShareAggregator is responsible for aggregating shares of random beacons,
 /// notarizations, and finalizations into full objects
-pub struct ShareAggregator {
+pub(crate) struct ShareAggregator {
     membership: Arc<Membership>,
     crypto: Arc<dyn ConsensusCrypto>,
     message_routing: Arc<dyn MessageRouting>,
@@ -51,13 +61,12 @@ impl ShareAggregator {
         let height = pool.get_random_beacon_height().increment();
         let shares = pool.get_random_beacon_shares(height);
         let state_reader = pool.as_cache();
-        let dkg_id = utils::active_low_threshold_transcript(state_reader, height)
-            .map(|transcript| transcript.dkg_id);
-        to_messages(utils::aggregate(
+        let dkg_id = active_low_threshold_nidkg_id(state_reader, height);
+        to_messages(aggregate(
             &self.log,
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
-            Box::new(|_| dkg_id),
+            Box::new(|_| dkg_id.clone()),
             shares,
         ))
     }
@@ -76,13 +85,12 @@ impl ShareAggregator {
             .get_random_tape_shares(expected_height, max_height)
             .filter(|share| pool.get_random_tape(share.height()).is_none());
         let state_reader = pool.as_cache();
-        to_messages(utils::aggregate(
+        to_messages(aggregate(
             &self.log,
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
             Box::new(|content: &RandomTapeContent| {
-                utils::active_low_threshold_transcript(state_reader, content.height())
-                    .map(|transcript| transcript.dkg_id)
+                active_low_threshold_nidkg_id(state_reader, content.height())
             }),
             shares,
         ))
@@ -93,8 +101,8 @@ impl ShareAggregator {
         let height = pool.get_notarized_height().increment();
         let shares = pool.get_notarization_shares(height);
         let state_reader = pool.as_cache();
-        let registry_version = utils::registry_version_at_height(state_reader, height);
-        to_messages(utils::aggregate(
+        let registry_version = registry_version_at_height(state_reader, height);
+        to_messages(aggregate(
             &self.log,
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
@@ -110,12 +118,12 @@ impl ShareAggregator {
             pool.get_notarized_height(),
         );
         let state_reader = pool.as_cache();
-        to_messages(utils::aggregate(
+        to_messages(aggregate(
             &self.log,
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
             Box::new(|content: &FinalizationContent| {
-                utils::registry_version_at_height(state_reader, content.height())
+                registry_version_at_height(state_reader, content.height())
             }),
             shares,
         ))
@@ -123,7 +131,7 @@ impl ShareAggregator {
 
     /// Attempt to construct `CatchUpPackage`s.
     fn aggregate_catch_up_package_shares(&self, pool: &PoolReader<'_>) -> Vec<ConsensusMessage> {
-        let mut start_block = pool.get_highest_summary_block();
+        let mut start_block = pool.get_highest_finalized_summary_block();
         let current_cup_height = pool.get_catch_up_height();
 
         while start_block.height() > current_cup_height {
@@ -131,43 +139,41 @@ impl ShareAggregator {
             let shares = pool.get_catch_up_package_shares(height).map(|share| {
                 let block = pool
                     .get_block(&share.content.block, height)
-                    .unwrap_or_else(|err| {
-                        panic!("Block not found for {:?}, error: {:?}", share, err)
-                    });
+                    .unwrap_or_else(|| panic!("Block not found for {share:?}"));
                 Signed {
-                    content: CatchUpContent::from_share_content(share.content, block),
+                    content: CatchUpContent::from_share_content(share.content, block.into_inner()),
                     signature: share.signature,
                 }
             });
             let state_reader = pool.as_cache();
-            let dkg_id = utils::active_high_threshold_transcript(state_reader, height)
-                .map(|transcript| transcript.dkg_id);
-            let result = utils::aggregate(
+            let dkg_id = active_high_threshold_nidkg_id(state_reader, height);
+            let result = aggregate(
                 &self.log,
                 self.membership.as_ref(),
                 self.crypto.as_aggregate(),
-                Box::new(|_| dkg_id),
+                Box::new(|_| dkg_id.clone()),
                 shares,
             );
             if !result.is_empty() {
                 return to_messages(result);
             }
 
-            if let Some(block_from_last_interval) =
+            let Some(block_from_last_interval) =
                 pool.get_finalized_block(start_block.height.decrement())
-            {
-                let next_start_height = block_from_last_interval
-                    .payload
-                    .as_ref()
-                    .dkg_interval_start_height();
-                if let Some(new_start_block) = pool.get_finalized_block(next_start_height) {
-                    start_block = new_start_block;
-                } else {
-                    break;
-                }
-            } else {
+            else {
                 break;
-            }
+            };
+
+            let next_start_height = block_from_last_interval
+                .payload
+                .as_ref()
+                .dkg_interval_start_height();
+
+            let Some(new_start_block) = pool.get_finalized_block(next_start_height) else {
+                break;
+            };
+
+            start_block = new_start_block;
         }
         Vec::new()
     }
@@ -180,16 +186,25 @@ fn to_messages<T: ConsensusMessageHashable>(artifacts: Vec<T>) -> Vec<ConsensusM
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies, dependencies_with_subnet_params};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::{
-        consensus::fake::*,
-        message_routing::FakeMessageRouting,
-        types::ids::{node_test_id, subnet_test_id},
-    };
+    use ic_test_utilities::message_routing::FakeMessageRouting;
+    use ic_test_utilities_consensus::fake::{FakeContentSigner, FakeSigner};
     use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_types::{
+        NodeId, RegistryVersion,
+        consensus::{
+            CatchUpPackage, CatchUpPackageShare, CatchUpShareContent, FinalizationShare,
+            HashedBlock, HashedRandomBeacon, NotarizationShare, RandomBeaconShare,
+        },
+        crypto::{CryptoHash, CryptoHashOf},
+        signature::ThresholdSignatureShare,
+    };
     use std::sync::Arc;
+
+    const INITIAL_REGISTRY_VERSION: u64 = 1;
 
     #[test]
     /// Adds a random beacon and notarization share to a pool
@@ -259,8 +274,51 @@ mod tests {
     }
 
     #[test]
+    fn test_catch_up_aggregation_without_oldest_registry_version() {
+        let cup = catch_up_package_aggregation(None);
+        assert_eq!(
+            cup.content
+                .oldest_registry_version_in_use_by_replicated_state,
+            None
+        );
+        assert_eq!(
+            cup.get_oldest_registry_version_in_use(),
+            RegistryVersion::from(INITIAL_REGISTRY_VERSION)
+        );
+    }
+
+    #[test]
+    fn test_catch_up_aggregation_with_smaller_oldest_registry_version() {
+        let cup = catch_up_package_aggregation(Some(RegistryVersion::from(0)));
+        assert_eq!(
+            cup.content
+                .oldest_registry_version_in_use_by_replicated_state,
+            Some(RegistryVersion::from(0))
+        );
+        assert_eq!(
+            cup.get_oldest_registry_version_in_use(),
+            RegistryVersion::from(0),
+        );
+    }
+
+    #[test]
+    fn test_catch_up_aggregation_with_larger_oldest_registry_version() {
+        let cup = catch_up_package_aggregation(Some(RegistryVersion::from(1234)));
+        assert_eq!(
+            cup.content
+                .oldest_registry_version_in_use_by_replicated_state,
+            Some(RegistryVersion::from(1234))
+        );
+        assert_eq!(
+            cup.get_oldest_registry_version_in_use(),
+            RegistryVersion::from(INITIAL_REGISTRY_VERSION)
+        );
+    }
+
     /// Test the aggregation of 'CatchUpPackageShare's
-    fn test_catch_up_package_aggregation() {
+    fn catch_up_package_aggregation(
+        oldest_registry_version_in_use_by_replicated_state: Option<RegistryVersion>,
+    ) -> CatchUpPackage {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let node_ids: Vec<_> = (0..3).map(node_test_id).collect();
             let interval_length = 3;
@@ -273,7 +331,7 @@ mod tests {
                 pool_config,
                 subnet_test_id(0),
                 vec![(
-                    1,
+                    INITIAL_REGISTRY_VERSION,
                     SubnetRecordBuilder::from(&node_ids)
                         .with_dkg_interval_length(interval_length)
                         .build(),
@@ -296,28 +354,25 @@ mod tests {
             pool.finalize(&block);
 
             // Insert a few CUP shares
-            fn new_cup_share(
-                start_block: &Block,
-                random_beacon: &RandomBeacon,
-                node_id: NodeId,
-            ) -> CatchUpPackageShare {
+            let new_cup_share = |node_id: NodeId| -> CatchUpPackageShare {
                 let state_hash = CryptoHashOf::from(CryptoHash(Vec::new()));
                 CatchUpPackageShare {
                     content: (&CatchUpContent::new(
-                        HashedBlock::new(ic_types::crypto::crypto_hash, start_block.clone()),
-                        HashedRandomBeacon::new(
+                        HashedBlock::new(
                             ic_types::crypto::crypto_hash,
-                            random_beacon.clone(),
+                            block.content.as_ref().clone(),
                         ),
+                        HashedRandomBeacon::new(ic_types::crypto::crypto_hash, beacon.clone()),
                         state_hash,
+                        oldest_registry_version_in_use_by_replicated_state,
                     ))
                         .into(),
                     signature: ThresholdSignatureShare::fake(node_id),
                 }
-            }
-            let share0 = new_cup_share(block.content.as_ref(), &beacon, node_test_id(0));
-            let share1 = new_cup_share(block.content.as_ref(), &beacon, node_test_id(1));
-            let share2 = new_cup_share(block.content.as_ref(), &beacon, node_test_id(2));
+            };
+            let share0 = new_cup_share(node_test_id(0));
+            let share1 = new_cup_share(node_test_id(1));
+            let share2 = new_cup_share(node_test_id(2));
             pool.insert_validated(share0.clone());
             pool.insert_validated(share1);
             pool.insert_validated(share2);
@@ -327,10 +382,11 @@ mod tests {
             assert!(messages.len() == 1);
             let cup = match messages.pop() {
                 Some(ConsensusMessage::CatchUpPackage(x)) => x,
-                x => panic!("Expecting CatchUpPackageShare but got {:?}\n", x),
+                x => panic!("Expecting CatchUpPackageShare but got {x:?}\n"),
             };
 
             assert_eq!(CatchUpShareContent::from(&cup.content), share0.content);
+            cup
         })
     }
 }

@@ -6,10 +6,9 @@ use super::dealing::{
 };
 use super::encryption::decrypt;
 use crate::api::ni_dkg_errors;
-use crate::crypto::x_for_index;
 use crate::ni_dkg::fs_ni_dkg::forward_secure::SecretKey as ForwardSecureSecretKey;
 use crate::types as threshold_types;
-use ic_crypto_internal_bls12_381_type::Scalar;
+use ic_crypto_internal_bls12_381_type::{G2Projective, LagrangeCoefficients, NodeIndices};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381 as g20;
 use ic_types::{NodeIndex, NumberOfNodes};
 use std::collections::BTreeMap;
@@ -21,8 +20,8 @@ use crate::api::ni_dkg_errors::{
     CspDkgCreateReshareTranscriptError, CspDkgCreateTranscriptError, InvalidArgumentError,
     SizeError,
 };
-use crate::types::public_coefficients::conversions::pub_key_bytes_from_pub_coeff_bytes;
-use ic_crypto_internal_types::curves::bls12_381::Fr as FrBytes;
+
+use crate::types::public_coefficients::pub_key_bytes_from_pub_coeff_bytes;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 
 /// Creates an NiDKG transcript.
@@ -52,8 +51,7 @@ pub fn create_transcript(
     let collection_threshold_usize = usize::try_from(collection_threshold.get()).map_err(|_| {
         CspDkgCreateTranscriptError::SizeError(SizeError {
             message: format!(
-                "collection threshold is too large for this machine: {}",
-                collection_threshold
+                "collection threshold is too large for this machine: {collection_threshold}"
             ),
         })
     })?;
@@ -185,13 +183,11 @@ fn compute_transcript(
         .iter()
         .map(|(dealer_index, dealing)| {
             // Type conversion from crypto internal type.
-            // The dealings have already been verified,
-            // so we can trust the serialized coefficients.
-            threshold_types::PublicCoefficients::from_trusted_bytes(&dealing.public_coefficients)
+            threshold_types::PublicCoefficients::deserialize_cached(&dealing.public_coefficients)
                 .map(|public_coefficients| (*dealer_index, public_coefficients))
                 .map_err(|crypto_error| {
                     let error = InvalidArgumentError {
-                        message: format!("Invalid dealing: {:?}", crypto_error),
+                        message: format!("Invalid dealing: {crypto_error:?}"),
                     };
                     CspDkgCreateTranscriptError::InvalidDealingError {
                         dealer_index: *dealer_index,
@@ -204,24 +200,29 @@ fn compute_transcript(
 
     // Combine the dealings
     let public_coefficients: g20::PublicCoefficientsBytes = {
-        let lagrange_coefficients = {
-            let reshare_x: Vec<threshold_types::SecretKey> =
-                csp_dealings.keys().copied().map(x_for_index).collect();
+        let coefficients = {
+            let reshare_x: Vec<NodeIndex> = csp_dealings.keys().copied().collect();
 
-            threshold_types::PublicCoefficients::lagrange_coefficients_at_zero(&reshare_x)
-                .expect("Cannot fail because all x are distinct.")
+            let indices = NodeIndices::from_slice(&reshare_x)
+                .expect("Cannot fail because all x are distinct.");
+
+            LagrangeCoefficients::at_zero(&indices).into_coefficients()
         };
 
-        let mut combined_public_coefficients = threshold_types::PublicCoefficients::zero();
+        let mut combined = Vec::with_capacity(threshold.get() as usize);
 
-        for ((_dealer_index, individual), factor) in individual_public_coefficients
-            .into_iter()
-            .zip(lagrange_coefficients)
-        {
-            // Aggregate the public coefficients:
-            combined_public_coefficients += individual * factor;
+        // TODO(CRP-2550) this loop can run in parallel
+        for i in 0..threshold.get() as usize {
+            let points: Vec<_> = individual_public_coefficients
+                .values()
+                .map(|pc| &pc.coefficients[i].0)
+                .collect();
+            combined.push(crate::types::PublicKey(
+                G2Projective::muln_affine_vartime_ref(&points, &coefficients).to_affine(),
+            ));
         }
 
+        let combined_public_coefficients = threshold_types::PublicCoefficients::new(combined);
         // This type conversion is needed because of the internal/CSP type duplication.
         g20::PublicCoefficientsBytes::from(&combined_public_coefficients)
     };
@@ -256,12 +257,14 @@ pub fn compute_threshold_signing_key(
     epoch: g20::Epoch,
 ) -> Result<threshold_types::SecretKeyBytes, ni_dkg_errors::CspDkgLoadPrivateKeyError> {
     // Get my shares
+
+    // TODO(CRP-2550) this loop can run in parallel
     let shares_from_each_dealer: Result<BTreeMap<NodeIndex, threshold_types::SecretKey>, _> =
         transcript
             .receiver_data
             .iter()
             .map(|(dealer_index, encrypted_shares)| {
-                let fs_plaintext = decrypt(
+                let secret_key = decrypt(
                     encrypted_shares,
                     fs_secret_key,
                     receiver_index,
@@ -278,28 +281,13 @@ pub fn compute_threshold_signing_key(
                     },
                     error => {
                         let message = format!(
-                            "Dealing #{}: could not get share for receiver #{}.\n {:#?}",
-                            dealer_index, receiver_index, error
+                            "Dealing #{dealer_index}: could not get share for receiver #{receiver_index}.\n {error:#?}"
                         );
                         let error = InvalidArgumentError { message };
                         ni_dkg_errors::CspDkgLoadPrivateKeyError::InvalidTranscriptError(error)
                     }
                 })?;
-                let secret_key = FrBytes::from(&fs_plaintext);
-                let secret_key = Scalar::deserialize(&secret_key.0);
 
-                if secret_key.is_err() {
-                    let message = format!(
-                        "Dealing #{}: has invalid share for receiver #{}.",
-                        dealer_index, receiver_index
-                    );
-                    let error = InvalidArgumentError { message };
-                    return Err(
-                        ni_dkg_errors::CspDkgLoadPrivateKeyError::InvalidTranscriptError(error),
-                    );
-                };
-
-                let secret_key = secret_key.expect("Unwrap of None");
                 Ok((*dealer_index, secret_key))
             })
             .collect();
@@ -308,11 +296,7 @@ pub fn compute_threshold_signing_key(
     // Interpolate
     let combined_shares = {
         let lagrange_coefficients = {
-            let reshare_x: Vec<threshold_types::SecretKey> = shares_from_each_dealer
-                .keys()
-                .copied()
-                .map(x_for_index)
-                .collect();
+            let reshare_x: Vec<NodeIndex> = shares_from_each_dealer.keys().copied().collect();
 
             threshold_types::PublicCoefficients::lagrange_coefficients_at_zero(&reshare_x)
                 .expect("Cannot fail because all x are distinct.")

@@ -4,6 +4,7 @@ load("//bazel:prost.bzl", "protobuf_generator")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/utils/rustfmt",
     "@crate_index//:prost-build",
 ]
@@ -14,11 +15,11 @@ ALIASES = {}
 
 rust_library(
     name = "lib",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_sns_root_protobuf_generator",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

@@ -1,35 +1,83 @@
+use ic_base_types::{NumBytes, NumSeconds};
+use ic_logger::{ReplicaLogger, error, info, warn};
+use ic_management_canister_types_private::{
+    Global, LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource, SnapshotVisibility,
+};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
+use ic_protobuf::state::{
+    canister_snapshot_bits::v1 as pb_canister_snapshot_bits,
+    canister_state_bits::v1 as pb_canister_state_bits, ingress::v1 as pb_ingress,
+    queues::v1 as pb_queues, stats::v1 as pb_stats, system_metadata::v1 as pb_metadata,
+};
+use ic_replicated_state::{
+    CanisterStatus, ExportedFunctions, NumWasmPages,
+    canister_state::{
+        execution_state::{NextScheduledMethod, WasmMetadata},
+        system_state::{CanisterHistory, TaskQueue, wasm_chunk_store::WasmChunkStoreMetadata},
+    },
+    page_map::{Shard, StorageLayout, StorageResult},
+};
+use ic_sys::{fs::sync_path, mmap::ScopedMmap};
+use ic_types::{
+    AccumulatedPriority, CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, ExecutionRound,
+    Height, LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
+    batch::TotalQueryStats,
+};
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_utils::thread::maybe_parallel_map;
+use ic_wasm_types::{CanisterModule, MemoryMappableWasmFile, WasmHash};
+use prometheus::{Histogram, IntCounterVec, IntGauge};
+use std::collections::{BTreeMap, BTreeSet};
+use std::convert::{From, TryFrom, identity};
+use std::ffi::OsStr;
+use std::fs::OpenOptions;
+use std::io::{Error, Write};
+
+/// Result of marking files readonly, containing counts for monitoring
+#[derive(Clone, Debug)]
+pub struct ReadonlyMarkingResult {
+    pub files_traversed: usize,
+    pub files_made_readonly: usize,
+}
+use std::marker::PhantomData;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+
 use crate::error::LayoutError;
 use crate::utils::do_copy;
 
-use bitcoin::{hashes::Hash, Network, OutPoint, Script, TxOut, Txid};
-use ic_base_types::{NumBytes, NumSeconds};
-use ic_logger::{error, ReplicaLogger};
-use ic_protobuf::{
-    bitcoin::v1 as pb_bitcoin,
-    proxy::{try_from_option_field, ProxyDecodeError},
-    state::{
-        canister_state_bits::v1 as pb_canister_state_bits, queues::v1 as pb_queues,
-        system_metadata::v1 as pb_metadata,
-    },
-};
-use ic_replicated_state::{
-    bitcoin_state, canister_state::execution_state::WasmMetadata, CallContextManager,
-    CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
-};
-use ic_sys::mmap::ScopedMmap;
-use ic_types::{
-    nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId, ComputeAllocation, Cycles,
-    ExecutionRound, Height, MemoryAllocation, NumInstructions, PrincipalId,
-};
-use ic_utils::fs::{sync_and_mark_files_readonly, sync_path};
-use ic_utils::thread::parallel_map;
-use ic_wasm_types::{CanisterModule, WasmHash};
-use std::collections::{BTreeMap, BTreeSet};
-use std::convert::{identity, From, TryFrom, TryInto};
-use std::fs::OpenOptions;
-use std::io::{Error, Write};
-use std::marker::PhantomData;
-use std::path::{Path, PathBuf};
+use crossbeam_channel::{Sender, bounded, unbounded};
+use ic_utils_thread::JoinOnDrop;
+
+pub mod proto;
+
+#[cfg(test)]
+mod tests;
+
+// State layout directory and file names.
+pub const CHECKPOINTS_DIR: &str = "checkpoints";
+pub const CANISTER_STATES_DIR: &str = "canister_states";
+pub const SNAPSHOTS_DIR: &str = "snapshots";
+pub const SNAPSHOT_FILE: &str = "snapshot.pbuf";
+pub const QUEUES_FILE: &str = "queues.pbuf";
+pub const CANISTER_FILE: &str = "canister.pbuf";
+pub const INGRESS_HISTORY_FILE: &str = "ingress_history.pbuf";
+pub const SPLIT_MARKER_FILE: &str = "split_from.pbuf";
+pub const SUBNET_QUEUES_FILE: &str = "subnet_queues.pbuf";
+pub const REFUNDS_FILE: &str = "refunds.pbuf";
+pub const SYSTEM_METADATA_FILE: &str = "system_metadata.pbuf";
+pub const STATS_FILE: &str = "stats.pbuf";
+pub const WASM_FILE: &str = "software.wasm";
+pub const UNVERIFIED_CHECKPOINT_MARKER: &str = "unverified_checkpoint_marker";
+pub const STATE_SYNC_CHECKPOINT_MARKER: &str = "state_sync_checkpoint_marker";
+pub const OVERLAY: &str = "overlay";
+pub const VMEMORY_0: &str = "vmemory_0";
+pub const STABLE_MEMORY: &str = "stable_memory";
+pub const WASM_CHUNK_STORE: &str = "wasm_chunk_store";
+pub const LOG_MEMORY_STORE: &str = "log_memory_store";
+pub const BIN_FILE: &str = "bin";
 
 /// `ReadOnly` is the access policy used for reading checkpoints. We
 /// don't want to ever modify persisted states.
@@ -38,8 +86,12 @@ pub enum ReadOnly {}
 /// `WriteOnly` is the access policy used while we are creating a new
 /// checkpoint.
 pub enum WriteOnly {}
+
 /// `RwPolicy` is the access policy used for tip on disk state.
-pub enum RwPolicy {}
+pub struct RwPolicy<'a, Owner> {
+    lifetime_tag: PhantomData<&'a Owner>,
+}
+
 pub trait AccessPolicy {
     /// `check_dir` specifies what to do the first time we enter a
     /// directory while reading/writing a checkpoint.
@@ -76,16 +128,26 @@ impl AccessPolicy for WriteOnly {
 
 impl WritePolicy for WriteOnly {}
 
-impl AccessPolicy for RwPolicy {
+impl<T> AccessPolicy for RwPolicy<'_, T> {
     fn check_dir(p: &Path) -> Result<(), LayoutError> {
         WriteOnly::check_dir(p)
     }
 }
 
-impl ReadPolicy for RwPolicy {}
-impl WritePolicy for RwPolicy {}
+impl<T> ReadPolicy for RwPolicy<'_, T> {}
+impl<T> WritePolicy for RwPolicy<'_, T> {}
 
 pub type CompleteCheckpointLayout = CheckpointLayout<ReadOnly>;
+
+pub enum CheckpointStatus {
+    /// Locally created checkpoint that has been fully verified.
+    Verified,
+    /// Checkpoint created via state sync (conisdered as unverified).
+    UnverifiedStateSync,
+    /// Locally created checkpoint that has not yet been verified.
+    /// May be incomplete due to asynchronous writes of protobuf files.
+    UnverifiedRegular,
+}
 
 /// This struct contains bits of the `ExecutionState` that are not already
 /// covered somewhere else and are too small to be serialized separately.
@@ -96,7 +158,9 @@ pub struct ExecutionStateBits {
     pub exports: ExportedFunctions,
     pub last_executed_round: ExecutionRound,
     pub metadata: WasmMetadata,
-    pub binary_hash: Option<WasmHash>,
+    pub binary_hash: WasmHash,
+    pub next_scheduled_method: NextScheduledMethod,
+    pub is_wasm64: bool,
 }
 
 /// This struct contains bits of the `CanisterState` that are not already
@@ -105,100 +169,180 @@ pub struct ExecutionStateBits {
 pub struct CanisterStateBits {
     pub controllers: BTreeSet<PrincipalId>,
     pub last_full_execution_round: ExecutionRound,
-    pub call_context_manager: Option<CallContextManager>,
     pub compute_allocation: ComputeAllocation,
     pub accumulated_priority: AccumulatedPriority,
+    pub priority_credit: AccumulatedPriority,
+    pub long_execution_mode: LongExecutionMode,
     pub execution_state_bits: Option<ExecutionStateBits>,
     pub memory_allocation: MemoryAllocation,
+    pub wasm_memory_threshold: NumBytes,
     pub freeze_threshold: NumSeconds,
     pub cycles_balance: Cycles,
     pub cycles_debit: Cycles,
+    pub reserved_balance: Cycles,
+    pub reserved_balance_limit: Option<Cycles>,
     pub status: CanisterStatus,
+    pub rounds_scheduled: u64,
     pub scheduled_as_first: u64,
-    pub skipped_round_due_to_no_messages: u64,
     pub executed: u64,
-    pub interruped_during_execution: u64,
+    pub interrupted_during_execution: u64,
     pub certified_data: Vec<u8>,
-    pub consumed_cycles_since_replica_started: NominalCycles,
+    pub consumed_cycles: NominalCycles,
     pub stable_memory_size: NumWasmPages,
     pub heap_delta_debit: NumBytes,
     pub install_code_debit: NumInstructions,
-    pub task_queue: Vec<ExecutionTask>,
-    pub time_of_last_allocation_charge_nanos: Option<u64>,
+    pub time_of_last_allocation_charge_nanos: u64,
+    pub global_timer_nanos: Option<u64>,
+    pub canister_version: u64,
+    pub consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+    pub instructions_executed: NumInstructions,
+    pub ingress_messages_executed: u64,
+    pub remote_subnet_messages_executed: u64,
+    pub local_subnet_messages_executed: u64,
+    pub http_outcalls_executed: u64,
+    pub heartbeats_and_global_timers_executed: u64,
+    pub canister_history: CanisterHistory,
+    pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
+    pub total_query_stats: TotalQueryStats,
+    pub log_visibility: LogVisibilityV2,
+    pub snapshot_visibility: SnapshotVisibility,
+    pub log_memory_limit: NumBytes,
+    pub canister_log: CanisterLog,
+    pub next_canister_log_record_idx: u64,
+    pub wasm_memory_limit: Option<NumBytes>,
+    pub next_snapshot_id: u64,
+    pub task_queue: TaskQueue,
+    pub environment_variables: BTreeMap<String, String>,
 }
 
-/// This struct contains bits of the `BitcoinState` that are not already
+/// This struct contains bits of the `CanisterSnapshot` that are not already
 /// covered somewhere else and are too small to be serialized separately.
-#[derive(Debug)]
-pub struct BitcoinStateBits {
-    pub adapter_queues: bitcoin_state::AdapterQueues,
-    pub unstable_blocks: bitcoin_state::UnstableBlocks,
-    pub stable_height: u32,
-    pub network: Network,
-    pub utxos_large: BTreeMap<OutPoint, (TxOut, u32)>,
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct CanisterSnapshotBits {
+    /// The ID of the canister snapshot.
+    pub snapshot_id: SnapshotId,
+    /// The timestamp indicating the moment the snapshot was captured.
+    pub taken_at_timestamp: Time,
+    /// The canister version at the time of taking the snapshot.
+    pub canister_version: u64,
+    /// The hash of the canister wasm.
+    pub binary_hash: WasmHash,
+    /// The certified data blob belonging to the canister.
+    pub certified_data: Vec<u8>,
+    /// The metadata required for a wasm chunk store.
+    pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
+    /// The size of the stable memory in pages.
+    pub stable_memory_size: NumWasmPages,
+    /// The size of the wasm memory in pages.
+    pub wasm_memory_size: NumWasmPages,
+    /// The total size of the snapshot in bytes.
+    pub total_size: NumBytes,
+    /// State of the exported Wasm globals.
+    pub exported_globals: Vec<Global>,
+    /// Whether this snapshot comes from a canister or from a user upload.
+    pub source: SnapshotSource,
+    /// The state of the global timer.
+    pub global_timer: Option<CanisterTimer>,
+    /// The state of the low memory hook.
+    pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
 }
 
-impl Default for BitcoinStateBits {
-    fn default() -> Self {
-        Self {
-            network: Network::Testnet,
-            adapter_queues: bitcoin_state::AdapterQueues::default(),
-            unstable_blocks: bitcoin_state::UnstableBlocks::default(),
-            stable_height: 0,
-            utxos_large: BTreeMap::default(),
+#[derive(Clone)]
+struct StateLayoutMetrics {
+    state_layout_error_count: IntCounterVec,
+    state_layout_sync_remove_checkpoint_duration: Histogram,
+    state_layout_async_remove_checkpoint_duration: Histogram,
+    checkpoint_removal_channel_length: IntGauge,
+}
+
+impl StateLayoutMetrics {
+    fn new(metric_registry: &MetricsRegistry) -> StateLayoutMetrics {
+        StateLayoutMetrics {
+            state_layout_error_count: metric_registry.int_counter_vec(
+                "state_layout_error_count",
+                "Total number of errors encountered in the state layout.",
+                &["source"],
+            ),
+            state_layout_sync_remove_checkpoint_duration: metric_registry.histogram(
+                "state_layout_sync_remove_checkpoint_duration_seconds",
+                "Time elapsed in removing checkpoint synchronously.",
+                decimal_buckets(-3, 1),
+            ),
+            state_layout_async_remove_checkpoint_duration: metric_registry.histogram(
+                "state_layout_async_remove_checkpoint_duration_seconds",
+                "Time elapsed in removing checkpoint asynchronously in the background thread.",
+                decimal_buckets(-3, 1),
+            ),
+            checkpoint_removal_channel_length: metric_registry.int_gauge(
+                "state_layout_checkpoint_removal_channel_length",
+                "Number of requests in the checkpoint removal channel.",
+            ),
         }
     }
 }
 
+struct CheckpointRefData {
+    // CheckpointLayouts using this ref that are still alive.
+    checkpoint_layout_counter: i32,
+    // The ref is scheduled for removal once checkpoint_layout_counter drops to zero.
+    mark_deleted: bool,
+}
+
 /// `StateLayout` provides convenience functions to construct correct
 /// paths to individual components of the replicated execution
-/// state. It also utilizes filesystem specific checkpoint managers
-/// to create and manage checkpoints.
-///
-/// Following layout is overlayed on top of the filesystem specific
-/// checkpoint manager's internal layout. "checkpoints" directory
-/// is not owned by `StateLayout` and is internal to checkpoint manager
+/// state and checkpoints.
 ///
 /// ```text
 /// <root>
 /// ├── states_metadata.pbuf
 /// │
 /// │── tip
-/// │   ├── system_metadata.pbuf
+/// │   ├── canister_states
+/// │   │   └── <hex(canister_id)>
+/// │   │       ├── canister.pbuf
+/// │   │       ├── queues.pbuf
+/// │   │       ├── software.wasm
+/// │   │       ├── stable_memory.bin
+/// │   │       └── vmemory_0.bin
+/// │   ├── snapshots
+/// │   │   └── <hex(canister_id)>
+/// │   │       └──  <hex(snapshot_id)>
+/// │   │           ├── snapshot.pbuf
+/// │   │           ├── software.wasm
+/// │   │           ├── stable_memory.bin
+/// │   │           └── vmemory_0.bin
+/// │   ├── ingress_history.pbuf
+/// │   ├── split_from.pbuf
 /// │   ├── subnet_queues.pbuf
-/// │   ├── bitcoin
-/// |   |   └── testnet
-/// |   |       └── state.pbuf
-/// |   |       └── utxos_small.bin
-/// |   |       └── utxos_medium.bin
-/// |   |       └── address_outpoints.bin
-/// │   └── canister_states
-/// │       └── <hex(canister_id)>
-/// │           ├── queues.pbuf
-/// │           ├── vmemory_0.bin
-/// │           ├── canister.pbuf
-/// │           ├── stable_memory.(pbuf|bin)
-/// │           └── software.wasm
+/// │   └── system_metadata.pbuf
 /// │
 /// ├── [checkpoints, backups, diverged_checkpoints]
 /// │   └──<hex(round)>
-/// │      ├── system_metadata.pbuf
+/// │      ├── canister_states
+/// │      │   └── <hex(canister_id)>
+/// │      │       ├── canister.pbuf
+/// │      │       ├── queues.pbuf
+/// │      │       ├── software.wasm
+/// │      │       ├── stable_memory.bin
+/// │      │       ├── vmemory_0.bin
+/// │      │       ├── wasm_chunk_store.bin
+/// │      │       └── log_memory_store.bin
+/// │      ├── snapshots
+/// │      │   └── <hex(canister_id)>
+/// │      │       └──  <hex(snapshot_id)>
+/// │      │           ├── snapshot.pbuf
+/// │      │           ├── software.wasm
+/// │      │           ├── stable_memory.bin
+/// │      │           └── vmemory_0.bin
+/// │      ├── ingress_history.pbuf
+/// │      ├── split_from.pbuf
 /// │      ├── subnet_queues.pbuf
-/// |      ├── bitcoin
-/// |      |   └── testnet
-/// |      |       └── state.pbuf
-/// |      |       └── utxos_small.bin
-/// |      |       └── utxos_medium.bin
-/// |      |       └── address_outpoints.bin
-/// │      └── canister_states
-/// │          └── <hex(canister_id)>
-/// │              ├── queues.pbuf
-/// │              ├── vmemory_0.bin
-/// │              ├── canister.pbuf
-/// │              ├── stable_memory.(pbuf|bin)
-/// │              └── software.wasm
+/// │      └── system_metadata.pbuf
 /// │
-/// └── tmp
+/// ├── diverged_state_markers
+/// │   └──<hex(round)>
+/// │
+/// ├── tmp
 /// └── fs_tmp
 /// ```
 ///
@@ -222,24 +366,19 @@ impl Default for BitcoinStateBits {
 ///
 /// ## Promoting a TIP to a checkpoint
 ///
-///   1. Dump the state to files and directories under "<state_root>/tip", sync
-///      all the files.  This sync is probably not required, but it makes
-///      it easier to reason about reflinking (see the next step).
+///   1. Dump the state to files and directories under "<state_root>/tip", mark
+///      readonly and sync all files
 ///
-///   2. Reflink/copy all the files from "<state_root>/tip" to
-///      "<state_root>/fs_tmp/scratchpad_<height>", sync both files and
-///      directories under the scratchpad directory, including the scratchpad
-///      directory itself.
+///   2. Rename tip to checkpoint.
 ///
-///   3. Rename "<state_root>/fs_tmp/scratchpad_<height>" to
-///      "<state_root>/checkpoints/<height>", sync "<state_root>/checkpoints".
+///   3. Reflink the checkpoint back to writeable tip
 ///
 /// ## Promoting a State Sync artifact to a checkpoint
 ///
 ///   1. Create state files directly in
 ///      "<state_root>/fs_tmp/state_sync_scratchpad_<height>".
 ///
-///   2. When all the writes are complete, call sync_and_mark_files_readonly()
+///   2. When all the writes are complete, call mark_files_readonly_and_sync()
 ///      on "<state_root>/fs_tmp/state_sync_scratchpad_<height>".  This function
 ///      syncs all the files and directories under the scratchpad directory,
 ///      including the scratchpad directory itself.
@@ -251,27 +390,316 @@ impl Default for BitcoinStateBits {
 pub struct StateLayout {
     root: PathBuf,
     log: ReplicaLogger,
+    metrics: StateLayoutMetrics,
+    tip_handler_captured: Arc<AtomicBool>,
+    checkpoint_ref_registry: Arc<Mutex<BTreeMap<Height, CheckpointRefData>>>,
+    checkpoint_removal_sender: Sender<CheckpointRemovalRequest>,
+    _checkpoint_removal_handle: Arc<JoinOnDrop<()>>,
+}
+
+pub struct TipHandler {
+    tip_path: PathBuf,
+}
+
+impl TipHandler {
+    pub fn tip_path(&mut self) -> PathBuf {
+        self.tip_path.clone()
+    }
+
+    /// Returns a layout object representing tip state in "tip"
+    /// directory. During round execution this directory may contain
+    /// inconsistent state. During full checkpointing this directory contains
+    /// full state and is converted to a checkpoint.
+    /// This directory is cleaned during restart of a node and reset to
+    /// last full checkpoint.
+    pub fn tip(
+        &mut self,
+        height: Height,
+    ) -> Result<CheckpointLayout<RwPolicy<'_, Self>>, LayoutError> {
+        CheckpointLayout::new_untracked(self.tip_path(), height)
+    }
+
+    /// Resets "tip" to a checkpoint identified by height.
+    pub fn reset_tip_to(
+        &mut self,
+        state_layout: &StateLayout,
+        cp: &CheckpointLayout<ReadOnly>,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
+    ) -> Result<(), LayoutError> {
+        let tip = self.tip_path();
+        if tip.exists() {
+            std::fs::remove_dir_all(&tip).map_err(|err| LayoutError::IoError {
+                path: tip.to_path_buf(),
+                message: format!("Cannot remove tip for checkpoint {}", cp.height()),
+                io_err: err,
+            })?;
+        }
+
+        debug_assert!(cp.raw_path().exists());
+
+        let file_copy_instruction = |path: &Path| {
+            if path.extension() == Some(OsStr::new("pbuf")) {
+                // Do not copy protobufs.
+                CopyInstruction::Skip
+            } else if path == cp.unverified_checkpoint_marker()
+                || path == cp.state_sync_checkpoint_marker()
+            {
+                CopyInstruction::Skip
+            } else {
+                // Everything else should be readonly.
+                CopyInstruction::ReadOnly
+            }
+        };
+
+        match copy_recursively(
+            &state_layout.log,
+            &state_layout.metrics,
+            cp.raw_path(),
+            &tip,
+            FSync::No,
+            file_copy_instruction,
+            thread_pool,
+        ) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                if let Err(err) = std::fs::remove_dir_all(&tip) {
+                    error!(
+                        state_layout.log,
+                        "Failed to tip directory. Path: {}, Error: {}.",
+                        tip.display(),
+                        err
+                    )
+                }
+                Err(LayoutError::IoError {
+                    path: tip,
+                    message: format!(
+                        "Failed to convert reset tip to checkpoint to {} (err kind: {:?})",
+                        cp.raw_path().display(),
+                        e.kind()
+                    ),
+                    io_err: e,
+                })
+            }
+        }
+    }
+
+    /// Deletes canisters from tip if they are not in `ids`.
+    pub fn filter_tip_canisters(
+        &mut self,
+        height: Height,
+        ids: &BTreeSet<CanisterId>,
+    ) -> Result<(), LayoutError> {
+        let tip = self.tip(height)?;
+        let canisters_on_disk = tip.canister_ids()?;
+        for id in canisters_on_disk {
+            if !ids.contains(&id) {
+                let canister_path = tip.canister(&id)?.raw_path();
+                std::fs::remove_dir_all(&canister_path).map_err(|err| LayoutError::IoError {
+                    path: canister_path,
+                    message: "Cannot remove canister.".to_string(),
+                    io_err: err,
+                })?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Deletes snapshots from tip if they are not in `ids`.
+    pub fn filter_tip_snapshots(
+        &mut self,
+        height: Height,
+        ids: &BTreeSet<SnapshotId>,
+    ) -> Result<(), LayoutError> {
+        let tip = self.tip(height)?;
+        let snapshots_on_disk = tip.snapshot_ids()?;
+        for id in snapshots_on_disk {
+            if !ids.contains(&id) {
+                tip.snapshot(&id)?.delete_dir()?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Moves the entire canister directory from one canister id to another.
+    pub fn move_canister_directory(
+        &mut self,
+        height: Height,
+        src: CanisterId,
+        dst: CanisterId,
+    ) -> Result<(), LayoutError> {
+        let tip = self.tip(height)?;
+        let src_path = tip.canister(&src)?.raw_path();
+        let dst_path = tip.canister(&dst)?.raw_path();
+        std::fs::rename(&src_path, &dst_path).map_err(|err| LayoutError::IoError {
+            path: src_path,
+            message: "Failed to rename canister".to_string(),
+            io_err: err,
+        })
+    }
+}
+
+enum CheckpointRemovalRequest {
+    Remove(PathBuf),
+    Wait { sender: Sender<()> },
+}
+
+fn spawn_checkpoint_removal_thread(
+    log: ReplicaLogger,
+    metrics: StateLayoutMetrics,
+) -> (JoinOnDrop<()>, Sender<CheckpointRemovalRequest>) {
+    // The number of the requests in the channel is limited by the number of checkpoints created.
+    // As we always flush the channel before creating a new checkpoint, there won't be excessive number of requests.
+    #[allow(clippy::disallowed_methods)]
+    let (checkpoint_removal_sender, checkpoint_removal_receiver) =
+        unbounded::<CheckpointRemovalRequest>();
+    let checkpoint_removal_handle = JoinOnDrop::new(
+        std::thread::Builder::new()
+            .name("CheckpointRemovalThread".to_string())
+            .spawn(move || {
+                while let Ok(req) = checkpoint_removal_receiver.recv() {
+                    match req {
+                        CheckpointRemovalRequest::Remove(path) => {
+                            debug_assert_eq!(path.parent().unwrap().file_name().unwrap(), "fs_tmp",);
+                            let start = Instant::now();
+                            if let Err(err) = std::fs::remove_dir_all(&path) {
+                                error!(
+                                    log,
+                                    "Failed to remove checkpoint directory. Error: {}.", err
+                                )
+                            }
+                            let elapsed = start.elapsed();
+                            metrics
+                                .state_layout_async_remove_checkpoint_duration
+                                .observe(elapsed.as_secs_f64());
+                            let remaining_requests = checkpoint_removal_receiver.len();
+                            info!(
+                                log,
+                                "Asynchronously removed checkpoint from tmp path {} in {:?}. Number of remaining requests: {}",
+                                path.display(),
+                                elapsed,
+                                remaining_requests
+                            );
+                        }
+                        CheckpointRemovalRequest::Wait { sender } => {
+                            sender.send(()).expect("Failed to send completion signal");
+                        }
+                    }
+                }
+            })
+            .expect("failed to spawn checkpoint removal thread"),
+    );
+    (checkpoint_removal_handle, checkpoint_removal_sender)
 }
 
 impl StateLayout {
-    /// Needs to be pub for criterion performance regression tests.
-    pub fn try_new(log: ReplicaLogger, root: PathBuf) -> Result<Self, LayoutError> {
-        let state_layout = Self { root, log };
+    /// Create a new StateLayout and initialize it by creating all necessary
+    /// directories if they do not exist already and clear all tmp directories
+    /// that are expected to be empty when the replica starts.
+    /// Needs to be pub for tests.
+    pub fn try_new(
+        log: ReplicaLogger,
+        root: PathBuf,
+        metrics_registry: &MetricsRegistry,
+    ) -> Result<Self, LayoutError> {
+        let state_layout = Self::new_no_init(log, root, metrics_registry);
         state_layout.init()?;
         Ok(state_layout)
+    }
+
+    /// Create a new StateLayout without initializing it. Useful for tests and
+    /// tools that want to create a StateLayout without interferring with
+    /// replicas / state managers that are already running using the same state
+    /// directory.
+    pub fn new_no_init(
+        log: ReplicaLogger,
+        root: PathBuf,
+        metrics_registry: &MetricsRegistry,
+    ) -> Self {
+        let metrics = StateLayoutMetrics::new(metrics_registry);
+        let (checkpoint_removal_handle, checkpoint_removal_sender) =
+            spawn_checkpoint_removal_thread(log.clone(), metrics.clone());
+
+        Self {
+            root,
+            log,
+            metrics,
+            tip_handler_captured: Arc::new(false.into()),
+            checkpoint_ref_registry: Arc::new(Mutex::new(BTreeMap::new())),
+            checkpoint_removal_sender,
+            _checkpoint_removal_handle: Arc::new(checkpoint_removal_handle),
+        }
     }
 
     fn init(&self) -> Result<(), LayoutError> {
         self.cleanup_tip()?;
         self.cleanup_tmp()?;
+        // This is for testing only. In production the Guest OS setup
+        // would have already created the page_deltas directory, however
+        // in testing the directory does not already exist and we need to
+        // create it.
+        if !Path::new(&self.page_deltas()).exists() {
+            WriteOnly::check_dir(&self.page_deltas())?;
+        }
+
         WriteOnly::check_dir(&self.backups())?;
         WriteOnly::check_dir(&self.checkpoints())?;
         WriteOnly::check_dir(&self.diverged_checkpoints())?;
+        WriteOnly::check_dir(&self.diverged_state_markers())?;
         WriteOnly::check_dir(&self.fs_tmp())?;
         WriteOnly::check_dir(&self.tip_path())?;
-        WriteOnly::check_dir(&self.tmp())
+        WriteOnly::check_dir(&self.tmp())?;
+        for path in [
+            &self.backups(),
+            &self.checkpoints(),
+            &self.diverged_checkpoints(),
+            &self.diverged_state_markers(),
+        ] {
+            sync_path(path).map_err(|err| LayoutError::IoError {
+                path: path.clone(),
+                message: "Could not sync StateLayout during init".to_string(),
+                io_err: err,
+            })?
+        }
+        Ok(())
     }
 
+    /// Mark files (but not dirs) in all checkpoints readonly.
+    pub fn mark_checkpoint_files_readonly(
+        &self,
+        thread_pool: &mut Option<scoped_threadpool::Pool>,
+    ) -> Result<(), LayoutError> {
+        for height in self.verified_checkpoint_heights()? {
+            let cp_layout = self.checkpoint_verified(height)?;
+            let result = cp_layout.mark_files_readonly_and_sync(thread_pool.as_mut(), true)?;
+
+            info!(
+                &self.log,
+                "Marked checkpoint files readonly: made {} files readonly out of {} traversed for checkpoint {}",
+                result.files_made_readonly,
+                result.files_traversed,
+                height
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Create tip handler. Could only be called once as TipHandler is an exclusive owner of the
+    /// tip folder.
+    pub fn capture_tip_handler(&self) -> TipHandler {
+        assert_eq!(
+            self.tip_handler_captured.compare_exchange(
+                false,
+                true,
+                Ordering::SeqCst,
+                Ordering::SeqCst
+            ),
+            Ok(false)
+        );
+        TipHandler {
+            tip_path: self.tip_path(),
+        }
+    }
     /// Returns the the raw root path for state
     pub fn raw_path(&self) -> &Path {
         &self.root
@@ -287,6 +715,10 @@ impl StateLayout {
     /// aka fs_tmp. This directory is cleaned during restart of a node.
     pub fn fs_tmp(&self) -> PathBuf {
         self.root.join("fs_tmp")
+    }
+
+    pub fn page_deltas(&self) -> PathBuf {
+        self.root.join("page_deltas")
     }
 
     /// Removes the tmp directory and all its contents.
@@ -307,17 +739,24 @@ impl StateLayout {
                 io_err: err,
             })?
         }
+        // The page deltas directory will always exist because
+        // the guest os deployment scripts should have created it.
+        // Also, if we delete the directory here and re-create it as
+        // it happens for the other sibling dirs then the SELinux
+        // settings will be overwritten, which will not grant the sandbox
+        // the proper access to the files in the dir.
+        let page_deltas = self.page_deltas();
+        if page_deltas.exists() {
+            for entry in std::fs::read_dir(page_deltas.as_path()).unwrap() {
+                let entry = entry.map_err(|err| LayoutError::IoError {
+                    path: page_deltas.clone(),
+                    message: "Unable to remove content of the page_deltas directory".to_string(),
+                    io_err: err,
+                });
+                std::fs::remove_file(entry.unwrap().path()).unwrap();
+            }
+        }
         Ok(())
-    }
-
-    /// Returns a layout object representing tip state in "tip"
-    /// directory. During round execution this directory may contain
-    /// inconsistent state. During full checkpointing this directory contains
-    /// full state and is converted to a checkpoint.
-    /// This directory is cleaned during restart of a node and reset to
-    /// last full checkpoint.
-    pub fn tip(&self, height: Height) -> Result<CheckpointLayout<RwPolicy>, LayoutError> {
-        CheckpointLayout::new(self.tip_path(), height)
     }
 
     /// Returns the path to the serialized states metadata.
@@ -326,10 +765,9 @@ impl StateLayout {
     }
 
     /// Returns scratchpad used during statesync
-    pub fn state_sync_scratchpad(&self, height: Height) -> Result<PathBuf, LayoutError> {
-        Ok(self
-            .tmp()
-            .join(format!("state_sync_scratchpad_{:016x}", height.get())))
+    pub fn state_sync_scratchpad(&self, height: Height) -> PathBuf {
+        self.tmp()
+            .join(format!("state_sync_scratchpad_{:016x}", height.get()))
     }
 
     /// Returns the path to cache an unfinished statesync at `height`
@@ -350,177 +788,253 @@ impl StateLayout {
         }
     }
 
-    /// Creates a checkpoint from the "tip" state returning layout object of
-    /// the newly created checkpoint
-    pub fn tip_to_checkpoint(
+    /// Creates an unverified marker in the scratchpad and promotes it to a checkpoint.
+    ///
+    /// This function maintains the integrity of the checkpointing process by ensuring that
+    /// the scratchpad is properly marked as unverified before transitioning it into a checkpoint.
+    pub fn promote_scratchpad_to_unverified_checkpoint<T>(
         &self,
-        tip: CheckpointLayout<RwPolicy>,
-        thread_pool: Option<&mut scoped_threadpool::Pool>,
-    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
-        let height = tip.height;
-        let cp = self.scratchpad_to_checkpoint(tip, height)?;
-        self.reset_tip_to(height, thread_pool)?;
-        Ok(cp)
+        scratchpad_layout: CheckpointLayout<RwPolicy<T>>,
+        height: Height,
+    ) -> Result<CheckpointLayout<RwPolicy<'_, T>>, LayoutError> {
+        scratchpad_layout.create_unverified_checkpoint_marker()?;
+        self.scratchpad_to_checkpoint(scratchpad_layout, height)
     }
 
-    pub fn scratchpad_to_checkpoint(
+    fn scratchpad_to_checkpoint<T>(
         &self,
-        layout: CheckpointLayout<RwPolicy>,
+        layout: CheckpointLayout<RwPolicy<T>>,
         height: Height,
-    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+    ) -> Result<CheckpointLayout<RwPolicy<'_, T>>, LayoutError> {
+        // The scratchpad must have an unverified marker before it is promoted to a checkpoint.
+        debug_assert!(!layout.is_checkpoint_verified());
+        debug_assert_eq!(height, layout.height());
         let scratchpad = layout.raw_path();
         let checkpoints_path = self.checkpoints();
-        let cp_path = checkpoints_path.join(self.checkpoint_name(height));
-        if cp_path.exists() {
-            return Err(LayoutError::AlreadyExists(height));
-        }
-        sync_and_mark_files_readonly(scratchpad).map_err(|err| LayoutError::IoError {
-            path: scratchpad.to_path_buf(),
-            message: format!(
-                "Could not sync and mark readonly scratchpad for checkpoint {}",
-                height
-            ),
-            io_err: err,
-        })?;
-        std::fs::rename(scratchpad, &cp_path).map_err(|err| LayoutError::IoError {
-            path: scratchpad.to_path_buf(),
-            message: format!("Failed to rename scratchpad to checkpoint {}", height),
-            io_err: err,
+        let cp_path = checkpoints_path.join(Self::checkpoint_name(height));
+
+        std::fs::rename(scratchpad, cp_path).map_err(|err| {
+            if is_already_exists_err(&err) {
+                LayoutError::AlreadyExists(height)
+            } else {
+                LayoutError::IoError {
+                    path: scratchpad.to_path_buf(),
+                    message: format!("Failed to rename scratchpad to checkpoint {height}"),
+                    io_err: err,
+                }
+            }
         })?;
         sync_path(&checkpoints_path).map_err(|err| LayoutError::IoError {
             path: checkpoints_path,
             message: "Could not sync checkpoints".to_string(),
             io_err: err,
         })?;
-        CheckpointLayout::new(cp_path, height)
+        self.checkpoint(height)
     }
 
-    pub fn checkpoint_to_scratchpad(
-        &self,
-        height: Height,
-    ) -> Result<CheckpointLayout<RwPolicy>, LayoutError> {
-        let tmp_path = self.tmp();
-        let scratchpad_dir = tempfile::Builder::new()
-            .prefix(&tmp_path)
-            .tempdir()
-            .map_err(|io_err| LayoutError::IoError {
-                path: tmp_path,
-                message: "Failed to create a temporary directory".to_string(),
-                io_err,
-            })?;
-
-        let cp_name = self.checkpoint_name(height);
-        let cp_path = self.checkpoints().join(cp_name);
-        copy_recursively(
-            &self.log,
-            &cp_path,
-            scratchpad_dir.path(),
-            FilePermissions::ReadWrite,
-            None,
-        )
-        .map_err(|err| LayoutError::IoError {
-            path: scratchpad_dir.path().to_path_buf(),
-            message: format!("Failed to create a copy of checkpoint {}", height),
-            io_err: err,
-        })?;
-        CheckpointLayout::<RwPolicy>::new(scratchpad_dir.into_path(), height)
-    }
-
-    /// Resets "tip" to a checkpoint identified by height.
-    pub fn reset_tip_to(
-        &self,
-        height: Height,
-        thread_pool: Option<&mut scoped_threadpool::Pool>,
-    ) -> Result<(), LayoutError> {
-        let cp_name = self.checkpoint_name(height);
-        let tip = self.tip_path();
-        if tip.exists() {
-            std::fs::remove_dir_all(&tip).map_err(|err| LayoutError::IoError {
-                path: tip.to_path_buf(),
-                message: format!("Cannot remove tip for checkpoint {}", height),
-                io_err: err,
-            })?;
-        }
-
-        let cp_path = self.checkpoints().join(&cp_name);
-        if !cp_path.exists() {
-            return Ok(());
-        }
-
-        match copy_recursively(
-            &self.log,
-            cp_path.as_path(),
-            &tip,
-            FilePermissions::ReadWrite,
-            thread_pool,
-        ) {
-            Ok(()) => Ok(()),
-            Err(e) => {
-                if let Err(err) = std::fs::remove_dir_all(&tip) {
-                    error!(
-                        self.log,
-                        "Failed to tip directory. Path: {}, Error: {}.",
-                        tip.display(),
-                        err
-                    )
+    pub fn clone_checkpoint(&self, from: Height, to: Height) -> Result<(), LayoutError> {
+        let src = self.checkpoints().join(Self::checkpoint_name(from));
+        let dst = self.checkpoints().join(Self::checkpoint_name(to));
+        self.copy_and_sync_checkpoint(&Self::checkpoint_name(to), &src, &dst, None)
+            .map_err(|io_err| {
+                if is_already_exists_err(&io_err) {
+                    LayoutError::AlreadyExists(to)
+                } else {
+                    LayoutError::IoError {
+                        path: dst,
+                        message: format!("Failed to clone checkpoint {from} to {to}"),
+                        io_err,
+                    }
                 }
-                Err(LayoutError::IoError {
-                    path: tip,
-                    message: format!(
-                        "Failed to convert reset tip to checkpoint to {} (err kind: {:?})",
-                        cp_name,
-                        e.kind()
-                    ),
-                    io_err: e,
-                })
-            }
-        }
+            })?;
+        Ok(())
     }
 
-    /// Returns the layout of the checkpoint with the given height (if
-    /// there is one).
-    pub fn checkpoint(&self, height: Height) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
-        let cp_name = self.checkpoint_name(height);
-        let path = self.checkpoints().join(&cp_name);
+    /// Returns the layout of the checkpoint with the given height.
+    /// If the checkpoint is not found, an error is returned.
+    fn checkpoint<T>(&self, height: Height) -> Result<CheckpointLayout<T>, LayoutError>
+    where
+        T: AccessPolicy,
+    {
+        let cp_name = Self::checkpoint_name(height);
+        let path = self.checkpoints().join(cp_name);
         if !path.exists() {
             return Err(LayoutError::NotFound(height));
         }
-        CheckpointLayout::new(path, height)
+        {
+            let mut checkpoint_ref_registry = self.checkpoint_ref_registry.lock().unwrap();
+            match checkpoint_ref_registry.get_mut(&height) {
+                Some(ref mut ref_data) => {
+                    ref_data.checkpoint_layout_counter += 1;
+                    #[cfg(debug_assertions)]
+                    {
+                        let mark_deleted = ref_data.mark_deleted;
+                        drop(checkpoint_ref_registry);
+                        debug_assert!(!mark_deleted);
+                    }
+                }
+                None => {
+                    checkpoint_ref_registry.insert(
+                        height,
+                        CheckpointRefData {
+                            checkpoint_layout_counter: 1,
+                            mark_deleted: false,
+                        },
+                    );
+                }
+            }
+        }
+        CheckpointLayout::new(path, height, self.clone())
     }
 
-    /// Returns a sorted list of `Height`s for which a checkpoint is available.
-    pub fn checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
+    /// Returns the layout of a verified checkpoint with the given height.
+    /// If the checkpoint is not found or is not verified, an error is returned.
+    pub fn checkpoint_verified(
+        &self,
+        height: Height,
+    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+        let cp = self.checkpoint(height)?;
+        if !cp.is_checkpoint_verified() {
+            return Err(LayoutError::CheckpointUnverified(height));
+        };
+        Ok(cp)
+    }
+
+    /// Returns the layout of a checkpoint with the given height that is in the verification process.
+    /// If the checkpoint is not found, an error is returned.
+    ///
+    /// Note that the unverified marker file may already be removed from the checkpoint by another verification process.
+    /// This method does not require that the marker file exists.
+    pub fn checkpoint_in_verification(
+        &self,
+        height: Height,
+    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+        self.checkpoint(height)
+    }
+
+    /// Returns if a checkpoint with the given height is verified or not.
+    /// If the checkpoint is not found, an error is returned.
+    pub fn checkpoint_status(&self, height: Height) -> Result<CheckpointStatus, LayoutError> {
+        let cp_name = Self::checkpoint_name(height);
+        let path = self.checkpoints().join(cp_name);
+        if !path.exists() {
+            return Err(LayoutError::NotFound(height));
+        }
+        // An untracked checkpoint layout is acceptable for temporary use here, as it’s only needed briefly to verify the existence of the marker.
+        let cp = CheckpointLayout::<ReadOnly>::new_untracked(path, height)?;
+        Ok(cp.checkpoint_status())
+    }
+
+    fn remove_checkpoint_ref(&self, height: Height) {
+        let mut checkpoint_ref_registry = self.checkpoint_ref_registry.lock().unwrap();
+        match checkpoint_ref_registry.get_mut(&height) {
+            None => {
+                debug_assert!(false, "Double removal at height {height}");
+                return;
+            }
+            Some(ref mut data) => {
+                debug_assert!(data.checkpoint_layout_counter >= 1);
+                data.checkpoint_layout_counter -= 1;
+                if data.checkpoint_layout_counter != 0 {
+                    return;
+                }
+                let mark_deleted = data.mark_deleted;
+                let _removed = checkpoint_ref_registry.remove(&height);
+                debug_assert!(_removed.is_some());
+                if !mark_deleted {
+                    return;
+                }
+            }
+        }
+        self.remove_checkpoint_if_not_the_latest(height, checkpoint_ref_registry);
+    }
+
+    /// Schedule checkpoint for removal when no CheckpointLayout points to it.
+    /// If none then remove immediately.
+    pub fn remove_checkpoint_when_unused(&self, height: Height) {
+        let mut checkpoint_ref_registry = self.checkpoint_ref_registry.lock().unwrap();
+        match checkpoint_ref_registry.get_mut(&height) {
+            Some(ref mut data) => data.mark_deleted = true,
+            None => self.remove_checkpoint_if_not_the_latest(height, checkpoint_ref_registry),
+        }
+    }
+
+    /// Returns a sorted list of `Height`s for which a checkpoint is available, regardless of verification status.
+    pub fn unfiltered_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
         let names = dir_file_names(&self.checkpoints()).map_err(|err| LayoutError::IoError {
-            path: "NO_PATH".into(),
+            path: self.checkpoints(),
             message: format!("Failed to get all checkpoints (err kind: {:?})", err.kind()),
             io_err: err,
         })?;
-
-        parse_checkpoint_heights(&names[..])
+        parse_and_sort_checkpoint_heights(&names[..])
     }
 
-    /// Returns a sorted list of `Height`s of checkpoints that were marked as
+    /// Filters the given heights to only include verified checkpoints.
+    pub fn filter_verified_checkpoint_heights(&self, heights: Vec<Height>) -> Vec<Height> {
+        heights
+            .into_iter()
+            .filter(|h| matches!(self.checkpoint_status(*h), Ok(CheckpointStatus::Verified)))
+            .collect()
+    }
+
+    /// Returns a sorted list of `Height`s for which a checkpoint is available and verified.
+    pub fn verified_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
+        let unfiltered_heights = self.unfiltered_checkpoint_heights()?;
+        Ok(self.filter_verified_checkpoint_heights(unfiltered_heights))
+    }
+
+    /// Returns a sorted list of `Height`s for which a checkpoint is available and is either verified or a state sync checkpoint.
+    ///
+    /// Useful for determining candidates for the base checkpoint during incremental manifest computation and state sync.
+    pub fn verified_or_state_sync_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
+        let heights = self
+            .unfiltered_checkpoint_heights()?
+            .into_iter()
+            .filter(|h| {
+                matches!(
+                    self.checkpoint_status(*h),
+                    Ok(CheckpointStatus::Verified | CheckpointStatus::UnverifiedStateSync)
+                )
+            })
+            .collect();
+        Ok(heights)
+    }
+
+    /// Returns a sorted in ascended order list of `Height`s of checkpoints that were marked as
     /// diverged.
     pub fn diverged_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
         let names = dir_file_names(&self.diverged_checkpoints()).map_err(|io_err| {
             LayoutError::IoError {
-                path: "NO_PATH".into(),
+                path: self.diverged_checkpoints(),
                 message: "failed to enumerate diverged checkpoints".to_string(),
                 io_err,
             }
         })?;
-        parse_checkpoint_heights(&names[..])
+        parse_and_sort_checkpoint_heights(&names[..])
     }
 
-    /// Returns a sorted list of heights of checkpoints that were "backed up"
+    /// Returns a sorted in ascending order list of `Height`s of states that were marked as
+    /// diverged.
+    pub fn diverged_state_heights(&self) -> Result<Vec<Height>, LayoutError> {
+        let names = dir_file_names(&self.diverged_state_markers()).map_err(|io_err| {
+            LayoutError::IoError {
+                path: self.diverged_state_markers(),
+                message: "failed to enumerate diverged states".to_string(),
+                io_err,
+            }
+        })?;
+        parse_and_sort_checkpoint_heights(&names[..])
+    }
+
+    /// Returns a sorted in ascended order list of heights of checkpoints that were "backed up"
     /// for future inspection because they corresponded to diverged states.
     pub fn backup_heights(&self) -> Result<Vec<Height>, LayoutError> {
         let names = dir_file_names(&self.backups()).map_err(|io_err| LayoutError::IoError {
-            path: "NO_PATH".into(),
+            path: self.backups(),
             message: "failed to enumerate backups".to_string(),
             io_err,
         })?;
-        parse_checkpoint_heights(&names[..])
+        parse_and_sort_checkpoint_heights(&names[..])
     }
 
     /// Returns a path to a diverged checkpoint given its height.
@@ -531,7 +1045,7 @@ impl StateLayout {
     /// Precondition:
     ///   h ∈ self.diverged_checkpoint_heights()
     pub fn diverged_checkpoint_path(&self, h: Height) -> PathBuf {
-        self.diverged_checkpoints().join(self.checkpoint_name(h))
+        self.diverged_checkpoints().join(Self::checkpoint_name(h))
     }
 
     /// Returns a path to a backed up state given its height.
@@ -539,28 +1053,194 @@ impl StateLayout {
     /// Precondition:
     ///   h ∈ self.backup_heights()
     pub fn backup_checkpoint_path(&self, h: Height) -> PathBuf {
-        self.backups().join(self.checkpoint_name(h))
+        self.backups().join(Self::checkpoint_name(h))
     }
 
-    /// Removes a checkpoint for a given height if it exists.
-    ///
-    /// Postcondition:
-    ///   height ∉ self.checkpoint_heights()
-    pub fn remove_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
-        let cp_name = self.checkpoint_name(height);
+    /// Asynchronously removes a checkpoint for a given height if it exists.
+    /// The checkpoint is first moved to the `fs_tmp` directory, and the actual file deletion
+    /// is delegated to a background thread. This offloading helps avoid blocking the calling thread,
+    /// such as Consensus's purger.
+    fn remove_checkpoint_async<T>(
+        &self,
+        height: Height,
+        drop_after_rename: T,
+    ) -> Result<(), LayoutError> {
+        let start = Instant::now();
+        let cp_name = Self::checkpoint_name(height);
         let cp_path = self.checkpoints().join(&cp_name);
-        let tmp_path = self.fs_tmp().join(&cp_name);
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        let tmp_path = self
+            .fs_tmp()
+            .join(format!("{}_{}_async", cp_name, timestamp.as_nanos()));
 
-        self.atomically_remove_via_path(&cp_path, &tmp_path)
+        // Atomically removes the checkpoint by first renaming it into tmp_path, and then deleting tmp_path.
+        // This way maintains the invariant that <root>/checkpoints/<height> are always internally consistent.
+        self.rename_to_tmp_path(&cp_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
-                path: cp_path,
+                path: cp_path.clone(),
                 message: format!(
-                    "failed to remove checkpoint {} (err kind: {:?})",
+                    "failed to rename checkpoint {} to tmp path {} (err kind: {:?})",
                     cp_name,
+                    tmp_path.display(),
                     err.kind()
                 ),
                 io_err: err,
-            })
+            })?;
+
+        // Drops drop_after_rename once the checkpoint path is renamed to tmp_path.
+        std::mem::drop(drop_after_rename);
+
+        self.metrics
+            .checkpoint_removal_channel_length
+            .set(self.checkpoint_removal_sender.len() as i64);
+
+        self.checkpoint_removal_sender
+            .send(CheckpointRemovalRequest::Remove(tmp_path))
+            .expect("failed to send checkpoint removal request");
+        info!(
+            self.log,
+            "Async checkpoint removal operation moves checkpoint @{} to tmp path and returns in {:?}",
+            height,
+            start.elapsed()
+        );
+        Ok(())
+    }
+
+    /// Removes a checkpoint for a given height if it exists.
+    /// Drops drop_after_rename once the checkpoint is moved to fs_tmp.
+    ///
+    /// Postcondition:
+    ///   height ∉ self.checkpoint_heights()
+    fn remove_checkpoint<T>(
+        &self,
+        height: Height,
+        drop_after_rename: T,
+    ) -> Result<(), LayoutError> {
+        self.remove_checkpoint_async(height, drop_after_rename)
+    }
+
+    /// Synchronously removes a checkpoint for a given height if it exists.
+    fn remove_checkpoint_sync<T>(
+        &self,
+        height: Height,
+        drop_after_rename: T,
+    ) -> Result<(), LayoutError> {
+        let start = Instant::now();
+        let cp_name = Self::checkpoint_name(height);
+        let cp_path = self.checkpoints().join(&cp_name);
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        let tmp_path = self
+            .fs_tmp()
+            .join(format!("{}_{}_sync", cp_name, timestamp.as_nanos()));
+
+        // Atomically removes the checkpoint by first renaming it into tmp_path, and then deleting tmp_path.
+        // This way maintains the invariant that <root>/checkpoints/<height> are always internally consistent.
+        self.rename_to_tmp_path(&cp_path, &tmp_path)
+            .map_err(|err| LayoutError::IoError {
+                path: cp_path.clone(),
+                message: format!(
+                    "failed to rename checkpoint {} to tmp path {} (err kind: {:?})",
+                    cp_name,
+                    tmp_path.display(),
+                    err.kind()
+                ),
+                io_err: err,
+            })?;
+
+        // Drops drop_after_rename once the checkpoint path is renamed to tmp_path.
+        std::mem::drop(drop_after_rename);
+        std::fs::remove_dir_all(&tmp_path).map_err(|err| LayoutError::IoError {
+            path: cp_path,
+            message: format!(
+                "failed to remove checkpoint {} from tmp path {} (err kind: {:?})",
+                cp_name,
+                tmp_path.display(),
+                err.kind()
+            ),
+            io_err: err,
+        })?;
+        let elapsed = start.elapsed();
+        info!(
+            self.log,
+            "Synchronously removed checkpoint @{} in {:?}", height, elapsed
+        );
+        self.metrics
+            .state_layout_sync_remove_checkpoint_duration
+            .observe(elapsed.as_secs_f64());
+        Ok(())
+    }
+
+    pub fn force_remove_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
+        // Perform a synchronous removal since performance is not a concern for forced removals.
+        // it is more suitable to remove the checkpoint immediately and in place for forced removals.
+        self.remove_checkpoint_sync(height, ())
+    }
+
+    /// Removes a checkpoint for a given height if it exists and it is not the latest verified checkpoint.
+    /// Crashes in debug if removal of the last verified checkpoint is ever attempted or the checkpoint is
+    /// not found.
+    ///
+    /// Postcondition:
+    ///   height ∉ self.checkpoint_heights()[0:-1]
+    fn remove_checkpoint_if_not_the_latest<T>(&self, height: Height, drop_after_rename: T) {
+        match self.verified_checkpoint_heights() {
+            Err(err) => {
+                error!(self.log, "Failed to get checkpoint heights: {}", err);
+                self.metrics
+                    .state_layout_error_count
+                    .with_label_values(&["remove_checkpoint_no_heights"])
+                    .inc();
+            }
+            Ok(mut heights) => {
+                if heights.is_empty() {
+                    error!(
+                        self.log,
+                        "Trying to remove non-existing checkpoint {}. The CheckpointLayout was invalid",
+                        height,
+                    );
+                    self.metrics
+                        .state_layout_error_count
+                        .with_label_values(&["remove_checkpoint_non_existent"])
+                        .inc();
+                    return;
+                }
+                if heights.pop() == Some(height) {
+                    error!(self.log, "Trying to remove the last checkpoint {}", height);
+                    self.metrics
+                        .state_layout_error_count
+                        .with_label_values(&["remove_last_checkpoint"])
+                        .inc();
+                    debug_assert!(false);
+                    return;
+                }
+                if let Err(err) = self.remove_checkpoint(height, drop_after_rename) {
+                    error!(self.log, "Failed to remove checkpoint: {}", err);
+                    debug_assert!(false);
+                    self.metrics
+                        .state_layout_error_count
+                        .with_label_values(&["remove_checkpoint_other"])
+                        .inc();
+                }
+            }
+        }
+    }
+
+    pub fn flush_checkpoint_removal_channel(&self) {
+        self.metrics
+            .checkpoint_removal_channel_length
+            .set(self.checkpoint_removal_sender.len() as i64);
+
+        let (sender, receiver) = bounded::<()>(1);
+        self.checkpoint_removal_sender
+            .send(CheckpointRemovalRequest::Wait { sender })
+            .expect("failed to send completion signal");
+        receiver
+            .recv()
+            .expect("failed to receive completion signal");
     }
 
     /// Marks the checkpoint with the specified height as diverged.
@@ -572,25 +1252,57 @@ impl StateLayout {
     ///   height ∈ self.diverged_checkpoint_heights() ∧
     ///   height ∉ self.checkpoint_heights()
     pub fn mark_checkpoint_diverged(&self, height: Height) -> Result<(), LayoutError> {
-        let cp_name = self.checkpoint_name(height);
+        let cp_name = Self::checkpoint_name(height);
         let cp_path = self.checkpoints().join(&cp_name);
-        let diverged_checkpoints_dir = self.diverged_checkpoints();
 
-        let dst_path = diverged_checkpoints_dir.join(&cp_name);
+        let dst_path = self.diverged_checkpoints().join(&cp_name);
 
-        match std::fs::rename(&cp_path, &dst_path) {
-            Ok(()) => sync_path(&self.checkpoints()).map_err(|err| LayoutError::IoError {
-                path: self.checkpoints(),
-                message: "Failed to sync checkpoints".to_string(),
-                io_err: err,
-            }),
+        match std::fs::rename(&cp_path, dst_path) {
+            Ok(()) => {
+                for path in [&self.checkpoints(), &self.diverged_checkpoints()] {
+                    sync_path(path).map_err(|err| LayoutError::IoError {
+                        path: path.clone(),
+                        message: "Failed to sync checkpoints".to_string(),
+                        io_err: err,
+                    })?
+                }
+                Ok(())
+            }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
             other => other.map_err(|err| LayoutError::IoError {
                 path: cp_path,
-                message: format!("Failed to mark checkpoint {} diverged", height),
+                message: format!("Failed to mark checkpoint {height} diverged"),
                 io_err: err,
             }),
         }
+    }
+
+    /// Path of diverged state marker for the given height.
+    pub fn diverged_state_marker_path(&self, height: Height) -> PathBuf {
+        self.diverged_state_markers()
+            .join(Self::checkpoint_name(height))
+    }
+
+    /// Creates a diverged state marker for the given height.
+    ///
+    /// Postcondition:
+    ///   h ∈ self.diverged_state_heights()
+    pub fn create_diverged_state_marker(&self, height: Height) -> Result<(), LayoutError> {
+        open_for_write(&self.diverged_state_marker_path(height))?;
+        sync_path(self.diverged_state_markers()).map_err(|err| LayoutError::IoError {
+            path: self.diverged_state_markers(),
+            message: "Failed to sync diverged state markers".to_string(),
+            io_err: err,
+        })
+    }
+
+    /// Removes a diverged checkpoint given its height.
+    ///
+    /// Precondition:
+    ///   h ∈ self.diverged_state_heights()
+    pub fn remove_diverged_state_marker(&self, height: Height) -> Result<(), LayoutError> {
+        let path = self.diverged_state_marker_path(height);
+        remove_existing_file(&path)
     }
 
     /// Removes a diverged checkpoint given its height.
@@ -598,17 +1310,22 @@ impl StateLayout {
     /// Precondition:
     ///   h ∈ self.diverged_checkpoint_heights()
     pub fn remove_diverged_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
-        let checkpoint_name = self.checkpoint_name(height);
+        let checkpoint_name = Self::checkpoint_name(height);
         let cp_path = self.diverged_checkpoints().join(&checkpoint_name);
         let tmp_path = self
             .fs_tmp()
             .join(format!("diverged_checkpoint_{}", &checkpoint_name));
-        self.atomically_remove_via_path(&cp_path, &tmp_path)
+        self.rename_to_tmp_path(&cp_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
-                path: cp_path,
-                message: format!("failed to remove diverged checkpoint {}", height),
+                path: cp_path.clone(),
+                message: format!("failed to rename diverged checkpoint {height} to tmp path"),
                 io_err: err,
-            })
+            })?;
+        std::fs::remove_dir_all(&tmp_path).map_err(|err| LayoutError::IoError {
+            path: cp_path,
+            message: format!("failed to remove diverged checkpoint {height} from tmp path"),
+            io_err: err,
+        })
     }
 
     /// Creates a copy of the checkpoint with the specified height and places it
@@ -619,7 +1336,7 @@ impl StateLayout {
     /// check the difference between these two states and debug the
     /// non-determinism even if the whole subnet moved forward.
     pub fn backup_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
-        let cp_name = self.checkpoint_name(height);
+        let cp_name = Self::checkpoint_name(height);
         let cp_path = self.checkpoints().join(&cp_name);
         if !cp_path.exists() {
             return Err(LayoutError::NotFound(height));
@@ -627,10 +1344,10 @@ impl StateLayout {
 
         let backups_dir = self.backups();
         let dst = backups_dir.join(&cp_name);
-        self.copy_checkpoint(&cp_name, cp_path.as_path(), dst.as_path(), None)
+        self.copy_and_sync_checkpoint(&cp_name, cp_path.as_path(), dst.as_path(), None)
             .map_err(|err| LayoutError::IoError {
                 path: cp_path,
-                message: format!("Failed to backup checkpoint {}", height),
+                message: format!("Failed to backup checkpoint {height}"),
                 io_err: err,
             })?;
         sync_path(&backups_dir).map_err(|err| LayoutError::IoError {
@@ -645,15 +1362,20 @@ impl StateLayout {
     /// Precondition:
     ///   h ∈ self.backup_heights()
     pub fn remove_backup(&self, height: Height) -> Result<(), LayoutError> {
-        let backup_name = self.checkpoint_name(height);
+        let backup_name = Self::checkpoint_name(height);
         let backup_path = self.backups().join(&backup_name);
         let tmp_path = self.fs_tmp().join(format!("backup_{}", &backup_name));
-        self.atomically_remove_via_path(backup_path.as_path(), tmp_path.as_path())
+        self.rename_to_tmp_path(&backup_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
-                path: backup_path,
-                message: format!("failed to remove backup {}", height),
+                path: backup_path.clone(),
+                message: format!("failed to rename backup {height} to tmp path"),
                 io_err: err,
-            })
+            })?;
+        std::fs::remove_dir_all(&tmp_path).map_err(|err| LayoutError::IoError {
+            path: backup_path,
+            message: format!("failed to remove backup {height} from tmp path"),
+            io_err: err,
+        })
     }
 
     /// Moves the checkpoint with the specified height to backup location so
@@ -662,7 +1384,7 @@ impl StateLayout {
     /// If checkpoint at `height` was already backed-up/archived before, it's
     /// removed.
     pub fn archive_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
-        let cp_name = self.checkpoint_name(height);
+        let cp_name = Self::checkpoint_name(height);
         let cp_path = self.checkpoints().join(&cp_name);
         if !cp_path.exists() {
             return Err(LayoutError::NotFound(height));
@@ -675,12 +1397,12 @@ impl StateLayout {
             // This might happen if we archived a checkpoint, then
             // recomputed it again, and then restarted again.  We don't need
             // another copy.
-            return self.remove_checkpoint(height);
+            return self.force_remove_checkpoint(height);
         }
 
         std::fs::rename(&cp_path, &dst).map_err(|err| LayoutError::IoError {
             path: cp_path,
-            message: format!("failed to archive checkpoint {}", height),
+            message: format!("failed to archive checkpoint {height}"),
             io_err: err,
         })?;
 
@@ -689,27 +1411,34 @@ impl StateLayout {
             message: "Failed to sync backups".to_string(),
             io_err: err,
         })?;
-        sync_path(&self.checkpoints()).map_err(|err| LayoutError::IoError {
+        sync_path(self.checkpoints()).map_err(|err| LayoutError::IoError {
             path: self.checkpoints(),
             message: "Failed to sync checkpoints".to_string(),
             io_err: err,
         })
     }
 
-    fn checkpoint_name(&self, height: Height) -> String {
+    /// Returns the name of the checkpoint directory with the given block height.
+    pub fn checkpoint_name(height: Height) -> String {
         format!("{:016x}", height.get())
     }
 
-    pub fn tip_path(&self) -> PathBuf {
+    fn tip_path(&self) -> PathBuf {
         self.raw_path().join("tip")
     }
 
-    fn checkpoints(&self) -> PathBuf {
-        self.root.join("checkpoints")
+    /// Returns the directory containing checkpoints.
+    /// Pub for testing.
+    pub fn checkpoints(&self) -> PathBuf {
+        self.root.join(CHECKPOINTS_DIR)
     }
 
     fn diverged_checkpoints(&self) -> PathBuf {
         self.root.join("diverged_checkpoints")
+    }
+
+    fn diverged_state_markers(&self) -> PathBuf {
+        self.root.join("diverged_state_markers")
     }
 
     fn backups(&self) -> PathBuf {
@@ -724,15 +1453,15 @@ impl StateLayout {
     /// path into the specified dst path.
     ///
     /// If a thread-pool is provided then files are copied in parallel.
-    fn copy_checkpoint(
+    pub fn copy_and_sync_checkpoint(
         &self,
         name: &str,
         src: &Path,
         dst: &Path,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> std::io::Result<()> {
-        let scratch_name = format!("scratchpad_{}", name);
-        let scratchpad = self.fs_tmp().join(&scratch_name);
+        let scratch_name = format!("scratchpad_{name}");
+        let scratchpad = self.fs_tmp().join(scratch_name);
         self.ensure_dir_exists(&scratchpad)?;
 
         if dst.exists() {
@@ -742,13 +1471,18 @@ impl StateLayout {
         let copy_atomically = || {
             copy_recursively(
                 &self.log,
+                &self.metrics,
                 src,
                 scratchpad.as_path(),
-                FilePermissions::ReadOnly,
+                FSync::Yes,
+                |_| CopyInstruction::ReadOnly,
                 thread_pool,
             )?;
-            std::fs::rename(&scratchpad, &dst)?;
-            sync_path(&dst)
+            std::fs::rename(&scratchpad, dst)?;
+            match dst.parent() {
+                Some(parent) => sync_path(parent),
+                None => Ok(()),
+            }
         };
 
         match copy_atomically() {
@@ -760,35 +1494,13 @@ impl StateLayout {
         }
     }
 
-    /// Deletes canisters from tip if they are not in ids.
-    pub fn filter_tip_canisters(
-        &self,
-        height: Height,
-        ids: &BTreeSet<&CanisterId>,
-    ) -> Result<(), LayoutError> {
-        let tip = self.tip(height)?;
-        let canisters_on_disk = tip.canister_ids()?;
-        for id in canisters_on_disk {
-            if !ids.contains(&id) {
-                let canister_path = tip.canister(&id)?.raw_path();
-                let tmp_path = self.fs_tmp().join(format!("canister_{}", &id));
-                self.atomically_remove_via_path(&canister_path, &tmp_path)
-                    .map_err(|err| LayoutError::IoError {
-                        path: canister_path,
-                        message: "Cannot atomically remove canister.".to_string(),
-                        io_err: err,
-                    })?;
-            }
-        }
-        Ok(())
-    }
-
-    /// Atomically removes path by first renaming it into tmp_path, and then
-    /// deleting tmp_path.
-    fn atomically_remove_via_path(&self, path: &Path, tmp_path: &Path) -> std::io::Result<()> {
-        // We first move the checkpoint directory into a temporary directory to
-        // maintain the invariant that <root>/checkpoints/<height> are always
-        // internally consistent.
+    /// Renames a path to a temporary path and synchronizes the parent directory of the original path.
+    ///
+    /// This helper function is useful when removing a checkpoint because renaming the checkpoint to a temporary path
+    /// is an atomic operation. This ensures that the checkpoint will not be left in an inconsistent
+    /// state on disk if a crash occurs. After the rename, the parent directory of the original
+    /// path is synced to persist the change.
+    fn rename_to_tmp_path(&self, path: &Path, tmp_path: &Path) -> std::io::Result<()> {
         if let Some(parent) = tmp_path.parent() {
             self.ensure_dir_exists(parent)?;
         }
@@ -810,44 +1522,124 @@ impl StateLayout {
             }
             Err(err) => return Err(err),
         }
-        std::fs::remove_dir_all(tmp_path)
+        Ok(())
     }
 }
 
-/// Collects all the direct children of the specified directory into a
-/// vector and applies the provided transformation to them.  The names
-/// are assumed to be hex numbers.
-fn collect_subdirs<F, T>(dir: &Path, transform: F) -> Result<Vec<T>, LayoutError>
+fn is_already_exists_err(err: &std::io::Error) -> bool {
+    // On Unix, if from is a directory, to must also be an (empty) directory.
+    // So error code is either EEXISTS or ENOTEMPTY according to man 2 rename.
+    err.kind() == std::io::ErrorKind::AlreadyExists || err.raw_os_error() == Some(libc::ENOTEMPTY)
+}
+
+/// Iterates over all the children at exact `depth` of the specified directory, applies
+/// the provided transformation to each, collects them into a vector and sorts
+/// them.
+///
+/// This function is used to list canister's in the `canister_states` directory as well as snaphots
+/// in the `snapshots` directory. Note that canisters are listed at depth 0, but snapshots are at depth 1
+/// as they are further grouped by their controlling canister.
+fn collect_subdirs<F, T>(dir: &Path, depth: u64, transform: F) -> Result<Vec<T>, LayoutError>
 where
-    F: Fn(&str) -> T,
+    F: Fn(&str) -> Result<T, String>,
+    T: Ord,
 {
-    let mut ids = Vec::new();
-
-    if !dir.exists() {
-        return Ok(ids);
-    }
-
-    let entries = dir.read_dir().map_err(|err| LayoutError::IoError {
-        path: dir.to_path_buf(),
-        message: "Failed to read directory".to_string(),
-        io_err: err,
-    })?;
-
-    for entry in entries {
-        let dir = entry.map_err(|err| LayoutError::IoError {
+    fn collect_subdirs_recursive<F, T>(
+        dir: &Path,
+        depth: u64,
+        transform: &F,
+        result: &mut Vec<T>,
+    ) -> Result<(), LayoutError>
+    where
+        F: Fn(&str) -> Result<T, String>,
+    {
+        let entries = dir.read_dir().map_err(|err| LayoutError::IoError {
             path: dir.to_path_buf(),
-            message: "Failed to get dir entry".to_string(),
+            message: "Failed to read directory".to_string(),
             io_err: err,
         })?;
 
-        if let Some(file_name) = dir.file_name().to_str() {
-            ids.push(transform(file_name));
+        for entry in entries {
+            let dir = entry.map_err(|err| LayoutError::IoError {
+                path: dir.to_path_buf(),
+                message: "Failed to get dir entry".to_string(),
+                io_err: err,
+            })?;
+
+            match dir.file_name().to_str() {
+                Some(file_name) => {
+                    if depth == 0 {
+                        result.push(transform(file_name).map_err(|err| {
+                            LayoutError::CorruptedLayout {
+                                path: dir.path(),
+                                message: err,
+                            }
+                        })?)
+                    } else {
+                        collect_subdirs_recursive(&dir.path(), depth - 1, transform, result)?;
+                    }
+                }
+                None => {
+                    return Err(LayoutError::CorruptedLayout {
+                        path: dir.path(),
+                        message: "not UTF-8".into(),
+                    });
+                }
+            }
         }
+        Ok(())
     }
-    Ok(ids)
+
+    if !dir.exists() {
+        return Ok(Vec::default());
+    }
+
+    let mut transformed_subdirs = Vec::new();
+    collect_subdirs_recursive(dir, depth, &transform, &mut transformed_subdirs)?;
+    transformed_subdirs.sort();
+    Ok(transformed_subdirs)
 }
 
-fn parse_checkpoint_heights(names: &[String]) -> Result<Vec<Height>, LayoutError> {
+/// Helper for parsing hex representations of canister IDs, used for the
+/// directory names under `canister_states`).
+fn parse_canister_id(hex: &str) -> Result<CanisterId, String> {
+    let blob = hex::decode(hex).map_err(|err| {
+        format!("failed to convert directory name {hex} into a canister ID: {err}")
+    })?;
+
+    Ok(CanisterId::unchecked_from_principal(
+        PrincipalId::try_from(&blob[..])
+            .map_err(|err| format!("failed to parse principal ID: {err}"))?,
+    ))
+}
+
+/// Helper for parsing hex representations of snapshot IDs, used for the
+/// directory names under `snapshots`).
+fn parse_snapshot_id(hex: &str) -> Result<SnapshotId, String> {
+    let blob = hex::decode(hex).map_err(|err| {
+        format!("failed to convert directory name {hex} into a snapshot ID: {err}")
+    })?;
+
+    SnapshotId::try_from(&blob).map_err(|err| format!("failed to parse snapshot ID: {err}"))
+}
+
+/// Parses the canister ID from a relative path, if it is the path of a canister or snapshot
+/// state file (e.g. `canister_states/00000000000000010101/queues.pbuf`).
+/// Returns `None` if the path is not under `canister_states` or `snapshots`; or if parsing
+/// fails.
+pub fn canister_id_from_path(path: &Path) -> Option<CanisterId> {
+    let mut path = path.iter();
+    let top_level = path.next();
+    if (top_level == Some(OsStr::new(CANISTER_STATES_DIR))
+        || top_level == Some(OsStr::new(SNAPSHOTS_DIR)))
+        && let Some(hex) = path.next()
+    {
+        return parse_canister_id(hex.to_str()?).ok();
+    }
+    None
+}
+
+fn parse_and_sort_checkpoint_heights(names: &[String]) -> Result<Vec<Height>, LayoutError> {
     let mut heights = names
         .iter()
         .map(|name| {
@@ -855,10 +1647,7 @@ fn parse_checkpoint_heights(names: &[String]) -> Result<Vec<Height>, LayoutError
                 .map(Height::new)
                 .map_err(|e| LayoutError::CorruptedLayout {
                     path: name.into(),
-                    message: format!(
-                        "failed to convert checkpoint name {} into a number: {}",
-                        name, e
-                    ),
+                    message: format!("failed to convert checkpoint name {name} into a number: {e}"),
                 })
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -868,44 +1657,118 @@ fn parse_checkpoint_heights(names: &[String]) -> Result<Vec<Height>, LayoutError
     Ok(heights)
 }
 
-pub struct CheckpointLayout<Permissions: AccessPolicy> {
+struct CheckpointLayoutImpl {
     root: PathBuf,
     height: Height,
-    permissions_tag: PhantomData<Permissions>,
+    // The StateLayout is used to make sure we never remove the CheckpointLayout when still in use.
+    // Is not None for CheckpointLayout pointing to "real" checkpoints, that is checkpoints in
+    // StateLayout's root/checkpoints/..., that are tracked by StateLayout
+    state_layout: Option<StateLayout>,
+}
+
+impl Drop for CheckpointLayoutImpl {
+    fn drop(&mut self) {
+        if let Some(state_layout) = &self.state_layout {
+            state_layout.remove_checkpoint_ref(self.height)
+        }
+    }
+}
+
+pub struct CheckpointLayout<Permissions: AccessPolicy>(
+    Arc<CheckpointLayoutImpl>,
+    PhantomData<Permissions>,
+);
+
+// TODO(MR-676) prevent cloning when Permissions is intentinally non-cloneable
+impl<Permissions: AccessPolicy> Clone for CheckpointLayout<Permissions> {
+    fn clone(&self) -> Self {
+        CheckpointLayout(self.0.clone(), PhantomData)
+    }
+}
+
+impl<Permissions: ReadPolicy> CheckpointLayout<Permissions> {
+    /// Clone CheckpointLayout removing all access but ReadOnly.
+    pub fn as_readonly(&self) -> CheckpointLayout<ReadOnly> {
+        CheckpointLayout(Arc::clone(&self.0), PhantomData)
+    }
+}
+
+impl<Permissions: AccessPolicy> std::fmt::Debug for CheckpointLayout<Permissions> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "checkpoint layout #{}, path: #{}",
+            self.0.height,
+            self.0.root.display()
+        )
+    }
 }
 
 impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
-    pub fn new(root: PathBuf, height: Height) -> Result<Self, LayoutError> {
+    pub fn new(
+        root: PathBuf,
+        height: Height,
+        state_layout: StateLayout,
+    ) -> Result<Self, LayoutError> {
         Permissions::check_dir(&root)?;
-        Ok(Self {
-            root,
-            height,
-            permissions_tag: PhantomData,
-        })
+        Ok(Self(
+            Arc::new(CheckpointLayoutImpl {
+                root,
+                height,
+                state_layout: Some(state_layout),
+            }),
+            PhantomData,
+        ))
+    }
+
+    pub fn new_untracked(root: PathBuf, height: Height) -> Result<Self, LayoutError> {
+        Permissions::check_dir(&root)?;
+        Ok(Self(
+            Arc::new(CheckpointLayoutImpl {
+                root,
+                height,
+                state_layout: None,
+            }),
+            PhantomData,
+        ))
     }
 
     pub fn system_metadata(&self) -> ProtoFileWith<pb_metadata::SystemMetadata, Permissions> {
-        self.root.join("system_metadata.pbuf").into()
+        self.0.root.join(SYSTEM_METADATA_FILE).into()
+    }
+
+    pub fn ingress_history(&self) -> ProtoFileWith<pb_ingress::IngressHistoryState, Permissions> {
+        self.0.root.join(INGRESS_HISTORY_FILE).into()
     }
 
     pub fn subnet_queues(&self) -> ProtoFileWith<pb_queues::CanisterQueues, Permissions> {
-        self.root.join("subnet_queues.pbuf").into()
+        self.0.root.join(SUBNET_QUEUES_FILE).into()
+    }
+
+    pub fn refunds(&self) -> ProtoFileWith<pb_queues::Refunds, Permissions> {
+        self.0.root.join(REFUNDS_FILE).into()
+    }
+
+    pub fn split_marker(&self) -> ProtoFileWith<pb_metadata::SplitFrom, Permissions> {
+        self.0.root.join(SPLIT_MARKER_FILE).into()
+    }
+
+    pub fn stats(&self) -> ProtoFileWith<pb_stats::Stats, Permissions> {
+        self.0.root.join(STATS_FILE).into()
+    }
+
+    pub fn unverified_checkpoint_marker(&self) -> PathBuf {
+        self.0.root.join(UNVERIFIED_CHECKPOINT_MARKER)
+    }
+
+    pub fn state_sync_checkpoint_marker(&self) -> PathBuf {
+        self.0.root.join(STATE_SYNC_CHECKPOINT_MARKER)
     }
 
     pub fn canister_ids(&self) -> Result<Vec<CanisterId>, LayoutError> {
-        let states_dir = self.root.join("canister_states");
+        let states_dir = self.0.root.join(CANISTER_STATES_DIR);
         Permissions::check_dir(&states_dir)?;
-        collect_subdirs(states_dir.as_path(), |p| {
-            let blob = hex::decode(p).unwrap_or_else(|err| {
-                panic!(
-                    "Failed to convert directory name {} into a canister id: {}",
-                    p, err
-                )
-            });
-
-            CanisterId::new(PrincipalId::try_from(&blob[..]).expect("failed to parse principal id"))
-                .unwrap()
-        })
+        collect_subdirs(states_dir.as_path(), 0, parse_canister_id)
     }
 
     pub fn canister(
@@ -913,37 +1776,534 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         canister_id: &CanisterId,
     ) -> Result<CanisterLayout<Permissions>, LayoutError> {
         CanisterLayout::new(
-            self.root
-                .join("canister_states")
+            self.0
+                .root
+                .join(CANISTER_STATES_DIR)
                 .join(hex::encode(canister_id.get_ref().as_slice())),
+            self,
         )
     }
 
-    pub fn bitcoin(&self) -> Result<BitcoinStateLayout<Permissions>, LayoutError> {
-        // TODO(EXC-1113): Rename this path to "bitcoin", as it stores data for either network.
-        BitcoinStateLayout::new(self.root.join("bitcoin").join("testnet"))
+    /// Lists all snapshots in the checkpoint.
+    pub fn snapshot_ids(&self) -> Result<Vec<SnapshotId>, LayoutError> {
+        let snapshots_dir = self.0.root.join(SNAPSHOTS_DIR);
+        Permissions::check_dir(&snapshots_dir)?;
+        collect_subdirs(snapshots_dir.as_path(), 1, parse_snapshot_id)
+    }
+
+    /// List all PageMaps with at least one file in the Checkpoint, including canister and snapshot
+    /// ones.
+    pub fn all_existing_pagemaps(&self) -> Result<Vec<PageMapLayout<Permissions>>, LayoutError> {
+        Ok(self
+            .canister_ids()?
+            .into_iter()
+            .map(|id| self.canister(&id)?.all_existing_pagemaps())
+            .chain(
+                self.snapshot_ids()?
+                    .into_iter()
+                    .map(|id| self.snapshot(&id)?.all_existing_pagemaps()),
+            )
+            .collect::<Result<Vec<Vec<PageMapLayout<Permissions>>>, LayoutError>>()?
+            .into_iter()
+            .flatten()
+            .collect())
+    }
+
+    pub fn all_existing_wasm_files(&self) -> Result<Vec<WasmFile<Permissions>>, LayoutError> {
+        let canister_wasm_files = self
+            .canister_ids()?
+            .into_iter()
+            .map(|id| {
+                let canister = self.canister(&id)?;
+                Ok(canister.wasm())
+            })
+            .collect::<Result<Vec<_>, LayoutError>>()?;
+
+        let snapshot_wasm_files = self
+            .snapshot_ids()?
+            .into_iter()
+            .map(|id| {
+                let snapshot = self.snapshot(&id)?;
+                Ok(snapshot.wasm())
+            })
+            .collect::<Result<Vec<_>, LayoutError>>()?;
+
+        let wasm_files = canister_wasm_files
+            .into_iter()
+            .chain(snapshot_wasm_files)
+            .filter(|wasm| wasm.raw_path().exists())
+            .collect();
+
+        Ok(wasm_files)
+    }
+
+    /// Directory where the snapshot for `snapshot_id` is stored.
+    /// Note that we store them by canister. This means we have the canister id in the path, which is
+    /// necessary in the context of subnet splitting. Also see [`canister_id_from_path`].
+    pub fn snapshot(
+        &self,
+        snapshot_id: &SnapshotId,
+    ) -> Result<SnapshotLayout<Permissions>, LayoutError> {
+        SnapshotLayout::new(
+            self.0
+                .root
+                .join(SNAPSHOTS_DIR)
+                .join(hex::encode(
+                    snapshot_id.get_canister_id().get_ref().as_slice(),
+                ))
+                .join(hex::encode(snapshot_id.as_slice())),
+            self,
+        )
     }
 
     pub fn height(&self) -> Height {
-        self.height
+        self.0.height
     }
 
     pub fn raw_path(&self) -> &Path {
-        &self.root
+        &self.0.root
+    }
+
+    /// Returns the status of this checkpoint based on its markers.
+    ///
+    /// The checkpoint can be in one of three states:
+    /// - `Verified`: No markers present (fully verified checkpoint)
+    /// - `UnverifiedStateSync`: Has state sync marker (always unverified)
+    /// - `UnverifiedRegular`: Has unverified marker only
+    ///
+    /// This is the canonical method for determining checkpoint status.
+    /// Other methods should use this function rather than checking markers directly.
+    pub fn checkpoint_status(&self) -> CheckpointStatus {
+        if self.state_sync_checkpoint_marker().exists() {
+            // Checkpoints with state sync marker are always unverified. Therefore both markers should be present.
+            // For defensive programming, we treat it as unverified even if the unverified marker
+            // is accidentally missing, since the presence of a state sync marker alone indicates
+            // the checkpoint should never be considered verified.
+            debug_assert!(self.unverified_checkpoint_marker().exists());
+            return CheckpointStatus::UnverifiedStateSync;
+        }
+        if self.unverified_checkpoint_marker().exists() {
+            return CheckpointStatus::UnverifiedRegular;
+        }
+        CheckpointStatus::Verified
+    }
+
+    /// Returns `true` if the checkpoint is verified.
+    pub fn is_checkpoint_verified(&self) -> bool {
+        matches!(self.checkpoint_status(), CheckpointStatus::Verified)
+    }
+
+    pub fn is_unverified_state_sync_checkpoint(&self) -> bool {
+        matches!(
+            self.checkpoint_status(),
+            CheckpointStatus::UnverifiedStateSync
+        )
+    }
+
+    pub fn is_verified_or_state_sync_checkpoint(&self) -> bool {
+        matches!(
+            self.checkpoint_status(),
+            CheckpointStatus::Verified | CheckpointStatus::UnverifiedStateSync
+        )
+    }
+
+    /// Recursively set permissions to readonly for all files under the checkpoint.
+    /// If `perform_sync` is true, also syncs files to disk.
+    /// Returns counts of files traversed and files made readonly for monitoring.
+    pub fn mark_files_readonly_and_sync(
+        &self,
+        mut thread_pool: Option<&mut scoped_threadpool::Pool>,
+        perform_sync: bool,
+    ) -> Result<ReadonlyMarkingResult, LayoutError> {
+        let checkpoint_path = self.raw_path();
+        let convert_io_err = |err: std::io::Error| -> LayoutError {
+            LayoutError::IoError {
+                path: checkpoint_path.to_path_buf(),
+                message: format!(
+                    "Could not mark files readonly and sync for checkpoint {}",
+                    self.height()
+                ),
+                io_err: err,
+            }
+        };
+
+        let paths =
+            dir_list_recursive(checkpoint_path, &mut thread_pool).map_err(convert_io_err)?;
+
+        let files_traversed = paths.len();
+
+        let results = maybe_parallel_map(&mut thread_pool, paths.iter(), |p| {
+            match mark_readonly_if_file(p) {
+                Ok(was_made_readonly) => {
+                    #[cfg(not(target_os = "linux"))]
+                    if perform_sync {
+                        sync_path(p)?;
+                    }
+                    Ok::<bool, std::io::Error>(was_made_readonly)
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    // State sync now skips delivering checkpoints that already exist, preventing concurrent marker removal while marking files readonly.
+                    debug_assert!(false, "Unexpected file not found: {:?}", p);
+                    Ok(false)
+                }
+                Err(e) => Err(e),
+            }
+        });
+
+        let files_made_readonly = results
+            .into_iter()
+            .collect::<Result<Vec<bool>, std::io::Error>>()
+            .map_err(convert_io_err)?
+            .iter()
+            .filter(|&&was_made| was_made)
+            .count();
+
+        #[cfg(target_os = "linux")]
+        if perform_sync {
+            let f = std::fs::File::open(checkpoint_path).map_err(convert_io_err)?;
+            use std::os::fd::AsRawFd;
+            unsafe {
+                if libc::syncfs(f.as_raw_fd()) == -1 {
+                    return Err(convert_io_err(std::io::Error::last_os_error()));
+                }
+            }
+        }
+        Ok(ReadonlyMarkingResult {
+            files_traversed,
+            files_made_readonly,
+        })
+    }
+}
+
+impl<P> CheckpointLayout<P>
+where
+    P: WritePolicy,
+{
+    /// Creates the unverified checkpoint marker.
+    /// If the marker already exists, this function does nothing and returns `Ok(())`.
+    ///
+    /// Only the checkpoint layout with write policy can create the unverified checkpoint marker,
+    /// e.g. state sync scratchpad and tip.
+    pub fn create_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
+        let marker = self.unverified_checkpoint_marker();
+        if marker.exists() {
+            return Ok(());
+        }
+        open_for_write(&marker)?;
+        sync_path(&self.0.root).map_err(|err| LayoutError::IoError {
+            path: self.0.root.clone(),
+            message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
+            io_err: err,
+        })
+    }
+
+    pub fn create_state_sync_checkpoint_marker(&self) -> Result<(), LayoutError> {
+        let marker = self.state_sync_checkpoint_marker();
+        open_for_write(&marker)?;
+        sync_path(&self.0.root).map_err(|err| LayoutError::IoError {
+            path: self.0.root.clone(),
+            message: "Failed to sync checkpoint directory for the creation of the state sync checkpoint marker".to_string(),
+            io_err: err,
+        })
+    }
+}
+
+impl CheckpointLayout<ReadOnly> {
+    /// Removes the unverified checkpoint marker.
+    /// If the marker does not exist, this function does nothing and returns `Ok(())`.
+    ///
+    /// A readonly checkpoint typically prevents modification to the files in the checkpoint.
+    /// However, the removal of the unverified checkpoint marker is allowed as
+    /// the marker is not part the checkpoint conceptually.
+    fn remove_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
+        let marker = self.unverified_checkpoint_marker();
+        if !marker.exists() {
+            return Ok(());
+        }
+        match std::fs::remove_file(&marker) {
+            Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
+                return Err(LayoutError::IoError {
+                    path: marker.to_path_buf(),
+                    message: "failed to remove file from disk".to_string(),
+                    io_err: err,
+                });
+            }
+            _ => {}
+        }
+
+        // Sync the directory to make sure the marker is removed from disk.
+        // This is strict prerequisite for the manifest computation.
+        sync_path(&self.0.root).map_err(|err| LayoutError::IoError {
+            path: self.0.root.clone(),
+            message: "Failed to sync checkpoint directory for the removal of the unverified checkpoint marker".to_string(),
+            io_err: err,
+        })
+    }
+
+    /// Finalizes the checkpoint by marking all files as read-only, ensuring
+    /// they are fully synchronized to disk, and then removing the unverified checkpoint marker.
+    ///
+    /// This function is necessary due to the asynchronous checkpoint writing.
+    /// Marking the files as read-only and performing a sync operation should be the last step
+    /// before removing the unverified checkpoint marker to prevent data inconsistencies.
+    pub fn finalize_and_remove_unverified_marker(
+        &self,
+        thread_pool: Option<&mut scoped_threadpool::Pool>,
+    ) -> Result<(), LayoutError> {
+        let _result = self.mark_files_readonly_and_sync(thread_pool, true)?;
+        self.remove_unverified_checkpoint_marker()?;
+        // Remove the state sync marker last to avoid briefly appearing as UnverifiedRegular
+        // if a concurrent thread observes the checkpoint between marker removals.
+        self.remove_state_sync_checkpoint_marker()
+    }
+
+    fn remove_state_sync_checkpoint_marker(&self) -> Result<(), LayoutError> {
+        let marker = self.state_sync_checkpoint_marker();
+        if !marker.exists() {
+            return Ok(());
+        }
+        match std::fs::remove_file(&marker) {
+            Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
+                return Err(LayoutError::IoError {
+                    path: marker.to_path_buf(),
+                    message: "failed to remove file from disk".to_string(),
+                    io_err: err,
+                });
+            }
+            _ => {}
+        }
+
+        sync_path(&self.0.root).map_err(|err| LayoutError::IoError {
+            path: self.0.root.clone(),
+            message: "Failed to sync checkpoint directory for the removal of the state sync checkpoint marker".to_string(),
+            io_err: err,
+        })
+    }
+}
+
+pub struct PageMapLayout<Permissions: AccessPolicy> {
+    root: PathBuf,
+    name_stem: String,
+    permissions_tag: PhantomData<Permissions>,
+    // Keep checkpoint alive so that the PageMap can be loaded asynchronously.
+    _checkpoint: Option<CheckpointLayout<Permissions>>,
+}
+
+impl<P> PageMapLayout<P>
+where
+    P: WritePolicy,
+{
+    /// Remove the base file and all overlay files.
+    pub fn delete_files(&self) -> Result<(), LayoutError> {
+        let base = self.base();
+        if base.exists() {
+            std::fs::remove_file(base.clone()).map_err(|err| LayoutError::IoError {
+                path: base,
+                message: "Failed to delete file".to_string(),
+                io_err: err,
+            })?;
+        }
+
+        for overlay in self.existing_overlays()? {
+            std::fs::remove_file(overlay.clone()).map_err(|err| LayoutError::IoError {
+                path: overlay,
+                message: "Failed to delete file".to_string(),
+                io_err: err,
+            })?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
+    /// List of overlay files on disk.
+    ///
+    /// All overlay files have the format {numbers}{name_stem}.overlay`, where `name_stem` distinguises
+    /// between wasm memory, stable memory etc, and the numbers impose an ordering of the
+    /// overlay files, with later alphabetically denoting a higher-priority overlay. The numbers are
+    /// typically the height when the overlay was written and a shard number.
+    ///
+    /// Note that this function returns a `LayoutError`. There is a function implementing the `StorageLayout` trait
+    /// with the same name, return a `Box<dyn Error>`. Calling `existing_overlays()` on a `PageMapLayout` will call
+    /// this function, calling it on a `dyn StorageLayout` will call the trait function. This simplifies error propagation.
+    pub fn existing_overlays(&self) -> Result<Vec<PathBuf>, LayoutError> {
+        let map_error = |err| LayoutError::IoError {
+            path: self.root.clone(),
+            message: "Failed list overlays".to_string(),
+            io_err: err,
+        };
+
+        let name_end = format!("_{}.overlay", self.name_stem);
+
+        let files = std::fs::read_dir(&self.root).map_err(map_error)?;
+        let mut result = Vec::default();
+        for file in files {
+            let path = file.map_err(map_error)?.path();
+            match path.to_str() {
+                Some(p) if p.ends_with(&name_end) => {
+                    result.push(path);
+                }
+                _ => (),
+            }
+        }
+        result.sort();
+
+        Ok(result)
+    }
+
+    /// Helper function to copy the files from `PageMapsLayout` `src` to another `PageMapLayout` `dst`.
+    /// This is used in the context of canister snapshots, where files need to be copied from a canister
+    /// to a snaphsot or vice versa.
+    pub fn copy_or_hardlink_files<W>(
+        log: &ReplicaLogger,
+        src: &PageMapLayout<Permissions>,
+        dst: &PageMapLayout<W>,
+    ) -> Result<(), LayoutError>
+    where
+        W: WritePolicy,
+    {
+        debug_assert_eq!(src.name_stem, dst.name_stem);
+
+        if src.base().exists() {
+            copy_file_and_set_permissions(log, &src.base(), &dst.base()).map_err(|err| {
+                LayoutError::IoError {
+                    path: dst.base(),
+                    message: format!(
+                        "Cannot copy or hardlink file {:?} to {:?}",
+                        src.base(),
+                        dst.base()
+                    ),
+                    io_err: err,
+                }
+            })?;
+        }
+        for overlay in src.existing_overlays()? {
+            let dst_path = dst.root.join(overlay.file_name().unwrap());
+            copy_file_and_set_permissions(log, &overlay, &dst_path).map_err(|err| {
+                LayoutError::IoError {
+                    path: dst.base(),
+                    message: format!("Cannot copy or hardlink file {overlay:?} to {dst_path:?}"),
+                    io_err: err,
+                }
+            })?;
+        }
+
+        Ok(())
+    }
+
+    /// Whether the layout has any files.
+    pub fn exists(&self) -> Result<bool, LayoutError> {
+        Ok(self.base().exists() || !self.existing_overlays()?.is_empty())
+    }
+}
+
+impl<Permissions: AccessPolicy> StorageLayout for PageMapLayout<Permissions> {
+    // The path to the base file.
+    fn base(&self) -> PathBuf {
+        self.root.join(format!("{}.{BIN_FILE}", self.name_stem))
+    }
+
+    /// Overlay path encoding, consistent with `overlay_height()` and `overlay_shard()`
+    fn overlay(&self, height: Height, shard: Shard) -> PathBuf {
+        self.root.join(format!(
+            "{:016x}_{:04x}_{}.{OVERLAY}",
+            height.get(),
+            shard.get(),
+            self.name_stem,
+        ))
+    }
+
+    /// List of overlay files on disk.
+    fn existing_overlays(&self) -> StorageResult<Vec<PathBuf>> {
+        self.existing_overlays()
+            .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)
+    }
+
+    /// Get overlay height as encoded in the file name.
+    fn overlay_height(&self, overlay: &Path) -> StorageResult<Height> {
+        let file_name = overlay
+            .file_name()
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: "No file name".to_owned(),
+            }) as Box<dyn std::error::Error + Send>)?
+            .to_str()
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: "Cannot convert file name to string".to_owned(),
+            }) as Box<dyn std::error::Error + Send>)?;
+        let hex = file_name
+            .split('_')
+            .next()
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: "Cannot parse file name".to_owned(),
+            }) as Box<dyn std::error::Error + Send>)?;
+        u64::from_str_radix(hex, 16)
+            .map(Height::new)
+            .map_err(|err| {
+                Box::new(LayoutError::CorruptedLayout {
+                    path: overlay.to_path_buf(),
+                    message: format!("failed to get height for overlay {hex}: {err}"),
+                }) as Box<dyn std::error::Error + Send>
+            })
+    }
+
+    /// Get overlay shard as encoded in the file name.
+    fn overlay_shard(&self, overlay: &Path) -> StorageResult<Shard> {
+        let file_name = overlay
+            .file_name()
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: "No file name".to_owned(),
+            }) as Box<dyn std::error::Error + Send>)?
+            .to_str()
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: "Cannot convert file name to string".to_owned(),
+            }) as Box<dyn std::error::Error + Send>)?;
+        let hex = file_name
+            .split('_')
+            .nth(1)
+            .ok_or(Box::new(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: "Cannot parse file name".to_owned(),
+            }) as Box<dyn std::error::Error + Send>)?;
+        u64::from_str_radix(hex, 16).map(Shard::new).map_err(|err| {
+            Box::new(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: format!("failed to get shard for overlay {hex}: {err}"),
+            }) as Box<dyn std::error::Error + Send>
+        })
     }
 }
 
 pub struct CanisterLayout<Permissions: AccessPolicy> {
     canister_root: PathBuf,
     permissions_tag: PhantomData<Permissions>,
+    checkpoint: Option<CheckpointLayout<Permissions>>,
 }
 
 impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
-    pub fn new(canister_root: PathBuf) -> Result<Self, LayoutError> {
+    pub fn new(
+        canister_root: PathBuf,
+        checkpoint: &CheckpointLayout<Permissions>,
+    ) -> Result<Self, LayoutError> {
         Permissions::check_dir(&canister_root)?;
         Ok(Self {
             canister_root,
             permissions_tag: PhantomData,
+            checkpoint: Some(checkpoint.clone()),
+        })
+    }
+
+    pub fn new_untracked(canister_root: PathBuf) -> Result<Self, LayoutError> {
+        Permissions::check_dir(&canister_root)?;
+        Ok(Self {
+            canister_root,
+            permissions_tag: PhantomData,
+            checkpoint: None,
         })
     }
 
@@ -952,60 +2312,194 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
     }
 
     pub fn queues(&self) -> ProtoFileWith<pb_queues::CanisterQueues, Permissions> {
-        self.canister_root.join("queues.pbuf").into()
+        self.canister_root.join(QUEUES_FILE).into()
     }
 
     pub fn wasm(&self) -> WasmFile<Permissions> {
-        self.canister_root.join("software.wasm").into()
+        WasmFile {
+            path: self.canister_root.join(WASM_FILE),
+            permissions_tag: PhantomData,
+            _checkpoint: self.checkpoint.clone(),
+        }
     }
 
     pub fn canister(
         &self,
     ) -> ProtoFileWith<pb_canister_state_bits::CanisterStateBits, Permissions> {
-        self.canister_root.join("canister.pbuf").into()
+        self.canister_root.join(CANISTER_FILE).into()
     }
 
-    pub fn vmemory_0(&self) -> PathBuf {
-        self.canister_root.join("vmemory_0.bin")
+    /// List all PageMaps with at least one file.
+    pub fn all_existing_pagemaps(&self) -> Result<Vec<PageMapLayout<Permissions>>, LayoutError> {
+        let mut result = Vec::new();
+        for pagemap in [
+            self.vmemory_0(),
+            self.stable_memory(),
+            self.wasm_chunk_store(),
+            self.log_memory_store(),
+        ]
+        .into_iter()
+        {
+            if pagemap.exists()? {
+                result.push(pagemap)
+            }
+        }
+        Ok(result)
     }
 
-    pub fn stable_memory_blob(&self) -> PathBuf {
-        self.canister_root.join("stable_memory.bin")
-    }
-}
-
-pub struct BitcoinStateLayout<Permissions: AccessPolicy> {
-    bitcoin_root: PathBuf,
-    permissions_tag: PhantomData<Permissions>,
-}
-
-impl<Permissions: AccessPolicy> BitcoinStateLayout<Permissions> {
-    pub fn new(bitcoin_root: PathBuf) -> Result<Self, LayoutError> {
-        Permissions::check_dir(&bitcoin_root)?;
-        Ok(Self {
-            bitcoin_root,
+    pub fn vmemory_0(&self) -> PageMapLayout<Permissions> {
+        PageMapLayout {
+            root: self.canister_root.clone(),
+            name_stem: VMEMORY_0.into(),
             permissions_tag: PhantomData,
+            _checkpoint: self.checkpoint.clone(),
+        }
+    }
+
+    pub fn stable_memory(&self) -> PageMapLayout<Permissions> {
+        PageMapLayout {
+            root: self.canister_root.clone(),
+            name_stem: STABLE_MEMORY.into(),
+            permissions_tag: PhantomData,
+            _checkpoint: self.checkpoint.clone(),
+        }
+    }
+
+    pub fn wasm_chunk_store(&self) -> PageMapLayout<Permissions> {
+        PageMapLayout {
+            root: self.canister_root.clone(),
+            name_stem: WASM_CHUNK_STORE.into(),
+            permissions_tag: PhantomData,
+            _checkpoint: self.checkpoint.clone(),
+        }
+    }
+
+    pub fn log_memory_store(&self) -> PageMapLayout<Permissions> {
+        PageMapLayout {
+            root: self.canister_root.clone(),
+            name_stem: LOG_MEMORY_STORE.into(),
+            permissions_tag: PhantomData,
+            _checkpoint: self.checkpoint.clone(),
+        }
+    }
+}
+
+pub struct SnapshotLayout<Permissions: AccessPolicy> {
+    snapshot_root: PathBuf,
+    permissions_tag: PhantomData<Permissions>,
+    checkpoint: Option<CheckpointLayout<Permissions>>,
+}
+
+impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
+    pub fn new(
+        snapshot_root: PathBuf,
+        checkpoint: &CheckpointLayout<Permissions>,
+    ) -> Result<Self, LayoutError> {
+        Permissions::check_dir(&snapshot_root)?;
+        Ok(Self {
+            snapshot_root,
+            permissions_tag: PhantomData,
+            checkpoint: Some(checkpoint.clone()),
         })
     }
 
+    pub fn new_untracked(snapshot_root: PathBuf) -> Result<Self, LayoutError> {
+        Permissions::check_dir(&snapshot_root)?;
+        Ok(Self {
+            snapshot_root,
+            permissions_tag: PhantomData,
+            checkpoint: None,
+        })
+    }
     pub fn raw_path(&self) -> PathBuf {
-        self.bitcoin_root.clone()
+        self.snapshot_root.clone()
     }
 
-    pub fn bitcoin_state(&self) -> ProtoFileWith<pb_bitcoin::BitcoinStateBits, Permissions> {
-        self.bitcoin_root.join("state.pbuf").into()
+    pub fn wasm(&self) -> WasmFile<Permissions> {
+        WasmFile {
+            path: self.snapshot_root.join(WASM_FILE),
+            permissions_tag: PhantomData,
+            _checkpoint: self.checkpoint.clone(),
+        }
     }
 
-    pub fn utxos_small(&self) -> PathBuf {
-        self.bitcoin_root.join("utxos_small.bin")
+    pub fn snapshot(
+        &self,
+    ) -> ProtoFileWith<pb_canister_snapshot_bits::CanisterSnapshotBits, Permissions> {
+        self.snapshot_root.join(SNAPSHOT_FILE).into()
     }
 
-    pub fn utxos_medium(&self) -> PathBuf {
-        self.bitcoin_root.join("utxos_medium.bin")
+    /// List all PageMaps with at least one file.
+    pub fn all_existing_pagemaps(&self) -> Result<Vec<PageMapLayout<Permissions>>, LayoutError> {
+        let mut result = Vec::new();
+        for pagemap in [
+            self.vmemory_0(),
+            self.stable_memory(),
+            self.wasm_chunk_store(),
+            // log_memory_store is not included in canister snapshots.
+        ]
+        .into_iter()
+        {
+            if pagemap.exists()? {
+                result.push(pagemap)
+            }
+        }
+        Ok(result)
     }
 
-    pub fn address_outpoints(&self) -> PathBuf {
-        self.bitcoin_root.join("address_outpoints.bin")
+    pub fn vmemory_0(&self) -> PageMapLayout<Permissions> {
+        PageMapLayout {
+            root: self.snapshot_root.clone(),
+            name_stem: VMEMORY_0.into(),
+            permissions_tag: PhantomData,
+            _checkpoint: self.checkpoint.clone(),
+        }
+    }
+
+    pub fn stable_memory(&self) -> PageMapLayout<Permissions> {
+        PageMapLayout {
+            root: self.snapshot_root.clone(),
+            name_stem: STABLE_MEMORY.into(),
+            permissions_tag: PhantomData,
+            _checkpoint: self.checkpoint.clone(),
+        }
+    }
+
+    pub fn wasm_chunk_store(&self) -> PageMapLayout<Permissions> {
+        PageMapLayout {
+            root: self.snapshot_root.clone(),
+            name_stem: WASM_CHUNK_STORE.into(),
+            permissions_tag: PhantomData,
+            _checkpoint: self.checkpoint.clone(),
+        }
+    }
+
+    // log_memory_store is not included in canister snapshots.
+}
+
+impl<P> SnapshotLayout<P>
+where
+    P: WritePolicy,
+{
+    /// Remove the entire directory for the snapshot.
+    pub fn delete_dir(&self) -> Result<(), LayoutError> {
+        let map_error = |err| LayoutError::IoError {
+            path: self.raw_path(),
+            message: "Cannot remove snapshot.".to_string(),
+            io_err: err,
+        };
+
+        std::fs::remove_dir_all(self.raw_path()).map_err(map_error)?;
+
+        // Remove the parent directory named after the canister if this was the last snapshot of that canister.
+        // Unwrap is safe as snapshots are not at located at `/`.
+        let parent = self.raw_path().parent().unwrap().to_owned();
+
+        if parent.read_dir().map_err(map_error)?.next().is_none() {
+            std::fs::remove_dir(&parent).map_err(map_error)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -1013,6 +2507,19 @@ fn open_for_write(path: &Path) -> Result<std::fs::File, LayoutError> {
     OpenOptions::new()
         .write(true)
         .create(true)
+        .truncate(true)
+        .open(path)
+        .map_err(|err| LayoutError::IoError {
+            path: path.to_path_buf(),
+            message: "Failed to open file for write".to_string(),
+            io_err: err,
+        })
+}
+
+fn create_for_write(path: &Path) -> Result<std::fs::File, LayoutError> {
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
         .truncate(true)
         .open(path)
         .map_err(|err| LayoutError::IoError {
@@ -1033,6 +2540,26 @@ fn open_for_read(path: &Path) -> Result<std::fs::File, LayoutError> {
         })
 }
 
+/// Removes the given file, returning an error if the file does not exist, as
+/// well as for any other I/O error.
+fn remove_existing_file(path: &Path) -> Result<(), LayoutError> {
+    std::fs::remove_file(path).map_err(|err| LayoutError::IoError {
+        path: path.to_path_buf(),
+        message: "failed to remove file from disk".to_string(),
+        io_err: err,
+    })
+}
+
+/// Tries removing the given file. Returns `Ok(())` if the file was deleted or
+/// did not exist; or a `LayoutError::IoError` otherwise.
+fn try_remove_file(path: &Path) -> Result<(), LayoutError> {
+    if path.exists() {
+        remove_existing_file(path)
+    } else {
+        Ok(())
+    }
+}
+
 pub struct ProtoFileWith<T, Permissions> {
     path: PathBuf,
     content_tag: PhantomData<T>,
@@ -1043,6 +2570,11 @@ impl<T, Permission> ProtoFileWith<T, Permission> {
     pub fn raw_path(&self) -> &Path {
         &self.path
     }
+
+    /// Removes the file if it exists, else does nothing.
+    pub fn try_remove_file(&self) -> Result<(), LayoutError> {
+        try_remove_file(&self.path)
+    }
 }
 
 impl<T, P> ProtoFileWith<T, P>
@@ -1051,36 +2583,38 @@ where
     P: WritePolicy,
 {
     pub fn serialize(&self, value: T) -> Result<(), LayoutError> {
-        let mut serialized = Vec::new();
-        value.encode(&mut serialized).unwrap_or_else(|e| {
-            panic!(
-                "Failed to serialize an object of type {} to protobuf: {}",
-                std::any::type_name::<T>(),
-                e
-            )
-        });
+        // There should be no existing file, due to how we initialize the tip.
+        // We delete just in case.
+        self.try_remove_file()?;
 
-        let file = open_for_write(&self.path)?;
+        let serialized = value.encode_to_vec();
+
+        if serialized.is_empty() {
+            return Ok(());
+        }
+
+        let file = create_for_write(&self.path)?;
         let mut writer = std::io::BufWriter::new(file);
         writer
-            .write(&serialized)
+            .write_all(&serialized)
             .map_err(|io_err| LayoutError::IoError {
                 path: self.path.clone(),
                 message: "failed to write serialized protobuf to disk".to_string(),
                 io_err,
             })?;
 
-        let file = writer.into_inner().map_err(|err| LayoutError::IoError {
+        writer.into_inner().map_err(|err| LayoutError::IoError {
             path: self.path.clone(),
             message: "failed to flush buffers to file".to_string(),
             io_err: std::io::Error::new(err.error().kind(), err.to_string()),
         })?;
 
-        file.sync_all().map_err(|err| LayoutError::IoError {
+        mark_readonly_if_file(&self.path).map_err(|err| LayoutError::IoError {
             path: self.path.clone(),
-            message: "failed to sync data to disk".to_string(),
+            message: "failed to mark protobuf as readonly".to_string(),
             io_err: err,
-        })
+        })?;
+        Ok(())
     }
 }
 
@@ -1089,9 +2623,19 @@ where
     T: prost::Message + std::default::Default,
     P: ReadPolicy,
 {
+    /// Deserializes the value from the underlying file.
+    /// If the file does not exist, deserialize as an empty buffer.
+    /// Returns an error for all other I/O errors.
     pub fn deserialize(&self) -> Result<T, LayoutError> {
-        let file = open_for_read(&self.path)?;
-        self.deserialize_file(file)
+        match open_for_read(&self.path) {
+            Ok(f) => self.deserialize_file(f),
+            Err(LayoutError::IoError { io_err, .. })
+                if io_err.kind() == std::io::ErrorKind::NotFound =>
+            {
+                self.deserialize_buffer(&[])
+            }
+            Err(err) => Err(err),
+        }
     }
 
     fn deserialize_file(&self, f: std::fs::File) -> Result<T, LayoutError> {
@@ -1100,7 +2644,11 @@ where
             message: "failed to mmap a file".to_string(),
             io_err,
         })?;
-        T::decode(mmap.as_slice()).map_err(|err| LayoutError::CorruptedLayout {
+        self.deserialize_buffer(mmap.as_slice())
+    }
+
+    fn deserialize_buffer(&self, buf: &[u8]) -> Result<T, LayoutError> {
+        T::decode(buf).map_err(|err| LayoutError::CorruptedLayout {
             path: self.path.clone(),
             message: format!(
                 "failed to deserialize an object of type {} from protobuf: {}",
@@ -1108,21 +2656,6 @@ where
                 err
             ),
         })
-    }
-
-    /// Deserializes the value if the underlying file exists.
-    /// If the proto file does not exist, returns Ok(None).
-    /// Returns an error for all other I/O errors.
-    pub fn deserialize_opt(&self) -> Result<Option<T>, LayoutError> {
-        match open_for_read(&self.path) {
-            Ok(f) => self.deserialize_file(f).map(Some),
-            Err(LayoutError::IoError { io_err, .. })
-                if io_err.kind() == std::io::ErrorKind::NotFound =>
-            {
-                Ok(None)
-            }
-            Err(err) => Err(err),
-        }
     }
 }
 
@@ -1142,32 +2675,100 @@ where
 /// A value of type `WasmFile` declares that some path should contain
 /// a Wasm module and provides a way to read it from disk or write it
 /// to disk.
-pub struct WasmFile<Permissions> {
+pub struct WasmFile<Permissions: AccessPolicy> {
     path: PathBuf,
     permissions_tag: PhantomData<Permissions>,
+    // Keep checkpoint alive so that the WasmFile can be loaded asynchronously.
+    _checkpoint: Option<CheckpointLayout<Permissions>>,
 }
 
-impl<T> WasmFile<T> {
+impl<Permissions: AccessPolicy> WasmFile<Permissions> {
     pub fn raw_path(&self) -> &Path {
         &self.path
     }
+}
+
+impl<T> MemoryMappableWasmFile for WasmFile<T>
+where
+    T: ReadPolicy,
+{
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+/// Checks that the given wasm file can be memory-mapped successfully.
+pub fn try_mmap_wasm_file(
+    wasm_file_layout: &dyn MemoryMappableWasmFile,
+) -> Result<(), LayoutError> {
+    wasm_file_layout
+        .mmap_file()
+        .map_err(|err| LayoutError::IoError {
+            path: wasm_file_layout.path().to_path_buf(),
+            message: "Failed to validate wasm file".to_string(),
+            io_err: err,
+        })?;
+    Ok(())
 }
 
 impl<T> WasmFile<T>
 where
     T: ReadPolicy,
 {
-    pub fn deserialize(
-        &self,
-        module_hash: Option<WasmHash>,
-    ) -> Result<CanisterModule, LayoutError> {
-        CanisterModule::new_from_file(self.path.clone(), module_hash).map_err(|err| {
+    /// Lazily loads a Wasm file with a known `module_hash` and optionally a known file `len`.
+    ///
+    /// If the file length is already known before calling this function,
+    /// passing it into the function avoids fetching the file's metadata, which can
+    /// be a relatively expensive operation when dealing with a large number of files.
+    /// This is similar to providing the `module_hash` upfront to avoid recomputing it.
+    pub fn lazy_load_with_module_hash(
+        self,
+        module_hash: WasmHash,
+        len: Option<usize>,
+    ) -> Result<CanisterModule, LayoutError>
+    where
+        T: Send + Sync + 'static,
+    {
+        let path = self.path.clone();
+        CanisterModule::new_from_file(Box::new(self), module_hash, len).map_err(|err| {
             LayoutError::IoError {
-                path: self.path.clone(),
-                message: "Failed to read file contents".to_string(),
+                path,
+                message: "Failed to load wasm file lazily".to_string(),
                 io_err: err,
             }
         })
+    }
+
+    /// Hardlink the (readonly) file from `src` to `dst`.
+    pub fn hardlink_file<W>(src: &WasmFile<T>, dst: &WasmFile<W>) -> Result<(), LayoutError>
+    where
+        W: WritePolicy,
+    {
+        let src_path = src.raw_path();
+        let dst_path = dst.raw_path();
+
+        if !src_path.exists() {
+            return Ok(());
+        }
+
+        #[cfg(debug_assertions)]
+        {
+            let src_metadata = src_path.metadata().map_err(|err| LayoutError::IoError {
+                path: src_path.to_path_buf(),
+                message: "Failed to read metadata".to_string(),
+                io_err: err,
+            })?;
+            debug_assert!(src_metadata.permissions().readonly());
+        }
+
+        std::fs::hard_link(src_path, dst_path).map_err(|err| LayoutError::IoError {
+            path: src_path.to_path_buf(),
+            message: format!(
+                "Failed to hardlink {src_path:?} to {dst_path:?} while making a canister snapshot",
+            ),
+            io_err: err,
+        })?;
+        Ok(())
     }
 }
 
@@ -1176,7 +2777,10 @@ where
     T: WritePolicy,
 {
     pub fn serialize(&self, wasm: &CanisterModule) -> Result<(), LayoutError> {
-        let mut file = open_for_write(&self.path)?;
+        // If there already exists a wasm file, delete it first to avoid writing hardlinked/readonly files.
+        self.try_delete_file()?;
+
+        let mut file = create_for_write(&self.path)?;
         file.write_all(wasm.as_slice())
             .map_err(|err| LayoutError::IoError {
                 path: self.path.clone(),
@@ -1194,286 +2798,19 @@ where
             path: self.path.clone(),
             message: "failed to sync wasm binary to disk".to_string(),
             io_err: err,
-        })
+        })?;
+
+        mark_readonly_if_file(&self.path).map_err(|err| LayoutError::IoError {
+            path: self.path.clone(),
+            message: "failed to mark wasm binary as readonly".to_string(),
+            io_err: err,
+        })?;
+        Ok(())
     }
-}
 
-impl<Permissions> From<PathBuf> for WasmFile<Permissions> {
-    fn from(path: PathBuf) -> Self {
-        Self {
-            path,
-            permissions_tag: PhantomData,
-        }
-    }
-}
-
-impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
-    fn from(item: CanisterStateBits) -> Self {
-        Self {
-            controllers: item
-                .controllers
-                .into_iter()
-                .map(|controller| controller.into())
-                .collect(),
-            last_full_execution_round: item.last_full_execution_round.get(),
-            call_context_manager: item.call_context_manager.as_ref().map(|v| v.into()),
-            compute_allocation: item.compute_allocation.as_percent(),
-            accumulated_priority: item.accumulated_priority.value(),
-            execution_state_bits: item.execution_state_bits.as_ref().map(|v| v.into()),
-            memory_allocation: item.memory_allocation.bytes().get(),
-            freeze_threshold: item.freeze_threshold.get(),
-            cycles_balance: Some(item.cycles_balance.into()),
-            cycles_debit: Some(item.cycles_debit.into()),
-            canister_status: Some((&item.status).into()),
-            scheduled_as_first: item.scheduled_as_first,
-            skipped_round_due_to_no_messages: item.skipped_round_due_to_no_messages,
-            executed: item.executed,
-            interruped_during_execution: item.interruped_during_execution,
-            certified_data: item.certified_data.clone(),
-            consumed_cycles_since_replica_started: Some(
-                (&item.consumed_cycles_since_replica_started).into(),
-            ),
-            stable_memory_size64: item.stable_memory_size.get() as u64,
-            heap_delta_debit: item.heap_delta_debit.get(),
-            install_code_debit: item.install_code_debit.get(),
-            time_of_last_allocation_charge_nanos: item.time_of_last_allocation_charge_nanos,
-            task_queue: item.task_queue.iter().map(|v| v.into()).collect(),
-        }
-    }
-}
-
-impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
-    type Error = ProxyDecodeError;
-
-    fn try_from(value: pb_canister_state_bits::CanisterStateBits) -> Result<Self, Self::Error> {
-        let execution_state_bits = value
-            .execution_state_bits
-            .map(|b| b.try_into())
-            .transpose()?;
-        let call_context_manager = value
-            .call_context_manager
-            .map(|c| c.try_into())
-            .transpose()?;
-
-        let consumed_cycles_since_replica_started = match try_from_option_field(
-            value.consumed_cycles_since_replica_started,
-            "CanisterStateBits::consumed_cycles_since_replica_started",
-        ) {
-            Ok(consumed_cycles) => consumed_cycles,
-            Err(_) => NominalCycles::default(),
-        };
-
-        let mut controllers = BTreeSet::new();
-        for controller in value.controllers.into_iter() {
-            controllers.insert(PrincipalId::try_from(controller)?);
-        }
-
-        let cycles_balance =
-            try_from_option_field(value.cycles_balance, "CanisterStateBits::cycles_balance")?;
-
-        let cycles_debit = value
-            .cycles_debit
-            .map(|c| c.try_into())
-            .transpose()?
-            .unwrap_or_else(Cycles::zero);
-
-        let task_queue = value
-            .task_queue
-            .into_iter()
-            .map(|v| v.try_into())
-            .collect::<Result<_, _>>()?;
-
-        Ok(Self {
-            controllers,
-            last_full_execution_round: value.last_full_execution_round.into(),
-            call_context_manager,
-            compute_allocation: ComputeAllocation::try_from(value.compute_allocation).map_err(
-                |e| ProxyDecodeError::ValueOutOfRange {
-                    typ: "ComputeAllocation",
-                    err: format!("{:?}", e),
-                },
-            )?,
-            accumulated_priority: value.accumulated_priority.into(),
-            execution_state_bits,
-            memory_allocation: MemoryAllocation::try_from(NumBytes::from(value.memory_allocation))
-                .map_err(|e| ProxyDecodeError::ValueOutOfRange {
-                    typ: "MemoryAllocation",
-                    err: format!("{:?}", e),
-                })?,
-            freeze_threshold: NumSeconds::from(value.freeze_threshold),
-            cycles_balance,
-            cycles_debit,
-            status: try_from_option_field(
-                value.canister_status,
-                "CanisterStateBits::canister_status",
-            )?,
-            scheduled_as_first: value.scheduled_as_first,
-            skipped_round_due_to_no_messages: value.skipped_round_due_to_no_messages,
-            executed: value.executed,
-            interruped_during_execution: value.interruped_during_execution,
-            certified_data: value.certified_data,
-            consumed_cycles_since_replica_started,
-            stable_memory_size: NumWasmPages::from(value.stable_memory_size64 as usize),
-            heap_delta_debit: NumBytes::from(value.heap_delta_debit),
-            install_code_debit: NumInstructions::from(value.install_code_debit),
-            time_of_last_allocation_charge_nanos: try_from_option_field(
-                value.time_of_last_allocation_charge_nanos,
-                "CanisterStateBits::time_of_last_allocation_charge_nanos",
-            )
-            .ok(),
-            task_queue,
-        })
-    }
-}
-
-impl From<&ExecutionStateBits> for pb_canister_state_bits::ExecutionStateBits {
-    fn from(item: &ExecutionStateBits) -> Self {
-        Self {
-            exported_globals: item
-                .exported_globals
-                .iter()
-                .map(|global| global.into())
-                .collect(),
-            heap_size: item
-                .heap_size
-                .get()
-                .try_into()
-                .expect("Canister heap size didn't fit into 32 bits"),
-            exports: (&item.exports).into(),
-            last_executed_round: item.last_executed_round.get(),
-            metadata: Some((&item.metadata).into()),
-            binary_hash: item.binary_hash.as_ref().map(|h| h.to_vec()),
-        }
-    }
-}
-
-impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits {
-    type Error = ProxyDecodeError;
-    fn try_from(value: pb_canister_state_bits::ExecutionStateBits) -> Result<Self, Self::Error> {
-        let mut globals = Vec::with_capacity(value.exported_globals.len());
-        for g in value.exported_globals.into_iter() {
-            globals.push(g.try_into()?);
-        }
-        let binary_hash = match value.binary_hash {
-            Some(hash) => {
-                let hash: [u8; 32] =
-                    hash.try_into()
-                        .map_err(|e| ProxyDecodeError::ValueOutOfRange {
-                            typ: "BinaryHash",
-                            err: format!("Expected a 32-byte long module hash, got {:?}", e),
-                        })?;
-                Some(hash.into())
-            }
-            None => None,
-        };
-
-        Ok(Self {
-            exported_globals: globals,
-            heap_size: (value.heap_size as usize).into(),
-            exports: value.exports.try_into()?,
-            last_executed_round: value.last_executed_round.into(),
-            metadata: try_from_option_field(value.metadata, "ExecutionStateBits::metadata")
-                .unwrap_or_default(),
-            binary_hash,
-        })
-    }
-}
-
-impl From<&BitcoinStateBits> for pb_bitcoin::BitcoinStateBits {
-    fn from(item: &BitcoinStateBits) -> Self {
-        pb_bitcoin::BitcoinStateBits {
-            adapter_queues: Some((&item.adapter_queues).into()),
-            unstable_blocks: Some((&item.unstable_blocks).into()),
-            stable_height: item.stable_height,
-            network: match item.network {
-                Network::Testnet => 1,
-                Network::Bitcoin => 2,
-                Network::Regtest => 3,
-                // TODO(EXC-1096): Define our Network struct to avoid this panic.
-                _ => panic!("Invalid network ID"),
-            },
-            utxos_large: item
-                .utxos_large
-                .iter()
-                .map(|(outpoint, (txout, height))| pb_bitcoin::Utxo {
-                    outpoint: Some(pb_bitcoin::OutPoint {
-                        txid: outpoint.txid.to_vec(),
-                        vout: outpoint.vout,
-                    }),
-                    txout: Some(pb_bitcoin::TxOut {
-                        value: txout.value,
-                        script_pubkey: txout.script_pubkey.to_bytes(),
-                    }),
-                    height: *height,
-                })
-                .collect(),
-        }
-    }
-}
-
-impl TryFrom<pb_bitcoin::BitcoinStateBits> for BitcoinStateBits {
-    type Error = ProxyDecodeError;
-
-    fn try_from(value: pb_bitcoin::BitcoinStateBits) -> Result<Self, Self::Error> {
-        let adapter_queues: bitcoin_state::AdapterQueues =
-            try_from_option_field(value.adapter_queues, "BitcoinStateBits::adapter_queues")?;
-
-        // NOTE: The `unwrap_or_default` here is needed temporarily for backward compatibility.
-        // TODO(EXC-1094): Replace the `unwrap_or_default` with an error once this change
-        //                 is deployed to prod.
-        let unstable_blocks: bitcoin_state::UnstableBlocks =
-            try_from_option_field(value.unstable_blocks, "BitcoinStateBits::unstable_blocks")
-                .unwrap_or_default();
-        Ok(BitcoinStateBits {
-            adapter_queues,
-            unstable_blocks,
-            stable_height: value.stable_height,
-            network: match value.network {
-                0 => {
-                    // No network specified. Assume "testnet".
-                    // NOTE: This is needed temporarily for protobuf backward compatibility.
-                    // TODO(EXC-1094): Remove this condition once it has been deployed to prod.
-                    Network::Testnet
-                }
-                1 => Network::Testnet,
-                2 => Network::Bitcoin,
-                3 => Network::Regtest,
-                other => {
-                    return Err(ProxyDecodeError::ValueOutOfRange {
-                        typ: "Network",
-                        err: format!(
-                            "Expected 0 or 1 (testnet), 2 (mainnet), 3 (regtest), got {}",
-                            other
-                        ),
-                    })
-                }
-            },
-            utxos_large: value
-                .utxos_large
-                .into_iter()
-                .map(|utxo| {
-                    let outpoint = utxo
-                        .outpoint
-                        .map(|o| {
-                            OutPoint::new(
-                                Txid::from_hash(Hash::from_slice(&o.txid).unwrap()),
-                                o.vout,
-                            )
-                        })
-                        .unwrap();
-
-                    let tx_out = utxo
-                        .txout
-                        .map(|t| TxOut {
-                            value: t.value,
-                            script_pubkey: Script::from(t.script_pubkey),
-                        })
-                        .unwrap();
-
-                    (outpoint, (tx_out, utxo.height))
-                })
-                .collect(),
-        })
+    /// Removes the file if it exists, else does nothing.
+    pub fn try_delete_file(&self) -> Result<(), LayoutError> {
+        try_remove_file(&self.path)
     }
 }
 
@@ -1486,7 +2823,7 @@ fn dir_file_names(p: &Path) -> std::io::Result<Vec<String>> {
         let string = e?.file_name().into_string().map_err(|file_name| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("failed to convert file name {:?} to string", file_name),
+                format!("failed to convert file name {file_name:?} to string"),
             )
         })?;
         result.push(string);
@@ -1494,30 +2831,93 @@ fn dir_file_names(p: &Path) -> std::io::Result<Vec<String>> {
     Ok(result)
 }
 
-#[derive(Clone, Copy)]
-enum FilePermissions {
-    ReadOnly,
-    ReadWrite,
+/// Marks a file as readonly if it's not already readonly.
+/// Returns true if the file was actually made readonly (was writable before),
+/// false if the file was already readonly or is a directory.
+fn mark_readonly_if_file(path: &Path) -> std::io::Result<bool> {
+    let metadata = path.metadata()?;
+    if !metadata.is_dir() {
+        let mut permissions = metadata.permissions();
+        if !permissions.readonly() {
+            permissions.set_readonly(true);
+            std::fs::set_permissions(path, permissions).map_err(|e| {
+                Error::new(
+                    e.kind(),
+                    format!(
+                        "failed to set readonly permissions for file {}: {}",
+                        path.display(),
+                        e
+                    ),
+                )
+            })?;
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn dir_list_recursive(
+    path: &Path,
+    thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
+) -> std::io::Result<Vec<PathBuf>> {
+    let mut result = Vec::new();
+    let mut paths_to_iterate = vec![path.to_path_buf()];
+    while !paths_to_iterate.is_empty() {
+        let next_paths_to_iterate = maybe_parallel_map(
+            thread_pool,
+            paths_to_iterate.iter(),
+            |path| -> std::io::Result<Vec<PathBuf>> {
+                let metadata = path.metadata()?;
+                if metadata.is_dir() {
+                    path.read_dir()?
+                        .map(|entry_result| entry_result.map(|entry| entry.path()))
+                        .collect::<Result<Vec<_>, _>>()
+                } else {
+                    Ok(Vec::new())
+                }
+            },
+        )
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .flatten()
+        .collect();
+        result.append(&mut paths_to_iterate);
+        paths_to_iterate = next_paths_to_iterate;
+    }
+    Ok(result)
+}
+
+#[derive(Copy, Clone)]
+enum FSync {
+    Yes,
+    No,
 }
 
 /// Recursively copies `src` to `dst` using the given permission policy for
 /// files. If a thread-pool is provided then files are copied in parallel.
+/// Syncs the target files if `fsync` is set to true.
 ///
 /// NOTE: If the function returns an error, the changes to the file
 /// system applied by this function are not undone.
-fn copy_recursively(
+fn copy_recursively<P>(
     log: &ReplicaLogger,
+    metrics: &StateLayoutMetrics,
     root_src: &Path,
     root_dst: &Path,
-    dst_permissions: FilePermissions,
-    thread_pool: Option<&mut scoped_threadpool::Pool>,
-) -> std::io::Result<()> {
+    fsync: FSync,
+    file_copy_instruction: P,
+    mut thread_pool: Option<&mut scoped_threadpool::Pool>,
+) -> std::io::Result<()>
+where
+    P: Fn(&Path) -> CopyInstruction,
+{
     let mut copy_plan = CopyPlan {
         create_and_sync_dir: vec![],
         copy_and_sync_file: vec![],
     };
 
-    build_copy_plan(root_src, root_dst, &mut copy_plan)?;
+    build_copy_plan(root_src, root_dst, &file_copy_instruction, &mut copy_plan)?;
 
     // Ensure that the target root directory exists.
     // Note: all the files and directories below the target root (including the
@@ -1531,61 +2931,87 @@ fn copy_recursively(
     //   2. We only invoke this function with DST being a child of a
     //   directory that is wiped out on replica start, so we don't care much
     //   about this temporary directory being properly synced.
-    std::fs::create_dir_all(&root_dst)?;
-    match thread_pool {
-        Some(thread_pool) => {
-            let results = parallel_map(thread_pool, copy_plan.create_and_sync_dir.iter(), |op| {
-                std::fs::create_dir_all(&op.dst)
-            });
-            results.into_iter().try_for_each(identity)?;
-            let results = parallel_map(thread_pool, copy_plan.copy_and_sync_file.iter(), |op| {
-                copy_and_sync_file(log, &op.src, &op.dst, dst_permissions)
-            });
-            results.into_iter().try_for_each(identity)?;
-            let results = parallel_map(thread_pool, copy_plan.create_and_sync_dir.iter(), |op| {
-                sync_path(&op.dst)
-            });
-            results.into_iter().try_for_each(identity)?;
-        }
-        None => {
-            for op in copy_plan.create_and_sync_dir.iter() {
-                std::fs::create_dir_all(&op.dst)?;
-            }
-            for op in copy_plan.copy_and_sync_file.into_iter() {
-                copy_and_sync_file(log, &op.src, &op.dst, dst_permissions)?;
-            }
-            for op in copy_plan.create_and_sync_dir.iter() {
-                sync_path(&op.dst)?;
-            }
-        }
+    std::fs::create_dir_all(root_dst)?;
+    let results = maybe_parallel_map(
+        &mut thread_pool,
+        copy_plan.create_and_sync_dir.iter(),
+        |op| {
+            // We keep directories writeable to make sure we can rename
+            // them or delete the files.
+            std::fs::create_dir_all(&op.dst)
+        },
+    );
+    results.into_iter().try_for_each(identity)?;
+    let results = maybe_parallel_map(
+        &mut thread_pool,
+        copy_plan.copy_and_sync_file.iter(),
+        |op| copy_checkpoint_file(log, metrics, &op.src, &op.dst, fsync),
+    );
+    results.into_iter().try_for_each(identity)?;
+    if let FSync::Yes = fsync {
+        let results = maybe_parallel_map(
+            &mut thread_pool,
+            copy_plan.create_and_sync_dir.iter(),
+            |op| sync_path(&op.dst),
+        );
+        results.into_iter().try_for_each(identity)?;
     }
     Ok(())
 }
 
 /// Copies the given file and ensures that the `read/write` permission of the
 /// target file match the given permission.
-fn copy_and_sync_file(
+/// This function is used for files inside checkpoints, so the `src` file is intended to be
+/// marked readonly.
+/// Syncs the target file if `fsync` is true.
+fn copy_checkpoint_file(
     log: &ReplicaLogger,
+    metrics: &StateLayoutMetrics,
     src: &Path,
     dst: &Path,
-    dst_permissions: FilePermissions,
+    fsync: FSync,
 ) -> std::io::Result<()> {
-    do_copy(log, src, dst)?;
-
-    // We keep the directory writable though to make sure we can rename
-    // them or delete the files.
-    let dst_metadata = dst.metadata()?;
-    let mut permissions = dst_metadata.permissions();
-    match dst_permissions {
-        FilePermissions::ReadOnly => permissions.set_readonly(true),
-        FilePermissions::ReadWrite => permissions.set_readonly(false),
+    // We don't expect to copy anything that isn't readonly, but just in case we handle it correctly below.
+    if !src.metadata()?.permissions().readonly() {
+        warn!(every_n_seconds => 5, log, "Copying writable file {:?}", src);
+        metrics
+            .state_layout_error_count
+            .with_label_values(&["copy_writable_checkpoint"])
+            .inc();
+        debug_assert!(false);
     }
-    std::fs::set_permissions(&dst, permissions)?;
-    sync_path(&dst)
+
+    copy_file_and_set_permissions(log, src, dst)?;
+
+    match fsync {
+        FSync::Yes => sync_path(dst),
+        FSync::No => Ok(()),
+    }
+}
+
+/// Copies the given file and ensures that the `read/write` permission of the
+/// target file match the given permission.
+fn copy_file_and_set_permissions(log: &ReplicaLogger, src: &Path, dst: &Path) -> Result<(), Error> {
+    if src.metadata()?.permissions().readonly() {
+        std::fs::hard_link(src, dst)?
+    } else {
+        do_copy(log, src, dst)?;
+        let dst_metadata = dst.metadata()?;
+        // We don't want to change the readonly flag of any files that are hardlinked somewhere else
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::unix::fs::MetadataExt;
+            debug_assert_eq!(dst_metadata.nlink(), 1);
+        }
+        let mut permissions = dst_metadata.permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(dst, permissions)?;
+    }
+    Ok(())
 }
 
 // Describes how to copy one directory to another.
-// The order of operations is improtant:
+// The order of operations is important:
 // 1. All directories should be created first.
 // 2. After that files can be copied in _any_ order.
 // 3. Finally, directories should be synced.
@@ -1606,10 +3032,26 @@ struct CopyAndSyncFile {
     dst: PathBuf,
 }
 
+#[derive(Eq, PartialEq)]
+enum CopyInstruction {
+    /// The file doesn't need to be copied
+    Skip,
+    /// The file needs to be copied and should be readonly at the destination
+    ReadOnly,
+}
+
 /// Traverse the source file tree and constructs a copy-plan:
 /// a collection of I/O operations that need to be performed to copy the source
 /// to the destination.
-fn build_copy_plan(src: &Path, dst: &Path, plan: &mut CopyPlan) -> std::io::Result<()> {
+fn build_copy_plan<P>(
+    src: &Path,
+    dst: &Path,
+    file_copy_instruction: &P,
+    plan: &mut CopyPlan,
+) -> std::io::Result<()>
+where
+    P: Fn(&Path) -> CopyInstruction,
+{
     let src_metadata = src.metadata()?;
 
     if src_metadata.is_dir() {
@@ -1623,127 +3065,16 @@ fn build_copy_plan(src: &Path, dst: &Path, plan: &mut CopyPlan) -> std::io::Resu
         for entry_result in entries {
             let entry = entry_result?;
             let dst_entry = dst.join(entry.file_name());
-            build_copy_plan(&entry.path(), &dst_entry, plan)?;
+            build_copy_plan(&entry.path(), &dst_entry, file_copy_instruction, plan)?;
         }
     } else {
+        if file_copy_instruction(src) == CopyInstruction::Skip {
+            return Ok(());
+        }
         plan.copy_and_sync_file.push(CopyAndSyncFile {
             src: PathBuf::from(src),
             dst: PathBuf::from(dst),
         });
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    use ic_ic00_types::IC_00;
-    use ic_interfaces::messages::{CanisterInputMessage, RequestOrIngress};
-    use ic_test_utilities::types::{
-        ids::canister_test_id,
-        messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
-    };
-    use std::sync::Arc;
-
-    fn default_canister_state_bits() -> CanisterStateBits {
-        CanisterStateBits {
-            controllers: BTreeSet::new(),
-            last_full_execution_round: ExecutionRound::from(0),
-            call_context_manager: None,
-            compute_allocation: ComputeAllocation::try_from(0).unwrap(),
-            accumulated_priority: AccumulatedPriority::from(0),
-            execution_state_bits: None,
-            memory_allocation: MemoryAllocation::default(),
-            freeze_threshold: NumSeconds::from(0),
-            cycles_balance: Cycles::zero(),
-            cycles_debit: Cycles::zero(),
-            status: CanisterStatus::Stopped,
-            scheduled_as_first: 0,
-            skipped_round_due_to_no_messages: 0,
-            executed: 0,
-            interruped_during_execution: 0,
-            certified_data: vec![],
-            consumed_cycles_since_replica_started: NominalCycles::from(0),
-            stable_memory_size: NumWasmPages::from(0),
-            heap_delta_debit: NumBytes::from(0),
-            install_code_debit: NumInstructions::from(0),
-            time_of_last_allocation_charge_nanos: None,
-            task_queue: vec![],
-        }
-    }
-
-    #[test]
-    fn test_encode_decode_empty_controllers() {
-        // A canister state with empty controllers.
-        let canister_state_bits = default_canister_state_bits();
-
-        let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-        let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
-
-        // Controllers are still empty, as expected.
-        assert_eq!(canister_state_bits.controllers, BTreeSet::new());
-    }
-
-    #[test]
-    fn test_encode_decode_non_empty_controllers() {
-        let mut controllers = BTreeSet::new();
-        controllers.insert(IC_00.into());
-        controllers.insert(canister_test_id(0).get());
-
-        // A canister state with non-empty controllers.
-        let canister_state_bits = CanisterStateBits {
-            controllers,
-            ..default_canister_state_bits()
-        };
-
-        let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-        let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
-
-        let mut expected_controllers = BTreeSet::new();
-        expected_controllers.insert(canister_test_id(0).get());
-        expected_controllers.insert(IC_00.into());
-        assert_eq!(canister_state_bits.controllers, expected_controllers);
-    }
-
-    #[test]
-    fn test_encode_decode_task_queue() {
-        let ingress = Arc::new(IngressBuilder::new().method_name("test_ingress").build());
-        let request = Arc::new(RequestBuilder::new().method_name("test_request").build());
-        let response = Arc::new(
-            ResponseBuilder::new()
-                .respondent(canister_test_id(42))
-                .build(),
-        );
-        let task_queue = vec![
-            ExecutionTask::AbortedInstallCode {
-                message: RequestOrIngress::Ingress(Arc::clone(&ingress)),
-                prepaid_execution_cycles: Cycles::new(1),
-            },
-            ExecutionTask::AbortedExecution {
-                message: CanisterInputMessage::Request(Arc::clone(&request)),
-                prepaid_execution_cycles: Cycles::new(2),
-            },
-            ExecutionTask::AbortedInstallCode {
-                message: RequestOrIngress::Request(Arc::clone(&request)),
-                prepaid_execution_cycles: Cycles::new(3),
-            },
-            ExecutionTask::AbortedExecution {
-                message: CanisterInputMessage::Response(Arc::clone(&response)),
-                prepaid_execution_cycles: Cycles::new(4),
-            },
-            ExecutionTask::AbortedExecution {
-                message: CanisterInputMessage::Ingress(Arc::clone(&ingress)),
-                prepaid_execution_cycles: Cycles::new(5),
-            },
-        ];
-        let canister_state_bits = CanisterStateBits {
-            task_queue: task_queue.clone(),
-            ..default_canister_state_bits()
-        };
-
-        let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-        let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
-        assert_eq!(canister_state_bits.task_queue, task_queue);
-    }
 }

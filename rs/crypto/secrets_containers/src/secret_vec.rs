@@ -1,11 +1,19 @@
 /// Sensitive data held as a Vec of `u8`s.
 use core::fmt::{self, Debug};
 use serde::{Deserialize, Serialize};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Sensitive data held as a Vec of `u8`s.
-#[derive(Clone, Deserialize, Eq, PartialEq, Serialize, Zeroize)]
-#[zeroize(drop)]
+///
+/// SecretVec implement Serialize/Deserialize traits from serde. However
+/// due to an oversight when the type was first written, it uses a significantly
+/// less efficient encoding than would be preferable. It is not possible to
+/// update this now without breaking existing encoded structures.
+///
+/// For new code, consider instead using SecretBytes, also from this
+/// crate, which implements a compact encoding which is equivalent to
+/// just the bytestring itself.
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
 pub struct SecretVec {
     inner_secret: Vec<u8>,
 }

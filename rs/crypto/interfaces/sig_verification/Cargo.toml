@@ -1,0 +1,10 @@
+[package]
+name = "ic-crypto-interfaces-sig-verification"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-types = { path = "../../../types/types" }

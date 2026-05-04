@@ -1,12 +1,15 @@
+use crate::common::EXPECTED_SNS_CREATION_FEE;
 use canister_test::Project;
-use ic_nns_test_utils::sns_wasm;
-use ic_nns_test_utils::state_test_helpers::set_up_universal_canister;
-use ic_sns_init::pb::v1::SnsInitPayload;
-use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesResponse};
-use ic_types::Cycles;
-pub mod common;
 use common::set_up_state_machine_with_nns;
-use ic_nns_constants::SNS_WASM_CANISTER_ID;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_nns_test_utils::sns_wasm;
+use ic_sns_init::pb::v1::SnsInitPayload;
+use ic_sns_wasm::{
+    pb::v1::{DeployedSns, ListDeployedSnsesResponse},
+    sns_wasm::assert_unique_canister_ids,
+};
+
+pub mod common;
 
 #[test]
 fn list_deployed_snses_lists_created_sns_instances() {
@@ -14,35 +17,40 @@ fn list_deployed_snses_lists_created_sns_instances() {
 
     let machine = set_up_state_machine_with_nns();
 
-    // Enough cycles for 2 SNS deploys
-    let wallet_canister =
-        set_up_universal_canister(&machine, Some(Cycles::new(50_000_000_000_000 * 2)));
+    sns_wasm::add_dummy_wasms_to_sns_wasms(&machine, None);
 
-    sns_wasm::add_dummy_wasms_to_sns_wasms(&machine);
+    // Add cycles to the SNS-W canister to deploy two SNSes.
+    machine.add_cycles(SNS_WASM_CANISTER_ID, EXPECTED_SNS_CREATION_FEE * 2);
 
-    let root_1 = sns_wasm::deploy_new_sns(
-        &machine,
-        wallet_canister,
-        SNS_WASM_CANISTER_ID,
-        SnsInitPayload::with_valid_values_for_testing(),
-        50_000_000_000_000,
-    )
-    .canisters
-    .unwrap()
-    .root;
+    let sns_init_payload = SnsInitPayload {
+        dapp_canisters: None,
+        ..SnsInitPayload::with_valid_values_for_testing_post_execution()
+    };
 
-    let root_2 = sns_wasm::deploy_new_sns(
-        &machine,
-        wallet_canister,
-        SNS_WASM_CANISTER_ID,
-        SnsInitPayload::with_valid_values_for_testing(),
-        50_000_000_000_000,
-    )
-    .canisters
-    .unwrap()
-    .root;
+    let sns_1 = {
+        let response = sns_wasm::deploy_new_sns(
+            &machine,
+            GOVERNANCE_CANISTER_ID,
+            SNS_WASM_CANISTER_ID,
+            sns_init_payload.clone(),
+        );
+        assert_eq!(response.error, None);
+        response.canisters.unwrap()
+    };
 
-    assert_ne!(root_1, root_2);
+    let sns_2 = {
+        let response = sns_wasm::deploy_new_sns(
+            &machine,
+            GOVERNANCE_CANISTER_ID,
+            SNS_WASM_CANISTER_ID,
+            sns_init_payload,
+        );
+        assert_eq!(response.error, None);
+        response.canisters.unwrap()
+    };
+
+    // Assert that canister IDs are unique.
+    assert_unique_canister_ids(&sns_1, &sns_2);
 
     // Also check that deployed SNSes are persisted across upgrades
     machine
@@ -54,14 +62,7 @@ fn list_deployed_snses_lists_created_sns_instances() {
     assert_eq!(
         response,
         ListDeployedSnsesResponse {
-            instances: vec![
-                DeployedSns {
-                    root_canister_id: root_1,
-                },
-                DeployedSns {
-                    root_canister_id: root_2,
-                },
-            ]
+            instances: vec![DeployedSns::from(sns_1), DeployedSns::from(sns_2),]
         }
     );
 }

@@ -2,64 +2,68 @@
 
 //! Methods for forward secure encryption
 
-// NOTE: the paper uses multiplicative notation for operations on G1, G2, GT,
-// while miracl's API uses additive naming convention, hence
-//    u*v  corresponds to u.add(v)
+// NOTE: the paper uses multiplicative notation for operations on GT,
+// while our BLS12-381 API uses additive naming convention, hence
+//    u*v  corresponds to u + v
 // and
-//    g^x  corresponds to g.mul(x)
+//    g^x  corresponds to g * x
 
-use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::{
-    prove_pop, verify_pop, EncryptionKeyInstance, EncryptionKeyPop,
+pub use crate::ni_dkg::fs_ni_dkg::chunking::*;
+use crate::ni_dkg::fs_ni_dkg::dlog_recovery::{
+    CheatingDealerDlogSolver, HonestDealerDlogLookupTable,
 };
-use crate::ni_dkg::fs_ni_dkg::nizk_chunking::CHALLENGE_BITS;
-use crate::ni_dkg::fs_ni_dkg::nizk_chunking::NUM_ZK_REPETITIONS;
-use crate::ni_dkg::fs_ni_dkg::random_oracles::{random_oracle, HashedMap};
+use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::{
+    EncryptionKeyInstance, EncryptionKeyPop, prove_pop, verify_pop,
+};
+use crate::ni_dkg::fs_ni_dkg::random_oracles::{HashedMap, random_oracle};
+
+use crate::ni_dkg::fs_ni_dkg::forward_secure::CiphertextIntegrityError::{
+    CrszVectorsLengthMismatch, InvalidNidkgCiphertext,
+};
+use crate::ni_dkg::groth20_bls12_381::types::{BTENodeBytes, FsEncryptionSecretKey};
 use ic_crypto_internal_bls12_381_type::{
     G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Gt, Scalar,
 };
-pub use ic_crypto_internal_types::curves::bls12_381::{G1 as G1Bytes, G2 as G2Bytes};
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionCiphertextBytes;
+pub use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
-use lazy_static::lazy_static;
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
+    FsEncryptionCiphertextBytes, FsEncryptionPop, FsEncryptionPublicKey,
+};
 use rand::{CryptoRng, RngCore};
 use std::collections::LinkedList;
-use zeroize::Zeroize;
+use std::sync::LazyLock;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
-/// The ciphertext is an element of Fr which is 256-bits
-pub(crate) const MESSAGE_BYTES: usize = 32;
+/// Constant which controls the upper limit of epochs
+///
+/// Specifically 2**LAMBDA_T NI-DKG epochs can occur
+///
+/// See Section 7.1 of <https://eprint.iacr.org/2021/339.pdf>
+pub const LAMBDA_T: usize = 32;
 
-/// The size in bytes of a chunk
-pub const CHUNK_BYTES: usize = 2;
+/// The size of the hash function used during encryption
+///
+/// See Section 7.1 of <https://eprint.iacr.org/2021/339.pdf>
+pub const LAMBDA_H: usize = 256;
 
-/// The maximum value of a chunk
-pub const CHUNK_SIZE: isize = 1 << (CHUNK_BYTES << 3); // Number of distinct chunks
-
-/// The minimum range of a chunk
-pub const CHUNK_MIN: isize = 0;
-
-/// The maximum range of a chunk
-pub const CHUNK_MAX: isize = CHUNK_MIN + CHUNK_SIZE - 1;
-
-/// NUM_CHUNKS is simply the number of chunks needed to hold a message (element
-/// of Fr)
-pub const NUM_CHUNKS: usize = (MESSAGE_BYTES + CHUNK_BYTES - 1) / CHUNK_BYTES;
+/// The maximum epoch is derived from the size of LAMBDA_T
+///
+/// The maximum epoch is expressed as a u32 because that is the
+/// underlying size of the Epoch type in ic-crypto-internal-types
+pub const MAXIMUM_EPOCH: u32 = ((1_u64 << LAMBDA_T) - 1) as u32;
 
 const DOMAIN_CIPHERTEXT_NODE: &str = "ic-fs-encryption/binary-tree-node";
 
 /// Type for a single bit
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Zeroize)]
-pub enum Bit {
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Zeroize)]
+pub(crate) enum Bit {
     Zero = 0,
     One = 1,
 }
 
 impl From<u8> for Bit {
     fn from(i: u8) -> Self {
-        if i == 0 {
-            Bit::Zero
-        } else {
-            Bit::One
-        }
+        if i == 0 { Bit::Zero } else { Bit::One }
     }
 }
 
@@ -72,8 +76,8 @@ impl From<&Bit> for u8 {
     }
 }
 
-impl From<&Bit> for i32 {
-    fn from(b: &Bit) -> i32 {
+impl From<&Bit> for u32 {
+    fn from(b: &Bit) -> u32 {
         match &b {
             Bit::Zero => 0,
             Bit::One => 1,
@@ -81,58 +85,89 @@ impl From<&Bit> for i32 {
     }
 }
 
-/// Generates tau (a vector of bits) from an epoch.
-pub fn tau_from_epoch(sys: &SysParam, epoch: Epoch) -> Vec<Bit> {
-    (0..sys.lambda_t)
-        .rev()
-        .map(|index| {
-            if (epoch.get() >> index) & 1 == 0 {
-                Bit::Zero
-            } else {
-                Bit::One
+/// Represents a prefix of an epoch.
+///
+/// The bits are the encoding (in big-endian ordering) of an
+/// integer which represents a prefix of an epoch.
+#[derive(Clone, Debug, Zeroize)]
+pub(crate) struct Tau(pub Vec<Bit>);
+
+impl Tau {
+    pub fn empty() -> Self {
+        Self(vec![])
+    }
+
+    pub fn extended_by(&self, bit: Bit) -> Self {
+        let mut ext = self.clone();
+        ext.push(bit);
+        ext
+    }
+
+    pub fn push(&mut self, bit: Bit) {
+        self.0.push(bit);
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn is_prefix_of_epoch(&self, epoch: Epoch) -> bool {
+        fn is_prefix(xs: &[Bit], ys: &[Bit]) -> bool {
+            if xs.len() > ys.len() {
+                return false;
             }
-        })
-        .collect()
+            for i in 0..xs.len() {
+                if xs[i] != ys[i] {
+                    return false;
+                }
+            }
+            true
+        }
+
+        is_prefix(&self.0, &Tau::from(epoch).0)
+    }
 }
 
-/// Converts an epoch prefix to an epoch by filling in remaining bits with
-/// zeros.
-pub fn epoch_from_tau_vec(tau: &[Bit]) -> Epoch {
-    let num_bits = ::std::mem::size_of::<Epoch>() * 8;
-    Epoch::from(
-        (0..num_bits)
+impl std::ops::Index<usize> for Tau {
+    type Output = Bit;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl From<Epoch> for Tau {
+    /// Gets the leaf node tau for a given epoch
+    fn from(epoch: Epoch) -> Tau {
+        let epoch = epoch.get();
+        let num_bits = std::mem::size_of::<Epoch>() * 8;
+        Tau((0..num_bits)
             .rev()
-            .zip(tau)
-            .fold(0u32, |epoch, (shift, tau)| {
-                epoch
-                    | ((match *tau {
-                        Bit::One => 1,
-                        Bit::Zero => 0,
-                    }) << shift)
-            }),
-    )
+            .map(|shift| Bit::from(((epoch >> shift) & 1) as u8))
+            .collect())
+    }
 }
 
 /// A node of a Binary Tree Encryption scheme.
 ///
 /// Notation from section 7.2.
-pub struct BTENode {
+pub(crate) struct BTENode {
     // Bit-vector, indicating a path in a binary tree.
-    pub tau: Vec<Bit>,
+    tau: Tau,
 
-    pub a: G1Affine,
-    pub b: G2Affine,
+    a: G1Affine,
+    b: G2Affine,
 
     // We split the d's into two groups.
-    // The vector `d_h` always contains the last lambda_H points
+    // The vector `d_h` always contains the last LAMBDA_H points
     // of d_l,...,d_lambda.
-    // The list `d_t` contains the other elements. There are at most lambda_T of them.
+    // The list `d_t` contains the other elements. There are at most LAMBDA_T of them.
     // The longer this list, the higher up we are in the binary tree,
     // and the more leaf node keys we are able to derive.
-    pub d_t: LinkedList<G2Affine>,
-    pub d_h: Vec<G2Affine>,
+    d_t: LinkedList<G2Affine>,
+    d_h: Vec<G2Affine>,
 
-    pub e: G2Affine,
+    e: G2Affine,
 }
 
 // must implement explicitly as zeroize does not support LinkedList
@@ -147,42 +182,141 @@ impl zeroize::Zeroize for BTENode {
     }
 }
 
+// ZeroizeOnDrop doesn't work if you don't derive Zeroize
+impl Drop for BTENode {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl BTENode {
+    pub(crate) fn serialize(&self) -> BTENodeBytes {
+        BTENodeBytes {
+            tau: self.tau.0.iter().map(|i| *i as u8).collect(),
+            a: self.a.serialize_to::<G1Bytes>(),
+            b: self.b.serialize_to::<G2Bytes>(),
+            d_t: self
+                .d_t
+                .iter()
+                .map(|p| p.serialize_to::<G2Bytes>())
+                .collect(),
+            d_h: self
+                .d_h
+                .iter()
+                .map(|p| p.serialize_to::<G2Bytes>())
+                .collect(),
+            e: self.e.serialize_to::<G2Bytes>(),
+        }
+    }
+
+    /// Deserialize a BTENode
+    ///
+    /// Assumes inputs are trusted points. Panics if deserialization fails.
+    pub(crate) fn deserialize_unchecked(node: &BTENodeBytes) -> Self {
+        Self {
+            tau: Tau(node.tau.iter().copied().map(Bit::from).collect()),
+            a: G1Affine::deserialize_unchecked(&node.a).expect("Malformed secret key at BTENode.a"),
+            b: G2Affine::deserialize_unchecked(&node.b).expect("Malformed secret key at BTENode.b"),
+            d_t: node
+                .d_t
+                .iter()
+                .map(|g2| {
+                    G2Affine::deserialize_unchecked(&g2)
+                        .expect("Malformed secret key at BTENode.d_t")
+                })
+                .collect(),
+            d_h: node
+                .d_h
+                .iter()
+                .map(|g2| {
+                    G2Affine::deserialize_unchecked(&g2)
+                        .expect("Malformed secret key at BTENode.d_h")
+                })
+                .collect(),
+            e: G2Affine::deserialize_unchecked(&node.e).expect("Malformed secret key at BTENode.e"),
+        }
+    }
+}
+
 /// A forward-secure secret key is a list of BTE nodes.
 ///
 /// We can derive the keys of any descendant of any node in the list.
 /// We obtain forward security by maintaining the list so that we can
 /// derive current and future private keys, but none of the past keys.
 pub struct SecretKey {
-    pub bte_nodes: LinkedList<BTENode>,
+    bte_nodes: LinkedList<BTENode>,
 }
 
 /// A public key and its associated proof of possession
 #[derive(Clone, Debug)]
 pub struct PublicKeyWithPop {
-    pub key_value: G1Affine,
-    pub proof_data: EncryptionKeyPop,
+    key_value: G1Affine,
+    proof_data: EncryptionKeyPop,
 }
 
 impl PublicKeyWithPop {
     pub fn verify(&self, associated_data: &[u8]) -> bool {
-        let instance = EncryptionKeyInstance {
-            g1_gen: *G1Affine::generator(),
-            public_key: self.key_value,
-            associated_data: associated_data.to_vec(),
-        };
+        let instance = EncryptionKeyInstance::new(&self.key_value, associated_data);
         verify_pop(&instance, &self.proof_data).is_ok()
+    }
+
+    pub fn public_key(&self) -> &G1Affine {
+        &self.key_value
+    }
+
+    pub fn proof(&self) -> &EncryptionKeyPop {
+        &self.proof_data
+    }
+
+    /// Parse a serialized public key and PoP
+    pub fn deserialize(pk: &FsEncryptionPublicKey, pop: &FsEncryptionPop) -> Option<Self> {
+        let key_value = G1Affine::deserialize(pk.as_bytes());
+        let pop_key = G1Affine::deserialize(&pop.pop_key);
+        let challenge = Scalar::deserialize(&pop.challenge);
+        let response = Scalar::deserialize(&pop.response);
+
+        match (key_value, pop_key, challenge, response) {
+            (Ok(key_value), Ok(pop_key), Ok(challenge), Ok(response)) => Some(Self {
+                key_value,
+                proof_data: EncryptionKeyPop::new(pop_key, challenge, response),
+            }),
+            (_, _, _, _) => None,
+        }
+    }
+
+    /// Serialize the public key and PoP
+    pub(crate) fn serialize(&self) -> (FsEncryptionPublicKey, FsEncryptionPop) {
+        let public_key = FsEncryptionPublicKey(self.key_value.serialize_to::<G1Bytes>());
+        let pop = self.proof_data.serialize();
+        (public_key, pop)
     }
 }
 
 /// NI-DKG system parameters
 pub struct SysParam {
-    pub lambda_t: usize,
-    pub lambda_h: usize,
-    pub f0: G2Affine,       // f_0 in the paper.
-    pub f: Vec<G2Affine>,   // f_1, ..., f_{lambda_T} in the paper.
-    pub f_h: Vec<G2Affine>, // The remaining lambda_H f_i's in the paper.
-    pub h: G2Affine,
+    f0: G2Affine,       // f_0 in the paper.
+    f: Vec<G2Affine>,   // f_1, ..., f_{lambda_T} in the paper.
+    f_h: Vec<G2Affine>, // The remaining LAMBDA_H f_i's in the paper.
+    h: G2Affine,
     h_prep: G2Prepared,
+}
+
+impl SysParam {
+    pub fn f0(&self) -> &G2Affine {
+        &self.f0
+    }
+
+    pub fn h(&self) -> &G2Affine {
+        &self.h
+    }
+
+    pub fn f(&self) -> &[G2Affine] {
+        &self.f
+    }
+
+    pub fn f_h(&self) -> &[G2Affine] {
+        &self.f_h
+    }
 }
 
 /// Generates a (public key, secret key) pair for of forward-secure
@@ -201,27 +335,24 @@ pub fn kgen<R: RngCore + CryptoRng>(
     let g1 = G1Affine::generator();
     let g2 = G2Affine::generator();
 
-    // x <- getRandomZp
-    // rho <- getRandomZp
-    // let y = g1^x
-    // let pk = (y, pi_dlog)
-    // let dk = (g1^rho, g2^x * f0^rho, f1^rho, ..., f_lambda^rho, h^rho)
-    // return (pk, dk)
-    let spec_x = Scalar::random(rng);
+    let x = Scalar::random(rng);
     let rho = Scalar::random(rng);
-    let a = G1Affine::from(g1 * rho);
-    let b = G2Projective::mul2(&g2.into(), &spec_x, &sys.f0.into(), &rho).to_affine();
+    let a = G1Affine::from(g1 * &rho);
+    let b = G2Projective::mul2_affine(g2, &x, &sys.f0, &rho).to_affine();
     let mut d_t = LinkedList::new();
     for f in sys.f.iter() {
-        d_t.push_back(G2Affine::from(*f * rho));
+        d_t.push_back(G2Affine::from(f * &rho));
     }
+
     let mut d_h = Vec::new();
     for h in sys.f_h.iter() {
-        d_h.push(G2Affine::from(*h * rho));
+        d_h.push(h * &rho);
     }
-    let e = G2Affine::from(sys.h * rho);
+    let d_h = G2Projective::batch_normalize(&d_h);
+
+    let e = G2Affine::from(&sys.h * &rho);
     let bte_root = BTENode {
-        tau: Vec::new(),
+        tau: Tau::empty(),
         a,
         b,
         d_t,
@@ -230,16 +361,11 @@ pub fn kgen<R: RngCore + CryptoRng>(
     };
     let sk = SecretKey::new(bte_root);
 
-    let y = G1Affine::from(g1 * spec_x);
+    let y = G1Affine::from(g1 * &x);
 
-    let pop_instance = EncryptionKeyInstance {
-        g1_gen: *G1Affine::generator(),
-        public_key: y,
-        associated_data: associated_data.to_vec(),
-    };
+    let pop_instance = EncryptionKeyInstance::new(&y, associated_data);
 
-    let pop =
-        prove_pop(&pop_instance, &spec_x, rng).expect("Implementation bug: Pop generation failed");
+    let pop = prove_pop(&pop_instance, &x, rng).expect("Implementation bug: Pop generation failed");
 
     (
         PublicKeyWithPop {
@@ -251,48 +377,6 @@ pub fn kgen<R: RngCore + CryptoRng>(
 }
 
 impl SecretKey {
-    /// The current key (the end of list of BTENodes) of a `SecretKey` should
-    /// always correspond to an epoch described by lambda_t bits. Some
-    /// internal operations break this invariant, leaving less than lambda_t
-    /// bits in the current key. This function should be called when this
-    /// happens; it modifies the list so the current key corresponds to the
-    /// first epoch of the subtree described by the current key.
-    ///
-    /// For example, if lambda_t = 5, then [..., 011] will change to
-    /// [..., 0111, 01101, 01100].
-    /// The current key's `tau` now has 5 bits, and the other entries cover the
-    /// rest of the 011 subtree after we delete the current key.
-    ///
-    /// Another example: during the very first epoch the private key is
-    /// [1, 01, 001, 0001, 00001, 00000].
-    ///
-    /// This makes key update easy: pop off the current key, then call this
-    /// function.
-    ///
-    /// An alternative is to only store the root nodes of the subtrees that
-    /// cover the remaining valid keys. Thus the first epoch, the private
-    /// key would simply be \[0\], and would only change to [1, 01, 001, 0001,
-    /// 00001] after the first update. Generally, some computations
-    /// happen one epoch later than they would with our current scheme. However,
-    /// key update is a bit fiddlier.
-    ///
-    /// No-op if `self` is empty.
-    pub(crate) fn fast_derive<R: RngCore + CryptoRng>(&mut self, sys: &SysParam, rng: &mut R) {
-        let mut epoch = Vec::new();
-        if self.bte_nodes.is_empty() {
-            return;
-        }
-        let now = self.current().expect("bte_nodes unexpectedly empty");
-        for i in 0..sys.lambda_t {
-            if i < now.tau.len() {
-                epoch.push(now.tau[i]);
-            } else {
-                epoch.push(Bit::Zero);
-            }
-        }
-        self.update_to(&epoch, sys, rng);
-    }
-
     fn new(bte_root: BTENode) -> SecretKey {
         let mut bte_nodes = LinkedList::new();
         bte_nodes.push_back(bte_root);
@@ -300,39 +384,93 @@ impl SecretKey {
     }
 
     /// Returns this key's  BTE-node that corresponds to the current epoch.
-    pub fn current(&self) -> Option<&BTENode> {
+    pub(crate) fn current(&self) -> Option<&BTENode> {
         self.bte_nodes.back()
+    }
+
+    /// Gets the current epoch for a secret key.
+    ///
+    /// Returns None if the key has been exhausted
+    pub fn current_epoch(&self) -> Option<Epoch> {
+        if let Some(node) = self.current() {
+            let mut epoch = 0_u32;
+            for i in 0..LAMBDA_T {
+                let x = if let Some(t) = node.tau.0.get(i) {
+                    t.into()
+                } else {
+                    0
+                };
+
+                epoch |= x << (LAMBDA_T - 1 - i);
+            }
+            Some(Epoch::from(epoch))
+        } else {
+            None
+        }
     }
 
     /// Updates this key to the next epoch.  After an update,
     /// the decryption keys for previous epochs are not accessible any more.
     /// (KUpd(dk, 1) from Sect. 9.1)
+    ///
+    /// The current key (the end of list of BTENodes) of a `SecretKey` should
+    /// always correspond to an epoch described by LAMBDA_T bits. However this
+    /// invariant is broken when we pop the final node. The second call to
+    /// update_to modifies the list so the current key corresponds to the
+    /// first epoch of the subtree described by the current key.
+    ///
+    /// For example, if LAMBDA_T = 5, then [..., 011] will change to
+    /// [..., 0111, 01101, 01100].
+    /// The current key's `tau` now has 5 bits, and the other entries cover the
+    /// rest of the 011 subtree after we delete the current key.
+    ///
+    /// Another example: during the very first epoch the private key is
+    /// [1, 01, 001, 0001, 00001, 00000].
+    ///
+    /// This makes key update easy: pop off the current key, then update again
+    ///
+    /// An alternative is to only store the root nodes of the subtrees that
+    /// cover the remaining valid keys. Thus the first epoch, the private
+    /// key would simply be \[0\], and would only change to [1, 01, 001, 0001,
+    /// 00001] after the first update. Generally, some computations
+    /// happen one epoch later than they would with our current scheme. However,
+    /// key update is a bit fiddlier.
     pub fn update<R: RngCore + CryptoRng>(&mut self, sys: &SysParam, rng: &mut R) {
-        self.fast_derive(sys, rng);
+        if let Some(current_epoch) = self.current_epoch() {
+            self.update_to(current_epoch, sys, rng);
+        }
         match self.bte_nodes.pop_back() {
             None => {}
             Some(mut dk) => {
                 dk.zeroize();
-                self.fast_derive(sys, rng);
+                if let Some(current_epoch) = self.current_epoch() {
+                    self.update_to(current_epoch, sys, rng);
+                }
             }
         }
     }
 
     /// Updates `self` to the given `epoch`.
     ///
-    /// If `epoch` is in the past, then disables `self`.
-    pub fn update_to<R: RngCore + CryptoRng>(
-        &mut self,
-        epoch: &[Bit],
-        sys: &SysParam,
-        rng: &mut R,
-    ) {
-        // dropWhileEnd (\node -> not $ tau node `isPrefixOf` epoch) bte_nodes
+    /// If `epoch` is in the past, with respect to the current key, then nothing happens
+    /// If `epoch` is the current epoch of the key, then nothing happens
+    ///
+    /// A key update can take up to 2*LAMBDA_T*LAMBDA_H G2 multiplications
+    pub fn update_to<R: RngCore + CryptoRng>(&mut self, epoch: Epoch, sys: &SysParam, rng: &mut R) {
+        if let Some(current_epoch) = self.current_epoch()
+            && current_epoch > epoch
+        {
+            return;
+        }
+
+        // Drop nodes from the end of bte_nodes until we either run out of nodes
+        // (in which case return, with the key disabled) or until we arrive at a
+        // node whose tau value is a prefix of the target epoch.
         loop {
             match self.bte_nodes.back() {
                 None => return,
                 Some(cur) => {
-                    if is_prefix(&cur.tau, epoch) {
+                    if cur.tau.is_prefix_of_epoch(epoch) {
                         break;
                     }
                 }
@@ -343,7 +481,7 @@ impl SecretKey {
                 .zeroize();
         }
 
-        let g1 = G1Affine::generator();
+        let epoch = Tau::from(epoch);
 
         // At this point, bte_nodes.back() is a prefix of `epoch`.
         // Replace it with the nodes for `epoch` and later (in the subtree).
@@ -354,9 +492,8 @@ impl SecretKey {
         //   * We can still derive the keys for 01110 and 01111 from 0111.
         //   * We can no longer decrypt 01100.
         let mut node = self.bte_nodes.pop_back().expect("self.bte_nodes was empty");
-        let mut n = node.tau.len();
         // Nothing to do if `node.tau` is already `epoch`.
-        if n == epoch.len() {
+        if node.tau.len() == epoch.len() {
             self.bte_nodes.push_back(node);
             return;
         }
@@ -367,32 +504,35 @@ impl SecretKey {
         let mut b_acc = G2Projective::from(&node.b);
         let mut f_acc = ftau_partial(&node.tau, sys).expect("node.tau not the expected size");
         let mut tau = node.tau.clone();
-        while n < epoch.len() {
+
+        for n in node.tau.len()..epoch.len() {
             if epoch[n] == Bit::Zero {
                 // Save the root of the right subtree for later.
-                let mut tau_1 = tau.clone();
-                tau_1.push(Bit::One);
+                let tau_1 = tau.extended_by(Bit::One);
                 let delta = Scalar::random(rng);
 
-                let a_blind = (g1 * delta) + node.a;
+                let a_blind = (G1Affine::generator() * &delta) + &node.a;
                 let mut b_blind =
                     G2Projective::from(d_t.pop_front().expect("d_t not sufficiently large"));
-                b_blind += b_acc;
-                b_blind += (f_acc + sys.f[n]) * delta;
+                b_blind += &b_acc;
+                b_blind += (&f_acc + &sys.f[n]) * &delta;
 
-                let e_blind = (sys.h * delta) + node.e;
+                let e_blind = (&sys.h * &delta) + &node.e;
                 let mut d_t_blind = LinkedList::new();
                 let mut k = n + 1;
                 d_t.iter().for_each(|d| {
-                    let tmp = (sys.f[k] * delta) + d;
+                    let tmp = (&sys.f[k] * &delta) + d;
                     d_t_blind.push_back(tmp.to_affine());
                     k += 1;
                 });
+
                 let mut d_h_blind = Vec::new();
                 node.d_h.iter().zip(&sys.f_h).for_each(|(d, f)| {
-                    let tmp = (*f * delta) + d;
-                    d_h_blind.push(tmp.to_affine());
+                    let tmp = (f * &delta) + d;
+                    d_h_blind.push(tmp);
                 });
+                let d_h_blind = G2Projective::batch_normalize(&d_h_blind);
+
                 self.bte_nodes.push_back(BTENode {
                     tau: tau_1,
                     a: a_blind.to_affine(),
@@ -403,30 +543,29 @@ impl SecretKey {
                 });
             } else {
                 // Update accumulators.
-                f_acc += sys.f[n];
+                f_acc += &sys.f[n];
                 b_acc += d_t.pop_front().expect("d_t not sufficiently large");
             }
             tau.push(epoch[n]);
-            n += 1;
         }
 
         let delta = Scalar::random(rng);
-        let a = g1 * delta + node.a;
-        let e = sys.h * delta + node.e;
-        b_acc += f_acc * delta;
+        let a = G1Affine::generator() * &delta + &node.a;
+        let e = &sys.h * &delta + &node.e;
+        b_acc += f_acc * &delta;
 
         let mut d_t_blind = LinkedList::new();
         // Typically `d_t_blind` remains empty.
         // It is only nontrivial if `epoch` is less than LAMBDA_T bits.
-        let mut k = n;
+        let mut k = epoch.len();
         d_t.iter().for_each(|d| {
-            let tmp = (sys.f[k] * delta) + d;
+            let tmp = (&sys.f[k] * &delta) + d;
             d_t_blind.push_back(tmp.to_affine());
             k += 1;
         });
         let mut d_h_blind = Vec::new();
         node.d_h.iter().zip(&sys.f_h).for_each(|(d, f)| {
-            let tmp = *f * delta + d;
+            let tmp = f * &delta + d;
             d_h_blind.push(tmp.to_affine());
         });
 
@@ -440,66 +579,61 @@ impl SecretKey {
         });
         node.zeroize();
     }
+
+    /// Serialises a forward secure secret key into the standard form.
+    pub fn serialize(&self) -> FsEncryptionSecretKey {
+        FsEncryptionSecretKey {
+            bte_nodes: self.bte_nodes.iter().map(|node| node.serialize()).collect(),
+        }
+    }
+
+    /// Parses a forward secure secret key
+    ///
+    /// # Security Note
+    ///
+    /// The provided `secret_key` is assumed to be "trusted",
+    /// meaning it was obtained from a known and trusted source.
+    /// This is because certain safety checks are NOT performed
+    /// on the members of the key.
+    ///
+    /// # Panics
+    /// Panics if the key is malformed.  Given that secret keys are created and
+    /// managed within the CSP such a failure is an error in this code or a
+    /// corruption of the secret key store.
+    pub fn deserialize(secret_key: &FsEncryptionSecretKey) -> Self {
+        Self {
+            bte_nodes: secret_key
+                .bte_nodes
+                .iter()
+                .map(BTENode::deserialize_unchecked)
+                .collect(),
+        }
+    }
 }
 
 /// Forward secure ciphertexts
 ///
 /// This is (C,R,S,Z) tuple of section 5.2, with multiple C values,
-/// one for each recipent.
+/// one for each recipient.
 #[derive(Debug)]
 pub struct FsEncryptionCiphertext {
-    pub cc: Vec<Vec<G1Affine>>,
-    pub rr: Vec<G1Affine>,
-    pub ss: Vec<G1Affine>,
-    pub zz: Vec<G2Affine>,
+    cc: Vec<[G1Affine; NUM_CHUNKS]>,
+    rr: [G1Affine; NUM_CHUNKS],
+    ss: [G1Affine; NUM_CHUNKS],
+    zz: [G2Affine; NUM_CHUNKS],
 }
 
 impl FsEncryptionCiphertext {
     /// Serialises a ciphertext from the internal representation into the standard
     /// form.
-    ///
-    /// # Panics
-    /// This will panic if the internal representation is invalid.  Given that the
-    /// internal representation is generated internally, this can happen only if there
-    /// is an error in our code.
     pub fn serialize(&self) -> FsEncryptionCiphertextBytes {
-        assert_eq!(self.rr.len(), NUM_CHUNKS);
-        assert_eq!(self.ss.len(), NUM_CHUNKS);
-        assert_eq!(self.zz.len(), NUM_CHUNKS);
-
-        let rand_r = {
-            let mut rand_r = [G1Bytes([0u8; G1Bytes::SIZE]); NUM_CHUNKS];
-            for (dst, src) in rand_r[..].iter_mut().zip(&self.rr) {
-                *dst = src.serialize_to::<G1Bytes>();
-            }
-            rand_r
-        };
-        let rand_s = {
-            let mut rand_s = [G1Bytes([0u8; G1Bytes::SIZE]); NUM_CHUNKS];
-            for (dst, src) in rand_s[..].iter_mut().zip(&self.ss) {
-                *dst = src.serialize_to::<G1Bytes>();
-            }
-            rand_s
-        };
-        let rand_z = {
-            let mut rand_z = [G2Bytes([0u8; G2Bytes::SIZE]); NUM_CHUNKS];
-            for (dst, src) in rand_z[..].iter_mut().zip(&self.zz) {
-                *dst = src.serialize_to::<G2Bytes>();
-            }
-            rand_z
-        };
+        let rand_r = G1Affine::serialize_array_to::<G1Bytes, NUM_CHUNKS>(&self.rr);
+        let rand_s = G1Affine::serialize_array_to::<G1Bytes, NUM_CHUNKS>(&self.ss);
+        let rand_z = G2Affine::serialize_array_to::<G2Bytes, NUM_CHUNKS>(&self.zz);
         let ciphertext_chunks = self
             .cc
             .iter()
-            .map(|cj| {
-                assert_eq!(cj.len(), NUM_CHUNKS);
-
-                let mut cc = [G1Bytes([0u8; G1Bytes::SIZE]); NUM_CHUNKS];
-                for (dst, src) in cc[..].iter_mut().zip(cj) {
-                    *dst = src.serialize_to::<G1Bytes>();
-                }
-                cc
-            })
+            .map(G1Affine::serialize_array_to::<G1Bytes, NUM_CHUNKS>)
             .collect();
 
         FsEncryptionCiphertextBytes {
@@ -516,185 +650,96 @@ impl FsEncryptionCiphertext {
     /// This will return an error if any of the constituent group elements is
     /// invalid.
     pub fn deserialize(ciphertext: &FsEncryptionCiphertextBytes) -> Result<Self, &'static str> {
-        let rr = G1Affine::batch_deserialize(&ciphertext.rand_r).or(Err("Malformed rand_r"))?;
-        let ss = G1Affine::batch_deserialize(&ciphertext.rand_s).or(Err("Malformed rand_s"))?;
-        let zz = G2Affine::batch_deserialize(&ciphertext.rand_z).or(Err("Malformed rand_z"))?;
+        let rr =
+            G1Affine::batch_deserialize_array(&ciphertext.rand_r).or(Err("Malformed rand_r"))?;
+        let ss =
+            G1Affine::batch_deserialize_array(&ciphertext.rand_s).or(Err("Malformed rand_s"))?;
+        let zz =
+            G2Affine::batch_deserialize_array(&ciphertext.rand_z).or(Err("Malformed rand_z"))?;
 
-        let cc: Vec<Vec<G1Affine>> = ciphertext
+        let cc: Vec<[G1Affine; NUM_CHUNKS]> = ciphertext
             .ciphertext_chunks
             .iter()
-            .map(|cj| G1Affine::batch_deserialize(&cj[..]).or(Err("Malformed ciphertext_chunk")))
+            .map(|cj| G1Affine::batch_deserialize_array(cj).or(Err("Malformed ciphertext_chunk")))
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self { cc, rr, ss, zz })
     }
+
+    pub fn ciphertext_chunks(&self) -> &[[G1Affine; NUM_CHUNKS]] {
+        &self.cc
+    }
+
+    pub fn randomizers_r(&self) -> &[G1Affine; NUM_CHUNKS] {
+        &self.rr
+    }
 }
 
 /// Randomness needed for NIZK proofs.
-#[derive(Zeroize)]
-#[zeroize(drop)]
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct EncryptionWitness {
-    pub spec_r: Vec<Scalar>,
+    r: [Scalar; NUM_CHUNKS],
 }
 
-/// Encrypt chunks. Returns ciphertext as well as the random spec_r's and s's
-/// chosen, for later use in NIZK proofs.
+impl EncryptionWitness {
+    pub fn witness(&self) -> &[Scalar; NUM_CHUNKS] {
+        &self.r
+    }
+}
+
+/// Encrypt chunks. Returns ciphertext as well as the witness for later use
+/// in the NIZK proofs.
 pub fn enc_chunks<R: RngCore + CryptoRng>(
-    sij: &[Vec<isize>],
-    pks: &[G1Affine],
-    tau: &[Bit],
+    recipient_and_message: &[(G1Affine, PlaintextChunks)],
+    epoch: Epoch,
     associated_data: &[u8],
     sys: &SysParam,
     rng: &mut R,
-) -> Option<(FsEncryptionCiphertext, EncryptionWitness)> {
-    if sij.is_empty() {
-        return None;
-    }
-
-    // do
-    //   chunks <- headMay allChunks
-    //   guard $ all (== chunks) allChunks
-
-    let all_chunks: LinkedList<_> = sij.iter().map(Vec::len).collect();
-    let chunks = *all_chunks.front().expect("sij was empty");
-    for si in sij.iter() {
-        if si.len() != chunks {
-            return None; // Chunk lengths disagree.
-        }
-        for x in si.iter() {
-            if *x < CHUNK_MIN || *x > CHUNK_MAX {
-                return None; // Chunk out of range.
-            }
-        }
-    }
+) -> (FsEncryptionCiphertext, EncryptionWitness) {
+    let receivers = recipient_and_message.len();
 
     let g1 = G1Affine::generator();
 
-    // do
-    //   spec_r <- replicateM chunks getRandom
-    //   s <- replicateM chunks getRandom
-    //   let rr = (g1^) <$> spec_r
-    //   let ss = (g1^) <$> s
-    let mut spec_r = Vec::with_capacity(chunks);
-    let mut s = Vec::with_capacity(chunks);
-    let mut rr = Vec::with_capacity(chunks);
-    let mut ss = Vec::with_capacity(chunks);
-    for _j in 0..chunks {
-        {
-            let tmp = Scalar::random(rng);
-            spec_r.push(tmp);
-            rr.push(G1Affine::from(g1 * tmp));
+    let s = Scalar::batch_random_array::<NUM_CHUNKS, R>(rng);
+    let ss = g1.batch_mul_array(&s);
+
+    let r = Scalar::batch_random_array::<NUM_CHUNKS, R>(rng);
+    let rr = g1.batch_mul_array(&r);
+
+    // TODO(CRP-2550) This can run in parallel (n = # receivers)
+    let cc = {
+        let mut cc: Vec<[G1Affine; NUM_CHUNKS]> = Vec::with_capacity(receivers);
+
+        for (pk, ptext) in recipient_and_message {
+            let pk_g1_tbl = G1Projective::compute_mul2_affine_tbl(pk, g1);
+
+            let chunks = ptext.chunks_as_scalars();
+
+            let enc_chunks =
+                G1Projective::batch_normalize_array(&pk_g1_tbl.mul2_array(&r, &chunks));
+
+            cc.push(enc_chunks);
         }
-        {
-            let tmp = Scalar::random(rng);
-            s.push(tmp);
-            ss.push(G1Affine::from(g1 * tmp));
-        }
-    }
-    // [[pk^spec_r * g1^s | (spec_r, s) <- zip rs si] | (pk, si) <- zip pks sij]
-    let cc: Vec<Vec<_>> = sij
+
+        cc
+    };
+
+    let id = ftau_extended(&cc, &rr, &ss, sys, epoch, associated_data);
+    let id_h_tbl = G2Projective::compute_mul2_tbl(&id, &G2Projective::from(&sys.h));
+
+    let zz = G2Projective::batch_normalize_array(&id_h_tbl.mul2_array(&r, &s));
+
+    let witness = EncryptionWitness { r };
+
+    let crsz = FsEncryptionCiphertext { cc, rr, ss, zz };
+
+    (crsz, witness)
+}
+
+fn find_prefix(dks: &SecretKey, epoch: Epoch) -> Option<&BTENode> {
+    dks.bte_nodes
         .iter()
-        .zip(pks)
-        .map(|(sj, pk)| {
-            sj.iter()
-                .zip(&spec_r)
-                .map(|(s, spec_r)| {
-                    G1Projective::mul2(&pk.into(), spec_r, &g1.into(), &Scalar::from_isize(*s))
-                        .to_affine()
-                })
-                .collect()
-        })
-        .collect();
-
-    let extended_tau = extend_tau(&cc, &rr, &ss, tau, associated_data);
-    let id = ftau(&extended_tau, sys).expect("extended_tau not the correct size");
-    let mut zz = Vec::with_capacity(chunks);
-
-    for j in 0..chunks {
-        zz.push(G2Projective::mul2(&id, &spec_r[j], &sys.h.into(), &s[j]).to_affine())
-    }
-
-    Some((
-        FsEncryptionCiphertext { cc, rr, ss, zz },
-        EncryptionWitness { spec_r },
-    ))
-}
-
-fn is_prefix(xs: &[Bit], ys: &[Bit]) -> bool {
-    // isPrefix [] _ = True
-    // isPrefix _ [] = False
-    // isPrefix (x:xt) (y:yt) = x == y && isPrefix xt yt
-    if xs.len() > ys.len() {
-        return false;
-    }
-    for i in 0..xs.len() {
-        if xs[i] != ys[i] {
-            return false;
-        }
-    }
-    true
-}
-
-fn find_prefix<'a>(dks: &'a SecretKey, tau: &[Bit]) -> Option<&'a BTENode> {
-    for node in dks.bte_nodes.iter() {
-        if is_prefix(&node.tau, tau) {
-            return Some(node);
-        }
-    }
-    None
-}
-
-/// Solves discrete log problem with baby-step giant-step.
-///
-/// Returns:
-///   find (\x -> base^x == tgt) [lo..lo + range - 1]
-///
-/// using an O(sqrt(N)) approach rather than a naive O(N) search.
-///
-/// We cut the exponent in half, that is, for a range of 2^46, we build a table
-/// of size 2^23 then perform up to 2^23 FP12 multiplications and lookups.
-/// Depending on the cost of CPU versus RAM, it may be better to split
-/// differently.
-pub fn baby_giant(tgt: &Gt, base: &Gt, lo: isize, range: isize) -> Option<isize> {
-    if range <= 0 {
-        return None;
-    }
-
-    let mut babies = std::collections::HashMap::new();
-    let mut n = 0;
-    let mut g = *Gt::identity();
-
-    loop {
-        if n * n >= range {
-            break;
-        }
-        babies.insert(g.tag(), n);
-        g += base;
-        n += 1;
-    }
-    g = g.neg();
-
-    let mut t = *base;
-    if lo >= 0 {
-        t *= Scalar::from_isize(lo);
-        t = t.neg();
-    } else {
-        t *= Scalar::from_isize(-lo);
-    }
-    t += tgt;
-
-    let mut x = lo;
-    loop {
-        if let Some(i) = babies.get(&t.tag()) {
-            return Some(x + i);
-        }
-        t += g;
-        x += n;
-        if x >= lo + range {
-            break;
-        }
-    }
-    None
+        .find(|&node| node.tau.is_prefix_of_epoch(epoch))
 }
 
 /// Error while decrypting
@@ -708,11 +753,11 @@ pub enum DecErr {
 /// Decrypt the i-th group of chunks.
 ///
 /// Decrypting a message for a future epoch hardly costs more than a message for
-/// a current epoch: at most lambda_t point additions.
+/// a current epoch: at most LAMBDA_T point additions.
 ///
 /// Upgrading a key is expensive in comparison because we must compute new
 /// subtree roots and re-"blind" them (the random deltas of the paper) to hide
-/// ciphertexts from future keys. Each re-blinding costs at least lambda_h
+/// ciphertexts from future keys. Each re-blinding costs at least LAMBDA_H
 /// (which is 256 in our system) point multiplications.
 ///
 /// Caller must ensure i < n, where n = crsz.cc.len().
@@ -720,47 +765,45 @@ pub fn dec_chunks(
     dks: &SecretKey,
     i: usize,
     crsz: &FsEncryptionCiphertext,
-    tau: &[Bit],
+    epoch: Epoch,
     associated_data: &[u8],
-) -> Result<Vec<isize>, DecErr> {
-    let spec_n = crsz.cc.len();
-    let spec_m = crsz.cc[i].len();
+) -> Result<Scalar, DecErr> {
+    let n = crsz.cc.len();
+    let m = crsz.cc[i].len();
 
-    if crsz.rr.len() != spec_m || crsz.ss.len() != spec_m || crsz.zz.len() != spec_m {
+    if crsz.rr.len() != m || crsz.ss.len() != m || crsz.zz.len() != m {
         return Err(DecErr::InvalidCiphertext);
     }
 
-    let extended_tau = extend_tau(&crsz.cc, &crsz.rr, &crsz.ss, tau, associated_data);
-    let dk = match find_prefix(dks, tau) {
-        None => return Err(DecErr::ExpiredKey),
-        Some(node) => node,
+    let dk = find_prefix(dks, epoch).ok_or(DecErr::ExpiredKey)?;
+
+    let bneg = {
+        let extended_tau = extend_tau(&crsz.cc, &crsz.rr, &crsz.ss, epoch, associated_data);
+
+        let mut bneg = G2Projective::from(&dk.b);
+
+        for (i, t) in dk.d_t.iter().enumerate() {
+            if extended_tau[dk.tau.len() + i] == Bit::One {
+                bneg += t;
+            }
+        }
+        for k in 0..LAMBDA_H {
+            if extended_tau[LAMBDA_T + k] == Bit::One {
+                bneg += &dk.d_h[k];
+            }
+        }
+        bneg.neg()
     };
-    let mut bneg = G2Projective::from(&dk.b);
-    let mut l = dk.tau.len();
-    for t in dk.d_t.iter() {
-        if extended_tau[l] == Bit::One {
-            bneg += t;
-        }
-        l += 1
-    }
-    for k in 0..LAMBDA_H {
-        if extended_tau[LAMBDA_T + k] == Bit::One {
-            bneg += dk.d_h[k];
-        }
-    }
-    bneg = bneg.neg();
 
     let cj = &crsz.cc[i];
 
     let bneg = G2Prepared::from(&bneg);
     let eneg = G2Prepared::from(&dk.e.neg());
 
-    // zipWith4 f cj rr ss zz where
-    //   f c spec_r s z =
-    //     ate(g2, c) * ate(bneg, spec_r) * ate(z, dk_a) * ate(eneg, s)
-    let mut powers = Vec::with_capacity(spec_m);
+    let mut powers = Vec::with_capacity(m);
 
-    for i in 0..spec_m {
+    // TODO(CRP-2550) These multipairings could be computed in parallel
+    for i in 0..m {
         let x = Gt::multipairing(&[
             (&cj[i], G2Prepared::generator()),
             (&crsz.rr[i], &bneg),
@@ -771,42 +814,41 @@ pub fn dec_chunks(
         powers.push(x);
     }
 
-    // Find discrete log of powers with baby-step-giant-step.
-    let mut dlogs = Vec::new();
-    for item in &powers {
-        match baby_giant(item, Gt::generator(), 0, CHUNK_SIZE) {
-            // Happy path: honest DKG participants.
-            Some(dlog) => dlogs.push(Scalar::from_isize(dlog)),
-            // It may take hours to brute force a cheater's discrete log.
-            None => match solve_cheater_log(spec_n, spec_m, item) {
-                Some(big) => dlogs.push(big),
-                None => panic!("Unsolvable discrete log!"),
-            },
+    // Find discrete log of the powers
+    let linear_search = HonestDealerDlogLookupTable::new();
+
+    let dlogs = {
+        let mut dlogs = linear_search.solve_several(&powers);
+
+        if dlogs.iter().any(|x| x.is_none()) {
+            // Cheating dealer case
+            let cheating_solver = CheatingDealerDlogSolver::new(n, m);
+
+            for i in 0..dlogs.len() {
+                if dlogs[i].is_none() {
+                    // TODO(CRP-2550) All BSGS could be run in parallel
+                    // It may take hours to brute force a cheater's discrete log.
+                    dlogs[i] = cheating_solver.solve(&powers[i]);
+                }
+            }
         }
-    }
 
-    let chunk_size = Scalar::from_isize(CHUNK_SIZE);
-    let mut acc = Scalar::zero();
-    for dlog in dlogs.iter() {
-        acc *= chunk_size;
-        acc += dlog;
-    }
-    let fr_bytes = acc.serialize();
+        let mut solutions = Vec::with_capacity(dlogs.len());
 
-    // Break up fr_bytes into a vec of isize, which will be combined again later.
-    // It may be better to simply return FrBytes and change enc_chunks() to take
-    // FrBytes and have it break it into chunks. This would confine the chunking
-    // logic to the DKG, where it belongs.
-    // (I tried this for a while, but it seemed to touch a lot of code.)
-    let redundant = fr_bytes[..]
-        .chunks_exact(CHUNK_BYTES)
-        .map(|x| 256 * (x[0] as isize) + (x[1] as isize))
-        .collect();
-    Ok(redundant)
+        for dlog in dlogs {
+            if let Some(solution) = dlog {
+                solutions.push(solution);
+            } else {
+                return Err(DecErr::InvalidChunk);
+            }
+        }
+
+        solutions
+    };
+
+    Ok(PlaintextChunks::from_dlogs(&dlogs).recombine_to_scalar())
 }
 
-// TODO(IDX-1866)
-#[allow(clippy::result_unit_err)]
 /// Verify ciphertext integrity
 ///
 /// Part of DVfy of Section 7.1 of <https://eprint.iacr.org/2021/339.pdf>
@@ -815,10 +857,10 @@ pub fn dec_chunks(
 /// we must also verify ciphertext integrity.
 pub fn verify_ciphertext_integrity(
     crsz: &FsEncryptionCiphertext,
-    tau: &[Bit],
+    epoch: Epoch,
     associated_data: &[u8],
     sys: &SysParam,
-) -> Result<(), ()> {
+) -> Result<(), CiphertextIntegrityError> {
     let n = if crsz.cc.is_empty() {
         0
     } else {
@@ -828,94 +870,102 @@ pub fn verify_ciphertext_integrity(
         // In theory, this is unreachable fail because deserialization only succeeds
         // when the vectors of a CRSZ have the same length. (In practice, it's
         // surprising how often "unreachable" code is reached!)
-        return Err(());
+        return Err(CrszVectorsLengthMismatch);
     }
 
-    let extended_tau = extend_tau(&crsz.cc, &crsz.rr, &crsz.ss, tau, associated_data);
-    let id = ftau(&extended_tau, sys).expect("extended_tau not the correct size");
+    let id = ftau_extended(&crsz.cc, &crsz.rr, &crsz.ss, sys, epoch, associated_data);
 
     let g1_neg = G1Affine::generator().neg();
     let precomp_id = G2Prepared::from(&id);
 
-    // check for all j:
-    //     1 =
-    //      e(g1^{-1}, Z_j) *
-    //      e(R_j, f_0 \Prod_{i=0}^{\lambda} f_i^{\tau_i}) *
-    //      e(S_j,h)
-    let checks: Result<(), ()> = crsz
-        .rr
-        .iter()
-        .zip(crsz.ss.iter().zip(crsz.zz.iter()))
-        .try_for_each(|(spec_r, (s, z))| {
-            let z = G2Prepared::from(z);
+    // TODO(CRP-2550) Each of these checks could be run in parallel
+    for i in 0..NUM_CHUNKS {
+        let r = &crsz.rr[i];
+        let s = &crsz.ss[i];
+        let z = G2Prepared::from(&crsz.zz[i]);
 
-            let v = Gt::multipairing(&[(spec_r, &precomp_id), (s, &sys.h_prep), (&g1_neg, &z)]);
+        let v = Gt::multipairing(&[(r, &precomp_id), (s, &sys.h_prep), (&g1_neg, &z)]);
 
-            if v.is_identity() {
-                Ok(())
-            } else {
-                Err(())
-            }
-        });
-    checks
+        if !v.is_identity() {
+            return Err(InvalidNidkgCiphertext);
+        }
+    }
+    Ok(())
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub enum CiphertextIntegrityError {
+    CrszVectorsLengthMismatch,
+    InvalidNidkgCiphertext,
 }
 
 /// Returns (tau || RO(cc, rr, ss, tau, associated_data)).
 ///
 /// See the description of Deal in Section 7.1.
-fn extend_tau(
-    cc: &[Vec<G1Affine>],
+pub(crate) fn extend_tau(
+    cc: &[[G1Affine; NUM_CHUNKS]],
     rr: &[G1Affine],
     ss: &[G1Affine],
-    tau: &[Bit],
+    epoch: Epoch,
     associated_data: &[u8],
-) -> Vec<Bit> {
+) -> Tau {
     let mut map = HashedMap::new();
     map.insert_hashed("ciphertext-chunks", &cc.to_vec());
     map.insert_hashed("randomizers-r", &rr.to_vec());
     map.insert_hashed("randomizers-s", &ss.to_vec());
-    map.insert_hashed("epoch", &(epoch_from_tau_vec(tau).get() as usize));
+    map.insert_hashed("epoch", &(epoch.get() as usize));
     map.insert_hashed("associated-data", &associated_data.to_vec());
 
     let hash = random_oracle(DOMAIN_CIPHERTEXT_NODE, &map);
 
-    let mut extended_tau: Vec<Bit> = tau.to_vec();
+    let tau = Tau::from(epoch);
+
+    let mut extended_tau: Vec<Bit> = tau.0;
     hash.iter().for_each(|byte| {
         for b in 0..8 {
             extended_tau.push(Bit::from((byte >> b) & 1));
         }
     });
-    extended_tau
+    Tau(extended_tau)
 }
 
-/// Computes the function f of the paper.
+/// Extends tau using the random oracle, and computes the function f
 ///
-/// The bit vector tau must have length lambda_T + lambda_H.
-fn ftau(tau: &[Bit], sys: &SysParam) -> Option<G2Projective> {
-    if tau.len() != sys.lambda_t + sys.lambda_h {
-        return None;
-    }
-    let mut id = G2Projective::from(sys.f0);
-    for (n, t) in tau.iter().enumerate() {
-        if *t == Bit::One {
-            if n < sys.lambda_t {
-                id += sys.f[n];
-            } else {
-                id += sys.f_h[n - sys.lambda_t];
-            }
+/// See the description of Deal in Section 7.1.
+fn ftau_extended(
+    cc: &[[G1Affine; NUM_CHUNKS]],
+    rr: &[G1Affine],
+    ss: &[G1Affine],
+    sys: &SysParam,
+    epoch: Epoch,
+    associated_data: &[u8],
+) -> G2Projective {
+    let extended_tau = extend_tau(cc, rr, ss, epoch, associated_data);
+
+    let mut id = G2Projective::from(&sys.f0);
+
+    for i in 0..LAMBDA_T {
+        if extended_tau.0[i] == Bit::One {
+            id += &sys.f[i];
         }
     }
-    Some(id)
+
+    for i in 0..LAMBDA_H {
+        if extended_tau.0[LAMBDA_T + i] == Bit::One {
+            id += &sys.f_h[i];
+        }
+    }
+
+    id
 }
 
-/// Computes f for bit vectors tau <= lambda_T.
-fn ftau_partial(tau: &[Bit], sys: &SysParam) -> Option<G2Projective> {
-    if tau.len() > sys.lambda_t {
+/// Computes f for bit vectors tau <= LAMBDA_T.
+pub(crate) fn ftau_partial(tau: &Tau, sys: &SysParam) -> Option<G2Projective> {
+    if tau.0.len() > LAMBDA_T {
         return None;
     }
-    // id = product $ f0 : [f | (t, f) <- zip tau sys_fs, t == 1]
     let mut id = G2Projective::from(&sys.f0);
-    tau.iter().zip(sys.f.iter()).for_each(|(t, f)| {
+    tau.0.iter().zip(sys.f.iter()).for_each(|(t, f)| {
         if *t == Bit::One {
             id += f;
         }
@@ -923,50 +973,30 @@ fn ftau_partial(tau: &[Bit], sys: &SysParam) -> Option<G2Projective> {
     Some(id)
 }
 
-// An FS key upgrade can take up to 2 * LAMBDA_T * LAMBDA_H point
-// multiplications. This is tolerable in practice for LAMBDA_T = 32, but in
-// tests, smaller values are preferable.
-
-/// Constant which controls the upper limit of epochs
-///
-/// Specifically 2**LAMBDA_T NI-DKG epochs cann occur
-///
-/// See Section 7.1 of <https://eprint.iacr.org/2021/339.pdf>
-pub const LAMBDA_T: usize = 32;
-
-/// The size of the hash function used during encryption
-///
-/// See Section 7.1 of <https://eprint.iacr.org/2021/339.pdf>
-const LAMBDA_H: usize = 256;
-
-lazy_static! {
-    static ref SYSTEM_PARAMS: SysParam =
-        SysParam::create(b"DFX01-with-BLS12381G2_XMD:SHA-256_SSWU_RO_");
-}
+static SYSTEM_PARAMS: LazyLock<SysParam> =
+    LazyLock::new(|| SysParam::create("DFX01-with-BLS12381G2_XMD:SHA-256_SSWU_RO_"));
 
 impl SysParam {
     /// Create a set of system parameters
-    fn create(dst: &[u8]) -> Self {
-        let f0 = G2Affine::hash(dst, b"f0");
+    fn create(dst: &'static str) -> Self {
+        let f0 = G2Affine::hash_with_precomputation(dst, b"f0");
 
         let mut f = Vec::with_capacity(LAMBDA_T);
         for i in 0..LAMBDA_T {
             let s = format!("f{}", i + 1);
-            f.push(G2Affine::hash(dst, s.as_bytes()));
+            f.push(G2Affine::hash_with_precomputation(dst, s.as_bytes()));
         }
         let mut f_h = Vec::with_capacity(LAMBDA_H);
         for i in 0..LAMBDA_H {
-            let s = format!("f_h{}", i);
-            f_h.push(G2Affine::hash(dst, s.as_bytes()));
+            let s = format!("f_h{i}");
+            f_h.push(G2Affine::hash_with_precomputation(dst, s.as_bytes()));
         }
 
-        let h = G2Affine::hash(dst, b"h");
+        let h = G2Affine::hash_with_precomputation(dst, b"h");
 
-        let h_prep = G2Prepared::from(h);
+        let h_prep = G2Prepared::from(&h);
 
         SysParam {
-            lambda_t: LAMBDA_T,
-            lambda_h: LAMBDA_H,
             f0,
             f,
             f_h,
@@ -979,37 +1009,4 @@ impl SysParam {
     pub fn global() -> &'static Self {
         &SYSTEM_PARAMS
     }
-}
-
-/// Brute-forces a discrete log for a malicious DKG participant whose NIZK
-/// chunking proof checks out.
-///
-/// For some Delta in [1..E - 1] the answer s satisfies (Delta * s) in
-/// [1 - Z..Z - 1].
-pub fn solve_cheater_log(spec_n: usize, spec_m: usize, target: &Gt) -> Option<Scalar> {
-    let bb_constant = CHUNK_SIZE as usize;
-    let ee = 1 << CHALLENGE_BITS;
-    let ss = spec_n * spec_m * (bb_constant - 1) * (ee - 1);
-    let zz = (2 * NUM_ZK_REPETITIONS * ss) as isize;
-    let mut target_power = *Gt::identity();
-
-    // For each Delta in [1..E - 1] we compute target^Delta and use
-    // baby-step-giant-step to find `scaled_answer` such that:
-    //   base^scaled_answer = target^Delta
-    // Then base^(scaled_answer * invDelta) = target where
-    //   invDelta = inverse of Delta mod spec_r
-    // That is, answer = scaled_answer * invDelta.
-    for delta in 1..ee {
-        target_power += target;
-        match baby_giant(&target_power, Gt::generator(), 1 - zz, 2 * zz - 1) {
-            None => {}
-            Some(scaled_answer) => {
-                let mut answer = Scalar::from_usize(delta);
-                answer = answer.inverse().expect("Delta is always invertible");
-                answer *= Scalar::from_isize(scaled_answer);
-                return Some(answer);
-            }
-        }
-    }
-    None
 }

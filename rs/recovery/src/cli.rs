@@ -1,127 +1,96 @@
-//! Command line interfaces to various subnet recovery processes.
 //! Calls the recovery library.
-use crate::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs};
-use crate::get_node_heights_from_metrics;
-use crate::nns_recovery_failover_nodes;
-use crate::nns_recovery_failover_nodes::{NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs};
-use crate::nns_recovery_same_nodes;
-use crate::nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs};
-use crate::steps::Step;
-use crate::util::subnet_id_from_str;
-use crate::{app_subnet_recovery, util};
-use crate::{NeuronArgs, RecoveryArgs};
-use ic_types::{NodeId, ReplicaVersion, SubnetId};
-use slog::{info, warn, Logger};
-use std::convert::TryFrom;
-use std::io::{stdin, stdout, Write};
-use std::net::IpAddr;
-use url::Url;
+use crate::{
+    DataLocation, NeuronArgs, RecoveryArgs,
+    app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs},
+    args_merger::merge,
+    error::GracefulExpect,
+    get_available_nodes_heights_from_metrics,
+    nns_recovery_failover_nodes::{NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs},
+    nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
+    recovery_iterator::RecoveryIterator,
+    recovery_state::{HasRecoveryState, RecoveryState},
+    registry_helper::RegistryHelper,
+    steps::Step,
+    util::{data_location_from_str, node_id_from_str, subnet_id_from_str},
+};
+use core::fmt::Debug;
+use ic_types::{NodeId, SubnetId};
+use serde::{Serialize, de::DeserializeOwned};
+use slog::{Logger, info, warn};
+use std::{
+    fmt::Display,
+    io::{Write, stdin, stdout},
+    path::Path,
+    str::FromStr,
+};
+use strum::EnumMessage;
 
-/// Application subnets are recovered by:
-///     1. Halting the broken subnet
-///     2. Downloading the most recent state by
-///         a) Choosing a node with max finalization height
-///         b) Optionally deploying read only access keys
-///     3. Updating the config to point to downloaded state
-///     4. Deleting old checkpoints
-///     5. Replaying finalized blocks using `ic-replay`
-///     6. Optionally proposing and upgrading the subnet to a new replica
-///        version     
-///     7. Proposing the recovery CUP
-///     8. Uploading the replayed state to one of the nodes
-///     9. Unhalting the recovered subnet
+const SUMMARY: &str = "The recovery process of an application subnet is only necessary,
+if a subnet stopped finalizing new blocks and cannot recover from
+this failure on its own. If the root cause of the issue was already
+identified and a new replica version with a hotfix is ready to be
+elected, a recovery process can be started.
+
+On a high level, this process consists of the following steps:
+
+1. Halting the broken subnet and deploying read only access keys.
+2. Downloading the most recent state by:
+    a) Downloading and merging certification pools from all available nodes
+    b) Choosing a node with the highest finalization height and downloading its
+       most recent state,
+3. Replaying finalized blocks using `ic-replay`.
+4. Optionally proposing and upgrading the subnet to a new replica
+   version.
+5. Proposing the recovery CUP.
+6. Uploading the obtained state to one of the nodes.
+7. Unhalting the recovered subnet.";
+
+fn nns_recovery_disclaimer(dir_path: &Path) -> String {
+    format!(
+        r#"
+The initialization of the local store uses the given NNS URL to make query calls to
+`get_certified_changes_since` to the registry canister. In case all NNS nodes are down in
+such a way that they cannot even serve query calls, then the local store initialization will
+stay stuck in an infinite loop.
+
+In such a case, it is possible to manually initialize the local store before starting the
+recovery, because then `ic-recovery` will not perform any calls to the registry canister.
+To do so, you should download the local store of a node that is up-to-date and honest,
+and place it in the expected location (i.e.
+`{dir}/recovery/working_dir/data/ic_registry_local_store`),
+for example using the following commands:
+
+mkdir -p {dir}/recovery/working_dir/data/ic_registry_local_store
+rsync --archive --checksum --delete --partial --progress --no-g backup@[IPV6]:/var/lib/ic/data/ic_registry_local_store/ {dir}/recovery/working_dir/data/ic_registry_local_store -e "ssh -o StrictHostKeyChecking=no -o NumberOfPasswordPrompts=0 -o ConnectionAttempts=4 -o ConnectTimeout=15 -A
+"#,
+        dir = dir_path.display()
+    )
+}
+
 pub fn app_subnet_recovery(
     logger: Logger,
     args: RecoveryArgs,
     subnet_recovery_args: AppSubnetRecoveryArgs,
-    test: bool,
+    mut neuron_args: Option<NeuronArgs>,
 ) {
     print_step(&logger, "App Subnet Recovery");
+    info!(logger, "\n{}\n", SUMMARY);
     print_summary(&logger, &args, subnet_recovery_args.subnet_id);
-    wait_for_confirmation(&logger);
-
-    let mut neuron_args = None;
-    if !test {
+    if !args.skip_prompts {
+        wait_for_confirmation(&logger);
+    }
+    if neuron_args.is_none() && !args.test_mode {
         neuron_args = Some(read_neuron_args(&logger));
     }
 
-    let nns_url = args.nns_url.clone();
-    let mut subnet_recovery =
-        AppSubnetRecovery::new(logger.clone(), args, neuron_args, subnet_recovery_args);
+    let subnet_recovery = AppSubnetRecovery::new(
+        logger.clone(),
+        args.clone(),
+        neuron_args,
+        subnet_recovery_args,
+    );
 
-    if subnet_recovery.params.pub_key.is_none() {
-        subnet_recovery.params.pub_key = read_optional(
-            &logger,
-            "Enter public key to add readonly SSH access to subnet: ",
-        );
-    }
-
-    while let Some((step_type, step)) = subnet_recovery.next() {
-        print_step(&logger, &format!("{:?}", step_type));
-        execute_step_after_consent(&logger, step);
-
-        // Depending on which step we just executed we might require some user interaction before we can start the next step.
-        match step_type {
-            app_subnet_recovery::StepType::Halt => {
-                info!(logger, "Ensure subnet is halted.");
-                // This can hardly be automated as currently the notion of "subnet is halted" is unclear,
-                // especially in the presence of failures.
-                wait_for_confirmation(&logger);
-
-                // We could pick a node with highest finalization height automatically,
-                // but we might have a preference between nodes of the same finalization height.
-                print_height_info(&logger, nns_url.clone(), subnet_recovery.params.subnet_id);
-
-                if subnet_recovery.params.download_node.is_none() {
-                    subnet_recovery.params.download_node =
-                        read_optional_ip(&logger, "Enter download IP:");
-                }
-            }
-
-            app_subnet_recovery::StepType::ValidateReplayOutput => {
-                if subnet_recovery.params.upgrade_version.is_none() {
-                    subnet_recovery.params.upgrade_version =
-                        read_optional_version(&logger, "Upgrade version: ");
-                }
-                if subnet_recovery.params.replacement_nodes.is_none() {
-                    subnet_recovery.params.replacement_nodes = read_optional_node_ids(
-                        &logger,
-                        "Enter space separated list of replacement nodes: ",
-                    );
-                }
-                if subnet_recovery.params.ecdsa_subnet_id.is_none() {
-                    let is_ecdsa_subnet = match subnet_recovery
-                        .get_recovery_api()
-                        .get_ecdsa_config(subnet_recovery.params.subnet_id)
-                    {
-                        Ok(Some(_)) => true,
-                        Ok(None) => false,
-                        Err(err) => {
-                            warn!(
-                                logger,
-                                "Failed to determine if broken subnet has ECDSA key: {:?}", err
-                            );
-                            false
-                        }
-                    };
-                    if is_ecdsa_subnet {
-                        subnet_recovery.params.ecdsa_subnet_id = read_optional_subnet_id(
-                            &logger,
-                            "Enter ID of subnet to reshare ECDSA key from: ",
-                        );
-                    }
-                }
-            }
-
-            app_subnet_recovery::StepType::ProposeCup => {
-                if subnet_recovery.params.upload_node.is_none() {
-                    subnet_recovery.params.upload_node =
-                        read_optional_ip(&logger, "Enter IP of node with admin access: ");
-                }
-            }
-            _ => {}
-        }
-    }
+    execute_steps(&logger, args.skip_prompts, subnet_recovery);
 }
 
 /// NNS is recovered on same nodes by:
@@ -139,39 +108,18 @@ pub fn nns_recovery_same_nodes(
     logger: Logger,
     args: RecoveryArgs,
     nns_recovery_args: NNSRecoverySameNodesArgs,
-    test: bool,
 ) {
     print_step(&logger, "NNS Recovery Same Nodes");
     print_summary(&logger, &args, nns_recovery_args.subnet_id);
-    wait_for_confirmation(&logger);
-
-    let nns_url = args.nns_url.clone();
-    let mut nns_recovery = NNSRecoverySameNodes::new(logger.clone(), args, nns_recovery_args, test);
-
-    print_height_info(&logger, nns_url, nns_recovery.params.subnet_id);
-
-    if nns_recovery.params.download_node.is_none() {
-        nns_recovery.params.download_node = read_optional_ip(&logger, "Enter download IP:");
+    if !args.skip_prompts {
+        wait_for_confirmation(&logger);
     }
-    while let Some((step_type, step)) = nns_recovery.next() {
-        print_step(&logger, &format!("{:?}", step_type));
-        execute_step_after_consent(&logger, step);
 
-        match step_type {
-            nns_recovery_same_nodes::StepType::DownloadState => {
-                if nns_recovery.params.upgrade_version.is_none() {
-                    nns_recovery.params.upgrade_version =
-                        read_optional_version(&logger, "Upgrade version: ");
-                }
-            }
-            nns_recovery_same_nodes::StepType::UploadCUPandRegistry => {
-                if nns_recovery.params.upload_node.is_none() {
-                    nns_recovery.params.upload_node = read_optional_ip(&logger, "Enter upload IP:");
-                }
-            }
-            _ => {}
-        }
-    }
+    info!(logger, "{}", nns_recovery_disclaimer(&args.dir));
+
+    let nns_recovery = NNSRecoverySameNodes::new(logger.clone(), args.clone(), nns_recovery_args);
+
+    execute_steps(&logger, args.skip_prompts, nns_recovery);
 }
 
 /// NNS is recovered on failover nodes by:
@@ -189,99 +137,71 @@ pub fn nns_recovery_failover_nodes(
     logger: Logger,
     args: RecoveryArgs,
     nns_recovery_args: NNSRecoveryFailoverNodesArgs,
-    test: bool,
+    mut neuron_args: Option<NeuronArgs>,
 ) {
     print_step(&logger, "NNS Recovery Failover Nodes");
     print_summary(&logger, &args, nns_recovery_args.subnet_id);
-    wait_for_confirmation(&logger);
+    if !args.skip_prompts {
+        wait_for_confirmation(&logger);
+    }
 
-    let mut neuron_args = None;
-    if !test {
+    if neuron_args.is_none() && !args.test_mode {
         neuron_args = Some(read_neuron_args(&logger));
     }
 
-    let validate_nns_url = nns_recovery_args.validate_nns_url.clone();
-    let mut nns_recovery =
-        NNSRecoveryFailoverNodes::new(logger.clone(), args, neuron_args, nns_recovery_args);
+    info!(logger, "{}", nns_recovery_disclaimer(&args.dir));
 
-    print_height_info(&logger, validate_nns_url, nns_recovery.params.subnet_id);
+    let nns_recovery =
+        NNSRecoveryFailoverNodes::new(logger.clone(), args.clone(), neuron_args, nns_recovery_args);
 
-    if nns_recovery.params.download_node.is_none() {
-        nns_recovery.params.download_node = read_optional_ip(&logger, "Enter download IP:");
+    execute_steps(&logger, args.skip_prompts, nns_recovery);
+}
+
+pub fn execute_steps<
+    StepType: Copy + Debug + PartialEq + EnumMessage,
+    SubcommandArgsType: Serialize + DeserializeOwned,
+    I: Iterator<Item = StepType>,
+    Steps: HasRecoveryState<StepType = StepType, SubcommandArgsType = SubcommandArgsType>
+        + RecoveryIterator<StepType, I>
+        + Iterator<Item = (StepType, Box<dyn Step>)>,
+>(
+    logger: &Logger,
+    skip_prompts: bool,
+    mut steps: Steps,
+) {
+    if let Some(next_step) = steps.get_next_step() {
+        steps.resume(next_step);
     }
 
-    while let Some((step_type, step)) = nns_recovery.next() {
-        print_step(&logger, &format!("{:?}", step_type));
-        execute_step_after_consent(&logger, step);
+    while let Some((_step_type, step)) = steps.next() {
+        execute_step_after_consent(logger, skip_prompts, step);
 
-        match step_type {
-            nns_recovery_failover_nodes::StepType::DownloadState => {
-                if nns_recovery.params.replica_version.is_none() {
-                    nns_recovery.params.replica_version = read_optional_version(
-                        &logger,
-                        "New NNS version (current unassigned version or other version blessed by parent NNS): ",
-                    );
-                }
-                if nns_recovery.params.replacement_nodes.is_none() {
-                    nns_recovery.params.replacement_nodes = read_optional_node_ids(
-                        &logger,
-                        "Enter space separated list of replacement nodes: ",
-                    );
-                }
-            }
-            nns_recovery_failover_nodes::StepType::ProposeToCreateSubnet => {
-                if nns_recovery.params.parent_nns_host_ip.is_none() {
-                    nns_recovery.params.parent_nns_host_ip = read_optional_ip(
-                        &logger,
-                        "Enter parent NNS IP to download the registry store from:",
-                    );
-                }
-            }
-            nns_recovery_failover_nodes::StepType::CreateRegistryTar => {
-                if nns_recovery.params.aux_user.is_none() {
-                    nns_recovery.params.aux_user = read_optional(&logger, "Enter aux user:");
-                }
-                if nns_recovery.params.aux_ip.is_none() {
-                    nns_recovery.params.aux_ip = read_optional_ip(&logger, "Enter aux IP:");
-                }
-                if (nns_recovery.params.aux_user.is_none() || nns_recovery.params.aux_ip.is_none())
-                    && nns_recovery.params.registry_url.is_none()
-                {
-                    nns_recovery.params.registry_url = read_optional_url(
-                        &logger,
-                        "Enter URL of the hosted registry store tar file:",
-                    );
-                }
-            }
-            nns_recovery_failover_nodes::StepType::ProposeCUP => {
-                if nns_recovery.params.upload_node.is_none() {
-                    nns_recovery.params.upload_node =
-                        read_optional_ip(&logger, "Enter IP of node with admin access: ");
-                }
-            }
-            _ => {}
+        if let Err(e) = steps.get_state().and_then(|state| state.save()) {
+            warn!(logger, "Failed to save the recovery state: {}", e);
         }
     }
 }
 
-pub fn execute_step_after_consent(logger: &Logger, step: Box<dyn Step>) {
+fn execute_step_after_consent(logger: &Logger, skip_prompts: bool, step: Box<dyn Step>) {
     info!(logger, "{}", step.descr());
-    if consent_given(logger, "Execute now?") {
-        loop {
-            match step.exec() {
-                Ok(()) => break,
-                Err(e) => {
-                    warn!(logger, "Error: {}", e);
-                    if !consent_given(logger, "Retry now?") {
-                        break;
-                    }
+    if !skip_prompts && !consent_given(logger, "Execute now?") {
+        return;
+    }
+
+    loop {
+        match step.exec() {
+            Ok(()) => break,
+            Err(e) => {
+                warn!(logger, "Error: {}", e);
+                if !skip_prompts && !consent_given(logger, "Retry now?") {
+                    break;
                 }
             }
         }
     }
 }
 
-pub fn print_summary(logger: &Logger, args: &RecoveryArgs, subnet_id: SubnetId) {
+fn print_summary(logger: &Logger, args: &RecoveryArgs, subnet_id: SubnetId) {
     info!(logger, "NNS Url: {}", args.nns_url);
     info!(logger, "Starting recovery of subnet with ID:");
     info!(logger, "-> {:?}", subnet_id);
@@ -290,9 +210,13 @@ pub fn print_summary(logger: &Logger, args: &RecoveryArgs, subnet_id: SubnetId) 
     info!(logger, "Creating recovery directory in {:?}", args.dir);
 }
 
-pub fn print_height_info(logger: &Logger, nns_url: Url, subnet_id: SubnetId) {
-    info!(logger, "Select a node with highest finalization height:");
-    match get_node_heights_from_metrics(logger, nns_url, subnet_id) {
+pub fn print_height_info(logger: &Logger, registry_helper: &RegistryHelper, subnet_id: SubnetId) {
+    info!(logger, "Collecting node heights from metrics...");
+    info!(
+        logger,
+        "Select a node with highest finalization height and highest CUP height:"
+    );
+    match get_available_nodes_heights_from_metrics(logger, registry_helper, subnet_id) {
         Ok(heights) => info!(logger, "{:#?}", heights),
         Err(err) => warn!(logger, "Failed to query height info: {:?}", err),
     }
@@ -308,13 +232,20 @@ pub fn print_step(logger: &Logger, title: &str) {
 }
 
 /// Prints a question to the user and returns `true`
-/// if the user replied with a yes.
+/// if the user replied with a yes. Returns `false` if the user replied with a no.
+/// Skips all other inputs.
 pub fn consent_given(logger: &Logger, question: &str) -> bool {
-    info!(logger, "{} [y/N] ", question);
-    let _ = stdout().flush();
-    let mut s = String::new();
-    stdin().read_line(&mut s).expect("Couldn't read user input");
-    matches!(s.as_str(), "y\n" | "Y\n")
+    info!(logger, "{} [y/n] ", question);
+    loop {
+        let _ = stdout().flush();
+        let mut s = String::new();
+        stdin().read_line(&mut s).expect("Couldn't read user input");
+        match s.as_str() {
+            "y\n" | "Y\n" => return true,
+            "n\n" | "N\n" => return false,
+            _ => continue,
+        }
+    }
 }
 
 /// Prints a question to the user and returns `true`
@@ -324,7 +255,7 @@ pub fn wait_for_confirmation(logger: &Logger) {
 }
 
 /// Request and read input from the user with the given prompt.
-pub fn read_input(logger: &Logger, prompt: &str) -> String {
+fn read_input(logger: &Logger, prompt: &str) -> String {
     info!(logger, "{}", prompt);
     let _ = stdout().flush();
     let mut input = String::new();
@@ -332,61 +263,69 @@ pub fn read_input(logger: &Logger, prompt: &str) -> String {
     input.trim().to_string()
 }
 
-/// Request and read input from the user with the given prompt. Convert empty
-/// input to `None`.
-pub fn read_optional(logger: &Logger, prompt: &str) -> Option<String> {
-    let input = read_input(logger, &format!("(Optional) {}", prompt));
-    if input.is_empty() {
-        None
-    } else {
-        Some(input)
-    }
+/// Read an optional input that can be parsed from a string. If the user input is empty, `None` is
+/// returned. Otherwise, the input is parsed and returned as `Some(value)`.
+pub fn read_optional<T: FromStr>(logger: &Logger, prompt: &str) -> Option<T>
+where
+    <T as FromStr>::Err: std::fmt::Display,
+{
+    read_optional_type(logger, prompt, FromStr::from_str)
 }
 
 pub fn read_optional_node_ids(logger: &Logger, prompt: &str) -> Option<Vec<NodeId>> {
     read_optional_type(logger, prompt, |input| {
         input
             .split(' ')
-            .map(util::node_id_from_str)
+            .map(node_id_from_str)
             .collect::<Result<Vec<NodeId>, _>>()
     })
 }
 
-pub fn read_optional_ip(logger: &Logger, prompt: &str) -> Option<IpAddr> {
-    read_optional_type(logger, prompt, |input| {
-        input.parse::<IpAddr>().map_err(|err| err.to_string())
-    })
-}
-
-pub fn read_optional_version(logger: &Logger, prompt: &str) -> Option<ReplicaVersion> {
-    read_optional_type(logger, prompt, |input| {
-        ReplicaVersion::try_from(input).map_err(|err| err.to_string())
-    })
-}
-
-pub fn read_optional_url(logger: &Logger, prompt: &str) -> Option<Url> {
-    read_optional_type(logger, prompt, |input| {
-        Url::parse(&input).map_err(|e| e.to_string())
-    })
-}
-
 pub fn read_optional_subnet_id(logger: &Logger, prompt: &str) -> Option<SubnetId> {
-    read_optional_type(logger, prompt, |input| subnet_id_from_str(&input))
+    read_optional_type(logger, prompt, subnet_id_from_str)
 }
 
-/// Optionally read an input of the generic type by applying the given deserialization function.
-pub fn read_optional_type<T>(
+pub fn read_optional_data_location(logger: &Logger, prompt: &str) -> Option<DataLocation> {
+    read_optional_type(logger, prompt, data_location_from_str)
+}
+
+/// Read an optional input of the generic type by applying the given deserialization function if the
+/// input is not empty.
+pub fn read_optional_type<T, E: Display>(
     logger: &Logger,
     prompt: &str,
-    mapper: impl Fn(String) -> Result<T, String> + Copy,
+    mapper: impl Fn(&str) -> Result<T, E>,
 ) -> Option<T> {
+    read_type(logger, &format!("(Optional) {prompt}"), |input| {
+        if input.is_empty() {
+            Ok(None)
+        } else {
+            mapper(input).map(Some)
+        }
+    })
+}
+
+/// Read an input that can be parsed from a string. In contrast to `read_optional`, an empty input
+/// will still be parsed and returned as a value of the generic type.
+pub fn read<T: FromStr>(logger: &Logger, prompt: &str) -> T
+where
+    <T as FromStr>::Err: std::fmt::Display,
+{
+    read_type(logger, prompt, FromStr::from_str)
+}
+
+/// Read an input of the generic type by applying the given deserialization function.
+fn read_type<T, E: Display>(
+    logger: &Logger,
+    prompt: &str,
+    mapper: impl Fn(&str) -> Result<T, E>,
+) -> T {
     loop {
-        match read_optional(logger, prompt).map(mapper) {
-            Some(Err(e)) => {
+        match mapper(&read_input(logger, prompt)) {
+            Err(e) => {
                 warn!(logger, "Could not parse input: {}", e);
             }
-            Some(Ok(v)) => return Some(v),
-            None => return None,
+            Ok(v) => return v,
         }
     }
 }
@@ -397,5 +336,85 @@ pub fn read_neuron_args(logger: &Logger) -> NeuronArgs {
         slot: read_input(logger, "Enter slot number: "),
         neuron_id: read_input(logger, "Enter neuron ID: "),
         key_id: read_input(logger, "Enter key ID: "),
+    }
+}
+
+pub fn read_and_maybe_update_state<T: Serialize + DeserializeOwned + Clone + PartialEq>(
+    logger: &Logger,
+    recovery_args: RecoveryArgs,
+    subcommand_args: Option<T>,
+) -> RecoveryState<T> {
+    let state = RecoveryState::<T>::read(&recovery_args.dir)
+        .expect_graceful("Failed to read the recovery state file");
+
+    if let Some(state) = state {
+        info!(
+            &logger,
+            "Recovery state file found with parameters {}",
+            serde_json::to_string_pretty(&state).expect("Failed to stringify the recovery state"),
+        );
+
+        // In system tests where `recovery_args.skip_prompts` is set, we want to execute the CLI
+        // arguments without making any assumptions on the saved state.
+        if !recovery_args.skip_prompts
+            && consent_given(logger, "Resume previously started recovery?")
+        {
+            let state = maybe_update_state(logger, state, &recovery_args, &subcommand_args);
+            // Immediately save the state with potentially new arguments
+            if let Err(e) = state.save() {
+                warn!(logger, "Failed to save the recovery state: {}", e);
+            }
+            return state;
+        }
+    }
+
+    // We are not resuming previously started recovery. Use the command-line arguments as is.
+    RecoveryState {
+        recovery_args,
+        subcommand_args: subcommand_args.expect("subcommand not provided"),
+        neuron_args: None,
+    }
+}
+
+/// Checks if there are any differences between the arguments passed to the tool in this run
+/// compared to the last run. If there are, asks user whether to use the new arguments.
+fn maybe_update_state<T: Serialize + DeserializeOwned + Clone + PartialEq>(
+    logger: &Logger,
+    recovery_state: RecoveryState<T>,
+    recovery_args: &RecoveryArgs,
+    subcommand_args: &Option<T>,
+) -> RecoveryState<T> {
+    let mut updated_recovery_state = recovery_state.clone();
+
+    updated_recovery_state.recovery_args = merge(
+        logger,
+        "Recovery Arguments",
+        &recovery_state.recovery_args,
+        recovery_args,
+    )
+    .unwrap();
+
+    if let Some(subcommand_args) = subcommand_args.as_ref() {
+        updated_recovery_state.subcommand_args = merge(
+            logger,
+            "Subcommand Arguments",
+            &recovery_state.subcommand_args,
+            subcommand_args,
+        )
+        .expect(
+            "Failed to merge subcommand arguments. \
+             Did you use a different subcommand than in the previous run?",
+        );
+    }
+
+    if updated_recovery_state != recovery_state
+        && consent_given(
+            logger,
+            "The arguments are different now than in the previous run. Use the new arguments?",
+        )
+    {
+        updated_recovery_state
+    } else {
+        recovery_state
     }
 }

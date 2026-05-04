@@ -7,7 +7,7 @@ mod tests;
 
 /// A set of receivers for non-interactive DKG. Satisfies invariants, see
 /// `NiDkgReceivers::new`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct NiDkgReceivers {
     receivers: BTreeSet<NodeId>,
     // The count equals receivers.len().
@@ -24,7 +24,7 @@ impl NiDkgReceivers {
     /// * The number of receivers fits into `NodeIndex` (error`:
     ///   TooManyReceivers`)
     ///
-    /// If an invariant is not satisifed, the `Err` as indicated above is
+    /// If an invariant is not satisfied, the `Err` as indicated above is
     /// returned.
     pub fn new(receivers: BTreeSet<NodeId>) -> Result<Self, NiDkgConfigValidationError> {
         Self::ensure_receivers_not_empty(&receivers)?;

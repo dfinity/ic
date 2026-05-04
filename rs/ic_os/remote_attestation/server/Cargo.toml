@@ -1,0 +1,22 @@
+[package]
+name = "remote_attestation_server"
+edition.workspace = true
+
+[[bin]]
+name = "remote_attestation_server"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+rand = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tonic = { workspace = true }
+attestation = { path = "../../sev/attestation" }
+remote_attestation_shared = { path = "../shared" }
+config_tool = { path = "../../config/tool" }
+config_types = { path = "../../config/types" }
+sev_guest = { path = "../../sev/guest" }
+sev = { workspace = true }
+
+[dev-dependencies]
+sev_guest_testing = { path = "../../sev/guest/testing" }

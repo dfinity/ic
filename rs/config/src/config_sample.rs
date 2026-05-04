@@ -60,7 +60,6 @@
 /// # EXAMPLE: y: "bad"
 /// y: "good"
 /// ```
-
 pub const SAMPLE_CONFIG: &str = r#"
 {
     // ============================================
@@ -79,16 +78,24 @@ pub const SAMPLE_CONFIG: &str = r#"
         node_ip: "127.0.0.1",
         // Listening port used by transport to establish peer connections.
         listening_port: 3000,
-        // The size of the buffered messages on the transport send queue.
-        send_queue_size: 1024,
-        // The field will be removed after the new transport implementation is rolled out.
-        legacy_flow_tag: 1,
     },
+    // =========================================================
+    // Configuration of IPv4 networking (provided at first boot)
+    // =========================================================
+    initial_ipv4_config: {
+        public_address: "",
+        public_gateway: "",
+    },
+    // ============================================
+    // Configuration of the domain name
+    // ============================================
+    domain: "",
     // ============================================
     // Configuration of registry client
     // ============================================
     registry_client: {
-        // The default is not to specify it.
+        // The directory that should be used to persist registry content.
+        local_store: "/var/lib/ic/data/ic_registry_local_store/"
     },
     // ============================================
     // Configuration of the node state persistence.
@@ -103,6 +110,9 @@ pub const SAMPLE_CONFIG: &str = r#"
     artifact_pool: {
         // The directory that should be used to persist consensus artifacts.
         consensus_pool_path: "/tmp/ic_consensus_pool",
+        // usize::MAX on 64-bit
+        ingress_pool_max_count: 9223372036854775807,
+        ingress_pool_max_bytes: 9223372036854775807,
         backup: {
             // The directory for the blockchain backup.
             spool_path: "/tmp/ic_backup/",
@@ -111,13 +121,6 @@ pub const SAMPLE_CONFIG: &str = r#"
             // How often we purge.
             purging_interval_secs: 3600
         }
-    },
-    // ============================================
-    // Consensus related config.
-    // ============================================
-    consensus: {
-        // Whether or not to detect starvation. Should only be set to false in tests.
-        detect_starvation: true,
     },
     // ============================================
     // Configuration of the node state persistence.
@@ -129,9 +132,10 @@ pub const SAMPLE_CONFIG: &str = r#"
         // Alternatives:
         // - EXAMPLE: csp_vault_type: "in_replica",
         //   CspVault is an internal structure of the replica process.
-        // - EXAMPLE: csp_vault_type: { unix_socket: "/some/path/to/socket" },
+        // - EXAMPLE: csp_vault_type: { unix_socket: { logic: "/some/path/to/socket", metrics: "/some/path/to/another_socket" } },
         //   CspVault is run as a separate process, which can be reached via a Unix socket.
-        csp_vault_type: { unix_socket: "/some/path/to/socket" },
+        //   It also has an optional Unix socket for exporting metrics.
+        csp_vault_type: { unix_socket: { logic: "/some/path/to/socket", metrics: "/some/path/to/another_socket" } },
     },
     // ========================================
     // Configuration of the message scheduling.
@@ -151,14 +155,11 @@ pub const SAMPLE_CONFIG: &str = r#"
     // Configuration of the execution environment.
     // ================================================
     hypervisor: {
-        // Which technology to use to intercept Wasm memory changes.
-        //
-        // Alternatives:
-        // - EXAMPLE: persistence_type: "sigsegv",
-        //   Use memory persistence based on mprotect + SIGSEGV.
-        // - EXAMPLE: persistence_type: "pagemap",
-        //   Use memory persistence based on /proc/pid/pagemap (Linux) or Mac OS equivalent.
-        persistence_type: "sigsegv",
+    },
+    // ==================================
+    // Configuration for replica tracing.
+    // ==================================
+    tracing: {
     },
     // ====================================
     // Configuration of the HTTPS endpoint.
@@ -180,18 +181,15 @@ pub const SAMPLE_CONFIG: &str = r#"
         //   Expose prometheus metrics on the specified address.
         // - EXAMPLE: exporter: { file: "/path/to/file" },
         //   Dump prometheus metrics to the specified file on shutdown.
-        exporter: "log"
+        exporter: "log",
+        connection_read_timeout_seconds: 300,
+        max_concurrent_requests: 50,
+        request_timeout_seconds: 30,
     },
     // ===================================
     // Configuration of the logging setup.
     // ===================================
     logger: {
-        // The node id to append to log lines. [deprecated]
-        node_id: 100,
-
-        // The datacenter id to append to log lines. [deprecated]
-        dc_id: 200,
-
         // The log level to use.
         // EXAMPLE: level: "critical",
         // EXAMPLE: level: "error",
@@ -206,32 +204,18 @@ pub const SAMPLE_CONFIG: &str = r#"
         // EXAMPLE: format: "json",
         format: "text_full",
 
-        // Output debug logs for these module paths
-        // EXAMPLE: debug_overrides: ["ic_consensus::finalizer", "ic_messaging::coordinator"],
-        debug_overrides: [],
-
-        // Output logs for these tags
-        // EXAMPLE: enabled_tags: ["artifact_tracing"],
-        enabled_tags: [],
-
         // If `true` the async channel for low-priority messages will block instead of drop messages.
         // This behavior is required for instrumentation in System Testing until we have a
         // dedicated solution for instrumentation.
         //
         // The default for this value is `false` and thus matches the previously expected behavior in
         // production use cases.
-        block_on_overflow: true,
+        block_on_overflow: false,
     },
     // ===================================
     // Configuration of the logging setup for the orchestrator.
     // ===================================
     orchestrator_logger: {
-        // The node id to append to log lines. [deprecated]
-        node_id: 100,
-
-        // The datacenter id to append to log lines. [deprecated]
-        dc_id: 200,
-
         // The log level to use.
         // EXAMPLE: level: "critical",
         // EXAMPLE: level: "error",
@@ -246,32 +230,18 @@ pub const SAMPLE_CONFIG: &str = r#"
         // EXAMPLE: format: "json",
         format: "text_full",
 
-        // Output debug logs for these module paths
-        // EXAMPLE: debug_overrides: ["ic_consensus::finalizer", "ic_messaging::coordinator"],
-        debug_overrides: [],
-
-        // Output logs for these tags
-        // EXAMPLE: enabled_tags: ["artifact_tracing"],
-        enabled_tags: [],
-
         // If `true` the async channel for low-priority messages will block instead of drop messages.
         // This behavior is required for instrumentation in System Testing until we have a
         // dedicated solution for instrumentation.
         //
         // The default for this value is `false` and thus matches the previously expected behavior in
         // production use cases.
-        block_on_overflow: true,
+        block_on_overflow: false,
     },
     // ===================================
     // Configuration of the logging setup for the CSP vault.
     // ===================================
     csp_vault_logger: {
-        // The node id to append to log lines. [deprecated]
-        node_id: 100,
-
-        // The datacenter id to append to log lines. [deprecated]
-        dc_id: 200,
-
         // The log level to use.
         // EXAMPLE: level: "critical",
         // EXAMPLE: level: "error",
@@ -286,21 +256,13 @@ pub const SAMPLE_CONFIG: &str = r#"
         // EXAMPLE: format: "json",
         format: "text_full",
 
-        // Output debug logs for these module paths
-        // EXAMPLE: debug_overrides: ["ic_crypto_internal_csp::vault"],
-        debug_overrides: [],
-
-        // Output logs for these tags
-        // EXAMPLE: enabled_tags: ["artifact_tracing"],
-        enabled_tags: [],
-
         // If `true` the async channel for low-priority messages will block instead of drop messages.
         // This behavior is required for instrumentation in System Testing until we have a
         // dedicated solution for instrumentation.
         //
         // The default for this value is `false` and thus matches the previously expected behavior in
         // production use cases.
-        block_on_overflow: true,
+        block_on_overflow: false,
     },
     // =================================
     // Configuration of Message Routing.
@@ -311,16 +273,11 @@ pub const SAMPLE_CONFIG: &str = r#"
     // =================================
     // Configuration of Malicious behavior.
     // =================================
-    malicious_behaviour: {
-       allow_malicious_behaviour: false,
+    malicious_behavior: {
+       allow_malicious_behavior: false,
        maliciously_seg_fault: false,
 
        malicious_flags: {
-         maliciously_gossip_drop_requests: false,
-         maliciously_gossip_artifact_not_found: false,
-         maliciously_gossip_send_many_artifacts: false,
-         maliciously_gossip_send_invalid_artifacts: false,
-         maliciously_gossip_send_late_artifacts: false,
          maliciously_propose_equivocating_blocks: false,
          maliciously_propose_empty_blocks: false,
          maliciously_finalize_all: false,
@@ -331,20 +288,37 @@ pub const SAMPLE_CONFIG: &str = r#"
          maliciously_disable_execution: false,
          maliciously_corrupt_own_state_at_heights: [],
          maliciously_disable_ingress_validation: false,
-         maliciously_corrupt_ecdsa_dealings: false,
+         maliciously_corrupt_idkg_dealings: false,
+         maliciously_alter_certified_hash: false,
+         maliciously_alter_state_sync_chunk_sending_side: false,
        },
     },
 
     firewall: {
         config_file: "/path/to/nftables/config",
         file_template: "",
-        ipv4_rule_template: "",
-        ipv6_rule_template: "",
+        ipv4_tcp_rule_template: "",
+        ipv4_udp_rule_template: "",
+        ipv6_tcp_rule_template: "",
+        ipv6_udp_rule_template: "",
         ipv4_user_output_rule_template: "",
         ipv6_user_output_rule_template: "",
         default_rules: [],
-        ports_for_node_whitelist: [],
+        tcp_ports_for_node_whitelist: [],
+        udp_ports_for_node_whitelist: [],
         ports_for_http_adapter_blacklist: [],
+        max_simultaneous_connections_per_ip_address: 0,
+    },
+
+    boundary_node_firewall: {
+        config_file: "/path/to/nftables/config",
+        file_template: "",
+        ipv4_tcp_rule_template: "",
+        ipv4_udp_rule_template: "",
+        ipv6_tcp_rule_template: "",
+        ipv6_udp_rule_template: "",
+        default_rules: [],
+        max_simultaneous_connections_per_ip_address: 0,
     },
 
     // =================================
@@ -360,14 +334,16 @@ pub const SAMPLE_CONFIG: &str = r#"
       poll_delay_duration_ms: 5000
     },
     // ====================================
-    // Configuration of various adapters. 
+    // Configuration of various adapters.
     // ====================================
     adapters_config: {
         bitcoin_testnet_uds_path: "/tmp/bitcoin_uds",
         // IPC socket path for canister http adapter. This UDS path has to be the same as
         // specified in the systemd socket file.
-        // The canister http adapter socket file is: /ic-os/guestos/rootfs/systemd/system/ic-canister-http-adapter.socket
-        canister_http_uds_path: "/run/ic-node/canister-http-adapter/socket",
+        // The canister http adapter socket file is: ic-https-outcalls-adapter.socket
+        https_outcalls_uds_path: "/run/ic-node/https-outcalls-adapter/socket",
+    },
+    bitcoin_payload_builder_config: {
     },
 }
 "#;
@@ -427,7 +403,7 @@ mod tests {
                 for &alternative in group.iter() {
                     let full_config = [&prefix, alternative, &suffix].join("\n");
                     if let Err(err) = json5::from_str::<Config>(&full_config) {
-                        panic!("Failed to parse config variant {}: {}", full_config, err);
+                        panic!("Failed to parse config variant {full_config}: {err}");
                     }
                 }
             }

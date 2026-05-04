@@ -2,40 +2,37 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite
 
 package(
     default_visibility = [
-        "//rs/canister_client:__pkg__",
-        "//rs/canister_client/sender:__pkg__",
         "//rs/crypto:__subpackages__",
         "//rs/crypto/internal:__subpackages__",
     ],
 )
 
 DEPENDENCIES = [
-    "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
+    # Keep sorted.
+    "//packages/ic-secp256r1",
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/secrets_containers",
     "//rs/types/types",
     "@crate_index//:base64",
-    "@crate_index//:hex",
-    "@crate_index//:openssl",
+    "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
-    "@crate_index//:simple_asn1",
     "@crate_index//:zeroize",
 ]
 
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
-    "//rs/crypto/internal/test_vectors",
-    "@crate_index//:proptest",
+    # Keep sorted.
+    "//rs/crypto/sha2",
+    "//rs/crypto/test_utils/reproducible_rng",
+    "@crate_index//:assert_matches",
+    "@crate_index//:hex",
     "@crate_index//:regex",
-    "@crate_index//:strum",
     "@crate_index//:wycheproof",
 ]
 
-MACRO_DEV_DEPENDENCIES = [
-    "@crate_index//:proptest-derive",
-]
+MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
@@ -45,7 +42,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_crypto_internal_basic_sig_ecdsa_secp256r1",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -58,7 +55,7 @@ rust_test(
 )
 
 rust_test_suite(
-    name = "ecdsa_secp256r1_integration_tests",
+    name = "ecdsa_secp256r1_integration",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

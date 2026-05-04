@@ -1,3 +1,4 @@
+use ic_types::NodeId;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
@@ -5,7 +6,6 @@ use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRe
 use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgTranscript};
-use ic_types::NodeId;
 use std::collections::{BTreeMap, HashSet};
 
 /// The result of loading a transcript
@@ -16,15 +16,19 @@ use std::collections::{BTreeMap, HashSet};
 pub enum LoadTranscriptResult {
     /// The keys associated with the transcript could be decrypted
     SigningKeyAvailable,
-    /// The keys associated with the transcript could not be decrypted
-    /// as this node never had access to the associated forward-secure
-    /// encryption keys
+    /// The signing key associated with the transcript could not be decrypted
+    /// as the node does not have the required forward-secure decryption key
     SigningKeyUnavailable,
     /// The keys associated with the transcript could not be decrypted
     /// because this node has subseqently called retain_only_active_keys
     /// and discarded the forward-secure keys that would be needed to
     /// decrypt the keys in the transcript
     SigningKeyUnavailableDueToDiscard,
+    /// The keys associated with the transcript could not be decrypted
+    /// because this node is not part of the current DKG committee.
+    /// This could be the case because the node is currently joining the
+    /// network or because the node is replaying.
+    NodeNotInCommittee,
 }
 
 /// The building blocks to perform non-interactive distributed key generation
@@ -59,25 +63,32 @@ pub trait NiDkgAlgorithm {
     /// Creates a non-interactive DKG dealing.
     ///
     /// # Errors
-    /// * `DkgCreateDealingError::InvalidTranscript` if the
-    ///   `resharing_transcript` in the `config` cannot be parsed.
-    /// * `DkgCreateDealingError::NotADealer` if the `self.node_id` is not
+    /// * [`DkgCreateDealingError::ReshareKeyIdComputationError`] if a key ID cannot be computed
+    ///   from the `resharing_transcript` in the `config`.
+    /// * [`DkgCreateDealingError::NotADealer`] if the `self.node_id` is not
     ///   contained in the `config`'s dealers.
-    /// * `DkgCreateDealingError::FsEncryptionPublicKeyNotInRegistry` if a
+    /// * [`DkgCreateDealingError::FsEncryptionPublicKeyNotInRegistry`] if a
     ///   forward secure encryption public key is not in the registry.
-    /// * `DkgCreateDealingError::Registry` if the registry client returns an
+    /// * [`DkgCreateDealingError::Registry`] if the registry client returns an
     ///   error, e.g. because the `registry_version` in the `config` is not
     ///   available.
-    /// * `DkgCreateDealingError::MalformedFsEncryptionPublicKey` if the
+    /// * [`DkgCreateDealingError::MalformedFsEncryptionPublicKey`] if the
     ///   encryption public key fetched from the registry is malformed.
-    /// * `DkgCreateDealingError::ThresholdSigningKeyNotInSecretKeyStore` if the
+    /// * [`DkgCreateDealingError::ThresholdSigningKeyNotInSecretKeyStore`] if the
     ///   threshold signing key to be reshared (in the case of resharing) is not
     ///   in the secret key store.  This error indicates that
-    ///   `NiDkgAlgorithm::load_transcript`  must be called prior to calling
+    ///   [`NiDkgAlgorithm::load_transcript`]  must be called prior to calling
     ///   this method.
+    /// * [`DkgCreateDealingError::TransientInternalError`] if there is a transient internal error,
+    ///   e.g., an RPC error when calling a remote CSP vault.
     fn create_dealing(&self, config: &NiDkgConfig) -> Result<NiDkgDealing, DkgCreateDealingError>;
 
     /// Verifies a non-interactive DKG dealing.
+    ///
+    /// # Preconditions
+    /// * As part of the NIDKG protocol the `NiDkgDealing` are signed. The `dealer`
+    ///   used during dealing's verification is assumed to be the identity of the
+    ///   node that signed the `dealing`.
     ///
     /// # Errors
     /// * `DkgVerifyDealingError::InvalidDealingError` if the dealing is
@@ -123,7 +134,7 @@ pub trait NiDkgAlgorithm {
     fn create_transcript(
         &self,
         config: &NiDkgConfig,
-        verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+        verified_dealings: BTreeMap<NodeId, NiDkgDealing>,
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError>;
 
     /// Loads the transcript. This ensures that
@@ -154,6 +165,10 @@ pub trait NiDkgAlgorithm {
     ///   error, e.g. because the registry version is not available.
     /// * `DkgLoadTranscriptError::InvalidTranscript` if the transcript could
     ///   not be parsed.
+    /// * `DkgLoadTranscriptError::TransientInternalError` if there was a transient internal error
+    ///   while loading the transcript, e.g., an RPC error when calling the remote CSP vault.
+    /// * `DkgLoadTranscriptError::InternalError` if there was an internal error, e.g., due to
+    ///   invalid input.
     fn load_transcript(
         &self,
         transcript: &NiDkgTranscript,
@@ -186,8 +201,14 @@ pub trait NiDkgAlgorithm {
     ///   transcripts}` cannot be obtained or is malformed. In this case the FS
     ///   decryption key is not updated, but the removal of threshold signing
     ///   keys is still ensured.
-    /// * `FsKeyNotInSecretKeyStoreError::FsKeyNotInSecretKeyStoreError`: If the
+    /// * `DkgKeyRemovalError::FsKeyNotInSecretKeyStoreError`: If the
     ///   forward secure key to be updated is not found in the secret key store.
+    /// * `DkgKeyRemovalError::TransientInternalError`: if there was a transient error while
+    ///   retaining the active keys, e.g., if there was an error communicating with the remote
+    ///   CSP vault.
+    /// * `DkgKeyRemovalError::KeyNotFoundError`: if a key could not be found.
+    /// * `DkgKeyRemovalError::KeyIdInstantiationError`: if a key ID could not be computed from
+    ///   the public coefficients in the transcript.
     fn retain_only_active_keys(
         &self,
         transcripts: HashSet<NiDkgTranscript>,

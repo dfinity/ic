@@ -1,0 +1,53 @@
+[package]
+name = "sns_tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+ic-nervous-system-common = { path = "../../../nervous_system/common" }
+ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
+ic-sns-swap = { path = "../../../sns/swap" }
+ic-system-test-driver = { path = "../../driver" }
+rust_decimal = "1.36.0"
+slog = { workspace = true }
+sns_system_test_lib = { path = "./lib" }
+
+[[bin]]
+name = "ic-systest-sns-sale-simple-load-test"
+path = "sns_sale_load_test_1.rs"
+
+[[bin]]
+name = "ic-systest-sns-sale-simple-load-test-2"
+path = "sns_sale_load_test_2.rs"
+
+[[bin]]
+name = "ic-systest-sns-sale-simple-load-test-3"
+path = "sns_sale_load_test_3.rs"
+
+[[bin]]
+name = "ic-systest-sns-aggregation-canister-test"
+path = "aggregation_canister_test.rs"
+
+[[bin]]
+name = "ic-systest-sns-workload-static-testnet"
+path = "workload_static_testnet.rs"
+
+[[bin]]
+name = "ic-systest-sns-launchpad-direct-load-test"
+path = "launchpad_direct_load_test.rs"
+
+[[bin]]
+name = "ic-systest-sns-launchpad-direct-auth-load-test"
+path = "launchpad_direct_auth_load_test.rs"
+
+[[bin]]
+name = "ic-systest-sns-launchpad-aggregator-load-test"
+path = "launchpad_aggregator_load_test.rs"
+
+[[bin]]
+name = "ic-systest-sns-payment-flow-load-test"
+path = "payment_flow_load_test.rs"

@@ -1,0 +1,58 @@
+= Network Configuration
+
+== Basic network information
+
+Network configuration details for each IC-OS:
+
+* SetupOS
+** Basic network connectivity is checked via pinging nns.ic0.app and the default gateway. Virtually no network traffic goes through SetupOS.
+* HostOS
+** The br6 bridge network interface is set up and passed to the GuestOS VM through qemu (refer to guestos_template.xml).
+* GuestOS
+** An internet connection is received via the br6 bridge interface from qemu.
+
+== Deterministic MAC Address
+
+Each IC-OS node must have a unique but deterministic MAC address derived from its BMC MAC address, deployment environment (mainnet vs testnet), and variant type (SetupOS, HostOS, GuestOS). This MAC address is then utilized to generate the node's network configuration.
+
+For details, see the link:../../rs/ic_os/networking/deterministic_ips/README.md[deterministic_ips README].
+
+== Hostname
+
+Since every HostOS and GuestOS are created equal, assigning a human-centric hostname isn't feasible (think pets vs. cattle). Instead, the management MAC address is used as part of the hostname.
+
+There are two different hostname schemas used, depending on the stage of the setup process: *Transient Setup Hostname* and *Persistent Setup Hostname*.
+
+*1. Transient Setup Hostname*
+
+This schema is used during the initial setup, before a replica has joined the IC. The format is:
+
+`<system type>-<management mac address>`
+
+Examples:
+
+  host-3cecef6b3799
+  replica-3cecef6b3799
+
+*2. Persistent Setup Hostname*
+
+[NOTE]
+Currently, the Persistent Setup Hostname feature is not used, but it has been developed.
+
+After a node has successfully joined the IC, the first 5 characters of the node-id are added to the end of the hostname. The orchestrator is used to fetch the node's node-id. The format is:
+
+`<system type>-<management mac address>-<first 5 characters of the node-id>`
+
+Examples:
+
+  host-3cecef6b3799-4wd4u
+  replica--3cecef6b3799-4wd4u
+
+== IPv6 Address
+
+The IP address can be derived from the MAC address and vice versa: As every virtual machine ends in the same MAC address, the IPv6 address of each node on the same physical machine can be derived, including the hypervisor itself.
+In other words, the prefix of the EUI-64 formatted IPv6 SLAAC address is swapped to get to the IPv6 address of the next node.
+
+When the corresponding IPv6 address is assigned, the IEEE’s 64-bit Extended Unique Identifier (EUI-64) format is followed. In this convention, the interface’s unique 48-bit MAC address is reformatted to match the EUI-64 specifications.
+
+The network part (i.e. +ipv6_prefix+) of the IPv6 address is retrieved from the +config.ini+ configuration file. The host part is the EUI-64 formatted address.

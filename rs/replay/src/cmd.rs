@@ -1,15 +1,17 @@
-use clap::Parser;
+use clap::{Parser, Subcommand};
+use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_types::{CanisterId, PrincipalId, SubnetId};
-use ledger_canister::AccountIdentifier;
+use icp_ledger::AccountIdentifier;
 use std::path::PathBuf;
 
+#[derive(Clone)]
 pub struct ClapSubnetId(pub SubnetId);
 
 impl std::str::FromStr for ClapSubnetId {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         PrincipalId::from_str(s)
-            .map_err(|e| format!("Unable to parse subnet_id {:?}", e))
+            .map_err(|e| format!("Unable to parse subnet_id {e:?}"))
             .map(SubnetId::from)
             .map(ClapSubnetId)
     }
@@ -39,20 +41,28 @@ pub struct ReplayToolArgs {
     #[clap(long)]
     /// The replay will stop at this height and make a checkpoint.
     pub replay_until_height: Option<u64>,
+
+    #[clap(long)]
+    /// Whether or not to skip prompts for user input.
+    pub skip_prompts: bool,
 }
 
-#[derive(Clone, Parser)]
+#[derive(Clone, Subcommand)]
 pub enum SubCommand {
     /// Add a new version of the replica binary to the registry.
-    AddAndBlessReplicaVersion(AddAndBlessReplicaVersionCmd),
+    UpgradeSubnetToReplicaVersion(UpgradeSubnetToReplicaVersionCmd),
+
     /// Add registry content from external registry store to the registry
     /// canister.
     AddRegistryContent(AddRegistryContentCmd),
+
     /// Update registry local store with data from the registry canister.
     UpdateRegistryLocalStore,
+
     /// Remove all nodes from the subnet record that this node belongs to.
     /// Note that this does not remove individual node records.
     RemoveSubnetNodes,
+
     /// Create a recovery CUP and write it to a file.
     GetRecoveryCup(GetRecoveryCupCmd),
 
@@ -73,8 +83,11 @@ pub enum SubCommand {
     /// tests.
     WithTrustedNeuronsFollowingNeuronForTests(WithTrustedNeuronsFollowingNeuronCmd),
 
-    /// Verify the signature of a CUP from a subnet
-    VerifySubnetCUP(VerifySubnetCUPCmd),
+    /// The replay will replace the subnet list record in the registry with a single subnet being
+    /// the player's subnet.
+    /// WARNING: This is a test-only sub-command and should only be used in
+    /// tests.
+    OverwriteSubnetListWithSingleton,
 }
 
 #[derive(Clone, Parser)]
@@ -85,26 +98,35 @@ pub struct GetRecoveryCupCmd {
     pub height: u64,
     /// Output file
     pub output_file: PathBuf,
-    /// Registry store URI
-    pub registry_store_uri: Option<String>,
-    /// Registry store SHA256 hash
-    pub registry_store_sha256: Option<String>,
 }
 
 #[derive(Clone, Parser)]
-pub struct AddAndBlessReplicaVersionCmd {
+pub struct UpgradeSubnetToReplicaVersionCmd {
     /// The Replica version ID.
     pub replica_version_id: String,
-    /// JSON value of the replica version record.
-    pub replica_version_value: String,
-    /// If true, the registry record of the corresponding subnet will be
-    /// updated with the new replica version.
+    /// The Replica version record.
+    #[clap(value_parser = parse_json::<ReplicaVersionRecord>)]
+    pub replica_version_record: ReplicaVersionRecord,
+    /// If true, the replica version will be added and blessed in the registry
+    /// before upgrading the subnet to it.
     #[clap(long)]
-    pub update_subnet_record: bool,
+    pub add_and_bless_replica_version: bool,
 }
 
 #[derive(Clone, Parser)]
 pub struct RestoreFromBackupCmd {
+    /// Registry local store path
+    pub registry_local_store_path: PathBuf,
+    /// Backup spool path
+    pub backup_spool_path: PathBuf,
+    /// The replica version to be restored
+    pub replica_version: String,
+    /// Height from which the restoration should happen
+    pub start_height: u64,
+}
+
+#[derive(Clone, Parser)]
+pub struct RestoreFromBackup2Cmd {
     /// Registry local store path
     pub registry_local_store_path: PathBuf,
     /// Backup spool path
@@ -157,10 +179,6 @@ pub struct WithNeuronCmd {
     pub neuron_stake_e8s: u64,
 }
 
-#[derive(Clone, Parser, Debug)]
-pub struct VerifySubnetCUPCmd {
-    /// File wih the content of the CUP
-    pub cup_file: PathBuf,
-    /// File wih the content of the public key
-    pub public_key_file: PathBuf,
+fn parse_json<T: serde::de::DeserializeOwned>(s: &str) -> Result<T, String> {
+    serde_json::from_str(s).map_err(|e| e.to_string())
 }

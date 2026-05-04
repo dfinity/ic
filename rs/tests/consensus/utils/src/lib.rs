@@ -1,0 +1,140 @@
+use anyhow::Context;
+use ic_protobuf::types::v1 as pb;
+use ic_system_test_driver::{
+    driver::test_env_api::{HasPublicApiUrl, IcNodeSnapshot},
+    retry_with_msg_async,
+    util::{MetricsFetcher, block_on},
+};
+use ic_types::{Height, consensus::CatchUpPackage};
+use prost::Message;
+use slog::{Logger, info, warn};
+
+pub mod impersonate_upstreams;
+pub mod node;
+pub mod performance;
+pub mod rw_message;
+pub mod ssh_access;
+pub mod subnet;
+pub mod upgrade;
+
+pub fn assert_node_is_making_progress(
+    node: &IcNodeSnapshot,
+    logger: &Logger,
+    height_delta: Height,
+) {
+    info!(
+        logger,
+        "Verifying that the node {} is making progress", node.node_id
+    );
+
+    node.await_status_is_healthy()
+        .expect("Should become healthy");
+
+    let height = get_certification_height_from_metrics(node);
+    let target_height = height + height_delta;
+
+    const MAX_RETRIES: u64 = 30;
+    const SLEEP_TIME_SECS: u64 = 10;
+
+    info!(
+        logger,
+        "Waiting until node {} progresses past height {}", node.node_id, target_height
+    );
+
+    for retry in 1..=MAX_RETRIES {
+        std::thread::sleep(std::time::Duration::from_secs(SLEEP_TIME_SECS));
+        let new_height = get_certification_height_from_metrics(node);
+
+        if new_height >= target_height {
+            info!(
+                logger,
+                "Node {} progressed from height {} to height {}", node.node_id, height, new_height
+            );
+
+            return;
+        }
+
+        warn!(
+            logger,
+            "Node {} didn't make enough progress in {} seconds and is at height {}",
+            node.node_id,
+            retry * SLEEP_TIME_SECS,
+            new_height,
+        );
+    }
+
+    panic!(
+        "Node {} didn't make enough progress in {} seconds",
+        node.node_id,
+        MAX_RETRIES * SLEEP_TIME_SECS,
+    );
+}
+
+fn get_certification_height_from_metrics(node: &IcNodeSnapshot) -> Height {
+    const CERT_HEIGHT_METRIC: &str = r#"artifact_pool_certification_height_stat{pool_type="validated",stat="max",type="certification"}"#;
+
+    let metrics = MetricsFetcher::new(
+        [node.clone()].into_iter(),
+        vec![CERT_HEIGHT_METRIC.to_string()],
+    );
+
+    block_on(async {
+        let height = metrics
+            .fetch::<u64>()
+            .await
+            .unwrap()
+            .get(CERT_HEIGHT_METRIC)
+            .unwrap()[0];
+
+        Height::from(height)
+    })
+}
+
+pub async fn get_cup_from_node(
+    node: &IcNodeSnapshot,
+    logger: &Logger,
+) -> anyhow::Result<CatchUpPackage> {
+    let url = node.get_public_url();
+    let cup_url = format!("{url}_/catch_up_package");
+
+    let send_request = || async {
+        let response = reqwest::ClientBuilder::new()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap()
+            .post(cup_url.clone())
+            .header("Content-Type", "application/cbor")
+            .send()
+            .await
+            .with_context(|| format!("Failed to send request to {cup_url}"))?;
+
+        if response.status() != reqwest::StatusCode::OK {
+            anyhow::bail!(
+                "Failed to send request to {cup_url}. Status: {}",
+                response.status()
+            );
+        }
+
+        response
+            .bytes()
+            .await
+            .context("Failed to collect response body")
+    };
+
+    let response = retry_with_msg_async!(
+        "Fetching a CUP",
+        logger,
+        std::time::Duration::from_secs(120),
+        std::time::Duration::from_secs(5),
+        send_request
+    )
+    .await
+    .context("Failed to fetch CUP")?;
+
+    let proto = pb::CatchUpPackage::decode(response).context("Failed to decode the response")?;
+
+    let cup =
+        CatchUpPackage::try_from(&proto).context("Failed to convert proto to CatchUpPackage")?;
+
+    Ok(cup)
+}

@@ -1,7 +1,7 @@
 [package]
 name = "ic-sns-wasm"
-version = "0.1.0"
-edition = "2021"
+version = "1.0.0"
+edition.workspace = true
 
 [[bin]]
 name = "sns-wasm-canister"
@@ -11,54 +11,61 @@ path = "canister/canister.rs"
 path = "src/lib.rs"
 
 [dependencies]
-# This MUST be kept in sync with build-info-build in the [build-dependencies] section!
-build-info = { version = "0.0.26", default-features = false, features = [] }
-
-async-trait = "0.1.42"
-candid = "0.8.1"
-dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
-futures = "0.3.21"
-hex = "0.4.3"
+async-trait = { workspace = true }
+candid = { workspace = true }
+futures = { workspace = true }
+hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-cdk = "0.6.0"
-ic-crypto-sha = {path = "../../crypto/sha/"}
-ic-ic00-types = {path = "../../types/ic00_types"}
+ic-cdk = { workspace = true }
+ic-crypto-sha2 = { path = "../../crypto/sha2/" }
+ic-http-types = { path = "../../../packages/ic-http-types" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
+ic-metrics-encoder = "1"
+ic-nervous-system-clients = { path = "../../nervous_system/clients" }
+ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-proto = { path = "../../nervous_system/proto" }
+ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nns-constants = { path = "../constants" }
+ic-nns-handler-root-interface = { path = "../handlers/root/interface" }
 ic-sns-governance = { path = "../../sns/governance" }
 ic-sns-init = { path = "../../sns/init" }
 ic-sns-root = { path = "../../sns/root" }
-ic-types = { path = "../../types/types"}
+ic-types-cycles = { path = "../../types/cycles" }
+ic-types = { path = "../../types/types" }
+ic-utils = { path = "../../utils" }
+ic-wasm = { workspace = true }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 maplit = "1.0.2"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0.85"
-prost = "0.10.4"
+prost = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_json = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-ic-protobuf = { path = "../../protobuf" }
-registry-canister = { path = "../../registry/canister" }
-ic-registry-keys = { path = "../../registry/keys" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-registry-keys = { path = "../../registry/keys" }
+registry-canister = { path = "../../registry/canister" }
 
 [dev-dependencies]
-ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
-ic-sns-wasm-proto-generator = { path = "./proto_generator" }
-ic-test-utilities = { path = "../../test_utilities" }
-ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-tempfile = "3.1.0"
-tokio = { version = "1.15.0", features = ["full"] }
-ic-state-machine-tests = { path = "../../state_machine_tests" }
+candid_parser = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
-ic-icrc1 = { path = "../../rosetta-api/icrc1" }
+ic-icrc1 = { path = "../../ledger_suite/icrc1" }
+ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nns-test-utils = { path = "../test_utils" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-sns-swap = { path = "../../sns/swap" }
-ic-ic00-types = { path = "../../types/ic00_types" }
-ledger-canister = { path = "../../rosetta-api/ledger_canister" }
-pretty_assertions = "1.2.1"
-on_wire = { path = "../../rust_canisters/on_wire" }
-walrus = "0.19.0"
+ic-sns-wasm-protobuf-generator = { path = "./protobuf_generator" }
+ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
+icp-ledger = { path = "../../ledger_suite/icp" }
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
 
 [features]
 test = ["ic-sns-init/test"]

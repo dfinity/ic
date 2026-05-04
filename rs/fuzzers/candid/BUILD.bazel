@@ -1,0 +1,29 @@
+load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary")
+
+package(default_visibility = ["//visibility:private"])
+
+rust_fuzz_test_binary(
+    name = "candid_parser",
+    srcs = [
+        "fuzz_targets/candid_parser.rs",
+    ],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:libfuzzer-sys",
+    ],
+)
+
+rust_fuzz_test_binary(
+    name = "candid_type_decoder",
+    srcs = [
+        "fuzz_targets/candid_type_decoder.rs",
+    ],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:libfuzzer-sys",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+    ],
+)

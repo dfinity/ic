@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 use super::*;
 
 mod pubkey_proto_to_pubkey_bytes {
@@ -54,7 +53,7 @@ mod pubkey_proto_to_pubkey_bytes {
             result.unwrap_err(),
             PublicKeyBytesFromProtoError {
                 key_bytes: pk_proto.key_value,
-                internal_error: format!("Unknown algorithm: {}", unknown_algorithm,)
+                internal_error: format!("Unknown algorithm: {unknown_algorithm}",)
             }
         );
     }
@@ -139,5 +138,6 @@ fn dummy_committee_signing_pubkey_proto() -> PublicKeyProto {
         key_value: [1; PublicKeyBytes::SIZE].to_vec(),
         version: 0,
         proof_data: Some([2; PopBytes::SIZE].to_vec()),
+        timestamp: None,
     }
 }

@@ -1,6 +1,6 @@
 //! The registry public interface.
 use ic_types::{
-    registry::RegistryClientError, registry::RegistryDataProviderError, time::Time, RegistryVersion,
+    RegistryVersion, registry::RegistryClientError, registry::RegistryDataProviderError, time::Time,
 };
 pub use prost::Message as RegistryValue;
 use serde::{Deserialize, Serialize};
@@ -12,8 +12,8 @@ pub const ZERO_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(0);
 /// How often we poll the local store.
 pub const POLLING_PERIOD: Duration = Duration::from_secs(5);
 
-pub fn empty_zero_registry_record(key: &str) -> RegistryTransportRecord {
-    RegistryTransportRecord {
+pub fn empty_zero_registry_record(key: &str) -> RegistryRecord {
+    RegistryRecord {
         key: key.to_string(),
         version: ZERO_REGISTRY_VERSION,
         value: None,
@@ -100,7 +100,7 @@ pub trait RegistryClient: Send + Sync {
 }
 
 /// A versioned (Key, Value) pair returned from the registry.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct RegistryVersionedRecord<T> {
     /// The key of the record.
     pub key: String,
@@ -137,9 +137,7 @@ pub type RegistryClientResult<T> = Result<Option<T>, RegistryClientError>;
 
 /// A RegistryRecord represents a versioned k/v-pair as stored in the registry
 /// canister.
-/// TODO(IC-102): This needs to be renamed to `RegistryRecord` after
-/// we removed the legacy `RegistryRecord`.
-pub type RegistryTransportRecord = RegistryVersionedRecord<Vec<u8>>;
+pub type RegistryRecord = RegistryVersionedRecord<Vec<u8>>;
 
 /// A `RegistryDataProvider` is the data source that backs the `RegistryClient`,
 /// i.e. the registry client uses an instances of this trait to get data from
@@ -161,30 +159,5 @@ pub trait RegistryDataProvider: Send + Sync {
     fn get_updates_since(
         &self,
         version: RegistryVersion,
-    ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError>;
-}
-
-/// Whenever the local store is successfully updated, the time contained in the
-/// certification is stored on disk. The `LocalStoreCertifiedTimeReader`
-/// provides a method to read this time from disk.
-pub trait LocalStoreCertifiedTimeReader: Send + Sync {
-    /// The value returns is based on the UNIX EPOCH. If there had been no
-    /// update so far, the UNIX EPOCH will be returned.
-    ///
-    /// Remark(2021-03-08): The time is *not* stored atomically, i.e.
-    /// it might be that registry updates are observed by the
-    /// `RegistryClient` but the time is not updated due to an error.
-    ///
-    /// It is assumed that this function is (a) called in tight loops and that
-    /// (b) there are no strict requirements in terms of granularity.
-    /// Thus, the implementation might cache values and only perform a read
-    /// every couple of seconds.
-    ///
-    /// There are *NO* guarantees in terms of monotonicity.
-    ///
-    /// # PANICS
-    ///
-    /// An I/O-error when reading the value from disk is treated as a *hard
-    /// failure*. In such a case, this function may panic.
-    fn read_certified_time(&self) -> ic_types::time::Time;
+    ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError>;
 }

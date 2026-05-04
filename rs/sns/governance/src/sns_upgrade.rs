@@ -1,9 +1,8 @@
-use crate::pb::v1::governance::Version;
-use crate::proposal::render_version;
-use crate::types::Environment;
+use crate::cached_upgrade_steps::CachedUpgradeSteps;
+use crate::{pb::v1::governance::Version, proposal::render_version, types::Environment};
 use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ic00_types::CanisterStatusResultV2;
+use ic_nervous_system_clients::canister_status::CanisterStatusResultV2;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 
 /// A struct to represent all the types of SNS canisters Governance knows about.
@@ -36,7 +35,7 @@ pub(crate) async fn get_upgrade_params(
             return Err(format!(
                 "There is no next version found for the current SNS version: {}",
                 render_version(current_version)
-            ))
+            ));
         }
     };
 
@@ -68,7 +67,8 @@ pub(crate) async fn get_wasm(
         .call_canister(
             SNS_WASM_CANISTER_ID,
             "get_wasm",
-            Encode!(&GetWasmRequest { hash: wasm_hash }).expect("Could not encode"),
+            Encode!(&GetWasmRequest { hash: wasm_hash })
+                .map_err(|e| format!("Could not encode GetWasmRequest: {e:?}"))?,
         )
         .await
         .map_err(|(code, message)| {
@@ -80,28 +80,54 @@ pub(crate) async fn get_wasm(
         })?;
 
     let response = Decode!(&response, GetWasmResponse)
-        .map_err(|e| format!("Decoding GetWasmResponse failed: {:?}", e))?;
+        .map_err(|e| format!("Decoding GetWasmResponse failed: {e:?}"))?;
     let wasm = response
         .wasm
         .ok_or_else(|| "No WASM found using hash returned from SNS-WASM canister.".to_string())?;
 
-    let returned_canister_type =
-        SnsCanisterType::from_i32(wasm.canister_type).ok_or_else(|| {
-            "Could not convert response from SNS-WASM to valid SnsCanisterType".to_string()
-        })?;
+    let returned_canister_type = SnsCanisterType::try_from(wasm.canister_type).map_err(|err| {
+        format!("Could not convert response from SNS-WASM to valid SnsCanisterType: {err}")
+    })?;
 
     if returned_canister_type != expected_sns_canister_type {
         return Err(format!(
             "WASM returned from SNS-WASM is not intended for the same canister type. \
-            Expected: {:?}.  Received: {:?}.",
-            expected_sns_canister_type, returned_canister_type
+            Expected: {expected_sns_canister_type:?}.  Received: {returned_canister_type:?}."
         ));
     }
 
     Ok(wasm)
 }
 
-async fn get_canisters_to_upgrade(
+pub(crate) async fn get_proposal_id_that_added_wasm(
+    env: &dyn Environment,
+    wasm_hash: Vec<u8>,
+) -> Result<Option<u64>, String> {
+    let response = env
+        .call_canister(
+            SNS_WASM_CANISTER_ID,
+            "get_proposal_id_that_added_wasm",
+            Encode!(&GetProposalIdThatAddedWasmRequest { hash: wasm_hash }).map_err(|e| {
+                format!("Could not encode GetProposalIdThatAddedWasmRequest: {e:?}")
+            })?,
+        )
+        .await
+        .map_err(|(code, message)| {
+            format!(
+                "Call to get_proposal_id_that_added_wasm failed: {} {}",
+                code.unwrap_or_default(),
+                message
+            )
+        })?;
+
+    let response = Decode!(&response, GetProposalIdThatAddedWasmResponse)
+        .map_err(|e| format!("Decoding GetProposalIdThatAddedWasmResponse failed: {e:?}"))?;
+    let proposal_id = response.proposal_id;
+
+    Ok(proposal_id)
+}
+
+pub(crate) async fn get_canisters_to_upgrade(
     env: &dyn Environment,
     root_canister_id: CanisterId,
     canister_type: SnsCanisterType,
@@ -128,17 +154,14 @@ async fn get_canisters_to_upgrade(
         .map(|maybe_principal| {
             maybe_principal
                 .ok_or_else(|| {
-                    format!(
-                        "Did not receive {} CanisterId from list_sns_canisters call",
-                        label
-                    )
+                    format!("Did not receive {label} CanisterId from list_sns_canisters call")
                 })
-                .and_then(|principal| CanisterId::new(principal).map_err(|e| format!("{}", e)))
+                .map(CanisterId::unchecked_from_principal)
         })
         .collect()
 }
 
-fn canister_type_and_wasm_hash_for_upgrade(
+pub(crate) fn canister_type_and_wasm_hash_for_upgrade(
     current_version: &Version,
     next_version: &Version,
 ) -> Result<(SnsCanisterType, Vec<u8>), String> {
@@ -146,11 +169,9 @@ fn canister_type_and_wasm_hash_for_upgrade(
 
     // This should be impossible due to upstream constraints.
     if differences.is_empty() {
-        return Err(
-            format!("No difference was found between the current SNS version {:?} and the next SNS version {:?}",
-                current_version, next_version
-            )
-        );
+        return Err(format!(
+            "No difference was found between the current SNS version {current_version:?} and the next SNS version {next_version:?}"
+        ));
     }
 
     // This should also be impossible due to upstream constraints.
@@ -172,22 +193,29 @@ pub(crate) async fn get_running_version(
 ) -> Result<Version, String> {
     let response = sns_canisters_summary(env, root_canister_id).await?;
 
-    let root = response.root.unwrap();
-    let governance = response.governance.unwrap();
-    let swap = response.swap.unwrap();
-    let ledger = response.ledger.unwrap();
-    let archives = response.archives;
-    let index = response.index.unwrap();
+    let GetSnsCanistersSummaryResponse {
+        root: Some(root),
+        governance: Some(governance),
+        ledger: Some(ledger),
+        swap: Some(swap),
+        dapps: _,
+        archives,
+        index: Some(index),
+    } = response
+    else {
+        return Err(format!(
+            "CanisterSummary could not be fetched for all canisters: {response:?}"
+        ));
+    };
 
-    let get_hash = |canister_status: &CanisterSummary, label: &str| {
+    let get_hash = |canister_status: CanisterSummary, label: &str| {
         canister_status
             .status
-            .as_ref()
-            .ok_or_else(|| format!("{} had no status", label))
+            .ok_or_else(|| format!("{label} had no status"))
             .and_then(|status| {
                 status
-                    .module_hash()
-                    .ok_or_else(|| format!("{} Status had no module hash", label))
+                    .module_hash
+                    .ok_or_else(|| format!("{label} Status had no module hash"))
             })
     };
 
@@ -195,18 +223,20 @@ pub(crate) async fn get_running_version(
     // be interpreted as empty (i.e. no running archives) but won't match any archive hashes
     let archive_wasm_hash = archives
         .into_iter()
-        .map(|canister_summary| get_hash(&canister_summary, "Ledger Archive").unwrap_or_default())
+        .map(|canister_summary| get_hash(canister_summary, "Ledger Archive"))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
         // Make sure all returned versions are the same.
         .reduce(|x, y| if x == y { x } else { vec![0, 0, 0] })
         .unwrap_or_default();
 
     Ok(Version {
-        root_wasm_hash: get_hash(&root, "Root")?,
-        governance_wasm_hash: get_hash(&governance, "Governance")?,
-        ledger_wasm_hash: get_hash(&ledger, "Ledger")?,
-        swap_wasm_hash: get_hash(&swap, "Swap")?,
+        root_wasm_hash: get_hash(root, "Root")?,
+        governance_wasm_hash: get_hash(governance, "Governance")?,
+        ledger_wasm_hash: get_hash(ledger, "Ledger")?,
+        swap_wasm_hash: get_hash(swap, "Swap")?,
         archive_wasm_hash,
-        index_wasm_hash: get_hash(&index, "Index")?,
+        index_wasm_hash: get_hash(index, "Index")?,
     })
 }
 
@@ -218,15 +248,15 @@ async fn sns_canisters_summary(
     let arg = Encode!(&GetSnsCanistersSummaryRequest {
         update_canister_list: Some(true)
     })
-    .unwrap();
+    .map_err(|e| format!("Could not encode GetSnsCanistersSummaryRequest: {e:?}"))?;
 
     let response = env
         .call_canister(root_canister_id, "get_sns_canisters_summary", arg)
         .await
-        .map_err(|e| format!("Request failed for get_sns_canisters_summary: {:?}", e))?;
+        .map_err(|e| format!("Request failed for get_sns_canisters_summary: {e:?}"))?;
 
     Decode!(&response, GetSnsCanistersSummaryResponse)
-        .map_err(|e| format!("Failed to decode response: {:?}", e))
+        .map_err(|e| format!("Failed to decode response: {e:?}"))
 }
 
 /// Get the next version of the SNS based on a given version.
@@ -245,6 +275,39 @@ async fn get_next_version(env: &dyn Environment, current_version: &Version) -> O
         .expect("Could not decode response to get_next_sns_version");
 
     response.next_version.map(|v| v.into())
+}
+
+pub(crate) async fn get_upgrade_steps(
+    env: &dyn Environment,
+    current_version: Version,
+    sns_governance_canister_id: PrincipalId,
+) -> Result<CachedUpgradeSteps, String> {
+    let request = ListUpgradeStepsRequest {
+        starting_at: Some(current_version.into()),
+        sns_governance_canister_id: Some(sns_governance_canister_id),
+        limit: 0,
+    };
+    let arg = Encode!(&request)
+        .map_err(|err| format!("Could not encode ListUpgradeStepsRequest: {err:?}"))?;
+
+    let requested_timestamp_seconds = env.now();
+
+    let response = env
+        .call_canister(SNS_WASM_CANISTER_ID, "list_upgrade_steps", arg)
+        .await
+        .map_err(|err| format!("Request failed for get_next_sns_version: {err:?}"))?;
+
+    let response = Decode!(&response, ListUpgradeStepsResponse).map_err(|err| {
+        format!("Could not decode the response from SnsW.list_upgrade_steps: {err}")
+    })?;
+
+    let response_timestamp_seconds = env.now();
+
+    CachedUpgradeSteps::try_from_sns_w_response(
+        response,
+        requested_timestamp_seconds,
+        response_timestamp_seconds,
+    )
 }
 
 /// Returns all SNS canisters known by the Root canister.
@@ -298,7 +361,7 @@ pub(crate) async fn get_all_sns_canisters(
 
 impl Version {
     /// Get the new hashes from next_version as a list of (SnsCanisterType, wasm_hash)
-    fn changes_against(
+    pub(crate) fn changes_against(
         &self,
         next_version: &Self,
     ) -> Vec<(SnsCanisterType, Vec<u8> /*wasm hash*/)> {
@@ -333,6 +396,52 @@ impl Version {
 
         differences
     }
+
+    pub(crate) fn version_has_expected_hashes(
+        &self,
+        expected_hashes: &[(SnsCanisterType, Vec<u8> /* wasm hash*/)],
+    ) -> Result<(), Vec<String>> {
+        let results = expected_hashes
+            .iter()
+            .map(|(canister_type, expected_hash)| {
+                let actual_hash = self.get_hash_for_type(canister_type);
+                if &actual_hash == expected_hash {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "Expected hash for {:?} to be: '{}', but it was '{}'",
+                        canister_type,
+                        hex::encode(expected_hash),
+                        hex::encode(actual_hash)
+                    ))
+                }
+            })
+            .collect::<Vec<Result<(), String>>>();
+
+        if results.iter().any(|r| r.is_err()) {
+            Err(results
+                .into_iter()
+                .flat_map(|result| result.err())
+                .collect::<Vec<_>>())
+        } else {
+            Ok(())
+        }
+    }
+
+    fn get_hash_for_type(&self, canister_type: &SnsCanisterType) -> Vec<u8> {
+        match canister_type {
+            // Unspecified should be impossible given we create the diff we are using,
+            // but we must not panic in a heartbeat, so  we use a value that won't match a
+            // real hash so downstream check will fail.
+            SnsCanisterType::Unspecified => vec![0; 3],
+            SnsCanisterType::Root => self.root_wasm_hash.clone(),
+            SnsCanisterType::Governance => self.governance_wasm_hash.clone(),
+            SnsCanisterType::Ledger => self.ledger_wasm_hash.clone(),
+            SnsCanisterType::Swap => self.swap_wasm_hash.clone(),
+            SnsCanisterType::Archive => self.archive_wasm_hash.clone(),
+            SnsCanisterType::Index => self.index_wasm_hash.clone(),
+        }
+    }
 }
 
 impl From<Version> for SnsVersion {
@@ -365,7 +474,7 @@ impl From<SnsVersion> for Version {
 
 /// Duplicated from ic-sns-wasms to avoid circular dependency as a temporary workaround
 /// The request type accepted by the get_next_sns_version canister method
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetNextSnsVersionRequest {
     #[prost(message, optional, tag = "1")]
     pub current_version: ::core::option::Option<SnsVersion>,
@@ -373,7 +482,7 @@ pub(crate) struct GetNextSnsVersionRequest {
 
 /// Duplicated from ic-sns-wasms to avoid circular dependency as a temporary workaround
 /// The response type returned by the get_next_sns_version canister method
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetNextSnsVersionResponse {
     #[prost(message, optional, tag = "1")]
     pub next_version: ::core::option::Option<SnsVersion>,
@@ -382,8 +491,8 @@ pub(crate) struct GetNextSnsVersionResponse {
 /// Duplicated from ic-sns-wasms to avoid circular dependency as a temporary workaround.
 /// Avoid using outside of tests and the functions in this file.
 /// Specifies the version of an SNS.
-#[derive(candid::CandidType, candid::Deserialize, Eq, Hash, Clone, PartialEq, ::prost::Message)]
-pub(crate) struct SnsVersion {
+#[derive(Clone, Eq, PartialEq, Hash, ::prost::Message, candid::CandidType, candid::Deserialize)]
+pub struct SnsVersion {
     /// The hash of the Root canister WASM.
     #[prost(bytes = "vec", tag = "1")]
     pub root_wasm_hash: ::prost::alloc::vec::Vec<u8>,
@@ -405,7 +514,7 @@ pub(crate) struct SnsVersion {
 }
 
 /// Copied from ic-sns-root
-#[derive(PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(Eq, PartialEq, Debug, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetSnsCanistersSummaryRequest {
     /// If set to true, root will update the list of canisters it owns before building the
     /// GetSnsCanistersSummaryResponse. This currently amounts to asking ledger about its archive
@@ -414,8 +523,7 @@ pub(crate) struct GetSnsCanistersSummaryRequest {
     pub update_canister_list: Option<bool>,
 }
 
-/// Copied from ic-sns-root
-#[derive(PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetSnsCanistersSummaryResponse {
     pub root: Option<CanisterSummary>,
     pub governance: Option<CanisterSummary>,
@@ -427,7 +535,7 @@ pub(crate) struct GetSnsCanistersSummaryResponse {
 }
 
 /// Copied from ic-sns-root
-#[derive(PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, candid::CandidType, candid::Deserialize)]
 pub(crate) struct CanisterSummary {
     pub canister_id: Option<PrincipalId>,
     pub status: Option<CanisterStatusResultV2>,
@@ -435,14 +543,14 @@ pub(crate) struct CanisterSummary {
 
 ///Copied from ic-sns-wasm.
 /// The argument for get_wasm, which consists of the WASM hash to be retrieved.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetWasmRequest {
     #[prost(bytes = "vec", tag = "1")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
 }
 /// Copied from ic-sns-wasm.
 /// The response for get_wasm, which returns a WASM if it is found, or None.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetWasmResponse {
     #[prost(message, optional, tag = "1")]
     pub wasm: ::core::option::Option<SnsWasm>,
@@ -450,27 +558,30 @@ pub(crate) struct GetWasmResponse {
 
 /// Copied from ic-sns-wasm.
 /// The representation of a WASM along with its target canister type
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message, candid::CandidType, candid::Deserialize)]
 pub(crate) struct SnsWasm {
     #[prost(bytes = "vec", tag = "1")]
+    #[serde(with = "serde_bytes")]
     pub wasm: ::prost::alloc::vec::Vec<u8>,
     #[prost(enumeration = "SnsCanisterType", tag = "2")]
     pub canister_type: i32,
+    #[prost(uint64, optional, tag = "3")]
+    pub proposal_id: ::core::option::Option<u64>,
 }
 /// Copied from ic-sns-wasm
 /// The type of canister a particular WASM is intended to be installed on.
 #[derive(
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    ::prost::Enumeration,
     candid::CandidType,
     candid::Deserialize,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
 )]
 #[repr(i32)]
 pub(crate) enum SnsCanisterType {
@@ -487,4 +598,40 @@ pub(crate) enum SnsCanisterType {
     Archive = 5,
     /// The type for the ledger index canister
     Index = 6,
+}
+/// Copied from ic-sns-wasm
+/// Similar to GetWasmRequest, but only returns the NNS proposal ID that blessed the wasm.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetProposalIdThatAddedWasmRequest {
+    #[prost(bytes = "vec", tag = "1")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+}
+/// Copied from ic-sns-wasm
+/// The NNS proposal ID that blessed the wasm, if it was recorded.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetProposalIdThatAddedWasmResponse {
+    #[prost(uint64, optional, tag = "1")]
+    pub proposal_id: ::core::option::Option<u64>,
+}
+
+#[derive(Clone, PartialEq, candid::CandidType, candid::Deserialize, Debug)]
+pub struct ListUpgradeStepsRequest {
+    /// If provided, limit response to only include entries for this version and later
+    pub starting_at: ::core::option::Option<SnsVersion>,
+    /// If provided, give responses that this canister would get back
+    pub sns_governance_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Limit to number of entries (for paging)
+    pub limit: u32,
+}
+#[derive(candid::CandidType, candid::Deserialize, Clone, Debug)]
+pub struct ListUpgradeStepsResponse {
+    pub steps: ::prost::alloc::vec::Vec<ListUpgradeStep>,
+}
+#[derive(candid::CandidType, candid::Deserialize, Clone, Debug)]
+pub struct ListUpgradeStep {
+    pub version: ::core::option::Option<SnsVersion>,
 }

@@ -1,149 +1,90 @@
+use crate::Priority;
 use crate::{
-    state::{mutate_state, read_state},
     ECDSAPublicKey,
+    state::{CkBtcMinterState, mutate_state, read_state},
 };
-use bech32::{u5, Variant};
 use candid::{CandidType, Deserialize, Principal};
-use ic_base_types::PrincipalId;
-use ic_btc_types::Network;
-use ic_crypto_extended_bip32::{DerivationIndex, DerivationPath, ExtendedBip32DerivationOutput};
-use ic_crypto_sha::Sha256;
-use ic_ic00_types::{ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId};
-use ic_icrc1::{Account, Subaccount};
-use ripemd::{Digest, Ripemd160};
+use canlog::log;
+use ic_management_canister_types_private::DerivationPath;
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use serde::Serialize;
 
-const SCHEMA_V1: u8 = 1;
-
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetBtcAddressArgs {
+    pub owner: Option<Principal>,
     pub subaccount: Option<Subaccount>,
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq)]
-pub struct GetBtcAddressResult {
-    pub address: String,
-}
-
-/// Returns a valid extended BIP-32 derivation path from an Account (Principal + subaccount)
-fn derive_public_key(account: Account) -> ECDSAPublicKey {
-    let ECDSAPublicKey {
-        public_key,
-        chain_code,
-    } = read_state(|s| s.ecdsa_public_key.clone().unwrap());
-    let derivation_schema = vec![
-        DerivationIndex(vec![SCHEMA_V1]),
-        DerivationIndex(account.owner.as_slice().to_vec()),
-        DerivationIndex(account.effective_subaccount().to_vec()),
-    ];
-    let ExtendedBip32DerivationOutput {
-        derived_public_key,
-        derived_chain_code,
-    } = DerivationPath::new(derivation_schema)
-        .key_derivation(&public_key, &chain_code)
-        .unwrap(); // the derivation should always be possible
-    ECDSAPublicKey {
-        public_key: derived_public_key,
-        chain_code: derived_chain_code,
-    }
-}
-
-/// Returns the human-readable part of a bech32 address
-pub fn hrp<'a>(network: Network) -> &'a str {
-    match network {
-        ic_btc_types::Network::Mainnet => "bc",
-        ic_btc_types::Network::Testnet => "tb",
-        ic_btc_types::Network::Regtest => "bcrt",
-    }
-}
-
-/// Calculates the p2wpkh address as described in [BIP-0173](https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki).
-///
-/// Note: the public key must be compressed.
-fn network_and_public_key_to_p2wpkh(network: Network, public_key: Vec<u8>) -> String {
-    let data: [u8; 20] = Ripemd160::digest(&Sha256::hash(&public_key)).into();
-    let witness_version: u5 = u5::try_from_u8(0).unwrap();
-    let data: Vec<u5> = std::iter::once(witness_version)
-        .chain(
-            bech32::convert_bits(&data[..], 8, 5, true)
-                .unwrap()
-                .into_iter()
-                .map(|b| u5::try_from_u8(b).unwrap()),
-        )
-        .collect();
-    let hrp = hrp(network);
-    bech32::encode(hrp, data, Variant::Bech32).unwrap()
-}
-
-pub async fn get_btc_address(args: GetBtcAddressArgs) -> GetBtcAddressResult {
-    let caller = PrincipalId(ic_cdk::caller());
-    init_ecdsa_public_key().await;
-    let public_key = derive_public_key(Account {
-        owner: caller,
-        subaccount: args.subaccount,
-    })
-    .public_key;
-    let address = network_and_public_key_to_p2wpkh(read_state(|s| s.btc_network), public_key);
-    GetBtcAddressResult { address }
-}
-
-/// Fetches the ECDSA public key of the canister
-async fn ecdsa_public_key(key_name: String, derivation_path: Vec<Vec<u8>>) -> ECDSAPublicKey {
-    // Retrieve the public key of this canister at the given derivation path
-    // from the ECDSA API.
-    let res: (ECDSAPublicKeyResponse,) = ic_cdk::call(
-        Principal::management_canister(),
-        "ecdsa_public_key",
-        (ECDSAPublicKeyArgs {
-            canister_id: None,
-            derivation_path,
-            key_id: EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: key_name,
-            },
-        },),
+/// PRECONDITION: s.ecdsa_public_key.is_some()
+pub fn account_to_p2wpkh_address_from_state(s: &CkBtcMinterState, account: &Account) -> String {
+    crate::address::account_to_p2wpkh_address(
+        s.btc_network,
+        s.ecdsa_public_key
+            .as_ref()
+            .expect("bug: the ECDSA public key must be initialized"),
+        account,
     )
-    .await
-    .unwrap();
+}
 
-    ECDSAPublicKey {
-        public_key: res.0.public_key,
-        chain_code: res.0.chain_code,
-    }
+pub async fn get_btc_address(args: GetBtcAddressArgs) -> String {
+    let owner = args.owner.unwrap_or_else(ic_cdk::api::msg_caller);
+    assert_ne!(
+        owner,
+        Principal::anonymous(),
+        "the owner must be non-anonymous"
+    );
+
+    init_ecdsa_public_key().await;
+
+    read_state(|s| {
+        account_to_p2wpkh_address_from_state(
+            s,
+            &Account {
+                owner,
+                subaccount: args.subaccount,
+            },
+        )
+    })
 }
 
 /// Initializes the Minter ECDSA public key. This function must be called
 /// before any endpoint runs its logic.
-pub async fn init_ecdsa_public_key() {
-    if read_state(|s| s.ecdsa_public_key.is_some()) {
-        return;
-    }
+pub async fn init_ecdsa_public_key() -> ECDSAPublicKey {
+    if let Some(key) = read_state(|s| s.ecdsa_public_key.clone()) {
+        return key;
+    };
     let key_name = read_state(|s| s.ecdsa_key_name.clone());
-    ic_cdk::println!("Fetching the ECDSA public key {}", &key_name);
-    let ecdsa_public_key = ecdsa_public_key(key_name, vec![]).await;
-    ic_cdk::println!(
+    log!(
+        Priority::Debug,
+        "Fetching the ECDSA public key {}",
+        &key_name
+    );
+    let ecdsa_public_key =
+        crate::management::ecdsa_public_key(key_name, DerivationPath::new(vec![]))
+            .await
+            .unwrap_or_else(|e| ic_cdk::trap(format!("failed to retrieve ECDSA public key: {e}")));
+    log!(
+        Priority::Debug,
         "ECDSA public key set to {}, chain code to {}",
         hex::encode(&ecdsa_public_key.public_key),
         hex::encode(&ecdsa_public_key.chain_code)
     );
     mutate_state(|s| {
-        s.ecdsa_public_key = Some(ecdsa_public_key);
+        s.ecdsa_public_key = Some(ecdsa_public_key.clone());
     });
+    ecdsa_public_key
 }
 
 #[cfg(test)]
 mod tests {
-    use ic_btc_types::Network;
-
-    use super::network_and_public_key_to_p2wpkh;
+    use crate::Network;
+    use crate::address::network_and_public_key_to_p2wpkh;
 
     fn check_network_and_public_key_result(network: Network, pk_hex: &str, expected: &str) {
         assert_eq!(
-            network_and_public_key_to_p2wpkh(network, hex::decode(pk_hex).unwrap()),
+            network_and_public_key_to_p2wpkh(network, &hex::decode(pk_hex).unwrap()),
             expected,
-            "network: {} pk_hey: {}",
-            network,
-            pk_hex
+            "network: {network} pk_hey: {pk_hex}"
         );
     }
 

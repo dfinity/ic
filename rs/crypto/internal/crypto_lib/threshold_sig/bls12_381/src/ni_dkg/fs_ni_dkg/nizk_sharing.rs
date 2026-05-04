@@ -3,7 +3,7 @@
 
 use crate::ni_dkg::fs_ni_dkg::random_oracles::*;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, G2Affine, G2Projective, Scalar};
-use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes, G2 as G2Bytes};
+use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::ZKProofShare;
 use rand::{CryptoRng, RngCore};
 use std::vec::Vec;
@@ -35,8 +35,8 @@ impl SharingInstance {
         combined_ciphertexts: Vec<G1Affine>,
     ) -> Self {
         Self {
-            g1_gen: *G1Affine::generator(),
-            g2_gen: *G2Affine::generator(),
+            g1_gen: G1Affine::generator().clone(),
+            g2_gen: G2Affine::generator().clone(),
             public_keys,
             public_coefficients,
             combined_randomizer,
@@ -64,14 +64,24 @@ impl SharingWitness {
 
 /// Zero-knowledge proof of sharing.
 pub struct ProofSharing {
-    pub ff: G1Affine,
-    pub aa: G2Affine,
-    pub yy: G1Affine,
-    pub z_r: Scalar,
-    pub z_alpha: Scalar,
+    ff: G1Affine,
+    aa: G2Affine,
+    yy: G1Affine,
+    z_r: Scalar,
+    z_alpha: Scalar,
 }
 
 impl ProofSharing {
+    pub fn new(ff: G1Affine, aa: G2Affine, yy: G1Affine, z_r: Scalar, z_alpha: Scalar) -> Self {
+        Self {
+            ff,
+            aa,
+            yy,
+            z_r,
+            z_alpha,
+        }
+    }
+
     /// Convert the sharing proof into a serializable form
     pub fn serialize(&self) -> ZKProofShare {
         ZKProofShare {
@@ -90,16 +100,15 @@ impl ProofSharing {
         let z_r = Scalar::deserialize(proof.response_z_r.as_bytes());
         let z_alpha = Scalar::deserialize(proof.response_z_a.as_bytes());
 
-        if let (Ok(ff), Ok(aa), Ok(yy), Ok(z_r), Ok(z_alpha)) = (ff, aa, yy, z_r, z_alpha) {
-            Some(Self {
+        match (ff, aa, yy, z_r, z_alpha) {
+            (Ok(ff), Ok(aa), Ok(yy), Ok(z_r), Ok(z_alpha)) => Some(Self {
                 ff,
                 aa,
                 yy,
                 z_r,
                 z_alpha,
-            })
-        } else {
-            None
+            }),
+            _ => None,
         }
     }
 }
@@ -112,7 +121,7 @@ struct FirstMoveSharing {
 }
 
 /// Creating or verifying a proof of sharing failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ZkProofSharingError {
     InvalidProof,
     InvalidInstance,
@@ -149,9 +158,9 @@ impl SharingInstance {
 impl From<&ProofSharing> for FirstMoveSharing {
     fn from(proof: &ProofSharing) -> Self {
         Self {
-            blinder_g1: proof.ff,
-            blinder_g2: proof.aa,
-            blinded_instance: proof.yy,
+            blinder_g1: proof.ff.clone(),
+            blinder_g2: proof.aa.clone(),
+            blinded_instance: proof.yy.clone(),
         }
     }
 }
@@ -200,16 +209,22 @@ pub fn prove_sharing<R: RngCore + CryptoRng>(
     // F = g_1^rho
     // A = g_2^alpha
     // Y = product [y_i^x^i | i <- [1..n]]^rho * g_1^alpha
-    let ff = (instance.g1_gen * rho).to_affine();
-    let aa = (instance.g2_gen * alpha).to_affine();
+    let ff = (&instance.g1_gen * &rho).to_affine();
+    let aa = (&instance.g2_gen * &alpha).to_affine();
 
     let pk_mul_xi = G1Projective::muln_affine_vartime(&instance.public_keys, &xpow);
-    let yy = G1Projective::mul2(&pk_mul_xi, &rho, &instance.g1_gen.into(), &alpha).to_affine();
+    let yy = G1Projective::mul2(
+        &pk_mul_xi,
+        &rho,
+        &G1Projective::from(&instance.g1_gen),
+        &alpha,
+    )
+    .to_affine();
 
     let first_move = FirstMoveSharing {
-        blinder_g1: ff,
-        blinder_g2: aa,
-        blinded_instance: yy,
+        blinder_g1: ff.clone(),
+        blinder_g2: aa.clone(),
+        blinded_instance: yy.clone(),
     };
 
     // Second move (verifier's challenge)
@@ -219,9 +234,9 @@ pub fn prove_sharing<R: RngCore + CryptoRng>(
     // Third move (prover)
     // z_r = r * x' + rho mod p
     // z_alpha = x' * sum [s_i*x^i | i <- [1..n]] + alpha mod p
-    let z_r = witness.scalar_r * x_challenge + rho;
+    let z_r = &witness.scalar_r * &x_challenge + &rho;
 
-    let z_alpha = Scalar::muln_vartime(&witness.scalars_s, &xpow) * x_challenge + alpha;
+    let z_alpha = Scalar::muln_vartime(&witness.scalars_s, &xpow) * x_challenge + &alpha;
 
     ProofSharing {
         ff,
@@ -243,62 +258,93 @@ pub fn verify_sharing(
     // Hash of Instance
     // x = oracle(instance)
     let x = instance.hash_to_scalar();
+    let xpow = Scalar::xpowers(&x, instance.public_keys.len());
 
     let first_move = FirstMoveSharing::from(nizk);
     // Verifier's challenge
     // x' = oracle(x, F, A, Y)
     let x_challenge = sharing_proof_challenge(&x, &first_move);
 
-    // First verification equation
-    // R^x' * F == g_1^z_r
-    let lhs = instance.combined_randomizer * x_challenge + first_move.blinder_g1;
-    let rhs = instance.g1_gen * nizk.z_r;
-    if lhs != rhs {
-        return Err(ZkProofSharingError::InvalidProof);
-    }
+    // TODO(CRP-2550): The verification can run in three threads
 
-    // Second verification equation
-    // Verify: product [A_k ^ sum [i^k * x^i | i <- [1..n]] | k <- [0..t-1]]^x' * A
-    // == g_2^z_alpha
-
-    let xpow = Scalar::xpowers(&x, instance.public_keys.len());
-
-    let mut ik = vec![Scalar::one(); instance.public_keys.len()];
-
-    let mut terms = Vec::with_capacity(instance.public_coefficients.len());
-    for pc in &instance.public_coefficients {
-        let acc = Scalar::muln_vartime(&ik, &xpow);
-        terms.push((pc.into(), acc));
-
-        for i in 0..ik.len() {
-            ik[i] *= Scalar::from_u64((i + 1) as u64);
+    // Thread 1
+    {
+        // First verification equation
+        // R^x' * F == g_1^z_r
+        let lhs = &instance.combined_randomizer.mul_vartime(&x_challenge) + &first_move.blinder_g1;
+        let rhs = instance.g1_gen.mul_vartime(&nizk.z_r);
+        if lhs != rhs {
+            return Err(ZkProofSharingError::InvalidProof);
         }
     }
-    let lhs = G2Projective::muln_vartime(&terms) * x_challenge + nizk.aa;
 
-    let rhs = instance.g2_gen * nizk.z_alpha;
+    // Thread 2
+    {
+        // Second verification equation
+        //   ( ∏_{k=0}^{t-1} A_k^{ Σ_{i=1}^n (i^k * x^i) } )^{x'} * A
+        //     == g_2^{z_α}
 
-    if lhs != rhs {
-        return Err(ZkProofSharingError::InvalidProof);
+        // We initialize ik with x_challenge (A) to avoid the point/scalar multiplication later
+        let mut ik = vec![x_challenge.clone(); instance.public_keys.len()];
+
+        let mut scalars = Vec::with_capacity(instance.public_coefficients.len());
+        for _pc in &instance.public_coefficients {
+            let acc = Scalar::muln_vartime(&ik, &xpow);
+            scalars.push(acc);
+
+            for i in 0..ik.len() {
+                ik[i] *= Scalar::from_u64((i + 1) as u64);
+            }
+        }
+        let lhs =
+            G2Projective::muln_affine_vartime(&instance.public_coefficients[..], &scalars[..])
+                + &nizk.aa;
+
+        let rhs = instance.g2_gen.mul_vartime(&nizk.z_alpha);
+
+        if lhs != rhs {
+            return Err(ZkProofSharingError::InvalidProof);
+        }
     }
 
-    // Third verification equation
-    // LHS = product [C_i ^ x^i | i <- [1..n]]^x' * Y
-    // RHS = product [y_i ^ x^i | i <- 1..n]^z_r * g_1^z_alpha
+    // Thread 3
+    {
+        // Third verification equation
+        // Original relation:
+        //   (∏_{i=1}^n C_i^{x^i})^{x'} * Y  ==  (∏_{i=1}^n y_i^{x^i})^{z_r} * g_1^{z_α}
+        //
+        // Equivalently, we can rewrite it by moving terms to opposite sides:
+        //
+        //   lhs = (∏_{i=1}^n C_i^{x^i})^{x'} * (∏_{i=1}^n y_i^{x^i})^{-z_r}
+        //   rhs = g_1^{z_α} * Y^{-1}
 
-    let cc_mul_xi = G1Projective::muln_affine_vartime(&instance.combined_ciphertexts, &xpow);
-    let lhs = cc_mul_xi * x_challenge + nizk.yy;
+        // The two expressions are re-arranged so that it becomes possible to compute
+        // everything with a single multi scalar multiplication.
 
-    let pk_mul_xi = G1Projective::muln_affine_vartime(&instance.public_keys, &xpow);
-    let rhs = G1Projective::mul2(
-        &pk_mul_xi,
-        &nizk.z_r,
-        &instance.g1_gen.into(),
-        &nizk.z_alpha,
-    );
+        let instance_inputs: Vec<_> = instance
+            .combined_ciphertexts
+            .iter()
+            .chain(&instance.public_keys)
+            .collect();
+        let challenges = {
+            let mut c = Vec::with_capacity(xpow.len() * 2);
+            for xp in &xpow {
+                c.push(xp * &x_challenge);
+            }
+            let z_r_neg = nizk.z_r.neg();
+            for xp in &xpow {
+                c.push(xp * &z_r_neg);
+            }
+            c
+        };
 
-    if lhs != rhs {
-        return Err(ZkProofSharingError::InvalidProof);
+        let lhs = G1Projective::muln_affine_vartime_ref(&instance_inputs, &challenges);
+        let rhs = &instance.g1_gen.mul_vartime(&nizk.z_alpha) + &nizk.yy.neg();
+
+        if lhs != rhs {
+            return Err(ZkProofSharingError::InvalidProof);
+        }
     }
+
     Ok(())
 }

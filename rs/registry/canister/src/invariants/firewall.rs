@@ -1,6 +1,6 @@
 use crate::invariants::common::{
-    get_node_records_from_snapshot, get_subnet_ids_from_snapshot, get_value_from_snapshot,
-    InvariantCheckError, RegistrySnapshot,
+    InvariantCheckError, RegistrySnapshot, get_node_records_from_snapshot,
+    get_subnet_ids_from_snapshot, get_value_from_snapshot,
 };
 
 use std::{
@@ -16,7 +16,7 @@ use ic_protobuf::registry::firewall::v1::{
     FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet,
 };
 use ic_registry_keys::{
-    get_firewall_rules_record_principal_id, make_firewall_rules_record_key, FirewallRulesScope,
+    FirewallRulesScope, get_firewall_rules_record_principal_id, make_firewall_rules_record_key,
 };
 
 const COMMENT_SIZE: usize = 255;
@@ -49,6 +49,9 @@ pub(crate) fn check_firewall_invariants(
     let replica_node_ruleset = get_replica_nodes_firewall_rules(snapshot);
     validate_firewall_ruleset(replica_node_ruleset)?;
 
+    let boundary_node_ruleset = get_boundary_nodes_firewall_rules(snapshot);
+    validate_firewall_ruleset(boundary_node_ruleset)?;
+
     let global_ruleset = get_global_firewall_rules(snapshot);
     validate_firewall_ruleset(global_ruleset)?;
 
@@ -73,18 +76,17 @@ fn validate_firewall_rule_principals(
 
     for key in snapshot.keys() {
         let record_key = String::from_utf8(key.clone()).unwrap();
-        if let Some(principal_id) = get_firewall_rules_record_principal_id(&record_key) {
-            if let Some(firewall_rules) = get_firewall_rules(snapshot, record_key.to_string()) {
-                if !principal_ids.contains(&principal_id) && !firewall_rules.entries.is_empty() {
-                    return Err(InvariantCheckError {
-                        msg: format!(
-                            "Firewall rule entry refers to non-existing principal: {:?}",
-                            record_key
-                        ),
-                        source: None,
-                    });
-                }
-            }
+        if let Some(principal_id) = get_firewall_rules_record_principal_id(&record_key)
+            && let Some(firewall_rules) = get_firewall_rules(snapshot, record_key.to_string())
+            && !principal_ids.contains(&principal_id)
+            && !firewall_rules.entries.is_empty()
+        {
+            return Err(InvariantCheckError {
+                msg: format!(
+                    "Firewall rule entry refers to non-existing principal: {record_key:?}"
+                ),
+                source: None,
+            });
         }
     }
 
@@ -129,14 +131,14 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
             ipv4_prefix
                 .parse::<Ipv4Net>()
                 .map_err(|e| InvariantCheckError {
-                    msg: format!("Failed to parse IPv4 prefix: {:?}", ipv4_prefix),
+                    msg: format!("Failed to parse IPv4 prefix: {ipv4_prefix:?}"),
                     source: Some(Box::new(e)),
                 })?;
         } else {
             ipv4_prefix
                 .parse::<Ipv4Addr>()
                 .map_err(|e| InvariantCheckError {
-                    msg: format!("Failed to parse IPv4 address: {:?}", ipv4_prefix),
+                    msg: format!("Failed to parse IPv4 address: {ipv4_prefix:?}"),
                     source: Some(Box::new(e)),
                 })?;
         }
@@ -149,14 +151,14 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
             ipv6_prefix
                 .parse::<Ipv6Net>()
                 .map_err(|e| InvariantCheckError {
-                    msg: format!("Failed to parse IPv6 prefix: {:?}", ipv6_prefix),
+                    msg: format!("Failed to parse IPv6 prefix: {ipv6_prefix:?}"),
                     source: Some(Box::new(e)),
                 })?;
         } else {
             ipv6_prefix
                 .parse::<Ipv6Addr>()
                 .map_err(|e| InvariantCheckError {
-                    msg: format!("Failed to parse IPv6 address: {:?}", ipv6_prefix),
+                    msg: format!("Failed to parse IPv6 address: {ipv6_prefix:?}"),
                     source: Some(Box::new(e)),
                 })?;
         }
@@ -173,13 +175,13 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
     // check that port number is <= 65535
     for &port in rule.ports.iter() {
         u16::try_from(port).map_err(|e| InvariantCheckError {
-            msg: format!("Port is outside of the allowed range: {:?}", port),
+            msg: format!("Port is outside of the allowed range: {port:?}"),
             source: Some(Box::new(e)),
         })?;
     }
 
     // check that action is not unspecified
-    if FirewallAction::from_i32(rule.action).unwrap_or(FirewallAction::Unspecified)
+    if FirewallAction::try_from(rule.action).unwrap_or(FirewallAction::Unspecified)
         == FirewallAction::Unspecified
     {
         return Err(InvariantCheckError {
@@ -200,25 +202,24 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
     }
 
     //Check that if a user is specified, it is not empty nor too long
-    if let Some(user) = &rule.user {
-        if user.is_empty() || user.len() > USER_SIZE {
-            return Err(InvariantCheckError {
-                msg: format!("User name {:?} is invalid", user),
-                source: None,
-            });
-        }
+    if let Some(user) = &rule.user
+        && (user.is_empty() || user.len() > USER_SIZE)
+    {
+        return Err(InvariantCheckError {
+            msg: format!("User name {user:?} is invalid"),
+            source: None,
+        });
     }
 
     // Check that the direction is one of the existing enum values
-    if let Some(direction) = rule.direction {
-        if FirewallRuleDirection::from_i32(direction).unwrap_or(FirewallRuleDirection::Unspecified)
+    if let Some(direction) = rule.direction
+        && FirewallRuleDirection::try_from(direction).unwrap_or(FirewallRuleDirection::Unspecified)
             == FirewallRuleDirection::Unspecified
-        {
-            return Err(InvariantCheckError {
-                msg: format!("Direction {:?} is invalid", direction,),
-                source: None,
-            });
-        }
+    {
+        return Err(InvariantCheckError {
+            msg: format!("Direction {direction:?} is invalid",),
+            source: None,
+        });
     }
 
     Ok(())
@@ -234,6 +235,13 @@ fn get_global_firewall_rules(snapshot: &RegistrySnapshot) -> Option<FirewallRule
 /// nodes (if it exists).
 fn get_replica_nodes_firewall_rules(snapshot: &RegistrySnapshot) -> Option<FirewallRuleSet> {
     let firewall_record_key = make_firewall_rules_record_key(&FirewallRulesScope::ReplicaNodes);
+    get_firewall_rules(snapshot, firewall_record_key)
+}
+
+/// A helper function that returns the firewall ruleset specific for the boundary
+/// nodes (if it exists).
+fn get_boundary_nodes_firewall_rules(snapshot: &RegistrySnapshot) -> Option<FirewallRuleSet> {
+    let firewall_record_key = make_firewall_rules_record_key(&FirewallRulesScope::ApiBoundaryNodes);
     get_firewall_rules(snapshot, firewall_record_key)
 }
 
@@ -264,7 +272,7 @@ fn get_firewall_rules(snapshot: &RegistrySnapshot, record_key: String) -> Option
     if snapshot.contains_key(record_key.as_bytes()) {
         Some(
             get_value_from_snapshot(snapshot, record_key.clone())
-                .unwrap_or_else(|| panic!("Could not find firewall rules: {}", record_key)),
+                .unwrap_or_else(|| panic!("Could not find firewall rules: {record_key}")),
         )
     } else {
         None
@@ -274,10 +282,11 @@ fn get_firewall_rules(snapshot: &RegistrySnapshot, record_key: String) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_nns_common::registry::encode_or_panic;
-    use ic_protobuf::registry::subnet::v1::SubnetListRecord;
-    use ic_protobuf::registry::{firewall::v1::FirewallRuleDirection, node::v1::NodeRecord};
+    use ic_protobuf::registry::{
+        firewall::v1::FirewallRuleDirection, node::v1::NodeRecord, subnet::v1::SubnetListRecord,
+    };
     use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key};
+    use prost::Message;
 
     // helper function that returns a generic firewall rule for use in the tests.
     fn firewall_rule_builder() -> FirewallRule {
@@ -325,12 +334,12 @@ mod tests {
             node_operator_id: vec![0],
             xnet: None,
             http: None,
-            p2p_flow_endpoints: vec![],
-            prometheus_metrics_http: None,
-            public_api: vec![],
-            private_api: vec![],
-            prometheus_metrics: vec![],
-            xnet_api: vec![],
+            hostos_version_id: None,
+            chip_id: None,
+            public_ipv4_config: None,
+            domain: None,
+            node_reward_type: None,
+            ssh_node_state_write_access: vec![],
         }
     }
 
@@ -563,11 +572,11 @@ mod tests {
 
         snapshot.insert(
             make_node_record_key(node_id).into_bytes(),
-            encode_or_panic::<NodeRecord>(&node_record_builder()),
+            node_record_builder().encode_to_vec(),
         );
         snapshot.insert(
             make_firewall_rules_record_key(&FirewallRulesScope::Node(node_id)).into_bytes(),
-            encode_or_panic::<FirewallRuleSet>(&firewall_ruleset_builder()),
+            firewall_ruleset_builder().encode_to_vec(),
         );
 
         assert!(validate_firewall_rule_principals(&snapshot).is_ok());
@@ -580,11 +589,11 @@ mod tests {
 
         snapshot.insert(
             make_node_record_key(node_id).into_bytes(),
-            encode_or_panic::<NodeRecord>(&node_record_builder()),
+            node_record_builder().encode_to_vec(),
         );
         snapshot.insert(
             make_firewall_rules_record_key(&FirewallRulesScope::Node(node_id)).into_bytes(),
-            encode_or_panic::<FirewallRuleSet>(&FirewallRuleSet { entries: vec![] }),
+            FirewallRuleSet { entries: vec![] }.encode_to_vec(),
         );
 
         assert!(validate_firewall_rule_principals(&snapshot).is_ok());
@@ -597,7 +606,7 @@ mod tests {
 
         snapshot.insert(
             make_node_record_key(node_id).into_bytes(),
-            encode_or_panic::<NodeRecord>(&node_record_builder()),
+            node_record_builder().encode_to_vec(),
         );
 
         assert!(validate_firewall_rule_principals(&snapshot).is_ok());
@@ -610,7 +619,7 @@ mod tests {
 
         snapshot.insert(
             make_firewall_rules_record_key(&FirewallRulesScope::Node(node_id)).into_bytes(),
-            encode_or_panic::<FirewallRuleSet>(&firewall_ruleset_builder()),
+            firewall_ruleset_builder().encode_to_vec(),
         );
 
         let actual_error = validate_firewall_rule_principals(&snapshot)
@@ -630,13 +639,14 @@ mod tests {
 
         snapshot.insert(
             make_subnet_list_record_key().into_bytes(),
-            encode_or_panic::<SubnetListRecord>(&SubnetListRecord {
+            SubnetListRecord {
                 subnets: vec![subnet_id.get().to_vec()],
-            }),
+            }
+            .encode_to_vec(),
         );
         snapshot.insert(
             make_firewall_rules_record_key(&FirewallRulesScope::Subnet(subnet_id)).into_bytes(),
-            encode_or_panic::<FirewallRuleSet>(&firewall_ruleset_builder()),
+            firewall_ruleset_builder().encode_to_vec(),
         );
 
         assert!(validate_firewall_rule_principals(&snapshot).is_ok());
@@ -649,13 +659,14 @@ mod tests {
 
         snapshot.insert(
             make_subnet_list_record_key().into_bytes(),
-            encode_or_panic::<SubnetListRecord>(&SubnetListRecord {
+            SubnetListRecord {
                 subnets: vec![subnet_id.get().to_vec()],
-            }),
+            }
+            .encode_to_vec(),
         );
         snapshot.insert(
             make_firewall_rules_record_key(&FirewallRulesScope::Subnet(subnet_id)).into_bytes(),
-            encode_or_panic::<FirewallRuleSet>(&FirewallRuleSet { entries: vec![] }),
+            FirewallRuleSet { entries: vec![] }.encode_to_vec(),
         );
 
         assert!(validate_firewall_rule_principals(&snapshot).is_ok());
@@ -668,9 +679,10 @@ mod tests {
 
         snapshot.insert(
             make_subnet_list_record_key().into_bytes(),
-            encode_or_panic::<SubnetListRecord>(&SubnetListRecord {
+            SubnetListRecord {
                 subnets: vec![subnet_id.get().to_vec()],
-            }),
+            }
+            .encode_to_vec(),
         );
 
         assert!(validate_firewall_rule_principals(&snapshot).is_ok());
@@ -683,7 +695,7 @@ mod tests {
 
         snapshot.insert(
             make_firewall_rules_record_key(&FirewallRulesScope::Subnet(subnet_id)).into_bytes(),
-            encode_or_panic::<FirewallRuleSet>(&firewall_ruleset_builder()),
+            firewall_ruleset_builder().encode_to_vec(),
         );
 
         let actual_error = validate_firewall_rule_principals(&snapshot)

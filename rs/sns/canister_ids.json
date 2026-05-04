@@ -1,0 +1,23 @@
+{
+  "nns-governance": {
+    "small06": "rrkah-fqaaa-aaaaa-aaaaq-cai"
+  },
+  "sns-wasm": {
+    "small06": "qaa6y-5yaaa-aaaaa-aaafa-cai"
+  },
+  "sns-governance": {
+    "small06": "xbgkv-fyaaa-aaaaa-aaava-cai"
+  },
+  "sns-index": {
+    "small06": "xub3y-eqaaa-aaaaa-aaawq-cai"
+  },
+  "sns-ledger": {
+    "small06": "xghmb-iaaaa-aaaaa-aaavq-cai"
+  },
+  "sns-root": {
+    "small06": "xifbj-tqaaa-aaaaa-aaauq-cai"
+  },
+  "sns-swap": {
+    "small06": "xta5m-jiaaa-aaaaa-aaawa-cai"
+  }
+}

@@ -1,0 +1,163 @@
+load("@os_info//:defs.bzl", "os_info")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//bazel:defs.bzl", "gzip_compress")
+load("//publish:defs.bzl", "artifact_bundle", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+ALL_BINARIES = {
+    # Keep sorted
+    "canister_sandbox": "//rs/canister_sandbox",
+    "compiler_sandbox": "//rs/canister_sandbox:compiler_sandbox",
+    "ic-btc-adapter": "//rs/bitcoin/adapter:ic-btc-adapter",
+    "replica": "//rs/replica:replica",
+    "rate-limiting-canister-client": "//rs/boundary_node/rate_limits/canister_client:rate-limiting-canister-client",
+    "ic-admin": "//rs/registry/admin:ic-admin",
+    "ic-backup": "//rs/backup:ic-backup",
+    "ic-boundary": "//rs/boundary_node/ic_boundary:ic-boundary",
+    "ic-https-outcalls-adapter": "//rs/https_outcalls/adapter:ic-outcalls-adapter-with-http",
+    "ic-https-outcalls-adapter-https-only": "//rs/https_outcalls/adapter:ic-https-outcalls-adapter",
+    "ic-consensus-pool-util": "//rs/artifact_pool:ic-consensus-pool-util",
+    "ic-crypto-csp": "//rs/crypto:ic-crypto-csp",
+    "ic-nns-init": "//rs/nns/init:ic-nns-init",
+    "ic-prep": "//rs/prep:ic-prep",
+    "ic-recovery": "//rs/recovery:ic-recovery",
+    "ic-regedit": "//rs/registry/regedit:ic-regedit",
+    "ic-registry-replicator": "//rs/orchestrator/registry_replicator:ic-registry-replicator",
+    "ic-replay": "//rs/replay:ic-replay",
+    "ic-test-state-machine": "//rs/state_machine_tests:ic-test-state-machine",
+    "nfplot": "//rs/nervous_system/neurons_fund/nfplot",
+    "orchestrator": "//rs/orchestrator",
+    "sandbox_launcher": "//rs/canister_sandbox:sandbox_launcher",
+    "sns": "//rs/sns/cli:sns",
+    "sns-audit": "//rs/sns/audit:sns-audit",
+    "state-tool": "//rs/state_tool:state-tool",
+    "pocket-ic": "//rs/pocket_ic_server:pocket-ic-server",
+    "types-test": "//rs/types/types:types_test",
+    "replicated-state-test": "//rs/replicated_state:replicated_state_test_binary",
+    "state-layout-test": "//rs/state_layout:state_layout_test_binary",
+}
+
+# test binaries or binaries using test utils
+TESTONLY_BINARIES = [
+    # Keep sorted
+    "e2e-test-driver",
+    "ic-admin",
+    "ic-boundary",
+    "ic-https-outcalls-adapter",
+    "ic-nns-init",
+    "ic-prep",
+    "ic-test-state-machine",
+    "pocket-ic",
+    "replicated-state-test",
+    "state-layout-test",
+    "types-test",
+]
+
+# We don't strip the more complex binaries
+# in order to have some debug information available.
+NO_STRIP_BINARIES = [
+    "canister_sandbox",
+    "replica",
+]
+
+# The name of binaries we have no reason to release
+# on macOS Darwin
+NO_DARWIN_BINARIES = [
+    "orchestrator",
+]
+
+TEST_BINARIES = [
+    "types-test",
+]
+
+[release_nostrip_binary(
+    name = name + "_bin",
+    binary = ALL_BINARIES[name],
+) for name in NO_STRIP_BINARIES]
+
+[release_strip_binary(
+    name = name + "_bin",
+    testonly = name in TESTONLY_BINARIES,
+    binary = ALL_BINARIES[name],
+) for name in ALL_BINARIES if name not in NO_STRIP_BINARIES and name not in TEST_BINARIES]
+
+[release_strip_binary_test(
+    name = name + "_bin",
+    testonly = True,
+    binary = ALL_BINARIES[name],
+) for name in TEST_BINARIES]
+
+# all targets below are tesonly because the targets violating the testonly flag
+# would error at this point
+
+[
+    genrule(
+        name = name + "_cleaned",
+        testonly = name in TESTONLY_BINARIES,
+        srcs = [name + "_bin"],
+        outs = [name],
+        cmd = select({
+            "@platforms//os:linux": "objcopy -R .comment -R .note -R .note.gnu.build-id $< $@",
+            "@platforms//os:osx": "cp $< $@",
+        }),
+        executable = True,
+    )
+    for name in ALL_BINARIES
+]
+
+[
+    gzip_compress(
+        name = name + ".gz",
+        srcs = [name],
+    )
+    for name in ALL_BINARIES
+]
+
+filegroup(
+    name = "binaries",
+    srcs = select({
+        "@platforms//os:linux": [name + ".gz" for name in ALL_BINARIES],
+        "@platforms//os:osx": [name + ".gz" for name in ALL_BINARIES if name not in NO_DARWIN_BINARIES],
+    }),
+)
+
+artifact_bundle(
+    name = "bundle",
+    testonly = True,
+    inputs = [
+        ":binaries",
+        "//rs/sns/testing:sns_testing_bundle",
+    ],
+    prefix = "binaries/" + os_info,
+    visibility = ["//visibility:public"],
+)
+
+# https://dfinity.atlassian.net/browse/IDX-2599
+# various places in the source code, and possibly other repositories reference
+# the legacy upload path. Unwinding it without a will involve an unpredictable amount of time.
+artifact_bundle(
+    name = "bundle-legacy",
+    inputs = [":binaries"],
+    prefix = "release",
+    # only create the bundle for a single platform since we don't prefix
+    # os_info
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+BINS_TO_TEST = [":" + name for name in ALL_BINARIES]
+
+sh_test(
+    name = "binary-libraries-test",
+    size = "small",
+    srcs = ["binary-libraries-test.sh"],
+    args = ["$(rootpath " + b + ")" for b in BINS_TO_TEST],
+    data = BINS_TO_TEST,
+    tags = [
+        "test_all_platforms",
+    ],
+)

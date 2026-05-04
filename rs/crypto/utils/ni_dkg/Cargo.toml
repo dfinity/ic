@@ -1,0 +1,23 @@
+[package]
+name = "ic-crypto-utils-ni-dkg"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
+ic-protobuf = { path = "../../../protobuf" }
+ic-types = { path = "../../../types/types" }
+
+[dev-dependencies]
+ic-base-types = { path = "../../../types/base_types" }
+ic-config = { path = "../../../config" }
+ic-crypto-node-key-generation = { path = "../../node_key_generation" }
+ic-crypto-node-key-validation = { path = "../../node_key_validation" }
+ic-crypto-test-utils-ni-dkg = { path = "../../test_utils/ni-dkg" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../test_utils/reproducible_rng" }
+ic-types-test-utils = { path = "../../../types/types_test_utils" }

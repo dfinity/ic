@@ -1,0 +1,17 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "linux_kernel_command_line",
+    srcs = glob(["src/**"]),
+    deps = [
+        # Keep sorted.
+        "@crate_index//:regex",
+    ],
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":linux_kernel_command_line",
+)

@@ -1,13 +1,16 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = [
+    "//rs/certification/test-utils:__pkg__",
+    "//rs/crypto:__subpackages__",
+])
 
 DEPENDENCIES = [
-    "//rs/crypto/sha",
-    "//rs/types/types",
+    # Keep sorted.
+    "//rs/crypto/sha2",
     "@crate_index//:hex",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:rand",
+    "@crate_index//:rand_chacha",
     "@crate_index//:serde",
     "@crate_index//:zeroize",
 ]
@@ -26,7 +29,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_crypto_internal_seed",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.1.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -39,7 +42,7 @@ rust_test(
 )
 
 rust_test_suite(
-    name = "seed_integration_tests",
+    name = "seed_integration",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

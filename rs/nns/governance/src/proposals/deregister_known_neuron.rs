@@ -1,0 +1,72 @@
+use crate::{
+    neuron_store::NeuronStore,
+    pb::v1::{
+        DeregisterKnownNeuron, GovernanceError, SelfDescribingValue, governance_error::ErrorType,
+    },
+    proposals::self_describing::{DocumentedAction, ValueBuilder},
+};
+
+impl DeregisterKnownNeuron {
+    /// Validates the deregister known neuron request.
+    ///
+    /// Preconditions:
+    ///  - A Neuron ID is given in the request and this ID identifies an existing neuron.
+    ///  - The neuron currently has known neuron data to be removed.
+    pub fn validate(&self, neuron_store: &NeuronStore) -> Result<(), GovernanceError> {
+        let neuron_id = self.id.as_ref().ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "No neuron ID specified in the request to deregister a known neuron.",
+            )
+        })?;
+
+        // Check if the neuron has known neuron data
+        let is_known_neuron =
+            neuron_store.with_neuron(neuron_id, |neuron| neuron.known_neuron_data().is_some())?;
+
+        if !is_known_neuron {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!("Neuron {} is not a known neuron", neuron_id.id),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Executes the deregister known neuron action.
+    ///
+    /// This method removes the known neuron data (name and description) from the neuron,
+    /// making it a regular neuron again.
+    pub fn execute(&self, neuron_store: &mut NeuronStore) -> Result<(), GovernanceError> {
+        let neuron_id = self.id.as_ref().ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "No neuron ID specified in the request to deregister a known neuron.",
+            )
+        })?;
+
+        // Remove the known neuron data
+        neuron_store.with_neuron_mut(neuron_id, |neuron| neuron.clear_known_neuron_data())?;
+
+        Ok(())
+    }
+}
+
+impl DocumentedAction for DeregisterKnownNeuron {
+    const NAME: &'static str = "Deregister Known Neuron";
+    const DESCRIPTION: &'static str = "Deregister an existing neuron as a \"known neuron\" \
+        and remove it from the list of known neurons.";
+}
+
+impl From<DeregisterKnownNeuron> for SelfDescribingValue {
+    fn from(value: DeregisterKnownNeuron) -> Self {
+        ValueBuilder::new()
+            .add_field("neuron_id", value.id.map(|id| id.id))
+            .build()
+    }
+}
+
+#[cfg(test)]
+#[path = "deregister_known_neuron_tests.rs"]
+mod tests;

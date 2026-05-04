@@ -1,0 +1,21 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "icrc_ledger_agent",
+    srcs = [
+        "src/lib.rs",
+    ],
+    deps = [
+        # Keep sorted.
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "@crate_index//:candid",
+        "@crate_index//:ciborium",
+        "@crate_index//:hex",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-cbor",
+        "@crate_index//:ic-certification",
+        "@crate_index//:leb128",
+    ],
+)

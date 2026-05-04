@@ -1,24 +1,31 @@
 //! The time source public interface.
 use ic_types::time::{Time, UNIX_EPOCH};
-use std::sync::RwLock;
-use std::time::SystemTime;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Instant, SystemTime};
 
 /// A interface that represent the source of time.
 pub trait TimeSource: Send + Sync {
-    /// Return the releative time since origin. The definition of origin depends
+    /// Return the relative time since origin. The definition of origin depends
     /// on the actual implementation. For [SysTimeSource] it is the UNIX
     /// epoch.
     fn get_relative_time(&self) -> Time;
+
+    /// Can be used as measurement of a monotonically nondecreasing clock. Production
+    /// code should use std::time::Instant::now() as implementation of this method.
+    /// However, accessing the Instant via the trait enables dependency injection for
+    /// more comprehensive testing.
+    fn get_instant(&self) -> Instant;
+
+    /// Get first monotonic measurement, taken at instantiation time of the given object.
+    /// Usually represents a time close to the start of the replica process.
+    fn get_origin_instant(&self) -> Instant;
 }
 
-/// Time source using the system time.
+/// Implements monotonically nondecreasing clock using SystemTime relative to the UNIX_EPOCH.
 pub struct SysTimeSource {
-    current_time: RwLock<Time>,
+    current_time: AtomicU64,
+    origin: Instant,
 }
-
-/// Error when time update is not monotone.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct TimeNotMonotoneError;
 
 #[allow(clippy::new_without_default)]
 /// Provide real system time as a [TimeSource].
@@ -26,35 +33,32 @@ impl SysTimeSource {
     /// Create a new [SysTimeSource].
     pub fn new() -> Self {
         SysTimeSource {
-            current_time: RwLock::new(system_time_now()),
-        }
-    }
-
-    /// Update time to the new system time value.
-    ///
-    /// It will skip the update and return an error if the new system time is
-    /// less than the previous value.
-    pub fn update_time(&self) -> Result<(), TimeNotMonotoneError> {
-        let mut current_time = self.current_time.write().unwrap();
-        let t = system_time_now();
-        if *current_time > t {
-            Err(TimeNotMonotoneError)
-        } else {
-            *current_time = t;
-            Ok(())
+            current_time: AtomicU64::new(system_time_now().as_nanos_since_unix_epoch()),
+            origin: Instant::now(),
         }
     }
 }
 
 impl TimeSource for SysTimeSource {
     fn get_relative_time(&self) -> Time {
-        *self.current_time.read().unwrap()
+        let t = system_time_now().as_nanos_since_unix_epoch();
+        self.current_time.fetch_max(t, Ordering::SeqCst);
+        Time::from_nanos_since_unix_epoch(self.current_time.load(Ordering::SeqCst))
+    }
+
+    fn get_instant(&self) -> Instant {
+        Instant::now()
+    }
+
+    fn get_origin_instant(&self) -> Instant {
+        self.origin
     }
 }
 
 /// Return the current system time. Note that the value returned is not
 /// guaranteed to be monotonic.
-fn system_time_now() -> Time {
+#[inline]
+pub fn system_time_now() -> Time {
     UNIX_EPOCH
         + SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)

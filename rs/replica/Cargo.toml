@@ -1,101 +1,88 @@
 [package]
 name = "ic-replica"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-base64 = "0.11.0"
-clap = { version = "3.1.6", features = ["derive"] }
-hex = "0.4.2"
-ic-async-utils = { path = "../async_utils" }
+clap = { workspace = true }
+hex = { workspace = true }
+ic-artifact-pool = { path = "../artifact_pool" }
+ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
+ic-nns-delegation-manager = { path = "../http_endpoints/nns_delegation_manager" }
 ic-btc-adapter-client = { path = "../bitcoin/client" }
 ic-btc-consensus = { path = "../bitcoin/consensus" }
-ic-canister-http-adapter-client = { path = "../canister_http/client" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
-ic-consensus-message = { path = "../consensus/message" }
+ic-consensus-certification = { path = "../consensus/certification" }
+ic-consensus-cup-utils = { path = "../consensus/cup_utils" }
 ic-crypto = { path = "../crypto" }
-ic-crypto-sha = { path = "../crypto/sha" }
-ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
-ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
-ic-cycles-account-manager = { path = "../cycles_account_manager" }
-ic-error-types = { path = "../types/error_types" }
+ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-execution-environment = { path = "../execution_environment" }
-ic-http-handler = { path = "../http_handler" }
+ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
+ic-http-endpoints-public = { path = "../http_endpoints/public" }
+ic-http-endpoints-xnet = { path = "../http_endpoints/xnet" }
+ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
 ic-interfaces = { path = "../interfaces" }
-ic-interfaces-bitcoin-adapter-client = { path = "../interfaces/bitcoin_adapter_client" }
-ic-interfaces-p2p = { path = "../interfaces/p2p" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
+ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
+ic-tracing-logging-layer = { path = "../monitoring/tracing/logging_layer" }
 ic-logger = { path = "../monitoring/logger" }
 ic-messaging = { path = "../messaging" }
 ic-metrics = { path = "../monitoring/metrics" }
-ic-metrics-exporter = { path = "../monitoring/metrics_exporter" }
-ic-nns-constants = { path = "../nns/constants" }
-ic-p2p = { path = "../p2p" }
+ic-pprof = { path = "../monitoring/pprof" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
-ic-replica-setup-ic-network =  { path = "./setup_ic_network" }
+ic-replica-setup-ic-network = { path = "./setup_ic_network" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }
 ic-sys = { path = "../sys" }
+ic-tracing = { path = "../monitoring/tracing" }
+ic-tracing-jaeger-exporter = { path = "../monitoring/tracing/jaeger_exporter" }
 ic-types = { path = "../types/types" }
-ic-utils = { path = "../utils" }
-ic-xnet-endpoint = { path = "../xnet/endpoint" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
-jemalloc-ctl = "0.3.3"
-jemallocator = "0.3.2"
-libc = "0.2.91"
-nix = "0.23.0"
-num_cpus = "1.13.1"
-pprof = { version = "0.9.1", default-features = false, features = ["backtrace-rs", "flamegraph", "prost-codec"], optional = true }
-prometheus = "0.12.0"
-prost = "0.10.4"
-rand = "0.8"
-regex = "1.3.9"
-serde = { version = "1.0.99", features = [ "derive" ] }
-serde_bytes = "0.11.5"
-serde_cbor = "0.11.1"
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
-slog-async = "2.5.0"
-static_assertions = "0.3.4"
-tempfile = "3.1.0"
-thread_profiler = { version = "0.3", optional = true }
-tokio = { version = "1.15.0", features = ["full"] }
-tracing = "0.1.13"
-tower = { version = "0.4.11", features = ["util"] }
+libc = { workspace = true }
+nix = { workspace = true }
+num_cpus = { workspace = true }
+pprof = { workspace = true, optional = true }
+prometheus = { workspace = true }
+rand = { workspace = true }
+regex = { workspace = true }
+slog = { workspace = true }
+tempfile = { workspace = true }
+tikv-jemalloc-ctl = { workspace = true }
+tikv-jemallocator = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
-assert_cmd = "0.12"
+assert_cmd = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
-criterion = "0.3"
-ic-ic00-types = { path = "../types/ic00_types" }
+criterion = { workspace = true }
+ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-test-utilities = { path = "../test_utilities" }
-ic-test-utilities-registry = { path = "../test_utilities/registry" }
-predicates = "1.0.1"
-wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
+predicates = { workspace = true }
+wat = { workspace = true }
 
 [[bench]]
 name = "calls"
 harness = false
 
-# TODO(RPL-268)
-# [[bench]]
-# name = "execution_only_update"
-# harness = false
-
 [[bin]]
 name = "replica"
-path = "src/main.rs"
+path = "bin/replica/main.rs"
 
 [features]
-profiler = ["thread_profiler/thread_profiler", "pprof"]
+profiler = ["pprof"]
 malicious_code = [
-  "ic-consensus/malicious_code",
-  "ic-http-handler/malicious_code",
-  "ic-p2p/malicious_code",
-  "ic-state-manager/malicious_code",
+    "ic-consensus/malicious_code",
+    "ic-state-manager/malicious_code",
 ]

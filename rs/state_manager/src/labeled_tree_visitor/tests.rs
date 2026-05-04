@@ -1,6 +1,6 @@
 use super::*;
 use ic_canonical_state::visitor::{named_blob, named_num, named_subtree, subtree};
-use ic_crypto_tree_hash::{flatmap, FlatMap, LabeledTree::*};
+use ic_crypto_tree_hash::{FlatMap, LabeledTree::*, flatmap};
 use proptest::prelude::*;
 
 // Sample tree traversal:
@@ -63,8 +63,8 @@ fn sample_traversal_produces_a_map() {
                 Label::from("deadbeef") => Leaf(vec![0xde, 0xad, 0xbe, 0xef]),
             ]),
             Label::from("nums") => SubTree(flatmap![
-                Label::from("1") => Leaf(1u64.to_be_bytes().to_vec()),
-                Label::from("2") => Leaf(2u64.to_be_bytes().to_vec()),
+                Label::from("1") => Leaf(1_u64.to_be_bytes().to_vec()),
+                Label::from("2") => Leaf(2_u64.to_be_bytes().to_vec()),
             ]),
         ])
     );
@@ -108,11 +108,9 @@ fn arb_tree() -> impl Strategy<Value = LabeledTree<Vec<u8>>> {
     )
 }
 
-proptest! {
-    #[test]
-    fn roundtrip(t in arb_tree()) {
-        let mut v = LabeledTreeVisitor::default();
-        let _ = traverse_labeled_tree(&t, &mut v);
-        prop_assert_eq!(v.finish(), t);
-    }
+#[test_strategy::proptest]
+fn roundtrip(#[strategy(arb_tree())] t: LabeledTree<Vec<u8>>) {
+    let mut v = LabeledTreeVisitor::default();
+    let _ = traverse_labeled_tree(&t, &mut v);
+    prop_assert_eq!(v.finish(), t);
 }

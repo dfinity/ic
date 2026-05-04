@@ -1,29 +1,27 @@
-#![allow(clippy::unwrap_used)]
-
 use super::*;
-use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
 use crate::sign::tests::{
-    dealing_encryption_pk_record_with, registry_with_records, REG_V1, REG_V2,
+    REG_V1, REG_V2, dealing_encryption_pk_record_with, registry_with_records,
 };
+use crate::sign::threshold_sig::ni_dkg::test_utils::REGISTRY_FS_ENC_PK_SIZE;
 use crate::sign::threshold_sig::ni_dkg::test_utils::csp_fs_enc_pk;
 use crate::sign::threshold_sig::ni_dkg::test_utils::dealing_enc_pk_record;
 use crate::sign::threshold_sig::ni_dkg::test_utils::map_of;
-use crate::sign::threshold_sig::ni_dkg::test_utils::REGISTRY_FS_ENC_PK_SIZE;
 use crate::sign::threshold_sig::ni_dkg::test_utils::{
-    csp_dealing, dkg_config, minimal_dkg_config_data_without_resharing, transcript, DKG_ID,
-    RESHARING_TRANSCRIPT_DKG_ID, THRESHOLD,
+    DKG_ID, RESHARING_TRANSCRIPT_DKG_ID, THRESHOLD, csp_dealing, dkg_config,
+    minimal_dkg_config_data_without_resharing, transcript,
 };
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgCreateDealingError;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspFsEncryptionPublicKey, CspNiDkgDealing, Epoch,
 };
 use ic_crypto_test_utils::set_of;
+use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
+use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::error::InvalidArgumentError;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfigData;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::{
     FsEncryptionPublicKeyNotInRegistryError, MalformedFsEncryptionPublicKeyError, NotADealerError,
 };
-use ic_types::crypto::AlgorithmId;
 use ic_types::registry::RegistryClientError;
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_42};
 
@@ -49,13 +47,12 @@ mod create_dealing {
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_create_dealing()
             .withf(
-                move |algorithm_id, dkg_id, dealer_index, threshold, epoch_, receiver_keys| {
-                    *dkg_id == DKG_ID
-                        && *dealer_index == 0
+                move |algorithm_id, dealer_index, threshold, epoch_, receiver_keys| {
+                    *dealer_index == 0
                         && *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
                         && *threshold == THRESHOLD
                         && *epoch_ == epoch(REG_V2)
-                        && *receiver_keys == map_of(vec![(0u32, csp_fs_enc_pk(PK_VALUE_1))])
+                        && *receiver_keys == map_of(vec![(0_u32, csp_fs_enc_pk(PK_VALUE_1))])
                 },
             )
             .times(1)
@@ -64,7 +61,7 @@ mod create_dealing {
         let _ = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_records(vec![key_record]),
+            registry_with_records(vec![key_record]).as_ref(),
             &dkg_config,
         );
     }
@@ -84,7 +81,7 @@ mod create_dealing {
         let _ = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_records(vec![dealing_enc_pk_record(NODE_1, REG_V2, PK_VALUE_1)]),
+            registry_with_records(vec![dealing_enc_pk_record(NODE_1, REG_V2, PK_VALUE_1)]).as_ref(),
             &dkg_config,
         );
     }
@@ -106,16 +103,16 @@ mod create_dealing {
         let csp = csp_with_create_dealing_expecting_receiver_keys_and_dealer_index(
             0,
             map_of(vec![
-                (0u32, csp_fs_enc_pk(PK_VALUE_1)),
-                (1u32, csp_fs_enc_pk(PK_VALUE_2)),
-                (2u32, csp_fs_enc_pk(PK_VALUE_3)),
+                (0_u32, csp_fs_enc_pk(PK_VALUE_1)),
+                (1_u32, csp_fs_enc_pk(PK_VALUE_2)),
+                (2_u32, csp_fs_enc_pk(PK_VALUE_3)),
             ]),
         );
 
         let _ = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_records(vec![key_record_1, key_record_2, key_record_3]),
+            registry_with_records(vec![key_record_1, key_record_2, key_record_3]).as_ref(),
             &dkg_config,
         );
     }
@@ -133,7 +130,7 @@ mod create_dealing {
         let result = create_dealing(
             &not_a_dealer_node,
             &csp,
-            &registry_with_records(vec![dealing_enc_pk_record(NODE_2, REG_V2, PK_VALUE_1)]),
+            registry_with_records(vec![dealing_enc_pk_record(NODE_2, REG_V2, PK_VALUE_1)]).as_ref(),
             &dkg_config,
         );
 
@@ -159,7 +156,7 @@ mod create_dealing {
         let result = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_too_old_latest_version,
+            registry_with_too_old_latest_version.as_ref(),
             &dkg_config,
         );
 
@@ -186,7 +183,7 @@ mod create_dealing {
             &NODE_1,
             &csp,
             // NODE_1 key is missing in registry:
-            &registry_with_missing_receiver_enc_key,
+            registry_with_missing_receiver_enc_key.as_ref(),
             &dkg_config,
         );
 
@@ -218,7 +215,7 @@ mod create_dealing {
         let result = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_records(vec![key_record]),
+            registry_with_records(vec![key_record]).as_ref(),
             &dkg_config,
         );
 
@@ -242,7 +239,7 @@ mod create_dealing {
         let dealing = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_records(vec![dealing_enc_pk_record(NODE_1, REG_V2, PK_VALUE_1)]),
+            registry_with_records(vec![dealing_enc_pk_record(NODE_1, REG_V2, PK_VALUE_1)]).as_ref(),
             &dkg_config,
         );
 
@@ -261,7 +258,7 @@ mod create_dealing {
         let error = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_records(vec![dealing_enc_pk_record(NODE_1, REG_V2, PK_VALUE_1)]),
+            registry_with_records(vec![dealing_enc_pk_record(NODE_1, REG_V2, PK_VALUE_1)]).as_ref(),
             &dkg_config,
         )
         .unwrap_err();
@@ -269,7 +266,7 @@ mod create_dealing {
         assert_eq!(
             error,
             DkgCreateDealingError::MalformedFsEncryptionPublicKey(MalformedFsEncryptionPublicKeyError {
-                internal_error: "error for receiver index 0: MalformedPublicKeyError { algorithm: Placeholder, key_bytes: None, internal_error: \"some error\" }".to_string()
+                internal_error: "error for receiver index 0: MalformedPublicKeyError { algorithm: Unspecified, key_bytes: None, internal_error: \"some error\" }".to_string()
             })
         );
     }
@@ -287,7 +284,7 @@ mod create_dealing {
         let _panic = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_records(vec![dealing_enc_pk_record(NODE_1, REG_V2, PK_VALUE_1)]),
+            registry_with_records(vec![dealing_enc_pk_record(NODE_1, REG_V2, PK_VALUE_1)]).as_ref(),
             &dkg_config,
         );
     }
@@ -307,9 +304,8 @@ mod create_dealing {
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_create_dealing()
             .withf(
-                move |algorithm_id, dkg_id, dealer_index, threshold, epoch_, receiver_keys| {
-                    *dkg_id == DKG_ID
-                        && *dealer_index == expected_index
+                move |algorithm_id, dealer_index, threshold, epoch_, receiver_keys| {
+                    *dealer_index == expected_index
                         && *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
                         && *threshold == THRESHOLD
                         && *epoch_ == epoch(REG_V2)
@@ -325,7 +321,7 @@ mod create_dealing {
         CspDkgCreateDealingError::MalformedFsPublicKeyError {
             receiver_index: 0,
             error: MalformedPublicKeyError {
-                algorithm: AlgorithmId::Placeholder,
+                algorithm: AlgorithmId::Unspecified,
                 key_bytes: None,
                 internal_error: "some error".to_string(),
             },
@@ -379,7 +375,7 @@ mod create_dealing_with_resharing_transcript {
                         && *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
                         && *threshold == THRESHOLD
                         && *epoch_ == epoch(REG_V2)
-                        && *receiver_keys == map_of(vec![(0u32, csp_fs_enc_pk(PK_VALUE_2))])
+                        && *receiver_keys == map_of(vec![(0_u32, csp_fs_enc_pk(PK_VALUE_2))])
                         && *resharing_public_coefficients
                             == CspPublicCoefficients::from(&resharing_transcript)
                 },
@@ -389,7 +385,7 @@ mod create_dealing_with_resharing_transcript {
         let _ = create_dealing(
             &NODE_3,
             &csp,
-            &registry_with_records(vec![resharing_enc_pk_record, enc_pk_record]),
+            registry_with_records(vec![resharing_enc_pk_record, enc_pk_record]).as_ref(),
             &dkg_config,
         );
     }
@@ -408,7 +404,7 @@ mod create_dealing_with_resharing_transcript {
         let error = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_records(vec![resharing_enc_pk_record, enc_pk_record]),
+            registry_with_records(vec![resharing_enc_pk_record, enc_pk_record]).as_ref(),
             &dkg_config,
         )
         .unwrap_err();
@@ -416,7 +412,7 @@ mod create_dealing_with_resharing_transcript {
         assert_eq!(
             error,
             DkgCreateDealingError::MalformedFsEncryptionPublicKey(MalformedFsEncryptionPublicKeyError {
-                internal_error: "error for receiver index 0: MalformedPublicKeyError { algorithm: Placeholder, key_bytes: None, internal_error: \"some error\" }".to_string()
+                internal_error: "error for receiver index 0: MalformedPublicKeyError { algorithm: Unspecified, key_bytes: None, internal_error: \"some error\" }".to_string()
             })
         );
     }
@@ -436,7 +432,7 @@ mod create_dealing_with_resharing_transcript {
         let _panic = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_records(vec![resharing_enc_pk_record, enc_pk_record]),
+            registry_with_records(vec![resharing_enc_pk_record, enc_pk_record]).as_ref(),
             &dkg_config,
         );
     }
@@ -454,7 +450,7 @@ mod create_dealing_with_resharing_transcript {
         CspDkgCreateReshareDealingError::MalformedFsPublicKeyError {
             receiver_index: 0,
             error: MalformedPublicKeyError {
-                algorithm: AlgorithmId::Placeholder,
+                algorithm: AlgorithmId::Unspecified,
                 key_bytes: None,
                 internal_error: "some error".to_string(),
             },
@@ -487,19 +483,12 @@ mod verify_dealing {
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_verify_dealing()
             .withf(
-                move |algorithm_id,
-                      dkg_id,
-                      dealer_index,
-                      threshold,
-                      epoch_,
-                      receiver_keys,
-                      dealing| {
-                    *dkg_id == DKG_ID
-                        && *dealer_index == 0
+                move |algorithm_id, dealer_index, threshold, epoch_, receiver_keys, dealing| {
+                    *dealer_index == 0
                         && *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
                         && *threshold == THRESHOLD
                         && *epoch_ == epoch(REG_V2)
-                        && *receiver_keys == map_of(vec![(0u32, csp_fs_enc_pk(PK_VALUE_1))])
+                        && *receiver_keys == map_of(vec![(0_u32, csp_fs_enc_pk(PK_VALUE_1))])
                         && *dealing == csp_dealing(DEALING_VALUE_1)
                 },
             )
@@ -508,7 +497,7 @@ mod verify_dealing {
 
         let _ = verify_dealing(
             &csp,
-            &registry_with_records(vec![receiver_1_enc_pk]),
+            registry_with_records(vec![receiver_1_enc_pk]).as_ref(),
             &dkg_config,
             &DEALER,
             &ni_dkg_dealing(csp_dealing(DEALING_VALUE_1)),
@@ -526,18 +515,19 @@ mod verify_dealing {
         let receiver_2_enc_pk = dealing_enc_pk_record(NODE_2, REG_V2, PK_VALUE_2);
         let receiver_3_enc_pk = dealing_enc_pk_record(NODE_3, REG_V2, PK_VALUE_3);
         let csp = csp_with_verify_dealing_expecting_receiver_keys(map_of(vec![
-            (0u32, csp_fs_enc_pk(PK_VALUE_1)),
-            (1u32, csp_fs_enc_pk(PK_VALUE_2)),
-            (2u32, csp_fs_enc_pk(PK_VALUE_3)),
+            (0_u32, csp_fs_enc_pk(PK_VALUE_1)),
+            (1_u32, csp_fs_enc_pk(PK_VALUE_2)),
+            (2_u32, csp_fs_enc_pk(PK_VALUE_3)),
         ]));
 
         let _ = verify_dealing(
             &csp,
-            &registry_with_records(vec![
+            registry_with_records(vec![
                 receiver_1_enc_pk,
                 receiver_2_enc_pk,
                 receiver_3_enc_pk,
-            ]),
+            ])
+            .as_ref(),
             &dkg_config,
             &DEALER,
             &dummy_ni_dkg_dealing(),
@@ -557,7 +547,7 @@ mod verify_dealing {
 
         let result = verify_dealing(
             &csp,
-            &registry_with_records(vec![receiver_enc_pk]),
+            registry_with_records(vec![receiver_enc_pk]).as_ref(),
             &dkg_config,
             &not_a_dealer_node,
             &dummy_ni_dkg_dealing(),
@@ -584,7 +574,7 @@ mod verify_dealing {
 
         let result = verify_dealing(
             &csp,
-            &registry_with_records(vec![old_version_receiver_enc_pk]),
+            registry_with_records(vec![old_version_receiver_enc_pk]).as_ref(),
             &dkg_config,
             &DEALER,
             &dummy_ni_dkg_dealing(),
@@ -613,7 +603,7 @@ mod verify_dealing {
 
         let result = verify_dealing(
             &csp,
-            &registry_with_missing_receiver_enc_key,
+            registry_with_missing_receiver_enc_key.as_ref(),
             &dkg_config,
             &DEALER,
             &dummy_ni_dkg_dealing(),
@@ -648,7 +638,7 @@ mod verify_dealing {
 
         let result = verify_dealing(
             &csp,
-            &registry_with_records(vec![key_record]),
+            registry_with_records(vec![key_record]).as_ref(),
             &dkg_config,
             &DEALER,
             &dummy_ni_dkg_dealing(),
@@ -674,7 +664,7 @@ mod verify_dealing {
 
         let result = verify_dealing(
             &csp,
-            &registry_with_records(vec![receiver_1_enc_pk]),
+            registry_with_records(vec![receiver_1_enc_pk]).as_ref(),
             &dkg_config,
             &DEALER,
             &dummy_ni_dkg_dealing(),
@@ -699,7 +689,7 @@ mod verify_dealing {
 
         let result = verify_dealing(
             &csp,
-            &registry_with_records(vec![receiver_1_enc_pk]),
+            registry_with_records(vec![receiver_1_enc_pk]).as_ref(),
             &dkg_config,
             &DEALER,
             &dummy_ni_dkg_dealing(),
@@ -717,14 +707,8 @@ mod verify_dealing {
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_verify_dealing()
             .withf(
-                move |_algorithm_id,
-                      _dkg_id,
-                      _dealer_index,
-                      _threshold,
-                      _epoch,
-                      receiver_keys,
-                      _dealing| {
-                    println!("{:?}", receiver_keys);
+                move |_algorithm_id, _dealer_index, _threshold, _epoch, receiver_keys, _dealing| {
+                    println!("{receiver_keys:?}");
                     *receiver_keys == expected_receiver_keys
                 },
             )
@@ -774,18 +758,16 @@ mod verify_dealing_with_resharing_transcript {
         csp.expect_verify_resharing_dealing()
             .withf(
                 move |algorithm_id,
-                      dkg_id,
                       dealer_resharing_index,
                       threshold,
                       epoch_,
                       receiver_keys,
                       dealing,
                       resharing_pub_coeffs| {
-                    *dkg_id == DKG_ID
-                        && *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
+                    *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
                         && *threshold == THRESHOLD
                         && *epoch_ == epoch(REG_V2)
-                        && *receiver_keys == map_of(vec![(0u32, csp_fs_enc_pk(PK_VALUE_1))])
+                        && *receiver_keys == map_of(vec![(0_u32, csp_fs_enc_pk(PK_VALUE_1))])
                         && *dealing == csp_dealing(DEALING_VALUE_1)
                         && *resharing_pub_coeffs == expected_resharing_pub_coeffs
                         // The resharing dealer index is the index of NODE_3 in the resharing committee.
@@ -798,7 +780,7 @@ mod verify_dealing_with_resharing_transcript {
 
         let _ = verify_dealing(
             &csp,
-            &registry_with_records(vec![receiver_1_enc_pk]),
+            registry_with_records(vec![receiver_1_enc_pk]).as_ref(),
             &dkg_config,
             &NODE_3,
             &ni_dkg_dealing(csp_dealing(DEALING_VALUE_1)),
@@ -817,7 +799,7 @@ mod verify_dealing_with_resharing_transcript {
 
         let result = verify_dealing(
             &csp,
-            &registry_with_records(vec![receiver_1_enc_pk]),
+            registry_with_records(vec![receiver_1_enc_pk]).as_ref(),
             &dkg_config,
             &NODE_2,
             &ni_dkg_dealing(csp_dealing(DEALING_VALUE_1)),
@@ -843,7 +825,7 @@ mod verify_dealing_with_resharing_transcript {
 
         let error = verify_dealing(
             &csp,
-            &registry_with_records(vec![receiver_1_enc_pk]),
+            registry_with_records(vec![receiver_1_enc_pk]).as_ref(),
             &dkg_config,
             &NODE_2,
             &ni_dkg_dealing(csp_dealing(DEALING_VALUE_1)),

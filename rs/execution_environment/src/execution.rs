@@ -1,9 +1,6 @@
 // Replicated messages.
-pub mod heartbeat;
-pub(crate) mod replicated_query;
+pub mod call_or_task;
 pub mod response;
-pub(crate) mod update;
-
 // Non-replicated messages.
 pub mod nonreplicated_query;
 mod nonreplicated_response;
@@ -15,6 +12,3 @@ pub mod upgrade;
 // Common helpers.
 pub(crate) mod common;
 pub mod inspect_message;
-
-#[cfg(test)]
-pub mod test_utilities;

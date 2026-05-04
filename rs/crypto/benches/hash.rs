@@ -1,57 +1,76 @@
-use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, Throughput};
-use ic_crypto_sha::Sha256;
+use criterion::measurement::Measurement;
+use criterion::{BenchmarkGroup, Criterion, Throughput, criterion_group, criterion_main};
+use ic_crypto_sha2::Sha256;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::prelude::*;
 use std::convert::TryFrom;
 use std::time::Duration;
 
 const KIBIBYTE: u128 = 1024; // 2 ^ 10
 const MEBIBYTE: u128 = 1_048_576; // 2 ^ 20
+const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(300);
 
 criterion_main!(benches);
 criterion_group!(benches, bench_hash);
 
 fn bench_hash(criterion: &mut Criterion) {
     let group = &mut criterion.benchmark_group("crypto_hash");
+    group.warm_up_time(WARMUP_TIME);
+
+    let rng = &mut reproducible_rng();
 
     group.sample_size(20);
-    bench_sha256(group, "sha256_32_B", 32);
-    bench_sha256(group, "sha256_1_KiB", KIBIBYTE);
-    bench_sha256(group, "sha256_1_MiB", MEBIBYTE);
-    bench_sha256_chunked(group, "sha256_1_MiB_in_1_KiB_chunks", MEBIBYTE, KIBIBYTE);
+    bench_sha256(group, "sha256_32_B", 32, rng);
+    bench_sha256(group, "sha256_1_KiB", KIBIBYTE, rng);
+    bench_sha256(group, "sha256_1_MiB", MEBIBYTE, rng);
+    bench_sha256_chunked(
+        group,
+        "sha256_1_MiB_in_1_KiB_chunks",
+        MEBIBYTE,
+        KIBIBYTE,
+        rng,
+    );
     bench_sha256_chunked(
         group,
         "sha256_1_MiB_in_16_KiB_chunks",
         MEBIBYTE,
         16 * KIBIBYTE,
+        rng,
     );
 
     group.sample_size(10);
     group.measurement_time(Duration::from_secs(7));
-    bench_sha256(group, "sha256_10_MiB", 10 * MEBIBYTE);
+    bench_sha256(group, "sha256_10_MiB", 10 * MEBIBYTE, rng);
     bench_sha256_chunked(
         group,
         "sha256_10_MiB_in_1_KiB_chunks",
         10 * MEBIBYTE,
         KIBIBYTE,
+        rng,
     );
     bench_sha256_chunked(
         group,
         "sha256_10_MiB_in_16_KiB_chunks",
         10 * MEBIBYTE,
         16 * KIBIBYTE,
+        rng,
     );
     bench_sha256_chunked(
         group,
         "sha256_100_MiB_in_16_KiB_chunks",
         100 * MEBIBYTE,
         16 * KIBIBYTE,
+        rng,
     );
 }
 
-fn bench_sha256<M: Measurement>(group: &mut BenchmarkGroup<'_, M>, name: &str, size: u128) {
-    let rng = &mut thread_rng();
+fn bench_sha256<M: Measurement, R: Rng + CryptoRng>(
+    group: &mut BenchmarkGroup<'_, M>,
+    name: &str,
+    size: u128,
+    rng: &mut R,
+) {
     group.throughput(Throughput::Bytes(as_u64(size)));
     group.bench_function(name, |bench| {
         bench.iter_batched_ref(
@@ -64,13 +83,13 @@ fn bench_sha256<M: Measurement>(group: &mut BenchmarkGroup<'_, M>, name: &str, s
     });
 }
 
-fn bench_sha256_chunked<M: Measurement>(
+fn bench_sha256_chunked<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     name: &str,
     size: u128,
     chunk_size: u128,
+    rng: &mut R,
 ) {
-    let rng = &mut thread_rng();
     group.throughput(Throughput::Bytes(as_u64(size)));
     group.bench_function(name, |bench| {
         bench.iter_batched_ref(
@@ -98,7 +117,7 @@ fn random_bytes_chunked<R: Rng>(n: u128, chunk_size: u128, rng: &mut R) -> Vec<V
 }
 
 fn random_bytes<R: Rng>(n: u128, rng: &mut R) -> Vec<u8> {
-    (0..n).map(|_| rng.gen::<u8>()).collect()
+    (0..n).map(|_| rng.r#gen::<u8>()).collect()
 }
 
 fn as_u64(u128: u128) -> u64 {

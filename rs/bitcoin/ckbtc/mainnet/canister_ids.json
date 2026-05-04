@@ -1,0 +1,17 @@
+{
+  "archive": {
+    "ic": "nbsys-saaaa-aaaar-qaaga-cai"
+  },
+  "btc_checker": {
+    "ic": "oltsj-fqaaa-aaaar-qal5q-cai"
+  },
+  "index": {
+    "ic": "n5wcd-faaaa-aaaar-qaaea-cai"
+  },
+  "ledger": {
+    "ic": "mxzaz-hqaaa-aaaar-qaada-cai"
+  },
+  "minter": {
+    "ic": "mqygn-kiaaa-aaaar-qaadq-cai"
+  }
+}

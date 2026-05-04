@@ -3,15 +3,15 @@
 use dfn_candid::candid;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
-use ic_nns_governance::pb::v1::{neuron::DissolveState, Neuron};
+use ic_nns_governance_api::{Neuron, neuron::DissolveState};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
 };
 
 #[test]
 fn get_build_metadata_test() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
 
         // Boot up the IC.
@@ -23,7 +23,7 @@ fn get_build_metadata_test() {
             nns_builder.governance.proto.neurons.insert(
                 neuron_id_4.id,
                 Neuron {
-                    id: Some(neuron_id_4.clone()),
+                    id: Some(neuron_id_4),
                     controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
                     dissolve_state: Some(DissolveState::DissolveDelaySeconds(
                         TWELVE_MONTHS_SECONDS
@@ -56,9 +56,7 @@ fn get_build_metadata_test() {
         ] {
             assert!(
                 response.contains(phrase),
-                "Failed to find {} in response:\n{}",
-                phrase,
-                response
+                "Failed to find {phrase} in response:\n{response}"
             );
         }
 

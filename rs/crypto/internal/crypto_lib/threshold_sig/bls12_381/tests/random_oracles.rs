@@ -1,6 +1,6 @@
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::random_oracles::*;
-use ic_crypto_sha::{DomainSeparationContext, Sha256};
+use ic_crypto_sha2::{DomainSeparationContext, Sha256};
 
 struct StructToBeHashed {
     point: G1Affine,
@@ -84,7 +84,7 @@ mod unique_hashing {
         const INTEGER_HASH_HEX: &str =
             "f0496c68b3a9652a454e53dc157f70567e49232df7ae2b0bc95d0e28a41abe1a";
 
-        let int = 42usize;
+        let int = 42_usize;
         let hash = int.unique_hash();
 
         assert_eq!(
@@ -111,7 +111,7 @@ mod unique_hashing {
         const BYTES_HASH_HEX: &str =
             "1dad75ea20c2f7f58939a1f905148f3554bf24c14528ff6cd0527dffbd10e431";
 
-        let bytes = vec![1u8, 2u8, 3u8, 4u8];
+        let bytes = vec![1_u8, 2_u8, 3_u8, 4_u8];
         let hash = bytes.unique_hash();
 
         assert_eq!(
@@ -181,7 +181,7 @@ mod unique_hashing {
 
     #[test]
     fn should_hash_vectors_of_points() {
-        let point = *G1Affine::generator();
+        let point = G1Affine::generator().clone();
         let other_point = (G1Affine::generator() * Scalar::from_usize(42)).to_affine();
 
         let vec = vec![point, other_point];
@@ -190,8 +190,8 @@ mod unique_hashing {
 
     #[test]
     fn should_hash_vectors_of_vectors_of_points() {
-        let point = *G1Affine::generator();
-        let other_point = *G1Affine::generator();
+        let point = G1Affine::generator().clone();
+        let other_point = G1Affine::generator().clone();
 
         let vec_in = vec![point, other_point];
         let vec_out = vec![vec_in; 3];
@@ -205,9 +205,9 @@ mod unique_hashing {
         let point1 = G1Affine::generator() * Scalar::from_usize(17);
         let point2 = G1Affine::generator() * Scalar::from_usize(13);
         let hashable_struct = StructToBeHashed {
-            point: *G1Affine::generator(),
+            point: G1Affine::generator().clone(),
             string: "some string".to_string(),
-            integer: 4usize,
+            integer: 4_usize,
             scalar: Scalar::from_usize(36),
             bytes: vec![1, 2, 3, 4],
         };
@@ -225,9 +225,9 @@ mod unique_hashing {
     #[test]
     fn should_hash_structs_with_domain() {
         let hashable_struct = StructToBeHashed {
-            point: *G1Affine::generator(),
+            point: G1Affine::generator().clone(),
             string: "some string".to_string(),
-            integer: 4usize,
+            integer: 4_usize,
             scalar: Scalar::from_usize(36),
             bytes: vec![1, 2, 3, 4],
         };
@@ -247,9 +247,9 @@ mod unique_hashing {
     #[test]
     fn test_expected_output_for_random_oracle_to_scalar() {
         let hashable_struct = StructToBeHashed {
-            point: *G1Affine::generator(),
+            point: G1Affine::generator().clone(),
             string: "some string".to_string(),
-            integer: 4usize,
+            integer: 4_usize,
             scalar: Scalar::from_usize(36),
             bytes: vec![1, 2, 3, 4],
         };
@@ -282,9 +282,9 @@ mod random_oracles {
             prop_assume!(domain_1!=domain_2);
 
             let hashable_struct = StructToBeHashed {
-                point: *G1Affine::generator(),
+                point: G1Affine::generator().clone(),
                 string: "some string".to_string(),
-                integer: 4usize,
+                integer: 4_usize,
                 scalar: Scalar::from_usize(36),
                 bytes: vec![1, 2, 3, 4],
             };
@@ -300,33 +300,15 @@ mod random_oracles {
             prop_assume!(domain_1!=domain_2);
 
             let hashable_struct = StructToBeHashed {
-                point: *G1Affine::generator(),
+                point: G1Affine::generator().clone(),
                 string: "some string".to_string(),
-                integer: 4usize,
+                integer: 4_usize,
                 scalar: Scalar::from_usize(36),
                 bytes: vec![1, 2, 3, 4],
             };
             let hash_1 = random_oracle_to_scalar(&domain_1, &hashable_struct);
             let hash_2 = random_oracle_to_scalar(&domain_2, &hashable_struct);
             assert_ne!(hash_1, hash_2);
-        }
-
-        #[test]
-        fn should_return_distinct_g1_points_on_different_domains(domain_1: String, domain_2: String) {
-            prop_assume!(domain_1.len()<100);
-            prop_assume!(domain_2.len()<100);
-            prop_assume!(domain_1!=domain_2);
-
-            let hashable_struct = StructToBeHashed {
-                point: *G1Affine::generator(),
-                string: "some string".to_string(),
-                integer: 4usize,
-                scalar: Scalar::from_usize(36),
-                bytes: vec![1, 2, 3, 4],
-            };
-            let hash_1 = random_oracle_to_g1(&domain_1, &hashable_struct);
-            let hash_2 = random_oracle_to_g1(&domain_2, &hashable_struct);
-            assert!(hash_1 != hash_2);
         }
     }
 }

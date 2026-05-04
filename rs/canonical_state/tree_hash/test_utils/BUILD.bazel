@@ -1,0 +1,25 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/canonical_state/tree_hash",
+    "//rs/crypto/tree_hash",
+    "//rs/crypto/tree_hash/test_utils",
+    "@crate_index//:rand",
+]
+
+rust_library(
+    name = "test_utils",
+    testonly = True,
+    srcs = glob(["src/**"]),
+    crate_name = "ic_canonical_state_tree_hash_test_utils",
+    rustc_flags = select({
+        "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+        "//conditions:default": [],
+    }),
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)

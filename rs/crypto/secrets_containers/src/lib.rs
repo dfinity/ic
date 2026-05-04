@@ -22,5 +22,8 @@ pub use secret_array::*;
 pub mod secret_vec;
 pub use secret_vec::*;
 
+pub mod secret_bytes;
+pub use secret_bytes::*;
+
 #[cfg(test)]
 mod tests;

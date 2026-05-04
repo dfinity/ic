@@ -2,37 +2,55 @@ use crate::deserialize_registry_value;
 use ic_interfaces_registry::{
     RegistryClient, RegistryClientResult, RegistryClientVersionedResult, RegistryVersionedRecord,
 };
-use ic_protobuf::registry::{
-    node::v1::NodeRecord,
-    replica_version::v1::ReplicaVersionRecord,
-    subnet::v1::{CatchUpPackageContents, GossipConfig, SubnetListRecord, SubnetRecord},
+use ic_limits::{INITIAL_NOTARY_DELAY, UNIT_DELAY_APP_SUBNET};
+use ic_protobuf::{
+    registry::{
+        node::v1::NodeRecord,
+        replica_version::v1::ReplicaVersionRecord,
+        subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord, SubnetType},
+    },
+    types::v1::SubnetId as SubnetIdProto,
 };
-use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_node_record_key, make_replica_version_key,
-    make_subnet_list_record_key, make_subnet_record_key, ROOT_SUBNET_ID_KEY,
+    ROOT_SUBNET_ID_KEY, make_catch_up_package_contents_key, make_node_record_key,
+    make_replica_version_key, make_subnet_list_record_key, make_subnet_record_key,
 };
-use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
-use ic_types::{Height, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId};
-use std::convert::{TryFrom, TryInto};
-use std::time::Duration;
+use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
+use ic_types::{
+    Height, NodeId, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, ReplicaVersion,
+    SubnetId,
+    registry::RegistryClientError::{self, DecodeError},
+};
+use std::{convert::TryFrom, time::Duration};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct NotarizationDelaySettings {
     pub unit_delay: Duration,
     pub initial_notary_delay: Duration,
+}
+
+impl Default for NotarizationDelaySettings {
+    fn default() -> Self {
+        Self {
+            initial_notary_delay: INITIAL_NOTARY_DELAY,
+            unit_delay: UNIT_DELAY_APP_SUBNET,
+        }
+    }
 }
 
 pub struct IngressMessageSettings {
     /// Maximum number of bytes per message. This is a hard cap, which means
     /// ingress messages greater than the limit will be dropped.
     pub max_ingress_bytes_per_message: usize,
+    /// Maximum number of ingress bytes per block. This is a hard cap, which means
+    /// blocks will never have more than this number of ingress bytes.
+    pub max_ingress_bytes_per_block: usize,
     /// Maximum number of messages per block. This is a hard cap, which means
     /// blocks will never have more than this number of messages.
     pub max_ingress_messages_per_block: usize,
 }
 
-/// A helper trait that wraps a RegistryClient and provides utility methods for
+/// A helper trait that wraps a [RegistryClient] and provides utility methods for
 /// querying subnet information.
 pub trait SubnetRegistry {
     fn get_subnet_record(
@@ -40,6 +58,17 @@ pub trait SubnetRegistry {
         subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> RegistryClientResult<SubnetRecord>;
+
+    /// Returns `true` if the `subnet_id` is deleted at `version`.
+    /// I.e., there used to be a `subnet_record` for this ID, but
+    /// it was explicitly deleted.
+    ///
+    /// Returns `false` if the subnet still exists or has never existed.
+    fn is_subnet_deleted(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> Result<bool, RegistryClientError>;
 
     fn get_root_subnet_id(&self, version: RegistryVersion) -> RegistryClientResult<SubnetId>;
 
@@ -62,13 +91,6 @@ pub trait SubnetRegistry {
         version: RegistryVersion,
     ) -> RegistryClientResult<IngressMessageSettings>;
 
-    /// Returns gossip config
-    fn get_gossip_config(
-        &self,
-        subnet_id: SubnetId,
-        version: RegistryVersion,
-    ) -> RegistryClientResult<Option<GossipConfig>>;
-
     /// Returns SubnetFeatures
     fn get_features(
         &self,
@@ -76,17 +98,17 @@ pub trait SubnetRegistry {
         version: RegistryVersion,
     ) -> RegistryClientResult<SubnetFeatures>;
 
-    /// Returns ecdsa config
-    fn get_ecdsa_config(
+    /// Returns chain key config
+    fn get_chain_key_config(
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
-    ) -> RegistryClientResult<EcdsaConfig>;
+    ) -> RegistryClientResult<ChainKeyConfig>;
 
     /// Returns notarization delay settings:
     /// - the unit delay for blockmaker;
     /// - the initial delay for notary, to give time to rank-0 block
-    /// propagation.
+    ///   propagation.
     fn get_notarization_delay_settings(
         &self,
         subnet_id: SubnetId,
@@ -116,7 +138,14 @@ pub trait SubnetRegistry {
         version: RegistryVersion,
     ) -> RegistryClientResult<bool>;
 
-    /// Return the ReplicaVersion as recorded in the subnet record
+    /// Returns whether the subnet record instructs the subnet to halt at the next cup height
+    fn get_halt_at_cup_height(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<bool>;
+
+    /// Return the [ReplicaVersion] as recorded in the subnet record
     /// at the given height.
     fn get_replica_version(
         &self,
@@ -124,7 +153,7 @@ pub trait SubnetRegistry {
         version: RegistryVersion,
     ) -> RegistryClientResult<ReplicaVersion>;
 
-    /// Return the ReplicaVersionRecord as recorded in the subnet record
+    /// Return the [ReplicaVersionRecord] as recorded in the subnet record
     /// at the given height.
     fn get_replica_version_record(
         &self,
@@ -138,8 +167,8 @@ pub trait SubnetRegistry {
         version: RegistryVersion,
     ) -> RegistryClientResult<ReplicaVersionRecord>;
 
-    /// Return the RegistryVersion at which the SubnetRecord for the provided
-    /// SubnetId was last updated.
+    /// Return the [RegistryVersion] at which the [SubnetRecord] for the provided
+    /// [SubnetId] was last updated.
     fn get_subnet_record_registry_version(
         &self,
         subnet_id: SubnetId,
@@ -171,6 +200,13 @@ pub trait SubnetRegistry {
         subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> RegistryClientResult<u64>;
+
+    /// Returns the subnet type (e.g., application, system, ...)
+    fn get_subnet_type(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<SubnetType>;
 }
 
 impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
@@ -183,12 +219,32 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         deserialize_registry_value::<SubnetRecord>(bytes)
     }
 
+    fn is_subnet_deleted(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> Result<bool, RegistryClientError> {
+        // The subnet record is deleted (rather than nonexistent), if...
+        self.get_versioned_value(&make_subnet_record_key(subnet_id), version)
+            .map(|registry_versioned_record| {
+                // ...the value is not present...
+                registry_versioned_record.value.is_none()
+                // ...and the registry version is NOT the initial registry version.
+                    && registry_versioned_record.version.get() > 0
+            })
+    }
+
     /// Return the root subnet id if it is available and can be parsed
     fn get_root_subnet_id(&self, version: RegistryVersion) -> RegistryClientResult<SubnetId> {
         let bytes = self.get_value(ROOT_SUBNET_ID_KEY, version);
         Ok(deserialize_registry_value::<SubnetIdProto>(bytes)?
             .and_then(|subnet_id_proto| subnet_id_proto.principal_id)
-            .map(|pr_id| PrincipalId::try_from(pr_id.raw).expect("Could not parse principal id!"))
+            .map(|pr_id| {
+                PrincipalId::try_from(pr_id.raw).map_err(|err| DecodeError {
+                    error: format!("get_root_subnet_id() failed with {err}"),
+                })
+            })
+            .transpose()?
             .map(SubnetId::from))
     }
 
@@ -198,8 +254,13 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         version: RegistryVersion,
     ) -> RegistryClientResult<Vec<NodeId>> {
         let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
-        Ok(deserialize_registry_value::<SubnetRecord>(bytes)?
-            .map(|subnet| get_node_ids_from_subnet_record(&subnet)))
+        deserialize_registry_value::<SubnetRecord>(bytes)?
+            .map(|subnet| {
+                get_node_ids_from_subnet_record(&subnet).map_err(|err| DecodeError {
+                    error: format!("get_node_ids_on_subnet() failed with {err}"),
+                })
+            })
+            .transpose()
     }
 
     fn get_subnet_size(
@@ -214,30 +275,24 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         )
     }
 
+    /// Returns subnet record entries related to ingress messages.
+    /// When [`SubnetRecord::max_ingress_bytes_per_block`] is not provided (i.e. it's set to 0), we
+    /// will use the default value defined in [`ic_limits::MAX_INGRESS_BYTES_PER_BLOCK`].
     fn get_ingress_message_settings(
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> RegistryClientResult<IngressMessageSettings> {
         let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
-        Ok(
-            deserialize_registry_value::<SubnetRecord>(bytes)?.map(|subnet| {
-                IngressMessageSettings {
-                    max_ingress_bytes_per_message: subnet.max_ingress_bytes_per_message as usize,
-                    max_ingress_messages_per_block: subnet.max_ingress_messages_per_block as usize,
-                }
-            }),
-        )
-    }
-
-    fn get_gossip_config(
-        &self,
-        subnet_id: SubnetId,
-        version: RegistryVersion,
-    ) -> RegistryClientResult<Option<GossipConfig>> {
-        let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
-        let subnet = deserialize_registry_value::<SubnetRecord>(bytes)?;
-        Ok(subnet.map(|subnet| subnet.gossip_config))
+        let maybe_subnet_record = deserialize_registry_value::<SubnetRecord>(bytes)?;
+        Ok(maybe_subnet_record.map(|subnet| IngressMessageSettings {
+            max_ingress_bytes_per_message: subnet.max_ingress_bytes_per_message as usize,
+            max_ingress_messages_per_block: subnet.max_ingress_messages_per_block as usize,
+            max_ingress_bytes_per_block: match subnet.max_ingress_bytes_per_block {
+                0 => ic_limits::MAX_INGRESS_BYTES_PER_BLOCK,
+                max_ingress_bytes_per_block @ 1.. => max_ingress_bytes_per_block,
+            } as usize,
+        }))
     }
 
     fn get_features(
@@ -252,14 +307,19 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
             .map(SubnetFeatures::from))
     }
 
-    fn get_ecdsa_config(
+    fn get_chain_key_config(
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
-    ) -> RegistryClientResult<EcdsaConfig> {
+    ) -> RegistryClientResult<ChainKeyConfig> {
         let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
         let subnet = deserialize_registry_value::<SubnetRecord>(bytes)?;
-        Ok(subnet.and_then(|subnet| subnet.ecdsa_config.map(|config| config.try_into().unwrap())))
+        subnet
+            .and_then(|subnet| subnet.chain_key_config.map(ChainKeyConfig::try_from))
+            .transpose()
+            .map_err(|err| DecodeError {
+                error: format!("get_chain_key_config() failed with {err}"),
+            })
     }
 
     fn get_notarization_delay_settings(
@@ -305,6 +365,16 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
     ) -> RegistryClientResult<bool> {
         let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
         Ok(deserialize_registry_value::<SubnetRecord>(bytes)?.map(|subnet| subnet.is_halted))
+    }
+
+    fn get_halt_at_cup_height(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<bool> {
+        let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
+        Ok(deserialize_registry_value::<SubnetRecord>(bytes)?
+            .map(|subnet| subnet.halt_at_cup_height))
     }
 
     fn get_replica_version(
@@ -370,7 +440,9 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
             .get_all_listed_subnet_records(version)?
             .and_then(|records| {
                 records.into_iter().find(|(_subnet_id, record)| {
-                    get_node_ids_from_subnet_record(record).contains(&node_id)
+                    get_node_ids_from_subnet_record(record)
+                        .unwrap()
+                        .contains(&node_id)
                 })
             }))
     }
@@ -420,14 +492,25 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         Ok(deserialize_registry_value::<SubnetRecord>(bytes)?
             .map(|subnet| subnet.max_block_payload_size))
     }
+
+    fn get_subnet_type(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<SubnetType> {
+        let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
+        Ok(deserialize_registry_value::<SubnetRecord>(bytes)?.map(|subnet| subnet.subnet_type()))
+    }
 }
 
-pub fn get_node_ids_from_subnet_record(subnet: &SubnetRecord) -> Vec<NodeId> {
+pub fn get_node_ids_from_subnet_record(
+    subnet: &SubnetRecord,
+) -> Result<Vec<NodeId>, PrincipalIdBlobParseError> {
     subnet
         .membership
         .iter()
-        .map(|n| NodeId::from(PrincipalId::try_from(&n[..]).unwrap()))
-        .collect()
+        .map(|n| PrincipalId::try_from(&n[..]).map(NodeId::from))
+        .collect::<Result<Vec<_>, _>>()
 }
 
 /// A helper trait to access the subnet list; the list of subnets that are part
@@ -439,15 +522,21 @@ pub trait SubnetListRegistry {
 impl<T: RegistryClient + ?Sized> SubnetListRegistry for T {
     fn get_subnet_ids(&self, version: RegistryVersion) -> RegistryClientResult<Vec<SubnetId>> {
         let bytes = self.get_value(make_subnet_list_record_key().as_str(), version);
-        Ok(
-            deserialize_registry_value::<SubnetListRecord>(bytes)?.map(|subnet| {
+        deserialize_registry_value::<SubnetListRecord>(bytes)?
+            .map(|subnet| {
                 subnet
                     .subnets
-                    .iter()
-                    .map(|s| SubnetId::from(PrincipalId::try_from(s.clone().as_slice()).unwrap()))
-                    .collect()
-            }),
-        )
+                    .into_iter()
+                    .map(|s| {
+                        Ok(SubnetId::from(
+                            PrincipalId::try_from(s.as_slice()).map_err(|err| DecodeError {
+                                error: format!("get_subnet_ids() failed with {err}"),
+                            })?,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .transpose()
     }
 }
 
@@ -461,9 +550,9 @@ pub trait SubnetTransportRegistry {
     /// method performs `n+1` requests, where `n` is the number of nodes on the
     /// network. Potential inconsistencies are resolved as follows:
     ///
-    /// * `Ok(None)` is return if the a request for the subnet member list
+    /// * `Ok(None)` is returned if the request for the subnet member list
     ///   returns `Ok(None)`, or if any of the requests for transport
-    ///   information return `Ok(None)`.
+    ///   information returns `Ok(None)`.
     /// * `Err(_)` if the request for subnet membership fails.
     /// * The method panics in all other cases.
     ///
@@ -472,7 +561,7 @@ pub trait SubnetTransportRegistry {
     /// If the membership list for a subnet can be retrieved, but one of the
     /// requests for a node contained in the membership list fails, the method
     /// panics.
-    fn get_subnet_transport_infos(
+    fn get_subnet_node_records(
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
@@ -480,7 +569,7 @@ pub trait SubnetTransportRegistry {
 }
 
 impl<T: RegistryClient + ?Sized> SubnetTransportRegistry for T {
-    fn get_subnet_transport_infos(
+    fn get_subnet_node_records(
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
@@ -533,7 +622,7 @@ mod tests {
         registry_version: RegistryVersion,
         subnet_records: Vec<(SubnetId, SubnetRecord)>,
         replica_version: Option<ReplicaVersion>,
-    ) -> Arc<dyn RegistryClient> {
+    ) -> Arc<FakeRegistryClient> {
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
         for (subnet_id, subnet_record) in subnet_records.into_iter() {
@@ -559,7 +648,7 @@ mod tests {
 
         let registry = Arc::new(FakeRegistryClient::new(data_provider));
         registry.update_to_latest_version();
-        registry as Arc<dyn RegistryClient>
+        registry
     }
 
     #[test]
@@ -568,8 +657,8 @@ mod tests {
         let version = RegistryVersion::from(2);
         let subnet_record = SubnetRecord {
             membership: vec![
-                node_id(32u64).get().into_vec(),
-                node_id(33u64).get().into_vec(),
+                node_id(32_u64).get().into_vec(),
+                node_id(33_u64).get().into_vec(),
             ],
             ..Default::default()
         };
@@ -585,11 +674,14 @@ mod tests {
     fn can_get_replica_version_from_subnet() {
         let subnet_id = subnet_id(4);
         let version = RegistryVersion::from(2);
-        let mut subnet_record = SubnetRecord::default();
 
         let replica_version = ReplicaVersion::try_from("some_version").unwrap();
         let replica_version_record = ReplicaVersionRecord::default();
-        subnet_record.replica_version_id = String::from(&replica_version);
+
+        let subnet_record = SubnetRecord {
+            replica_version_id: String::from(&replica_version),
+            ..Default::default()
+        };
 
         let registry = create_test_registry_client(
             version,
@@ -607,15 +699,59 @@ mod tests {
     }
 
     #[test]
+    fn can_get_is_halted_from_subnet() {
+        let subnet_id = subnet_id(4);
+        let version = RegistryVersion::from(2);
+
+        for is_halted in [false, true] {
+            let subnet_record = SubnetRecord {
+                is_halted,
+                ..Default::default()
+            };
+
+            let registry =
+                create_test_registry_client(version, vec![(subnet_id, subnet_record)], None);
+
+            assert_eq!(
+                registry.get_is_halted(subnet_id, version),
+                Ok(Some(is_halted))
+            );
+        }
+    }
+
+    #[test]
+    fn can_get_halt_at_cup_height_from_subnet() {
+        let subnet_id = subnet_id(4);
+        let version = RegistryVersion::from(2);
+
+        for halt_at_cup_height in [false, true] {
+            let subnet_record = SubnetRecord {
+                halt_at_cup_height,
+                ..Default::default()
+            };
+
+            let registry =
+                create_test_registry_client(version, vec![(subnet_id, subnet_record)], None);
+
+            assert_eq!(
+                registry.get_halt_at_cup_height(subnet_id, version),
+                Ok(Some(halt_at_cup_height))
+            );
+        }
+    }
+
+    #[test]
     fn can_get_max_block_size_from_subnet_record() {
         let subnet_id = subnet_id(4);
         let version = RegistryVersion::from(2);
-        let mut subnet_record = SubnetRecord::default();
         let max_block_payload_size_bytes = 4 * 1024 * 1024; // 4MiB
-        subnet_record.max_block_payload_size = max_block_payload_size_bytes;
-
         let replica_version = ReplicaVersion::try_from("some_version").unwrap();
-        subnet_record.replica_version_id = String::from(&replica_version);
+
+        let subnet_record = SubnetRecord {
+            max_block_payload_size: max_block_payload_size_bytes,
+            replica_version_id: String::from(&replica_version),
+            ..Default::default()
+        };
 
         let registry = create_test_registry_client(
             version,

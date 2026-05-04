@@ -1,6 +1,16 @@
 load("//toolchains/sysimage:toolchain.bzl", "vfat_image")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+exports_files([
+    "grubenv",
+    "guestos_grub.cfg",
+    "hostos_grub.cfg",
+    "setupos_grub.cfg",
+    "guestos_boot_args.template",
+    "hostos_boot_args.template",
+    "setupos_boot_args.template",
+])
 
 genrule(
     name = "build-bootloader-tree",
@@ -9,6 +19,7 @@ genrule(
         "bootloader-tree.tar",
     ],
     cmd = "$(location build-bootloader-tree.sh) -o $@",
+    tags = ["manual"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
@@ -16,24 +27,11 @@ genrule(
 )
 
 vfat_image(
-    name = "partition-esp.tar",
+    name = "partition-esp.tzst",
     src = ":bootloader-tree.tar",
     partition_size = "100M",
     subdir = "boot/efi",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
-)
-
-vfat_image(
-    name = "partition-grub.tar",
-    src = ":bootloader-tree.tar",
-    extra_files = {
-        ":grub.cfg": "/boot/grub/grub.cfg:0644",
-        ":grubenv": "/boot/grub/grubenv:0644",
-    },
-    partition_size = "100M",
-    subdir = "boot/grub",
+    tags = ["manual"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],

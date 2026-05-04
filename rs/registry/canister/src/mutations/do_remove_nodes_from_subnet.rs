@@ -3,20 +3,17 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use serde::Serialize;
-
 use ic_base_types::NodeId;
-use ic_nns_common::registry::{encode_or_panic, get_subnet_ids_from_subnet_list};
+use ic_nns_common::registry::get_subnet_ids_from_subnet_list;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_transport::update;
+use prost::Message;
+use serde::Serialize;
 
 impl Registry {
     /// Remove nodes from their subnets
     pub fn do_remove_nodes_from_subnet(&mut self, payload: RemoveNodesFromSubnetPayload) {
-        println!(
-            "{}do_remove_nodes_from_subnet started: {:?}",
-            LOG_PREFIX, payload
-        );
+        println!("{LOG_PREFIX}do_remove_nodes_from_subnet started: {payload:?}");
 
         let mutations = get_subnet_ids_from_subnet_list(self.get_subnet_list_record())
             .into_iter()
@@ -34,7 +31,7 @@ impl Registry {
                 if initial_len != subnet.membership.len() {
                     Some(update(
                         make_subnet_record_key(subnet_id).as_bytes(),
-                        encode_or_panic(&subnet),
+                        subnet.encode_to_vec(),
                     ))
                 } else {
                     None
@@ -45,15 +42,12 @@ impl Registry {
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
 
-        println!(
-            "{}do_remove_nodes_from_subnet finished: {:?}",
-            LOG_PREFIX, payload
-        );
+        println!("{LOG_PREFIX}do_remove_nodes_from_subnet finished: {payload:?}");
     }
 }
 
 /// The payload of a proposal to remove a Node from a Subnet
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct RemoveNodesFromSubnetPayload {
     /// The list of Node IDs that will be removed from their subnet
     pub node_ids: Vec<NodeId>,

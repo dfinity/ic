@@ -1,0 +1,15 @@
+[package]
+name = "ic-test-utilities-serialization"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dev-dependencies]
+assert_matches = { workspace = true }
+ic-protobuf = { path = "../../protobuf" }
+prost = { workspace = true }
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }

@@ -1,0 +1,11 @@
+package(default_visibility = ["//visibility:public"])
+
+genrule(
+    name = "make_executable",
+    srcs = [
+        "//:pebble",
+    ],
+    outs = ["pebble-bin"],
+    cmd = "cp $(locations //:pebble) $@ && chmod +x $@",
+    executable = True,
+)

@@ -42,7 +42,21 @@ fn list_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     Ok(buf)
 }
 
+#[derive(PartialEq)]
+enum CompareMode {
+    DirsIdentical,
+    RhsContainsIdenticalLhs,
+}
+
 pub fn compare(lhs: &Path, rhs: &Path) -> Result<(), CompareError> {
+    compare_impl(lhs, rhs, CompareMode::DirsIdentical)
+}
+
+pub fn compare_right_contains_left(lhs: &Path, rhs: &Path) -> Result<(), CompareError> {
+    compare_impl(lhs, rhs, CompareMode::RhsContainsIdenticalLhs)
+}
+
+fn compare_impl(lhs: &Path, rhs: &Path, mode: CompareMode) -> Result<(), CompareError> {
     let lhs_files = list_files(lhs).map_err(|e| CompareError::IoError {
         path: lhs.to_path_buf(),
         cause: e,
@@ -51,12 +65,14 @@ pub fn compare(lhs: &Path, rhs: &Path) -> Result<(), CompareError> {
         path: rhs.to_path_buf(),
         cause: e,
     })?;
-    if lhs_files != rhs_files {
+
+    if mode == CompareMode::DirsIdentical && lhs_files != rhs_files {
         return Err(CompareError::PathsDiffer {
             left: lhs_files,
             right: rhs_files,
         });
     }
+
     for path in lhs_files.iter() {
         let lhs_path = lhs.join(path);
         let rhs_path = rhs.join(path);

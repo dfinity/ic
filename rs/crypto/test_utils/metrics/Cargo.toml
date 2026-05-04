@@ -1,0 +1,12 @@
+[package]
+name = "ic-crypto-test-utils-metrics"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-crypto-internal-logmon = { path = "../../internal/logmon" }
+ic-metrics = { path = "../../../monitoring/metrics" }
+ic-test-utilities-metrics = { path = "../../../test_utilities/metrics" }

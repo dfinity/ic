@@ -1,31 +1,61 @@
 //! Generating and verifying Proofs of Possession (PoP)
 
-use crate::ni_dkg::fs_ni_dkg::random_oracles::{
-    random_oracle_to_g1, random_oracle_to_scalar, HashedMap, UniqueHash,
-};
+use crate::ni_dkg::fs_ni_dkg::random_oracles::{HashedMap, UniqueHash, random_oracle_to_scalar};
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
+    FrBytes, FsEncryptionPop, G1Bytes,
+};
 use rand::{CryptoRng, RngCore};
-use zeroize::Zeroize;
 
 const DOMAIN_POP_ENCRYPTION_KEY: &str = "ic-pop-encryption";
+// DOMAIN_POP_ENCRYPTION_KEY with a prefix of the length (17 == 0x11)
+const DOMAIN_POP_ENCRYPTION_KEY_WITH_PREFIX: &str = "\x11ic-pop-encryption";
 
 /// Proof of Possession (PoP) of the Encryption Key.
 #[derive(Clone, Debug)]
 pub struct EncryptionKeyPop {
-    pub pop_key: G1Affine,
-    pub challenge: Scalar,
-    pub response: Scalar,
+    pop_key: G1Affine,
+    challenge: Scalar,
+    response: Scalar,
+}
+
+impl EncryptionKeyPop {
+    pub fn new(pop_key: G1Affine, challenge: Scalar, response: Scalar) -> Self {
+        Self {
+            pop_key,
+            challenge,
+            response,
+        }
+    }
+
+    pub fn serialize(&self) -> FsEncryptionPop {
+        FsEncryptionPop {
+            pop_key: G1Bytes(self.pop_key.serialize()),
+            challenge: FrBytes(self.challenge.serialize()),
+            response: FrBytes(self.response.serialize()),
+        }
+    }
 }
 
 /// Instance for the Possession of the Encryption Key.
 pub struct EncryptionKeyInstance {
-    pub g1_gen: G1Affine,
-    pub public_key: G1Affine,
-    pub associated_data: Vec<u8>,
+    g1_gen: G1Affine,
+    public_key: G1Affine,
+    associated_data: Vec<u8>,
+}
+
+impl EncryptionKeyInstance {
+    pub fn new(public_key: &G1Affine, associated_data: &[u8]) -> Self {
+        Self {
+            g1_gen: G1Affine::generator().clone(),
+            public_key: public_key.clone(),
+            associated_data: associated_data.to_vec(),
+        }
+    }
 }
 
 /// A PoP could not be generated or verified
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum EncryptionKeyPopError {
     InvalidProof,
     InvalidInstance,
@@ -58,6 +88,11 @@ fn generate_pop_challenge(
     random_oracle_to_scalar(DOMAIN_POP_ENCRYPTION_KEY, &map)
 }
 
+/// Compute the PoP base point
+fn compute_pop_base(data: &dyn UniqueHash) -> G1Affine {
+    G1Affine::hash(DOMAIN_POP_ENCRYPTION_KEY_WITH_PREFIX, &data.unique_hash())
+}
+
 /// Prove the Possession of an EncryptionKey.
 pub fn prove_pop<R: RngCore + CryptoRng>(
     instance: &EncryptionKeyInstance,
@@ -65,18 +100,18 @@ pub fn prove_pop<R: RngCore + CryptoRng>(
     rng: &mut R,
 ) -> Result<EncryptionKeyPop, EncryptionKeyPopError> {
     // Check validity of the instance
-    if instance.public_key != G1Affine::from(instance.g1_gen * witness) {
+    if instance.public_key != (&instance.g1_gen * witness).to_affine() {
         return Err(EncryptionKeyPopError::InvalidInstance);
     }
 
     // First Move
-    let pop_base = random_oracle_to_g1(DOMAIN_POP_ENCRYPTION_KEY, instance);
-    let pop_key = G1Affine::from(pop_base * witness);
+    let pop_base = compute_pop_base(instance);
+    let pop_key = G1Affine::from(&pop_base * witness);
 
-    let mut random_scalar = Scalar::random(rng);
+    let random_scalar = Scalar::random(rng);
 
-    let blinder_public_key = G1Affine::from(instance.g1_gen * random_scalar);
-    let blinder_pop_key = G1Affine::from(pop_base * random_scalar);
+    let blinder_public_key = G1Affine::from(&instance.g1_gen * &random_scalar);
+    let blinder_pop_key = G1Affine::from(&pop_base * &random_scalar);
 
     // Challenge
     let challenge = generate_pop_challenge(
@@ -88,9 +123,7 @@ pub fn prove_pop<R: RngCore + CryptoRng>(
     );
 
     // Response
-    let response = challenge * witness + random_scalar;
-
-    random_scalar.zeroize();
+    let response = &challenge * witness + random_scalar;
 
     Ok(EncryptionKeyPop {
         pop_key,
@@ -105,21 +138,17 @@ pub fn verify_pop(
     pop: &EncryptionKeyPop,
 ) -> Result<(), EncryptionKeyPopError> {
     let minus_challenge = pop.challenge.neg();
-    let pop_base = random_oracle_to_g1(DOMAIN_POP_ENCRYPTION_KEY, instance);
+    let pop_base = compute_pop_base(instance);
 
-    let blinder_public_key = G1Projective::mul2(
-        &instance.public_key.into(),
+    let blinder_public_key = G1Projective::mul2_affine_vartime(
+        &instance.public_key,
         &minus_challenge,
-        &instance.g1_gen.into(),
+        &instance.g1_gen,
         &pop.response,
     );
 
-    let blinder_pop_key = G1Projective::mul2(
-        &pop.pop_key.into(),
-        &minus_challenge,
-        &pop_base.into(),
-        &pop.response,
-    );
+    let blinder_pop_key =
+        G1Projective::mul2_affine_vartime(&pop.pop_key, &minus_challenge, &pop_base, &pop.response);
 
     let challenge = generate_pop_challenge(
         &instance.public_key,

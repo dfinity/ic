@@ -1,32 +1,32 @@
 [package]
 name = "ic-nns-common"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [lib]
 name = "ic_nns_common"
 path = "src/lib.rs"
 
 [dependencies]
-candid = "0.8.1"
-dfn_core = { path = "../../rust_canisters/dfn_core" }
+candid = { workspace = true }
+comparable = { version = "0.5", features = ["derive"] }
 ic-base-types = { path = "../../types/base_types" }
-ic-crypto-sha = {path = "../../crypto/sha/"}
-ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-cdk = { workspace = true }
+ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nns-constants = { path = "../constants" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-transport = { path = "../../registry/transport" }
-ic-types = { path = "../../types/types" }
-lazy_static = "1.4.0"
-on_wire = { path = "../../rust_canisters/on_wire" }
-prost = "0.10.4"
-serde = { version = "1.0", features = ["derive"] }
-sha2 = "0.9.1"
-comparable = { version = "0.5", features = ["derive"] }
+ic-stable-structures = { workspace = true }
+num-traits = { workspace = true }
+prost = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
 
 [dev-dependencies]
-serial_test = "0.8.0"
 ic-nns-common-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-tempfile = "3.1.0"
+tempfile = { workspace = true }

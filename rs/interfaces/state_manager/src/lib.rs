@@ -1,51 +1,30 @@
 //! The state manager public interface.
-use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
+
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree, Witness};
 use ic_types::{
-    consensus::certification::Certification, CryptoHashOfPartialState, CryptoHashOfState, Height,
+    CryptoHashOfPartialState, CryptoHashOfState, Height, batch::BatchSummary,
+    consensus::certification::Certification, state_manager::StateManagerResult,
 };
 use phantom_newtype::BitMask;
+use std::collections::BTreeSet;
 use std::sync::Arc;
 use thiserror::Error;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum StateManagerError {
-    /// The state at the specified height was removed and cannot be recovered
-    /// anymore.
-    StateRemoved(Height),
-    /// The state at the specified height is not committed yet.
-    StateNotCommittedYet(Height),
-}
-
-impl std::fmt::Display for StateManagerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::StateRemoved(height) => {
-                write!(f, "state at height {} has already been removed", height)
-            }
-            Self::StateNotCommittedYet(height) => {
-                write!(f, "state at height {} is not committed yet", height)
-            }
-        }
-    }
-}
-
-impl std::error::Error for StateManagerError {}
-
-pub type StateManagerResult<T> = Result<T, StateManagerError>;
-
 /// Errors for functions returning state hashes that are permanent (i.e. no
 /// point in retrying)
-#[derive(Error, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
 pub enum PermanentStateHashError {
     #[error("state at height {0} has already been removed and cannot be recovered anymore")]
     StateRemoved(Height),
-    #[error("state at height {0} was committed with CertificationScope::Metadata, not CertificationScope::Full")]
+    #[error(
+        "state at height {0} was committed with CertificationScope::Metadata, not CertificationScope::Full"
+    )]
     StateNotFullyCertified(Height),
 }
 
 /// Errors for functions returning state hashes that rely on asynchronous
 /// computations that have not finished yet.
-#[derive(Error, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
 pub enum TransientStateHashError {
     #[error("state at height {0} is not committed yet")]
     StateNotCommittedYet(Height),
@@ -54,7 +33,7 @@ pub enum TransientStateHashError {
 }
 
 /// Errors for functions returning state hashes
-#[derive(Error, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
 pub enum StateHashError {
     /// The error is permanent and will not change if retried later
     #[error(transparent)]
@@ -66,7 +45,7 @@ pub enum StateHashError {
 }
 
 /// Indicates the subset of the state that needs to be certified.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CertificationScope {
     /// Only certify the system metadata.
     Metadata,
@@ -89,7 +68,7 @@ pub const CERT_ANY: CertificationMask = CertificationMask::new(1 | 2);
 
 /// A node state with a `height` attached to it, indicating that the state was
 /// obtained by executing a block with the given `height`.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Labeled<State> {
     height: Height,
     state: State,
@@ -116,11 +95,22 @@ impl<State> Labeled<State> {
     }
 }
 
+/// A state hash for a height to be signed and certified by consensus.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StateHashMetadata {
+    /// The state height.
+    pub height: Height,
+    /// The state hash at the height.
+    pub hash: CryptoHashOfPartialState,
+    /// The witness for the height.
+    pub height_witness: Witness,
+}
+
 /// APIs related to fetching and certifying the state.
 // tag::state-manager-interface[]
 pub trait StateManager: StateReader {
     /// Returns a snapshot of the list of state hashes that need to be
-    /// certified ("the list" below).
+    /// certified and witnesses for the state height ("the list" below).
     ///
     /// The actual list is maintained by the StateManager.  The
     /// following operations can modify the list:
@@ -144,8 +134,8 @@ pub trait StateManager: StateReader {
     /// ```text
     /// sm.commit_and_certify(state_1, h_1, scope_1)
     /// sm.commit_and_certify(state_1, h_2, scope_1)
-    /// sm.list_state_hashes_to_certify() = [(h_2, H_2)]
-    /// sm.list_state_hashes_to_certify() = [(h_1, H_1), (h_2, H_2)]
+    /// sm.list_state_hashes_to_certify() = [(h_2, H_2, W_2)]
+    /// sm.list_state_hashes_to_certify() = [(h_1, H_1, W_1), (h_2, H_2, W_2)]
     /// ```
     ///
     /// # Properties
@@ -163,9 +153,23 @@ pub trait StateManager: StateReader {
     ///   let l_1 = state_manager.list_state_hashes_to_certify()
     ///   ...
     ///   let l_2 = state_manager.list_state_hashes_to_certify()
-    ///   ∀ (h_1, H_1) ∈ l_1, (h_2, H_2) ∈ l_2: h_1 = h_2 ⇒ H_1 = H_2
+    ///   ∀ (h_1, H_1, W_1) ∈ l_1, (h_2, H_2, W_2) ∈ l_2: h_1 = h_2 ⇒ H_1 = H_2
     ///   ```
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)>;
+    ///
+    /// * The hash of the witness w.r.t. state height is equal to the hash of the state:
+    ///
+    ///   ```text
+    ///   ∀ metadata ∈ state_manager.list_state_hashes_to_certify(): digest(/"metadata"/"height"/<metadata.height>, W) = metadata.hash.
+    ///   ```
+    ///
+    /// * The returned witness is minimal (pruned) and deterministic.
+    fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata>;
+
+    /// Returns a list of heights for which the state manager optimistically requests
+    /// a certification to be delivered via `state_manager.deliver_state_certification`.
+    /// A call to `deliver_state_certification` with a certification of some
+    /// height removes that height from the list.
+    fn list_state_heights_to_certify(&self) -> Vec<Height>;
 
     /// Delivers a `certification` corresponding to some state hash / height
     /// pair.
@@ -234,23 +238,6 @@ pub trait StateManager: StateReader {
         cup_interval_length: Height,
     );
 
-    /// Returns the list of heights corresponding to accessible states matching
-    /// the mask.  E.g. `list_state_heights(CERT_ANY)` will return all
-    /// accessible states.
-    ///
-    /// Note that the initial state at height 0 is considered uncertified from
-    /// the State Manager point of view.  This is because the protocol requires
-    /// each replica to individually obtain the initial state using some
-    /// out-of-band mechanism (i.e., not state sync).  Also note that the
-    /// authenticity of this initial state will be verified by some protocol
-    /// external to this component.
-    ///
-    /// The list of heights is guaranteed to be
-    /// * Non-empty if `cert_mask = CERT_ANY` as it will contain at least height
-    ///   0 even if no states were committed yet.
-    /// * Sorted in ascending order.
-    fn list_state_heights(&self, cert_mask: CertificationMask) -> Vec<Height>;
-
     /// Notify this state manager that states with heights strictly less than
     /// the specified `height` can be removed.
     ///
@@ -262,27 +249,43 @@ pub trait StateManager: StateReader {
     fn remove_states_below(&self, height: Height);
 
     /// Notify the state manager that states committed with partial certification
-    /// state and heights strictly less than specified `height` can be removed.
+    /// state and heights strictly less than the specified `height` can be removed, except
+    /// for any heights provided in `extra_heights_to_keep`, which will still be retained.
+    ///
+    /// The heights in `extra_heights_to_keep` only apply to this call.
     ///
     /// Note that:
-    ///  * The initial state (height = 0) cannot be removed.
+    ///  * The initial state (height = 0) is not removed.
+    ///  * The latest state is not removed.
     ///  * Some states matching the removal criteria might be kept alive.  For
     ///    example, the last fully persisted state might be preserved to
     ///    optimize future operations.
     ///  * No checkpoints are removed, see also `remove_states_below()`
-    fn remove_inmemory_states_below(&self, height: Height);
+    fn remove_inmemory_states_below(
+        &self,
+        height: Height,
+        extra_heights_to_keep: &BTreeSet<Height>,
+    );
 
-    /// Commits the `state` at given `height`, limits the certification to
-    /// `scope`. The `state` must be the mutable state obtained via a call to
-    /// `take_tip`.
-    ///
-    /// Does nothing if `height ≤ state_manager.latest_state_height()`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the state at `height` has already been committed before but
-    /// has a different hash.
-    fn commit_and_certify(&self, state: Self::State, height: Height, scope: CertificationScope);
+    /// Notify the state manager that it could skip cloning and hashing the state
+    /// at heights strictly less than the specified `height`.
+    fn update_fast_forward_height(&self, height: Height);
+
+    /// Increments the `tip_height` and commits the `state` at the new height.
+    /// Limits the certification to `scope`.
+    /// The `state` must be the mutable state obtained via a call to `take_tip`, which
+    /// also returns `tip_height`.
+    fn commit_and_certify(
+        &self,
+        state: Self::State,
+        scope: CertificationScope,
+        batch_summary: Option<BatchSummary>,
+    );
+
+    /// Returns the height of the latest [`StateManager::commit_and_certify`] call,
+    /// or of the latest state sync once the subsequent [`StateManager::take_tip`]
+    /// call has advanced the tip to the synced height.
+    fn tip_height(&self) -> Height;
 
     /// Returns the version of the state that can be modified in-place and the
     /// height of that state.
@@ -332,6 +335,40 @@ pub trait StateManager: StateReader {
 }
 // end::state-manager-interface[]
 
+/// This component bundles a version of the state with the corresponding hash tree and
+/// certifications.
+pub trait CertifiedStateSnapshot: Send + Sync {
+    type State;
+
+    /// Returns a reference to the underlying certified state.
+    fn get_state(&self) -> &Self::State;
+
+    /// Returns the height of the underlying certified state.
+    fn get_height(&self) -> Height;
+
+    /// This method runs the same computation as [StateReader::read_certified_state],
+    /// with three significant differences:
+    ///
+    /// * This method is deterministic.
+    ///
+    /// * This method doesn't return the state because the state is fixed.
+    ///   Use the [get_state] method to access the underlying state.
+    ///
+    /// * This method is not blocking and is safe to use in async environment.
+    fn read_certified_state(
+        &self,
+        paths: &LabeledTree<()>,
+    ) -> Option<(MixedHashTree, Certification)> {
+        self.read_certified_state_with_exclusion(paths, None)
+    }
+
+    fn read_certified_state_with_exclusion(
+        &self,
+        paths: &LabeledTree<()>,
+        exclusion: Option<&MatchPatternPath>,
+    ) -> Option<(MixedHashTree, Certification)>;
+}
+
 /// This component is analogous to the `StateManager` except that it is used to
 /// access State which cannot be checkpointed or snapshotted.
 pub trait StateReader: Send + Sync {
@@ -358,6 +395,10 @@ pub trait StateReader: Send + Sync {
     /// height.  If nothing was committed so far, returns an empty valid
     /// state.
     fn get_latest_state(&self) -> Labeled<Arc<Self::State>>;
+
+    /// Returns a shared object of the state at the latest certified block
+    /// height. If nothing was certified so far, returns `None`.
+    fn get_latest_certified_state(&self) -> Option<Labeled<Arc<Self::State>>>;
 
     /// Returns the height of the latest state available.
     fn latest_state_height(&self) -> Height;
@@ -394,5 +435,21 @@ pub trait StateReader: Send + Sync {
     fn read_certified_state(
         &self,
         paths: &LabeledTree<()>,
+    ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)> {
+        self.read_certified_state_with_exclusion(paths, None)
+    }
+
+    /// An extension of [`Self::read_certified_state`] which additonally also takes a tree of exclusions.
+    /// If a path is mentioned both in `paths` and `exclusion` it is pruned in the returned [`MixedHashTree`].
+    /// This might be useful for cases where large subtrees are requested, but a small number of leafs should be omitted.
+    fn read_certified_state_with_exclusion(
+        &self,
+        paths: &LabeledTree<()>,
+        exclusion: Option<&MatchPatternPath>,
     ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)>;
+
+    /// Returns a CertifiedStateSnapshot corresponding to the latest certified state.
+    fn get_certified_state_snapshot(
+        &self,
+    ) -> Option<Box<dyn CertifiedStateSnapshot<State = Self::State> + 'static>>;
 }

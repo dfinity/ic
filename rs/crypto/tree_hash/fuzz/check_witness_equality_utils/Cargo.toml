@@ -1,0 +1,17 @@
+[package]
+name = "ic-crypto-tree-hash-fuzz-check-witness-equality-utils"
+publish = false
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-canonical-state-tree-hash = { path = "../../../../canonical_state/tree_hash" }
+ic-canonical-state-tree-hash-test-utils = { path = "../../../../canonical_state/tree_hash/test_utils" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../../test_utils/reproducible_rng" }
+ic-crypto-tree-hash = { path = "../.." }
+ic-crypto-tree-hash-test-utils = { path = "../../test_utils" }
+rand = { workspace = true }
+rand_chacha = { workspace = true }

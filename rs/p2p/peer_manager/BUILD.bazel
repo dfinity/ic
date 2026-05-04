@@ -1,0 +1,66 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = [
+    "//rs/p2p:__subpackages__",
+    "//rs/replica:__subpackages__",
+])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/interfaces",
+    "//rs/interfaces/registry",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/p2p/quic_transport",
+    "//rs/registry/helpers",
+    "//rs/types/base_types",
+    "@crate_index//:prometheus",
+    "@crate_index//:slog",
+    "@crate_index//:tokio",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/p2p/test_utils",
+    "//rs/test_utilities/logger",
+    "//rs/types/types_test_utils",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:async-trait",
+]
+
+ALIASES = {}
+
+rust_library(
+    name = "peer_manager",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "ic_peer_manager",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "peer_manager_test",
+    crate = ":peer_manager",
+    deps = [
+        "//rs/interfaces/mocks",
+        "//rs/registry/fake",
+        "//rs/registry/keys",
+        "//rs/registry/proto_data_provider",
+        "//rs/test_utilities/registry",
+        "//rs/types/types_test_utils",
+    ],
+)
+
+rust_test_suite(
+    name = "peer_manager_integration",
+    timeout = "long",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [":peer_manager"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)

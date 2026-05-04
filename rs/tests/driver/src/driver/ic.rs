@@ -1,0 +1,1075 @@
+use crate::driver::resource::BootImage;
+use crate::driver::{
+    bootstrap::{init_ic, setup_and_start_vms},
+    farm::{DnsRecord, DnsRecordType, Farm, HostFeature},
+    ic_gateway_vm::Playnet,
+    nested::UnassignedRecordConfig,
+    node_software_version::NodeSoftwareVersion,
+    resource::{AllocatedVm, ResourceGroup, allocate_resources, get_resource_request},
+    test_env::{TestEnv, TestEnvAttribute},
+    test_env_api::{
+        AcquirePlaynetCertificate, CreatePlaynetDnsRecords, HasRegistryLocalStore,
+        HasTopologySnapshot,
+    },
+    test_setup::GroupSetup,
+};
+use anyhow::Result;
+use ic_prep_lib::prep_state_directory::IcPrepStateDir;
+use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
+use ic_protobuf::registry::{dc::v1::DataCenterRecord, node::v1::NodeRewardType};
+use ic_regedit;
+use ic_registry_canister_api::IPv4Config;
+use ic_registry_resource_limits::ResourceLimits;
+use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
+use ic_registry_subnet_type::SubnetType;
+use ic_types::malicious_behavior::MaliciousBehavior;
+use ic_types::{Height, NodeId, PrincipalId};
+use ic_types_cycles::CanisterCyclesCostSchedule;
+use phantom_newtype::AmountOf;
+use serde::{Deserialize, Serialize};
+use slog::info;
+use std::collections::BTreeMap;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::net::{Ipv6Addr, SocketAddr};
+use std::path::Path;
+use std::time::Duration;
+
+/// Builder object to declare a topology of an InternetComputer.
+/// Used as input to the IC Manager.
+#[derive(Clone, Debug, Default)]
+pub struct InternetComputer {
+    pub initial_version: Option<NodeSoftwareVersion>,
+    pub vm_resource_overrides: VmResourceOverrides,
+    pub vm_allocation: Option<VmAllocationStrategy>,
+    pub required_host_features: Vec<HostFeature>,
+    pub subnets: Vec<Subnet>,
+    pub node_operator: Option<PrincipalId>,
+    pub node_provider: Option<PrincipalId>,
+    pub unassigned_nodes: Vec<Node>,
+    pub ssh_readonly_access_to_unassigned_nodes: Vec<String>,
+    name: String,
+    pub bitcoind_addr: Option<SocketAddr>,
+    pub dogecoind_addr: Option<SocketAddr>,
+    pub jaeger_addr: Option<SocketAddr>,
+    pub socks_proxy: Option<String>,
+    use_specified_ids_allocation_range: bool,
+    pub unassigned_record_config: Option<UnassignedRecordConfig>,
+    pub api_boundary_nodes: Vec<Node>,
+    pub api_bn_use_playnet: bool,
+    pub data_centers: Vec<DataCenterRecord>,
+    pub node_operators: Vec<NodeOperatorConfig>,
+}
+
+/// Configuration for a node operator to be added to the initial registry.
+#[derive(Clone, Debug, Default)]
+pub struct NodeOperatorConfig {
+    pub name: String,
+    pub principal_id: PrincipalId,
+    pub node_provider_principal_id: Option<PrincipalId>,
+    pub node_allowance: u64,
+    pub dc_id: String,
+    pub rewardable_nodes: BTreeMap<String, u32>,
+}
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+pub enum VmAllocationStrategy {
+    #[serde(rename = "distributeToArbitraryHost")]
+    DistributeToArbitraryHost,
+    #[serde(rename = "distributeWithinSingleHost")]
+    DistributeWithinSingleHost,
+    #[serde(rename = "distributeAcrossDcs")]
+    DistributeAcrossDcs,
+}
+
+impl InternetComputer {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the VM resource overrides (like number of virtual CPUs and memory)
+    /// at the IC level. More specific overrides have more priority.
+    /// Node > Subnet > IC > Group > Default
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.vm_resource_overrides = vm_resource_overrides;
+        self
+    }
+
+    pub fn with_vm_allocation(mut self, vm_allocation: VmAllocationStrategy) -> Self {
+        self.vm_allocation = Some(vm_allocation);
+        self
+    }
+
+    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
+        self.required_host_features = required_host_features;
+        self
+    }
+
+    pub fn add_subnet(mut self, subnet: Subnet) -> Self {
+        self.subnets.push(subnet);
+        self
+    }
+
+    /// Adds a one-node subnet that's optimized to be "fast".
+    ///
+    /// The subnet is able to execute calls faster because the block time
+    /// on the node is reduced.
+    pub fn add_fast_single_node_subnet(mut self, subnet_type: SubnetType) -> Self {
+        let mut subnet = Subnet::fast_single_node(subnet_type);
+        subnet.vm_allocation.clone_from(&self.vm_allocation);
+        subnet
+            .required_host_features
+            .clone_from(&self.required_host_features);
+        self.subnets.push(subnet);
+        self
+    }
+
+    pub fn with_initial_replica(mut self, initial_replica: NodeSoftwareVersion) -> Self {
+        self.initial_version = Some(initial_replica);
+        self
+    }
+
+    pub fn with_node_operator(mut self, principal_id: PrincipalId) -> Self {
+        self.node_operator = Some(principal_id);
+        self
+    }
+
+    pub fn with_node_provider(mut self, principal_id: PrincipalId) -> Self {
+        self.node_provider = Some(principal_id);
+        self
+    }
+
+    pub fn add_data_center(mut self, dc_record: DataCenterRecord) -> Self {
+        if self
+            .data_centers
+            .iter()
+            .any(|existing| existing.id.eq_ignore_ascii_case(&dc_record.id))
+        {
+            panic!(
+                "Duplicate data center id (case-insensitive) in IC config: {}",
+                dc_record.id
+            );
+        }
+        self.data_centers.push(dc_record);
+        self
+    }
+
+    pub fn add_node_operator(mut self, node_operator: NodeOperatorConfig) -> Self {
+        self.node_operators.push(node_operator);
+        self
+    }
+
+    /// Add the given number of unassigned nodes to the IC.
+    pub fn with_unassigned_nodes(mut self, no_of_nodes: usize) -> Self {
+        for _ in 0..no_of_nodes {
+            self.unassigned_nodes.push(
+                Node::new()
+                    .with_vm_allocation(self.vm_allocation.clone())
+                    .with_boot_image(BootImage::GroupDefault)
+                    .with_required_host_features(self.required_host_features.clone()),
+            );
+        }
+        self
+    }
+
+    /// Add unassigned node with custom settings.
+    pub fn with_unassigned_node(mut self, node: Node) -> Self {
+        self.unassigned_nodes.push(node);
+        self
+    }
+
+    /// Add the given number of API boundary nodes and simply set their domain
+    /// name to apibn-X.ic.net, where X ranges from 0 to the given number of nodes
+    pub fn with_api_boundary_nodes(mut self, no_of_nodes: usize) -> Self {
+        for idx in 0..no_of_nodes {
+            self.api_boundary_nodes.push(
+                Node::new()
+                    .with_vm_allocation(self.vm_allocation.clone())
+                    .with_boot_image(BootImage::GroupDefault)
+                    .with_required_host_features(self.required_host_features.clone())
+                    .with_domain(format!("apibn-{idx}.ic.net")),
+            );
+        }
+        self
+    }
+
+    /// Add the given number of API boundary nodes with playnet support.
+    /// Unlike `with_api_boundary_nodes`, nodes are created without domains here —
+    /// real domains (e.g. `apibn-0.ic50.farm.dfinity.systems`) are assigned during
+    /// `setup_and_start` after a playnet certificate is acquired from Farm.
+    pub fn with_api_boundary_nodes_playnet(mut self, no_of_nodes: usize) -> Self {
+        self.api_bn_use_playnet = true;
+        for _ in 0..no_of_nodes {
+            self.api_boundary_nodes.push(
+                Node::new()
+                    .with_vm_allocation(self.vm_allocation.clone())
+                    .with_boot_image(BootImage::GroupDefault)
+                    .with_required_host_features(self.required_host_features.clone()),
+            );
+        }
+        self
+    }
+
+    /// Add an API boundary node with custom settings (domain name)
+    pub fn with_api_boundary_node(mut self, node: Node) -> Self {
+        self.api_boundary_nodes.push(node);
+        self
+    }
+
+    /// Add a single unassigned node with the given IPv4 configuration
+    pub fn with_ipv4_enabled_unassigned_node(mut self, ipv4_config: IPv4Config) -> Self {
+        self.unassigned_nodes.push(
+            Node::new()
+                .with_vm_allocation(self.vm_allocation.clone())
+                .with_boot_image(BootImage::GroupDefault)
+                .with_required_host_features(self.required_host_features.clone())
+                .with_ipv4_config(ipv4_config),
+        );
+        self
+    }
+
+    /// Give this particular internet computer instance a name. The name must be
+    /// unique across internet computer instances created within a system
+    /// environment.
+    ///
+    /// By default, an IC instance has no name. Thus, not calling this method is
+    /// equivalent to `.with_name("")`.
+    pub fn with_name<S: ToString>(mut self, name: S) -> Self {
+        self.name = name.to_string();
+        self
+    }
+
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+
+    pub fn with_bitcoind_addr(mut self, bitcoind_addr: SocketAddr) -> Self {
+        self.bitcoind_addr = Some(bitcoind_addr);
+        self
+    }
+
+    pub fn with_dogecoind_addr(mut self, dogecoind_addr: SocketAddr) -> Self {
+        self.dogecoind_addr = Some(dogecoind_addr);
+        self
+    }
+
+    pub fn with_jaeger_addr(mut self, jaeger_addr: SocketAddr) -> Self {
+        self.jaeger_addr = Some(jaeger_addr);
+        self
+    }
+
+    pub fn use_specified_ids_allocation_range(mut self) -> Self {
+        self.use_specified_ids_allocation_range = true;
+        self
+    }
+
+    pub fn with_socks_proxy(mut self, socks_proxy: String) -> Self {
+        self.socks_proxy = Some(socks_proxy);
+        self
+    }
+
+    pub fn without_unassigned_config(mut self) -> Self {
+        self.unassigned_record_config = Some(UnassignedRecordConfig::Skip);
+        self
+    }
+
+    pub fn with_unassigned_config(mut self) -> Self {
+        self.unassigned_record_config = Some(UnassignedRecordConfig::Ignore);
+        self
+    }
+
+    pub fn setup_and_start_return_vms(
+        &mut self,
+        env: &TestEnv,
+    ) -> Result<BTreeMap<String, AllocatedVm>> {
+        if self
+            .subnets
+            .iter()
+            .any(|s| s.subnet_type == SubnetType::CloudEngine)
+        {
+            // Cloud engines use API boundary nodes to replicate their registry and to fetch
+            // delegations since the firewall on the NNS blocks them.
+            assert!(
+                !self.api_boundary_nodes.is_empty() && self.api_bn_use_playnet,
+                "At least one API boundary node with valid certificates is required when using \
+                a cloud engine subnet. Add `.with_api_boundary_nodes_playnet(1)` when creating \
+                the `InternetComputer` instance."
+            );
+        }
+
+        // propagate required host features and resource settings to all vms
+        let farm = Farm::from_test_env(env, "Internet Computer");
+        for node in self
+            .subnets
+            .iter_mut()
+            .flat_map(|subnet| subnet.nodes.iter_mut())
+            .chain(self.unassigned_nodes.iter_mut())
+            .chain(self.api_boundary_nodes.iter_mut())
+        {
+            node.required_host_features = node
+                .required_host_features
+                .iter()
+                .chain(self.required_host_features.iter())
+                .cloned()
+                .collect();
+        }
+
+        let tempdir = tempfile::tempdir()?;
+        self.create_secret_key_stores(tempdir.path())?;
+        let group_setup = GroupSetup::read_attribute(env);
+        let group_name: String = group_setup.infra_group_name;
+        let res_request = get_resource_request(self, env, &group_name)?;
+
+        if let Some(record) = self.unassigned_record_config {
+            record.write_attribute(env);
+        }
+
+        let res_group = allocate_resources(&farm, &res_request, env)?;
+        self.propagate_ip_addrs(&res_group);
+
+        if self.api_bn_use_playnet {
+            self.setup_api_bn_playnet(env);
+        }
+
+        let init_ic = init_ic(
+            self,
+            env,
+            &env.logger(),
+            self.use_specified_ids_allocation_range,
+        )?;
+
+        // save initial registry snapshot for this pot
+        let local_store_path = env
+            .registry_local_store_path(&self.name)
+            .expect("corrupted ic-prep directory structure");
+        let reg_snapshot = ic_regedit::load_registry_local_store(local_store_path)?;
+        let reg_snapshot_serialized =
+            serde_json::to_string_pretty(&reg_snapshot).expect("Could not pretty print value.");
+        IcPrepStateDir::new(init_ic.target_dir.to_str().expect("invalid target dir"));
+        std::fs::write(
+            init_ic.target_dir.join("initial_registry_snapshot.json"),
+            reg_snapshot_serialized,
+        )
+        .unwrap();
+        let topology_snapshot = env.topology_snapshot_by_name(&self.name);
+        // Pretty print IC Topology using the Display implementation
+        info!(env.logger(), "{topology_snapshot}");
+        // Emit a json log event, to be consumed by log post-processing tools.
+        topology_snapshot.emit_log_event(&env.logger());
+        setup_and_start_vms(&init_ic, self, env, &farm, &group_name)?;
+        Ok(res_group.vms)
+    }
+
+    pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
+        self.setup_and_start_return_vms(env)?;
+        Ok(())
+    }
+
+    fn create_secret_key_stores(&mut self, tempdir: &Path) -> Result<()> {
+        for node in self
+            .subnets
+            .iter_mut()
+            .flat_map(|subnet| subnet.nodes.iter_mut())
+            .chain(self.unassigned_nodes.iter_mut())
+            .chain(self.api_boundary_nodes.iter_mut())
+        {
+            let sks = NodeSecretKeyStore::new(tempdir.join(format!("node-{node:p}")))?;
+            node.secret_key_store = Some(sks);
+        }
+        Ok(())
+    }
+
+    fn propagate_ip_addrs(&mut self, res_group: &ResourceGroup) {
+        for node in self
+            .subnets
+            .iter_mut()
+            .flat_map(|subnet| subnet.nodes.iter_mut())
+            .chain(self.unassigned_nodes.iter_mut())
+            .chain(self.api_boundary_nodes.iter_mut())
+        {
+            node.ipv6 = Some(
+                res_group
+                    .vms
+                    .get(&node.id().to_string())
+                    .unwrap_or_else(|| panic!("no VM found for [node_id = {:?}]", node.id()))
+                    .ipv6,
+            );
+        }
+    }
+
+    /// Acquires a playnet certificate from Farm, assigns real domains to API BN
+    /// nodes, creates DNS records, and writes the Playnet attribute for reuse
+    /// by the IC gateway.
+    fn setup_api_bn_playnet(&mut self, env: &TestEnv) {
+        let playnet_cert = env.acquire_playnet_certificate();
+        let fqdn = &playnet_cert.playnet;
+        info!(env.logger(), "Acquired playnet for API BNs: {}", fqdn);
+
+        for (idx, node) in self.api_boundary_nodes.iter_mut().enumerate() {
+            node.domain = Some(format!("apibn-{idx}.{fqdn}"));
+        }
+
+        let dns_records: Vec<DnsRecord> = self
+            .api_boundary_nodes
+            .iter()
+            .enumerate()
+            .map(|(idx, node)| DnsRecord {
+                name: format!("apibn-{idx}"),
+                record_type: DnsRecordType::AAAA,
+                records: vec![node.ipv6.expect("API BN missing IPv6").to_string()],
+            })
+            .collect();
+        let suffix = env.create_playnet_dns_records(dns_records);
+        info!(
+            env.logger(),
+            "Created playnet DNS records for API BNs under {}", suffix
+        );
+
+        let playnet = Playnet {
+            playnet_cert,
+            aaaa_records: vec![],
+            a_records: vec![],
+        };
+        playnet.write_attribute(env);
+    }
+
+    pub fn has_malicious_behaviors(&self) -> bool {
+        let has_malicious_nodes: bool = self
+            .subnets
+            .iter()
+            .any(|s| s.nodes.iter().any(|n| n.malicious_behavior.is_some()));
+        let has_malicious_unassigned_nodes = self
+            .unassigned_nodes
+            .iter()
+            .any(|n| n.malicious_behavior.is_some());
+        let has_malicious_api_boundary_nodes = self
+            .api_boundary_nodes
+            .iter()
+            .any(|n| n.malicious_behavior.is_some());
+        has_malicious_nodes || has_malicious_unassigned_nodes || has_malicious_api_boundary_nodes
+    }
+
+    pub fn get_malicious_behavior_of_node(&self, node_id: NodeId) -> Option<MaliciousBehavior> {
+        let node_filter_map = |n: &Node| {
+            if n.secret_key_store.as_ref().unwrap().node_id == node_id {
+                Some(n.malicious_behavior.clone())
+            } else {
+                None
+            }
+        };
+        // extract malicious nodes all subnet nodes
+        let mut malicious_nodes: Vec<Option<MaliciousBehavior>> = self
+            .subnets
+            .iter()
+            .flat_map(|s| s.nodes.iter().filter_map(node_filter_map))
+            .collect();
+        // extract malicious nodes from all unassigned nodes
+        malicious_nodes.extend(self.unassigned_nodes.iter().filter_map(node_filter_map));
+        // extract malicious nodes from all API boundary nodes
+        malicious_nodes.extend(self.api_boundary_nodes.iter().filter_map(node_filter_map));
+
+        match malicious_nodes.len() {
+            0 => None,
+            1 => malicious_nodes.first().unwrap().clone(),
+            _ => panic!("more than one node has id={node_id}"),
+        }
+    }
+
+    pub fn get_query_stats_epoch_length_of_node(&self, node_id: NodeId) -> Option<u64> {
+        self.subnets
+            .iter()
+            .find(|subnet| {
+                subnet
+                    .nodes
+                    .iter()
+                    .any(|node| node.secret_key_store.as_ref().unwrap().node_id == node_id)
+            })
+            .and_then(|subnet| subnet.query_stats_epoch_length)
+    }
+
+    pub fn get_ipv4_config_of_node(&self, node_id: NodeId) -> Option<IPv4Config> {
+        let node_filter_map = |n: &Node| {
+            if n.secret_key_store.as_ref().unwrap().node_id == node_id {
+                Some(n.ipv4.clone())
+            } else {
+                None
+            }
+        };
+        // extract ipv4-enabled nodes all subnet nodes
+        let mut ipv4_enabled_nodes: Vec<Option<IPv4Config>> = self
+            .subnets
+            .iter()
+            .flat_map(|s| s.nodes.iter().filter_map(node_filter_map))
+            .collect();
+        // extract ipv4-enabled nodes from all unassigned nodes
+        ipv4_enabled_nodes.extend(self.unassigned_nodes.iter().filter_map(node_filter_map));
+
+        // extract ipv4-enabled nodes from all API boundary nodes
+        ipv4_enabled_nodes.extend(self.api_boundary_nodes.iter().filter_map(node_filter_map));
+
+        match ipv4_enabled_nodes.len() {
+            0 => None,
+            1 => ipv4_enabled_nodes.first().unwrap().clone(),
+            _ => panic!("more than one node has id={node_id}"),
+        }
+    }
+
+    pub fn get_domain_of_node(&self, node_id: NodeId) -> Option<String> {
+        let node_filter_map = |n: &Node| {
+            if n.secret_key_store.as_ref().unwrap().node_id == node_id {
+                Some(n.domain.clone())
+            } else {
+                None
+            }
+        };
+        // extract all matching nodes from all subnet nodes
+        let mut nodes: Vec<Option<String>> = self
+            .subnets
+            .iter()
+            .flat_map(|s| s.nodes.iter().filter_map(node_filter_map))
+            .collect();
+        // extract node with given domain name from all unassigned nodes
+        nodes.extend(self.unassigned_nodes.iter().filter_map(node_filter_map));
+        // extract node with given domain name  from all unassigned nodes
+        nodes.extend(self.api_boundary_nodes.iter().filter_map(node_filter_map));
+
+        match nodes.len() {
+            0 => None,
+            1 => nodes.first().unwrap().clone(),
+            _ => panic!("more than one node has id={node_id}"),
+        }
+    }
+
+    pub fn get_recovery_hash_of_node(&self, node_id: NodeId) -> Option<String> {
+        let node_filter_map = |n: &Node| {
+            if n.secret_key_store.as_ref().unwrap().node_id == node_id {
+                Some(n.recovery_hash.clone())
+            } else {
+                None
+            }
+        };
+        // extract recovery hash from all subnet nodes
+        let mut recovery_hashes: Vec<Option<String>> = self
+            .subnets
+            .iter()
+            .flat_map(|s| s.nodes.iter().filter_map(node_filter_map))
+            .collect();
+        // extract recovery hash from all unassigned nodes
+        recovery_hashes.extend(self.unassigned_nodes.iter().filter_map(node_filter_map));
+        // extract recovery hash from all API boundary nodes
+        recovery_hashes.extend(self.api_boundary_nodes.iter().filter_map(node_filter_map));
+
+        match recovery_hashes.len() {
+            0 => None,
+            1 => recovery_hashes.first().unwrap().clone(),
+            _ => panic!("more than one node has id={node_id}"),
+        }
+    }
+}
+
+/// A builder for the initial configuration of a subnetwork.
+#[derive(Clone, PartialEq, Debug, Deserialize)]
+pub struct Subnet {
+    pub vm_resource_overrides: VmResourceOverrides,
+    pub vm_allocation: Option<VmAllocationStrategy>,
+    pub boot_image: BootImage,
+    pub required_host_features: Vec<HostFeature>,
+    pub default_node_reward_type: Option<NodeRewardType>,
+    pub nodes: Vec<Node>,
+    pub max_ingress_bytes_per_message: Option<u64>,
+    pub max_ingress_messages_per_block: Option<u64>,
+    pub max_ingress_bytes_per_block: Option<u64>,
+    pub max_block_payload_size: Option<u64>,
+    #[serde(with = "humantime_serde")]
+    pub unit_delay: Option<Duration>,
+    #[serde(with = "humantime_serde")]
+    pub initial_notary_delay: Option<Duration>,
+    pub dkg_interval_length: Option<Height>,
+    pub dkg_dealings_per_block: Option<usize>,
+    // NOTE: Some values in this config, like the http port,
+    // are overwritten in `update_and_write_node_config`.
+    pub subnet_type: SubnetType,
+    pub canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
+    pub max_instructions_per_message: Option<u64>,
+    pub max_instructions_per_round: Option<u64>,
+    pub max_instructions_per_install_code: Option<u64>,
+    pub features: Option<SubnetFeatures>,
+    pub resource_limits: Option<ResourceLimits>,
+    pub max_number_of_canisters: Option<u64>,
+    pub ssh_readonly_access: Vec<String>,
+    pub ssh_backup_access: Vec<String>,
+    pub chain_key_config: Option<ChainKeyConfig>,
+    pub running_state: SubnetRunningState,
+    pub query_stats_epoch_length: Option<u64>,
+    pub initial_height: u64,
+}
+
+impl Subnet {
+    pub fn new(subnet_type: SubnetType) -> Self {
+        // Invariants in the registry ensure that
+        //   - Cloud engines have a free cost schedule
+        //   - Cloud engines only have nodes with reward type 4
+        let (canister_cycles_cost_schedule, default_node_reward_type) = match subnet_type {
+            SubnetType::Application | SubnetType::System | SubnetType::VerifiedApplication => {
+                (CanisterCyclesCostSchedule::Normal, None)
+            }
+            SubnetType::CloudEngine => (
+                CanisterCyclesCostSchedule::Free,
+                Some(NodeRewardType::Type4),
+            ),
+        };
+        Self {
+            vm_resource_overrides: Default::default(),
+            vm_allocation: Default::default(),
+            boot_image: Default::default(),
+            required_host_features: vec![],
+            default_node_reward_type,
+            nodes: vec![],
+            max_ingress_bytes_per_message: None,
+            max_ingress_bytes_per_block: None,
+            max_ingress_messages_per_block: None,
+            max_block_payload_size: None,
+            unit_delay: None,
+            initial_notary_delay: None,
+            dkg_interval_length: None,
+            dkg_dealings_per_block: None,
+            max_instructions_per_message: None,
+            max_instructions_per_round: None,
+            max_instructions_per_install_code: None,
+            features: None,
+            resource_limits: None,
+            max_number_of_canisters: None,
+            subnet_type,
+            canister_cycles_cost_schedule,
+            ssh_readonly_access: vec![],
+            ssh_backup_access: vec![],
+            chain_key_config: None,
+            running_state: SubnetRunningState::Active,
+            query_stats_epoch_length: None,
+            initial_height: 0,
+        }
+    }
+
+    /// Set the VM resource overrides (like number of virtual CPUs and memory)
+    /// at the subnet level. More specific overrides have more priority.
+    /// Node > Subnet > IC > Group > Default
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.vm_resource_overrides = vm_resource_overrides;
+        self
+    }
+
+    pub fn with_vm_allocation(mut self, vm_allocation: VmAllocationStrategy) -> Self {
+        self.vm_allocation = Some(vm_allocation);
+        self
+    }
+
+    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
+        self.required_host_features = required_host_features;
+        self
+    }
+
+    pub fn with_max_ingress_messages_per_block(
+        mut self,
+        max_ingress_messages_per_block: u64,
+    ) -> Self {
+        self.max_ingress_messages_per_block = Some(max_ingress_messages_per_block);
+        self
+    }
+
+    pub fn with_boot_image(mut self, boot_image: BootImage) -> Self {
+        self.boot_image = boot_image;
+        self
+    }
+
+    /// An empty subnet that's optimized to be "fast".
+    ///
+    /// The subnet is able to execute calls faster because the block time
+    /// on its nodes is reduced.
+    ///
+    /// See also `fast_single_node`.
+    pub fn fast(subnet_type: SubnetType, no_of_nodes: usize) -> Self {
+        assert!(
+            0 < no_of_nodes,
+            "cannot create subner with {no_of_nodes} nodes"
+        );
+        Self::new(subnet_type)
+            // Shorter block time.
+            .with_unit_delay(Duration::from_millis(200))
+            .with_initial_notary_delay(Duration::from_millis(200))
+            .add_nodes(no_of_nodes)
+    }
+
+    /// A one-node subnet that's optimized to be "fast".
+    pub fn fast_single_node(subnet_type: SubnetType) -> Self {
+        Self::fast(subnet_type, 1)
+    }
+
+    /// A (many-node) subnet that's optimized to be "slow" so that its nodes can
+    /// be run on a single machine without issues.
+    ///
+    /// Running many replicas on one machine means that those replicas will
+    /// compete for the resources on that machine. The consensus delays
+    /// essentially determine how fast the blocks are proposed and how fast the
+    /// proposed blocks are notarized. If enough replicas get to run their
+    /// notarizer before it is time for the next blockmaker to propose, that
+    /// single block gets notarized and eventually finalized. If the system is
+    /// so loaded that it is already time for the second blockmaker to propose a
+    /// block before the first block gets notarized, this adds to the load of
+    /// the system and points to the fact that consensus is struggling to make
+    /// easy progress with the given parameters. We call this situation
+    /// starvation of consensus. When the delays are increased, the amount of
+    /// work that consensus attempts to make in any given time interval is
+    /// decreased. This gives the first block more time to be notarized by
+    /// enough replicas and possibly avoids the additional load of
+    /// making/checking/notarizing multiple blocks per height. A slower
+    /// consensus is therefore preferable while running multiple replicas on a
+    /// single machine.
+    pub fn slow(subnet_type: SubnetType) -> Self {
+        Self::new(subnet_type)
+            // Shorter block time.
+            .with_unit_delay(Duration::from_millis(1000))
+            .with_initial_notary_delay(Duration::from_millis(5000))
+    }
+
+    /// Add the given number of nodes to the subnet.
+    pub fn add_nodes(self, no_of_nodes: usize) -> Self {
+        (0..no_of_nodes).fold(self, |subnet, _| {
+            let vm_allocation = subnet.vm_allocation.clone();
+            let boot_image = subnet.boot_image.clone();
+            let required_host_features = subnet.required_host_features.clone();
+            subnet.add_node(
+                Node::new()
+                    .with_vm_allocation(vm_allocation)
+                    .with_boot_image(boot_image)
+                    .with_required_host_features(required_host_features),
+            )
+        })
+    }
+
+    pub fn add_node(mut self, mut node: Node) -> Self {
+        if node.node_reward_type.is_none()
+            && let Some(reward_type) = self.default_node_reward_type
+        {
+            node = node.with_node_reward_type(reward_type);
+        }
+
+        self.nodes.push(node);
+        self
+    }
+
+    /// Add the given number of nodes to the subnet.
+    ///
+    /// The nodes will extend required host features with the given ones.
+    pub fn add_node_with_required_host_features(
+        self,
+        mut required_host_features: Vec<HostFeature>,
+    ) -> Self {
+        let vm_allocation = self.vm_allocation.clone();
+        let boot_image = self.boot_image.clone();
+        required_host_features.extend_from_slice(&self.required_host_features);
+
+        self.add_node(
+            Node::new()
+                .with_vm_allocation(vm_allocation)
+                .with_boot_image(boot_image)
+                .with_required_host_features(required_host_features),
+        )
+    }
+
+    pub fn with_max_ingress_bytes_per_block(mut self, limit: u64) -> Self {
+        self.max_ingress_bytes_per_block = Some(limit);
+        self
+    }
+
+    pub fn with_max_ingress_message_size(mut self, limit: u64) -> Self {
+        self.max_ingress_bytes_per_message = Some(limit);
+        self
+    }
+
+    pub fn with_max_block_payload_size(mut self, limit: u64) -> Self {
+        self.max_block_payload_size = Some(limit);
+        self
+    }
+
+    pub fn with_unit_delay(mut self, unit_delay: Duration) -> Self {
+        self.unit_delay = Some(unit_delay);
+        self
+    }
+
+    pub fn with_initial_notary_delay(mut self, initial_notary_delay: Duration) -> Self {
+        self.initial_notary_delay = Some(initial_notary_delay);
+        self
+    }
+
+    pub fn with_dkg_interval_length(mut self, dkg_interval_length: Height) -> Self {
+        self.dkg_interval_length = Some(dkg_interval_length);
+        self
+    }
+
+    pub fn with_features(mut self, features: SubnetFeatures) -> Self {
+        self.features = Some(features);
+        self
+    }
+
+    pub fn with_resource_limits(mut self, resource_limits: ResourceLimits) -> Self {
+        self.resource_limits = Some(resource_limits);
+        self
+    }
+
+    pub fn with_max_number_of_canisters(mut self, max_number_of_canisters: u64) -> Self {
+        self.max_number_of_canisters = Some(max_number_of_canisters);
+        self
+    }
+
+    pub fn with_chain_key_config(mut self, chain_key_config: ChainKeyConfig) -> Self {
+        self.chain_key_config = Some(chain_key_config);
+        self
+    }
+
+    pub fn with_query_stats_epoch_length(mut self, length: u64) -> Self {
+        self.query_stats_epoch_length = Some(length);
+        self
+    }
+
+    pub fn with_cost_schedule(mut self, cost_schedule: CanisterCyclesCostSchedule) -> Self {
+        self.canister_cycles_cost_schedule = cost_schedule;
+        self
+    }
+
+    pub fn halted(mut self) -> Self {
+        self.running_state = SubnetRunningState::Halted;
+        self
+    }
+
+    pub fn with_initial_height(mut self, initial_height: u64) -> Self {
+        self.initial_height = initial_height;
+        self
+    }
+
+    pub fn with_random_height(mut self) -> Self {
+        use rand::Rng;
+        self.initial_height = rand::thread_rng().r#gen();
+        self
+    }
+
+    pub fn add_malicious_nodes(
+        self,
+        no_of_nodes: usize,
+        malicious_behavior: MaliciousBehavior,
+    ) -> Self {
+        (0..no_of_nodes).fold(self, |subnet, _| {
+            let vm_allocation = subnet.vm_allocation.clone();
+            let boot_image = subnet.boot_image.clone();
+            let required_host_features = subnet.required_host_features.clone();
+            subnet.add_node(
+                Node::new()
+                    .with_vm_allocation(vm_allocation)
+                    .with_boot_image(boot_image)
+                    .with_required_host_features(required_host_features)
+                    .with_malicious_behavior(malicious_behavior.clone()),
+            )
+        })
+    }
+
+    pub fn add_node_with_ipv4(self, ipv4_config: IPv4Config) -> Self {
+        let vm_allocation = self.vm_allocation.clone();
+        let boot_image = self.boot_image.clone();
+        let required_host_features = self.required_host_features.clone();
+        self.add_node(
+            Node::new()
+                .with_vm_allocation(vm_allocation)
+                .with_boot_image(boot_image)
+                .with_required_host_features(required_host_features)
+                .with_ipv4_config(ipv4_config),
+        )
+    }
+
+    /// provides a small summary of this subnet topology and config to be used
+    /// as a part of a test environment identifier.
+    pub fn summary(&self) -> String {
+        let ns = self.nodes.len();
+        let mut s = DefaultHasher::new();
+        format!("{self:?}").hash(&mut s);
+        let config_hash = format!("{:x}", s.finish());
+        format!("S{:02}{}", ns, &config_hash[0..3])
+    }
+}
+
+impl Default for Subnet {
+    fn default() -> Self {
+        Self {
+            vm_resource_overrides: Default::default(),
+            vm_allocation: Default::default(),
+            boot_image: BootImage::GroupDefault,
+            required_host_features: vec![],
+            default_node_reward_type: None,
+            nodes: vec![],
+            max_ingress_bytes_per_message: None,
+            max_ingress_bytes_per_block: None,
+            max_ingress_messages_per_block: None,
+            max_block_payload_size: None,
+            unit_delay: Some(Duration::from_millis(200)),
+            initial_notary_delay: None,
+            dkg_interval_length: None,
+            dkg_dealings_per_block: None,
+            subnet_type: SubnetType::System,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal,
+            max_instructions_per_message: None,
+            max_instructions_per_round: None,
+            max_instructions_per_install_code: None,
+            features: None,
+            resource_limits: None,
+            max_number_of_canisters: None,
+            ssh_readonly_access: vec![],
+            ssh_backup_access: vec![],
+            chain_key_config: None,
+            running_state: SubnetRunningState::Active,
+            query_stats_epoch_length: None,
+            initial_height: 0,
+        }
+    }
+}
+
+pub type NrOfVCPUs = AmountOf<VCPUs, u64>;
+pub type AmountOfMemoryKiB = AmountOf<MemoryKiB, u64>;
+pub type ImageSizeGiB = AmountOf<SizeGiB, u64>;
+
+pub enum VCPUs {}
+pub enum MemoryKiB {}
+pub enum SizeGiB {}
+
+/// Resource overrides that will be layered to create VmResources.
+///
+/// NOTE: Values should not be used from here directly (it is still possible to
+/// allow for easy construction), they should be first assembled into a
+/// VmResources and pulled from there.
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize, Serialize)]
+pub struct VmResourceOverrides {
+    pub vcpus: Option<NrOfVCPUs>,
+    pub memory_kibibytes: Option<AmountOfMemoryKiB>,
+    pub boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
+}
+
+/// Resources that the VM will use like number of virtual CPUs and memory.
+///
+/// NOTE: This should not be constructed directly (it is still possible to
+/// allow for easy deconstruction), it should be assembled from a set of
+/// VmResourceOverrides.
+pub struct VmResources {
+    pub vcpus: NrOfVCPUs,
+    pub memory_kibibytes: AmountOfMemoryKiB,
+    pub boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
+}
+
+impl VmResourceOverrides {
+    pub const fn const_default() -> Self {
+        VmResourceOverrides {
+            vcpus: None,
+            memory_kibibytes: None,
+            boot_image_minimal_size_gibibytes: None,
+        }
+    }
+
+    pub fn layer(mut self, layer: &VmResourceOverrides) -> Self {
+        self.vcpus = self.vcpus.or(layer.vcpus);
+        self.memory_kibibytes = self.memory_kibibytes.or(layer.memory_kibibytes);
+        self.boot_image_minimal_size_gibibytes = self
+            .boot_image_minimal_size_gibibytes
+            .or(layer.boot_image_minimal_size_gibibytes);
+
+        self
+    }
+
+    pub fn base(self, base: &VmResources) -> VmResources {
+        VmResources {
+            vcpus: self.vcpus.unwrap_or(base.vcpus),
+            memory_kibibytes: self.memory_kibibytes.unwrap_or(base.memory_kibibytes),
+            boot_image_minimal_size_gibibytes: self
+                .boot_image_minimal_size_gibibytes
+                .or(base.boot_image_minimal_size_gibibytes),
+        }
+    }
+}
+
+/// A builder for the initial configuration of a node.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize)]
+pub struct Node {
+    pub vm_resource_overrides: VmResourceOverrides,
+    pub vm_allocation: Option<VmAllocationStrategy>,
+    pub required_host_features: Vec<HostFeature>,
+    pub secret_key_store: Option<NodeSecretKeyStore>,
+    pub ipv6: Option<Ipv6Addr>,
+    pub malicious_behavior: Option<MaliciousBehavior>,
+    pub ipv4: Option<IPv4Config>,
+    pub domain: Option<String>,
+    pub node_reward_type: Option<NodeRewardType>,
+    pub recovery_hash: Option<String>,
+    pub boot_image: BootImage,
+    pub node_operator_principal_id: Option<PrincipalId>,
+}
+
+impl Node {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn id(&self) -> NodeId {
+        self.secret_key_store
+            .clone()
+            .expect("no secret key store")
+            .node_id
+    }
+
+    /// Set the VM resource overrides (like number of virtual CPUs and memory)
+    /// at the node level. More specific overrides have more priority.
+    /// Node > Subnet > IC > Group > Default
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.vm_resource_overrides = vm_resource_overrides;
+        self
+    }
+
+    pub fn with_vm_allocation(mut self, vm_allocation: Option<VmAllocationStrategy>) -> Self {
+        self.vm_allocation = vm_allocation;
+        self
+    }
+
+    pub fn with_boot_image(mut self, boot_image: BootImage) -> Self {
+        self.boot_image = boot_image;
+        self
+    }
+
+    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
+        self.required_host_features = required_host_features;
+        self
+    }
+
+    pub fn with_node_operator_principal_id(mut self, principal_id: PrincipalId) -> Self {
+        self.node_operator_principal_id = Some(principal_id);
+        self
+    }
+
+    pub fn with_malicious_behavior(mut self, malicious_behavior: MaliciousBehavior) -> Self {
+        self.malicious_behavior = Some(malicious_behavior);
+        self
+    }
+
+    pub fn with_ipv4_config(mut self, ipv4_config: IPv4Config) -> Self {
+        self.ipv4 = Some(ipv4_config);
+        self
+    }
+
+    pub fn with_domain(mut self, domain: String) -> Self {
+        self.domain = Some(domain);
+        self
+    }
+
+    pub fn with_node_reward_type(mut self, node_reward_type: NodeRewardType) -> Self {
+        self.node_reward_type = Some(node_reward_type);
+        self
+    }
+
+    pub fn with_recovery_hash(mut self, recovery_hash: String) -> Self {
+        self.recovery_hash = Some(recovery_hash);
+        self
+    }
+}

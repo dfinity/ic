@@ -1,10 +1,14 @@
 //! Data types for threshold public keys.
 use crate::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
+use crate::sign::threshold_sig::public_key::bls12_381::{
+    CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError, PublicKeyBytes,
+};
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
+use thiserror::Error;
 
 /// A threshold signature public key.
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialOrd, Ord, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub enum CspThresholdSigPublicKey {
     ThresBls12_381(bls12_381::PublicKeyBytes),
 }
@@ -17,22 +21,31 @@ impl From<CspThresholdSigPublicKey> for bls12_381::PublicKeyBytes {
     }
 }
 
-impl From<&CspNiDkgTranscript> for CspThresholdSigPublicKey {
-    // The conversion is deliberately implemented directly, i.e., without
-    // using From-conversions involving intermediate types, because the
-    // panic on empty coefficients is currently specific to converting
-    // the transcript to the contained threshold signature public key.
-    fn from(csp_ni_dkg_transcript: &CspNiDkgTranscript) -> Self {
-        match csp_ni_dkg_transcript {
-            CspNiDkgTranscript::Groth20_Bls12_381(transcript) => Self::ThresBls12_381(
-                transcript
-                    .public_coefficients
-                    .coefficients
-                    .get(0)
-                    .copied()
-                    .expect("coefficients empty"),
-            ),
+/// Converting an NI-DKG transcript to a BLS 12 381 CspThresholdSigPublicKey struct failed.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
+pub enum CspNiDkgTranscriptToCspThresholdSigPublicKeyConversionError {
+    #[error("the public coefficients of the threshold public key are empty")]
+    CoefficientsEmpty,
+}
+
+impl From<CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError>
+    for CspNiDkgTranscriptToCspThresholdSigPublicKeyConversionError
+{
+    fn from(err: CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError) -> Self {
+        match err {
+            CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError::CoefficientsEmpty => {
+                CspNiDkgTranscriptToCspThresholdSigPublicKeyConversionError::CoefficientsEmpty
+            }
         }
+    }
+}
+
+impl TryFrom<&CspNiDkgTranscript> for CspThresholdSigPublicKey {
+    type Error = CspNiDkgTranscriptToCspThresholdSigPublicKeyConversionError;
+
+    fn try_from(csp_ni_dkg_transcript: &CspNiDkgTranscript) -> Result<Self, Self::Error> {
+        let public_key_bytes = PublicKeyBytes::try_from(csp_ni_dkg_transcript)?;
+        Ok(Self::ThresBls12_381(public_key_bytes))
     }
 }
 
@@ -46,14 +59,13 @@ pub mod bls12_381 {
     //! Data types for BLS12-381 threshold signature public keys.
     use super::*;
     use std::cmp::Ordering;
-    use std::convert::TryFrom;
     use std::fmt;
     use std::hash::Hasher;
 
     use thiserror::Error;
 
     /// A BLS12-381 public key as bytes.
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Eq, PartialEq)]
     pub struct PublicKeyBytes(pub [u8; PublicKeyBytes::SIZE]);
     crate::derive_serde!(PublicKeyBytes, PublicKeyBytes::SIZE);
 
@@ -72,52 +84,8 @@ pub mod bls12_381 {
         }
     }
 
-    /// These conversions are used for the CLI only
-    mod conversions_for_cli {
-        use super::*;
-
-        impl From<PublicKeyBytes> for String {
-            fn from(bytes: PublicKeyBytes) -> String {
-                base64::encode(&bytes.0[..])
-            }
-        }
-
-        impl TryFrom<&str> for PublicKeyBytes {
-            type Error = ThresholdSigPublicKeyBytesConversionError;
-
-            fn try_from(string: &str) -> Result<Self, Self::Error> {
-                let bytes = base64::decode(string).map_err(|e| {
-                    ThresholdSigPublicKeyBytesConversionError::Malformed {
-                        key_bytes: Some(string.as_bytes().to_vec()),
-                        internal_error: format!(
-                            "public key is not a valid base64 encoded string: {}",
-                            e
-                        ),
-                    }
-                })?;
-                if bytes.len() != PublicKeyBytes::SIZE {
-                    return Err(ThresholdSigPublicKeyBytesConversionError::Malformed {
-                        key_bytes: Some(string.as_bytes().to_vec()),
-                        internal_error: "public key length is incorrect".to_string(),
-                    });
-                }
-                let mut buffer = [0u8; PublicKeyBytes::SIZE];
-                buffer.copy_from_slice(&bytes);
-                Ok(PublicKeyBytes(buffer))
-            }
-        }
-
-        impl TryFrom<&String> for PublicKeyBytes {
-            type Error = ThresholdSigPublicKeyBytesConversionError;
-
-            fn try_from(string: &String) -> Result<Self, Self::Error> {
-                PublicKeyBytes::try_from(string.as_str())
-            }
-        }
-    }
-
     /// Converting a threshold signature public key to bytes failed.
-    #[derive(Clone, Debug, PartialEq, Eq, Hash, Error)]
+    #[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
     pub enum ThresholdSigPublicKeyBytesConversionError {
         #[error("malformed threshold signature public key: {internal_error}")]
         Malformed {
@@ -131,14 +99,6 @@ pub mod bls12_381 {
             write!(f, "0x{}", hex::encode(&self.0[..]))
         }
     }
-
-    impl PartialEq for PublicKeyBytes {
-        fn eq(&self, other: &Self) -> bool {
-            self.0[..] == other.0[..]
-        }
-    }
-
-    impl Eq for PublicKeyBytes {}
 
     impl Ord for PublicKeyBytes {
         fn cmp(&self, other: &Self) -> Ordering {
@@ -155,6 +115,31 @@ pub mod bls12_381 {
     impl Hash for PublicKeyBytes {
         fn hash<H: Hasher>(&self, state: &mut H) {
             self.0[..].hash(state);
+        }
+    }
+
+    /// Converting an NI-DKG transcript to a BLS 12 381 public key bytes struct failed.
+    #[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
+    pub enum CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError {
+        #[error("coefficients empty")]
+        CoefficientsEmpty,
+    }
+
+    impl TryFrom<&CspNiDkgTranscript> for PublicKeyBytes {
+        type Error = CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError;
+
+        fn try_from(csp_ni_dkg_transcript: &CspNiDkgTranscript) -> Result<Self, Self::Error> {
+            match csp_ni_dkg_transcript {
+                CspNiDkgTranscript::Groth20_Bls12_381(transcript) => Ok(
+                    transcript
+                        .public_coefficients
+                        .coefficients.first()
+                        .copied()
+                        .ok_or(
+                            CspNiDkgTranscriptThresholdSigPublicKeyBytesConversionError::CoefficientsEmpty,
+                        )?,
+                ),
+            }
         }
     }
 }

@@ -2,7 +2,7 @@ use ic_metrics::MetricsRegistry;
 use prometheus::proto::MetricType;
 use std::collections::BTreeMap;
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub struct HistogramStats {
     pub count: u64,
     pub sum: f64,
@@ -14,16 +14,14 @@ pub fn fetch_histogram_stats(registry: &MetricsRegistry, name: &str) -> Option<H
     let stats = stats_map.remove(&Labels::new());
     assert!(
         stats_map.is_empty(),
-        "{}: expecting `Histogram`, found `HistogramVec` {:?}",
-        name,
-        stats_map
+        "{name}: expecting `Histogram`, found `HistogramVec` {stats_map:?}"
     );
     stats
 }
 
 #[test]
 fn test_fetch_histogram_stats() {
-    use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+    use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 
     let r = MetricsRegistry::new();
     let h = r.histogram(
@@ -48,7 +46,7 @@ pub fn fetch_histogram_vec_stats(
     let mut stats = MetricVec::new();
 
     for metric_family in registry.prometheus_registry().gather() {
-        if metric_family.get_name() == name {
+        if metric_family.name() == name {
             assert_eq!(MetricType::HISTOGRAM, metric_family.get_field_type());
             for metric in metric_family.get_metric() {
                 stats.insert(
@@ -67,7 +65,7 @@ pub fn fetch_histogram_vec_stats(
 
 #[test]
 fn test_fetch_histogram_vec_stats() {
-    use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+    use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 
     let r = MetricsRegistry::new();
     let h = r.histogram_vec(
@@ -104,6 +102,60 @@ pub fn fetch_histogram_vec_count(registry: &MetricsRegistry, name: &str) -> Metr
         .into_iter()
         .map(|(k, v)| (k, v.count))
         .collect()
+}
+
+/// Fetches the buckets ofall label value combinations of a `Histogram` or
+/// `HistogramVec`, given its name.
+pub fn fetch_histogram_vec_buckets(
+    registry: &MetricsRegistry,
+    name: &str,
+) -> MetricVec<BTreeMap<String, u64>> {
+    let mut buckets = MetricVec::new();
+
+    for metric_family in registry.prometheus_registry().gather() {
+        if metric_family.name() == name {
+            assert_eq!(MetricType::HISTOGRAM, metric_family.get_field_type());
+            for metric in metric_family.get_metric() {
+                buckets.insert(
+                    to_labels(metric),
+                    metric
+                        .get_histogram()
+                        .get_bucket()
+                        .iter()
+                        .map(|b| (b.upper_bound().to_string(), b.cumulative_count()))
+                        .collect(),
+                );
+            }
+            break;
+        }
+    }
+    buckets
+}
+
+#[test]
+fn test_fetch_histogram_vec_buckets() {
+    use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
+
+    let r = MetricsRegistry::new();
+    let h = r.histogram_vec(
+        "p2p_message_size_bytes",
+        "Message size in bytes.",
+        decimal_buckets(0, 0),
+        &["device"],
+    );
+
+    h.with_label_values(&["/dev/disk0"]).observe(1.5);
+
+    let buckets_vec = fetch_histogram_vec_buckets(&r, "p2p_message_size_bytes");
+    let buckets = buckets_vec.get(&labels(&[("device", "/dev/disk0")]));
+    assert_eq!(
+        Some(&BTreeMap::from([
+            ("1".to_string(), 0),
+            ("2".to_string(), 1),
+            ("5".to_string(), 1)
+        ])),
+        buckets
+    );
 }
 
 /// Fetches the value of an `IntCounter`, given its name.
@@ -158,9 +210,7 @@ pub fn fetch_counter(registry: &MetricsRegistry, name: &str) -> Option<f64> {
     let value = value_map.remove(&Labels::new());
     assert!(
         value_map.is_empty(),
-        "{}: expecting `Counter`, found `CounterVec` {:?}",
-        name,
-        value_map
+        "{name}: expecting `Counter`, found `CounterVec` {value_map:?}"
     );
     value
 }
@@ -173,10 +223,13 @@ pub fn fetch_counter_vec(registry: &MetricsRegistry, name: &str) -> MetricVec<f6
     let mut values = MetricVec::new();
 
     for metric_family in registry.prometheus_registry().gather() {
-        if metric_family.get_name() == name {
+        if metric_family.name() == name {
             assert_eq!(MetricType::COUNTER, metric_family.get_field_type());
             for metric in metric_family.get_metric() {
-                values.insert(to_labels(metric), metric.get_counter().get_value());
+                values.insert(
+                    to_labels(metric),
+                    metric.get_counter().get_or_default().value(),
+                );
             }
             break;
         }
@@ -236,9 +289,7 @@ pub fn fetch_gauge(registry: &MetricsRegistry, name: &str) -> Option<f64> {
     let value = value_map.remove(&Labels::new());
     assert!(
         value_map.is_empty(),
-        "{}: expecting `Gauge`, found `GaugeVec` {:?}",
-        name,
-        value_map
+        "{name}: expecting `Gauge`, found `GaugeVec` {value_map:?}"
     );
     value
 }
@@ -251,10 +302,13 @@ pub fn fetch_gauge_vec(registry: &MetricsRegistry, name: &str) -> MetricVec<f64>
     let mut values = MetricVec::new();
 
     for metric_family in registry.prometheus_registry().gather() {
-        if metric_family.get_name() == name {
+        if metric_family.name() == name {
             assert_eq!(MetricType::GAUGE, metric_family.get_field_type());
             for metric in metric_family.get_metric() {
-                values.insert(to_labels(metric), metric.get_gauge().get_value());
+                values.insert(
+                    to_labels(metric),
+                    metric.get_gauge().get_or_default().value(),
+                );
             }
             break;
         }
@@ -312,8 +366,8 @@ fn to_labels(metric: &prometheus::proto::Metric) -> Labels {
         .iter()
         .map(|label_pair| {
             (
-                label_pair.get_name().to_string(),
-                label_pair.get_value().to_string(),
+                label_pair.name().to_string(),
+                label_pair.value().to_string(),
             )
         })
         .collect()

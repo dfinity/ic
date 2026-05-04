@@ -3,51 +3,48 @@
 
 use crate::{
     common::NnsInitPayloads,
-    governance::{
-        get_pending_proposals, submit_external_update_proposal,
-        submit_external_update_proposal_binary, wait_for_final_state,
-    },
-    ids::TEST_NEURON_1_ID,
+    governance::{submit_external_update_proposal, wait_for_final_state},
+    state_test_helpers::state_machine_builder_for_nns_tests,
 };
-use candid::Encode;
+use candid::{CandidType, Encode, Principal};
 use canister_test::{
-    local_test_with_config_e, local_test_with_config_with_mutations, Canister, Project, Runtime,
-    Wasm,
+    Canister, Project, Runtime, Wasm, local_test_with_config_with_mutations_on_system_subnet,
 };
 use cycles_minting_canister::CyclesCanisterInitPayload;
-use dfn_candid::{candid_one, CandidOne};
-use futures::future::join_all;
-use ic_base_types::CanisterId;
+use dfn_candid::{CandidOne, candid_one};
+use futures::{FutureExt, executor::block_on, future::join_all};
 use ic_canister_client_sender::Sender;
-use ic_config::{subnet_config::SubnetConfig, Config};
-use ic_ic00_types::CanisterInstallMode;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
-use ic_nervous_system_root::{
-    CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running, ChangeCanisterProposal,
+use ic_config::Config;
+use ic_management_canister_types_private::CanisterInstallMode;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
+use ic_nns_common::{
+    init::LifelineCanisterInitPayload,
+    types::{NeuronId, ProposalId},
 };
-use ic_nns_common::types::ProposalId;
-use ic_nns_common::{init::LifelineCanisterInitPayload, types::NeuronId};
 use ic_nns_constants::*;
-use ic_nns_governance::{
-    governance::TimeWarp, pb::v1::Governance, pb::v1::NnsFunction, pb::v1::ProposalStatus,
-};
+use ic_nns_governance_api::{Governance, NnsFunction, ProposalStatus, test_api::TimeWarp};
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_registry_transport::pb::v1::RegistryMutation;
-use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
-use ic_sns_wasm::pb::v1::AddWasmRequest;
+use ic_sns_wasm::{init::SnsWasmCanisterInitPayload, pb::v1::AddWasmRequest};
 use ic_test_utilities::universal_canister::{
-    call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
+    UNIVERSAL_CANISTER_WASM, call_args, wasm as universal_canister_argument_builder,
 };
+use ic_types_cycles::Cycles;
+use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
+use icp_ledger as ledger;
 use ledger::LedgerCanisterInitPayload;
-use ledger_canister as ledger;
 use lifeline::LIFELINE_CANISTER_WASM;
-use on_wire::{bytes, IntoWire};
+use on_wire::{IntoWire, bytes};
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
-use std::{future::Future, thread, time::SystemTime};
+use serde::Deserialize;
+use std::{future::Future, path::Path, thread, time::SystemTime};
+use xrc_mock::{ExchangeRate, XrcMockInitPayload};
 
-/// All the NNS canisters that exist at genesis.
+/// All the NNS canisters that are use in tests, but not all canisters
+/// on NNS mainnet (there are 4 ledger archives, for example and a ledger index that aren't tested
+/// using this struct)
 #[derive(Clone)]
 pub struct NnsCanisters<'a> {
     // Canisters here are listed in creation order.
@@ -61,6 +58,10 @@ pub struct NnsCanisters<'a> {
     pub identity: Canister<'a>,
     pub nns_ui: Canister<'a>,
     pub sns_wasms: Canister<'a>,
+    pub migration: Canister<'a>,
+
+    // Optional canisters.
+    pub subnet_rental: Option<Canister<'a>>,
 }
 
 impl NnsCanisters<'_> {
@@ -81,7 +82,7 @@ impl NnsCanisters<'_> {
         .into_iter()
         .collect();
 
-        maybe_canisters.unwrap_or_else(|e| panic!("At least one canister creation failed: {}", e));
+        maybe_canisters.unwrap_or_else(|e| panic!("At least one canister creation failed: {e}"));
         eprintln!("NNS canisters created after {:.1} s", since_start_secs());
 
         // TODO (after deploying SNS-WASMs to mainnet) update ALL_NNS_CANISTER_IDS to the resulting
@@ -91,6 +92,8 @@ impl NnsCanisters<'_> {
             .create_canister_max_cycles_with_retries()
             .await
             .expect("Failed creating last canister");
+
+        // Create canisters.
 
         let mut registry = Canister::new(runtime, REGISTRY_CANISTER_ID);
         let mut governance = Canister::new(runtime, GOVERNANCE_CANISTER_ID);
@@ -102,8 +105,10 @@ impl NnsCanisters<'_> {
         let identity = Canister::new(runtime, IDENTITY_CANISTER_ID);
         let nns_ui = Canister::new(runtime, NNS_UI_CANISTER_ID);
         let mut sns_wasms = Canister::new(runtime, SNS_WASM_CANISTER_ID);
+        let mut subnet_rental = Canister::new(runtime, SUBNET_RENTAL_CANISTER_ID);
+        let mut migration = Canister::new(runtime, MIGRATION_CANISTER_ID);
 
-        // Install all the canisters
+        // Install code into canisters (pass init argument/payload).
         // Registry and Governance need to first or the process hangs,
         // Ledger is just added as to avoid Governance spamming the logs.
         futures::join!(
@@ -119,7 +124,148 @@ impl NnsCanisters<'_> {
             ),
             install_lifeline_canister(&mut lifeline, init_payloads.lifeline.clone()),
             install_genesis_token_canister(&mut genesis_token, init_payloads.genesis_token.clone()),
-            install_sns_wasm_canister(&mut sns_wasms, init_payloads.sns_wasms.clone())
+            install_sns_wasm_canister(&mut sns_wasms, init_payloads.sns_wasms.clone()),
+            async {
+                if let Some(()) = init_payloads.subnet_rental {
+                    install_subnet_rental_canister(&mut subnet_rental).await;
+                }
+            },
+            install_migration_canister(&mut migration),
+        );
+
+        eprintln!("NNS canisters installed after {:.1} s", since_start_secs());
+
+        // Set controller(s) of canisters.
+
+        // We can set all the controllers at once. Several -- or all -- may go
+        // into the same block, this makes setup faster.
+        futures::try_join!(
+            registry.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            governance.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            ledger.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            // The root is special! it's controlled by the lifeline
+            root.set_controller_with_retries(LIFELINE_CANISTER_ID.get()),
+            cycles_minting.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            lifeline.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            genesis_token.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            identity.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            nns_ui.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            sns_wasms.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            subnet_rental.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            migration.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+        )
+        .unwrap();
+
+        eprintln!("NNS canisters set up after {:.1} s", since_start_secs());
+
+        // Finally, bundle canisters.
+        NnsCanisters {
+            registry,
+            governance,
+            ledger,
+            root,
+            cycles_minting,
+            lifeline,
+            genesis_token,
+            identity,
+            nns_ui,
+            sns_wasms,
+            subnet_rental: init_payloads.subnet_rental.map(|()| subnet_rental),
+            migration,
+        }
+    }
+
+    /// Creates and installs all of the NNS canisters at the right ids that are scheduled to
+    /// exist at genesis, and sets the controller on each canister.
+    pub async fn set_up_at_ids(
+        runtime: &'_ Runtime,
+        init_payloads: NnsInitPayloads,
+    ) -> NnsCanisters<'_> {
+        let since_start_secs = {
+            let s = SystemTime::now();
+            move || (SystemTime::now().duration_since(s).unwrap()).as_secs_f32()
+        };
+
+        // Let's create the canisters at the desired IDs
+        let mut registry = runtime
+            .create_canister_at_id_max_cycles_with_retries(REGISTRY_CANISTER_ID.get())
+            .await
+            .unwrap();
+        let mut governance = runtime
+            .create_canister_at_id_max_cycles_with_retries(GOVERNANCE_CANISTER_ID.get())
+            .await
+            .unwrap();
+        let mut ledger = runtime
+            .create_canister_at_id_max_cycles_with_retries(LEDGER_CANISTER_ID.get())
+            .await
+            .unwrap();
+        let mut root = runtime
+            .create_canister_at_id_max_cycles_with_retries(ROOT_CANISTER_ID.get())
+            .await
+            .unwrap();
+        let mut cycles_minting = runtime
+            .create_canister_at_id_max_cycles_with_retries(CYCLES_MINTING_CANISTER_ID.get())
+            .await
+            .unwrap();
+        let mut lifeline = runtime
+            .create_canister_at_id_max_cycles_with_retries(LIFELINE_CANISTER_ID.get())
+            .await
+            .unwrap();
+        let mut genesis_token = runtime
+            .create_canister_at_id_max_cycles_with_retries(GENESIS_TOKEN_CANISTER_ID.get())
+            .await
+            .unwrap();
+        let identity = runtime
+            .create_canister_at_id_max_cycles_with_retries(IDENTITY_CANISTER_ID.get())
+            .await
+            .unwrap();
+        let nns_ui = runtime
+            .create_canister_at_id_max_cycles_with_retries(NNS_UI_CANISTER_ID.get())
+            .await
+            .unwrap();
+        let mut sns_wasms = runtime
+            .create_canister_at_id_max_cycles_with_retries(SNS_WASM_CANISTER_ID.get())
+            .await
+            .unwrap();
+        let mut migration = runtime
+            .create_canister_at_id_max_cycles_with_retries(MIGRATION_CANISTER_ID.get())
+            .await
+            .unwrap();
+
+        let mut subnet_rental = init_payloads.subnet_rental.as_ref().map(|_not_used| {
+            block_on(async {
+                runtime
+                    .create_canister_at_id_max_cycles_with_retries(SUBNET_RENTAL_CANISTER_ID.get())
+                    .await
+                    .unwrap()
+            })
+        });
+
+        // Install all the canisters
+        // Registry and Governance need to first or the process hangs,
+        // Ledger is just added as to avoid Governance spamming the logs.
+        futures::join!(
+            install_registry_canister(&mut registry, init_payloads.registry.clone()),
+            install_governance_canister(&mut governance, init_payloads.governance.clone()),
+            install_ledger_canister(&mut ledger, init_payloads.ledger.clone()),
+        );
+        // nns_ui and identity do not need to be installed for this test,
+        // because their init payload is not available in our tests.
+        futures::join!(
+            install_root_canister(&mut root, init_payloads.root.clone()),
+            install_cycles_minting_canister(
+                &mut cycles_minting,
+                init_payloads.cycles_minting.clone()
+            ),
+            install_lifeline_canister(&mut lifeline, init_payloads.lifeline.clone()),
+            install_genesis_token_canister(&mut genesis_token, init_payloads.genesis_token.clone()),
+            install_sns_wasm_canister(&mut sns_wasms, init_payloads.sns_wasms.clone()),
+            async {
+                if let Some(subnet_rental) = subnet_rental.as_mut() {
+                    install_subnet_rental_canister(subnet_rental).await;
+                }
+            },
+            install_migration_canister(&mut migration),
         );
 
         eprintln!("NNS canisters installed after {:.1} s", since_start_secs());
@@ -138,6 +284,16 @@ impl NnsCanisters<'_> {
             identity.set_controller_with_retries(ROOT_CANISTER_ID.get()),
             nns_ui.set_controller_with_retries(ROOT_CANISTER_ID.get()),
             sns_wasms.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            async {
+                if let Some(subnet_rental) = subnet_rental.as_mut() {
+                    subnet_rental
+                        .set_controller_with_retries(ROOT_CANISTER_ID.get())
+                        .await
+                } else {
+                    Ok(())
+                }
+            },
+            migration.set_controller_with_retries(ROOT_CANISTER_ID.get()),
         )
         .unwrap();
 
@@ -154,10 +310,12 @@ impl NnsCanisters<'_> {
             identity,
             nns_ui,
             sns_wasms,
+            subnet_rental,
+            migration,
         }
     }
 
-    pub fn all_canisters(&self) -> [&Canister<'_>; NUM_NNS_CANISTERS] {
+    pub fn all_canisters(&self) -> [&Canister<'_>; 10] {
         [
             &self.registry,
             &self.governance,
@@ -195,8 +353,8 @@ impl NnsCanisters<'_> {
         assert_eq!(
             wait_for_final_state(&self.governance, proposal_id)
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
     }
 }
@@ -217,34 +375,87 @@ async fn install_rust_canister_with_memory_allocation(
         .map(|s| s.to_string())
         .collect::<Box<[String]>>();
 
-    // Wrapping call to cargo_bin_* to avoid blocking current thread
-    let wasm: Wasm = tokio::runtime::Handle::current()
-        .spawn_blocking(move || {
-            println!(
-                "Compiling Wasm for {} in task on thread: {:?}",
-                binary_name_,
-                thread::current().id()
-            );
-            // Second half of moving data had to be done in-thread to avoid lifetime/ownership issues
+    let wasm: Wasm = match canister.runtime() {
+        Runtime::Remote(_) | Runtime::Local(_) => {
+            tokio::runtime::Handle::current()
+                .spawn_blocking(move || {
+                    println!(
+                        "Compiling Wasm for {} in task on thread: {:?}",
+                        binary_name_,
+                        thread::current().id()
+                    );
+                    // Second half of moving data had to be done in-thread to avoid lifetime/ownership issues
+                    let features = features.iter().map(|s| s.as_str()).collect::<Box<[&str]>>();
+                    Project::cargo_bin_maybe_from_env(&binary_name_, &features)
+                })
+                .await
+                .unwrap()
+        }
+        Runtime::StateMachine(_) => {
             let features = features.iter().map(|s| s.as_str()).collect::<Box<[&str]>>();
             Project::cargo_bin_maybe_from_env(&binary_name_, &features)
-        })
-        .await
-        .unwrap();
+        }
+    };
 
     println!("Done compiling the wasm for {}", binary_name.as_ref());
 
+    if canister.is_runtime_local() {
+        wasm.install_onto_canister(
+            canister,
+            CanisterInstallMode::Reinstall,
+            canister_init_payload,
+            Some(memory_allocation),
+        )
+        .await
+        .unwrap_or_else(|e| {
+            panic!(
+                "Could not install {} via local runtime due to {}",
+                binary_name.as_ref(),
+                e
+            )
+        });
+    } else {
+        wasm.install_with_retries_onto_canister(
+            canister,
+            canister_init_payload,
+            Some(memory_allocation),
+        )
+        .await
+        .unwrap_or_else(|e| {
+            panic!(
+                "Could not install {} via remote runtime due to {}",
+                binary_name.as_ref(),
+                e
+            )
+        });
+    };
+    println!(
+        "Installed {} with {}",
+        canister.canister_id(),
+        binary_name.as_ref()
+    );
+}
+
+/// Installs a rust canister with the provided memory allocation
+/// from the specified path to the WASM code.
+async fn install_rust_canister_with_memory_allocation_from_path<P: AsRef<Path>>(
+    canister: &mut Canister<'_>,
+    path_to_wasm: P,
+    canister_init_payload: Option<Vec<u8>>,
+    memory_allocation: u64, // in bytes
+) {
+    let wasm: Wasm = Wasm::from_file(path_to_wasm.as_ref());
     wasm.install_with_retries_onto_canister(
         canister,
         canister_init_payload,
         Some(memory_allocation),
     )
     .await
-    .unwrap_or_else(|e| panic!("Could not install {} due to {}", binary_name.as_ref(), e));
+    .unwrap_or_else(|e| panic!("Could not install {:?} due to {}", path_to_wasm.as_ref(), e));
     println!(
-        "Installed {} with {}",
+        "Installed {} with {:?}",
         canister.canister_id(),
-        binary_name.as_ref()
+        path_to_wasm.as_ref(),
     );
 }
 
@@ -265,13 +476,116 @@ pub async fn install_rust_canister(
     .await
 }
 
+/// Install a rust canister bytecode in a subnet
+/// from a specified path to the WASM code.
+pub async fn install_rust_canister_from_path<P: AsRef<Path>>(
+    canister: &mut Canister<'_>,
+    path_to_wasm: P,
+    canister_init_payload: Option<Vec<u8>>,
+) {
+    install_rust_canister_with_memory_allocation_from_path(
+        canister,
+        path_to_wasm,
+        canister_init_payload,
+        memory_allocation_of(canister.canister_id()),
+    )
+    .await
+}
+
+/// Runtime must be built from a node belonging to a subnet that can host
+/// EXCHANGE_RATE_CANISTER_ID.
+///
+/// Warning: This assumes that canisters with ID smaller than that of the
+/// Exchange Rate canister have all already been created.
+pub async fn create_and_install_mock_exchange_rate_canister(
+    runtime: &'_ Runtime,
+    price_of_icp_in_xdr_cents: u64,
+) {
+    // Step 1: Create the canister.
+
+    // Create canisters in a loop until we hit EXCHANGE_RATE_CANISTER_ID. Yes,
+    // this is a hack. You might think that
+    // runtime.create_canister_with_specified_id(...) would get the desired
+    // effect (more straightforwardly), but trying to create an Exchange Rate
+    // canister that way results in
+    //
+    //     The `specified_id` uf6dk-hyaaa-aaaaq-qaaaq-cai is invalid because it belongs to the canister allocation ranges of the test environment.
+    //
+    // This is because of the way that the routing table is set up in system
+    // tests. If we wanted to get rid of this hack, we would have to change how
+    // the routing table is set up in system tests:
+    // https://github.com/dfinity/ic/pull/6053#discussion_r2329340517
+    //
+    // The "Warning" in the triple slash comments of this function is because of
+    // this hack.
+    let mut found = false;
+    for _ in 0..100 {
+        let canister = runtime.create_canister(Some(0)).await.unwrap();
+        if canister.canister_id() == EXCHANGE_RATE_CANISTER_ID {
+            found = true;
+            break;
+        }
+    }
+    assert!(found);
+
+    // Step 2: Install code into the canister.
+
+    // Step 2.1: Construct init payload/argument.
+    let exchange_rate = ExchangeRate {
+        // The additional 7 zeros because `decimal` is set to 9 a little bit
+        // later, in metadata.
+        rate: 10_u64.pow(7) * price_of_icp_in_xdr_cents,
+
+        base_asset: Some(Asset {
+            symbol: "ICP".to_string(),
+            class: AssetClass::Cryptocurrency,
+        }),
+        quote_asset: Some(Asset {
+            symbol: "CXDR".to_string(),
+            class: AssetClass::FiatCurrency,
+        }),
+
+        // I believe these are realistic compared to what would be seen in
+        // production. FWIW, these same values are used in other tests.
+        metadata: Some(ExchangeRateMetadata {
+            decimals: 9,
+            base_asset_num_queried_sources: 7,
+            base_asset_num_received_rates: 5,
+            quote_asset_num_queried_sources: 10,
+            quote_asset_num_received_rates: 4,
+            standard_deviation: 0,
+            forex_timestamp: None,
+        }),
+    };
+    let init_payload = XrcMockInitPayload {
+        response: xrc_mock::Response::ExchangeRate(exchange_rate),
+    };
+
+    // Step 2.2: Actually install the WASM, and pass init_payload to it.
+    let mut mock_exchange_rate_canister = Canister::new(runtime, EXCHANGE_RATE_CANISTER_ID);
+    install_mock_exchange_rate_canister(&mut mock_exchange_rate_canister, init_payload).await;
+}
+
+/// Warning: This assumes that canisters with ID smaller than that of the
+/// Subnet Rental canister have all already been created.
+pub async fn create_and_install_mock_subnet_rental_canister(runtime: &'_ Runtime) -> Canister<'_> {
+    // Create canisters in a loop until we hit SUBNET_RENTAL_CANISTER_ID.
+    // This is a hack similar to the one in `create_and_install_mock_exchange_rate_canister`.
+    // See the comment there for more details.
+    for _ in 0..100 {
+        let mut canister = runtime.create_canister(Some(0)).await.unwrap();
+        if canister.canister_id() == SUBNET_RENTAL_CANISTER_ID {
+            install_universal_canister(&mut canister).await;
+            return canister;
+        }
+    }
+    panic!("Could not set up mock subnet rental canister");
+}
+
 /// Compiles the governance canister, builds it's initial payload and installs
 /// it
 pub async fn install_governance_canister(canister: &mut Canister<'_>, init_payload: Governance) {
-    let mut serialized = Vec::new();
-    init_payload
-        .encode(&mut serialized)
-        .expect("Couldn't serialize init payload.");
+    let serialized = Encode!(&init_payload).expect("Couldn't serialize init payload.");
     install_rust_canister(canister, "governance-canister", &["test"], Some(serialized)).await;
 }
 
@@ -291,7 +605,7 @@ pub async fn install_registry_canister(
     init_payload: RegistryCanisterInitPayload,
 ) {
     let encoded = Encode!(&init_payload).unwrap();
-    install_rust_canister(canister, "registry-canister", &[], Some(encoded)).await;
+    install_rust_canister(canister, "registry-canister", &["test"], Some(encoded)).await;
 }
 
 /// Creates and installs the registry canister.
@@ -325,24 +639,21 @@ pub async fn set_up_genesis_token_canister(
 }
 
 /// Compiles the ledger canister, builds it's initial payload and installs it
-pub async fn install_ledger_canister<'runtime, 'a>(
-    canister: &mut Canister<'runtime>,
-    args: LedgerCanisterInitPayload,
-) {
+pub async fn install_ledger_canister(canister: &mut Canister<'_>, args: LedgerCanisterInitPayload) {
     install_rust_canister(
         canister,
         "ledger-canister",
-        &["notify-method"],
+        &[],
         Some(CandidOne(args).into_bytes().unwrap()),
     )
     .await
 }
 
 /// Creates and installs the ledger canister.
-pub async fn set_up_ledger_canister<'runtime, 'a>(
-    runtime: &'runtime Runtime,
+pub async fn set_up_ledger_canister(
+    runtime: &Runtime,
     args: LedgerCanisterInitPayload,
-) -> Canister<'runtime> {
+) -> Canister<'_> {
     let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_ledger_canister(&mut canister, args).await;
     canister
@@ -371,7 +682,7 @@ pub async fn set_up_root_canister(
 /// installs it
 pub async fn install_cycles_minting_canister(
     canister: &mut Canister<'_>,
-    init_payload: CyclesCanisterInitPayload,
+    init_payload: Option<CyclesCanisterInitPayload>,
 ) {
     install_rust_canister(
         canister,
@@ -385,7 +696,7 @@ pub async fn install_cycles_minting_canister(
 /// Creates and installs the cycles minting canister.
 pub async fn set_up_cycles_minting_canister(
     runtime: &'_ Runtime,
-    init_payload: CyclesCanisterInitPayload,
+    init_payload: Option<CyclesCanisterInitPayload>,
 ) -> Canister<'_> {
     let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_cycles_minting_canister(&mut canister, init_payload).await;
@@ -398,7 +709,7 @@ pub async fn install_lifeline_canister(
     _init_payload: LifelineCanisterInitPayload,
 ) {
     // Use the env var if we have one, otherwise use the embedded binary.
-    Wasm::from_location_specified_by_env_var("lifeline", &[])
+    Wasm::from_location_specified_by_env_var("lifeline_canister", &[])
         .unwrap_or_else(|| Wasm::from_bytes(LIFELINE_CANISTER_WASM))
         .install_with_retries_onto_canister(
             canister,
@@ -429,15 +740,29 @@ pub async fn set_up_universal_canister(runtime: &'_ Runtime) -> Canister<'_> {
         .create_canister_max_cycles_with_retries()
         .await
         .unwrap();
-    Wasm::from_bytes(UNIVERSAL_CANISTER_WASM)
-        .install_with_retries_onto_canister(&mut canister, None, None)
+    install_universal_canister(&mut canister).await;
+    canister
+}
+
+/// Installs universal canister with specified cycle count
+pub async fn set_up_universal_canister_with_cycles(
+    runtime: &'_ Runtime,
+    cycles: u128,
+) -> Canister<'_> {
+    let mut canister = runtime.create_canister(Some(cycles)).await.unwrap();
+    install_universal_canister(&mut canister).await;
+    canister
+}
+
+async fn install_universal_canister(canister: &mut Canister<'_>) {
+    Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec())
+        .install_with_retries_onto_canister(canister, None, None)
         .await
         .unwrap();
     println!(
         "Installed {} with the universal canister",
         canister.canister_id(),
     );
-    canister
 }
 
 /// Compiles the sns_wasm canister, builds it's initial payload and installs it
@@ -447,6 +772,22 @@ pub async fn install_sns_wasm_canister(
 ) {
     let encoded = Encode!(&init_payload).unwrap();
     install_rust_canister(canister, "sns-wasm-canister", &[], Some(encoded)).await;
+}
+
+pub async fn install_node_rewards_canister(canister: &mut Canister<'_>) {
+    install_rust_canister(canister, "node-rewards-canister", &[], None).await;
+}
+
+pub async fn install_mock_exchange_rate_canister(
+    canister: &mut Canister<'_>,
+    init_payload: XrcMockInitPayload,
+) {
+    let init_payload = Encode!(&init_payload).unwrap();
+    install_rust_canister(canister, "xrc_mock", &[], Some(init_payload)).await;
+}
+
+pub async fn install_subnet_rental_canister(canister: &mut Canister<'_>) {
+    install_rust_canister(canister, "subnet-rental-canister", &[], None).await;
 }
 
 /// Creates and installs the sns_wasm canister.
@@ -463,15 +804,40 @@ pub async fn set_up_sns_wasm_canister(
     canister
 }
 
-/// Runs a local test on the nns subnetwork, so that the canister will be
-/// assigned the same ids as in prod.
-pub fn local_test_on_nns_subnet<Fut, Out, F>(run: F) -> Out
+/// Compiles the migration canister and installs it.
+pub async fn install_migration_canister(canister: &mut Canister<'_>) {
+    #[derive(CandidType, Deserialize, Default)]
+    struct MigrationCanisterInitArgs {
+        allowlist: Option<Vec<Principal>>,
+    }
+    install_rust_canister(
+        canister,
+        "migration-canister",
+        &[],
+        Some(Encode!(&MigrationCanisterInitArgs::default()).unwrap()),
+    )
+    .await;
+}
+
+/// Creates and installs the migration canister.
+pub async fn set_up_migration_canister(runtime: &'_ Runtime) -> Canister<'_> {
+    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
+    install_migration_canister(&mut canister).await;
+    canister
+}
+
+/// Runs a test in a StateMachine in a way that is (mostly) compatible with local_test_on_nns_subnet_with_mutations
+pub fn state_machine_test_on_nns_subnet<Fut, Out, F>(run: F) -> Out
 where
     Fut: Future<Output = Result<Out, String>>,
     F: FnOnce(Runtime) -> Fut + 'static,
 {
-    let (config, _tmpdir) = Config::temp_config();
-    local_test_with_config_e(config, SubnetConfig::default_system_subnet(), run)
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    // This is for easy conversion from existing tests, but nothing is actually async.
+    run(Runtime::StateMachine(state_machine))
+        .now_or_never()
+        .expect("Async call did not return from now_or_never")
+        .expect("state_machine_test_on_nns_subnet failed.")
 }
 
 /// Runs a local test on the nns subnetwork, so that the canister will be
@@ -490,12 +856,12 @@ where
     F: FnOnce(Runtime) -> Fut + 'static,
 {
     let (config, _tmpdir) = Config::temp_config();
-    local_test_with_config_with_mutations(config, mutations, run)
-        .expect("local_test_with_config_with_mutations failed")
+    local_test_with_config_with_mutations_on_system_subnet(config, mutations, run)
+        .expect("local_test_with_config_with_mutations_on_system_subnet failed")
 }
 
-/// Encapsulates different test scenarios, with diferent upgrade modes.
-#[derive(Clone, Copy, Eq, PartialEq)]
+/// Encapsulates different test scenarios, with different upgrade modes.
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum UpgradeTestingScenario {
     Never,
     Always,
@@ -509,241 +875,6 @@ pub async fn maybe_upgrade_to_self(canister: &mut Canister<'_>, scenario: Upgrad
     if UpgradeTestingScenario::Always == scenario {
         canister.upgrade_to_self_binary(Vec::new()).await.unwrap()
     }
-}
-
-/// Appends a few inert bytes to the provided Wasm. Results in a functionally
-/// identical binary.
-pub fn append_inert(wasm: Option<&Wasm>) -> Wasm {
-    let mut wasm = wasm.unwrap().clone().bytes();
-    // This sequence of bytes encodes an empty wasm custom section
-    // named "a". It is harmless to suffix any wasm with it, even multiple
-    // times.
-    wasm.append(&mut vec![0, 2, 1, 97]);
-    Wasm::from_bytes(wasm)
-}
-
-/// Upgrades the root canister via a proposal.
-pub async fn upgrade_root_canister_by_proposal(
-    governance: &Canister<'_>,
-    lifeline: &Canister<'_>,
-    wasm: Wasm,
-) {
-    let wasm = wasm.bytes();
-    let new_module_hash = &ic_crypto_sha::Sha256::hash(&wasm);
-
-    let proposal_id = submit_external_update_proposal_binary(
-        governance,
-        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
-        NeuronId(TEST_NEURON_1_ID),
-        NnsFunction::NnsRootUpgrade,
-        Encode!(&wasm, &Vec::<u8>::new(), &false).expect(
-            "Could not candid-serialize the argument tuple for the NnsRootUpgrade proposal.",
-        ),
-        "Upgrade Root Canister".to_string(),
-        "<proposal created by upgrade_root_canister_by_proposal>".to_string(),
-    )
-    .await;
-
-    assert_eq!(
-        wait_for_final_state(governance, proposal_id).await.status(),
-        ProposalStatus::Executed
-    );
-
-    let pending_proposals = get_pending_proposals(governance).await;
-    assert_eq!(pending_proposals.len(), 0);
-
-    loop {
-        let status: CanisterStatusResult = lifeline
-            .update_(
-                "canister_status",
-                candid_one,
-                CanisterIdRecord::from(ROOT_CANISTER_ID),
-            )
-            .await
-            .unwrap();
-        if status.module_hash.unwrap().as_slice() == new_module_hash && status.status == Running {
-            break;
-        }
-    }
-}
-
-/// Perform a change on a canister by upgrading it or
-/// reinstalling entirely, depending on the `how` argument.
-/// Argument `wasm` is ensured to have a different
-/// hash relative to the current binary.
-/// In argument `arg` additional arguments can be provided
-/// that serve as input to the upgrade hook or as init arguments
-/// to the fresh installation.
-///
-/// This is an internal method.
-async fn change_nns_canister_by_proposal(
-    how: CanisterInstallMode,
-    canister_id: CanisterId,
-    governance: &Canister<'_>,
-    root: &Canister<'_>,
-    stop_before_installing: bool,
-    wasm: Wasm,
-    arg: Option<Vec<u8>>,
-) {
-    let wasm = wasm.bytes();
-    let new_module_hash = &ic_crypto_sha::Sha256::hash(&wasm);
-
-    let status: CanisterStatusResult = root
-        .update_(
-            "canister_status",
-            candid_one,
-            CanisterIdRecord::from(canister_id),
-        )
-        .await
-        .unwrap();
-    let old_module_hash = status.module_hash.unwrap();
-    assert_ne!(old_module_hash.as_slice(), new_module_hash, "change_nns_canister_by_proposal: both module hashes prev, cur are the same {:?}, but they should be different for upgrade", old_module_hash);
-
-    let proposal = ChangeCanisterProposal::new(stop_before_installing, how, canister_id)
-        .with_memory_allocation(ic_nns_constants::memory_allocation_of(canister_id))
-        .with_wasm(wasm);
-    let proposal = if let Some(arg) = arg {
-        proposal.with_arg(arg)
-    } else {
-        proposal
-    };
-
-    // Submitting a proposal also implicitly records a vote from the proposer,
-    // which with TEST_NEURON_1 is enough to trigger execution.
-    submit_external_update_proposal(
-        governance,
-        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
-        NeuronId(TEST_NEURON_1_ID),
-        NnsFunction::NnsCanisterUpgrade,
-        proposal,
-        "Upgrade NNS Canister".to_string(),
-        "<proposal created by change_nns_canister_by_proposal>".to_string(),
-    )
-    .await;
-
-    // Wait 'till the hash matches and the canister is running again.
-    loop {
-        let status: CanisterStatusResult = root
-            .update_(
-                "canister_status",
-                candid_one,
-                CanisterIdRecord::from(canister_id),
-            )
-            .await
-            .unwrap();
-        if status.module_hash.unwrap().as_slice() == new_module_hash && status.status == Running {
-            break;
-        }
-    }
-}
-
-/// Upgrade the given root-controlled canister to the specified Wasm module.
-/// This should only be called in NNS integration tests, where the NNS
-/// canisters have their expected IDs.
-///
-/// This goes through MANY rounds of consensus, so expect it to be slow!
-///
-/// WARNING: this calls `execute_eligible_proposals` on the governance canister,
-/// so it may have side effects!
-pub async fn upgrade_nns_canister_by_proposal(
-    canister: &Canister<'_>,
-    governance: &Canister<'_>,
-    root: &Canister<'_>,
-    stop_before_installing: bool,
-    wasm: Wasm,
-) {
-    change_nns_canister_by_proposal(
-        CanisterInstallMode::Upgrade,
-        canister.canister_id(),
-        governance,
-        root,
-        stop_before_installing,
-        wasm,
-        None,
-    )
-    .await
-}
-
-/// Upgrades an nns canister via proposal, with an argument.
-pub async fn upgrade_nns_canister_with_arg_by_proposal(
-    canister: &Canister<'_>,
-    governance: &Canister<'_>,
-    root: &Canister<'_>,
-    wasm: Wasm,
-    arg: Vec<u8>,
-) {
-    change_nns_canister_by_proposal(
-        CanisterInstallMode::Upgrade,
-        canister.canister_id(),
-        governance,
-        root,
-        false,
-        wasm,
-        Some(arg),
-    )
-    .await
-}
-
-/// Propose and execute the fresh reinstallation of the canister. Wasm
-/// and initialisation arguments can be specified.
-/// This should only be called in NNS integration tests, where the NNS
-/// canisters have their expected IDs.
-///
-/// WARNING: this calls `execute_eligible_proposals` on the governance canister,
-/// so it may have side effects!
-pub async fn reinstall_nns_canister_by_proposal(
-    canister: &Canister<'_>,
-    governance: &Canister<'_>,
-    root: &Canister<'_>,
-    wasm: Wasm,
-    arg: Vec<u8>,
-) {
-    change_nns_canister_by_proposal(
-        CanisterInstallMode::Reinstall,
-        canister.canister_id(),
-        governance,
-        root,
-        true,
-        append_inert(Some(&wasm)),
-        Some(arg),
-    )
-    .await
-}
-
-/// Depending on the testing scenario, upgrade the given root-controlled
-/// canister to itself, or do nothing. This should only be called in NNS
-/// integration tests, where the NNS canisters have their expected IDs.
-///
-/// This goes through MANY rounds of consensus, so expect it to be slow!
-///
-/// WARNING: this calls `execute_eligible_proposals` on the Proposals canister,
-/// so it may have side effects!
-pub async fn maybe_upgrade_root_controlled_canister_to_self(
-    // nns_canisters is NOT passed by reference because of the canister to upgrade,
-    // for which we have a mutable borrow.
-    nns_canisters: NnsCanisters<'_>,
-    canister: &mut Canister<'_>,
-    stop_before_installing: bool,
-    scenario: UpgradeTestingScenario,
-) {
-    if UpgradeTestingScenario::Always != scenario {
-        return;
-    }
-
-    // Copy the wasm of the canister to upgrade. We'll need it to upgrade back to
-    // it. To observe that the upgrade happens, we need to make the binary different
-    // post-upgrade.
-    let wasm = append_inert(Some(canister.wasm().unwrap()));
-    let wasm_clone = wasm.clone().bytes();
-    upgrade_nns_canister_by_proposal(
-        canister,
-        &nns_canisters.governance,
-        &nns_canisters.root,
-        stop_before_installing,
-        wasm,
-    )
-    .await;
-    canister.set_wasm(wasm_clone);
 }
 
 const UNIVERSAL_CANISTER_YEAH_RESPONSE: &[u8] = b"It worked";
@@ -785,10 +916,7 @@ pub async fn forward_call_via_universal_canister(
     {
         UNIVERSAL_CANISTER_YEAH_RESPONSE => true,
         UNIVERSAL_CANISTER_NOPE_RESPONSE => false,
-        other => panic!(
-            "Unexpected response from the universal canister: {:?}",
-            other
-        ),
+        other => panic!("Unexpected response from the universal canister: {other:?}"),
     }
 }
 
@@ -852,7 +980,7 @@ pub async fn try_call_with_cycles_via_universal_canister(
                         .reject_message()
                         .reject(),
                 ),
-            ((cycles >> 64) as u64, cycles as u64),
+            Cycles::from(cycles),
         )
         .build();
     sender

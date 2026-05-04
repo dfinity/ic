@@ -1,0 +1,44 @@
+Subnet amug5-wmzps-orth4-td26p-ic6on-bvn7u-nc3up-xu66v-djtcx-oghso-2ae
+--------
+MANIFEST VERSION: V3
+FILE TABLE
+    idx     |    size    |                               hash                               |                         path                         
+------------+------------+------------------------------------------------------------------+------------------------------------------------------
+          0 |        500 | 8aa492a44efd0bffae55c88b2cbb7bc510277317932d946b49e8ff5dc47e71c0 | canister_states/00000000002000000101/canister.pbuf
+          1 |     508879 | 5384e46fc2ae2c5bfcea4f21158606f6ca5315b225c997089c65297abf11883a | canister_states/00000000002000000101/software.wasm
+          2 |          0 | 981305d7c0b2ace0f53fe822f4075278fa28511e8c34e70f37fd8425af659b36 | canister_states/00000000002000000101/stable_memory.bin
+          3 |    1118208 | 0ff33360f7349f41df7969eda9e51f063fa33f2e1bb902d7f257e11609b451c4 | canister_states/00000000002000000101/vmemory_0.bin
+          4 |         35 | 0b88bcb8088312567938f735fd09925955f6bbf35cc1b8d035237dbe39e3edf4 | split_from.pbuf
+          5 |       2767 | 499bb9305f44b8b00813af808d28009f10b169f814d70764dd62fc21f4d0d923 | system_metadata.pbuf
+CHUNK TABLE
+    idx     |  file_idx  |   offset   |    size    |                               hash                               
+------------+------------+------------+------------+------------------------------------------------------------------
+          0 |          0 |          0 |        500 | e912f21718a2b72cb3c3dead1461e0bff8b9b3e4790564dc666e16b3e1d990c1
+          1 |          1 |          0 |     508879 | d55d459a22845f86d6ba304cbc8ff40749d7f9d34892097b1d44f78d50739862
+          2 |          3 |          0 |    1048576 | de5005242d69024d356dd4d03d8a6879a2b8aadfff6e0f5f80900d45d363305e
+          3 |          3 |    1048576 |      69632 | 4723e3cff806357ae33a2fdd7f76b02991c9a32c649372254f9f7692b223cd47
+          4 |          4 |          0 |         35 | c7d058f79437148380c321f717b5de4130d268dcf910c553c8bee72ef720717e
+          5 |          5 |          0 |       2767 | 89c124994426fed4fece71c315c6cd35ad7f559b0d5e60d53590baeff1af25c6
+
+
+ROOT HASH: 18ede3b7ebd377bda19e406a41d3e1b6de1a626ae0b65afb3e2b6ef7f4ea4d46
+========
+
+Subnet 4heh6-kgou6-qsxov-psrhm-l3pi6-6cc45-c6oyl-pbayl-vayfm-hmxx2-vae
+--------
+MANIFEST VERSION: V3
+FILE TABLE
+    idx     |    size    |                               hash                               |        path        
+------------+------------+------------------------------------------------------------------+--------------------
+          0 |         35 | 0b88bcb8088312567938f735fd09925955f6bbf35cc1b8d035237dbe39e3edf4 | split_from.pbuf
+          1 |         67 | 175396b667f0a67db943c28a457183ae15c81a49a981034782df66baea883f07 | system_metadata.pbuf
+CHUNK TABLE
+    idx     |  file_idx  |   offset   |    size    |                               hash                               
+------------+------------+------------+------------+------------------------------------------------------------------
+          0 |          0 |          0 |         35 | c7d058f79437148380c321f717b5de4130d268dcf910c553c8bee72ef720717e
+          1 |          1 |          0 |         67 | 04384fc7ba4a6c5a8b863a99edb612567e072d4cf7f964d19f0d4f6ef0e4b922
+
+
+ROOT HASH: 88953b62a72559bfe1e1647793a61beb81ac6266081628b35133f0c55e0deb46
+========
+

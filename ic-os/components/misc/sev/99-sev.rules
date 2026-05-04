@@ -1,0 +1,2 @@
+KERNEL=="sev-guest", TAG+="systemd"
+KERNEL=="sev-guest", MODE="0644"

@@ -1,0 +1,12 @@
+[package]
+name = "ic-crypto-test-utils-root-of-trust"
+description = "Test utilities for providing the root of trust"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-types = { path = "../../../types/types" }
+mockall = { workspace = true }
+thiserror = { workspace = true }

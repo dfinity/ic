@@ -3,24 +3,44 @@ package registry.replica_version.v1;
 
 // Information about a Replica version
 message ReplicaVersionRecord {
-    reserved "binary_url";
-    reserved 1;
+  // The hex-formatted SHA-256 hash of the archive file served by 'release_package_urls'
+  string release_package_sha256_hex = 6;
 
-    reserved "sha256_hex";
-    reserved 2;
+  // The URLs against which a HTTP GET request will return a release package
+  // that corresponds to this version
+  repeated string release_package_urls = 7;
 
-    reserved "node_manager_binary_url";
-    reserved 3;
+  // The SEV-SNP measurements that belong to this release
+  GuestLaunchMeasurements guest_launch_measurements = 9;
 
-    reserved "node_manager_sha256_hex";
-    reserved 4;
+  reserved 1, 2, 3, 4, 5, 8;
+  reserved "binary_url";
+  reserved "sha256_hex";
+  reserved "node_manager_binary_url";
+  reserved "node_manager_sha256_hex";
+  reserved "release_package_url";
+  reserved "guest_launch_measurement_sha256_hex";
+}
 
-    // The URL against which a HTTP GET request will return a release package
-    // that corresponds to this version
-    string release_package_url = 5;
+message GuestLaunchMeasurements {
+  // A list of valid SEV-SNP measurements. One release can have multiple valid
+  // measurements, e.g. depending on the kernel command line used to launch the
+  // guest. Must be non-empty.
+  repeated GuestLaunchMeasurement guest_launch_measurements = 1;
+}
 
-    // The hex-formatted SHA-256 hash of the archive file served by 'release_package_url'
-    string release_package_sha256_hex = 6;
+message GuestLaunchMeasurement {
+  // SEV-SNP measurement (48 bytes)
+  bytes measurement = 1;
+  // Metadata about how the measurement was obtained
+  GuestLaunchMeasurementMetadata metadata = 2;
+}
+
+message GuestLaunchMeasurementMetadata {
+  // Kernel command line string used to launch the guest. This can be absent,
+  // and if present, can hold any value, including the empty string, up to 100
+  // KiB.
+  optional string kernel_cmdline = 1;
 }
 
 // A list of blessed versions of the IC Replica
@@ -28,6 +48,6 @@ message ReplicaVersionRecord {
 // New versions are added here after a vote has been accepted by token
 // holders. Subnetworks can then be upgraded to any of those version.
 message BlessedReplicaVersions {
-    // A list of version information ids.
-    repeated string blessed_version_ids = 1;
+  // A list of version information ids.
+  repeated string blessed_version_ids = 1;
 }

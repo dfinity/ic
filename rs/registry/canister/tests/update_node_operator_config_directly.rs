@@ -4,16 +4,16 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_KEYPAIR,
     TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_OWNER_PRINCIPAL,
 };
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::{
-    itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
+    itest_helpers::{set_up_registry_canister, state_machine_test_on_nns_subnet},
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::pb::v1::{
-    registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
+    RegistryAtomicMutateRequest, RegistryMutation, registry_mutation,
 };
+use prost::Message;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
@@ -21,7 +21,7 @@ use registry_canister::{
 
 #[test]
 fn node_provider_is_updated_on_receiving_the_request() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let node_operator_key = make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL);
         let node_operator_record = NodeOperatorRecord {
             node_operator_principal_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
@@ -32,12 +32,12 @@ fn node_provider_is_updated_on_receiving_the_request() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![RegistryMutation {
                         mutation_type: registry_mutation::Type::Insert as i32,
                         key: node_operator_key.as_bytes().to_vec(),
-                        value: encode_or_panic(&node_operator_record),
+                        value: node_operator_record.encode_to_vec(),
                     }],
                     preconditions: vec![],
                 })

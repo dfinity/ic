@@ -1,20 +1,24 @@
 [package]
 name = "ic-crypto-internal-basic-sig-rsa-pkcs1"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-rsa = "0.4.0"
+ic-crypto-sha2 = { path = "../../../../sha2" }
 ic-types = { path = "../../../../../types/types" }
-ic-crypto-sha = { path = "../../../../sha" }
-ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
-num-traits = { version= "0.2.9", default-features = false, features = ["libm"] }
-serde = { version = "1.0.99", features = [ "derive" ] }
-simple_asn1 = "0.6.1"
-num-bigint = "~0.4.3"
+num-bigint = { workspace = true }
+num-traits = { workspace = true }
+pkcs8 = { workspace = true }
+rsa = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
+simple_asn1 = { workspace = true }
 
 [dev-dependencies]
-hex = "0.4.2"
-serde = { version = "1.0.115", features = ["derive"] }
-serde_json = "1.0.54"
-wycheproof = "0.4.0"
+hex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+wycheproof = { version = "0.6", default-features = false, features = ["rsa_sig"] }

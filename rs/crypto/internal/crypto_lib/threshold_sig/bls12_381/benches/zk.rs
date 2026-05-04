@@ -4,29 +4,25 @@ use fs_ni_dkg::nizk_sharing::*;
 use ic_crypto_internal_bls12_381_type::*;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::forward_secure::CHUNK_SIZE;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use rand::{CryptoRng, Rng};
 
 fn setup_sharing_instance_and_witness() -> (SharingInstance, SharingWitness) {
     const NODE_COUNT: usize = 28;
     const THRESHOLD: usize = 19;
 
-    let mut rng = rand::thread_rng();
+    let rng = &mut reproducible_rng();
 
     let g1 = G1Affine::generator();
     let g2 = G2Affine::generator();
 
     let mut pk = Vec::with_capacity(NODE_COUNT);
     for _ in 0..NODE_COUNT {
-        pk.push(G1Affine::from(g1 * Scalar::random(&mut rng)))
+        pk.push(G1Affine::from(g1 * Scalar::random(rng)))
     }
 
-    let mut a = Vec::new();
-    let mut aa = Vec::new();
-
-    for _ in 0..THRESHOLD {
-        let apow = Scalar::random(&mut rng);
-        a.push(apow);
-        aa.push(G2Affine::from(g2 * apow));
-    }
+    let a = Scalar::batch_random(rng, THRESHOLD);
+    let aa = G2Affine::batch_mul(g2, &a);
 
     let mut s = Vec::with_capacity(NODE_COUNT);
     // s = [sum [a_k ^ i^k | (a_k, k) <- zip a [0..t-1]] | i <- [1..n]]
@@ -35,14 +31,14 @@ fn setup_sharing_instance_and_witness() -> (SharingInstance, SharingWitness) {
         let mut ipow = Scalar::one();
         let mut acc = Scalar::zero();
         for ak in &a {
-            acc += *ak * ipow;
-            ipow *= ibig;
+            acc += ak * &ipow;
+            ipow *= &ibig;
         }
         s.push(acc);
     }
 
-    let r = Scalar::random(&mut rng);
-    let rr = G1Affine::from(g1 * r);
+    let r = Scalar::random(rng);
+    let rr = G1Affine::from(g1 * &r);
 
     let cc: Vec<_> = pk
         .iter()
@@ -62,39 +58,34 @@ fn zk_sharing_proof(c: &mut Criterion) {
 
     let (instance, witness) = setup_sharing_instance_and_witness();
 
-    let mut rng = rand::thread_rng();
+    let rng = &mut reproducible_rng();
 
     group.bench_function("prove_sharing", |b| {
-        b.iter(|| prove_sharing(&instance, &witness, &mut rng))
+        b.iter(|| prove_sharing(&instance, &witness, rng))
     });
 
-    let proof = prove_sharing(&instance, &witness, &mut rng);
+    let proof = prove_sharing(&instance, &witness, rng);
 
     group.bench_function("verify_sharing", |b| {
         b.iter(|| verify_sharing(&instance, &proof))
     });
 }
 
-fn setup_chunking_instance_and_witness() -> (ChunkingInstance, ChunkingWitness) {
+fn setup_chunking_instance_and_witness<R: Rng + CryptoRng>(
+    rng: &mut R,
+) -> (ChunkingInstance, ChunkingWitness) {
     const NODE_COUNT: usize = 28;
-    const THRESHOLD: usize = 19;
-
-    let mut rng = rand::thread_rng();
+    const NUM_CHUNKS: usize = 16;
 
     let g1 = G1Affine::generator();
 
     let mut y = Vec::with_capacity(NODE_COUNT);
     for _ in 0..NODE_COUNT {
-        y.push(G1Affine::from(g1 * Scalar::random(&mut rng)));
+        y.push(G1Affine::from(g1 * Scalar::random(rng)));
     }
 
-    let mut r = Vec::with_capacity(THRESHOLD);
-    let mut rr = Vec::with_capacity(THRESHOLD);
-    for _ in 0..THRESHOLD {
-        let r_i = Scalar::random(&mut rng);
-        rr.push(G1Affine::from(g1 * r_i));
-        r.push(r_i);
-    }
+    let r = Scalar::batch_random(rng, NUM_CHUNKS);
+    let rr = G1Affine::batch_mul(g1, &r);
 
     let mut s = Vec::with_capacity(y.len());
     let mut chunk = Vec::new();
@@ -102,31 +93,31 @@ fn setup_chunking_instance_and_witness() -> (ChunkingInstance, ChunkingWitness) 
         let mut s_i = Vec::new();
         let mut chunk_i = Vec::new();
         for r_j in &r {
-            let s_ij = Scalar::random_within_range(&mut rng, CHUNK_SIZE as u64);
+            let s_ij = Scalar::random_within_range(rng, CHUNK_SIZE as u64);
             chunk_i.push(G1Projective::mul2(&y_i.into(), r_j, &g1.into(), &s_ij).to_affine());
             s_i.push(s_ij);
         }
-        s.push(s_i);
-        chunk.push(chunk_i);
+        s.push(s_i.try_into().expect("Unexpected size"));
+        chunk.push(chunk_i.try_into().expect("Unexpected size"));
     }
 
-    let instance = ChunkingInstance::new(y, chunk, rr);
-    let witness = ChunkingWitness::new(r, s);
+    let instance = ChunkingInstance::new(y, chunk, rr.try_into().expect("Unexpected size"));
+    let witness = ChunkingWitness::new(r.try_into().expect("Unexpected size"), s);
     (instance, witness)
 }
 
 fn zk_chunking_proof(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_nidkg_chunking_proof");
 
-    let (instance, witness) = setup_chunking_instance_and_witness();
+    let rng = &mut reproducible_rng();
 
-    let mut rng = rand::thread_rng();
+    let (instance, witness) = setup_chunking_instance_and_witness(rng);
 
     group.bench_function("prove_chunking", |b| {
-        b.iter(|| prove_chunking(&instance, &witness, &mut rng))
+        b.iter(|| prove_chunking(&instance, &witness, rng))
     });
 
-    let proof = prove_chunking(&instance, &witness, &mut rng);
+    let proof = prove_chunking(&instance, &witness, rng);
 
     group.bench_function("verify_chunking", |b| {
         b.iter(|| verify_chunking(&instance, &proof))

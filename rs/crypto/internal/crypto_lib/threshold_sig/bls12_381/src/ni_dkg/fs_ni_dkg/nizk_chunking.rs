@@ -1,13 +1,12 @@
 //! Proofs of correct chunking
 #![allow(clippy::needless_range_loop)]
 
-use crate::ni_dkg::fs_ni_dkg::forward_secure::CHUNK_SIZE;
+use crate::ni_dkg::fs_ni_dkg::forward_secure::{CHUNK_SIZE, NUM_CHUNKS};
 use crate::ni_dkg::fs_ni_dkg::random_oracles::{
-    random_oracle, random_oracle_to_scalar, HashedMap, UniqueHash,
+    HashedMap, UniqueHash, random_oracle, random_oracle_to_scalar,
 };
-use arrayvec::ArrayVec;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
-use ic_crypto_internal_types::curves::bls12_381::{Fr as FrBytes, G1 as G1Bytes};
+use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::ZKProofDec;
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -25,13 +24,13 @@ const SECURITY_LEVEL: usize = 256;
 pub const NUM_ZK_REPETITIONS: usize = 32;
 
 /// Defined as ceil(SECURITY_LEVEL/NUM_ZK_REPETITIONS)
-pub const CHALLENGE_BITS: usize = (SECURITY_LEVEL + NUM_ZK_REPETITIONS - 1) / NUM_ZK_REPETITIONS;
+pub const CHALLENGE_BITS: usize = SECURITY_LEVEL.div_ceil(NUM_ZK_REPETITIONS);
 
 // The number of bytes needed to represent a challenge (which must fit in a usize)
-pub const CHALLENGE_BYTES: usize = (CHALLENGE_BITS + 7) / 8;
+pub const CHALLENGE_BYTES: usize = CHALLENGE_BITS.div_ceil(8);
 const _: () = assert!(CHALLENGE_BYTES < std::mem::size_of::<usize>());
 
-// A bitmask specifyng the size of a challenge
+// A bitmask specifying the size of a challenge
 pub const CHALLENGE_MASK: usize = (1 << CHALLENGE_BITS) - 1;
 
 /// Instance for a chunking relation.
@@ -45,21 +44,31 @@ pub const CHALLENGE_MASK: usize = (1 << CHALLENGE_BITS) - 1;
 #[derive(Clone, Debug)]
 pub struct ChunkingInstance {
     g1_gen: G1Affine,
-    pub public_keys: Vec<G1Affine>,
-    //This should be Vec<[G1Affine; NUM_CHUNKS]>
-    pub ciphertext_chunks: Vec<Vec<G1Affine>>,
-    //This should have size NUM_CHUNKS
-    randomizers_r: Vec<G1Affine>,
+    public_keys: Vec<G1Affine>,
+    ciphertext_chunks: Vec<[G1Affine; NUM_CHUNKS]>,
+    randomizers_r: [G1Affine; NUM_CHUNKS],
 }
 
 impl ChunkingInstance {
+    pub fn public_keys(&self) -> &[G1Affine] {
+        &self.public_keys
+    }
+
+    pub fn ciphertext_chunks(&self) -> &[[G1Affine; NUM_CHUNKS]] {
+        &self.ciphertext_chunks
+    }
+
+    pub fn randomizers_r(&self) -> &[G1Affine; NUM_CHUNKS] {
+        &self.randomizers_r
+    }
+
     pub fn new(
         public_keys: Vec<G1Affine>,
-        ciphertext_chunks: Vec<Vec<G1Affine>>,
-        randomizers_r: Vec<G1Affine>,
+        ciphertext_chunks: Vec<[G1Affine; NUM_CHUNKS]>,
+        randomizers_r: [G1Affine; NUM_CHUNKS],
     ) -> Self {
         Self {
-            g1_gen: *G1Affine::generator(),
+            g1_gen: G1Affine::generator().clone(),
             public_keys,
             ciphertext_chunks,
             randomizers_r,
@@ -73,14 +82,12 @@ impl ChunkingInstance {
 ///   Witness = (scalar_r =[r_1..r_m], scalar_s=[s_{1,1}..s_{n,m}])
 #[derive(Clone, Debug)]
 pub struct ChunkingWitness {
-    //This should have size NUM_CHUNKS
-    scalars_r: Vec<Scalar>,
-    //This should be Vec<[Scalar; NUM_CHUNKS]>
-    scalars_s: Vec<Vec<Scalar>>,
+    scalars_r: [Scalar; NUM_CHUNKS],
+    scalars_s: Vec<[Scalar; NUM_CHUNKS]>,
 }
 
 impl ChunkingWitness {
-    pub fn new(scalars_r: Vec<Scalar>, scalars_s: Vec<Vec<Scalar>>) -> Self {
+    pub fn new(scalars_r: [Scalar; NUM_CHUNKS], scalars_s: Vec<[Scalar; NUM_CHUNKS]>) -> Self {
         Self {
             scalars_r,
             scalars_s,
@@ -89,7 +96,7 @@ impl ChunkingWitness {
 }
 
 /// Creating or verifying a proof of correct chunking failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ZkProofChunkingError {
     InvalidProof,
     InvalidInstance,
@@ -98,20 +105,20 @@ pub enum ZkProofChunkingError {
 /// Zero-knowledge proof of chunking.
 pub struct ProofChunking {
     y0: G1Affine,
-    bb: Vec<G1Affine>,
-    cc: Vec<G1Affine>,
+    bb: [G1Affine; NUM_ZK_REPETITIONS],
+    cc: [G1Affine; NUM_ZK_REPETITIONS],
     dd: Vec<G1Affine>,
     yy: G1Affine,
     z_r: Vec<Scalar>,
-    z_s: Vec<Scalar>,
+    z_s: [Scalar; NUM_ZK_REPETITIONS],
     z_beta: Scalar,
 }
 
 /// First move of the prover in the zero-knowledge proof of chunking.
 struct FirstMoveChunking {
     y0: G1Affine,
-    bb: Vec<G1Affine>,
-    cc: Vec<G1Affine>,
+    bb: [G1Affine; NUM_ZK_REPETITIONS],
+    cc: [G1Affine; NUM_ZK_REPETITIONS],
 }
 
 /// Prover's response to the first challenge of the verifier.
@@ -137,12 +144,12 @@ impl ChunkingInstance {
 }
 
 impl FirstMoveChunking {
-    fn from(y0: &G1Affine, bb: &[G1Affine], cc: &[G1Affine]) -> Self {
-        Self {
-            y0: y0.to_owned(),
-            bb: bb.to_owned(),
-            cc: cc.to_owned(),
-        }
+    fn from(
+        y0: G1Affine,
+        bb: [G1Affine; NUM_ZK_REPETITIONS],
+        cc: [G1Affine; NUM_ZK_REPETITIONS],
+    ) -> Self {
+        Self { y0, bb, cc }
     }
 }
 
@@ -197,72 +204,70 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
         .check_instance()
         .expect("The chunking proof instance is invalid");
 
-    let spec_m = instance.randomizers_r.len();
-    let spec_n = instance.public_keys.len();
+    let m = instance.randomizers_r.len();
+    let n = instance.public_keys.len();
 
-    let ss = spec_n * spec_m * ((CHUNK_SIZE as usize) - 1) * CHALLENGE_MASK;
+    let ss = n * m * (CHUNK_SIZE - 1) * CHALLENGE_MASK;
     let zz = 2 * NUM_ZK_REPETITIONS * ss;
     let range = zz - 1 + ss + 1;
     let zz_big = Scalar::from_usize(zz);
     let p_sub_s = Scalar::from_usize(ss).neg();
 
     // y0 <- getRandomG1
-    let y0 = G1Affine::hash(b"ic-crypto-nizk-chunking-proof-y0", &rng.gen::<[u8; 32]>());
+    let y0 = G1Affine::hash("ic-crypto-nizk-chunking-proof-y0", &rng.r#gen::<[u8; 32]>());
 
-    let g1 = instance.g1_gen;
+    let g1 = &instance.g1_gen;
 
-    // sigma = replicateM NUM_ZK_REPETITIONS $ getRandom [-S..Z-1]
-    // beta = replicateM NUM_ZK_REPETITIONS $ getRandom [0..p-1]
-    // bb = map (g1^) beta
-    // cc = zipWith (\x pk -> y0^x * g1^pk) beta sigma
-    let beta: Vec<Scalar> = (0..NUM_ZK_REPETITIONS)
-        .map(|_| Scalar::random(rng))
-        .collect();
-    let bb: Vec<G1Affine> = beta
-        .iter()
-        .map(|beta_i| G1Affine::from(g1 * beta_i))
-        .collect();
+    let y0_g1_tbl = G1Projective::compute_mul2_affine_tbl(&y0, g1);
+
+    let beta = Scalar::batch_random_array::<NUM_ZK_REPETITIONS, R>(rng);
+    let bb = g1.batch_mul_array(&beta);
 
     let (first_move, first_challenge, z_s) = loop {
-        let sigma: Vec<Scalar> = (0..NUM_ZK_REPETITIONS)
-            .map(|_| Scalar::random_within_range(rng, range as u64) + p_sub_s)
-            .collect();
-        let cc: Vec<G1Affine> = beta
-            .iter()
-            .zip(&sigma)
-            .map(|(beta_i, sigma_i)| {
-                G1Projective::mul2(&y0.into(), beta_i, &g1.into(), sigma_i).to_affine()
-            })
-            .collect();
+        let sigma = [(); NUM_ZK_REPETITIONS]
+            .map(|_| Scalar::random_within_range(rng, range as u64) + &p_sub_s);
 
-        let first_move = FirstMoveChunking::from(&y0, &bb, &cc);
+        let cc = G1Projective::batch_normalize_array(&y0_g1_tbl.mul2_array(&beta, &sigma));
+
+        let first_move = FirstMoveChunking::from(y0.clone(), bb.clone(), cc);
         // Verifier's challenge.
-        let first_challenge =
-            ChunksOracle::new(instance, &first_move).get_all_chunks(spec_n, spec_m);
+        let first_challenge = ChunksOracle::new(instance, &first_move).get_all_chunks(n, m);
 
         // z_s = [sum [e_ijk * s_ij | i <- [1..n], j <- [1..m]] + sigma_k | k <- [1..l]]
-        let z_s: Result<Vec<Scalar>, ()> = (0..NUM_ZK_REPETITIONS)
-            .map(|k| {
-                let mut acc = Scalar::zero();
-                first_challenge
-                    .iter()
-                    .zip(witness.scalars_s.iter())
-                    .for_each(|(e_i, s_i)| {
-                        e_i.iter().zip(s_i.iter()).for_each(|(e_ij, s_ij)| {
-                            acc += Scalar::from_usize(e_ij[k]) * s_ij;
-                        });
+
+        let iota: [usize; NUM_ZK_REPETITIONS] = std::array::from_fn(|i| i);
+
+        let z_s = iota.map(|k| {
+            let mut acc = Scalar::zero();
+            first_challenge
+                .iter()
+                .zip(witness.scalars_s.iter())
+                .for_each(|(e_i, s_i)| {
+                    e_i.iter().zip(s_i.iter()).for_each(|(e_ij, s_ij)| {
+                        acc += Scalar::from_usize(e_ij[k]) * s_ij;
                     });
-                acc += sigma[k];
+                });
+            acc += &sigma[k];
 
-                if acc > zz_big {
-                    Err(())
-                } else {
-                    Ok(acc)
-                }
-            })
-            .collect();
+            acc
+        });
 
-        if let Ok(z_s) = z_s {
+        // Now check if our z_s is valid. Our control flow reveals if we retry
+        // but in the event of a retry it should ideally not reveal *which* z_s
+        // caused us to retry, since that may reveal information about the witness.
+        //
+        // Perform the check by using ct_compare with zz_big. This function
+        // returns 1 if the zz_big is greater than its argument. If for any
+        // input it returns 0 or -1 (indicating z was == or > zz_big) then the
+        // sum will not match the overall length of z_s.
+
+        let zs_in_range = z_s
+            .iter()
+            .map(|z| zz_big.ct_compare(z) as isize)
+            .sum::<isize>() as usize
+            == NUM_ZK_REPETITIONS;
+
+        if zs_in_range {
             break (first_move, first_challenge, z_s);
         }
     };
@@ -270,26 +275,20 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
     // delta <- replicate (n + 1) getRandom
     // dd = map (g1^) delta
     // Y = product [y_i^delta_i | i <- [0..n]]
-    let mut delta = Vec::with_capacity(spec_n + 1);
-    let mut dd = Vec::with_capacity(spec_n + 1);
-    for _ in 0..spec_n + 1 {
-        let delta_i = Scalar::random(rng);
-        dd.push(G1Affine::from(g1 * delta_i));
-        delta.push(delta_i);
-    }
+    let delta = Scalar::batch_random(rng, n + 1);
+    let dd = g1.batch_mul(&delta);
 
     let yy = {
-        let y0_and_pk = [y0]
-            .iter()
-            .chain(&instance.public_keys)
-            .cloned()
-            .collect::<Vec<_>>();
-        G1Projective::muln_affine_vartime(&y0_and_pk, &delta).to_affine()
+        let y0_and_pk: Vec<_> = [&y0]
+            .into_iter()
+            .chain(instance.public_keys.iter())
+            .collect();
+        G1Projective::muln_affine_vartime_ref(&y0_and_pk, &delta).to_affine()
     };
 
     let second_move = SecondMoveChunking::from(&z_s, &dd, &yy);
 
-    // Second verifier's challege. Forth move in the protocol.
+    // Second verifier's challenge. Forth move in the protocol.
     // x = oracle(e, z_s, dd, yy)
     let second_challenge = chunking_proof_challenge_oracle(&first_challenge, &second_move);
 
@@ -304,14 +303,14 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
             xpow_e_ij.push(Scalar::muln_usize_vartime(&xpowers, &e_i[j]));
         }
 
-        let z_rk = delta[delta_idx] + Scalar::muln_vartime(&witness.scalars_r, &xpow_e_ij);
+        let z_rk = Scalar::muln_vartime(&witness.scalars_r, &xpow_e_ij) + &delta[delta_idx];
 
         z_r.push(z_rk);
 
         delta_idx += 1;
     }
 
-    let z_beta = delta[0] + Scalar::muln_vartime(&beta, &xpowers);
+    let z_beta = Scalar::muln_vartime(&beta, &xpowers) + &delta[0];
 
     ProofChunking {
         y0,
@@ -339,9 +338,9 @@ pub fn verify_chunking(
     require_eq("z_r", nizk.z_r.len(), num_receivers)?;
     require_eq("z_s", nizk.z_s.len(), NUM_ZK_REPETITIONS)?;
 
-    let spec_m = instance.randomizers_r.len();
-    let spec_n = instance.public_keys.len();
-    let ss = spec_n * spec_m * (CHUNK_SIZE as usize - 1) * CHALLENGE_MASK;
+    let m = instance.randomizers_r.len();
+    let n = instance.public_keys.len();
+    let ss = n * m * (CHUNK_SIZE - 1) * CHALLENGE_MASK;
     let zz = 2 * NUM_ZK_REPETITIONS * ss;
     let zz_big = Scalar::from_usize(zz);
 
@@ -351,89 +350,97 @@ pub fn verify_chunking(
         }
     }
 
-    let first_move = FirstMoveChunking::from(&nizk.y0, &nizk.bb, &nizk.cc);
+    let first_move = FirstMoveChunking::from(nizk.y0.clone(), nizk.bb.clone(), nizk.cc.clone());
     let second_move = SecondMoveChunking::from(&nizk.z_s, &nizk.dd, &nizk.yy);
     // e_{m,n,l} = oracle(instance, y_0, bb, cc)
-    let e = ChunksOracle::new(instance, &first_move).get_all_chunks(spec_n, spec_m);
+    let e = ChunksOracle::new(instance, &first_move).get_all_chunks(n, m);
 
     // x = oracle(e, z_s, dd, yy)
     let x = chunking_proof_challenge_oracle(&e, &second_move);
 
     let xpowers = Scalar::xpowers(&x, NUM_ZK_REPETITIONS);
-    let g1 = instance.g1_gen;
+    let g1 = &instance.g1_gen;
 
-    // Verify: all [product [R_j ^ sum [e_ijk * x^k | k <- [1..l]] | j <- [1..m]] *
-    // dd_i == g1 ^ z_r_i | i <- [1..n]]
-    let mut delta_idx = 0;
-    let mut verifies = true;
+    // TODO(CRP-2550) Verification of chunking proof could run in 3 threads
 
-    e.iter().zip(nizk.z_r.iter()).for_each(|(e_i, z_ri)| {
-        delta_idx += 1;
+    // Thread 1
+    {
+        /*
+        Verify lhs == rhs where
+        lhs = product [R_j ^ sum [e_ijk * x^k | k <- [1..l]] | j <- [1..m]] * dd_i
+        rhs = g1 ^ z_r_i | i <- [1..n]]
+         */
 
-        let e_ijk_polynomials: Vec<_> = e_i
-            .iter()
-            .map(|e_ij| Scalar::muln_usize_vartime(&xpowers, e_ij))
-            .collect();
+        let rhs = g1.batch_mul_vartime(&nizk.z_r);
 
-        let lhs = G1Projective::muln_affine_vartime(&instance.randomizers_r, &e_ijk_polynomials)
-            + nizk.dd[delta_idx];
+        let lhs = {
+            let mut lhs = Vec::with_capacity(e.len());
+            // TODO(CRP-2550) this loop can run in parallel
+            for (i, e_i) in e.iter().enumerate() {
+                let e_ijk_polynomials: Vec<_> = e_i
+                    .iter()
+                    .map(|e_ij| Scalar::muln_usize_vartime(&xpowers, e_ij))
+                    .collect();
 
-        let rhs = g1 * z_ri;
-        verifies = verifies && (lhs == rhs);
-    });
-    if !verifies {
-        return Err(ZkProofChunkingError::InvalidProof);
-    }
+                let rj_e_ijk =
+                    G1Projective::muln_affine_vartime(&instance.randomizers_r, &e_ijk_polynomials);
 
-    // Verify: product [bb_k ^ x^k | k <- [1..l]] * dd_0 == g1 ^ z_beta
-    let lhs = G1Projective::muln_affine_vartime(&nizk.bb, &xpowers) + nizk.dd[0];
-
-    let rhs = g1 * nizk.z_beta;
-    if lhs != rhs {
-        return Err(ZkProofChunkingError::InvalidProof);
-    }
-
-    // Verify: product [product [chunk_ij ^ e_ijk | i <- [1..n], j <- [1..m]] ^ x^k
-    // | k <- [1..l]] * product [cc_k ^ x^k | k <- [1..l]] * Y   = product
-    // [y_i^z_ri | i <- [1..n]] * y0^z_beta * g_1 ^ sum [z_sk * x^k | k <- [1..l]]
-
-    let cij_to_eijks: Vec<G1Projective> = (0..NUM_ZK_REPETITIONS)
-        .map(|k| {
-            let c_ij_s: Vec<_> = instance
-                .ciphertext_chunks
-                .iter()
-                .flatten()
-                .cloned()
-                .collect();
-            let e_ijk_s: Vec<_> = e
-                .iter()
-                .flatten()
-                .map(|e_ij| Scalar::from_usize(e_ij[k]))
-                .collect();
-            if c_ij_s.len() != spec_m * spec_n || e_ijk_s.len() != spec_m * spec_n {
-                return Err(ZkProofChunkingError::InvalidProof);
+                lhs.push(rj_e_ijk + &nizk.dd[i + 1]);
             }
+            G1Projective::batch_normalize(&lhs)
+        };
 
-            Ok(G1Projective::muln_affine_vartime(&c_ij_s, &e_ijk_s) + nizk.cc[k])
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-
-    let cij_to_eijks_terms = cij_to_eijks
-        .iter()
-        .cloned()
-        .zip(xpowers.clone())
-        .collect::<Vec<_>>();
-
-    let lhs = G1Projective::muln_vartime(&cij_to_eijks_terms) + nizk.yy;
-
-    let acc = Scalar::muln_vartime(&nizk.z_s, &xpowers);
-
-    let rhs = G1Projective::muln_affine_vartime(&instance.public_keys, &nizk.z_r)
-        + G1Projective::mul2(&nizk.y0.into(), &nizk.z_beta, &g1.into(), &acc);
-
-    if lhs != rhs {
-        return Err(ZkProofChunkingError::InvalidProof);
+        if lhs != rhs {
+            return Err(ZkProofChunkingError::InvalidProof);
+        }
     }
+
+    // Thread 2
+    {
+        // Verify: product [bb_k ^ x^k | k <- [1..l]] * dd_0 == g1 ^ z_beta
+        let lhs = G1Projective::muln_affine_vartime(&nizk.bb, &xpowers) + &nizk.dd[0];
+
+        let rhs = g1.mul_vartime(&nizk.z_beta);
+        if lhs != rhs {
+            return Err(ZkProofChunkingError::InvalidProof);
+        }
+    }
+
+    // Thread 3
+    {
+        // Verify: product [product [chunk_ij ^ e_ijk | i <- [1..n], j <- [1..m]] ^ x^k
+        // | k <- [1..l]] * product [cc_k ^ x^k | k <- [1..l]] * Y   = product
+        // [y_i^z_ri | i <- [1..n]] * y0^z_beta * g_1 ^ sum [z_sk * x^k | k <- [1..l]]
+
+        // TODO(CRP-2550) this loop can run in parallel
+        let cij_to_eijks: Vec<G1Projective> = (0..NUM_ZK_REPETITIONS)
+            .map(|k| {
+                let c_ij_s: Vec<_> = instance.ciphertext_chunks.iter().flatten().collect();
+                let e_ijk_s: Vec<_> = e
+                    .iter()
+                    .flatten()
+                    .map(|e_ij| Scalar::from_usize(e_ij[k]))
+                    .collect();
+                if c_ij_s.len() != m * n || e_ijk_s.len() != m * n {
+                    return Err(ZkProofChunkingError::InvalidProof);
+                }
+
+                Ok(G1Projective::muln_affine_vartime_ref(&c_ij_s, &e_ijk_s) + &nizk.cc[k])
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let lhs = G1Projective::muln_vartime(&cij_to_eijks[..], &xpowers[..]) + &nizk.yy;
+
+        let acc = Scalar::muln_vartime(&nizk.z_s, &xpowers);
+
+        let rhs = G1Projective::muln_affine_vartime(&instance.public_keys, &nizk.z_r)
+            + G1Projective::mul2_affine_vartime(&nizk.y0, &nizk.z_beta, g1, &acc);
+
+        if lhs != rhs {
+            return Err(ZkProofChunkingError::InvalidProof);
+        }
+    }
+
     Ok(())
 }
 
@@ -468,10 +475,10 @@ impl ChunksOracle {
             & (0..CHALLENGE_BYTES).fold(0, |state, _| (state << 8) | (self.getbyte() as usize))
     }
 
-    fn get_all_chunks(&mut self, spec_n: usize, spec_m: usize) -> Vec<Vec<Vec<usize>>> {
-        (0..spec_n)
+    fn get_all_chunks(&mut self, n: usize, m: usize) -> Vec<Vec<Vec<usize>>> {
+        (0..n)
             .map(|_| {
-                (0..spec_m)
+                (0..m)
                     .map(|_| (0..NUM_ZK_REPETITIONS).map(|_| self.get_chunk()).collect())
                     .collect()
             })
@@ -507,48 +514,16 @@ fn require_eq(
 }
 
 impl ProofChunking {
-    /// Serialises a chunking proof from the miracl-compatible form to the stanard
-    /// form.
-    ///
-    /// # Panics
-    /// This will panic if the miracl proof is malformed.  Given that the miracl
-    /// representation is created internally, such an error can only be caused by an
-    /// error in implementation.
+    /// Serialises a chunking proof from the internal form to the standard form
     pub fn serialize(&self) -> ZKProofDec {
         ZKProofDec {
             first_move_y0: self.y0.serialize_to::<G1Bytes>(),
-            first_move_b: self
-                .bb
-                .iter()
-                .map(|g1| g1.serialize_to::<G1Bytes>())
-                .collect::<ArrayVec<_>>()
-                .into_inner()
-                .expect("Wrong size of first_move_b==bb in chunking proof"),
-            first_move_c: self
-                .cc
-                .iter()
-                .map(|g1| g1.serialize_to::<G1Bytes>())
-                .collect::<ArrayVec<_>>()
-                .into_inner()
-                .expect("Wrong size of first_move_c==cc in chunking proof"),
-            second_move_d: self
-                .dd
-                .iter()
-                .map(|g1| g1.serialize_to::<G1Bytes>())
-                .collect(),
+            first_move_b: G1Affine::serialize_array_to::<G1Bytes, NUM_ZK_REPETITIONS>(&self.bb),
+            first_move_c: G1Affine::serialize_array_to::<G1Bytes, NUM_ZK_REPETITIONS>(&self.cc),
+            second_move_d: G1Affine::serialize_seq_to::<G1Bytes>(&self.dd),
             second_move_y: self.yy.serialize_to::<G1Bytes>(),
-            response_z_r: self
-                .z_r
-                .iter()
-                .map(|s| s.serialize_to::<FrBytes>())
-                .collect(),
-            response_z_s: self
-                .z_s
-                .iter()
-                .map(|s| s.serialize_to::<FrBytes>())
-                .collect::<ArrayVec<_>>()
-                .into_inner()
-                .expect("Wrong size of response_z_s==z_s in chunking proof"),
+            response_z_r: Scalar::serialize_seq_to::<FrBytes>(&self.z_r),
+            response_z_s: Scalar::serialize_array_to::<FrBytes, NUM_ZK_REPETITIONS>(&self.z_s),
             response_z_b: self.z_beta.serialize_to::<FrBytes>(),
         }
     }
@@ -556,33 +531,32 @@ impl ProofChunking {
     /// Parses a chunking proof from the standard form
     pub fn deserialize(proof: &ZKProofDec) -> Option<Self> {
         let y0 = G1Affine::deserialize(&proof.first_move_y0);
-        let bb = G1Affine::batch_deserialize(&proof.first_move_b[..]);
-        let cc = G1Affine::batch_deserialize(&proof.first_move_c[..]);
+        let bb = G1Affine::batch_deserialize_array(&proof.first_move_b);
+        let cc = G1Affine::batch_deserialize_array(&proof.first_move_c);
         let dd = G1Affine::batch_deserialize(&proof.second_move_d[..]);
         let yy = G1Affine::deserialize(proof.second_move_y.as_bytes());
         let z_r = Scalar::batch_deserialize(&proof.response_z_r);
-        let z_s = Scalar::batch_deserialize(&proof.response_z_s[..]);
+        let z_s = Scalar::batch_deserialize_array(&proof.response_z_s);
         let z_beta = Scalar::deserialize(proof.response_z_b.as_bytes());
 
-        if let (Ok(y0), Ok(bb), Ok(cc), Ok(dd), Ok(yy), Ok(z_r), Ok(z_s), Ok(z_beta)) =
-            (y0, bb, cc, dd, yy, z_r, z_s, z_beta)
-        {
-            if dd.len() != z_r.len() + 1 {
-                return None;
-            }
+        match (y0, bb, cc, dd, yy, z_r, z_s, z_beta) {
+            (Ok(y0), Ok(bb), Ok(cc), Ok(dd), Ok(yy), Ok(z_r), Ok(z_s), Ok(z_beta)) => {
+                if dd.len() != z_r.len() + 1 {
+                    return None;
+                }
 
-            Some(Self {
-                y0,
-                bb,
-                cc,
-                dd,
-                yy,
-                z_r,
-                z_s,
-                z_beta,
-            })
-        } else {
-            None
+                Some(Self {
+                    y0,
+                    bb,
+                    cc,
+                    dd,
+                    yy,
+                    z_r,
+                    z_s,
+                    z_beta,
+                })
+            }
+            _ => None,
         }
     }
 }

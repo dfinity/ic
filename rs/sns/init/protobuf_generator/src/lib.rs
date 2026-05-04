@@ -5,6 +5,8 @@ use std::path::Path;
 pub struct ProtoPaths<'a> {
     pub sns_init: &'a Path,
     pub base_types: &'a Path,
+    pub nervous_system: &'a Path,
+    pub sns_swap: &'a Path,
 }
 
 /// Build protos using prost_build.
@@ -17,6 +19,11 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.out_dir(out);
 
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
+    config.extern_path(
+        ".ic_nervous_system.pb.v1",
+        "::ic-nervous-system-proto::pb::v1",
+    );
+    config.extern_path(".ic_sns_swap.pb.v1", "::ic-sns-swap::pb::v1");
 
     // Add universally needed types to all definitions in this namespace
     config.type_attribute(
@@ -25,7 +32,15 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     );
 
     config
-        .compile_protos(&proto_files, &[proto.sns_init, proto.base_types])
+        .compile_protos(
+            &proto_files,
+            &[
+                proto.sns_init,
+                proto.base_types,
+                proto.nervous_system,
+                proto.sns_swap,
+            ],
+        )
         .unwrap();
 
     ic_utils_rustfmt::rustfmt(out).expect("failed to rustfmt protobufs");

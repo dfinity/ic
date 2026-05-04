@@ -8,9 +8,11 @@ use ic_interfaces_registry::{RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_nns_constants::NNS_CANISTER_WASMS;
 use ic_registry_local_store::{ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreReader};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
-use ic_registry_transport::{delete, upsert};
+use ic_registry_transport::{
+    delete,
+    pb::v1::{RegistryAtomicMutateRequest, RegistryMutation, registry_mutation},
+    upsert,
+};
 use ic_sys::utility_command::{UtilityCommand, UtilityCommandError};
 use std::path::Path;
 
@@ -83,12 +85,99 @@ pub fn read_initial_mutations_from_local_store_dir(
         .collect()
 }
 
+/// Given params to read a HSM, return a `Sender` that uses this HSM to sign
+/// requests.
+pub fn make_hsm_sender(hsm_slot: &str, key_id: &str, pin: &str) -> Sender {
+    // Set up the agent using an HSM, first perform a simple test for correctness of
+    // the PIN.
+    UtilityCommand::try_to_attach_hsm();
+    let res = UtilityCommand::new(
+        "pkcs11-tool".to_string(),
+        vec![
+            "--read-object",
+            "--slot",
+            hsm_slot,
+            "--type",
+            "pubkey",
+            "--id",
+            key_id,
+            "--pin",
+            pin,
+        ]
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>(),
+    )
+    .execute();
+
+    if let Err(UtilityCommandError::Failed(err, _status)) = res {
+        // The key id is not found.
+        if err.contains("object not found") {
+            panic!("Cannot find key with id {key_id}");
+        }
+        // The pin is incorrect.
+        if err.contains("CKR_PIN_INCORRECT") {
+            panic!("The PIN that was given is incorrect");
+        }
+    }
+
+    let pub_key = UtilityCommand::read_public_key(Some(hsm_slot), Some(key_id))
+        .execute()
+        .unwrap_or_else(|e| {
+            panic!("Error while trying to read the public key from the HSM. Underlying error: {e}")
+        });
+
+    let key_id = key_id.to_string();
+    let pin = pin.to_string();
+    let hsm_slot = hsm_slot.to_string();
+    let sender = Sender::from_external_hsm(
+        pub_key,
+        std::sync::Arc::new(move |input| {
+            UtilityCommand::sign_message(input.to_vec(), Some(&hsm_slot), Some(&pin), Some(&key_id))
+                .execute()
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+        }),
+    );
+    UtilityCommand::try_to_detach_hsm();
+
+    sender
+}
+
+/// Verifies that `wasm_dir` contains all of the wasm files corresponding to the
+/// NNS canisters, and sets an environment variable pointing at each of them so
+/// that they can be found later.
+pub fn set_up_env_vars_for_all_canisters<P: AsRef<Path>>(wasm_dir: P) {
+    'outer: for canister in &NNS_CANISTER_WASMS {
+        // Can either .wasm.gz or .wasm be found?
+        for ext in &[".wasm.gz", ".wasm"] {
+            let file_part = format!("{canister}{ext}");
+            let mut path = wasm_dir.as_ref().to_path_buf();
+            path.push(file_part.as_str());
+            if path.is_file() {
+                // Sets up the env var following the pattern expected by
+                // WASM::from_location_specified_by_env_var
+                // TODO: Audit that the environment access only happens in single-threaded code.
+                unsafe {
+                    std::env::set_var(Wasm::env_var_name(canister, &[]), path.to_str().unwrap())
+                };
+                continue 'outer;
+            }
+        }
+        // if no file is found, panic!
+        panic!(
+            "The provided --wasm-dir, '{}', must contain all NNS canister wasms, but there is {}.wasm.gz or {}.wasm",
+            wasm_dir.as_ref().display(),
+            canister,
+            canister
+        );
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use ic_base_types::RegistryVersion;
-    use ic_registry_local_store::Changelog;
-    use ic_registry_local_store::LocalStoreWriter;
+    use ic_registry_local_store::{Changelog, LocalStoreWriter};
     use tempfile::TempDir;
 
     /// In this test, a directory written by the `LocalStore::store` function is
@@ -145,88 +234,5 @@ mod test {
                 },
             ]
         );
-    }
-}
-
-/// Given params to read a HSM, return a `Sender` that uses this HSM to sign
-/// requests.
-pub fn make_hsm_sender(hsm_slot: &str, key_id: &str, pin: &str) -> Sender {
-    // Set up the agent using an HSM, first perform a simple test for correctness of
-    // the PIN.
-    UtilityCommand::try_to_attach_hsm();
-    let res = UtilityCommand::new(
-        "pkcs11-tool".to_string(),
-        vec![
-            "--read-object",
-            "--slot",
-            hsm_slot,
-            "--type",
-            "pubkey",
-            "--id",
-            key_id,
-            "--pin",
-            pin,
-        ]
-        .into_iter()
-        .map(|s| s.to_string())
-        .collect::<Vec<_>>(),
-    )
-    .execute();
-
-    if let Err(UtilityCommandError::Failed(err, _status)) = res {
-        // The key id is not found.
-        if err.contains("object not found") {
-            panic!("Cannot find key with id {}", key_id);
-        }
-        // The pin is incorrect.
-        if err.contains("CKR_PIN_INCORRECT") {
-            panic!("The PIN that was given is incorrect");
-        }
-    }
-
-    let pub_key = UtilityCommand::read_public_key(Some(hsm_slot), Some(key_id))
-        .execute()
-        .unwrap_or_else(|e| {
-            panic!(
-                "Error while trying to read the public key from the HSM. Underlying error: {}",
-                e
-            )
-        });
-
-    let key_id = key_id.to_string();
-    let pin = pin.to_string();
-    let hsm_slot = hsm_slot.to_string();
-    let sender = Sender::from_external_hsm(
-        pub_key,
-        std::sync::Arc::new(move |input| {
-            UtilityCommand::sign_message(input.to_vec(), Some(&hsm_slot), Some(&pin), Some(&key_id))
-                .execute()
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
-        }),
-    );
-    UtilityCommand::try_to_detach_hsm();
-
-    sender
-}
-
-/// Verifies that `wasm_dir` contains all of the wasm files corresponding to the
-/// NNS canisters, and sets an environment variable pointing at each of them so
-/// that they can be found later.
-pub fn set_up_env_vars_for_all_canisters<P: AsRef<Path>>(wasm_dir: P) {
-    for canister in &NNS_CANISTER_WASMS {
-        // Can it be found?
-        let file_part = format!("{}.wasm", canister);
-        let mut path = wasm_dir.as_ref().to_path_buf();
-        path.push(file_part.as_str());
-        assert!(
-            path.is_file(),
-            "The provided --wasm-dir, '{}', must contain all NNS canister wasms, but it misses {}",
-            wasm_dir.as_ref().display(),
-            file_part
-        );
-
-        // Sets up the env var following the pattern expected by
-        // WASM::from_location_specified_by_env_var
-        std::env::set_var(Wasm::env_var_name(canister, &[]), path.to_str().unwrap());
     }
 }

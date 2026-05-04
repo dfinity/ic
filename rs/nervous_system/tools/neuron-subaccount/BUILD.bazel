@@ -1,0 +1,19 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:private"])
+
+rust_binary(
+    name = "neuron-subaccount",
+    srcs = [
+        "src/main.rs",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nervous_system/common",
+        "//rs/nns/constants",
+        "//rs/types/base_types",
+        "@crate_index//:clap",
+        "@crate_index//:hex",
+    ],
+)

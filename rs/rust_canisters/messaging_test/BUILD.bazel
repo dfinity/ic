@@ -1,0 +1,59 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "messaging_test",
+    srcs = ["src/lib.rs"],
+    crate_name = "messaging_test",
+    version = "0.1.0",
+    deps = [
+        # Keep sorted
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
+    ],
+)
+
+rust_canister(
+    name = "messaging-test-canister",
+    srcs = ["src/main.rs"],
+    service_file = ":messaging-test-canister.did",
+    deps = [
+        # Keep sorted
+        ":messaging_test",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-cdk",
+    ],
+)
+
+rust_ic_test_suite(
+    name = "messaging_test_integration",
+    srcs = [
+        "tests/messaging_test.rs",
+    ],
+    data = [
+        "//rs/rust_canisters/messaging_test:messaging-test-canister",
+    ],
+    env = {
+        "MESSAGING_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/messaging_test:messaging-test-canister)",
+    },
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:test-strategy",
+    ],
+    deps = [
+        # Keep sorted.
+        ":messaging_test",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/messaging_test/utils",
+        "//rs/state_machine_tests",
+        "//rs/types/types",
+        "//rs/types/types_test_utils",
+        "@crate_index//:assert_matches",
+        "@crate_index//:proptest",
+    ],
+)

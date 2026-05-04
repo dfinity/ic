@@ -1,48 +1,71 @@
 use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
 use crate::key_id::KeyId;
-use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
+use crate::types::{CspPop, CspPublicKey, CspSignature};
 use crate::vault::api::{
     BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
-    CspMultiSignatureError, CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError,
-    CspThresholdSignatureKeygenError, CspTlsKeygenError, CspTlsSignError, IDkgProtocolCspVault,
-    MultiSignatureCspVault, NiDkgCspVault, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
-    ThresholdSignatureCspVault,
+    CspMultiSignatureError, CspMultiSignatureKeygenError, CspPublicKeyStoreError,
+    CspSecretKeyStoreContainsError, CspTlsKeygenError, CspTlsSignError,
+    IDkgCreateDealingVaultError, IDkgDealingInternalBytes, IDkgProtocolCspVault,
+    IDkgTranscriptInternalBytes, IDkgTranscriptOperationInternalBytes, MultiSignatureCspVault,
+    NiDkgCspVault, PksAndSksContainsErrors, PublicAndSecretKeyStoreCspVault,
+    PublicKeyStoreCspVault, PublicRandomSeedGenerator, PublicRandomSeedGeneratorError,
+    SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault, ThresholdSchnorrSigShareBytes,
+    ThresholdSchnorrSignerCspVault, ThresholdSignatureCspVault, ValidatePksAndSksError,
+    VetKdCspVault, VetKdEncryptedKeyShareCreationVaultError,
 };
-use crate::vault::remote_csp_vault::TarpcCspVaultClient;
-use crate::TlsHandshakeCspVault;
+use crate::vault::remote_csp_vault::ThresholdSchnorrCreateSigShareVaultError;
+use crate::vault::remote_csp_vault::codec::{Bincode, CspVaultObserver, ObservableCodec};
+use crate::vault::remote_csp_vault::{
+    FOUR_GIGA_BYTES, TarpcCspVaultClient, remote_vault_codec_builder, robust_unix_socket,
+};
+use crate::{ExternalPublicKeys, TlsHandshakeCspVault};
 use core::future::Future;
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
-    CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError, CspDkgLoadPrivateKeyError,
-    CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError,
+    CspDkgCreateDealingError, CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError,
+    CspDkgLoadPrivateKeyError, CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError,
 };
-use ic_crypto_internal_threshold_sig_ecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+    CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
+use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
-use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
+use ic_logger::{ReplicaLogger, debug, new_logger};
+use ic_protobuf::registry::crypto::v1::PublicKey;
+use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
-    IDkgRetainThresholdKeysError, IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
+    IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
+    IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
-use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealing;
+use ic_types::crypto::vetkd::{VetKdDerivationContext, VetKdEncryptedKeyShareContent};
+use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
+use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tarpc::serde_transport;
-use tarpc::tokio_serde::formats::Bincode;
-use tokio::net::UnixStream;
-use tokio_util::codec::length_delimited::LengthDelimitedCodec;
+use tracing::instrument;
+
+#[cfg(test)]
+use ic_config::logger::Config as LoggerConfig;
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
+use ic_crypto_node_key_validation::ValidNodePublicKeys;
+#[cfg(test)]
+use ic_logger::new_replica_logger_from_config;
+use ic_logger::replica_logger::no_op_logger;
+#[cfg(test)]
+use slog_async::AsyncGuard;
 
 /// An implementation of `CspVault`-trait that talks to a remote CSP vault.
 #[allow(dead_code)]
@@ -53,10 +76,14 @@ pub struct RemoteCspVault {
     // special, long timeout for RPC calls that should not really timeout.
     long_rpc_timeout: Duration,
     tokio_runtime_handle: tokio::runtime::Handle,
+    logger: ReplicaLogger,
+    metrics: Arc<CryptoMetrics>,
+    #[cfg(test)]
+    _logger_guard: Option<AsyncGuard>,
 }
 
 #[allow(dead_code)]
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum RemoteCspVaultError {
     TransportError {
         server_address: String,
@@ -82,37 +109,129 @@ impl RemoteCspVault {
     pub fn new(
         socket_path: &Path,
         rt_handle: tokio::runtime::Handle,
+        logger: ReplicaLogger,
+        metrics: Arc<CryptoMetrics>,
     ) -> Result<Self, RemoteCspVaultError> {
-        let conn = rt_handle
-            .block_on(UnixStream::connect(socket_path))
-            .map_err(|e| RemoteCspVaultError::TransportError {
-                server_address: socket_path.to_string_lossy().to_string(),
-                message: e.to_string(),
-            })?;
-        let codec_builder = LengthDelimitedCodec::builder();
-        let transport = serde_transport::new(codec_builder.new_framed(conn), Bincode::default());
-        let client = {
-            let _enter_guard = rt_handle.enter();
-            TarpcCspVaultClient::new(Default::default(), transport).spawn()
-        };
-        Ok(RemoteCspVault {
-            tarpc_csp_client: client,
+        RemoteCspVaultBuilder::new(socket_path.to_path_buf(), rt_handle)
+            .with_logger(logger)
+            .with_metrics(metrics)
+            .build()
+    }
+
+    pub fn builder(
+        socket_path: PathBuf,
+        rt_handle: tokio::runtime::Handle,
+    ) -> RemoteCspVaultBuilder {
+        RemoteCspVaultBuilder::new(socket_path, rt_handle)
+    }
+}
+
+pub struct RemoteCspVaultBuilder {
+    socket_path: PathBuf,
+    rt_handle: tokio::runtime::Handle,
+    max_frame_length: usize,
+    rpc_timeout: Duration,
+    long_rpc_timeout: Duration,
+    logger: ReplicaLogger,
+    metrics: Arc<CryptoMetrics>,
+    #[cfg(test)]
+    _logger_guard: Option<AsyncGuard>,
+}
+
+impl RemoteCspVaultBuilder {
+    pub fn new(socket_path: PathBuf, rt_handle: tokio::runtime::Handle) -> Self {
+        RemoteCspVaultBuilder {
+            socket_path,
+            rt_handle,
+            max_frame_length: FOUR_GIGA_BYTES,
             rpc_timeout: DEFAULT_RPC_TIMEOUT,
             long_rpc_timeout: LONG_RPC_TIMEOUT,
-            tokio_runtime_handle: rt_handle,
-        })
+            logger: no_op_logger(),
+            metrics: Arc::new(CryptoMetrics::none()),
+            #[cfg(test)]
+            _logger_guard: None,
+        }
     }
 
     #[cfg(test)]
-    pub fn new_for_test(
-        socket_path: &Path,
-        rt_handle: tokio::runtime::Handle,
-        timeout: Duration,
-    ) -> Result<Self, RemoteCspVaultError> {
-        let mut csp_vault = Self::new(socket_path, rt_handle)?;
-        csp_vault.rpc_timeout = timeout;
-        csp_vault.long_rpc_timeout = timeout;
-        Ok(csp_vault)
+    pub fn new_for_test(socket_path: PathBuf, rt_handle: tokio::runtime::Handle) -> Self {
+        let (logger, guard) = new_replica_logger_from_config(&LoggerConfig::default());
+        let mut builder = Self::new(socket_path, rt_handle);
+        builder.logger = logger;
+        builder._logger_guard = Some(guard);
+        builder
+    }
+
+    pub fn with_rpc_timeout(mut self, timeout: Duration) -> Self {
+        self.rpc_timeout = timeout;
+        self
+    }
+
+    pub fn with_long_rpc_timeout(mut self, timeout: Duration) -> Self {
+        self.long_rpc_timeout = timeout;
+        self
+    }
+
+    pub fn with_rpc_timeouts(mut self, timeout: Duration) -> Self {
+        self.rpc_timeout = timeout;
+        self.long_rpc_timeout = timeout;
+        self
+    }
+
+    pub fn with_max_frame_length(mut self, new_length: usize) -> Self {
+        self.max_frame_length = new_length;
+        self
+    }
+
+    pub fn with_logger(mut self, logger: ReplicaLogger) -> Self {
+        self.logger = logger;
+        self
+    }
+
+    pub fn with_metrics(mut self, metrics: Arc<CryptoMetrics>) -> Self {
+        self.metrics = metrics;
+        self
+    }
+
+    pub fn build(self) -> Result<RemoteCspVault, RemoteCspVaultError> {
+        let conn = self
+            .rt_handle
+            .block_on(robust_unix_socket::connect(
+                self.socket_path.clone(),
+                new_logger!(&self.logger),
+            ))
+            .map_err(|e| RemoteCspVaultError::TransportError {
+                server_address: self.socket_path.to_string_lossy().to_string(),
+                message: e.to_string(),
+            })?;
+        let transport = serde_transport::new(
+            remote_vault_codec_builder()
+                .max_frame_length(self.max_frame_length)
+                .new_framed(conn),
+            ObservableCodec::new(
+                Bincode::default(),
+                CspVaultObserver::new(new_logger!(&self.logger), Arc::clone(&self.metrics)),
+            ),
+        );
+        let client = {
+            let _enter_guard = self.rt_handle.enter();
+            TarpcCspVaultClient::new(Default::default(), transport).spawn()
+        };
+        debug!(self.logger, "Instantiated remote CSP vault client");
+        Ok(RemoteCspVault {
+            tarpc_csp_client: client,
+            rpc_timeout: self.rpc_timeout,
+            long_rpc_timeout: self.long_rpc_timeout,
+            tokio_runtime_handle: self.rt_handle,
+            logger: self.logger,
+            metrics: self.metrics,
+            #[cfg(test)]
+            _logger_guard: self._logger_guard,
+        })
+    }
+
+    pub fn build_expecting_ok(self) -> RemoteCspVault {
+        self.build().expect("error building RemoteCspVault")
     }
 }
 
@@ -126,153 +245,214 @@ fn context_with_timeout(timeout: Duration) -> tarpc::context::Context {
     context
 }
 
+fn error_to_string_with_sources(error: &dyn std::error::Error) -> String {
+    let mut error_string = error.to_string();
+    let mut maybe_source_err = error.source();
+    while let Some(source_err) = maybe_source_err {
+        error_string.push_str(". Caused by: ");
+        error_string.push_str(&source_err.to_string());
+        maybe_source_err = source_err.source();
+    }
+    error_string
+}
+
 // Note: the implementation of the traits below blocks when calling
 // the remote server, as the API used by `Csp` is synchronous, while the server
 // API is async.
 impl BasicSignatureCspVault for RemoteCspVault {
-    fn sign(
-        &self,
-        algorithm_id: AlgorithmId,
-        message: &[u8],
-        key_id: KeyId,
-    ) -> Result<CspSignature, CspBasicSignatureError> {
+    #[instrument(skip_all)]
+    fn sign(&self, message: Vec<u8>) -> Result<CspSignature, CspBasicSignatureError> {
         self.tokio_block_on(self.tarpc_csp_client.sign(
             context_with_timeout(self.rpc_timeout),
-            algorithm_id,
-            message.to_vec(),
-            key_id,
+            ByteBuf::from(message),
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspBasicSignatureError::InternalError {
-                internal_error: rpc_error.to_string(),
+            Err(CspBasicSignatureError::TransientInternalError {
+                internal_error: error_to_string_with_sources(&rpc_error),
             })
         })
     }
 
-    fn gen_key_pair(
-        &self,
-        algorithm_id: AlgorithmId,
-    ) -> Result<(KeyId, CspPublicKey), CspBasicSignatureKeygenError> {
+    #[instrument(skip_all)]
+    fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CspBasicSignatureKeygenError> {
         self.tokio_block_on(
             self.tarpc_csp_client
-                .gen_key_pair(context_with_timeout(self.rpc_timeout), algorithm_id),
+                .gen_node_signing_key_pair(context_with_timeout(self.rpc_timeout)),
         )
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspBasicSignatureKeygenError::InternalError {
-                internal_error: rpc_error.to_string(),
+            Err(CspBasicSignatureKeygenError::TransientInternalError {
+                internal_error: error_to_string_with_sources(&rpc_error),
             })
         })
     }
 }
 
 impl MultiSignatureCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
     fn multi_sign(
         &self,
         algorithm_id: AlgorithmId,
-        message: &[u8],
+        message: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspMultiSignatureError> {
         self.tokio_block_on(self.tarpc_csp_client.multi_sign(
             context_with_timeout(self.rpc_timeout),
             algorithm_id,
-            message.to_vec(),
+            ByteBuf::from(message),
             key_id,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspMultiSignatureError::InternalError {
-                internal_error: rpc_error.to_string(),
+            Err(CspMultiSignatureError::TransientInternalError {
+                internal_error: error_to_string_with_sources(&rpc_error),
             })
         })
     }
 
-    fn gen_key_pair_with_pop(
+    #[instrument(skip_all)]
+    fn gen_committee_signing_key_pair(
         &self,
-        algorithm_id: AlgorithmId,
-    ) -> Result<(KeyId, CspPublicKey, CspPop), CspMultiSignatureKeygenError> {
+    ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError> {
         self.tokio_block_on(
             self.tarpc_csp_client
-                .gen_key_pair_with_pop(context_with_timeout(self.rpc_timeout), algorithm_id),
+                .gen_committee_signing_key_pair(context_with_timeout(self.rpc_timeout)),
         )
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspMultiSignatureKeygenError::InternalError {
-                internal_error: rpc_error.to_string(),
+            Err(CspMultiSignatureKeygenError::TransientInternalError {
+                internal_error: error_to_string_with_sources(&rpc_error),
             })
         })
     }
 }
 
 impl ThresholdSignatureCspVault for RemoteCspVault {
-    fn threshold_keygen_for_test(
-        &self,
-        algorithm_id: AlgorithmId,
-        threshold: NumberOfNodes,
-        signatory_eligibility: &[bool],
-    ) -> Result<(CspPublicCoefficients, Vec<Option<KeyId>>), CspThresholdSignatureKeygenError> {
-        self.tokio_block_on(self.tarpc_csp_client.threshold_keygen_for_test(
-            context_with_timeout(self.rpc_timeout),
-            algorithm_id,
-            threshold,
-            signatory_eligibility.to_vec(),
-        ))
-        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspThresholdSignatureKeygenError::InternalError {
-                internal_error: rpc_error.to_string(),
-            })
-        })
-    }
-
+    #[instrument(skip_all)]
     fn threshold_sign(
         &self,
         algorithm_id: AlgorithmId,
-        message: &[u8],
+        message: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspThresholdSignError> {
         self.tokio_block_on(self.tarpc_csp_client.threshold_sign(
             context_with_timeout(self.rpc_timeout),
             algorithm_id,
-            message.to_vec(),
+            ByteBuf::from(message),
             key_id,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspThresholdSignError::InternalError {
-                internal_error: rpc_error.to_string(),
+            Err(CspThresholdSignError::TransientInternalError {
+                internal_error: error_to_string_with_sources(&rpc_error),
             })
         })
     }
 }
 
 impl SecretKeyStoreCspVault for RemoteCspVault {
-    fn sks_contains(&self, key_id: &KeyId) -> Result<bool, CspSecretKeyStoreContainsError> {
+    #[instrument(skip_all)]
+    fn sks_contains(&self, key_id: KeyId) -> Result<bool, CspSecretKeyStoreContainsError> {
         self.tokio_block_on(
             self.tarpc_csp_client
-                .sks_contains(context_with_timeout(self.rpc_timeout), *key_id),
+                .sks_contains(context_with_timeout(self.rpc_timeout), key_id),
         )
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspSecretKeyStoreContainsError::InternalError {
-                internal_error: rpc_error.to_string(),
+            Err(CspSecretKeyStoreContainsError::TransientInternalError {
+                internal_error: error_to_string_with_sources(&rpc_error),
             })
         })
     }
 }
 
-impl NiDkgCspVault for RemoteCspVault {
-    fn gen_forward_secure_key_pair(
-        &self,
-        node_id: NodeId,
-        algorithm_id: AlgorithmId,
-    ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), CspDkgCreateFsKeyError> {
-        self.tokio_block_on(self.tarpc_csp_client.gen_forward_secure_key_pair(
-            context_with_timeout(self.rpc_timeout),
-            node_id,
-            algorithm_id,
-        ))
+impl PublicKeyStoreCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
+    fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
+        self.tokio_block_on(
+            self.tarpc_csp_client
+                .current_node_public_keys(context_with_timeout(self.rpc_timeout)),
+        )
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspDkgCreateFsKeyError::InternalError(InternalError {
-                internal_error: rpc_error.to_string(),
-            }))
+            Err(CspPublicKeyStoreError::TransientInternalError(
+                error_to_string_with_sources(&rpc_error),
+            ))
         })
     }
 
+    #[instrument(skip_all)]
+    fn current_node_public_keys_with_timestamps(
+        &self,
+    ) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
+        self.tokio_block_on(
+            self.tarpc_csp_client
+                .current_node_public_keys_with_timestamps(context_with_timeout(self.rpc_timeout)),
+        )
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(CspPublicKeyStoreError::TransientInternalError(
+                error_to_string_with_sources(&rpc_error),
+            ))
+        })
+    }
+
+    #[instrument(skip_all)]
+    fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, CspPublicKeyStoreError> {
+        self.tokio_block_on(
+            self.tarpc_csp_client
+                .idkg_key_count(context_with_timeout(self.rpc_timeout)),
+        )
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(CspPublicKeyStoreError::TransientInternalError(
+                error_to_string_with_sources(&rpc_error),
+            ))
+        })
+    }
+}
+
+impl PublicAndSecretKeyStoreCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
+    fn pks_and_sks_contains(
+        &self,
+        external_public_keys: ExternalPublicKeys,
+    ) -> Result<(), PksAndSksContainsErrors> {
+        self.tokio_block_on(
+            self.tarpc_csp_client
+                .pks_and_sks_contains(context_with_timeout(self.rpc_timeout), external_public_keys),
+        )
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(PksAndSksContainsErrors::TransientInternalError(
+                error_to_string_with_sources(&rpc_error),
+            ))
+        })
+    }
+
+    #[instrument(skip_all)]
+    fn validate_pks_and_sks(&self) -> Result<ValidNodePublicKeys, ValidatePksAndSksError> {
+        self.tokio_block_on(
+            self.tarpc_csp_client
+                .validate_pks_and_sks(context_with_timeout(self.rpc_timeout)),
+        )
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(ValidatePksAndSksError::TransientInternalError(
+                error_to_string_with_sources(&rpc_error),
+            ))
+        })
+    }
+}
+
+impl NiDkgCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
+    fn gen_dealing_encryption_key_pair(
+        &self,
+        node_id: NodeId,
+    ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), CspDkgCreateFsKeyError> {
+        self.tokio_block_on(
+            self.tarpc_csp_client
+                .gen_dealing_encryption_key_pair(context_with_timeout(self.rpc_timeout), node_id),
+        )
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(CspDkgCreateFsKeyError::TransientInternalError(
+                error_to_string_with_sources(&rpc_error),
+            ))
+        })
+    }
+
+    #[instrument(skip_all)]
     fn update_forward_secure_epoch(
         &self,
         algorithm_id: AlgorithmId,
@@ -288,39 +468,67 @@ impl NiDkgCspVault for RemoteCspVault {
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(CspDkgUpdateFsEpochError::TransientInternalError(
                 InternalError {
-                    internal_error: rpc_error.to_string(),
+                    internal_error: error_to_string_with_sources(&rpc_error),
                 },
             ))
         })
     }
 
+    #[instrument(skip_all)]
     fn create_dealing(
         &self,
         algorithm_id: AlgorithmId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
-        receiver_keys: &BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
-        maybe_resharing_secret: Option<KeyId>,
-    ) -> Result<CspNiDkgDealing, CspDkgCreateReshareDealingError> {
+        receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
+    ) -> Result<CspNiDkgDealing, CspDkgCreateDealingError> {
         self.tokio_block_on(self.tarpc_csp_client.create_dealing(
             context_with_timeout(self.rpc_timeout),
             algorithm_id,
             dealer_index,
             threshold,
             epoch,
-            receiver_keys.clone(),
-            maybe_resharing_secret,
+            receiver_keys,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspDkgCreateReshareDealingError::InternalError(
+            Err(CspDkgCreateDealingError::TransientInternalError(
                 InternalError {
-                    internal_error: rpc_error.to_string(),
+                    internal_error: error_to_string_with_sources(&rpc_error),
                 },
             ))
         })
     }
 
+    #[instrument(skip_all)]
+    fn create_resharing_dealing(
+        &self,
+        algorithm_id: AlgorithmId,
+        dealer_index: NodeIndex,
+        threshold: NumberOfNodes,
+        epoch: Epoch,
+        receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
+        resharing_secret: KeyId,
+    ) -> Result<CspNiDkgDealing, CspDkgCreateReshareDealingError> {
+        self.tokio_block_on(self.tarpc_csp_client.create_resharing_dealing(
+            context_with_timeout(self.rpc_timeout),
+            algorithm_id,
+            dealer_index,
+            threshold,
+            epoch,
+            receiver_keys,
+            resharing_secret,
+        ))
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(CspDkgCreateReshareDealingError::TransientInternalError(
+                InternalError {
+                    internal_error: error_to_string_with_sources(&rpc_error),
+                },
+            ))
+        })
+    }
+
+    #[instrument(skip_all)]
     fn load_threshold_signing_key(
         &self,
         algorithm_id: AlgorithmId,
@@ -340,12 +548,13 @@ impl NiDkgCspVault for RemoteCspVault {
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(CspDkgLoadPrivateKeyError::TransientInternalError(
                 InternalError {
-                    internal_error: rpc_error.to_string(),
+                    internal_error: error_to_string_with_sources(&rpc_error),
                 },
             ))
         })
     }
 
+    #[instrument(skip_all)]
     fn retain_threshold_keys_if_present(
         &self,
         active_key_ids: BTreeSet<KeyId>,
@@ -357,7 +566,7 @@ impl NiDkgCspVault for RemoteCspVault {
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(CspDkgRetainThresholdKeysError::TransientInternalError(
                 InternalError {
-                    internal_error: rpc_error.to_string(),
+                    internal_error: error_to_string_with_sources(&rpc_error),
                 },
             ))
         })
@@ -365,37 +574,37 @@ impl NiDkgCspVault for RemoteCspVault {
 }
 
 impl TlsHandshakeCspVault for RemoteCspVault {
-    fn gen_tls_key_pair(
-        &self,
-        node: NodeId,
-        not_after: &str,
-    ) -> Result<(KeyId, TlsPublicKeyCert), CspTlsKeygenError> {
-        self.tokio_block_on(self.tarpc_csp_client.gen_tls_key_pair(
-            context_with_timeout(self.rpc_timeout),
-            node,
-            not_after.to_string(),
-        ))
+    #[instrument(skip_all)]
+    fn gen_tls_key_pair(&self, node: NodeId) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
+        self.tokio_block_on(
+            self.tarpc_csp_client
+                .gen_tls_key_pair(context_with_timeout(self.rpc_timeout), node),
+        )
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspTlsKeygenError::InternalError {
-                internal_error: rpc_error.to_string(),
+            Err(CspTlsKeygenError::TransientInternalError {
+                internal_error: error_to_string_with_sources(&rpc_error),
             })
         })
     }
 
-    fn tls_sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError> {
+    #[instrument(skip_all)]
+    fn tls_sign(&self, message: Vec<u8>, key_id: KeyId) -> Result<CspSignature, CspTlsSignError> {
         // Here we cannot call `block_on` directly but have to wrap it in
         // `block_in_place` because this method here is called via a Rustls
         // callback (via our implementation of the `rustls::sign::Signer`
-        // trait) from the async function `tokio_rustls::TlsAcceptor::accept`.
+        // trait) from the async function `tokio_rustls::TlsAcceptor::accept`,
+        // which in turn is called from our async function
+        // `TlsHandshake::perform_tls_server_handshake`.
+        #[allow(clippy::disallowed_methods)]
         tokio::task::block_in_place(|| {
             self.tokio_block_on(self.tarpc_csp_client.tls_sign(
                 context_with_timeout(self.rpc_timeout),
-                message.to_vec(),
-                *key_id,
+                ByteBuf::from(message),
+                key_id,
             ))
             .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-                Err(CspTlsSignError::InternalError {
-                    internal_error: rpc_error.to_string(),
+                Err(CspTlsSignError::TransientInternalError {
+                    internal_error: error_to_string_with_sources(&rpc_error),
                 })
             })
         })
@@ -403,186 +612,277 @@ impl TlsHandshakeCspVault for RemoteCspVault {
 }
 
 impl IDkgProtocolCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
     fn idkg_create_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        context_data: &[u8],
+        context_data: Vec<u8>,
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
-        receiver_keys: &[MEGaPublicKey],
-        transcript_operation: &IDkgTranscriptOperationInternal,
-    ) -> Result<IDkgDealingInternal, IDkgCreateDealingError> {
+        receiver_keys: Vec<PublicKey>,
+        transcript_operation: IDkgTranscriptOperationInternalBytes,
+    ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError> {
         self.tokio_block_on(self.tarpc_csp_client.idkg_create_dealing(
             context_with_timeout(self.rpc_timeout),
             algorithm_id,
-            context_data.to_vec(),
+            ByteBuf::from(context_data),
             dealer_index,
             reconstruction_threshold,
-            receiver_keys.to_vec(),
-            transcript_operation.clone(),
+            receiver_keys,
+            transcript_operation,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(IDkgCreateDealingError::InternalError {
-                internal_error: rpc_error.to_string(),
-            })
-        })
-    }
-
-    fn idkg_verify_dealing_private(
-        &self,
-        algorithm_id: AlgorithmId,
-        dealing: &IDkgDealingInternal,
-        dealer_index: NodeIndex,
-        receiver_index: NodeIndex,
-        receiver_key_id: KeyId,
-        context_data: &[u8],
-    ) -> Result<(), IDkgVerifyDealingPrivateError> {
-        self.tokio_block_on(self.tarpc_csp_client.idkg_verify_dealing_private(
-            context_with_timeout(self.rpc_timeout),
-            algorithm_id,
-            dealing.clone(),
-            dealer_index,
-            receiver_index,
-            receiver_key_id,
-            context_data.to_vec(),
-        ))
-        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(IDkgVerifyDealingPrivateError::CspVaultRpcError(
-                rpc_error.to_string(),
+            Err(IDkgCreateDealingVaultError::TransientInternalError(
+                error_to_string_with_sources(&rpc_error),
             ))
         })
     }
 
+    #[instrument(skip_all)]
+    fn idkg_verify_dealing_private(
+        &self,
+        algorithm_id: AlgorithmId,
+        dealing: IDkgDealingInternalBytes,
+        dealer_index: NodeIndex,
+        receiver_index: NodeIndex,
+        receiver_key_id: KeyId,
+        context_data: Vec<u8>,
+    ) -> Result<(), IDkgVerifyDealingPrivateError> {
+        self.tokio_block_on(self.tarpc_csp_client.idkg_verify_dealing_private(
+            context_with_timeout(self.rpc_timeout),
+            algorithm_id,
+            dealing,
+            dealer_index,
+            receiver_index,
+            receiver_key_id,
+            ByteBuf::from(context_data),
+        ))
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(IDkgVerifyDealingPrivateError::TransientInternalError {
+                internal_error: error_to_string_with_sources(&rpc_error),
+            })
+        })
+    }
+
+    #[instrument(skip_all)]
     fn idkg_load_transcript(
         &self,
-        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
-        context_data: &[u8],
+        algorithm_id: AlgorithmId,
+        dealings: BTreeMap<NodeIndex, IDkgDealingInternalBytes>,
+        context_data: Vec<u8>,
         receiver_index: NodeIndex,
-        key_id: &KeyId,
-        transcript: &IDkgTranscriptInternal,
+        key_id: KeyId,
+        transcript: IDkgTranscriptInternalBytes,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         self.tokio_block_on(self.tarpc_csp_client.idkg_load_transcript(
             context_with_timeout(self.rpc_timeout),
-            dealings.clone(),
-            context_data.to_vec(),
+            algorithm_id,
+            dealings,
+            ByteBuf::from(context_data),
             receiver_index,
-            *key_id,
-            transcript.clone(),
+            key_id,
+            transcript,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(IDkgLoadTranscriptError::InternalError {
-                internal_error: rpc_error.to_string(),
+            Err(IDkgLoadTranscriptError::TransientInternalError {
+                internal_error: error_to_string_with_sources(&rpc_error),
             })
         })
     }
 
+    #[instrument(skip_all)]
     fn idkg_load_transcript_with_openings(
         &self,
-        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
-        openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
-        context_data: &[u8],
+        alg: AlgorithmId,
+        dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+        openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
+        context_data: Vec<u8>,
         receiver_index: NodeIndex,
-        key_id: &KeyId,
-        transcript: &IDkgTranscriptInternal,
+        key_id: KeyId,
+        transcript: IDkgTranscriptInternalBytes,
     ) -> Result<(), IDkgLoadTranscriptError> {
         self.tokio_block_on(self.tarpc_csp_client.idkg_load_transcript_with_openings(
             context_with_timeout(self.rpc_timeout),
-            dealings.clone(),
-            openings.clone(),
-            context_data.to_vec(),
+            alg,
+            dealings,
+            openings,
+            ByteBuf::from(context_data),
             receiver_index,
-            *key_id,
-            transcript.clone(),
+            key_id,
+            transcript,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(IDkgLoadTranscriptError::InternalError {
-                internal_error: rpc_error.to_string(),
+            Err(IDkgLoadTranscriptError::TransientInternalError {
+                internal_error: error_to_string_with_sources(&rpc_error),
             })
         })
     }
 
-    fn idkg_retain_threshold_keys_if_present(
+    #[instrument(skip_all)]
+    fn idkg_retain_active_keys(
         &self,
         active_key_ids: BTreeSet<KeyId>,
-    ) -> Result<(), IDkgRetainThresholdKeysError> {
-        self.tokio_block_on(self.tarpc_csp_client.idkg_retain_threshold_keys_if_present(
+        oldest_public_key: MEGaPublicKey,
+    ) -> Result<(), IDkgRetainKeysError> {
+        self.tokio_block_on(self.tarpc_csp_client.idkg_retain_active_keys(
             context_with_timeout(self.rpc_timeout),
             active_key_ids,
+            oldest_public_key,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(IDkgRetainThresholdKeysError::InternalError {
-                internal_error: rpc_error.to_string(),
+            Err(IDkgRetainKeysError::TransientInternalError {
+                internal_error: error_to_string_with_sources(&rpc_error),
             })
         })
     }
 
-    fn idkg_gen_mega_key_pair(
-        &self,
-        algorithm_id: AlgorithmId,
-    ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
+    #[instrument(skip_all)]
+    fn idkg_gen_dealing_encryption_key_pair(&self) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
         self.tokio_block_on(
             self.tarpc_csp_client
-                .idkg_gen_mega_key_pair(context_with_timeout(self.rpc_timeout), algorithm_id),
+                .idkg_gen_dealing_encryption_key_pair(context_with_timeout(self.rpc_timeout)),
         )
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspCreateMEGaKeyError::CspServerError {
-                internal_error: rpc_error.to_string(),
+            Err(CspCreateMEGaKeyError::TransientInternalError {
+                internal_error: error_to_string_with_sources(&rpc_error),
             })
         })
     }
 
+    #[instrument(skip_all)]
     fn idkg_open_dealing(
         &self,
-        dealing: IDkgDealingInternal,
+        alg: AlgorithmId,
+        dealing: BatchSignedIDkgDealing,
         dealer_index: NodeIndex,
-        context_data: &[u8],
+        context_data: Vec<u8>,
         opener_index: NodeIndex,
-        opener_key_id: &KeyId,
+        opener_key_id: KeyId,
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError> {
         self.tokio_block_on(self.tarpc_csp_client.idkg_open_dealing(
             context_with_timeout(self.rpc_timeout),
+            alg,
             dealing,
             dealer_index,
-            context_data.to_vec(),
+            ByteBuf::from(context_data),
             opener_index,
-            *opener_key_id,
+            opener_key_id,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(IDkgOpenTranscriptError::InternalError {
-                internal_error: rpc_error.to_string(),
+            Err(IDkgOpenTranscriptError::TransientInternalError {
+                internal_error: error_to_string_with_sources(&rpc_error),
             })
         })
     }
 }
 
 impl ThresholdEcdsaSignerCspVault for RemoteCspVault {
-    fn ecdsa_sign_share(
+    #[instrument(skip_all)]
+    #[inline]
+    fn create_ecdsa_sig_share(
         &self,
-        derivation_path: &ExtendedDerivationPath,
-        hashed_message: &[u8],
-        nonce: &Randomness,
-        key: &IDkgTranscriptInternal,
-        kappa_unmasked: &IDkgTranscriptInternal,
-        lambda_masked: &IDkgTranscriptInternal,
-        kappa_times_lambda: &IDkgTranscriptInternal,
-        key_times_lambda: &IDkgTranscriptInternal,
+        derivation_path: ExtendedDerivationPath,
+        hashed_message: Vec<u8>,
+        nonce: Randomness,
+        key_raw: IDkgTranscriptInternalBytes,
+        kappa_unmasked_raw: IDkgTranscriptInternalBytes,
+        lambda_masked_raw: IDkgTranscriptInternalBytes,
+        kappa_times_lambda_raw: IDkgTranscriptInternalBytes,
+        key_times_lambda_raw: IDkgTranscriptInternalBytes,
         algorithm_id: AlgorithmId,
-    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
-        self.tokio_block_on(self.tarpc_csp_client.ecdsa_sign_share(
+    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaCreateSigShareError> {
+        self.tokio_block_on(self.tarpc_csp_client.create_ecdsa_sig_share(
             context_with_timeout(self.rpc_timeout),
-            derivation_path.clone(),
-            hashed_message.to_vec(),
-            *nonce,
-            key.clone(),
-            kappa_unmasked.clone(),
-            lambda_masked.clone(),
-            kappa_times_lambda.clone(),
-            key_times_lambda.clone(),
+            derivation_path,
+            ByteBuf::from(hashed_message),
+            nonce,
+            key_raw,
+            kappa_unmasked_raw,
+            lambda_masked_raw,
+            kappa_times_lambda_raw,
+            key_times_lambda_raw,
             algorithm_id,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(ThresholdEcdsaSignShareError::InternalError {
-                internal_error: rpc_error.to_string(),
+            Err(ThresholdEcdsaCreateSigShareError::TransientInternalError {
+                internal_error: error_to_string_with_sources(&rpc_error),
+            })
+        })
+    }
+}
+
+impl ThresholdSchnorrSignerCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
+    #[inline]
+    fn create_schnorr_sig_share(
+        &self,
+        derivation_path: ExtendedDerivationPath,
+        message: Vec<u8>,
+        taproot_tree_root: Option<Vec<u8>>,
+        nonce: Randomness,
+        key_raw: IDkgTranscriptInternalBytes,
+        presig_raw: IDkgTranscriptInternalBytes,
+        algorithm_id: AlgorithmId,
+    ) -> Result<ThresholdSchnorrSigShareBytes, ThresholdSchnorrCreateSigShareVaultError> {
+        self.tokio_block_on(self.tarpc_csp_client.create_schnorr_sig_share(
+            context_with_timeout(self.rpc_timeout),
+            derivation_path,
+            ByteBuf::from(message),
+            taproot_tree_root.map(ByteBuf::from),
+            nonce,
+            key_raw,
+            presig_raw,
+            algorithm_id,
+        ))
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(
+                ThresholdSchnorrCreateSigShareVaultError::TransientInternalError(
+                    error_to_string_with_sources(&rpc_error),
+                ),
+            )
+        })
+    }
+}
+
+impl VetKdCspVault for RemoteCspVault {
+    #[instrument(skip_all)]
+    #[inline]
+    fn create_encrypted_vetkd_key_share(
+        &self,
+        key_id: KeyId,
+        master_public_key: Vec<u8>,
+        transport_public_key: Vec<u8>,
+        context: VetKdDerivationContext,
+        input: Vec<u8>,
+    ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError> {
+        self.tokio_block_on(self.tarpc_csp_client.create_encrypted_vetkd_key_share(
+            context_with_timeout(self.rpc_timeout),
+            key_id,
+            ByteBuf::from(master_public_key),
+            ByteBuf::from(transport_public_key),
+            context,
+            ByteBuf::from(input),
+        ))
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(
+                VetKdEncryptedKeyShareCreationVaultError::TransientInternalError(
+                    error_to_string_with_sources(&rpc_error),
+                ),
+            )
+        })
+    }
+}
+
+impl PublicRandomSeedGenerator for RemoteCspVault {
+    #[instrument(skip_all)]
+    fn new_public_seed(&self) -> Result<Seed, PublicRandomSeedGeneratorError> {
+        self.tokio_block_on(
+            self.tarpc_csp_client
+                .new_public_seed(context_with_timeout(self.rpc_timeout)),
+        )
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(PublicRandomSeedGeneratorError::TransientInternalError {
+                internal_error: error_to_string_with_sources(&rpc_error),
             })
         })
     }

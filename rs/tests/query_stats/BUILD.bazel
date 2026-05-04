@@ -1,0 +1,56 @@
+load("//rs/tests:common.bzl", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+system_test(
+    name = "query_stats_basic",
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/query_stats/lib",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test(
+    name = "query_stats_below_threshold",
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/query_stats/lib",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test(
+    name = "query_stats_above_threshold",
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/query_stats/lib",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test(
+    name = "query_stats_https_outcalls",
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/query_stats/lib",
+        "@crate_index//:anyhow",
+    ],
+)

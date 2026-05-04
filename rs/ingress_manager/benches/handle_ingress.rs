@@ -13,44 +13,45 @@
 //! We vary the rate of unvalidated ingress coming into the unvalidated pool
 //! between 100/s and 1000/s, and each message has a 100 bytes payload.
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_constants::MAX_INGRESS_TTL;
-use ic_ingress_manager::IngressManager;
+use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
+use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifact, ingress_manager::IngressHandler,
-    ingress_pool::MutableIngressPool, time_source::TimeSource,
+    p2p::consensus::{MutablePool, PoolMutationsProducer, UnvalidatedArtifact},
+    time_source::TimeSource,
 };
+use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::Labeled;
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_limits::MAX_INGRESS_TTL;
+use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_metrics::MetricsRegistry;
-use ic_registry_client::client::RegistryClientImpl;
+use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{BitcoinState, CanisterQueues, ReplicatedState, SystemMetadata};
-use ic_test_utilities::{
-    consensus::MockConsensusCache,
-    crypto::temp_crypto_component_with_fake_registry,
-    cycles_account_manager::CyclesAccountManagerBuilder,
-    history::MockIngressHistory,
-    mock_time,
-    state::ReplicatedStateBuilder,
-    state_manager::MockStateManager,
-    types::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
-    types::messages::SignedIngressBuilder,
-    FastForwardTimeSource,
-};
+use ic_replicated_state::{CanisterQueues, RefundPool, ReplicatedState, SystemMetadata};
+use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_registry::test_subnet_record;
+use ic_test_utilities_state::{MockIngressHistory, ReplicatedStateBuilder};
+use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::{
+    ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
+    messages::SignedIngressBuilder,
+};
 use ic_types::{
+    Height, RegistryVersion, SubnetId, Time,
+    batch::RawQueryStats,
     ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::{MessageId, SignedIngress},
-    Height, RegistryVersion, SubnetId, Time,
+    time::UNIX_EPOCH,
 };
-use rand::{seq::SliceRandom, Rng};
+use pprof::criterion::{Output, PProfProfiler};
+use rand::{Rng, seq::SliceRandom};
 use std::collections::{BTreeMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
@@ -63,6 +64,8 @@ const MAX_INGRESS_COUNT_PER_PAYLOAD: usize = 1000;
 
 /// Block time
 const BLOCK_TIME: Duration = Duration::from_secs(2);
+
+const VALIDATOR_NODE_ID: u64 = 42;
 
 type Histories = Arc<RwLock<Vec<Arc<(Time, HashSet<MessageId>)>>>>;
 
@@ -87,7 +90,7 @@ impl SimulatedIngressHistory {
                         IngressStatus::Known {
                             receiver: canister_test_id(0).get(),
                             user_id: user_test_id(0),
-                            time: mock_time(),
+                            time: UNIX_EPOCH,
                             state: IngressState::Completed(ic_types::ingress::WasmResult::Reply(
                                 vec![],
                             )),
@@ -130,13 +133,13 @@ impl SimulatedIngressHistory {
     fn set_history(&self, messages: BTreeMap<Time, MessageId>) {
         let mut rng = rand::thread_rng();
         let start_time = self.time_source.get_relative_time();
-        let end_time = *messages.keys().rev().next().unwrap();
+        let end_time = *messages.keys().next_back().unwrap();
         let mut histories = vec![];
         let mut time = start_time + Duration::from_secs(2);
         let set_limit = MAX_INGRESS_COUNT_PER_PAYLOAD * (MAX_INGRESS_TTL.as_secs() as usize) / 2;
         while time < end_time {
             let min_time = if start_time + MAX_INGRESS_TTL < time {
-                time - MAX_INGRESS_TTL
+                time.saturating_sub(MAX_INGRESS_TTL)
             } else {
                 start_time
             };
@@ -154,7 +157,7 @@ impl SimulatedIngressHistory {
 }
 
 /// Helper to run a single test with dependency setup.
-fn run_test<T>(_test_name: &str, test: T)
+fn run_test<T>(test: T)
 where
     T: FnOnce(
         Arc<FastForwardTimeSource>,
@@ -164,13 +167,11 @@ where
         &mut IngressManager,
     ),
 {
-    ic_test_utilities::with_test_replica_logger(|log| {
+    ic_test_utilities_logger::with_test_replica_logger(|log| {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             // Set initial time to non-zero
-            time_source
-                .set_time(mock_time() + Duration::from_secs(1))
-                .unwrap();
+            time_source.advance_time(Duration::from_secs(1));
             let (history, ingress_hist_reader) = SimulatedIngressHistory::new(time_source.clone());
             let history = Arc::new(history);
             let history_cl = history.clone();
@@ -188,45 +189,45 @@ where
                         BTreeMap::new(),
                         metadata,
                         CanisterQueues::default(),
-                        Vec::new(),
-                        BitcoinState::default(),
+                        RefundPool::default(),
+                        RawQueryStats::default(),
                     )),
                 )
             });
 
-            let mut consensus_pool_cache = MockConsensusCache::new();
+            let mut consensus_time = MockConsensusTime::new();
             let time_source_cl = time_source.clone();
-            consensus_pool_cache
+            consensus_time
                 .expect_consensus_time()
                 .returning(move || Some(time_source_cl.get_relative_time()));
 
             let subnet_id = subnet_test_id(0);
-            const VALIDATOR_NODE_ID: u64 = 42;
             let ingress_signature_crypto = Arc::new(temp_crypto_component_with_fake_registry(
                 node_test_id(VALIDATOR_NODE_ID),
             ));
             let mut state_manager = MockStateManager::new();
-            state_manager.expect_get_state_at().return_const(Ok(
-                ic_interfaces_state_manager::Labeled::new(
+            state_manager
+                .expect_get_state_at()
+                .return_const(Ok(Labeled::new(
                     Height::new(0),
                     Arc::new(ReplicatedStateBuilder::default().build()),
-                ),
-            ));
+                )));
 
             let metrics_registry = MetricsRegistry::new();
             let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
+                node_test_id(VALIDATOR_NODE_ID),
                 pool_config.clone(),
                 metrics_registry.clone(),
                 no_op_logger(),
             )));
 
             let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-            let runtime = tokio::runtime::Runtime::new().unwrap();
             let mut ingress_manager = IngressManager::new(
-                Arc::new(consensus_pool_cache),
+                time_source.clone(),
+                Arc::new(consensus_time),
                 Box::new(ingress_hist_reader),
                 ingress_pool,
-                setup_registry(subnet_id, runtime.handle().clone()),
+                setup_registry(subnet_id),
                 ingress_signature_crypto,
                 metrics_registry,
                 subnet_id,
@@ -234,6 +235,7 @@ where
                 Arc::new(state_manager),
                 cycles_account_manager,
                 MaliciousFlags::default(),
+                RandomStateKind::Random,
             );
             test(
                 time_source,
@@ -250,12 +252,11 @@ where
 /// randomly distributed over the given expiry time period.
 fn prepare(time_source: &dyn TimeSource, duration: Duration, num: usize) -> Vec<SignedIngress> {
     let now = time_source.get_relative_time();
-    let max_expiry = now + duration;
     let mut rng = rand::thread_rng();
     (0..num)
         .map(|i| {
-            let expiry = std::time::Duration::from_millis(
-                rng.gen::<u64>() % ((max_expiry - now).as_millis() as u64),
+            let expiry = Duration::from_millis(
+                rng.r#gen::<u64>() % ((duration.as_millis() as u64).saturating_sub(1) + 1),
             );
             SignedIngressBuilder::new()
                 .method_payload(vec![0; PAYLOAD_SIZE])
@@ -273,7 +274,12 @@ fn setup(
     log: ReplicaLogger,
     messages: Vec<SignedIngress>,
 ) -> (IngressPoolImpl, BTreeMap<Time, MessageId>) {
-    let mut pool = IngressPoolImpl::new(pool_config, MetricsRegistry::new(), log);
+    let mut pool = IngressPoolImpl::new(
+        node_test_id(VALIDATOR_NODE_ID),
+        pool_config,
+        MetricsRegistry::new(),
+        log,
+    );
     let mut message_ids = BTreeMap::new();
     let timestamp = time_source.get_relative_time();
     for (i, ingress) in messages.into_iter().enumerate() {
@@ -292,7 +298,7 @@ fn setup(
 fn on_state_change(pool: &mut IngressPoolImpl, manager: &IngressManager) -> usize {
     let changeset = manager.on_state_change(pool);
     let n = changeset.len();
-    pool.apply_changeset(changeset);
+    pool.apply(changeset);
     n
 }
 
@@ -311,28 +317,34 @@ fn handle_ingress(criterion: &mut Criterion) {
         let expiry_range = MAX_INGRESS_TTL + time_span;
         let total_messages = ingress_rate * expiry_range.as_secs();
         run_test(
-            "get_ingress_payload",
             |time_source: Arc<FastForwardTimeSource>,
              pool_config: ArtifactPoolConfig,
              log: ReplicaLogger,
              history: &SimulatedIngressHistory,
              manager: &mut IngressManager| {
-                let name = format!("handle_ingress({})", ingress_rate);
-                let messages = prepare(time_source.as_ref(), expiry_range, total_messages as usize);
-                let (pool, message_ids) = setup(time_source.as_ref(), pool_config, log, messages);
-                group.bench_function(&name, |bench| {
+                group.bench_function(format!("handle_ingress({ingress_rate})"), |bench| {
                     bench.iter_custom(|iters| {
                         let mut elapsed = Duration::from_secs(0);
                         for _ in 0..iters {
-                            let bench_start = Instant::now();
-                            let mut ingress_pool = pool.clone();
+                            let messages = prepare(
+                                time_source.as_ref(),
+                                expiry_range,
+                                total_messages as usize,
+                            );
+                            let (mut ingress_pool, message_ids) = setup(
+                                time_source.as_ref(),
+                                pool_config.clone(),
+                                log.clone(),
+                                messages,
+                            );
                             time_source.reset();
                             // We skip the first MAX_INGRESS_TTL duration in order to save
                             // overall benchmark time. Also by this time, the ingress
                             // history has become fully populated.
                             let start = time_source.get_relative_time() + MAX_INGRESS_TTL;
                             time_source.set_time(start).unwrap();
-                            history.set_history(message_ids.clone());
+                            history.set_history(message_ids);
+                            let bench_start = Instant::now();
                             // Increment time every 200ms until it is over.
                             loop {
                                 on_state_change(&mut ingress_pool, manager);
@@ -340,9 +352,7 @@ fn handle_ingress(criterion: &mut Criterion) {
                                 if now >= start + time_span {
                                     break;
                                 }
-                                time_source
-                                    .set_time(now + Duration::from_millis(200))
-                                    .unwrap();
+                                time_source.advance_time(Duration::from_millis(200));
                             }
                             elapsed += bench_start.elapsed();
                         }
@@ -356,7 +366,7 @@ fn handle_ingress(criterion: &mut Criterion) {
 }
 
 /// Sets up a registry client.
-fn setup_registry(subnet_id: SubnetId, runtime: tokio::runtime::Handle) -> Arc<dyn RegistryClient> {
+fn setup_registry(subnet_id: SubnetId) -> Arc<dyn RegistryClient> {
     let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
     let subnet_record = test_subnet_record();
     registry_data_provider
@@ -366,14 +376,19 @@ fn setup_registry(subnet_id: SubnetId, runtime: tokio::runtime::Handle) -> Arc<d
             Some(subnet_record),
         )
         .expect("Failed to add subnet record.");
-    let registry = Arc::new(RegistryClientImpl::new(
-        Arc::clone(&registry_data_provider) as Arc<_>,
-        None,
+    let registry = Arc::new(FakeRegistryClient::new(
+        Arc::clone(&registry_data_provider) as Arc<_>
     ));
-    runtime.block_on(async { registry.as_ref().fetch_and_start_polling().unwrap() });
+    registry.update_to_latest_version();
     registry
 }
 
-criterion_group!(benches, handle_ingress);
+criterion_group! {
+    name = benches;
+    // Flamegraphs can be generated by passing the `--profile-time SECONDS` argument
+    // to the benchmark. The SVG files can be found in the bazel output directory.
+    config = Criterion::default().with_profiler(PProfProfiler::new(499, Output::Flamegraph(None)));
+    targets = handle_ingress
+}
 
 criterion_main!(benches);

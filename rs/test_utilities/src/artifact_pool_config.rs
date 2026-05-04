@@ -31,7 +31,7 @@ pub fn with_test_lmdb_pool_config<T>(run: impl FnOnce(LMDBConfig) -> T) -> T {
     toml_config.consensus_pool_backend = Some("lmdb".to_string());
     let config = match ArtifactPoolConfig::from(toml_config).persistent_pool_backend {
         PersistentPoolBackend::Lmdb(config) => config,
-        _ => panic!("Missing rocksdb persistent pool config"),
+        _ => panic!("Missing lmdb persistent pool config"),
     };
     run(config)
 }
@@ -54,30 +54,31 @@ pub fn with_test_pool_configs<T>(num: usize, run: impl FnOnce(Vec<ArtifactPoolCo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::ids::node_test_id;
-    use crate::types::messages::SignedIngressBuilder;
-    use crate::util::mock_time;
-    use crate::with_test_replica_logger;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
-    use ic_interfaces::artifact_pool::UnvalidatedArtifact;
-    use ic_interfaces::ingress_pool::{IngressPool, MutableIngressPool};
+    use ic_interfaces::ingress_pool::IngressPool;
+    use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_metrics::MetricsRegistry;
+    use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_types::ids::node_test_id;
+    use ic_test_utilities_types::messages::SignedIngressBuilder;
+    use ic_types::time::UNIX_EPOCH;
 
     #[test]
     fn test_artifact_pool_config() {
         with_test_replica_logger(|log| {
             with_test_pool_config(|pool_config| {
                 let metrics_registry = MetricsRegistry::new();
-                let mut ingress_pool = IngressPoolImpl::new(pool_config, metrics_registry, log);
+                let mut ingress_pool =
+                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
                 assert_eq!(ingress_pool.unvalidated().size(), 0);
-                for _ in 1..1024u64 {
+                for _ in 1..1024_u64 {
                     let ingress_msg = SignedIngressBuilder::new()
                         .sign_for_randomly_generated_sender()
                         .build();
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_msg,
                         peer_id: node_test_id(0),
-                        timestamp: mock_time(),
+                        timestamp: UNIX_EPOCH,
                     })
                 }
                 assert_eq!(ingress_pool.unvalidated().size(), 1023);

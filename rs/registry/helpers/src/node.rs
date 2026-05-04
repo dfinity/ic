@@ -2,12 +2,12 @@ use crate::deserialize_registry_value;
 use crate::subnet::{SubnetListRegistry, SubnetRegistry};
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 pub use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord};
-use ic_registry_keys::{get_node_record_node_id, make_node_record_key, NODE_RECORD_KEY_PREFIX};
+use ic_registry_keys::{NODE_RECORD_KEY_PREFIX, get_node_record_node_id, make_node_record_key};
 use ic_types::registry::RegistryClientError;
 pub use ic_types::{NodeId, RegistryVersion, SubnetId};
 
 pub trait NodeRegistry {
-    fn get_transport_info(
+    fn get_node_record(
         &self,
         node_id: NodeId,
         version: RegistryVersion,
@@ -25,7 +25,7 @@ pub trait NodeRegistry {
 }
 
 impl<T: RegistryClient + ?Sized> NodeRegistry for T {
-    fn get_transport_info(
+    fn get_node_record(
         &self,
         node_id: NodeId,
         version: RegistryVersion,
@@ -41,10 +41,10 @@ impl<T: RegistryClient + ?Sized> NodeRegistry for T {
     ) -> RegistryClientResult<SubnetId> {
         if let Some(subnet_ids) = self.get_subnet_ids(version)? {
             for subnet_id in subnet_ids {
-                if let Some(node_ids) = self.get_node_ids_on_subnet(subnet_id, version)? {
-                    if node_ids.contains(&node_id) {
-                        return Ok(Some(subnet_id));
-                    }
+                if let Some(node_ids) = self.get_node_ids_on_subnet(subnet_id, version)?
+                    && node_ids.contains(&node_id)
+                {
+                    return Ok(Some(subnet_id));
                 }
             }
         }

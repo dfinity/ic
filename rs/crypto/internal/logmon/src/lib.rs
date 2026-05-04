@@ -3,3 +3,6 @@
 #![deny(clippy::unwrap_used)]
 
 pub mod metrics;
+
+#[cfg(test)]
+mod tests;

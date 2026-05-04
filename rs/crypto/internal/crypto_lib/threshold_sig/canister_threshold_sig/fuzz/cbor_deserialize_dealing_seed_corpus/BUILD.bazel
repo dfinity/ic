@@ -1,0 +1,33 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+package(default_visibility = ["//visibility:private"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig",
+    "//rs/types/types",
+    "@crate_index//:assert_matches",
+    "@crate_index//:clap",
+    "@crate_index//:rand",
+    "@crate_index//:rand_chacha",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_binary(
+    name = "cbor_deserialize_dealing_seed_corpus_generation",
+    srcs = glob(["src/**"]),
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "cbor_deserialize_dealing_seed_corpus_generation_test",
+    aliases = ALIASES,
+    crate = ":cbor_deserialize_dealing_seed_corpus_generation",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)

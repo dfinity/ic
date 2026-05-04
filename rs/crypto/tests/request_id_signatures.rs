@@ -1,38 +1,39 @@
-#![allow(clippy::unwrap_used)]
+use assert_matches::assert_matches;
 use ic_config::crypto::CryptoConfig;
-use ic_crypto::{
-    ecdsa_p256_signature_from_der_bytes, ed25519_public_key_to_der, user_public_key_from_bytes,
-    CryptoComponent, KeyBytesContentType,
-};
+use ic_crypto::CryptoComponent;
+use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
+use ic_crypto_internal_csp::vault::vault_from_config;
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_test_vectors::test_data;
-use ic_interfaces::crypto::BasicSigVerifierByPublicKey;
+use ic_crypto_standalone_sig_verifier::{
+    KeyBytesContentType, ecdsa_p256_signature_from_der_bytes, ed25519_public_key_to_der,
+    user_public_key_from_bytes,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, UserPublicKey};
-use ic_types::crypto::{SignableMock, DOMAIN_IC_REQUEST};
+use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoError, UserPublicKey};
+use ic_types::crypto::{DOMAIN_IC_REQUEST, SignableMock};
 use ic_types::messages::MessageId;
-use ic_types_test_utils::ids::node_test_id;
+use rand::{CryptoRng, Rng};
 use std::sync::Arc;
 
-use crate::ed25519_utils::ed25519_signature_and_public_key;
-use openssl::ec::{EcGroup, EcKey};
-use openssl::ecdsa::EcdsaSig;
-use openssl::nid::Nid;
-use openssl::pkey::PKey;
-use openssl::sha::sha256;
-
-mod ed25519_utils;
+use ic_crypto_sha2::Sha256;
+use ic_crypto_test_utils::ed25519_utils::ed25519_signature_and_public_key;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
 #[test]
 fn should_verify_request_id_ed25519_signature() {
+    let rng = &mut reproducible_rng();
     let request_id = MessageId::from([42; 32]);
-    let (signature, public_key) = ed25519_signature_and_public_key(&request_id);
+    let (signature, public_key) = ed25519_signature_and_public_key(&request_id, rng);
     CryptoConfig::run_with_temp_config(|config| {
         let crypto = crypto_component(&config);
-        assert!(crypto
-            .verify_basic_sig_by_public_key(&signature, &request_id, &public_key)
-            .is_ok());
+        assert!(
+            crypto
+                .verify_basic_sig_by_public_key(&signature, &request_id, &public_key)
+                .is_ok()
+        );
     })
 }
 
@@ -81,9 +82,11 @@ fn should_correctly_verify_sig_with_der_encoded_ed25519_pk() {
         };
         CryptoConfig::run_with_temp_config(|config| {
             let crypto = crypto_component(&config);
-            assert!(crypto
-                .verify_basic_sig_by_public_key(&sig, &msg, &pk)
-                .is_ok());
+            assert!(
+                crypto
+                    .verify_basic_sig_by_public_key(&sig, &msg, &pk)
+                    .is_ok()
+            );
         })
     }
 }
@@ -130,9 +133,11 @@ fn should_fail_verifying_corrupted_sig_with_der_encoded_ed25519_pk() {
     };
     CryptoConfig::run_with_temp_config(|config| {
         let crypto = crypto_component(&config);
-        assert!(crypto
-            .verify_basic_sig_by_public_key(&corrupted_sig, &msg, &pk)
-            .is_err());
+        assert!(
+            crypto
+                .verify_basic_sig_by_public_key(&corrupted_sig, &msg, &pk)
+                .is_err()
+        );
     })
 }
 
@@ -150,34 +155,39 @@ fn should_fail_verifying_sig_on_wrong_msg_with_der_encoded_ed25519_pk() {
     };
     CryptoConfig::run_with_temp_config(|config| {
         let crypto = crypto_component(&config);
-        assert!(crypto
-            .verify_basic_sig_by_public_key(&sig, &wrong_msg, &pk)
-            .is_err());
+        assert!(
+            crypto
+                .verify_basic_sig_by_public_key(&sig, &wrong_msg, &pk)
+                .is_err()
+        );
     })
 }
 
 #[test]
 fn should_verify_request_id_ecdsa_signature() {
+    let rng = &mut reproducible_rng();
     let request_id = MessageId::from([42; 32]);
-    let (signature, public_key) = ecdsa_signature_and_public_key(Nid::SECP256K1, &request_id);
+    let (signature, public_key) = ecdsa_secp256k1_signature_and_public_key(&request_id, rng);
     CryptoConfig::run_with_temp_config(|config| {
         let crypto = crypto_component(&config);
-        assert!(crypto
-            .verify_basic_sig_by_public_key(&signature, &request_id, &public_key)
-            .is_ok());
+        assert!(
+            crypto
+                .verify_basic_sig_by_public_key(&signature, &request_id, &public_key)
+                .is_ok()
+        );
     });
-    let (signature, public_key) =
-        ecdsa_signature_and_public_key(Nid::X9_62_PRIME256V1, &request_id);
+    let (signature, public_key) = ecdsa_secp256r1_signature_and_public_key(&request_id, rng);
     CryptoConfig::run_with_temp_config(|config| {
         let crypto = crypto_component(&config);
-        assert!(crypto
-            .verify_basic_sig_by_public_key(&signature, &request_id, &public_key)
-            .is_ok());
+        assert_eq!(
+            crypto.verify_basic_sig_by_public_key(&signature, &request_id, &public_key),
+            Ok(())
+        );
     });
 }
 
 #[test]
-fn should_correctly_parse_der_encoded_ecdsa_p256_pk() {
+fn should_correctly_parse_der_encoded_openssl_ecdsa_p256_pk() {
     let pk_der = hex::decode(test_data::ECDSA_P256_PK_DER_HEX).unwrap();
     let (pk, bytes_type) = user_public_key_from_bytes(&pk_der).unwrap();
     assert_eq!(pk.algorithm_id, AlgorithmId::EcdsaP256);
@@ -203,8 +213,7 @@ fn should_correctly_parse_cose_encoded_der_wrapped_ecdsa_p256_pk() {
         assert_eq!(
             pk.algorithm_id,
             AlgorithmId::EcdsaP256,
-            "Failed for pk_hex: {}",
-            pk_cose_der_hex
+            "Failed for pk_hex: {pk_cose_der_hex}"
         );
         assert_eq!(
             bytes_type,
@@ -243,8 +252,7 @@ fn should_correctly_verify_sig_with_der_wrapped_cose_encoded_ecdsa_p256_pk() {
                 crypto
                     .verify_basic_sig_by_public_key(&sig, &msg, &pk)
                     .is_ok(),
-                "Failed for pk_hex: {}",
-                pk_der_hex
+                "Failed for pk_hex: {pk_der_hex}"
             );
         })
     }
@@ -282,16 +290,18 @@ fn should_fail_parse_raw_ed25519_pk() {
 }
 
 #[test]
-fn should_correctly_parse_der_encoded_openssl_ecdsa_p256_pk() {
-    let pk_der = new_pk_der(Nid::X9_62_PRIME256V1);
+fn should_correctly_parse_der_encoded_ecdsa_p256_pk() {
+    let rng = &mut reproducible_rng();
+    let pk_der = new_secp256r1_pk_der(rng);
     let (pk, bytes_type) = user_public_key_from_bytes(&pk_der).unwrap();
     assert_eq!(pk.algorithm_id, AlgorithmId::EcdsaP256);
     assert_eq!(bytes_type, KeyBytesContentType::EcdsaP256PublicKeyDer);
 }
 
 #[test]
-fn should_correctly_parse_der_encoded_openssl_ecdsa_secp256k1_pk() {
-    let pk_der = new_pk_der(Nid::SECP256K1);
+fn should_correctly_parse_der_encoded_ecdsa_secp256k1_pk() {
+    let rng = &mut reproducible_rng();
+    let pk_der = new_secp256k1_pk_der(rng);
     let (pk, bytes_type) = user_public_key_from_bytes(&pk_der).unwrap();
     assert_eq!(pk.algorithm_id, AlgorithmId::EcdsaSecp256k1);
     assert_eq!(bytes_type, KeyBytesContentType::EcdsaSecp256k1PublicKeyDer);
@@ -327,49 +337,77 @@ fn should_fail_parsing_corrupted_cose_encoded_der_wrapped_pk() {
 
 #[test]
 fn should_fail_parsing_ec_keys_on_unsupported_curves() {
-    for curve_name in [Nid::X9_62_PRIME192V1, Nid::X9_62_PRIME239V2].iter() {
-        let pk_der = new_pk_der(*curve_name);
+    // valid public keys generated with openssl
+    const VALID_PRIME192V1_PUBKEY_DER_HEX: &str = "3049301306072a8648ce3d020106082a8648ce3d0301010332000425adc4047e9dcf0d7efbe6bb6e76794555c51f0dfd6f7f90f3067f69e17e989d5969f68e9aefbef70a1788af0b86c03e";
+    const VALID_PRIME239V2_PUBKEY_DER_HEX: &str = "3055301306072a8648ce3d020106082a8648ce3d030105033e00046e1e1bf9e0b7b341d118f6a9acb08c1300af5804617098387b37e705625d6ff0ba958781f35dcec26f568481777a4827aea87c92a6ee0e48c72ce733";
+
+    for valid_pubkey_der_hex in [
+        VALID_PRIME192V1_PUBKEY_DER_HEX,
+        VALID_PRIME239V2_PUBKEY_DER_HEX,
+    ]
+    .iter()
+    {
+        let pk_der = hex::decode(valid_pubkey_der_hex).expect("invalid hex");
         let pk_result = user_public_key_from_bytes(&pk_der);
-        assert!(pk_result.is_err());
+        assert_matches!(
+            pk_result,
+            Err(CryptoError::MalformedPublicKey { internal_error, .. })
+            if internal_error.contains("Unsupported or unparsable public key")
+        );
     }
 }
 
-fn new_pk_der(curve_name: Nid) -> Vec<u8> {
-    let group = EcGroup::from_curve_name(curve_name).expect("unable to create EC group");
-    let ec_key = EcKey::generate(&group).expect("unable to generate EC key");
-    let pkey = PKey::from_ec_key(ec_key).expect("unable to create PKey");
-    pkey.public_key_to_der()
-        .expect("unable to DER-encode public key")
+fn new_secp256r1_pk_der<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
+    let sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);
+    sk.public_key().serialize_der()
 }
 
-fn ecdsa_signature_and_public_key(
-    nid: Nid,
+fn new_secp256k1_pk_der<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
+    let sk = ic_secp256k1::PrivateKey::generate_using_rng(rng);
+    sk.public_key().serialize_der()
+}
+
+fn ecdsa_secp256r1_signature_and_public_key<R: Rng + CryptoRng>(
     request_id: &MessageId,
+    rng: &mut R,
 ) -> (BasicSigOf<MessageId>, UserPublicKey) {
-    let ec_key = {
-        let group = EcGroup::from_curve_name(nid).expect("unable to create EC group");
-        EcKey::generate(&group).expect("unable to generate EC key")
-    };
+    let sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);
 
     let signature: BasicSigOf<MessageId> = {
         let bytes_to_sign = {
             let mut buf = vec![];
             buf.extend_from_slice(DOMAIN_IC_REQUEST);
             buf.extend_from_slice(request_id.as_bytes());
-            sha256(&buf)
+            Sha256::hash(&buf)
         };
-        let ecdsa_sig = EcdsaSig::sign(&bytes_to_sign, &ec_key).expect("unable to ECDSA-sign");
-        let r = ecdsa_sig.r().to_vec();
-        let s = ecdsa_sig.s().to_vec();
-        let signature_bytes: Vec<u8> =
-            [vec![0; 32 - r.len()], r, vec![0; 32 - s.len()], s].concat();
-        BasicSigOf::new(BasicSig(signature_bytes))
+        let signature_bytes = sk.sign_digest(&bytes_to_sign).expect("failed to sign");
+        BasicSigOf::new(BasicSig(signature_bytes.to_vec()))
     };
 
-    let pkey = PKey::from_ec_key(ec_key).expect("unable to create PKey");
-    let pk_der = pkey
-        .public_key_to_der()
-        .expect("unable to DER-encode public key");
+    let pk_der = sk.public_key().serialize_der();
+    let (public_key, _) = user_public_key_from_bytes(&pk_der).unwrap();
+
+    (signature, public_key)
+}
+
+fn ecdsa_secp256k1_signature_and_public_key<R: Rng + CryptoRng>(
+    request_id: &MessageId,
+    rng: &mut R,
+) -> (BasicSigOf<MessageId>, UserPublicKey) {
+    let sk = ic_secp256k1::PrivateKey::generate_using_rng(rng);
+
+    let signature: BasicSigOf<MessageId> = {
+        let bytes_to_sign = {
+            let mut buf = vec![];
+            buf.extend_from_slice(DOMAIN_IC_REQUEST);
+            buf.extend_from_slice(request_id.as_bytes());
+            Sha256::hash(&buf)
+        };
+        let signature_bytes = sk.sign_digest_with_ecdsa(&bytes_to_sign);
+        BasicSigOf::new(BasicSig(signature_bytes.to_vec()))
+    };
+
+    let pk_der = sk.public_key().serialize_der();
     let (public_key, _) = user_public_key_from_bytes(&pk_der).unwrap();
 
     (signature, public_key)
@@ -377,11 +415,14 @@ fn ecdsa_signature_and_public_key(
 
 fn crypto_component(config: &CryptoConfig) -> CryptoComponent {
     let dummy_registry = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-    CryptoComponent::new_with_fake_node_id(
+
+    let vault = vault_from_config(
         config,
         None,
-        Arc::new(dummy_registry),
-        node_test_id(42),
         no_op_logger(),
-    )
+        Arc::new(CryptoMetrics::none()),
+    );
+    ic_crypto_node_key_generation::generate_node_signing_keys(vault.as_ref());
+
+    CryptoComponent::new(config, None, Arc::new(dummy_registry), no_op_logger(), None)
 }

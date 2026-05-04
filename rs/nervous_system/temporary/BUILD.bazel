@@ -1,0 +1,34 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = []  # Nice.
+
+DEV_DEPENDENCIES = [
+    "@crate_index//:rand",  # Used by doc test.
+]
+
+LIB_SRCS = glob(
+    ["src/**"],
+    exclude = ["**/*tests.rs"],
+)
+
+rust_library(
+    name = "temporary",
+    srcs = LIB_SRCS,
+    crate_name = "ic_nervous_system_temporary",
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "temporary_integration_test",
+    srcs = glob(["tests/**/*.rs"]),
+    deps = [":temporary"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_doc_test(
+    name = "temporary_doc_test",
+    crate = ":temporary",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

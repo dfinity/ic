@@ -1,12 +1,15 @@
 use super::*;
-use crate::crypto::tests::set_of;
 use crate::NumberOfNodes;
-use ic_crypto_internal_types::curves::bls12_381::{Fr, G1, G2};
+use crate::crypto::tests::set_of;
+use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
-    Dealing, EncryptedShares, PublicCoefficientsBytes, ZKProofDec, ZKProofShare, NUM_CHUNKS,
-    NUM_ZK_REPETITIONS,
+    Dealing, EncryptedShares, NUM_CHUNKS, NUM_ZK_REPETITIONS, PublicCoefficientsBytes, ZKProofDec,
+    ZKProofShare,
 };
+use ic_crypto_test_utils_ni_dkg::dummy_dealing;
+use ic_management_canister_types_private::VetKdCurve;
+use std::str::FromStr;
 
 #[test]
 fn should_correctly_convert_csp_dkg_dealing_to_dkg_dealing() {
@@ -46,12 +49,11 @@ fn should_correctly_convert_ni_dkg_transcript_to_csp_dkg_transcript() {
 // message should be well readable and in particular contain hex encodings where
 // applicable.
 fn should_correctly_format_dealing_display_message() {
-    let dealing = NiDkgDealing::dummy_dealing_for_tests(0);
+    let dealing = dummy_dealing(0);
 
-    let display_text = format!("{}", dealing);
+    let display_text = format!("{dealing}");
 
-    let expected_text =
-        "NiDkgDealing { internal_dealing: Groth20_Bls12_381(Dealing { \
+    let expected_text = "NiDkgDealing { internal_dealing: Groth20_Bls12_381(Dealing { \
         public_coefficients: PublicCoefficientsBytes { coefficients: [] }, ciphertexts: FsEncryptionCiphertextBytes { \
          rand_r: [G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \
           G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \
@@ -117,7 +119,7 @@ fn should_correctly_format_dealing_display_message() {
           G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \
           G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \
           G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000)]] }, \
-          zk_proof_decryptability: ZKProofDecHelper { first_move_y0: G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \
+          zk_proof_decryptability: ZKProofDec { first_move_y0: G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \
           first_move_b: [G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \
           G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \
           G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \
@@ -229,6 +231,21 @@ fn should_correctly_format_dealing_display_message() {
     assert_eq!(display_text, expected_text);
 }
 
+#[test]
+fn should_correctly_format_ni_dkg_id() {
+    let vetkd_key_id = VetKdKeyId {
+        curve: VetKdCurve::Bls12_381_G2,
+        name: "abcdefg".to_string(),
+    };
+
+    let nidkg_mpkid = NiDkgMasterPublicKeyId::VetKd(vetkd_key_id);
+
+    assert_eq!(
+        MasterPublicKeyId::from_str(&format!("{nidkg_mpkid}")),
+        Ok(MasterPublicKeyId::from(nidkg_mpkid))
+    );
+}
+
 fn transcript_with_internal_csp_transcript(
     csp_dkg_transcript: &CspNiDkgTranscript,
 ) -> NiDkgTranscript {
@@ -253,10 +270,10 @@ fn csp_dealing() -> CspNiDkgDealing {
             coefficients: vec![],
         },
         ciphertexts: EncryptedShares {
-            rand_r: [G1([1; G1::SIZE]); NUM_CHUNKS],
-            rand_s: [G1([12; G1::SIZE]); NUM_CHUNKS],
-            rand_z: [G2([123; G2::SIZE]); NUM_CHUNKS],
-            ciphertext_chunks: vec![[G1([234; G1::SIZE]); NUM_CHUNKS]],
+            rand_r: [G1Bytes([1; G1Bytes::SIZE]); NUM_CHUNKS],
+            rand_s: [G1Bytes([12; G1Bytes::SIZE]); NUM_CHUNKS],
+            rand_z: [G2Bytes([123; G2Bytes::SIZE]); NUM_CHUNKS],
+            ciphertext_chunks: vec![[G1Bytes([234; G1Bytes::SIZE]); NUM_CHUNKS]],
         },
         zk_proof_decryptability: zk_proof_dec(),
         zk_proof_correct_sharing: zk_proof_share(),
@@ -264,8 +281,8 @@ fn csp_dealing() -> CspNiDkgDealing {
 }
 
 pub fn zk_proof_dec() -> ZKProofDec {
-    let fr = Fr([0u8; Fr::SIZE]);
-    let g1 = G1([0u8; G1::SIZE]);
+    let fr = FrBytes([0_u8; FrBytes::SIZE]);
+    let g1 = G1Bytes([0_u8; G1Bytes::SIZE]);
 
     ZKProofDec {
         first_move_y0: g1,
@@ -280,9 +297,9 @@ pub fn zk_proof_dec() -> ZKProofDec {
 }
 
 pub fn zk_proof_share() -> ZKProofShare {
-    let fr = Fr([0u8; Fr::SIZE]);
-    let g1 = G1([0u8; G1::SIZE]);
-    let g2 = G2([0u8; G2::SIZE]);
+    let fr = FrBytes([0_u8; FrBytes::SIZE]);
+    let g1 = G1Bytes([0_u8; G1Bytes::SIZE]);
+    let g2 = G2Bytes([0_u8; G2Bytes::SIZE]);
 
     ZKProofShare {
         first_move_f: g1,
@@ -300,19 +317,4 @@ fn empty_ni_csp_dkg_transcript() -> CspNiDkgTranscript {
         },
         receiver_data: Default::default(),
     })
-}
-
-#[test]
-fn should_correctly_convert_i32_to_ni_dkg_tag() {
-    assert!(NiDkgTag::try_from(-1).is_err());
-    assert!(NiDkgTag::try_from(0).is_err());
-    assert_eq!(NiDkgTag::try_from(1), Ok(NiDkgTag::LowThreshold));
-    assert_eq!(NiDkgTag::try_from(2), Ok(NiDkgTag::HighThreshold));
-    assert!(NiDkgTag::try_from(3).is_err());
-}
-
-#[test]
-fn should_correctly_convert_ni_dkg_tag_to_i32() {
-    assert_eq!(NiDkgTag::LowThreshold as i32, 1);
-    assert_eq!(NiDkgTag::HighThreshold as i32, 2);
 }

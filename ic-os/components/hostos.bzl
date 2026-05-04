@@ -1,0 +1,113 @@
+"""
+Enumerate every component file dependency for HostOS
+"""
+
+load(":defs.bzl", "OS_TYPE_DEST")
+
+component_files = {
+    # OS-type marker file, this can be used to identify the OS
+    Label("upgrade/systemd-generators/os-type-hostos"): OS_TYPE_DEST,
+
+    # hostos components
+    Label("hostos/guestos/guestos.service"): "/etc/systemd/system/guestos.service",
+    Label("hostos/guestos/upgrade-guestos.service"): "/etc/systemd/system/upgrade-guestos.service",
+    Label("hostos/libvirt/setup-libvirt.sh"): "/opt/ic/bin/setup-libvirt.sh",
+    Label("hostos/libvirt/setup-libvirt.service"): "/etc/systemd/system/setup-libvirt.service",
+    Label("hostos/misc/setup-var.sh"): "/opt/ic/bin/setup-var.sh",
+    Label("hostos/misc/detect-first-boot.sh"): "/opt/ic/bin/detect-first-boot.sh",
+    Label("hostos/verbose-logging/verbose-logging.sh"): "/opt/ic/bin/verbose-logging.sh",
+    Label("hostos/verbose-logging/verbose-logging.service"): "/etc/systemd/system/verbose-logging.service",
+    Label("hostos/verbose-logging/logrotate.d/verbose-logging"): "/etc/logrotate.d/verbose-logging",
+    Label("hostos/misc/logrotate/override.conf"): "/etc/systemd/system/logrotate.service.d/override.conf",
+
+    # early-boot
+    Label("early-boot/relabel-machine-id/relabel-machine-id-hostos.sh"): "/opt/ic/bin/relabel-machine-id.sh",
+    Label("early-boot/relabel-machine-id/relabel-machine-id.service"): "/etc/systemd/system/relabel-machine-id.service",
+    Label("early-boot/setup-hostname/setup-hostname.sh"): "/opt/ic/bin/setup-hostname.sh",
+    Label("early-boot/setup-hostname/hostos/setup-hostname.service"): "/etc/systemd/system/setup-hostname.service",
+    Label("early-boot/setup-hostname/hostname-empty"): "/etc/hostname",
+    Label("early-boot/save-machine-id/save-machine-id.sh"): "/opt/ic/bin/save-machine-id.sh",
+    Label("early-boot/save-machine-id/save-machine-id.service"): "/etc/systemd/system/save-machine-id.service",
+    Label("early-boot/fstab/fstab-hostos"): "/etc/fstab",
+    Label("early-boot/locale"): "/etc/default/locale",
+    Label("early-boot/initramfs-tools/hostos/initramfs.conf"): "/etc/initramfs-tools/initramfs.conf",
+    Label("early-boot/initramfs-tools/hostos/amd64-microcode"): "/etc/default/amd64-microcode",
+    Label("early-boot/initramfs-tools/hostos/intel-microcode"): "/etc/default/intel-microcode",
+    Label("early-boot/initramfs-tools/hostos/modules"): "/etc/initramfs-tools/modules",
+    Label("early-boot/initramfs-tools/hostos/set-machine-id/set-machine-id"): "/etc/initramfs-tools/scripts/init-bottom/set-machine-id",
+
+    # misc
+    Label("misc/config/config-hostos.sh"): "/opt/ic/bin/config.sh",
+    Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
+    Label("misc/output-wrapper.sh"): "/opt/ic/bin/output-wrapper.sh",
+    Label("misc/vsock/vsock-agent.service"): "/etc/systemd/system/vsock-agent.service",
+    Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
+    Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
+    Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
+    Label("hostos/misc/sudoers"): "/etc/sudoers",
+    Label("hostos/misc/limited-console"): "/opt/ic/bin/limited-console",
+    Label("hostos/misc/bash"): "/opt/ic/bin/rbash/bash",
+    Label("hostos/misc/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
+    Label("hostos/misc/20-ipmi.rules"): "/etc/udev/rules.d/20-ipmi.rules",
+    Label("hostos/misc/reserve-hugepages/reserve-hugepages.service"): "/etc/systemd/system/reserve-hugepages.service",
+    Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.sh"): "/opt/ic/bin/guestos-recovery-upgrader.sh",
+    Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-launcher.sh"): "/opt/ic/bin/guestos-recovery-launcher.sh",
+    Label("misc/systemd-user/user@.service"): "/etc/systemd/system/user@.service",
+
+    # monitoring
+    Label("monitoring/metrics.sh"): "/opt/ic/bin/metrics.sh",
+    Label("monitoring/hostos/monitor-guestos.sh"): "/opt/ic/bin/monitor-guestos.sh",
+    Label("monitoring/hostos/monitor-guestos.service"): "/etc/systemd/system/monitor-guestos.service",
+    Label("monitoring/hostos/monitor-guestos.timer"): "/etc/systemd/system/monitor-guestos.timer",
+    Label("monitoring/hostos/custom-metrics.sh"): "/opt/ic/bin/custom-metrics.sh",
+    Label("monitoring/hostos/custom-metrics.service"): "/etc/systemd/system/custom-metrics.service",
+    Label("monitoring/hostos/monitor-nvme.sh"): "/opt/ic/bin/monitor-nvme.sh",
+    Label("monitoring/hostos/monitor-nvme.service"): "/etc/systemd/system/monitor-nvme.service",
+    Label("monitoring/hostos/monitor-nvme.timer"): "/etc/systemd/system/monitor-nvme.timer",
+    Label("monitoring/hostos/monitor-power.sh"): "/opt/ic/bin/monitor-power.sh",
+    Label("monitoring/hostos/monitor-power.service"): "/etc/systemd/system/monitor-power.service",
+    Label("monitoring/hostos/monitor-power.timer"): "/etc/systemd/system/monitor-power.timer",
+    Label("monitoring/hostos/setup-node-gen-status.service"): "/etc/systemd/system/setup-node-gen-status.service",
+    Label("monitoring/node_exporter/node_exporter.crt"): "/etc/node_exporter/node_exporter.crt",
+    Label("monitoring/node_exporter/node_exporter.key"): "/etc/node_exporter/node_exporter.key",
+    Label("monitoring/node_exporter/web.yml"): "/etc/node_exporter/web.yml",
+    Label("monitoring/node_exporter/node_exporter.service"): "/etc/systemd/system/node_exporter.service",
+    Label("monitoring/node_exporter/node_exporter"): "/etc/default/node_exporter",
+    Label("monitoring/node_exporter/setup-node_exporter-keys/setup-node_exporter-keys.sh"): "/opt/ic/bin/setup-node_exporter-keys.sh",
+    Label("monitoring/node_exporter/setup-node_exporter-keys/setup-node_exporter-keys.service"): "/etc/systemd/system/setup-node_exporter-keys.service",
+    Label("monitoring/metrics-proxy/hostos/metrics-proxy.yaml"): "/etc/metrics-proxy.yaml",
+    Label("monitoring/metrics-proxy/metrics-proxy.service"): "/etc/systemd/system/metrics-proxy.service",
+    Label("monitoring/journald.conf"): "/etc/systemd/journald.conf",
+    Label("misc/log-config/log-config-hostos.service"): "/etc/systemd/system/log-config.service",
+    Label("monitoring/grub-version/grub-version.sh"): "/opt/ic/bin/grub-version.sh",
+    Label("monitoring/grub-version/grub-version.service"): "/etc/systemd/system/grub-version.service",
+    Label("monitoring/hostos/export-guestos-serial-logs.sh"): "/opt/ic/bin/export-guestos-serial-logs.sh",
+    Label("monitoring/hostos/export-guestos-serial-logs.service"): "/etc/systemd/system/export-guestos-serial-logs.service",
+
+    # networking
+    Label("networking/generate-network-config/generate-network-config-hostos.service"): "/etc/systemd/system/generate-network-config.service",
+    Label("networking/fallback.conf"): "/etc/systemd/resolved.conf.d/fallback.conf",
+    Label("networking/resolv.conf"): "/etc/resolv.conf",
+    Label("networking/network-tweaks.conf"): "/etc/sysctl.d/network-tweaks.conf",
+    Label("networking/nftables/hostos/nftables.template"): "/opt/ic/share/nftables.template",
+    Label("networking/nftables/hostos/setup-nftables.service"): "/etc/systemd/system/setup-nftables.service",
+    Label("networking/nftables/hostos/setup-nftables.sh"): "/opt/ic/bin/setup-nftables.sh",
+    Label("networking/hosts"): "/etc/hosts",
+    Label("networking/dev-certs/canister_http_test_ca.cert"): "/dev-certs/canister_http_test_ca.cert",
+
+    # ssh
+    Label("ssh/generate-host-ssh-keys/generate-host-ssh-keys.sh"): "/opt/ic/bin/generate-host-ssh-keys.sh",
+    Label("ssh/generate-host-ssh-keys/generate-host-ssh-keys.service"): "/etc/systemd/system/generate-host-ssh-keys.service",
+    Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys-hostos.sh"): "/opt/ic/bin/setup-ssh-user-keys.sh",
+    Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys.service"): "/etc/systemd/system/setup-ssh-user-keys.service",
+
+    # TODO: remove in NODE-1859
+    Label("hostos/update-config/update-config.service"): "/etc/systemd/system/update-config.service",
+
+    # upgrade
+    Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
+    Label("upgrade/systemd-generators/mount-generator"): "/etc/systemd/system-generators/mount-generator",
+    Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
+    Label("upgrade/install-upgrade.sh"): "/opt/ic/bin/install-upgrade.sh",
+    Label("upgrade/boot-state.sh"): "/opt/ic/bin/boot-state.sh",
+}

@@ -4,6 +4,8 @@ package ic_sns_governance.pb.v1;
 
 import "ic_base_types/pb/v1/types.proto";
 import "ic_ledger/pb/v1/types.proto";
+import "ic_nervous_system/pb/v1/nervous_system.proto";
+import "types/v1/management_canister_types.proto";
 
 // The different types of neuron permissions, i.e., privileges to modify a neuron,
 // that principals can have.
@@ -15,7 +17,7 @@ enum NeuronPermissionType {
   // start dissolving, stop dissolving, and increasing the dissolve delay for the neuron.
   NEURON_PERMISSION_TYPE_CONFIGURE_DISSOLVE_STATE = 1;
 
-  // The principal has permission to add additional principals to modify the neuron.
+  // The principal has permission to add other principals to modify the neuron.
   // The nervous system parameter `NervousSystemParameters::neuron_grantable_permissions`
   // determines the maximum set of privileges that a principal can grant to another principal in
   // the given SNS.
@@ -42,6 +44,13 @@ enum NeuronPermissionType {
   // The principal has permission to disburse the neuron's maturity to a
   // given ledger account.
   NEURON_PERMISSION_TYPE_DISBURSE_MATURITY = 8;
+
+  // The principal has permission to stake the neuron's maturity.
+  NEURON_PERMISSION_TYPE_STAKE_MATURITY = 9;
+
+  // The principal has permission to grant/revoke permission to vote and submit
+  // proposals on behalf of the neuron to other principals.
+  NEURON_PERMISSION_TYPE_MANAGE_VOTING_PERMISSION = 10;
 }
 
 // A principal with a particular set of permissions over a neuron.
@@ -59,9 +68,30 @@ message NeuronId {
   bytes id = 1;
 }
 
+// Neuron whose voting decisions are being followed.
+message Followee {
+  NeuronId neuron_id = 1;
+  // Human-readable alias that helps identify this followee among other neurons.
+  optional string alias = 2;
+}
+
+// A sequence of NeuronIds, which is used to get prost to generate a type isomorphic to Option<Vec<NeuronId>>.
+message NeuronIds {
+  repeated NeuronId neuron_ids = 1;
+}
+
 // The id of a specific proposal.
 message ProposalId {
   uint64 id = 1;
+}
+
+message DisburseMaturityInProgress {
+  // This field is the quantity of maturity in e8s that has been decremented from a Neuron to
+  // be modulated and disbursed as SNS tokens.
+  uint64 amount_e8s = 1;
+  uint64 timestamp_of_disbursement_seconds = 2;
+  Account account_to_disburse_to = 3;
+  optional uint64 finalize_disbursement_timestamp_seconds = 4;
 }
 
 // A neuron in the governance system.
@@ -73,7 +103,7 @@ message Neuron {
   repeated NeuronPermission permissions = 2;
 
   // The cached record of the neuron's staked governance tokens, measured in
-  // fractions of 10E-8 of a governance token.
+  // fractions of 10e-8 of a governance token.
   //
   // There is a minimum cached state, NervousSystemParameters::neuron_minimum_stake_e8s,
   // that can be set by each SNS. Neurons that are created by claiming a neuron, spawning a neuron,
@@ -137,18 +167,35 @@ message Neuron {
   }
 
   // A list of a neuron's followees for a specific function.
-  message Followees {repeated NeuronId followees = 1;}
+  message Followees {
+    repeated NeuronId followees = 1;
+  }
 
-  // The neuron's followees, specified as a map of proposal functions IDs to followees neuron IDs.
-  // The map's keys are represented by integers as Protobuf does not support enum keys in maps.
+  // A list of a neuron's followees, possibly associated with a given topic.
+  message FolloweesForTopic {
+    repeated Followee followees = 1;
+    optional Topic topic = 2;
+  }
+
+  // A collection of a neuron's followees (per topic).
+  message TopicFollowees {
+    map<int32, FolloweesForTopic> topic_id_to_followees = 1;
+  }
+
+  // The neuron's legacy followees (per proposal type), specified as a map of proposal functions IDs
+  // to followees neuron IDs. The map's keys are represented by integers as Protobuf does not
+  // support enum keys in maps.
   map<uint64, Followees> followees = 11;
 
-  // The accumulated maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
-  // 10E-8 of a governance token.
+  // The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
+  optional TopicFollowees topic_followees = 19;
+
+  // The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
+  // 10e-8 of a governance token.
   //
   // The unit is "equivalent" to insist that, while this quantity is on the
   // same scale as the governance token, maturity is not directly convertible to
-  // governance tokens: conversion requires a minting event.
+  // governance tokens: conversion requires a minting event and the conversion rate is variable.
   uint64 maturity_e8s_equivalent = 12;
 
   // A percentage multiplier to be applied when calculating the voting power of a neuron.
@@ -156,6 +203,41 @@ message Neuron {
   // voting_power_percentage_multiplier can only be less than 100 for a developer neuron
   // that is created at SNS initialization.
   uint64 voting_power_percentage_multiplier = 13;
+
+  // The ID of the NNS neuron whose Community Fund participation resulted in the
+  // creation of this SNS neuron.
+  optional uint64 source_nns_neuron_id = 14;
+
+  // The accumulated staked maturity of the neuron, in "e8s equivalent" (see
+  // "maturity_e8s_equivalent"). Staked maturity becomes regular maturity once
+  // the neuron is dissolved.
+  //
+  // Contrary to `maturity_e8s_equivalent` this maturity is staked and thus
+  // locked until the neuron is dissolved and contributes to voting power
+  // and rewards. Once the neuron is dissolved, this maturity will be "moved"
+  // to 'maturity_e8s_equivalent' and will be able to be spawned (with maturity
+  // modulation).
+  optional uint64 staked_maturity_e8s_equivalent = 15;
+
+  // If set and true the maturity rewarded to this neuron for voting will be
+  // automatically staked and will contribute to the neuron's voting power.
+  optional bool auto_stake_maturity = 16;
+
+  // The duration that this neuron is vesting.
+  //
+  // A neuron that is vesting is non-dissolving and cannot start dissolving until the vesting duration has elapsed.
+  // Vesting can be used to lock a neuron more than the max allowed dissolve delay. This allows devs and members of
+  // a particular SNS instance to prove their long-term commitment to the community. For example, the max dissolve delay
+  // for a particular SNS instance might be 1 year, but the devs of the project may set their vesting duration to 3
+  // years and dissolve delay to 1 year in order to prove that they are making a minimum 4 year commitment to the
+  // project.
+  optional uint64 vesting_period_seconds = 17;
+
+  // Disburse maturity operations that are currently underway.
+  // The entries are sorted by `timestamp_of_disbursement_seconds`-values,
+  // with the oldest entries first, i.e. it holds for all i that:
+  // entry[i].timestamp_of_disbursement_seconds <= entry[i+1].timestamp_of_disbursement_seconds
+  repeated DisburseMaturityInProgress disburse_maturity_in_progress = 18;
 }
 
 // The types of votes a neuron can issue.
@@ -215,6 +297,9 @@ message NervousSystemFunction {
     // The signature of the method must be equivalent to the following:
     // <method_name>(proposal_data: ProposalData) -> Result<String, String>
     optional string validator_method_name = 5;
+
+    // The topic this proposal belongs to.
+    optional Topic topic = 6;
   }
 
   oneof function_type {
@@ -230,11 +315,10 @@ message NervousSystemFunction {
 }
 
 // A proposal function defining a generic proposal, i.e., a proposal
-// that is not build into the standard SNS and calls a canister outside
+// that is not built into the standard SNS and calls a canister outside
 // the SNS for execution.
 // The canister and method to call are derived from the `function_id`.
 message ExecuteGenericNervousSystemFunction {
-
   // This enum value determines what canister to call and what
   // function to call on that canister.
   //
@@ -247,19 +331,88 @@ message ExecuteGenericNervousSystemFunction {
 }
 
 // A proposal function that should guide the future strategy of the SNS's
-// ecosystem but does not have immediate effect in the sense that a method is executed.
+// ecosystem but does not have immediate effect in the sense that no method is executed.
 message Motion {
   // The text of the motion, which can at most be 100kib.
   string motion_text = 1;
 }
 
+// Represents a WASM split into smaller chunks, each of which can safely be sent around the ICP.
+message ChunkedCanisterWasm {
+  // Obligatory check sum of the overall WASM to be reassembled from chunks.
+  bytes wasm_module_hash = 1;
+  // Obligatory; indicates which canister stores the WASM chunks.
+  ic_base_types.pb.v1.PrincipalId store_canister_id = 2;
+  // Specifies a list of hash values for the chunks that comprise this WASM. Must contain at least
+  // one chunk.
+  repeated bytes chunk_hashes_list = 3;
+}
+
 // A proposal function that upgrades a canister that is controlled by the
-// SNS governance canister.
+// SNS Governance canister.
 message UpgradeSnsControlledCanister {
   // The id of the canister that is upgraded.
   ic_base_types.pb.v1.PrincipalId canister_id = 1;
   // The new wasm module that the canister is upgraded to.
   bytes new_canister_wasm = 2;
+  // Arguments passed to the post-upgrade method of the new wasm module.
+  optional bytes canister_upgrade_arg = 3;
+  // Canister install_code mode.
+  optional types.v1.CanisterInstallMode mode = 4;
+  // If the entire WASM does not fit into the 2 MiB ingress limit, then `new_canister_wasm` should be
+  // empty, and this field should be set instead.
+  optional ChunkedCanisterWasm chunked_canister_wasm = 5;
+}
+
+// A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
+// target principal.
+message TransferSnsTreasuryFunds {
+  // Whether to make the transfer from the NNS ledger (in ICP) or
+  // to make the transfer from the SNS ledger (in SNS tokens).
+  enum TransferFrom {
+    TRANSFER_FROM_UNSPECIFIED = 0;
+    TRANSFER_FROM_ICP_TREASURY = 1;
+    TRANSFER_FROM_SNS_TOKEN_TREASURY = 2;
+  }
+
+  TransferFrom from_treasury = 1;
+
+  // The amount to transfer, in e8s.
+  uint64 amount_e8s = 2;
+
+  // An optional memo to use for the transfer.
+  optional uint64 memo = 3;
+
+  // The principal to transfer the funds to.
+  ic_base_types.pb.v1.PrincipalId to_principal = 4;
+
+  // An (optional) Subaccount of the principal to transfer the funds to.
+  optional Subaccount to_subaccount = 5;
+}
+
+// A proposal function that changes the ledger's parameters.
+// Fields with None values will remain unchanged.
+message ManageLedgerParameters {
+  optional uint64 transfer_fee = 1;
+  optional string token_name = 2;
+  optional string token_symbol = 3;
+  optional string token_logo = 4;
+}
+
+// A proposal to mint SNS tokens to (optionally a Subaccount of) the
+// target principal.
+message MintSnsTokens {
+  // The amount to transfer, in e8s.
+  optional uint64 amount_e8s = 1;
+
+  // An optional memo to be used for the transfer.
+  optional uint64 memo = 2;
+
+  // The principal to transfer the funds to.
+  optional ic_base_types.pb.v1.PrincipalId to_principal = 3;
+
+  // An (optional) Subaccount of the principal to transfer the funds to.
+  optional Subaccount to_subaccount = 4;
 }
 
 // A proposal function to change the values of SNS metadata.
@@ -275,10 +428,185 @@ message ManageSnsMetadata {
   optional string description = 4;
 }
 
-// A proposal function to upgrade the SNS to the next version.  The versions are such that only
-// one kind of canister will update at the same time.
+// A proposal function to upgrade the SNS to the next version. The versions are such that only
+// one kind of canister will get updated at the same time.
 // This returns an error if the canister cannot be upgraded or no upgrades are available.
 message UpgradeSnsToNextVersion {}
+
+// A proposal to register a list of dapps in the root canister.
+message RegisterDappCanisters {
+  // The canister IDs to be registered (i.e. under the management of the SNS).
+  // The canisters must be already controlled by the SNS root canister before
+  // making this proposal. Any controllers besides the root canister will be
+  // removed when the proposal is executed.
+  // At least one canister ID is required.
+  repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
+}
+
+message Precise {
+  oneof value {
+    bool bool = 1;
+    bytes blob = 2;
+    string text = 3;
+    uint64 nat = 4;
+    int64 int = 5;
+    PreciseArray array = 6;
+    PreciseMap map = 7;
+  }
+}
+
+message PreciseArray {
+  repeated Precise array = 1;
+}
+
+message PreciseMap {
+  map<string, Precise> map = 1;
+}
+
+message ExtensionInit {
+  optional Precise value = 1;
+}
+
+message RegisterExtension {
+  optional ChunkedCanisterWasm chunked_canister_wasm = 1;
+
+  optional ExtensionInit extension_init = 2;
+}
+
+// WASM specification that can be either direct bytes or chunked
+message Wasm {
+  oneof wasm {
+    // Use this field if the WASM fits within the proposal size limit.
+    bytes bytes = 1;
+    // If the entire WASM does not fit into the 2 MiB ingress limit, use this instead.
+    ChunkedCanisterWasm chunked = 2;
+  }
+}
+
+message ExtensionUpgradeArg {
+  optional Precise value = 1;
+}
+
+message UpgradeExtension {
+  // The id of the extension canister to upgrade.
+  optional ic_base_types.pb.v1.PrincipalId extension_canister_id = 1;
+
+  // Arguments passed to the post-upgrade method of the new wasm module.
+  optional ExtensionUpgradeArg canister_upgrade_arg = 2;
+
+  // The new wasm module that the extension canister is upgraded to.
+  optional Wasm wasm = 3;
+}
+
+message ExtensionOperationArg {
+  optional Precise value = 1;
+}
+
+message ExecuteExtensionOperation {
+  optional ic_base_types.pb.v1.PrincipalId extension_canister_id = 1;
+
+  optional string operation_name = 2;
+
+  optional ExtensionOperationArg operation_arg = 3;
+}
+
+// Specification for an SNS extension
+message ExtensionSpec {
+  // The name of the extension
+  optional string name = 1;
+  // The version of the extension.
+  optional uint64 version = 2;
+  // The topic that the extension's registration proposal will be under
+  optional Topic topic = 3;
+  // The type of the extension, which determines its standard operations.
+  optional ExtensionType extension_type = 4;
+}
+
+// Types of extensions that can be registered
+enum ExtensionType {
+  EXTENSION_TYPE_UNSPECIFIED = 0;
+  EXTENSION_TYPE_TREASURY_MANAGER = 1;
+}
+
+// A proposal to remove a list of dapps from the SNS and assign them to new controllers
+message DeregisterDappCanisters {
+  // The canister IDs to be deregistered (i.e. removed from the management of the SNS).
+  repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
+
+  // The new controllers for the deregistered canisters.
+  repeated ic_base_types.pb.v1.PrincipalId new_controllers = 2;
+}
+
+enum LogVisibility {
+  LOG_VISIBILITY_UNSPECIFIED = 0;
+
+  // The log is visible to the controllers of the dapp canister.
+  LOG_VISIBILITY_CONTROLLERS = 1;
+
+  // The log is visible to the public.
+  LOG_VISIBILITY_PUBLIC = 2;
+}
+
+enum SnapshotVisibility {
+  SNAPSHOT_VISIBILITY_UNSPECIFIED = 0;
+
+  // Snapshots are visible to the controllers of the dapp canister.
+  SNAPSHOT_VISIBILITY_CONTROLLERS = 1;
+
+  // Snapshots are visible to the public.
+  SNAPSHOT_VISIBILITY_PUBLIC = 2;
+}
+
+// A proposal to manage the settings of one or more dapp canisters.
+message ManageDappCanisterSettings {
+  // The canister IDs of the dapp canisters to be modified.
+  repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
+
+  // Below are fields under CanisterSettings defined at
+  // https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.
+  optional uint64 compute_allocation = 2;
+  optional uint64 memory_allocation = 3;
+  optional uint64 freezing_threshold = 4;
+  optional uint64 reserved_cycles_limit = 5;
+  optional LogVisibility log_visibility = 6;
+
+  optional uint64 wasm_memory_limit = 7;
+  optional uint64 wasm_memory_threshold = 8;
+  optional SnapshotVisibility snapshot_visibility = 9;
+}
+
+// Unlike `Governance.Version`, this message has optional fields and is the recommended one
+// to be used in APIs that can evolve. For example, the SNS Governance could eventually support
+// a shorthand notation for SNS versions, enabling clients to specify SNS versions without having
+// to set each individual SNS framework canister's WASM hash.
+message SnsVersion {
+  // The hash of the Governance canister WASM.
+  optional bytes governance_wasm_hash = 1;
+
+  // The hash of the Swap canister WASM.
+  optional bytes swap_wasm_hash = 2;
+
+  // The hash of the Root canister WASM.
+  optional bytes root_wasm_hash = 3;
+
+  // The hash of the Index canister WASM.
+  optional bytes index_wasm_hash = 4;
+
+  // The hash of the Ledger canister WASM.
+  optional bytes ledger_wasm_hash = 5;
+
+  // The hash of the Ledger Archive canister WASM.
+  optional bytes archive_wasm_hash = 6;
+}
+
+message AdvanceSnsTargetVersion {
+  // If not specified, the target will advance to the latest SNS version known to this SNS.
+  optional SnsVersion new_target = 1;
+}
+
+message SetTopicsForCustomProposals {
+  map<uint64, Topic> custom_function_id_to_topic = 1;
+}
 
 // A proposal is the immutable input of a proposal submission.
 message Proposal {
@@ -286,7 +614,7 @@ message Proposal {
   string title = 1;
 
   // The description of the proposal which is a short text, composed
-  // using a maximum of 15000 bytes of characters.
+  // using a maximum of 30000 bytes of characters.
   string summary = 2;
 
   // The web address of additional content required to evaluate the
@@ -329,12 +657,12 @@ message Proposal {
     // Id = 2.
     NervousSystemParameters manage_nervous_system_parameters = 6;
 
-    // Upgrade a canister that is controlled by the SNS governance canister.
+    // Upgrade a canister that is controlled by the SNS Governance canister.
     //
     // Id = 3.
     UpgradeSnsControlledCanister upgrade_sns_controlled_canister = 7;
 
-    // Add a new NervousSystemFunction, of generic type,  to be executable by proposal.
+    // Add a new NervousSystemFunction, of generic type, to be executable by proposal.
     //
     // Id = 4.
     NervousSystemFunction add_generic_nervous_system_function = 8;
@@ -346,7 +674,7 @@ message Proposal {
 
     // Execute a method outside the SNS canisters.
     //
-    // Id = [1000-u64::MAX].
+    // Ids \in [1000, u64::MAX].
     ExecuteGenericNervousSystemFunction execute_generic_nervous_system_function = 10;
 
     // Execute an upgrade to next version on the blessed SNS upgrade path.
@@ -354,10 +682,64 @@ message Proposal {
     // Id = 7.
     UpgradeSnsToNextVersion upgrade_sns_to_next_version = 11;
 
-    // Modify values of SnsMetada.
+    // Modify values of SnsMetadata.
     //
-    // Id = 8
+    // Id = 8.
     ManageSnsMetadata manage_sns_metadata = 12;
+
+    // Transfer SNS treasury funds (ICP or SNS token) to an account.
+    // Id = 9.
+    TransferSnsTreasuryFunds transfer_sns_treasury_funds = 13;
+
+    // Register one or more dapp canister(s) in the SNS root canister.
+    //
+    // Id = 10.
+    RegisterDappCanisters register_dapp_canisters = 14;
+
+    // Deregister one or more dapp canister(s) in the SNS root canister.
+    //
+    // Id = 11.
+    DeregisterDappCanisters deregister_dapp_canisters = 15;
+
+    // Mint SNS tokens to an account.
+    //
+    // Id = 12.
+    MintSnsTokens mint_sns_tokens = 16;
+
+    // Change some parameters on the ledger.
+    //
+    // Id = 13.
+    ManageLedgerParameters manage_ledger_parameters = 17;
+
+    // Change canister settings for one or more dapp canister(s).
+    //
+    // Id = 14.
+    ManageDappCanisterSettings manage_dapp_canister_settings = 18;
+
+    // Advance SNS target version.
+    //
+    // Id = 15.
+    AdvanceSnsTargetVersion advance_sns_target_version = 19;
+
+    // Change the mapping from custom proposal types to topics.
+    //
+    // Id = 16.
+    SetTopicsForCustomProposals set_topics_for_custom_proposals = 20;
+
+    // Register an SNS extension canister.
+    //
+    // Id = 17.
+    RegisterExtension register_extension = 21;
+
+    // Execute an SNS extension's operation.
+    //
+    // Id = 18.
+    ExecuteExtensionOperation execute_extension_operation = 22;
+
+    // Upgrade an SNS extension canister.
+    //
+    // Id = 19.
+    UpgradeExtension upgrade_extension = 23;
   }
 }
 
@@ -421,6 +803,20 @@ message GovernanceError {
 
     // The NeuronId is invalid.
     ERROR_TYPE_INVALID_NEURON_ID = 16;
+
+    // This indicates that we have a bug. It should be impossible for users to provoke this.
+    //
+    // For example, suppose you put some auxiliary data into a ProposalData during proposal
+    // submission. That data is supposed to be used during execution of the proposal. But during
+    // execution, the auxiliary data is invalid (e.g. absent).
+    ERROR_TYPE_INCONSISTENT_INTERNAL_DATA = 17;
+
+    // Users cannot provoke this.
+    //
+    // E.g. 1 / E8 somehow provokes a divide by zero error, even though E8 is a positive number.
+    //
+    // This is a generalization of INCONSISTENT_INTERNAL_DATA.
+    ERROR_TYPE_UNREACHABLE_CODE = 18;
   }
 
   ErrorType error_type = 1;
@@ -468,6 +864,10 @@ enum ProposalDecisionStatus {
   PROPOSAL_DECISION_STATUS_FAILED = 5;
 }
 
+message TopicSelector {
+  optional Topic topic = 1;
+}
+
 // A proposal's status, with respect to reward distribution.
 enum ProposalRewardStatus {
   PROPOSAL_REWARD_STATUS_UNSPECIFIED = 0;
@@ -476,7 +876,7 @@ enum ProposalRewardStatus {
   // voting rewards. This implies nothing on the
   // ProposalDecisionStatus, i.e., a proposal can be decided
   // due to an absolute majority being in favor or against it,
-  // but other neuron holders can still cast their vote to get rewards.
+  // but other neuron holders can still cast their votes to get rewards.
   PROPOSAL_REWARD_STATUS_ACCEPT_VOTES = 1;
 
   // The proposal no longer accepts votes. It is due to settle
@@ -517,20 +917,30 @@ message WaitForQuietState {
 // The ProposalData that contains everything related to a proposal:
 // the proposal itself (immutable), as well as mutable data such as ballots.
 message ProposalData {
-  // TODO: update comments when clear
   // The proposal's action.
   // Types 0-999 are reserved for current (and future) core governance
-  // proposals that are not generic NervousSystemFunctions.
+  // proposals that are of type NativeNervousSystemFunction.
   //
-  // If the proposal is not a core governance proposal, the type will
+  // If the proposal is not a core governance proposal, the action will
   // be the same as the id of the NervousSystemFunction.
   //
   // Current set of reserved ids:
   // Id 0 - Unspecified catch all id for following purposes.
   // Id 1 - Motion proposals.
-  // Id 2 - Nervous System parameters proposals.
-  // Id 3 - Upgrade governance controlled canister proposals.
-  // Id 4 - Execute functions outside of the Governance canister.
+  // Id 2 - ManageNervousSystemParameters proposals.
+  // Id 3 - UpgradeSnsControlledCanister proposals.
+  // Id 4 - AddGenericNervousSystemFunction proposals.
+  // Id 5 - RemoveGenericNervousSystemFunction proposals.
+  // Id 6 - ExecuteGenericNervousSystemFunction proposals.
+  // Id 7 - UpgradeSnsToNextVersion proposals.
+  // Id 8 - ManageSnsMetadata proposals.
+  // Id 9 - TransferSnsTreasuryFunds proposals.
+  // Id 13 - ManageLedgerParameters proposals.
+  // Id 14 - ManageDappCanisterSettings proposals.
+  // Id 15 - AdvanceSnsTargetVersion proposals.
+  // Id 16 - SetTopicsForCustomProposals proposals.
+  // Id 17 - RegisterExtension.
+  // Id 18 - ExecuteExtensionOperation.
   uint64 action = 1;
 
   // This is stored here temporarily. It is also stored on the map
@@ -539,7 +949,7 @@ message ProposalData {
   // The unique id for this proposal.
   ProposalId id = 2;
 
-  // The ID of the neuron that made this proposal.
+  // The NeuronId of the Neuron that made this proposal.
   NeuronId proposer = 3;
 
   // The amount of governance tokens in e8s to be
@@ -586,6 +996,12 @@ message ProposalData {
   // If not specified, the proposal has not (yet) failed to execute.
   GovernanceError failure_reason = 12;
 
+  // OBSOLETE: Superseded by reward_event_end_timestamp_seconds. However, old
+  // proposals use this (old) field, not the new one, since they predate the new
+  // field. Therefore, to correctly detect whether a proposal has been rewarded,
+  // both fields must be consulted. That is what the has_been_rewarded method
+  // does, so use that.
+  //
   // The reward event round at which rewards for votes on this proposal
   // were distributed.
   //
@@ -593,8 +1009,6 @@ message ProposalData {
   // no reward event taking this proposal into consideration happened yet.
   //
   // This field matches field round in RewardEvent.
-  //
-  // This field is invalid when .is_eligible_for_rewards is false.
   uint64 reward_event_round = 13;
 
   // The proposal's wait-for-quiet state. This needs to be saved in stable memory.
@@ -602,38 +1016,111 @@ message ProposalData {
 
   // The proposal's payload rendered as text, for display in text/UI frontends.
   // This is set if the proposal is considered valid at time of submission.
+  //
+  // Proposals with action of type NativeNervousSystemFunction (action 0-999)
+  // render the payload in Markdown.
+  //
+  // Proposals with action of type GenericNervousSystemFunction provide no
+  // guarantee on the style of rendering as this is performed by the
+  // GenericNervousSystemFunction validator_canister.
   optional string payload_text_rendering = 15;
 
-  // True if NervousSystemParameters.voting_reward_parameters was set when the
-  // proposal was made.
+  // Deprecated. From now on, this field will be set to true when new proposals
+  // are created. However, there ARE old proposals where this is set to false.
+  //
+  // When set to false, the proposal skips past the ReadyToSettle reward status
+  // directly to Settled
+  //
+  // TODO(NNS1-2731): Delete this.
   bool is_eligible_for_rewards = 16;
 
-  // The initial voting period of the proposal, identical in meaning to the one in  
-  // NervousSystemParameters, and duplicated here so the parameters can be changed 
+  // The initial voting period of the proposal, identical in meaning to the one in
+  // NervousSystemParameters, and duplicated here so the parameters can be changed
   // without affecting existing proposals.
   uint64 initial_voting_period_seconds = 17;
 
-  // The wait_for_quiet_deadline_increase_seconds of the proposal, identical in 
-  // meaning to the one in NervousSystemParameters, and duplicated here so the 
+  // The wait_for_quiet_deadline_increase_seconds of the proposal, identical in
+  // meaning to the one in NervousSystemParameters, and duplicated here so the
   // parameters can be changed without affecting existing proposals.
   uint64 wait_for_quiet_deadline_increase_seconds = 18;
+
+  // If populated, then the proposal is considered "settled" in terms of voting
+  // rewards. Prior to the distribution of rewards, but after votes are no longer
+  // accepted, it is considered "ready to settle".
+  optional uint64 reward_event_end_timestamp_seconds = 19;
+
+  // Minimum "yes" votes needed for proposal adoption, as a fraction of the
+  // total voting power. Example: 300 basis points represents a requirement that
+  // 3% of the total voting power votes to adopt the proposal.
+  optional ic_nervous_system.pb.v1.Percentage minimum_yes_proportion_of_total = 20;
+
+  // Minimum "yes" votes needed for proposal adoption, as a fraction of the
+  // exercised voting power. Example: 50_000 basis points represents a
+  // requirement that 50% of the exercised voting power votes to adopt the
+  // proposal.
+  optional ic_nervous_system.pb.v1.Percentage minimum_yes_proportion_of_exercised = 21;
+
+  message TransferSnsTreasuryFundsActionAuxiliary {
+    Valuation valuation = 1;
+  }
+
+  message MintSnsTokensActionAuxiliary {
+    Valuation valuation = 1;
+  }
+
+  message AdvanceSnsTargetVersionActionAuxiliary {
+    // Corresponds to the Some(target_version) from an AdvanceSnsTargetVersion proposal, or
+    // to the last SNS version known to this SNS at the time of AdvanceSnsTargetVersion creation.
+    optional SnsVersion target_version = 1;
+  }
+
+  // In general, this holds data retrieved at proposal submission/creation time and used later
+  // during execution. This varies based on the action of the proposal.
+  oneof action_auxiliary {
+    TransferSnsTreasuryFundsActionAuxiliary transfer_sns_treasury_funds = 22;
+    MintSnsTokensActionAuxiliary mint_sns_tokens = 23;
+    AdvanceSnsTargetVersionActionAuxiliary advance_sns_target_version = 24;
+  }
+
+  // This proposal's topic.
+  optional Topic topic = 25;
+}
+
+message Valuation {
+  enum Token {
+    TOKEN_UNSPECIFIED = 0;
+    TOKEN_ICP = 1;
+    TOKEN_SNS_TOKEN = 2;
+  }
+
+  optional Token token = 1;
+  Account account = 2;
+  optional uint64 timestamp_seconds = 3;
+
+  message ValuationFactors {
+    ic_nervous_system.pb.v1.Tokens tokens = 1;
+    ic_nervous_system.pb.v1.Decimal icps_per_token = 2;
+    ic_nervous_system.pb.v1.Decimal xdrs_per_icp = 3;
+  }
+
+  ValuationFactors valuation_factors = 4;
 }
 
 // The nervous system's parameters, which are parameters that can be changed, via proposals,
 // by each nervous system community.
 // For some of the values there are specified minimum values (floor) or maximum values
 // (ceiling). The motivation for this is a) to prevent that the nervous system accidentally
-// chooses parameters that result in an un-upgradable (and thus stuck) governance canister
+// chooses parameters that result in an non-upgradable (and thus stuck) governance canister
 // and b) to prevent the canister from growing too big (which could harm the other canisters
 // on the subnet).
 //
 // Required invariant: the canister code assumes that all system parameters are always set.
 message NervousSystemParameters {
-  // The number of e8s (10E-8 of a token) that a rejected
+  // The number of e8s (10e-8 of a token) that a rejected
   // proposal costs the proposer.
   optional uint64 reject_cost_e8s = 1;
 
-  // The minimum number of e8s (10E-8 of a token) that can be staked in a neuron.
+  // The minimum number of e8s (10e-8 of a token) that can be staked in a neuron.
   //
   // To ensure that staking and disbursing of the neuron work, the chosen value
   // must be larger than the transaction_fee_e8s.
@@ -664,16 +1151,19 @@ message NervousSystemParameters {
 
   // The wait for quiet algorithm extends the voting period of a proposal when
   // there is a flip in the majority vote during the proposal's voting period.
-  // This parameter determines the maximum time period that the voting period 
+  // This parameter determines the maximum time period that the voting period
   // may be extended after a flip. If there is a flip at the very end of the
   // original proposal deadline, the remaining time will be set to this parameter.
-  // If there is a flip before or after the original deadline, the deadline will
+  // If there is a flip before or after the original deadline, the deadline will be
   // extended by somewhat less than this parameter.
-  // The maximum total voting period extension is 2 * wait_for_quiet_deadline_increase_seconds. 
-  // For more information, see the wiki page on the wait-for-quiet algorithm: 
-  // https://wiki.internetcomputer.org/wiki/Network_Nervous_System#Proposal_decision_and_wait-for-quiet
+  // The maximum total voting period extension is 2 * wait_for_quiet_deadline_increase_seconds.
+  // For more information, see the wiki page on the wait-for-quiet algorithm:
+  // https://internetcomputer.org/how-it-works/network-nervous-system-nns/#voting-rules
   optional uint64 wait_for_quiet_deadline_increase_seconds = 18;
 
+  // TODO NNS1-2169: This field currently has no effect.
+  // TODO NNS1-2169: Design and implement this feature.
+  //
   // The set of default followees that every newly created neuron will follow
   // per function. This is specified as a mapping of proposal functions to followees.
   //
@@ -715,7 +1205,7 @@ message NervousSystemParameters {
   // The max number of proposals for which ballots are still stored, i.e.,
   // unsettled proposals. If this number of proposals is reached, new proposals
   // can only be added in exceptional cases (for few proposals it is defined
-  // that they are allowed even if resoures are low to guarantee that the relevant
+  // that they are allowed even if resources are low to guarantee that the relevant
   // canisters can be upgraded).
   //
   // This number must be larger than zero and at most as large as the defined
@@ -754,6 +1244,32 @@ message NervousSystemParameters {
   //
   // To achieve functionality equivalent to NNS, this should be set to 25.
   optional uint64 max_age_bonus_percentage = 21;
+
+  // By default, maturity modulation is enabled; however, an SNS can use this
+  // field to disable it. When disabled, this canister will still poll the
+  // Cycles Minting Canister (CMC), and store the value received therefrom.
+  // However, the fetched value does not get used when this is set to true.
+  //
+  // The reason we call this "disabled" instead of (positive) "enabled" is so
+  // that the PB default (bool fields are false) and our application default
+  // (enabled) agree.
+  optional bool maturity_modulation_disabled = 22;
+
+  // Whether to automatically advance the SNS target version after a new upgrade is published
+  // by the NNS. If not specified, defaults to false for backward compatibility.
+  optional bool automatically_advance_target_version = 23;
+
+  // Custom proposal criticality configuration. Allows specifying additional native function IDs
+  // that should be treated as critical. If not specified, defaults to None (no custom criticality).
+  optional CustomProposalCriticality custom_proposal_criticality = 24;
+}
+
+// Defines custom proposal criticality settings for the nervous system.
+message CustomProposalCriticality {
+  // List of native function IDs that should be treated as critical.
+  // These functions will require a higher level of consensus to be executed.
+  // Only non-critical native function IDs can be added to this list.
+  repeated uint64 additional_critical_native_action_ids = 1;
 }
 
 message VotingRewardsParameters {
@@ -761,19 +1277,18 @@ message VotingRewardsParameters {
   //
   // Must be > 0.
   //
-  // During such periods, proposals enter the ReadyToSettle state. Once the
-  // round is over, voting for those proposals entitle voters to voting
-  // rewards. Such rewards are calculated by the governance canister's
-  // heartbeat.
+  // During such periods, proposals enter the ReadyToSettle state. Once the round is over, voting
+  // for those proposals entitle voters to voting rewards. Such rewards are calculated in
+  // the governance canister's run_periodic_tasks function.
   //
   // This is a nominal amount. That is, the actual time between reward
   // calculations and distribution cannot be guaranteed to be perfectly
   // periodic, but actual inter-reward periods are generally expected to be
   // within a few seconds of this.
   //
-  // This supercedes super.reward_distribution_period_seconds.
+  // This supersedes super.reward_distribution_period_seconds.
   optional uint64 round_duration_seconds = 1;
-  
+
   // No longer needed because we assume the start time is the SNS genesis.
   reserved "start_timestamp_seconds";
   reserved 2;
@@ -784,13 +1299,13 @@ message VotingRewardsParameters {
   // levels out at the end of the growth rate transition period.
   optional uint64 reward_rate_transition_duration_seconds = 3;
 
-  // The amount of rewards is propotional to token_supply * current_rate. In
-  // turn, current_rate is somewhere between these two values. In the first
-  // reward period, it is the initial growth rate, and after the growth rate
-  // transition period has elapsed, the growth rate becomes the final growth
-  // rate, and remains at that value for the rest of time. The transition
-  // between the initial and final growth rates is quadratic, and levels out at
-  // the end of the growth rate transition period.
+  // The amount of rewards is proportional to token_supply * current_rate. In
+  // turn, current_rate is somewhere between `initial_reward_rate_basis_points`
+  // and `final_reward_rate_basis_points`. In the first reward period, it is the
+  // initial growth rate, and after the growth rate transition period has elapsed,
+  // the growth rate becomes the final growth rate, and remains at that value for
+  // the rest of time. The transition between the initial and final growth rates is
+  // quadratic, and levels out at the end of the growth rate transition period.
   //
   // (A basis point is one in ten thousand.)
   optional uint64 initial_reward_rate_basis_points = 4;
@@ -808,9 +1323,18 @@ message NeuronPermissionList {
   repeated NeuronPermissionType permissions = 1;
 }
 
-// TODO: update when rewards are introduced
-// A reward event is an event at which neuron maturity is increased
+// A record of when voting rewards were determined, and neuron maturity
+// increased for participation in voting on proposals.
+//
+// This has diverged from NNS: this uses the same tag for different fields.
+// Therefore, we cannot simply move one of the definitions to a shared library.
+//
+// To make it a little easier to eventually deduplicate NNS and SNS Governance
+// code, tags should be chosen so that it is new to BOTH this and the NNS
+// RewardEvent. (This also applies to other message definitions.)
 message RewardEvent {
+  // DEPRECATED: Use end_timestamp_seconds instead.
+  //
   // Rewards are (calculated and) distributed periodically in "rounds". Round 1
   // begins at start_time and ends at start_time + 1 * round_duration, where
   // start_time and round_duration are specified in VotingRewardsParameters.
@@ -825,10 +1349,9 @@ message RewardEvent {
   // are.
   uint64 round = 1;
 
-  // The timestamp at which this reward event took place, in seconds since the unix epoch.
-  //
-  // This does not match the date taken into account for reward computation, which
-  // should always be an (integer) multiple of round_duration after start_time.
+  // Not to be confused with round_end_timestampe_seconds. This is just used to
+  // record when the calculation (of voting rewards) was performed, not the time
+  // range/events (i.e. proposals) that was operated on.
   uint64 actual_timestamp_seconds = 2;
 
   // The list of proposals that were taken into account during
@@ -841,9 +1364,58 @@ message RewardEvent {
   // the same scale as governance tokens, maturity is not directly convertible
   // to governance tokens: conversion requires a minting event.
   uint64 distributed_e8s_equivalent = 4;
+
+  // All proposals that were "ready to settle" up to this time were
+  // considered.
+  //
+  // If a proposal is "ready to settle", it simply means that votes are no
+  // longer accepted (votes can still be accepted for reward purposes after the
+  // proposal is decided), but rewards have not yet been given yet (on account
+  // of the proposal).
+  //
+  // The reason this should be used instead of `round` is that the duration of a
+  // round can be changed via proposal. Such changes cause round numbers to be
+  // not comparable without also knowing the associated round duration.
+  //
+  // Being able to change round duration does not exist in NNS (yet), and there
+  // is (currently) no intention to add that feature, but it could be done by
+  // making similar changes.
+  optional uint64 end_timestamp_seconds = 5;
+
+  // In some cases, the rewards that would have been distributed in one round are
+  // "rolled over" into the next reward event. This field keeps track of how many
+  // rounds have passed since the last time rewards were distributed (rather
+  // than being rolled over).
+  //
+  // For the genesis pseudo-reward event, this field will be zero.
+  //
+  // In normal operation, this field will almost always be 1. There are two
+  // reasons that rewards might not be distributed in a given round.
+  //
+  // 1. "Missed" rounds: there was a long period when we did calculate rewards
+  //    (longer than 1 round). (I.e. distribute_rewards was not called from
+  //    run_periodic_tasks, for whatever reason, most likely some kind of bug.)
+  //
+  // 2. Rollover: We tried to distribute rewards, but there were no proposals
+  //    settled to distribute rewards for.
+  //
+  // In both of these cases, the rewards purse rolls over into the next round.
+  optional uint64 rounds_since_last_distribution = 6;
+
+  // The total amount of rewards that was available during the reward event.
+  //
+  // The e8s_equivalent_to_be_rolled_over method returns this when
+  // there are no proposals (per the settled_proposals field).
+  //
+  // This is mostly copied from NNS.
+  //
+  // Warning: There is a field with the same name in NNS, but different tags are
+  // used. Also, this uses the `optional` keyword (whereas, the NNS analog does
+  // not).
+  optional uint64 total_available_e8s_equivalent = 8;
 }
 
-// The representation of the whole governance system, containting all
+// The representation of the whole governance system, containing all
 // information about the governance system that must be kept
 // across upgrades of the governance system, i.e. kept in stable memory.
 message Governance {
@@ -860,7 +1432,7 @@ message Governance {
   NervousSystemParameters parameters = 8;
 
   // TODO IC-1168: update when rewards are introduced
-  //  The latest reward event.
+  // The latest reward event
   RewardEvent latest_reward_event = 9;
 
   // The commands that require a neuron lock.
@@ -868,6 +1440,15 @@ message Governance {
     // The timestamp at which the command was issued, for debugging
     // purposes.
     uint64 timestamp = 1;
+
+    // A general place holder for sync commands. The neuron lock is
+    // never left holding a sync command (as it either succeeds to
+    // acquire the lock and releases it in the same call, or never
+    // acquires it in the first place), but it still must be acquired
+    // to prevent interleaving with another async command. Thus, there's
+    // no value in actually storing the command itself, and this placeholder
+    // can generally be used in all sync cases.
+    message SyncCommand {}
 
     oneof command {
       ManageNeuron.Disburse disburse = 2;
@@ -879,8 +1460,11 @@ message Governance {
       ManageNeuron.RemoveNeuronPermissions remove_neuron_permissions = 8;
       ManageNeuron.Configure configure = 9;
       ManageNeuron.Follow follow = 10;
+      ManageNeuron.SetFollowing set_following = 14;
       Proposal make_proposal = 11;
       ManageNeuron.RegisterVote register_vote = 12;
+      ManageNeuron.FinalizeDisburseMaturity finalize_disburse_maturity = 13;
+      SyncCommand sync_command = 20;
     }
   }
 
@@ -915,7 +1499,6 @@ message Governance {
   // Metrics that are too costly to compute each time when they are
   // requested.
   message GovernanceCachedMetrics {
-
     reserved 16;
 
     // The timestamp when these metrics were computed, as seconds since
@@ -976,7 +1559,7 @@ message Governance {
     uint64 neurons_with_invalid_stake_count = 12;
 
     // The total amount of governance tokens that are staked in neurons,
-    // measured in fractions of 10E-8 of a governance token.
+    // measured in fractions of 10e-8 of a governance token.
     uint64 total_staked_e8s = 13;
 
     // TODO: rather than taking six months, it would be more interesting to take the respective SNS's eligibility boarder here.
@@ -986,6 +1569,12 @@ message Governance {
     // The number of governance tokens in neurons with a dissolve delay of
     // less than six months.
     uint64 neurons_with_less_than_6_months_dissolve_delay_e8s = 15;
+
+    // Metrics related to the treasury assets of this SNS.
+    repeated TreasuryMetrics treasury_metrics = 17;
+
+    // Metrics related to the voting power in this SNS.
+    optional VotingPowerMetrics voting_power_metrics = 18;
   }
 
   GovernanceCachedMetrics metrics = 13;
@@ -1030,7 +1619,7 @@ message Governance {
     // Name of the SNS project. This may differ from the name of the associated token.
     optional string name = 3;
 
-    // Description of the SNS project.
+    // Description of the SNS project
     optional string description = 4;
   }
 
@@ -1038,6 +1627,7 @@ message Governance {
 
   // The initialization parameters used to spawn an SNS
   string sns_initialization_parameters = 22;
+
   // A version of the SNS defined by the WASM hashes of its canisters.
   message Version {
     // The hash of the Root canister WASM.
@@ -1054,23 +1644,74 @@ message Governance {
     bytes index_wasm_hash = 6;
   }
 
-  // An upgrade in progress, defined as a version target and a time at which it is considered failed.
-  message UpgradeInProgress {
-    // Version to  be upgraded to
-    Version target_version = 1;
-    // Seconds since UNIX epoch to mark this as a failed version if not in sync with current version
-    uint64 mark_failed_at_seconds = 2;
-    // Lock to avoid checking over and over again.  Also, it is a counter for how many times we have attempted to check,
-    // allowing us to fail in case we otherwise have gotten stuck.
-    uint64 checking_upgrade_lock = 3;
-    // The proposal that initiated this upgrade
-    uint64 proposal_id = 4;
+  message Versions {
+    repeated Governance.Version versions = 1;
   }
+
   // Current version that this SNS is running.
   Version deployed_version = 23;
 
-  // Version SNS is in process of upgrading to.
-  UpgradeInProgress pending_version = 24;
+  // An upgrade in progress, defined as a version target and a time at which it is considered failed.
+  message PendingVersion {
+    // Version to be upgraded to
+    Version target_version = 1;
+    // Seconds since UNIX epoch to mark this as a failed version if not in sync with current version
+    uint64 mark_failed_at_seconds = 2;
+    // Lock to avoid checking over and over again. Also, it is a counter for how many times we have attempted to check,
+    // allowing us to fail in case we otherwise have gotten stuck.
+    uint64 checking_upgrade_lock = 3;
+    // The proposal that initiated this upgrade
+    optional uint64 proposal_id = 4;
+  }
+
+  // Version the SNS is in process of upgrading to.
+  PendingVersion pending_version = 24;
+  Version target_version = 30;
+
+  // True if the run_periodic_tasks function is currently finalizing disburse maturity, meaning
+  // that it should finish before being called again.
+  optional bool is_finalizing_disburse_maturity = 25;
+
+  message MaturityModulation {
+    // When X maturity is disbursed, the amount that goes to the destination
+    // account is X * (1 + y) where y = current_basis_points / 10_000.
+    //
+    // Fetched from the cycles minting canister (same as NNS governance).
+    //
+    // There is a positive relationship between the price of ICP (in XDR) and
+    // this value.
+    optional int32 current_basis_points = 1;
+
+    // When current_basis_points was last updated (seconds since UNIX epoch).
+    optional uint64 updated_at_timestamp_seconds = 2;
+  }
+
+  MaturityModulation maturity_modulation = 26;
+
+  reserved "migrated_root_wasm_memory_limit";
+  reserved 27;
+
+  // The sns's local cache of the upgrade steps recieved from SNS-W.
+  message CachedUpgradeSteps {
+    // The upgrade steps that have been returned from SNS-W the last time we
+    // called list_upgrade_steps.
+    Governance.Versions upgrade_steps = 1;
+    // The timestamp of the request we sent to list_upgrade_steps.
+    // It's possible that this is greater than the response_timestamp_seconds, because
+    // we update it as soon as we send the request, and only update the
+    // response_timestamp and the upgrade_steps when we receive the response.
+    // The primary use of this is that we can avoid calling list_upgrade_steps
+    // more frequently than necessary.
+    optional uint64 requested_timestamp_seconds = 2;
+    // The timestamp of the response we received from list_upgrade_steps (stored in upgrade_steps).
+    optional uint64 response_timestamp_seconds = 3;
+  }
+  CachedUpgradeSteps cached_upgrade_steps = 29;
+
+  // Information about the timers that perform periodic tasks of this Governance canister.
+  optional ic_nervous_system.pb.v1.Timers timers = 31;
+
+  UpgradeJournal upgrade_journal = 32;
 }
 
 // Request message for 'get_metadata'.
@@ -1084,6 +1725,39 @@ message GetMetadataResponse {
   optional string description = 4;
 }
 
+// Request message for 'get_sns_status'
+message GetMetricsRequest {
+  uint64 time_window_seconds = 1;
+}
+
+message TreasuryMetrics {
+  Valuation.Token treasury = 1;
+  optional string name = 2;
+
+  ic_base_types.pb.v1.PrincipalId ledger_canister_id = 3;
+  Account account = 4;
+
+  uint64 amount_e8s = 5;
+  uint64 original_amount_e8s = 6;
+
+  uint64 timestamp_seconds = 7;
+}
+
+message VotingPowerMetrics {
+  uint64 governance_total_potential_voting_power = 1;
+  uint64 timestamp_seconds = 2;
+}
+
+// Response message for 'get_sns_status'
+message Metrics {
+  uint64 num_recently_submitted_proposals = 1;
+  uint64 last_ledger_block_timestamp = 2;
+  uint64 num_recently_executed_proposals = 3;
+  repeated TreasuryMetrics treasury_metrics = 4;
+  optional VotingPowerMetrics voting_power_metrics = 5;
+  uint64 genesis_timestamp_seconds = 6;
+}
+
 // Request message for 'get_sns_initialization_parameters'
 message GetSnsInitializationParametersRequest {}
 
@@ -1091,19 +1765,43 @@ message GetSnsInitializationParametersRequest {}
 message GetSnsInitializationParametersResponse {
   string sns_initialization_parameters = 1;
 }
+
 // Request for the SNS's currently running version.
 message GetRunningSnsVersionRequest {}
 
 // Response with the SNS's currently running version and any upgrades
 // that are in progress.
+// GetUpgradeJournal is a superior API to this one that should be used instead.
 message GetRunningSnsVersionResponse {
   // The currently deployed version of the SNS.
   Governance.Version deployed_version = 1;
   // The upgrade in progress, if any.
-  Governance.UpgradeInProgress pending_version = 2;
+  UpgradeInProgress pending_version = 2;
+
+  // The same as PendingVersion (stored in the governance proto). They are separated to make it easy to change one without changing the other.
+  message UpgradeInProgress {
+    // Version to be upgraded to
+    Governance.Version target_version = 1;
+    // Seconds since UNIX epoch to mark this as a failed version if not in sync with current version
+    uint64 mark_failed_at_seconds = 2;
+    // Lock to avoid checking over and over again. Also, it is a counter for how many times we have attempted to check,
+    // allowing us to fail in case we otherwise have gotten stuck.
+    uint64 checking_upgrade_lock = 3;
+    // The proposal that initiated this upgrade
+    uint64 proposal_id = 4;
+  }
 }
 
-// Empty message to use in oneof fields that represent empty
+// Request to fail an upgrade proposal that is Adopted but not Executed or
+// Failed if it is past the time when it should have been marked as failed.
+// This is useful in the case where the asynchronous process may have failed to
+// complete.
+message FailStuckUpgradeInProgressRequest {}
+
+// Response to FailStuckUpgradeInProgressRequest
+message FailStuckUpgradeInProgressResponse {}
+
+// Empty message to be used in oneof fields that represent empty
 // enums.
 message Empty {}
 
@@ -1136,6 +1834,14 @@ message ManageNeuron {
     uint64 dissolve_timestamp_seconds = 1;
   }
 
+  // Changes auto-stake maturity for this Neuron. While on, auto-stake
+  // maturity will cause all the maturity generated by voting rewards
+  // to this neuron to be automatically staked and contribute to the
+  // voting power of the neuron.
+  message ChangeAutoStakeMaturity {
+    bool requested_setting_for_auto_stake_maturity = 1;
+  }
+
   // Commands that only configure a given neuron, but do not interact
   // with the outside world. They all require the caller to have
   // `NeuronPermissionType::ConfigureDissolveState` for the neuron.
@@ -1145,6 +1851,7 @@ message ManageNeuron {
       StartDissolving start_dissolving = 2;
       StopDissolving stop_dissolving = 3;
       SetDissolveTimestamp set_dissolve_timestamp = 4;
+      ChangeAutoStakeMaturity change_auto_stake_maturity = 5;
     }
   }
 
@@ -1152,7 +1859,7 @@ message ManageNeuron {
   // neuron's tokens (if no argument is provided) to a given ledger account.
   // Thereby, the neuron's accumulated fees are burned and (if relevant in
   // the given nervous system) the token equivalent of the neuron's accumulated
-  // maturity are minted and also transferred to the specified account.
+  // maturity is minted and also transferred to the specified account.
   message Disburse {
     message Amount {
       uint64 e8s = 1;
@@ -1174,9 +1881,9 @@ message ManageNeuron {
   // the permissions (i.e., principals that can change the neuron), the age, the followees, and
   // the dissolve state. The parent neuron's fees and maturity (if applicable in the given
   // nervous system) remain in the parent neuron and the child neuron's fees and maturity
-  // are initialized to be zero.
+  // are initialized to zero.
   message Split {
-    // The amount of governance tokens (in measured in fractions of 10E-8 of
+    // The amount of governance tokens (measured in fractions of 10e-8 of
     // a governance token) to be split to the child neuron.
     uint64 amount_e8s = 1;
 
@@ -1194,6 +1901,15 @@ message ManageNeuron {
     uint32 percentage_to_merge = 1;
   }
 
+  // Stake the maturity of a neuron.
+  // The caller can choose a percentage of the current maturity to stake.
+  // If 'percentage_to_stake' is not provided, all of the neuron's current
+  // maturity will be staked.
+  message StakeMaturity {
+    // The percentage of maturity to stake, from 1 to 100 (inclusive).
+    optional uint32 percentage_to_stake = 1;
+  }
+
   // Disburse the maturity of a neuron to any ledger account. If an account
   // is not specified, the caller's account will be used. The caller can choose
   // a percentage of the current maturity to disburse to the ledger account. The
@@ -1204,6 +1920,14 @@ message ManageNeuron {
     uint32 percentage_to_disburse = 1;
 
     // The (optional) principal to which to transfer the stake.
+    Account to_account = 2;
+  }
+
+  message FinalizeDisburseMaturity {
+    // The amount to be disbursed in e8s of the governance token.
+    uint64 amount_to_be_disbursed_e8s = 1;
+
+    // The principal to which to transfer the stake (required).
     Account to_account = 2;
   }
 
@@ -1236,6 +1960,11 @@ message ManageNeuron {
     repeated NeuronId followees = 2;
   }
 
+  message SetFollowing {
+    // The neuron's topic-based following, specified as a sequence of `FolloweesForTopic`.
+    repeated Neuron.FolloweesForTopic topic_following = 1;
+  }
+
   // The operation that registers a given vote from the neuron for a given
   // proposal (a directly cast vote as opposed to a vote that is cast as
   // a result of a follow relation).
@@ -1264,8 +1993,8 @@ message ManageNeuron {
       // The memo and principal used to define the neuron to be claimed
       // or refreshed. Specifically, the memo (nonce) and the given principal
       // (called 'controller' or 'claimer') are used to compute the ledger
-      // subaccount to which the staked tokens to be used for claiming or
-      // refreshing a neuron were transferred to.
+      // subaccount to which the staked tokens were transferred to, to be used
+      // for claiming or refreshing a neuron.
       // If 'controller' is omitted, the id of the principal who calls this
       // operation will be used.
       MemoAndController memo_and_controller = 2;
@@ -1277,11 +2006,11 @@ message ManageNeuron {
     }
   }
 
-  // Add a set of permissions to the Neuron for the given PrincipalId. These
+  // Add a set of permissions to the Neuron for a given PrincipalId. These
   // permissions must be a subset of `NervousSystemParameters::neuron_grantable_permissions`.
   // If the PrincipalId doesn't have existing permissions, a new entry will be added for it
   // with the provided permissions. If a principalId already has permissions for the neuron,
-  // the new permissions will be added to the existing permissions.
+  // the new permissions will be added to the existing set.
   message AddNeuronPermissions {
     // The PrincipalId that the permissions will be granted to.
     ic_base_types.pb.v1.PrincipalId principal_id = 1;
@@ -1290,10 +2019,10 @@ message ManageNeuron {
     NeuronPermissionList permissions_to_add = 2;
   }
 
-  // Remove a set of permissions from the Neuron for the given PrincipalId. If a PrincipalId has all of
+  // Remove a set of permissions from the Neuron for a given PrincipalId. If the PrincipalId has all of
   // its permissions removed, it will be removed from the neuron's permissions list. This is a dangerous
-  // operation as its possible to remove all permissions for a neuron and no longer be able to modify
-  // it's state, i.e. disbursing the neuron back into the governance token.
+  // operation as it's possible to remove all permissions for a neuron and no longer be able to modify
+  // its state, i.e. disbursing the neuron back into the governance token.
   message RemoveNeuronPermissions {
     // The PrincipalId that the permissions will be revoked from.
     ic_base_types.pb.v1.PrincipalId principal_id = 1;
@@ -1306,6 +2035,7 @@ message ManageNeuron {
     Configure configure = 2;
     Disburse disburse = 3;
     Follow follow = 4;
+    SetFollowing set_following = 14;
     // Making a proposal is defined by a proposal, which contains the proposer neuron.
     // Making a proposal will implicitly cast a yes vote for the proposing neuron.
     Proposal make_proposal = 5;
@@ -1316,6 +2046,7 @@ message ManageNeuron {
     DisburseMaturity disburse_maturity = 10;
     AddNeuronPermissions add_neuron_permissions = 11;
     RemoveNeuronPermissions remove_neuron_permissions = 12;
+    StakeMaturity stake_maturity = 13;
   }
 }
 
@@ -1335,25 +2066,37 @@ message ManageNeuronResponse {
   // The response to the ManageNeuron command 'merge_maturity'.
   message MergeMaturityResponse {
     // The maturity that was merged in fractions of
-    // 10E-8 of a governance token.
+    // 10e-8 of a governance token.
     uint64 merged_maturity_e8s = 1;
 
     // The resulting cached stake of the modified neuron
-    // in fractions of 10E-8 of a governance token.
+    // in fractions of 10e-8 of a governance token.
     uint64 new_stake_e8s = 2;
   }
 
-  // The response to the DisburseMaturity command 'disburse_maturity'.
   message DisburseMaturityResponse {
-    // The block height at which the disburse maturity transfer happened.
-    uint64 transfer_block_height = 1;
+    reserved 1;
+    reserved "transfer_block_height";
 
-    // The amount disbursed in e8s of the governance token.
+    // This field is deprecated and is populated with the same value as `amount_deducted_e8s`.
     uint64 amount_disbursed_e8s = 2;
+
+    // The amount of maturity in e8s of the governance token deducted from the Neuron.
+    // This amount will undergo maturity modulation if enabled, and may be increased or
+    // decreased at the time of disbursement.
+    optional uint64 amount_deducted_e8s = 3;
+  }
+
+  message StakeMaturityResponse {
+    uint64 maturity_e8s = 1;
+    uint64 staked_maturity_e8s = 2;
   }
 
   // The response to the ManageNeuron command 'follow'.
   message FollowResponse {}
+
+  // The response to the ManageNeuron command 'set_following'.
+  message SetFollowingResponse {}
 
   // The response to the ManageNeuron command 'make_proposal'.
   message MakeProposalResponse {
@@ -1388,6 +2131,7 @@ message ManageNeuronResponse {
     ConfigureResponse configure = 2;
     DisburseResponse disburse = 3;
     FollowResponse follow = 4;
+    SetFollowingResponse set_following = 14;
     MakeProposalResponse make_proposal = 5;
     RegisterVoteResponse register_vote = 6;
     SplitResponse split = 7;
@@ -1396,6 +2140,7 @@ message ManageNeuronResponse {
     DisburseMaturityResponse disburse_maturity = 10;
     AddNeuronPermissionsResponse add_neuron_permission = 11;
     RemoveNeuronPermissionsResponse remove_neuron_permission = 12;
+    StakeMaturityResponse stake_maturity = 13;
   }
 }
 
@@ -1437,7 +2182,7 @@ message GetProposalResponse {
 // have the highest ids. ListProposals reverses the list and paginates backwards
 // using `before_proposal`, so the first element returned is the latest proposal.
 message ListProposals {
-  // Limit the number of Proposals returned in each page, from 1 to 100.
+  // Limits the number of Proposals returned in each page, from 1 to 100.
   // If a value outside of this range is provided, 100 will be used.
   uint32 limit = 1;
 
@@ -1454,7 +2199,7 @@ message ListProposals {
   repeated uint64 exclude_type = 3;
 
   // A list of proposal reward statuses, specifying that only proposals that
-  // that have one of the define reward statuses should be included
+  // that have one of the defined reward statuses should be included
   // in the list.
   // If this list is empty, no restriction is applied.
   //
@@ -1463,18 +2208,25 @@ message ListProposals {
   // with reward status PROPOSAL_REWARD_STATUS_ACCEPT_VOTES.
   repeated ProposalRewardStatus include_reward_status = 4;
 
-
   // A list of proposal decision statuses, specifying that only proposals that
-  // that have one of the define decision statuses should be included
+  // that have one of the defined decision statuses should be included
   // in the list.
   // If this list is empty, no restriction is applied.
   repeated ProposalDecisionStatus include_status = 5;
+
+  // A list of topics that should be included. If empty, all topics will be included.
+  // The list may contain the None, expressing selection of proposals without topics.
+  repeated TopicSelector include_topics = 6;
 }
 
 // A response to the ListProposals command.
 message ListProposalsResponse {
   // The returned list of proposals' ProposalData.
   repeated ProposalData proposals = 1;
+  // Whether ballots cast by the caller are included in the returned proposals.
+  optional bool include_ballots_by_caller = 2;
+  // Whether topic-based filtering has been taken into account.
+  optional bool include_topic_filtering = 3;
 }
 
 // An operation that lists all neurons tracked in the Governance state in a
@@ -1500,7 +2252,7 @@ message ListNeurons {
   ic_base_types.pb.v1.PrincipalId of_principal = 3;
 }
 
-// A response to the ListNeurons command.
+// The response to a ListNeurons command.
 message ListNeuronsResponse {
   // The returned list of neurons.
   repeated Neuron neurons = 1;
@@ -1508,11 +2260,11 @@ message ListNeuronsResponse {
 
 // The response to the list_nervous_system_functions query.
 message ListNervousSystemFunctionsResponse {
-  // Current set of nervous system function, both native and user-defined,
+  // Current set of nervous system functions, both native and user-defined,
   // that can be executed by proposal.
   repeated NervousSystemFunction functions = 1;
 
-  // Set of nervous system function ids that are reserved and cannot be
+  // Set of nervous system function-ids that are reserved and cannot be
   // used to add new NervousSystemFunctions.
   repeated uint64 reserved_ids = 2;
 }
@@ -1521,65 +2273,283 @@ message SetMode {
   Governance.Mode mode = 1;
 }
 
-message SetModeResponse {
+message SetModeResponse {}
+
+message GetMode {}
+
+message GetModeResponse {
+  optional Governance.Mode mode = 1;
 }
 
 // The request for the `claim_swap_neurons` method.
 message ClaimSwapNeuronsRequest {
-  // NeuronParameters groups parameters for creating a neuron in the
-  // `claim_swap_neurons` method.
-  message NeuronParameters {
-    // The PrincipalId that will have permissions when the neuron is created.
-    // The permissions that are granted are controlled my
-    // `NervousSystemParameters::neuron_claimer_permissions`. This field
-    // is required.
-    ic_base_types.pb.v1.PrincipalId controller = 1;
+  // Contains the information needed to set up a neuron for a swap participant.
+  message NeuronRecipe {
+    // The info that for a participant in the Neurons' Fund
+    message NeuronsFund {
+      // The neuron ID of the NNS neuron that participated in the Neurons' Fund.
+      optional uint64 nns_neuron_id = 1;
+      // The controller of the NNS neuron that participated in the Neurons' Fund.
+      optional ic_base_types.pb.v1.PrincipalId nns_neuron_controller = 2;
+      // The hotkeys of the NNS neuron that participated in the Neurons' Fund.
+      optional ic_nervous_system.pb.v1.Principals nns_neuron_hotkeys = 3;
+    }
 
-    // For Community Fund participants, in addition to the controller (that is
-    // set to the NNS governance), this is another PrincipalId with permissions.
-    // Specifically, the PrincipalId who is the controller of the NNS neuron
-    // that invested in the decentralization sale via the Community Fund will
-    // be granted the following permissions:
-    //    - NeuronPermissionType::SubmitProposal
-    //    - NeuronPermissionType::Vote
-    // This field is not set for other types of participants, therefore it is optional.
-    ic_base_types.pb.v1.PrincipalId hotkey = 2;
+    // Additional data associated with a direct (as opposed to Neurons' Fund) participant.
+    message Direct {}
 
-    // The stake of the neuron in e8s (10E-8 of a token) that the neuron will be
-    // created with. This field is required.
+    // The principal that should be the controller of the SNS neuron
+    optional ic_base_types.pb.v1.PrincipalId controller = 1;
+    // The ID of the SNS neuron
+    optional NeuronId neuron_id = 2;
+
+    // The SNS neuron's stake in e8s (10e-8 of a token)
     optional uint64 stake_e8s = 3;
 
-    // The memo used when creating the Subaccount of the neuron. The subaccount also
-    // doubles as the NeuronId and is calculated by hashing the controller field
-    // with the memo field. An implementation of this algorithm can be found at
-    // `nervous_system_common::compute_neuron_staking_subaccount`. This field is
-    // required.
-    optional uint64 memo = 4;
+    // The duration in seconds that the neuron's dissolve delay will be set to.
+    optional uint64 dissolve_delay_seconds = 4;
 
-    // The duration in seconds that the neuron's dissolve delay will be set to. Neurons
-    // that are for Community Fund investors will be automatically set to dissolving,
-    // while direct investors will be automatically set to non-dissolving.
-    optional uint64 dissolve_delay_seconds = 5;
+    // The neurons this neuron should follow
+    optional NeuronIds followees = 5;
+
+    oneof participant {
+      Direct direct = 6;
+      NeuronsFund neurons_fund = 7;
+    }
+  }
+
+  // Needed to cause prost to generate a type isomorphic to
+  // Optional<Vec<NeuronRecipe>>.
+  message NeuronRecipes {
+    repeated NeuronRecipe neuron_recipes = 1;
   }
 
   // The set of parameters that define the neurons created in `claim_swap_neurons`. For
-  // each NeuronParameter, one neuron will be created.
-  repeated NeuronParameters neuron_parameters = 1;
+  // each NeuronRecipe, one neuron will be created.
+  optional NeuronRecipes neuron_recipes = 2;
+
+  reserved 1;
+  reserved "neuron_parameters";
 }
 
-// The response for the `claim_swap_neurons` method. The sum of all fields
-// should equal the number of `NeuronParameters` in `ClaimSwapNeuronsRequest`.
+// An enum for representing the various statuses a Neuron being claimed by the
+// `claim_swap_neurons` API may have. The status is reported back to callers of
+// the API (mainly the SNS Swap canister) to indicate the success of the
+// operation.
+enum ClaimedSwapNeuronStatus {
+  // Unspecified represents the default value for unknown enum values when deserializing.
+  // This value is unused.
+  CLAIMED_SWAP_NEURON_STATUS_UNSPECIFIED = 0;
+
+  // The Neuron was successfully created and added to Governance. Future
+  // attempts to claim the same Neuron will result in
+  // `ClaimedSwapNeuronStatus::AlreadyExists`.
+  CLAIMED_SWAP_NEURON_STATUS_SUCCESS = 1;
+
+  // The Neuron could not be created because one or more of its
+  // construction parameters are invalid, i.e. its stake was not
+  // above the required minimum neuron stake. Additional retries will
+  // result in the same status.
+  CLAIMED_SWAP_NEURON_STATUS_INVALID = 2;
+
+  // The neuron could not be created because it already exists
+  // within SNS Governance. Additional retries will result in
+  // the same status.
+  CLAIMED_SWAP_NEURON_STATUS_ALREADY_EXISTS = 3;
+
+  // The Neuron could not be created because Governance has
+  // reached its configured memory limits. A retry is
+  // possible if more memory becomes available to the canister.
+  CLAIMED_SWAP_NEURON_STATUS_MEMORY_EXHAUSTED = 4;
+}
+
+// An enum representing the errors that the `claim_swap_neurons` API may
+// return.
+enum ClaimSwapNeuronsError {
+  // Unspecified represents the default value for unknown enum values when deserializing.
+  // This value is unused.
+  CLAIM_SWAP_NEURONS_ERROR_UNSPECIFIED = 0;
+
+  // The caller of `claim_swap_neurons` was unauthorized. No
+  // requested neurons were claimed if this error is returned.
+  CLAIM_SWAP_NEURONS_ERROR_UNAUTHORIZED = 1;
+
+  // The Governance canister encountered an internal error. No
+  // requested neurons were claimed if this error is returned.
+  CLAIM_SWAP_NEURONS_ERROR_INTERNAL = 2;
+}
+
+// The response for the `claim_swap_neurons` method.
 message ClaimSwapNeuronsResponse {
-  // This field reports the number of successfully created neurons.
-  uint32 successful_claims = 1;
+  reserved 1;
+  reserved "successful_claims";
+  reserved 2;
+  reserved "skipped_claims";
+  reserved 3;
+  reserved "failed_claims";
 
-  // This field reports the number of neurons skipped due to this method
-  // being idempotent, i.e. the neuron has already been created.
-  uint32 skipped_claims = 2;
+  // ClaimSwapNeurons will either return an error, in which
+  // no requested neurons were claimed, or a vector with
+  // various neuron statuses for the requested neuron ids.
+  oneof claim_swap_neurons_result {
+    ClaimedSwapNeurons ok = 4;
 
-  // This field reports the number of neurons that failed to be created.
-  uint32 failed_claims = 3;
+    ClaimSwapNeuronsError err = 5;
+  }
+
+  // The ok result from `claim_swap_neurons. For every requested neuron,
+  // a SwapNeuron message is returned, and should equal the count of
+  // `ClaimSwapNeuronsRequest.neuron_recipes`.
+  message ClaimedSwapNeurons {
+    repeated SwapNeuron swap_neurons = 1;
+  }
+
+  // SwapNeuron associates the status of a neuron attempting to be
+  // claimed with a NeuronId. The `id` field will correspond with a
+  // `ClaimSwapNeuronsRequest.neuron_recipes.neuron_id` field in
+  // the request object used in `claim_swap_neurons`.
+  message SwapNeuron {
+    NeuronId id = 1;
+
+    // The status of claiming of a requested swap neuron.
+    ClaimedSwapNeuronStatus status = 2;
+  }
 }
+
+message GetMaturityModulationRequest {}
+
+message GetMaturityModulationResponse {
+  Governance.MaturityModulation maturity_modulation = 1;
+}
+
+// A request to add maturity to a neuron. The associated endpoint is only
+// available when governance is compiled with the `test` feature enabled.
+message AddMaturityRequest {
+  optional NeuronId id = 1;
+  optional uint64 amount_e8s = 2;
+}
+
+// The response to a request to add maturity to a neuron. The associated endpoint is only
+// available when SNS Governance is compiled with the `test` feature enabled.
+message AddMaturityResponse {
+  optional uint64 new_maturity_e8s = 1;
+}
+
+// A test-only API that advances the target version of the SNS.
+message AdvanceTargetVersionRequest {
+  optional Governance.Version target_version = 1;
+}
+
+// The response to a request to advance the target version of the SNS.
+message AdvanceTargetVersionResponse {}
+
+// A test-only API that refreshes the cached upgrade steps.
+message RefreshCachedUpgradeStepsRequest {}
+
+// The response to a request to refresh the cached upgrade steps.
+message RefreshCachedUpgradeStepsResponse {}
+
+// Represents a single entry in the upgrade journal.
+message UpgradeJournalEntry {
+  oneof event {
+    UpgradeStepsRefreshed upgrade_steps_refreshed = 1;
+    UpgradeStepsReset upgrade_steps_reset = 7;
+    TargetVersionSet target_version_set = 2;
+    TargetVersionReset target_version_reset = 3;
+    UpgradeStarted upgrade_started = 4;
+    UpgradeOutcome upgrade_outcome = 5;
+  }
+  optional uint64 timestamp_seconds = 6;
+
+  message UpgradeStepsRefreshed {
+    optional Governance.Versions upgrade_steps = 2;
+  }
+
+  message UpgradeStepsReset {
+    optional string human_readable = 1;
+    optional Governance.Versions upgrade_steps = 2;
+  }
+
+  message TargetVersionSet {
+    optional Governance.Version old_target_version = 1;
+    optional Governance.Version new_target_version = 2;
+    optional bool is_advanced_automatically = 3;
+  }
+
+  message TargetVersionReset {
+    optional Governance.Version old_target_version = 1;
+    optional Governance.Version new_target_version = 2;
+    optional string human_readable = 3;
+  }
+
+  message UpgradeStarted {
+    optional Governance.Version current_version = 1;
+    optional Governance.Version expected_version = 2;
+    oneof reason {
+      ProposalId upgrade_sns_to_next_version_proposal = 3;
+      Empty behind_target_version = 4;
+    }
+  }
+
+  message UpgradeOutcome {
+    optional string human_readable = 1;
+
+    oneof status {
+      Empty success = 2;
+      Empty timeout = 3;
+      // The SNS ended up being upgraded to a version that was not the expected one.
+      InvalidState invalid_state = 4;
+      Empty external_failure = 5;
+    }
+
+    message InvalidState {
+      Governance.Version version = 1;
+    }
+  }
+}
+
+message UpgradeJournal {
+  // The entries in the upgrade journal.
+  repeated UpgradeJournalEntry entries = 1;
+}
+
+// The upgrade journal contains all the information needed to audit previous SNS upgrades and understand its current state.
+// It is being implemented as a part of the "effortless SNS upgrade" feature.
+message GetUpgradeJournalRequest {
+  // Maximum number of journal entries to return.
+  // If not specified, defaults to 100. Values larger than 100 will be capped at 100.
+  optional uint64 limit = 1;
+
+  // The starting index from which to return entries, counting from the oldest entry (0).
+  // If not specified, return the most recent entries.
+  optional uint64 offset = 2;
+}
+
+message GetUpgradeJournalResponse {
+  Governance.Versions upgrade_steps = 1;
+  optional uint64 response_timestamp_seconds = 2;
+  // The target version that the SNS will be upgraded to.
+  // Currently, this field is always None, but in the "effortless SNS upgrade"
+  // feature, it reflects the version of the SNS that the community has decided to upgrade to.
+  Governance.Version target_version = 3;
+  Governance.Version deployed_version = 5;
+
+  UpgradeJournal upgrade_journal = 4;
+  optional uint64 upgrade_journal_entry_count = 6;
+}
+
+// A request to mint tokens for a particular principal. The associated endpoint
+// is only available on SNS Governance, and only then when SNS Governance is
+// compiled with the `test` feature enabled.
+message MintTokensRequest {
+  optional Account recipient = 1;
+  optional uint64 amount_e8s = 2;
+}
+
+// The response to a request to mint tokens for a particular principal. The
+// associated endpoint is only available on SNS Governance, and only then when
+// SNS Governance is compiled with the `test` feature enabled.
+message MintTokensResponse {}
 
 // A Ledger subaccount.
 message Subaccount {
@@ -1597,4 +2567,28 @@ message Account {
   // The subaccount of the account. If not set then the default
   // subaccount (all bytes set to 0) is used.
   optional Subaccount subaccount = 2;
+}
+
+enum Topic {
+  // Unused, here for PB lint purposes.
+  TOPIC_UNSPECIFIED = 0;
+  // Proposals to set the direction of the DAO by tokenomics & branding
+  TOPIC_DAO_COMMUNITY_SETTINGS = 1;
+  // Proposals to upgrade and manage the SNS DAO framework
+  TOPIC_SNS_FRAMEWORK_MANAGEMENT = 2;
+  // Proposals to manage the dapp's canisters
+  TOPIC_DAPP_CANISTER_MANAGEMENT = 3;
+  // Proposals related to the dapp's business logic
+  TOPIC_APPLICATION_BUSINESS_LOGIC = 4;
+  // Proposals related to governance
+  TOPIC_GOVERNANCE = 5;
+  // Proposals related to treasury management
+  TOPIC_TREASURY_ASSET_MANAGEMENT = 6;
+  // Critical proposals related to dapp operations
+  TOPIC_CRITICAL_DAPP_OPERATIONS = 7;
+}
+
+message AddAllowedExtensionRequest {
+  bytes wasm_hash = 1;
+  ExtensionSpec spec = 2;
 }

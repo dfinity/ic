@@ -1,27 +1,29 @@
 [package]
 name = "ic-replay"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-candid = "0.8.1"
-clap = { version = "3.1.6", features = ["derive"] }
-hex = "0.4.2"
+async-trait = { workspace = true }
+candid = { workspace = true }
+clap = { workspace = true }
+hex = { workspace = true }
+ic-agent = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
-ic-canister-client = { path = "../canister_client" }
-ic-canister-sandbox-backend-lib = { path = "../canister_sandbox/backend_lib" }
-ic-canister-sandbox-launcher = { path = "../canister_sandbox/sandbox_launcher" }
+ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
-ic-consensus-message = { path = "../consensus/message" }
-ic-crypto = { path = "../crypto" }
-ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
-ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
-ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
-ic-crypto-sha = {path = "../crypto/sha/"}
-ic-cycles-account-manager = { path = "../cycles_account_manager" }
+ic-consensus-certification = { path = "../consensus/certification" }
+ic-consensus-cup-utils = { path = "../consensus/cup_utils" }
+ic-consensus-dkg = { path = "../consensus/dkg" }
+ic-consensus-utils = { path = "../consensus/utils" }
+ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
+ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
+ic-error-types = { path = "../../packages/ic-error-types" }
 ic-execution-environment = { path = "../execution_environment" }
-ic-http-handler = { path = "../http_handler" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
@@ -31,31 +33,45 @@ ic-metrics = { path = "../monitoring/metrics" }
 ic-nervous-system-common = { path = "../nervous_system/common" }
 ic-nns-common = { path = "../nns/common" }
 ic-nns-constants = { path = "../nns/constants" }
-ic-nns-governance = { path = "../nns/governance" }
-ic-nns-init = { path = "../nns/init" }
+ic-nns-governance-api = { path = "../nns/governance/api" }
 ic-protobuf = { path = "../protobuf" }
+ic-registry-canister-api = { path = "../registry/canister/api" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
-ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-local-store = { path = "../registry/local_store" }
+ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-transport = { path = "../registry/transport" }
-ic-replica = { path = "../replica" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }
 ic-types = { path = "../types/types" }
-ic-utils = { path = "../utils" }
-ledger-canister = { path = "../rosetta-api/ledger_canister" }
-prost = "0.10.4"
-rand = "0.8"
-serde = { version = "1.0.115", features = ["derive"] }
-serde_json = "1.0.40"
-slog = "2.5.2"
-slog-async = { version = "2.5", features = ["nested-values"] }
-tempfile = "3.1.0"
-tokio = { version = "1.15.0", features = ["full"] }
-url = { version = "2.1.1", features = ["serde"] }
+icp-ledger = { path = "../ledger_suite/icp" }
+mockall = { workspace = true }
+prost = { workspace = true }
+rayon = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
+slog-async = { workspace = true }
+strum = { workspace = true }
+tempfile = { workspace = true }
+time = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+
+[dev-dependencies]
+async-trait = { workspace = true }
+ic-crypto-sha2 = { path = "../crypto/sha2" }
+ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
+ic-nervous-system-agent = { path = "../nervous_system/agent" }
+ic-nervous-system-chunks = { path = "../nervous_system/chunks" }
+ic-nervous-system-integration-tests = { path = "../nervous_system/integration_tests" }
+ic-nns-test-utils = { path = "../nns/test_utils" }
+ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
+pocket-ic = { path = "../../packages/pocket-ic" }
+pretty_assertions = { workspace = true }
 
 [[bin]]
 name = "ic-replay"

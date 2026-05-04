@@ -7,46 +7,78 @@ DEPENDENCIES = [
     "//rs/canister_client",
     "//rs/certification",
     "//rs/crypto/tree_hash",
-    "//rs/crypto/utils/threshold_sig",
     "//rs/interfaces/registry",
     "//rs/nns/constants",
-    "//rs/protobuf",
-    "//rs/registry/proto",
+    "//rs/registry/canister/api",
     "//rs/registry/transport",
     "//rs/tree_deserializer",
     "//rs/types/types",
-    "//rs/utils",
-    "@crate_index//:bytes",
+    "@crate_index//:candid",
     "@crate_index//:chrono",
-    "@crate_index//:hyper",
-    "@crate_index//:hyper-tls",
-    "@crate_index//:lazy_static",
+    "@crate_index//:mockall",
     "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:serde",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
     "@crate_index//:url",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/pocket-ic",
     "//rs/certification/test-utils",
-    "//rs/crypto",
+    "//rs/crypto/sha2",
+    "//rs/nervous_system/agent",
+    "//rs/nervous_system/chunks",
+    "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
+    "//rs/nns/test_utils",
+    "@crate_index//:futures-util",
     "@crate_index//:leb128",
+    "@crate_index//:pretty_assertions",
+    "@crate_index//:tokio",
 ]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:async-trait",
+]
+
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+]
+
+DEV_DATA = [
+    # Keep sorted.
+    "//rs/pocket_ic_server:pocket-ic-server",
+    "//rs/registry/canister:registry-canister-test",
+]
+
+DEV_ENV = {
+    # Keep sorted.
+    "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
+    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+}
 
 rust_library(
     name = "nns_data_provider",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_registry_nns_data_provider",
-    version = "0.8.0",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
 rust_test(
     name = "nns_data_provider_test",
     crate = ":nns_data_provider",
-    deps = DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "registry_canister_integration_tests",
+    srcs = ["tests/registry_canister.rs"],
+    data = DEV_DATA,
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":nns_data_provider"],
 )

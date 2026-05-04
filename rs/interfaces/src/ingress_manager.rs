@@ -1,18 +1,18 @@
 //! The ingress manager public interface.
 use crate::{
+    consensus::PayloadWithSizeEstimate,
     execution_environment::{CanisterOutOfCyclesError, IngressHistoryError},
-    ingress_pool::{ChangeSet, IngressPool},
-    validation::{ValidationError, ValidationResult},
+    validation::ValidationError,
 };
 use ic_types::{
+    CanisterId, Height, NumBytes,
     artifact::IngressMessageId,
-    batch::{IngressPayload, IngressPayloadError, ValidationContext},
+    batch::{IngressPayload, ValidationContext},
     consensus::Payload,
-    crypto::CryptoError,
     ingress::IngressSets,
     messages::MessageId,
+    state_manager::StateManagerError,
     time::{Time, UNIX_EPOCH},
-    CanisterId, Height, NumBytes,
 };
 use std::collections::HashSet;
 
@@ -28,7 +28,6 @@ pub trait IngressSetQuery {
     fn get_expiry_lower_bound(&self) -> Time;
 }
 
-/// HashSet<MessageId> implements IngressSetQuery.
 impl IngressSetQuery for HashSet<IngressMessageId> {
     fn contains(&self, msg_id: &IngressMessageId) -> bool {
         HashSet::contains(self, msg_id)
@@ -51,78 +50,52 @@ impl IngressSetQuery for IngressSets {
     }
 }
 
-/// Permanent errors returned by the Ingress Selector.
-#[derive(Debug)]
-pub enum IngressPermanentError {
-    CryptoError(CryptoError),
+/// Reasons for why an ingress payload might be invalid.
+#[derive(Eq, PartialEq, Debug)]
+pub enum InvalidIngressPayloadReason {
+    /// An [`IngressMessageId`] inside the payload doesn't match the referenced [`SignedIngress`].
+    MismatchedMessageId {
+        expected: IngressMessageId,
+        computed: IngressMessageId,
+    },
+    /// Failed to deserialize an ingress message.
+    IngressMessageDeserializationFailure(IngressMessageId, String),
     IngressValidationError(MessageId, String),
-    IngressBucketError(MessageId),
-    IngressHistoryError(IngressHistoryError),
-    IngressPayloadError(IngressPayloadError),
     IngressExpired(MessageId, String),
     IngressMessageTooBig(usize, usize),
-    IngressPayloadTooBig(usize, usize),
     IngressPayloadTooManyMessages(usize, usize),
     DuplicatedIngressMessage(MessageId),
     InsufficientCycles(CanisterOutOfCyclesError),
     CanisterNotFound(CanisterId),
+    CanisterStopping(CanisterId),
+    CanisterStopped(CanisterId),
     InvalidManagementMessage,
-    StateRemoved(Height),
 }
 
-/// Transient errors returned by the Ingress Selector.
-#[derive(Debug)]
-pub enum IngressTransientError {
-    CryptoError(CryptoError),
-    StateNotCommittedYet(Height),
+/// Reasons for validation failures.
+#[derive(Eq, PartialEq, Debug)]
+pub enum IngressPayloadValidationFailure {
+    StateManagerError(Height, StateManagerError),
+    IngressHistoryError(Height, IngressHistoryError),
 }
 
 pub type IngressPayloadValidationError =
-    ValidationError<IngressPermanentError, IngressTransientError>;
+    ValidationError<InvalidIngressPayloadReason, IngressPayloadValidationFailure>;
 
-impl From<CryptoError> for IngressTransientError {
-    fn from(err: CryptoError) -> IngressTransientError {
-        IngressTransientError::CryptoError(err)
+impl<T> From<InvalidIngressPayloadReason> for ValidationError<InvalidIngressPayloadReason, T> {
+    fn from(err: InvalidIngressPayloadReason) -> ValidationError<InvalidIngressPayloadReason, T> {
+        ValidationError::InvalidArtifact(err)
     }
 }
 
-impl From<CryptoError> for IngressPermanentError {
-    fn from(err: CryptoError) -> IngressPermanentError {
-        IngressPermanentError::CryptoError(err)
+impl<P> From<IngressPayloadValidationFailure>
+    for ValidationError<P, IngressPayloadValidationFailure>
+{
+    fn from(
+        err: IngressPayloadValidationFailure,
+    ) -> ValidationError<P, IngressPayloadValidationFailure> {
+        ValidationError::ValidationFailed(err)
     }
-}
-
-impl<T> From<IngressPermanentError> for ValidationError<IngressPermanentError, T> {
-    fn from(err: IngressPermanentError) -> ValidationError<IngressPermanentError, T> {
-        ValidationError::Permanent(err)
-    }
-}
-
-impl<P> From<IngressTransientError> for ValidationError<P, IngressTransientError> {
-    fn from(err: IngressTransientError) -> ValidationError<P, IngressTransientError> {
-        ValidationError::Transient(err)
-    }
-}
-
-/// Processes Ingress messages received from peers or HttpHandler.
-///
-/// Its main role is to determine whether the message should be relayed to other
-/// nodes or not and to remove expired messages. This interface is used by
-/// ArtifactManager when a new ingress message is inserted in the unvalidated
-/// pool.
-pub trait IngressHandler {
-    /// Inspect the input [IngressPool] to build a [ChangeSet] of
-    /// actions to be executed. The caller is then expected to apply the
-    /// returned [ChangeSet] to the input of this call, namely
-    /// [IngressPool].
-    ///
-    /// #Input
-    /// [IngressPool] which is passed as a read-only reference.
-    ///
-    /// #Returns
-    /// [ChangeSet] that describes which Ingress Messages are added, moved or
-    /// removed from their current part of the artifact pool
-    fn on_state_change(&self, pool: &dyn IngressPool) -> ChangeSet;
 }
 
 /// A component used by Consensus to build and validate a payload.
@@ -142,13 +115,14 @@ pub trait IngressSelector: Send + Sync {
     /// get_ingress_payload(..., byte_limit).count_bytes() <= byte_limit
     ///
     /// #Returns
-    /// [IngressPayload] which is a collection of valid ingress messages
+    /// [`IngressPayload`] which is a collection of valid ingress messages together with an estimate
+    /// of how big the payload would be when sent over wire.
     fn get_ingress_payload(
         &self,
         past_ingress: &dyn IngressSetQuery,
         context: &ValidationContext,
         byte_limit: NumBytes,
-    ) -> IngressPayload;
+    ) -> PayloadWithSizeEstimate<IngressPayload>;
 
     /// Validates an IngressPayload against the past payloads and
     /// ValidationContext. The size of the payload is derived from registry.
@@ -162,16 +136,16 @@ pub trait IngressSelector: Send + Sync {
     /// valid set rule check run to select a valid set of messages
     ///
     /// #Returns
-    /// `ValidationResult::Valid`: if the payload is valid
-    /// `ValidationResult::Invalid`: if the payload is invalid
-    /// `ValidationResult::Error`: a transient error occured during the
-    /// validation.
+    /// `Ok(x)`: if the payload is valid, where `x` is the size of the payload.
+    /// [`ValidationError::InvalidArtifact`]: if the payload is invalid
+    /// [`ValidationError::ValidationFailed`]: an error occurred during the validation which
+    /// prevents determining whether the artifact is valid or not.
     fn validate_ingress_payload(
         &self,
         payload: &IngressPayload,
         past_ingress: &dyn IngressSetQuery,
         context: &ValidationContext,
-    ) -> ValidationResult<IngressPayloadValidationError>;
+    ) -> Result<NumBytes, IngressPayloadValidationError>;
 
     /// Extracts the sequence of past ingress messages from `past_payloads`. The
     /// past_ingress is actually a list of HashSet of MessageIds taken from the

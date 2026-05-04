@@ -1,25 +1,27 @@
 //! Random beacon maker is responsible for creating random beacon share
 //! for the node if the node is a beacon maker and no such share exists.
-use crate::consensus::{
+use ic_consensus_utils::{
+    active_low_threshold_nidkg_id,
+    crypto::ConsensusCrypto,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
-    prelude::*,
-    utils::active_low_threshold_transcript,
-    ConsensusCrypto,
 };
-use ic_logger::{error, trace, ReplicaLogger};
-use ic_types::replica_config::ReplicaConfig;
+use ic_logger::{ReplicaLogger, error, trace};
+use ic_types::{
+    consensus::{HasCommittee, RandomBeacon, RandomBeaconContent, RandomBeaconShare},
+    replica_config::ReplicaConfig,
+};
 use std::sync::Arc;
 
 /// Random beacon maker is responsible for creating beacon shares
-pub struct RandomBeaconMaker {
+pub(crate) struct RandomBeaconMaker {
     replica_config: ReplicaConfig,
     membership: Arc<Membership>,
     crypto: Arc<dyn ConsensusCrypto>,
     log: ReplicaLogger,
 }
 
-impl<'a> RandomBeaconMaker {
+impl RandomBeaconMaker {
     /// Instantiate a new random beacon maker and save a copy of the config.
     pub fn new(
         replica_config: ReplicaConfig,
@@ -78,10 +80,8 @@ impl<'a> RandomBeaconMaker {
                 // beacon at height h only after there exists a block at
                 // height h, and we only use the random beacon at height
                 // h-1 in the validation of blocks at height h.
-                if let Some(transcript) =
-                    active_low_threshold_transcript(pool.as_cache(), next_height)
-                {
-                    match self.crypto.sign(&content, my_node_id, transcript.dkg_id) {
+                if let Some(dkg_id) = active_low_threshold_nidkg_id(pool.as_cache(), next_height) {
+                    match self.crypto.sign(&content, my_node_id, dkg_id) {
                         Ok(signature) => Some(RandomBeaconShare { content, signature }),
                         Err(err) => {
                             error!(self.log, "Couldn't create a signature: {:?}", err);
@@ -105,7 +105,7 @@ impl<'a> RandomBeaconMaker {
 mod tests {
     //! BeaconMaker unit tests
     use super::*;
-    use crate::consensus::mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
 
@@ -130,15 +130,19 @@ mod tests {
 
             // 2. Skip making another share
             pool.insert_validated(beacon_share);
-            assert!(beacon_maker
-                .on_state_change(&PoolReader::new(&pool))
-                .is_none());
+            assert!(
+                beacon_maker
+                    .on_state_change(&PoolReader::new(&pool))
+                    .is_none()
+            );
 
             // 3. Next next beacon can't be made due to missing notarized block
             pool.insert_validated(pool.make_next_beacon());
-            assert!(beacon_maker
-                .on_state_change(&PoolReader::new(&pool))
-                .is_none());
+            assert!(
+                beacon_maker
+                    .on_state_change(&PoolReader::new(&pool))
+                    .is_none()
+            );
 
             // 4. Next next beacon can be made once we have another block
             let beacon = pool.validated().random_beacon().get_highest().unwrap();

@@ -1,23 +1,24 @@
 //! An agent to talk to the Internet Computer through the public endpoints.
 use crate::{
-    cbor::{parse_canister_query_response, parse_read_state_response, RequestStatus},
+    cbor::{parse_query_response, prepare_query, prepare_read_state, prepare_update},
     http_client::{HttpClient, HttpClientConfig},
 };
 use backoff::backoff::Backoff;
 use ic_canister_client_sender::Sender;
 use ic_crypto_tree_hash::Path;
+use ic_management_canister_types_private::{IC_00, InstallCodeArgs, Method, Payload};
 use ic_protobuf::types::v1 as pb;
+use ic_read_state_response_parser::{RequestStatus, parse_read_state_response};
 use ic_types::{
-    consensus::catchup::CatchUpPackageParam,
-    messages::{
-        Blob, HttpCallContent, HttpQueryContent, HttpReadStateContent, HttpRequestEnvelope,
-        HttpStatusResponse, MessageId, ReplicaHealthStatus,
-    },
     CanisterId,
+    consensus::catchup::CatchUpPackageParam,
+    crypto::threshold_sig::ThresholdSigPublicKey,
+    messages::{Blob, HttpStatusResponse, MessageId, ReplicaHealthStatus},
+    time::expiry_time_from_now,
 };
 use prost::Message;
 use serde_cbor::value::Value as CBOR;
-use std::{error::Error, fmt, sync::Arc, time::Duration, time::Instant};
+use std::{fmt, sync::Arc, time::Duration, time::Instant};
 use tokio::time::sleep_until;
 use url::Url;
 
@@ -38,16 +39,16 @@ const POLL_INTERVAL_MULTIPLIER: f64 = 1.2;
 /// The HTTP path for query calls on the replica.
 // TODO is this how v1 api works can we just change the URL?
 pub fn query_path(cid: CanisterId) -> String {
-    format!("api/v2/canister/{}/query", cid)
+    format!("api/v2/canister/{cid}/query")
 }
 
 pub fn read_state_path(cid: CanisterId) -> String {
-    format!("api/v2/canister/{}/read_state", cid)
+    format!("api/v2/canister/{cid}/read_state")
 }
 
 /// The HTTP path for update calls on the replica.
 pub fn update_path(cid: CanisterId) -> String {
-    format!("api/v2/canister/{}/call", cid)
+    format!("api/v2/canister/{cid}/call")
 }
 
 const NODE_STATUS_PATH: &str = "api/v2/status";
@@ -90,6 +91,9 @@ pub struct Agent {
     /// The values that any 'sender' field should have when issuing
     /// calls with the user corresponding to this Agent.
     pub sender_field: Blob,
+
+    /// Public key against which we should verify response.
+    pub nns_public_key: Option<ThresholdSigPublicKey>,
 }
 
 impl fmt::Debug for Agent {
@@ -149,12 +153,19 @@ impl Agent {
             http_client,
             sender,
             sender_field,
+            nns_public_key: None,
         }
     }
 
     /// Sets the timeout for ingress requests.
     pub fn with_ingress_timeout(mut self, ingress_timeout: Duration) -> Self {
         self.ingress_timeout = ingress_timeout;
+        self
+    }
+
+    /// Sets the nns key to verify requests with.
+    pub fn with_nns_public_key(mut self, nns_public_key: ThresholdSigPublicKey) -> Self {
+        self.nns_public_key = Some(nns_public_key);
         self
     }
 
@@ -187,10 +198,7 @@ impl Agent {
             None
         } else {
             Some(pb::CatchUpPackage::decode(&bytes[..]).map_err(|e| {
-                format!(
-                    "Failed to deserialize CUP from protobuf, got: {:?} - error {:?}",
-                    bytes, e
-                )
+                format!("Failed to deserialize CUP from protobuf, got: {bytes:?} - error {e:?}")
             })?)
         };
 
@@ -205,21 +213,26 @@ impl Agent {
         method: &str,
         arg: Vec<u8>,
     ) -> Result<Option<Vec<u8>>, String> {
-        let envelope = self
-            .prepare_query(canister_id, method, arg)
-            .map_err(|e| format!("Failed to prepare query: {}", e))?;
+        let envelope = prepare_query(
+            &self.sender,
+            canister_id,
+            method,
+            arg,
+            self.sender_field.clone(),
+        )
+        .map_err(|e| format!("Failed to prepare query: {e}"))?;
         let bytes = self
             .http_client
             .post_with_response(
                 &self.url,
                 &query_path(*canister_id),
-                envelope,
+                envelope.into(),
                 tokio::time::Instant::now() + self.query_timeout,
             )
             .await?;
         let cbor = bytes_to_cbor(bytes)?;
 
-        let call_response = parse_canister_query_response(&cbor)?;
+        let call_response = parse_query_response(&cbor)?;
         if call_response.status == "replied" {
             Ok(call_response.reply)
         } else {
@@ -230,10 +243,11 @@ impl Agent {
         }
     }
 
-    /// Calls the query method 'method' on the canister located at 'url',
+    /// Calls the update method 'method' on the given canister,
     /// optionally with 'arguments'.
     pub async fn execute_update<S: ToString>(
         &self,
+        effective_canister_id: &CanisterId,
         canister_id: &CanisterId,
         method: S,
         arguments: Vec<u8>,
@@ -241,14 +255,21 @@ impl Agent {
     ) -> Result<Option<Vec<u8>>, String> {
         let deadline = Instant::now() + self.ingress_timeout;
         let mut backoff = get_backoff_policy();
-        let (http_body, request_id) = self
-            .prepare_update(canister_id, method, arguments, nonce)
-            .map_err(|err| format!("{}", err))?;
+        let (http_body, request_id) = prepare_update(
+            &self.sender,
+            canister_id,
+            method,
+            arguments,
+            nonce,
+            expiry_time_from_now(),
+            self.sender_field.clone(),
+        )
+        .map_err(|err| format!("{err}"))?;
         self.http_client
             .post_with_response(
                 &self.url,
-                &update_path(*canister_id),
-                http_body,
+                &update_path(*effective_canister_id),
+                http_body.into(),
                 tokio::time::Instant::from_std(deadline),
             )
             .await?;
@@ -262,7 +283,7 @@ impl Agent {
             sleep_until(tokio::time::Instant::from_std(next_poll_time)).await;
             next_poll_time = Instant::now() + backoff.next_backoff().expect("Backoff interval MUST be available. If you see this error the backoff is misconfigured.");
             match self
-                .wait_ingress(request_id.clone(), deadline, canister_id)
+                .wait_ingress(request_id.clone(), deadline, effective_canister_id)
                 .await
             {
                 Ok(request_status) => match request_status.status.as_ref() {
@@ -280,15 +301,14 @@ impl Agent {
                         return Err(format!(
                             "unexpected result: {:?} - {:?}",
                             request_status.status, request_status.reject_message
-                        ))
+                        ));
                     }
                 },
-                Err(e) => return Err(format!("Unexpected error: {:?}", e)),
+                Err(e) => return Err(format!("Unexpected error: {e:?}")),
             }
         }
         Err(format!(
-            "Request took longer than the deadline {:?} to complete.",
-            deadline
+            "Request took longer than the deadline {deadline:?} to complete."
         ))
     }
 
@@ -302,19 +322,19 @@ impl Agent {
         &self,
         request_id: MessageId,
         deadline: Instant,
-        canister_id: &CanisterId,
+        effective_canister_id: &CanisterId,
     ) -> Result<CBOR, String> {
         let path = Path::new(vec!["request_status".into(), request_id.into()]);
-        let status_request_body = self
-            .prepare_read_state(&[path])
-            .map_err(|e| format!("Failed to prepare read state: {:?}", e))?;
+        let signed_request_bytes =
+            prepare_read_state(&self.sender, &[path], self.sender_field.clone())
+                .map_err(|e| format!("Failed to prepare read state: {e:?}"))?;
 
         let bytes = self
             .http_client
             .post_with_response(
                 &self.url,
-                &read_state_path(*canister_id),
-                status_request_body,
+                &read_state_path(*effective_canister_id),
+                signed_request_bytes.into(),
                 tokio::time::Instant::from_std(deadline),
             )
             .await?;
@@ -329,12 +349,18 @@ impl Agent {
         &self,
         request_id: MessageId,
         deadline: Instant,
-        canister_id: &CanisterId,
+        effective_canister_id: &CanisterId,
     ) -> Result<RequestStatus, String> {
         let cbor = self
-            .request_status_once(request_id.clone(), deadline, canister_id)
+            .request_status_once(request_id.clone(), deadline, effective_canister_id)
             .await?;
-        parse_read_state_response(&request_id, cbor)
+
+        parse_read_state_response(
+            &request_id,
+            effective_canister_id,
+            self.nns_public_key.as_ref(),
+            cbor,
+        )
     }
 
     async fn get_status(&self) -> Result<HttpStatusResponse, String> {
@@ -348,7 +374,7 @@ impl Agent {
             .await?;
         let resp = bytes_to_cbor(bytes)?;
         serde_cbor::value::from_value::<HttpStatusResponse>(resp)
-            .map_err(|source| format!("decoding to HttpStatusResponse failed: {}", source))
+            .map_err(|source| format!("decoding to HttpStatusResponse failed: {source}"))
     }
 
     /// Requests the root key of this node by querying /api/v2/status
@@ -368,76 +394,21 @@ impl Agent {
     pub fn http_client(&self) -> &HttpClient {
         self.http_client.as_ref()
     }
-}
 
-/// Wraps the content into an envelope that contains the message signature.
-///
-/// Prerequisite: `content` contains a `sender` field that is compatible with
-/// the `keypair` argument.
-pub fn sign_submit(
-    content: HttpCallContent,
-    sender: &Sender,
-) -> Result<(HttpRequestEnvelope<HttpCallContent>, MessageId), Box<dyn Error>> {
-    // Open question: should this also set the `sender` field of the `content`? The
-    // two are linked, but it's a bit weird for a function that presents itself
-    // as 'wrapping a content into an envelope' to mess up with the content.
-
-    let message_id = match &content {
-        HttpCallContent::Call { update } => update.id(),
-    };
-
-    let pub_key_der = sender.sender_pubkey_der().map(Blob);
-    let sender_sig = sender.sign_message_id(&message_id)?.map(Blob);
-
-    let envelope = HttpRequestEnvelope::<HttpCallContent> {
-        content,
-        sender_pubkey: pub_key_der,
-        sender_sig,
-        sender_delegation: None,
-    };
-    Ok((envelope, message_id))
-}
-
-/// Wraps the content into an envelope that contains the message signature.
-///
-/// Prerequisite: if `content` contains a `sender` field (this is the case for
-/// queries, but not for request_status), then this 'sender' must be compatible
-/// with the `keypair` argument.
-pub fn sign_read_state(
-    content: HttpReadStateContent,
-    sender: &Sender,
-) -> Result<HttpRequestEnvelope<HttpReadStateContent>, Box<dyn Error>> {
-    let message_id = content.id();
-    let pub_key_der = sender.sender_pubkey_der().map(Blob);
-    let sender_sig = sender.sign_message_id(&message_id)?.map(Blob);
-
-    Ok(HttpRequestEnvelope::<HttpReadStateContent> {
-        content,
-        sender_pubkey: pub_key_der,
-        sender_sig,
-        sender_delegation: None,
-    })
-}
-
-/// Wraps the content into an envelope that contains the message signature.
-///
-/// Prerequisite: if `content` contains a `sender` field (this is the case for
-/// queries, but not for request_status), then this 'sender' must be compatible
-/// with the `keypair` argument.
-pub fn sign_query(
-    content: HttpQueryContent,
-    sender: &Sender,
-) -> Result<HttpRequestEnvelope<HttpQueryContent>, Box<dyn Error>> {
-    let message_id = content.id();
-    let pub_key_der = sender.sender_pubkey_der().map(Blob);
-    let sender_sig = sender.sign_message_id(&message_id)?.map(Blob);
-
-    Ok(HttpRequestEnvelope::<HttpQueryContent> {
-        content,
-        sender_pubkey: pub_key_der,
-        sender_sig,
-        sender_delegation: None,
-    })
+    // Ships a binary wasm module to a canister.
+    pub async fn install_canister(&self, install_args: InstallCodeArgs) -> Result<(), String> {
+        let effective_canister_id: CanisterId =
+            CanisterId::try_from(install_args.canister_id).unwrap();
+        self.execute_update(
+            &effective_canister_id,
+            &IC_00,
+            Method::InstallCode,
+            install_args.encode(),
+            vec![],
+        )
+        .await
+        .map(|_| ())
+    }
 }
 
 fn bytes_to_cbor(bytes: Vec<u8>) -> Result<CBOR, String> {
@@ -456,271 +427,4 @@ fn bytes_to_cbor(bytes: Vec<u8>) -> Result<CBOR, String> {
         )
     })?;
     Ok(cbor)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{ed25519_public_key_to_der, Ed25519KeyPair};
-    use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
-    use ic_test_utilities::types::ids::node_test_id;
-    use ic_types::malicious_flags::MaliciousFlags;
-    use ic_types::messages::{HttpCanisterUpdate, HttpRequest, HttpUserQuery, UserQuery};
-    use ic_types::time::current_time;
-    use ic_types::{PrincipalId, RegistryVersion, UserId};
-    use ic_validator::get_authorized_canisters;
-    use rand::SeedableRng;
-    use rand_chacha::ChaChaRng;
-    use std::convert::TryFrom;
-    use tokio_test::assert_ok;
-
-    // The node id of the node that validates message signatures
-    const VALIDATOR_NODE_ID: u64 = 42;
-    fn mock_registry_version() -> RegistryVersion {
-        RegistryVersion::from(0)
-    }
-
-    /// Create an HttpRequest with a non-anonymous user and then verify
-    /// that `validate_message` manages to authenticate it.
-    #[test]
-    fn sign_and_verify_submit_content_with_ed25519() {
-        let test_start_time = current_time();
-        let expiry_time = test_start_time + Duration::from_secs(4 * 60);
-        // Set up an arbitrary legal input
-        let keypair = {
-            let mut rng = ChaChaRng::seed_from_u64(789_u64);
-            Ed25519KeyPair::generate(&mut rng)
-        };
-        let content = HttpCallContent::Call {
-            update: HttpCanisterUpdate {
-                canister_id: Blob(vec![51]),
-                method_name: "foo".to_string(),
-                arg: Blob(vec![12, 13, 99]),
-
-                nonce: None,
-                sender: Blob(
-                    UserId::from(PrincipalId::new_self_authenticating(
-                        &ed25519_public_key_to_der(keypair.public_key.to_vec()),
-                    ))
-                    .get()
-                    .into_vec(),
-                ),
-                ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
-            },
-        };
-        let sender = Sender::from_keypair(&keypair);
-        let (submit, id) = sign_submit(content.clone(), &sender).unwrap();
-
-        // The wrapped content is content, without modification
-        assert_eq!(submit.content, content);
-
-        // The message id matches one that can be reconstructed from the output
-        let request = HttpRequest::try_from(submit).unwrap();
-        assert_eq!(id, request.id());
-
-        // The envelope can be successfully authenticated
-        let validator = temp_crypto_component_with_fake_registry(node_test_id(VALIDATOR_NODE_ID));
-        assert!(get_authorized_canisters(
-            &request,
-            &validator,
-            test_start_time,
-            mock_registry_version(),
-            &MaliciousFlags::default(),
-        )
-        .unwrap()
-        .contains(&request.content().canister_id()));
-    }
-
-    /// Create an HttpRequest with a non-anonymous user and then verify
-    /// that `validate_message` manages to authenticate it.
-    #[test]
-    fn sign_and_verify_submit_content_with_ecdsa_secp256k1() {
-        let test_start_time = current_time();
-        let expiry_time = test_start_time + Duration::from_secs(4 * 60);
-        // Set up an arbitrary legal input
-        // Set up an arbitrary legal input
-        let (sk, pk) = {
-            let mut rng = ChaChaRng::seed_from_u64(89_u64);
-            let sk = libsecp256k1::SecretKey::random(&mut rng);
-            let pk = libsecp256k1::PublicKey::from_secret_key(&sk);
-            (sk.serialize(), pk.serialize())
-        };
-        let sender_id = UserId::from(PrincipalId::new_self_authenticating(
-            &ecdsa_secp256k1::api::public_key_to_der(
-                &ecdsa_secp256k1::types::PublicKeyBytes::from(pk.to_vec()),
-            )
-            .expect("DER encoding failed"),
-        ));
-        let content = HttpCallContent::Call {
-            update: HttpCanisterUpdate {
-                canister_id: Blob(vec![51]),
-                method_name: "foo".to_string(),
-                arg: Blob(vec![12, 13, 99]),
-                nonce: None,
-                sender: Blob(sender_id.get().into_vec()),
-                ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
-            },
-        };
-        let sender = Sender::from_secp256k1_keys(&sk, &pk);
-        let (submit, id) = sign_submit(content.clone(), &sender).unwrap();
-
-        // The wrapped content is content, without modification
-        assert_eq!(submit.content, content);
-
-        // The message id matches one that can be reconstructed from the output
-        let request = HttpRequest::try_from(submit).unwrap();
-        assert_eq!(id, request.id());
-
-        // The envelope can be successfully authenticated
-        let validator = temp_crypto_component_with_fake_registry(node_test_id(VALIDATOR_NODE_ID));
-        assert!(get_authorized_canisters(
-            &request,
-            &validator,
-            test_start_time,
-            mock_registry_version(),
-            &MaliciousFlags::default(),
-        )
-        .unwrap()
-        .contains(&request.content().canister_id()));
-    }
-
-    /// Create an HttpRequest with an explicit anonymous user and then
-    /// verify that `validate_message` manages to authenticate it.
-    #[test]
-    fn sign_and_verify_submit_content_explicit_anonymous() {
-        let test_start_time = current_time();
-        let expiry_time = test_start_time + Duration::from_secs(4 * 60);
-
-        // Set up an arbitrary legal input
-        let content = HttpCallContent::Call {
-            update: HttpCanisterUpdate {
-                canister_id: Blob(vec![51]),
-                method_name: "foo".to_string(),
-                arg: Blob(vec![12, 13, 99]),
-
-                nonce: None,
-                sender: Blob(UserId::from(PrincipalId::new_anonymous()).get().into_vec()),
-                ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
-            },
-        };
-        let (submit, id) = sign_submit(content.clone(), &Sender::Anonymous).unwrap();
-
-        // The wrapped content is content, without modification
-        assert_eq!(submit.content, content);
-
-        // The message id matches one that can be reconstructed from the output
-        let request = HttpRequest::try_from(submit).unwrap();
-        assert_eq!(id, request.id());
-
-        // The envelope can be successfully authenticated
-        let validator = temp_crypto_component_with_fake_registry(node_test_id(VALIDATOR_NODE_ID));
-        assert!(get_authorized_canisters(
-            &request,
-            &validator,
-            test_start_time,
-            mock_registry_version(),
-            &MaliciousFlags::default(),
-        )
-        .unwrap()
-        .contains(&request.content().canister_id()));
-    }
-
-    #[test]
-    fn sign_and_verify_request_status_content_valid_query_with_ed25519() {
-        let test_start_time = current_time();
-        let expiry_time = test_start_time + Duration::from_secs(4 * 60);
-
-        // Set up an arbitrary legal input
-        let keypair = {
-            let mut rng = ChaChaRng::seed_from_u64(89_u64);
-            Ed25519KeyPair::generate(&mut rng)
-        };
-        let sender = UserId::from(PrincipalId::new_self_authenticating(
-            &ed25519_public_key_to_der(keypair.public_key.to_vec()),
-        ));
-        let content = HttpQueryContent::Query {
-            query: HttpUserQuery {
-                canister_id: Blob(vec![67, 3]),
-                method_name: "foo".to_string(),
-                arg: Blob(vec![23, 19, 4]),
-                sender: Blob(sender.get().into_vec()),
-                nonce: None,
-                ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
-            },
-        };
-        // Workaround because HttpQueryContent is not cloneable
-        let content_copy = serde_cbor::value::from_value::<HttpQueryContent>(
-            serde_cbor::value::to_value(&content).unwrap(),
-        )
-        .unwrap();
-
-        let read = sign_query(content, &Sender::from_keypair(&keypair)).unwrap();
-
-        // The wrapped content is content, without modification
-        assert_eq!(read.content, content_copy);
-
-        // The signature matches
-        let read_request = HttpRequest::<UserQuery>::try_from(read).unwrap();
-        let validator = temp_crypto_component_with_fake_registry(node_test_id(VALIDATOR_NODE_ID));
-        assert_ok!(get_authorized_canisters(
-            &read_request,
-            &validator,
-            test_start_time,
-            mock_registry_version(),
-            &MaliciousFlags::default(),
-        ));
-    }
-
-    #[test]
-    fn sign_and_verify_request_status_content_valid_query_with_ecdsa_secp256k1() {
-        let test_start_time = current_time();
-        let expiry_time = test_start_time + Duration::from_secs(4 * 60);
-
-        // Set up an arbitrary legal input
-        let (sk, pk) = {
-            let mut rng = ChaChaRng::seed_from_u64(89_u64);
-            let sk = libsecp256k1::SecretKey::random(&mut rng);
-            let pk = libsecp256k1::PublicKey::from_secret_key(&sk);
-            (sk.serialize(), pk.serialize())
-        };
-
-        let sender_id = UserId::from(PrincipalId::new_self_authenticating(
-            &ecdsa_secp256k1::api::public_key_to_der(
-                &ecdsa_secp256k1::types::PublicKeyBytes::from(pk.to_vec()),
-            )
-            .expect("DER encoding failed"),
-        ));
-        let content = HttpQueryContent::Query {
-            query: HttpUserQuery {
-                canister_id: Blob(vec![67, 3]),
-                method_name: "foo".to_string(),
-                arg: Blob(vec![23, 19, 4]),
-                sender: Blob(sender_id.get().into_vec()),
-                nonce: None,
-                ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
-            },
-        };
-        // Workaround because HttpQueryContent is not cloneable
-        let content_copy = serde_cbor::value::from_value::<HttpQueryContent>(
-            serde_cbor::value::to_value(&content).unwrap(),
-        )
-        .unwrap();
-
-        let sender = Sender::from_secp256k1_keys(&sk, &pk);
-        let read = sign_query(content, &sender).unwrap();
-
-        // The wrapped content is content, without modification
-        assert_eq!(read.content, content_copy);
-
-        // The signature matches
-        let read_request = HttpRequest::<UserQuery>::try_from(read).unwrap();
-        let validator = temp_crypto_component_with_fake_registry(node_test_id(VALIDATOR_NODE_ID));
-        assert_ok!(get_authorized_canisters(
-            &read_request,
-            &validator,
-            test_start_time,
-            mock_registry_version(),
-            &MaliciousFlags::default(),
-        ));
-    }
 }

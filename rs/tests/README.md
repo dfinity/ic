@@ -3,11 +3,13 @@
 Note: For an overview over the testing terminology, please visit [this
 notion-page](https://www.notion.so/Testing-Terminology-8cc0735dfcd945959f8d47caedf058b5).
 
+**Note**: If you want to add a system test, please jump right to the section
+about [bazelified system tests](How-can-I-run-system-tests-in-Bazel?).
+
 ## System tests
 
-System tests (declared in `rs/tests/bin/prod_test_driver.rs`) can involve all
-components in combination in the form of a functioning IC. The test API is
-implemented in Rust.
+System tests can involve all components in combination in the form of a
+functioning IC. The test API is implemented in Rust.
 
 The system test driver allows for the execution of arbitrary setup and test
 functions written in Rust. However, the accompanying APIs are geared towards
@@ -19,86 +21,32 @@ an Internet Computer instance, every node is instantiated as a virtual machine
 running the
 [ic-os](https://sourcegraph.com/github.com/dfinity/ic/-/tree/ic-os/guestos).
 
-System tests are organized in a hierarchy: every test belongs to a _pot_. A pot
-declares the test system (Internet Computer under test). Multiple tests can run
-using the same test instance (of a pot) either in parallel or in sequence. Pots
-in turn are grouped into _test suites_.
+### How can I write system tests in Bazel?
+T&V team is working actively on the
+[bazelification](https://docs.google.com/document/d/1RGyvOkRluFsqroDmyM9hfr37VG-nCrTOrutQnStJsco/edit#heading=h.fcajjuvgc2dn)
+of all system tests. When you want to write a new test or when you own system
+tests declared in `rs/tests/bin/prod_test_driver.rs`, take a look at the linked
+document.
 
+### How can I run system tests in Bazel?
+In order to run system tests, enter the build docker container:
 ```
-Suite0
- |
- | -- Pot0
- |     |
- |     | -- Test0
- |     | -- Test1
- |
- | -- Pot1
- |     | -- Test0
- ...
+/ic$ ./ci/container/container-run.sh
 ```
-
-### How can I run system tests?
-
-First, make sure you're in the `nix-shell` started from `ic/rs`.
-
-When running system tests, the base ic-os version has to be set manually.
-Currently, only disk images built by CI/CD can be used. Thus, you first need to
-find out the `IC_VERSION_ID` that belongs to the image that you want to use.
-Note that alongside the image itself, also all other build artifacts that belong
-to that version are downloaded from CI/CD (NNS canisters, auxiliary binaries,
-etc.). When run locally, only the test driver (including tests) is re-compiled
-and includes local changes.
-
-When running tests locally, it is possible, however, to provide all the test
-artifacts and build dependencies (with the exception of disk images) in a folder
-by specifying a corresponding directory in the `ARTIFACT_DIR` environment
-variable.
-
-You have two options to find the desired `IC_VERSION_ID`:
-
-1. To obtain a GuestOS image version for your commit, please push your branch
-to origin and create an MR. See http://go/guestos-image-version
-1. To obtain the latest GuestOS image version for `origin/master` (e.g., if your
-changes are withing `ic/rs/tests`), use the following command (Note: this
-command is not guaranteed to be deterministic):
-
-```bash
-ic/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master
+To launch a test target (`my_test_target` in this case) within the docker run:
+```
+devenv-container$ bazel test --test_output=streamed //rs/tests:my_test_target
 ```
 
-For example, running all tests in a test suite `hourly` can be achieved as
-follows:
+In the docker container, you can also use `ict` to start tests.
 
-```bash
-IC_VERSION_ID=<version> ./run-system-tests.py --suite hourly
+```
+ict test //rs/tests:my_test_target
 ```
 
-The command line options `include-pattern` and `exclude-pattern` allow the
-inclusion and exclusion of tests based on regular expressions. See also the
-`--help` message for more information.
-
-For example, running the basic health test can be achieved using the following
-command:
-
-```bash
-IC_VERSION_ID=<version> ./run-system-tests.py --suite hourly --include-pattern basic_health_test
-```
-
-If your test is supposed to run for more than 50min, you need to set the
-`SYSTEM_TESTS_TIMEOUT` environment variable to a suitable value in seconds.
-
-Changing the replica log level for system test runs, e.g., to facilitate debugging, can
-be achieved by using log overrides. E.g., using the `DEBUG` level in certain modules
-you can use the following:
-
-```bash
-IC_VERSION_ID=<version> ./run-system-tests.py \
-    --include-pattern=http_basic_remote \
-    --suite=staging \
-    --log-debug-overrides "ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors"
-```
-
-If you have further questions, please contact the testing team on #eng-testing.
+At some point in the future, ict should be the only thing a user needs to know.
+I.e., she can explore all options by interacting with ict and there is no need
+for a README here no more. ;-)
 
 # How to write a system test
 
@@ -226,9 +174,6 @@ like `basic_health_test`.
   the file system directory or only through information available through the test environment.
 * Put your test in a suitable folder in the src directory or create a new
   sub-directory. Don't forget to modify CODEOWNERS accordingly.
-* Add your test to a suitable suite in `rs/tests/bin/prod-test-driver.rs`.
-  If your test takes more than 50min, it must only run nightly and the pipeline
-  might need to be adjusted in `testnet/tests/pipeline/pipeline.yml`.
 
 ### A note on the CLI
 
@@ -242,138 +187,15 @@ For example, to run all the `pre-master` system tests use:
 
 Note: This requires the commit to be built by CI/CD, i.e. it must be pushed to the remote and an MR has to be created. If the script can't find artifacts for the current commit, it will fail.
 
-Below is the usage of the "legacy" system tests.
-
-To run all tests, but still log debug-level messages to `my-log` we run:
-
-```
-$ ./setup-and-cargo-test.sh -- -v --log-to-file my-log
-```
-
-The `--` separates the arguments to `setup-and-cargo-test.sh` from the arguments
-consumed by `rs/tests/src/main.rs`. In general,
-
-```
-$ ./setup-and-cargo-test.sh [SCRIPT-OPTIONS] [-- SYSTEM-TEST-OPTIONS]
-```
-
-If you wish to see more info on which options are supported, run:
-
-```
-$ ./setup-and-cargo-test.sh -- --help
-```
-
-### Pots and Tests
-
-In `fondue`, tests are organized in _pots_ of two different kinds:
-
-- *Composable* pots consist of multiple individual tests that run against the
-	same environment configuration. This means we pay the price of setting up a
-	bunch of nodes only once. The disadvantage is that these tests receive a
-	read-only `IcHandle` object, which does not enable the test author to change
-	its environment (i.e., start new replicas, stop replicas, etc). Note that
-	altering the state of the nodes is allowed — think of installing a canister,
-	for instance.  You can think of an `IcHandle` as a vector of HTTP endpoints.
-
-- *Isolated* pots consists in a _single_ test that runs against a given
-	environment. This single test, however, receives a `IcManager` instead of a
-	`IcManager::handle()`; hence, it is allowed to perform arbitrary changes in
-	its environment.
-
-
-## Legacy system tests
-
-The `rs/tests` crate also hosts the so-called _legacy system tests_ declared in
-`rs/tests/src/main.rs`. The tests use largely the same API, however, the nodes
-for legacy system tests are instantiated as _processes_ (rather than virtual machines).
-These processes all share the resources of a single OS that launched the legacy system tests.
-Conversely, we encourage you to use the new system tests framework based on the Farm service that offers on-demand resource allocation and load balancing across a pool of remote servers.
-
-**Note**: Legacy system tests are **not** supported on Darwin!
-### My test is failing/flaky, what do I do?
-
-Please, check the [FAQ](doc/FAQ.md) or [TROUBLESHOOTING](doc/TROUBLESHOOTING.md) before submitting
-a bug report.
-
 ### Running the tests
-Legacy system tests can be launched via the `setup-and-cargo-test.sh` script. Go to the end of the page for info on the CLI arguments.
+Go to the end of the page for info on the CLI arguments.
 If you are running the script within nix-shell on Linux and run out of disk space, `export TMPDIR=` might solve this issue for you.
 In particular, the `nix-shell` command run in Ubuntu 20.04 sets the `TMPDIR` variable to `/run/user/1000`, which might correspond to a disk partition that is be too small for storing all the artifacts produced by the tests. To mitigate the problem, one could run, e.g., `export TMPDIR=/tmp`.
 
-
-### Filtering
-
-Often, we might want to run just one specific test, or we might
-want to skip certain tests. We can do so by passing a filter
-as the last argument to `system-tests` or as an argument to `--skip`.
-
-To run all tests that contain the string "basic" in their name we run:
-
-```
-$ ./setup-and-cargo-test.sh -- basic
-```
-
-This will run `basic_health_test` and `canister_lifecycle_basic_test`.
-Now, say that we do not want to run the steps that have `delete` in their
-names:
-
-```
-$ ./setup-and-cargo-test.sh -- --skip delete basic
-```
 ### Running Docker Containers in system-tests
 
 Docker containers can be run in Universal VMs. Search for calls of "UniversalVm::new" to see examples on how to set that up.
 
 Note that Universal VMs are created afresh for each pot. This means that if it runs a docker container the container's image needs to be fetched from the registry each time.
 
-Docker Hub has a rate limit which makes it is unsuitable for system-tests. Instead, please use the registry:
-
-https://gitlab.com/dfinity-lab/open/public-docker-registry/container_registry
-
-In order to fetch images from this registry you first need to ensure your image is pushed there. In order to do that first login using:
-
-```
-docker login registry.gitlab.com
-```
-
-Then push your image using the following shell function:
-
-```
-push_to_gitlab() {
-  image="$1"
-  docker pull --platform linux/amd64 "$image"
-  docker tag "$image" "registry.gitlab.com/dfinity-lab/open/public-docker-registry/$image"
-  docker image push "registry.gitlab.com/dfinity-lab/open/public-docker-registry/$image"
-}
-```
-
-You can then run this image in your Universal VM activation script as follows:
-
-```
-docker run "registry.gitlab.com/dfinity-lab/open/public-docker-registry/$image"
-```
-
 ### Known Issues
-
-#### Darwin Support is 'Best Effort'
-
-It might happen that tests break on Darwin because, on CI, they are not tested
-on Darwin.
-
-This is a compromise. As many developers use Darwin, we can save overhead by
-running the tests directly on Darwin for local testing. Hence, they _should_
-run on Darwin. On the other hand, supporting both Linux _and_ Darwin on CI is
-costly.
-
-#### NNS Canister Installation Timeouts when testing locally
-
-Using the `NNSInstaller`-trait, it is possible to install all NNS-canisters on
-the root subnet using functionality by the `nns/test_utils`-crate. The NNS
-canisters are compiled before installation. If your local cargo cache is
-outdated ( e.g., after an explicit cache invalidation or pulling updates),
-canister compilation can take on the order of 10 minutes. As a result, a test
-might hit a global timeout configured in the test runner
-(`rs/tests/src/main.rs`). *It is suggested to adjust such timeouts to mitigate
-this issue.*
-
-On CI, the issue is mitigated as the canisters are built in a separate stage.

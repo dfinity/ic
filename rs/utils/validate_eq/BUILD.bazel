@@ -1,0 +1,21 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "validate_eq",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_validate_eq",
+    version = "0.1.0",
+    deps = [
+    ],
+)
+
+rust_test(
+    name = "validate_eq_test",
+    crate = ":validate_eq",
+    proc_macro_deps = [
+        # Keep sorted.
+        "//rs/utils/validate_eq_derive",
+    ],
+)

@@ -11,7 +11,7 @@ impl TryFrom<&PublicKeyProto> for PublicKeyBytes {
     type Error = PublicKeyBytesFromProtoError;
 
     fn try_from(pk_proto: &PublicKeyProto) -> Result<Self, Self::Error> {
-        if AlgorithmIdProto::from_i32(pk_proto.algorithm) != Some(AlgorithmIdProto::Ed25519) {
+        if AlgorithmIdProto::try_from(pk_proto.algorithm).ok() != Some(AlgorithmIdProto::Ed25519) {
             return Err(PublicKeyBytesFromProtoError {
                 key_bytes: pk_proto.clone().key_value,
                 internal_error: format!("Unknown algorithm: {}", pk_proto.algorithm),
@@ -33,7 +33,7 @@ impl TryFrom<&PublicKeyProto> for PublicKeyBytes {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct PublicKeyBytesFromProtoError {
     pub key_bytes: Vec<u8>,
     pub internal_error: String,

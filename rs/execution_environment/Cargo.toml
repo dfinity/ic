@@ -1,78 +1,95 @@
 [package]
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
 name = "ic-execution-environment"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
 
 [dependencies]
-candid = "0.8.1"
-hex = "0.4.2"
+candid = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
-ic-btc-canister = { path = "../bitcoin/canister" }
-ic-btc-types = { path = "../bitcoin/types/public" }
-ic-canister-sandbox-replica-controller = { path = "../canister_sandbox/replica_controller" }
+ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-config = { path = "../config" }
-ic-constants = { path = "../constants" }
 ic-crypto-prng = { path = "../crypto/prng" }
-ic-crypto-tecdsa = { path = "../crypto/tecdsa" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
+ic-crypto-utils-canister-threshold-sig = { path = "../crypto/utils/canister_threshold_sig" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-embedders = { path = "../embedders" }
-ic-error-types = { path = "../types/error_types" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-error-types = { path = "../../packages/ic-error-types" }
+ic-heap-bytes = { path = "../../packages/ic-heap-bytes" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
+ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
-ic-nns-constants = { path = "../nns/constants" }
+ic-query-stats = { path = "../query_stats" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
+ic-registry-resource-limits = { path = "../registry/resource_limits" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
-ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-layout = { path = "../state_layout" }
 ic-sys = { path = "../sys" }
-ic-system-api = { path = "../system_api" }
 ic-types = { path = "../types/types" }
+ic-types-cycles = { path = "../types/cycles" }
 ic-utils = { path = "../utils" }
+ic-utils-lru-cache = { path = "../utils/lru_cache" }
+ic-utils-thread = { path = "../utils/thread" }
+ic-vetkeys = { workspace = true }
 ic-wasm-types = { path = "../types/wasm_types" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 memory_tracker = { path = "../memory_tracker" }
-nix = "0.23.0"
-num-rational = "0.2.2"
-num-traits = "0.2.12"
+more-asserts = { workspace = true }
+num-traits = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
-prometheus = { version = "0.12.0", features = [ "process" ] }
-rand = "0.8"
+prometheus = { workspace = true }
+rand = { workspace = true }
 scoped_threadpool = "0.1.*"
-serde = { version = "1.0.99", features = [ "derive" ] }
-serde_cbor = "0.11.1"
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
-strum = "0.23.0"
-threadpool = "1.8.1"
-tokio = { version = "1.17.0", features = ["sync", "rt"] }
-tower = { version = "0.4.11", features = ["limit", "buffer", "timeout"] }
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+slog = { workspace = true }
+strum = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+tracing = { workspace = true }
+wasmparser = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.3.0"
-bitcoin = "0.28.1"
-criterion = { version = "0.3", features = ["html_reports"] }
-iai = "0.1"
-ic-btc-test-utils = { path = "../bitcoin/test-utils" }
-ic-btc-types = { path = "../bitcoin/types/public" }
+assert_matches = { workspace = true }
+canister-test = { path = "../rust_canisters/canister_test" }
+criterion = { workspace = true }
+execution-environment-bench = { path = "benches/lib" }
+flate2 = { workspace = true }
+ic-btc-interface = { workspace = true }
+ic-crypto-sha2 = { path = "../crypto/sha2" }
+ic-crypto-test-utils-vetkd = { path = "../crypto/test_utils/vetkd" }
+ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
+ic-nns-constants = { path = "../nns/constants" }
+ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
+ic-test-utilities-execution-environment = { path = "../test_utilities/execution_environment" }
+ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
+ic-test-utilities-state = { path = "../test_utilities/state" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
-ic-wasm-types = { path = "../types/wasm_types" }
-libflate = "1.1.2"
+itertools = { workspace = true }
+lazy_static = { workspace = true }
+libflate = { workspace = true }
 maplit = "1.0.2"
-mockall = "0.7.2"
-proptest = "1.0"
-test-strategy = "0.2"
-tempfile = "3.1.0"
-tokio = "1.15.0"
-wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
+proptest = { workspace = true }
+regex-lite = { workspace = true }
+rstest = { workspace = true }
+serde_bytes = { workspace = true }
+test-strategy = "0.3.1"
+wat = { workspace = true }
+wirm = { workspace = true }
 
 [build-dependencies]
 escargot = "0.5"
@@ -80,22 +97,43 @@ escargot = "0.5"
 [features]
 default = []
 sigsegv_handler_checksum = [
-	"ic-canister-sandbox-replica-controller/sigsegv_handler_checksum",
-	"memory_tracker/sigsegv_handler_checksum"
+	"ic-canister-sandbox-backend-lib/sigsegv_handler_checksum",
+	"memory_tracker/sigsegv_handler_checksum",
 ]
 
 [[bench]]
+harness = false
 name = "execute_inspect_message"
-harness = false
+path = "benches/system_api/execute_inspect_message.rs"
 
 [[bench]]
+harness = false
 name = "execute_query"
-harness = false
+path = "benches/system_api/execute_query.rs"
 
 [[bench]]
+harness = false
 name = "execute_update"
-harness = false
+path = "benches/system_api/execute_update.rs"
 
 [[bench]]
-name = "scheduler"
 harness = false
+name = "wasm_instructions"
+path = "benches/wasm_instructions/main.rs"
+
+[[bench]]
+harness = false
+name = "scheduler"
+
+[[bench]]
+harness = false
+name = "load_simulator_canisters"
+
+[[bench]]
+harness = false
+name = "100k_canisters"
+
+[[bench]]
+harness = false
+name = "management_canister_bench"
+path = "benches/management_canister/main.rs"

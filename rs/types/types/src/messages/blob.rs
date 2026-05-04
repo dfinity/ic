@@ -9,7 +9,7 @@ use std::{fmt, ops::Deref};
 /// Use `serde_bytes` so that the `Vec<u8>` is deserialized as a sequence
 /// (array) of bytes, whereas we want an actual CBOR "byte array", e.g. a
 /// bytestring.
-#[derive(Clone, Serialize, Deserialize, Hash, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct Blob(#[serde(with = "serde_bytes")] pub Vec<u8>);
 
@@ -43,7 +43,7 @@ impl fmt::Display for Blob {
     }
 }
 
-impl<'a, T: AsRef<[u8]>> From<T> for Blob {
+impl<T: AsRef<[u8]>> From<T> for Blob {
     fn from(v: T) -> Blob {
         Blob(v.as_ref().to_vec())
     }

@@ -12,7 +12,7 @@ The *secondary goal* is to provide the ability to manipulate the registry local
 store.
 
 This document should give an overview of how the tool is supposed to be used.
-Please check the `help`-information printed by the tool itself to get detailled
+Please check the `help`-information printed by the tool itself to get detailed
 (and up-to-date) information
 
 == Snapshot

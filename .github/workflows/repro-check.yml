@@ -1,0 +1,73 @@
+name: Repro check
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+    inputs:
+      github_sha:
+        description: Commit on which the repro check should be run
+        required: true
+        type: string
+  # Used as a reusable workflow within release-testing workflow
+  workflow_call:
+    inputs:
+      github_sha:
+        description: Commit on which the repro check should be run
+        required: true
+        type: string
+  pull_request:
+    paths:
+      - 'ci/container/*'
+      - 'ci/scripts/repro-check'
+      - '.github/workflows/repro-check.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  repro-check:
+    name: Run repro-check for ${{ inputs.github_sha || github.sha }}
+    runs-on:
+      labels: dind-large
+    container:
+      image: ubuntu:24.04
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host
+    steps:
+      - name: Setup podman
+        shell: bash
+        run: |
+          apt-get update
+          apt-get -y upgrade
+          apt-get -y install curl sudo git podman
+
+          # Create a passwordless sudo rule for the current user (usually root in containers, but safe to include)
+          # Required because the repro check uses it.
+          echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/nopasswd
+          chmod 0440 /etc/sudoers.d/nopasswd
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          sparse-checkout: "ci/scripts/repro-check"
+
+      - name: Repro check for PR
+        shell: bash
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          CI_PROJECT_DIR: ${{ github.workspace }}
+        run: |
+          # Hermetic python interpreter requires a non-root user to be built.
+          set -euo pipefail
+          sudo -u ubuntu -- "$CI_PROJECT_DIR"/ci/scripts/repro-check --commit ${{ github.sha }} --dry-run
+
+      - name: Repro check for ${{ inputs.github_sha }}
+        shell: bash
+        if: ${{ github.event_name != 'pull_request' }}
+        run: |
+          # Hermetic python interpreter requires a non-root user to be built.
+          sudo -u ubuntu bash -c '
+            curl -fsSL https://raw.githubusercontent.com/dfinity/ic/${{ github.sha }}/ci/scripts/repro-check |
+            python3 - -c ${{ inputs.github_sha }}
+          '

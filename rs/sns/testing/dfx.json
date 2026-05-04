@@ -1,0 +1,11 @@
+{
+  "canisters":
+  {
+    "test": {
+      "candid": "canister/test.did",
+      "type": "custom",
+      "build": "",
+      "wasm": ""
+    }
+  }
+}

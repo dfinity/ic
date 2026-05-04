@@ -1,0 +1,19 @@
+= The state sync protocol of the Internet Computer =
+
+The state sync protocol of the Internet Computer enables nodes, for example, ones that have fallen behind, to synchronize the replicated state of the subnet without having to (re-)execute all the blocks in the respective subnet blockchain.
+Instead, they can immediately download the required state, and verify its authenticity relative to the subnet’s chain key, using the following state sync protocol.
+
+Up-to-date nodes create a so-called checkpoint every couple of hundreds of rounds (usually 500). This involves writing the replicated state to disk, computing a hash of this state, and consensus attempting to agree on this state by including the hash in so-called catch-up packages (CUPs).
+The hash is computed in a manner that makes it impossible to come up with two different states that have the same hash, which means that the existence of an agreed-upon CUP for a particular height also implies that 
+ * the majority of nodes agree on the state at a particular height and 
+ * a majority of nodes is actually able to serve this state as part of state sync.
+
+Nodes periodically advertise all state versions they have available locally to their peers on the same subnet (refer to as an advert). This version is essentially the height of the block to which the state corresponds, and the hash of this state. 
+If a node sees a CUP that is more recent than its local state, it can conclude that it has fallen behind and can request the state corresponding to this CUP from its peers the next time it sees an advert for this state. 
+The protocol also ensures that unchanged pieces of the state available to a node are not re-downloaded, but can directly be used by the node. The state can be viewed as a file tree, where each file is, in turn, split into chunks. 
+The resuming node may have many of the chunks already, but possibly not all of them. A node can simultaneously request chunks from multiple peers, similar to BitTorrent.
+
+The resuming node starts by requesting a special chunk called the manifest from the peer who sent the advert that triggered the state synchronization. This manifest contains a list of all files and chunks that correspond to this state. There is also a hash and some metadata included for each file and each chunk. Similar to a Torrent file, the manifest does not include peer information and its content does not depend on any specific peer. The manifest’s hash is the hash that is included in the CUP. Once the hash of the manifest is verified against the hash included in the CUP, one can conclude that the file and chunk hashes in the manifest are authentic and can be used to verify files and chunks by comparing their hashes against the hashes included in the manifest. This mechanism ensures that nodes cannot trick each other into downloading and using fake state chunks.
+
+After downloading the manifest, the resuming node knows exactly which chunks it is missing. It can then trigger multiple simultaneous download requests to other peers — all peers that advertised the same state — to fetch the missing chunks as soon as possible.
+

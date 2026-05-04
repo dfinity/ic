@@ -1,0 +1,32 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
+
+package(default_visibility = ["//rs/nervous_system:default_visibility"])
+
+DEPENDENCIES = []  # Nice.
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:maplit",
+]
+
+LIB_SRCS = glob(
+    ["src/**"],
+    # Ensures that we do not need to rebuild library just because a *test.rs file changed.
+    # Currently, there are no such files, but if someone adds one later, they do not need to
+    # remember to do this.
+    exclude = ["**/*tests.rs"],
+)
+
+rust_library(
+    name = "union_multi_map",
+    srcs = LIB_SRCS,
+    crate_name = "ic_nervous_system_collections_union_multi_map",
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "union_multi_map_integration",
+    srcs = glob(["tests/**/*.rs"]),
+    deps = [":union_multi_map"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)

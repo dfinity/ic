@@ -10,7 +10,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/registry/proto/generator",
+    "//rs/registry/proto/generator:lib",
     "//rs/test_utilities/compare_dirs",
     "@crate_index//:tempfile",
 ]
@@ -19,16 +19,15 @@ rust_library(
     name = "proto",
     srcs = glob([
         "src/**",
-        "gen/**",
     ]),
     crate_name = "ic_registry_common_proto",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
 generated_files_check(
@@ -37,7 +36,7 @@ generated_files_check(
     data = [
         ":protos",
     ] + glob([
-        "gen/**",
+        "src/gen/**",
     ]),
     manifest_dir = "rs/registry/proto",
     deps = DEV_DEPENDENCIES,

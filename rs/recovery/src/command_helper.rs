@@ -1,8 +1,11 @@
 //! Various helper methods enabling execution and piping of system commands.
-use crate::error::{RecoveryError, RecoveryResult};
-use std::convert::TryInto;
-use std::process::Command;
-use std::process::Stdio;
+use slog::{Logger, info};
+
+use crate::{
+    cli::wait_for_confirmation,
+    error::{RecoveryError, RecoveryResult},
+};
+use std::process::{Command, Stdio};
 
 /// Execute ALL given commands in a blocking manner by creating pipes between
 /// them. Execution will fail if ANY [Command] fails. Optionally return the
@@ -25,7 +28,7 @@ pub fn pipe(a: &mut Command, b: &mut Command) -> RecoveryResult<()> {
     let mut cmd_a = a
         .stdout(Stdio::piped())
         .spawn()
-        .map_err(|e| RecoveryError::cmd_error(a, None, format!("Could not spawn: {:?}", e)))?;
+        .map_err(|e| RecoveryError::cmd_error(a, None, format!("Could not spawn: {e:?}")))?;
 
     let b_stdin: Stdio = cmd_a
         .stdout
@@ -33,16 +36,13 @@ pub fn pipe(a: &mut Command, b: &mut Command) -> RecoveryResult<()> {
         .ok_or_else(|| {
             RecoveryError::cmd_error(a, None, "Could not create pipe: stdout is None".to_string())
         })?
-        .try_into()
-        .map_err(|e| {
-            RecoveryError::cmd_error(a, None, format!("Could not create pipe: {:?}", e))
-        })?;
+        .into();
 
     b.stdin(b_stdin).stdout(Stdio::piped());
 
     let output = cmd_a.wait_with_output();
     let output = output.map_err(|e| {
-        RecoveryError::cmd_error(a, None, format!("Failed to execute command: {:?}", e))
+        RecoveryError::cmd_error(a, None, format!("Failed to execute command: {e:?}"))
     })?;
 
     let exit_status = output.status;
@@ -51,7 +51,7 @@ pub fn pipe(a: &mut Command, b: &mut Command) -> RecoveryResult<()> {
             RecoveryError::cmd_error(
                 a,
                 exit_status.code(),
-                format!("Could not get stderr: {:?}", e),
+                format!("Could not get stderr: {e:?}"),
             )
         })?;
         return Err(RecoveryError::cmd_error(a, exit_status.code(), stderr));
@@ -60,11 +60,26 @@ pub fn pipe(a: &mut Command, b: &mut Command) -> RecoveryResult<()> {
     Ok(())
 }
 
+/// Execute the given system [Command] in a blocking manner.
+/// If a logger is provided, ask for user confirmation first.
+pub fn confirm_exec_cmd(
+    command: &mut Command,
+    logger: Option<&Logger>,
+) -> RecoveryResult<Option<String>> {
+    if let Some(log) = logger {
+        info!(log, "");
+        info!(log, "About to execute:");
+        info!(log, "{:?}", command);
+        wait_for_confirmation(log);
+    }
+    exec_cmd(command)
+}
+
 /// Execute the given system [Command] in a blocking manner. Optionally return
 /// the commands output if it exists and execution was successful.
 pub fn exec_cmd(command: &mut Command) -> RecoveryResult<Option<String>> {
     let output = command.output().map_err(|e| {
-        RecoveryError::cmd_error(command, None, format!("Could not execute: {:?}", e))
+        RecoveryError::cmd_error(command, None, format!("Could not execute: {e:?}"))
     })?;
 
     let exit_status = output.status;
@@ -73,7 +88,7 @@ pub fn exec_cmd(command: &mut Command) -> RecoveryResult<Option<String>> {
             RecoveryError::cmd_error(
                 command,
                 exit_status.code(),
-                format!("Could not get stderr: {:?}", e),
+                format!("Could not get stderr: {e:?}"),
             )
         })?;
         if let Ok(mut s) = String::from_utf8(output.stdout) {
@@ -92,7 +107,7 @@ pub fn exec_cmd(command: &mut Command) -> RecoveryResult<Option<String>> {
         RecoveryError::cmd_error(
             command,
             exit_status.code(),
-            format!("Could not get stdout: {:?}", e),
+            format!("Could not get stdout: {e:?}"),
         )
     })?;
 

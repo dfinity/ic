@@ -4,15 +4,14 @@ use dfn_core::{
     api::{arg_data, caller, now},
     over, over_async, stable,
 };
-use prost::Message;
-use std::time::SystemTime;
-
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_gtc::{
-    pb::v1::{AccountState, Gtc},
     LOG_PREFIX,
+    pb::v1::{AccountState, Gtc},
 };
 use ic_nns_gtc_accounts::FORWARD_WHITELIST;
+use prost::Message;
+use std::{ptr::addr_of_mut, time::SystemTime};
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -25,7 +24,7 @@ fn gtc() -> &'static Gtc {
 
 fn gtc_mut() -> &'static mut Gtc {
     unsafe {
-        if let Some(gtc) = &mut GTC {
+        if let Some(gtc) = &mut *addr_of_mut!(GTC) {
             gtc
         } else {
             GTC = Some(Gtc::default());
@@ -34,11 +33,11 @@ fn gtc_mut() -> &'static mut Gtc {
     }
 }
 
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn canister_init() {
     dfn_core::printer::hook();
 
-    println!("{}canister_init: Initializing", LOG_PREFIX);
+    println!("{LOG_PREFIX}canister_init: Initializing");
 
     let gtc = gtc_mut();
 
@@ -55,9 +54,9 @@ fn canister_init() {
     }
 }
 
-#[export_name = "canister_pre_upgrade"]
+#[unsafe(export_name = "canister_pre_upgrade")]
 fn canister_pre_upgrade() {
-    println!("{}Executing pre upgrade", LOG_PREFIX);
+    println!("{LOG_PREFIX}Executing pre upgrade");
 
     let mut serialized = Vec::new();
     gtc()
@@ -67,18 +66,17 @@ fn canister_pre_upgrade() {
     stable::set(&serialized);
 }
 
-#[export_name = "canister_post_upgrade"]
+#[unsafe(export_name = "canister_post_upgrade")]
 fn canister_post_upgrade() {
     dfn_core::printer::hook();
-    println!("{}Executing post upgrade", LOG_PREFIX);
+    println!("{LOG_PREFIX}Executing post upgrade");
 
     let serialized = stable::get();
     let gtc = gtc_mut();
     if let Err(err) = gtc.merge(&serialized[..]) {
         panic!(
             "Error deserializing canister state post-upgrade. \
-             CANISTER MIGHT HAVE BROKEN STATE!!!!. Error: {:?}",
-            err
+             CANISTER MIGHT HAVE BROKEN STATE!!!!. Error: {err:?}"
         )
     }
 
@@ -96,9 +94,9 @@ fn canister_post_upgrade() {
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
 
 /// Returns the sum of all token balances in the internal ledger
-#[export_name = "canister_query total"]
+#[unsafe(export_name = "canister_query total")]
 fn total() {
-    println!("{}total", LOG_PREFIX);
+    println!("{LOG_PREFIX}total");
     over(candid, |()| -> u32 { total_() })
 }
 
@@ -108,7 +106,7 @@ fn total_() -> u32 {
 }
 
 /// Returns the token balance of a given address
-#[export_name = "canister_query balance"]
+#[unsafe(export_name = "canister_query balance")]
 fn balance() {
     over(candid_one, balance_)
 }
@@ -119,7 +117,7 @@ fn balance_(address: String) -> u32 {
 }
 
 /// Returns the number of unique addresses present in the ledger
-#[export_name = "canister_query len"]
+#[unsafe(export_name = "canister_query len")]
 fn len() {
     over(candid, |()| -> u16 { len_() })
 }
@@ -130,9 +128,9 @@ fn len_() -> u16 {
 }
 
 /// Return the account state of the given GTC address
-#[export_name = "canister_query get_account"]
+#[unsafe(export_name = "canister_query get_account")]
 fn get_account() {
-    println!("{}get_account", LOG_PREFIX);
+    println!("{LOG_PREFIX}get_account");
     over(candid_one, get_account_)
 }
 
@@ -143,9 +141,9 @@ fn get_account_(address: String) -> Result<AccountState, String> {
 
 /// Claim the caller's GTC neurons (on behalf of the caller) and return the IDs
 /// of these neurons
-#[export_name = "canister_update claim_neurons"]
+#[unsafe(export_name = "canister_update claim_neurons")]
 fn claim_neurons() {
-    println!("{}claim_neurons", LOG_PREFIX);
+    println!("{LOG_PREFIX}claim_neurons");
     over_async(candid_one, claim_neurons_)
 }
 
@@ -158,9 +156,9 @@ async fn claim_neurons_(hex_pubkey: String) -> Result<Vec<NeuronId>, String> {
 /// `donate_account_recipient_neuron_id`.
 ///
 /// This method may only be called by the owner of the account.
-#[export_name = "canister_update donate_account"]
+#[unsafe(export_name = "canister_update donate_account")]
 fn donate_account() {
-    println!("{}donate_account", LOG_PREFIX);
+    println!("{LOG_PREFIX}donate_account");
     over_async(candid_one, donate_account_)
 }
 
@@ -173,9 +171,9 @@ async fn donate_account_(hex_pubkey: String) -> Result<(), String> {
 /// the GTC's `forward_whitelisted_unclaimed_accounts_recipient_neuron_id`.
 ///
 /// This method may be called by anyone 6 months after the IC Genesis.
-#[export_name = "canister_update forward_whitelisted_unclaimed_accounts"]
+#[unsafe(export_name = "canister_update forward_whitelisted_unclaimed_accounts")]
 fn forward_whitelisted_unclaimed_accounts() {
-    println!("{}forward_whitelisted_unclaimed_accounts", LOG_PREFIX);
+    println!("{LOG_PREFIX}forward_whitelisted_unclaimed_accounts");
     over_async(candid_one, forward_whitelisted_unclaimed_accounts_)
 }
 
@@ -184,42 +182,11 @@ async fn forward_whitelisted_unclaimed_accounts_(_: ()) -> Result<(), String> {
     gtc_mut().forward_whitelisted_unclaimed_accounts().await
 }
 
-// When run on native this prints the candid service definition of this
-// canister, from the methods annotated with `candid_method` above.
-//
-// Note that `cargo test` calls `main`, and `export_service` (which defines
-// `__export_service` in the current scope) needs to be called exactly once. So
-// in addition to `not(target_arch = "wasm32")` we have a `not(test)` guard here
-// to avoid calling `export_service`, which we need to call in the test below.
-#[cfg(not(any(target_arch = "wasm32", test)))]
 fn main() {
-    // The line below generates did types and service definition from the
-    // methods annotated with `candid_method` above. The definition is then
-    // obtained with `__export_service()`.
-    candid::export_service!();
-    std::print!("{}", __export_service());
+    // This block is intentionally left blank.
 }
 
-#[cfg(any(target_arch = "wasm32", test))]
-fn main() {}
-
-#[test]
-fn check_gtc_candid_file() {
-    let did_path = std::path::PathBuf::from(
-        std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env var undefined"),
-    )
-    .join("canister/gtc.did");
-    let gtc_did = String::from_utf8(std::fs::read(&did_path).unwrap()).unwrap();
-
-    // See comments in main above
-    candid::export_service!();
-    let expected = __export_service();
-
-    if gtc_did != expected {
-        panic!(
-            "Generated candid definition does not match canister/gtc.did. \
-            Run `cargo run --bin genesis-token-canister > canister/gtc.did` in \
-            rs/nns/gtc to update canister/gtc.did."
-        )
-    }
-}
+// In order for some of the test(s) within this mod to work,
+// this MUST occur at the end.
+#[cfg(test)]
+mod tests;

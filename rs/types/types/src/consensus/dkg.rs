@@ -2,11 +2,19 @@
 
 use super::*;
 use crate::{
+    ReplicaVersion,
+    artifact::PbArtifact,
     crypto::threshold_sig::ni_dkg::{
-        config::NiDkgConfig, NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
+        NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
+        config::NiDkgConfig,
+        errors::{
+            create_transcript_error::DkgCreateTranscriptError,
+            verify_dealing_error::DkgVerifyDealingError,
+        },
     },
     messages::CallbackId,
-    ReplicaVersion,
+    registry::RegistryClientError,
+    state_manager::StateManagerError,
 };
 use ic_protobuf::types::v1 as pb;
 use serde_with::serde_as;
@@ -15,10 +23,62 @@ use std::collections::BTreeMap;
 /// Contains a Node's contribution to a DKG dealing.
 pub type Message = BasicSigned<DealingContent>;
 
+impl IdentifiableArtifact for Message {
+    const NAME: &'static str = "dkg";
+    type Id = DkgMessageId;
+    fn id(&self) -> Self::Id {
+        self.into()
+    }
+}
+
+impl PbArtifact for Message {
+    type PbId = ic_protobuf::types::v1::DkgMessageId;
+    type PbIdError = ProxyDecodeError;
+    type PbMessage = ic_protobuf::types::v1::DkgMessage;
+    type PbMessageError = ProxyDecodeError;
+}
+
+/// Identifier of a DKG message.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+pub struct DkgMessageId {
+    pub hash: CryptoHashOf<Message>,
+    pub height: Height,
+}
+
+impl From<&Message> for DkgMessageId {
+    fn from(msg: &Message) -> Self {
+        Self {
+            hash: crypto_hash(msg),
+            height: msg.content.dkg_id.start_block_height,
+        }
+    }
+}
+
+impl From<DkgMessageId> for pb::DkgMessageId {
+    fn from(id: DkgMessageId) -> Self {
+        Self {
+            hash: id.hash.clone().get().0,
+            height: id.height.get(),
+        }
+    }
+}
+
+impl TryFrom<pb::DkgMessageId> for DkgMessageId {
+    type Error = ProxyDecodeError;
+
+    fn try_from(id: pb::DkgMessageId) -> Result<Self, Self::Error> {
+        Ok(Self {
+            hash: CryptoHash(id.hash.clone()).into(),
+            height: Height::from(id.height),
+        })
+    }
+}
+
 /// Holds the content of a DKG dealing
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DealingContent {
-    version: ReplicaVersion,
+    pub version: ReplicaVersion,
     /// the cryptographic data of the dealing
     pub dealing: NiDkgDealing,
     /// The id of the DKG instance this dealing belongs to
@@ -34,19 +94,6 @@ impl DealingContent {
             dkg_id,
         }
     }
-
-    /// Create a new DealingContent with replica version
-    pub fn new_with_replica_version(
-        version: ReplicaVersion,
-        dealing: NiDkgDealing,
-        dkg_id: NiDkgId,
-    ) -> Self {
-        DealingContent {
-            version,
-            dealing,
-            dkg_id,
-        }
-    }
 }
 
 impl SignedBytesWithoutDomainSeparator for DealingContent {
@@ -55,11 +102,23 @@ impl SignedBytesWithoutDomainSeparator for DealingContent {
     }
 }
 
+impl From<Message> for pb::DkgMessage {
+    fn from(message: Message) -> Self {
+        Self {
+            replica_version: message.content.version.to_string(),
+            dkg_id: Some(pb::NiDkgId::from(message.content.dkg_id)),
+            dealing: bincode::serialize(&message.content.dealing).unwrap(),
+            signature: message.signature.signature.get().0,
+            signer: Some(crate::node_id_into_protobuf(message.signature.signer)),
+        }
+    }
+}
+
 impl From<&Message> for pb::DkgMessage {
     fn from(message: &Message) -> Self {
         Self {
             replica_version: message.content.version.to_string(),
-            dkg_id: Some(pb::NiDkgId::from(message.content.dkg_id)),
+            dkg_id: Some(pb::NiDkgId::from(message.content.dkg_id.clone())),
             dealing: bincode::serialize(&message.content.dealing).unwrap(),
             signature: message.signature.signature.clone().get().0,
             signer: Some(crate::node_id_into_protobuf(message.signature.signer)),
@@ -68,22 +127,18 @@ impl From<&Message> for pb::DkgMessage {
 }
 
 impl TryFrom<pb::DkgMessage> for Message {
-    type Error = String;
+    type Error = ProxyDecodeError;
+
     fn try_from(message: pb::DkgMessage) -> Result<Self, Self::Error> {
         Ok(Self {
-            content: DealingContent::new_with_replica_version(
-                ReplicaVersion::try_from(message.replica_version).map_err(|err| {
-                    format!("Couldn't deserialize the replica version: {:?}", err)
-                })?,
-                bincode::deserialize(&message.dealing)
-                    .map_err(|err| format!("Couldn't deserialize the dealing: {:?}", err))?,
-                NiDkgId::try_from(message.dkg_id.expect("No Dkg id found"))
-                    .map_err(|err| format!("Couldn't deserialize the Dkg id: {:?}", err))?,
-            ),
+            content: DealingContent {
+                version: ReplicaVersion::try_from(message.replica_version)?,
+                dealing: bincode::deserialize(&message.dealing)?,
+                dkg_id: try_from_option_field(message.dkg_id, "DkgId not found")?,
+            },
             signature: BasicSignature {
                 signature: BasicSigOf::from(BasicSig(message.signature)),
-                signer: node_id_try_from_protobuf(message.signer.expect("No signer found"))
-                    .map_err(|err| format!("Couldn't parse the node id: {:?}", err))?,
+                signer: node_id_try_from_option(message.signer)?,
             },
         })
     }
@@ -98,8 +153,9 @@ impl HasVersion for DealingContent {
 /// The DKG summary will be present as the DKG payload at every block,
 /// corresponding to the start of a new DKG interval.
 #[serde_as]
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Summary {
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct DkgSummary {
     /// The registry version used to create this summary.
     pub registry_version: RegistryVersion,
     /// The crypto configs of the currently computed DKGs, indexed by DKG Ids.
@@ -115,28 +171,27 @@ pub struct Summary {
     /// corresponding to this tag.
     #[serde_as(as = "Vec<(_, _)>")]
     next_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
-    /// Transcripts that are computed for new subnets being created.
-    pub transcripts_for_new_subnets_with_callback_ids:
-        Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>,
+    /// Transcripts that are computed for remote subnets.
+    pub transcripts_for_remote_subnets: Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>,
     /// The length of the current interval in rounds (following the start
     /// block).
     pub interval_length: Height,
     /// The length of the next interval in rounds (following the start block).
     pub next_interval_length: Height,
-    /// The height of the block conatining that summary.
+    /// The height of the block containing that summary.
     pub height: Height,
     /// The number of intervals a DKG for the given remote target was attempted.
     pub initial_dkg_attempts: BTreeMap<NiDkgTargetId, u32>,
 }
 
-impl Summary {
+impl DkgSummary {
     /// Create a new Summary
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         configs: Vec<NiDkgConfig>,
         current_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
         next_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
-        transcripts_for_new_subnets: Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>,
+        transcripts_for_remote_subnets: Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>,
         registry_version: RegistryVersion,
         interval_length: Height,
         next_interval_length: Height,
@@ -146,11 +201,11 @@ impl Summary {
         Self {
             configs: configs
                 .into_iter()
-                .map(|config| (config.dkg_id(), config))
+                .map(|config| (config.dkg_id().clone(), config))
                 .collect(),
             current_transcripts,
             next_transcripts,
-            transcripts_for_new_subnets_with_callback_ids: transcripts_for_new_subnets,
+            transcripts_for_remote_subnets,
             registry_version,
             interval_length,
             next_interval_length,
@@ -172,10 +227,8 @@ impl Summary {
     /// Returns a reference to the current transcript for the given tag. Note
     /// that currently we expect that a valid summary contains the current
     /// transcript for any DKG tag.
-    pub fn current_transcript(&self, tag: &NiDkgTag) -> &NiDkgTranscript {
-        self.current_transcripts
-            .get(tag)
-            .unwrap_or_else(|| panic!("No current transcript available for tag {:?}", tag))
+    pub fn current_transcript(&self, tag: &NiDkgTag) -> Option<&NiDkgTranscript> {
+        self.current_transcripts.get(tag)
     }
 
     /// Returns a reference to the current transcripts.
@@ -199,19 +252,8 @@ impl Summary {
     pub fn into_transcripts(self) -> Vec<NiDkgTranscript> {
         self.current_transcripts
             .into_iter()
-            .chain(self.next_transcripts.into_iter())
+            .chain(self.next_transcripts)
             .map(|(_, t)| t)
-            .collect()
-    }
-
-    /// Return the set of next transcripts for all tags. If for some tag
-    /// the next transcript is not available, the current transcript is used.
-    /// This function avoids expensive copying when transcripts are large.
-    pub fn into_next_transcripts(self) -> BTreeMap<NiDkgTag, NiDkgTranscript> {
-        let mut next_transcripts = self.next_transcripts;
-        self.current_transcripts
-            .into_iter()
-            .map(|(tag, current)| (tag, next_transcripts.remove(&tag).unwrap_or(current)))
             .collect()
     }
 
@@ -246,22 +288,19 @@ impl Summary {
     /// Returns the oldest registry version that is still relevant to DKG.
     pub(crate) fn get_oldest_registry_version_in_use(&self) -> RegistryVersion {
         self.current_transcripts()
-            .iter()
-            .map(|(_id, transcript)| transcript.registry_version)
+            .values()
+            .map(|transcript| transcript.registry_version)
             .min()
             .expect("No current transcripts available")
     }
 }
 
-fn build_tagged_transcripts_vec(
+fn build_transcripts_vec(
     transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
-) -> Vec<pb::TaggedNiDkgTranscript> {
+) -> Vec<pb::NiDkgTranscript> {
     transcripts
-        .iter()
-        .map(|(tag, transcript)| pb::TaggedNiDkgTranscript {
-            tag: pb::NiDkgTag::from(tag) as i32,
-            transcript: Some(pb::NiDkgTranscript::from(transcript)),
-        })
+        .values()
+        .map(pb::NiDkgTranscript::from)
         .collect()
 }
 
@@ -272,7 +311,7 @@ fn build_callback_ided_transcripts_vec(
         .iter()
         .map(
             |(id, callback_id, transcript_result)| pb::CallbackIdedNiDkgTranscript {
-                dkg_id: Some(pb::NiDkgId::from(*id)),
+                dkg_id: Some(pb::NiDkgId::from(id.clone())),
                 transcript_result: match transcript_result {
                     Ok(transcript) => Some(pb::NiDkgTranscriptResult {
                         val: Some(pb::ni_dkg_transcript_result::Val::Transcript(
@@ -302,8 +341,8 @@ fn build_initial_dkg_attempts_vec(
         .collect()
 }
 
-impl From<&Summary> for pb::Summary {
-    fn from(summary: &Summary) -> Self {
+impl From<&DkgSummary> for pb::Summary {
+    fn from(summary: &DkgSummary) -> Self {
         Self {
             registry_version: summary.registry_version.get(),
             configs: summary
@@ -311,15 +350,13 @@ impl From<&Summary> for pb::Summary {
                 .values()
                 .map(pb::NiDkgConfig::from)
                 .collect(),
-            current_transcripts: build_tagged_transcripts_vec(&summary.current_transcripts),
-            next_transcripts: build_tagged_transcripts_vec(&summary.next_transcripts),
+            current_transcripts: build_transcripts_vec(&summary.current_transcripts),
+            next_transcripts: build_transcripts_vec(&summary.next_transcripts),
             interval_length: summary.interval_length.get(),
             next_interval_length: summary.next_interval_length.get(),
             height: summary.height.get(),
-            transcripts_for_new_subnets_with_callback_ids: build_callback_ided_transcripts_vec(
-                summary
-                    .transcripts_for_new_subnets_with_callback_ids
-                    .as_slice(),
+            transcripts_for_remote_subnets: build_callback_ided_transcripts_vec(
+                summary.transcripts_for_remote_subnets.as_slice(),
             ),
             initial_dkg_attempts: build_initial_dkg_attempts_vec(&summary.initial_dkg_attempts),
         }
@@ -327,23 +364,13 @@ impl From<&Summary> for pb::Summary {
 }
 
 fn build_tagged_transcripts_map(
-    transcripts: &[pb::TaggedNiDkgTranscript],
-) -> Result<BTreeMap<NiDkgTag, NiDkgTranscript>, String> {
+    transcripts: &[pb::NiDkgTranscript],
+) -> Result<BTreeMap<NiDkgTag, NiDkgTranscript>, ProxyDecodeError> {
     transcripts
         .iter()
-        .map(|tagged_transcript| {
-            tagged_transcript
-                .transcript
-                .as_ref()
-                .ok_or_else(|| "Transcript missing".to_string())
-                .and_then(|t| {
-                    Ok((
-                        NiDkgTag::try_from(tagged_transcript.tag).map_err(|e| {
-                            format!("Failed to convert NiDkgTag of transcript: {:?}", e)
-                        })?,
-                        NiDkgTranscript::try_from(t)?,
-                    ))
-                })
+        .map(|transcript_pb| {
+            let transcript = NiDkgTranscript::try_from(transcript_pb)?;
+            Ok((transcript.dkg_id.dkg_tag.clone(), transcript))
         })
         .collect::<Result<BTreeMap<_, _>, _>>()
 }
@@ -352,22 +379,22 @@ fn build_tagged_transcripts_map(
 fn build_transcripts_vec_from_pb(
     transcripts: Vec<pb::CallbackIdedNiDkgTranscript>,
 ) -> Result<Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>, String> {
-    let mut transcripts_for_new_subnets = Vec::new();
+    let mut transcripts_for_remote_subnets = Vec::new();
     for transcript in transcripts.into_iter() {
         let id = transcript.dkg_id.ok_or_else(|| {
             "Missing DkgPayload::Summary::IdedNiDkgTranscript::NiDkgId".to_string()
         })?;
         let id = NiDkgId::try_from(id)
-            .map_err(|e| format!("Failed to convert NiDkgId of transcript: {:?}", e))?;
+            .map_err(|e| format!("Failed to convert NiDkgId of transcript: {e:?}"))?;
         let callback_id = CallbackId::from(transcript.callback_id);
         let transcript_result = transcript
             .transcript_result
             .ok_or("Missing DkgPayload::Summary::IdedNiDkgTranscript::NiDkgTranscriptResult")?;
         let transcript_result = build_transcript_result(&transcript_result)
-            .map_err(|e| format!("Failed to convert NiDkgTranscriptResult: {:?}", e))?;
-        transcripts_for_new_subnets.push((id, callback_id, transcript_result));
+            .map_err(|e| format!("Failed to convert NiDkgTranscriptResult: {e:?}"))?;
+        transcripts_for_remote_subnets.push((id, callback_id, transcript_result));
     }
-    Ok(transcripts_for_new_subnets)
+    Ok(transcripts_for_remote_subnets)
 }
 
 fn build_initial_dkg_attempts_map(
@@ -375,11 +402,11 @@ fn build_initial_dkg_attempts_map(
 ) -> BTreeMap<NiDkgTargetId, u32> {
     vec.iter()
         .map(|item| {
-            let mut id = [0u8; NiDkgTargetId::SIZE];
+            let mut id = [0_u8; NiDkgTargetId::SIZE];
             // Safely convert the received slice to a fixed-size slice.
             let mut v = Vec::<u8>::new();
             v.extend_from_slice(&item.target_id);
-            v.resize(NiDkgTargetId::SIZE, 0u8);
+            v.resize(NiDkgTargetId::SIZE, 0_u8);
             id.copy_from_slice(&v);
             // Return the key-value pair.
             (NiDkgTargetId::new(id), item.attempt_no)
@@ -395,35 +422,37 @@ fn build_transcript_result(
         .as_ref()
         .ok_or("Val missing in DkgPayload::Summary::IdedNiDkgTranscript::NiDkgTranscriptResult")?
     {
-        pb::ni_dkg_transcript_result::Val::Transcript(transcript) => {
-            Ok(Ok(NiDkgTranscript::try_from(transcript)?))
-        }
+        pb::ni_dkg_transcript_result::Val::Transcript(transcript) => Ok(Ok(
+            NiDkgTranscript::try_from(transcript).map_err(|e| e.to_string())?,
+        )),
         pb::ni_dkg_transcript_result::Val::ErrorString(error_string) => {
             Ok(Err(std::str::from_utf8(error_string)
-                .map_err(|e| format!("Failed to convert ErrorString: {:?}", e))?
+                .map_err(|e| format!("Failed to convert ErrorString: {e:?}"))?
                 .to_string()))
         }
     }
 }
 
-impl TryFrom<pb::Summary> for Summary {
-    type Error = String;
+impl TryFrom<pb::Summary> for DkgSummary {
+    type Error = ProxyDecodeError;
+
     fn try_from(summary: pb::Summary) -> Result<Self, Self::Error> {
         Ok(Self {
             registry_version: RegistryVersion::from(summary.registry_version),
             configs: summary
                 .configs
                 .into_iter()
-                .map(|config| NiDkgConfig::try_from(config).map(|c| (c.dkg_id, c)))
+                .map(|config| NiDkgConfig::try_from(config).map(|c| (c.dkg_id.clone(), c)))
                 .collect::<Result<BTreeMap<_, _>, _>>()?,
             current_transcripts: build_tagged_transcripts_map(&summary.current_transcripts)?,
             next_transcripts: build_tagged_transcripts_map(&summary.next_transcripts)?,
             interval_length: Height::from(summary.interval_length),
             next_interval_length: Height::from(summary.next_interval_length),
             height: Height::from(summary.height),
-            transcripts_for_new_subnets_with_callback_ids: build_transcripts_vec_from_pb(
-                summary.transcripts_for_new_subnets_with_callback_ids,
-            )?,
+            transcripts_for_remote_subnets: build_transcripts_vec_from_pb(
+                summary.transcripts_for_remote_subnets,
+            )
+            .map_err(ProxyDecodeError::Other)?,
             initial_dkg_attempts: build_initial_dkg_attempts_map(&summary.initial_dkg_attempts),
         })
     }
@@ -432,12 +461,12 @@ impl TryFrom<pb::Summary> for Summary {
 /// The DKG payload is either the DKG Summary, if this payload belongs to a
 /// start block of a new DKG interval, or a tuple containing the start height
 /// and the set of valid dealings corresponding to the current interval.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum Payload {
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+pub enum DkgPayload {
     /// DKG Summary payload
-    Summary(Summary),
+    Summary(DkgSummary),
     /// DKG Dealings payload
-    Dealings(Dealings),
+    Data(DkgDataPayload),
 }
 
 /// DealingMessages is a vector of DKG messages
@@ -445,42 +474,72 @@ pub type DealingMessages = Vec<Message>;
 
 /// Dealings contains dealing messages and the height at which this DKG interval
 /// started
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Dealings {
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct DkgDataPayload {
     /// The height of the DKG interval that this object belongs to
     pub start_height: Height,
     /// The dealing messages
     pub messages: DealingMessages,
+    /// Transcripts that are computed for remote subnets.
+    pub transcripts_for_remote_subnets: Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>,
 }
 
-impl TryFrom<pb::Dealings> for Dealings {
-    type Error = String;
-    fn try_from(dealings: pb::Dealings) -> Result<Self, Self::Error> {
+impl TryFrom<pb::DkgDataPayload> for DkgDataPayload {
+    type Error = ProxyDecodeError;
+
+    fn try_from(data_payload: pb::DkgDataPayload) -> Result<Self, Self::Error> {
         Ok(Self {
-            start_height: Height::from(dealings.summary_height),
-            messages: dealings
+            start_height: Height::from(data_payload.summary_height),
+            messages: data_payload
                 .dealings
                 .into_iter()
-                .map(|protobuf_dealing| {
-                    Message::try_from(protobuf_dealing).expect("Couldn't parse the dealing")
-                })
-                .collect(),
+                .map(Message::try_from)
+                .collect::<Result<_, _>>()?,
+            transcripts_for_remote_subnets: build_transcripts_vec_from_pb(
+                data_payload.transcripts_for_remote_subnets,
+            )
+            .map_err(ProxyDecodeError::Other)?,
         })
     }
 }
 
-impl Dealings {
-    /// Return an empty DealingsPayload using the given start_height.
+impl DkgDataPayload {
+    /// Return an empty [`DkgDataPayload`] using the given start_height.
     pub fn new_empty(start_height: Height) -> Self {
         Self::new(start_height, vec![])
     }
 
-    /// Return an new DealingsPayload.
+    /// Return a new [`DkgDataPayload`].
     pub fn new(start_height: Height, messages: DealingMessages) -> Self {
         Self {
             start_height,
             messages,
+            transcripts_for_remote_subnets: vec![],
         }
+    }
+
+    /// Return a new [`DkgDataPayload`] with the given remote DKG transcripts.
+    pub fn new_with_remote_dkg_transcripts(
+        start_height: Height,
+        messages: DealingMessages,
+        remote_dkg_transcripts: Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>,
+    ) -> Self {
+        Self {
+            start_height,
+            messages,
+            transcripts_for_remote_subnets: remote_dkg_transcripts,
+        }
+    }
+
+    /// Returns true if the payload is empty
+    pub fn is_empty(&self) -> bool {
+        let DkgDataPayload {
+            start_height: _,
+            messages,
+            transcripts_for_remote_subnets,
+        } = self;
+        messages.is_empty() && transcripts_for_remote_subnets.is_empty()
     }
 }
 
@@ -492,14 +551,135 @@ impl NiDkgTag {
         let f = crate::consensus::get_faults_tolerated(committee_size);
         match self {
             NiDkgTag::LowThreshold => f + 1,
-            NiDkgTag::HighThreshold => committee_size - f,
+            NiDkgTag::HighThreshold | NiDkgTag::HighThresholdForKey(_) => committee_size - f,
         }
+    }
+}
+
+impl From<&DkgSummary> for pb::DkgPayload {
+    fn from(summary: &DkgSummary) -> Self {
+        Self {
+            val: Some(pb::dkg_payload::Val::Summary(pb::Summary::from(summary))),
+        }
+    }
+}
+
+impl From<&DkgDataPayload> for pb::DkgPayload {
+    fn from(data_payload: &DkgDataPayload) -> Self {
+        Self {
+            val: Some(pb::dkg_payload::Val::DataPayload(pb::DkgDataPayload {
+                dealings: data_payload
+                    .messages
+                    .iter()
+                    .map(pb::DkgMessage::from)
+                    .collect(),
+                summary_height: data_payload.start_height.get(),
+                transcripts_for_remote_subnets: build_callback_ided_transcripts_vec(
+                    data_payload.transcripts_for_remote_subnets.as_slice(),
+                ),
+            })),
+        }
+    }
+}
+
+impl TryFrom<pb::DkgPayload> for DkgPayload {
+    type Error = ProxyDecodeError;
+
+    fn try_from(summary: pb::DkgPayload) -> Result<Self, Self::Error> {
+        match summary
+            .val
+            .ok_or(ProxyDecodeError::MissingField("DkgPayload::val"))?
+        {
+            pb::dkg_payload::Val::Summary(summary) => {
+                Ok(DkgPayload::Summary(DkgSummary::try_from(summary)?))
+            }
+            pb::dkg_payload::Val::DataPayload(data_payload) => {
+                Ok(DkgPayload::Data(DkgDataPayload::try_from(data_payload)?))
+            }
+        }
+    }
+}
+
+/// Errors which could occur when creating a Dkg payload.
+#[derive(PartialEq, Debug)]
+pub enum DkgPayloadCreationError {
+    CryptoError(CryptoError),
+    StateManagerError(StateManagerError),
+    DkgCreateTranscriptError(DkgCreateTranscriptError),
+    FailedToGetDkgIntervalSettingFromRegistry(RegistryClientError),
+    FailedToGetSubnetMemberListFromRegistry(RegistryClientError),
+    FailedToGetVetKdKeyList(RegistryClientError),
+    MissingDkgStartBlock,
+}
+
+/// Reasons for why a dkg payload might be invalid.
+#[derive(PartialEq, Debug)]
+pub enum InvalidDkgPayloadReason {
+    CryptoError(CryptoError),
+    DkgVerifyDealingError(DkgVerifyDealingError),
+    MismatchedDkgSummary(DkgSummary, DkgSummary),
+    MissingDkgConfigForDealing,
+    DkgStartHeightDoesNotMatchParentBlock,
+    DkgSummaryAtNonStartHeight(Height),
+    DkgDealingAtStartHeight(Height),
+    InvalidDealer(NodeId),
+    DealerAlreadyDealt(NodeId),
+    /// There are multiple dealings from the same dealer in the payload.
+    DuplicateDealers,
+    /// The number of dealings in the payload exceeds the maximum allowed number of dealings.
+    TooManyDealings {
+        limit: usize,
+        actual: usize,
+    },
+    /// The early NiDKG transcripts that were included with this payload are invalid
+    InvalidEarlyNiDkgTranscripts,
+}
+
+/// Possible failures which could occur while validating a dkg payload. They don't imply that the
+/// payload is invalid.
+#[allow(dead_code)]
+#[derive(PartialEq, Debug)]
+pub enum DkgPayloadValidationFailure {
+    PayloadCreationFailed(DkgPayloadCreationError),
+    /// Crypto related errors.
+    CryptoError(CryptoError),
+    DkgVerifyDealingError(DkgVerifyDealingError),
+    FailedToGetMaxDealingsPerBlock(RegistryClientError),
+    FailedToGetRegistryVersion,
+}
+
+impl From<DkgVerifyDealingError> for InvalidDkgPayloadReason {
+    fn from(err: DkgVerifyDealingError) -> Self {
+        InvalidDkgPayloadReason::DkgVerifyDealingError(err)
+    }
+}
+
+impl From<DkgVerifyDealingError> for DkgPayloadValidationFailure {
+    fn from(err: DkgVerifyDealingError) -> Self {
+        DkgPayloadValidationFailure::DkgVerifyDealingError(err)
+    }
+}
+
+impl From<CryptoError> for InvalidDkgPayloadReason {
+    fn from(err: CryptoError) -> Self {
+        InvalidDkgPayloadReason::CryptoError(err)
+    }
+}
+
+impl From<CryptoError> for DkgPayloadValidationFailure {
+    fn from(err: CryptoError) -> Self {
+        DkgPayloadValidationFailure::CryptoError(err)
     }
 }
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
+    use crate::crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId;
+    use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
+    use strum::EnumCount;
+    use strum::IntoEnumIterator;
 
     #[test]
     fn should_correctly_calculate_threshold_for_ni_dkg_tag_low_threshold() {
@@ -514,6 +694,7 @@ mod tests {
         assert_eq!(low_threshold_tag.threshold_for_subnet_of_size(28), 10);
         assert_eq!(low_threshold_tag.threshold_for_subnet_of_size(64), 22);
     }
+
     #[test]
     fn should_correctly_calculate_threshold_for_ni_dkg_tag_high_threshold() {
         let high_threshold_tag = NiDkgTag::HighThreshold;
@@ -529,6 +710,29 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::single_element_loop)]
+    fn should_correctly_calculate_threshold_for_ni_dkg_tag_high_threshold_for_key() {
+        for ni_dkg_master_public_key_id in [NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::Bls12_381_G2,
+            name: "some key".to_string(),
+        })] {
+            let tag = NiDkgTag::HighThresholdForKey(ni_dkg_master_public_key_id);
+
+            assert_eq!(tag.threshold_for_subnet_of_size(0), 1);
+            assert_eq!(tag.threshold_for_subnet_of_size(1), 1);
+            assert_eq!(tag.threshold_for_subnet_of_size(2), 1);
+            assert_eq!(tag.threshold_for_subnet_of_size(3), 1);
+            assert_eq!(tag.threshold_for_subnet_of_size(4), 3);
+            assert_eq!(tag.threshold_for_subnet_of_size(5), 3);
+            assert_eq!(tag.threshold_for_subnet_of_size(6), 3);
+            assert_eq!(tag.threshold_for_subnet_of_size(28), 19);
+            assert_eq!(tag.threshold_for_subnet_of_size(64), 43);
+        }
+        assert_eq!(NiDkgMasterPublicKeyId::COUNT, 1);
+        assert_eq!(VetKdCurve::iter().count(), 1);
+    }
+
+    #[test]
     fn should_correctly_calculate_faults_tolerated_for_committee_of_size() {
         use crate::consensus::get_faults_tolerated;
         assert_eq!(get_faults_tolerated(0), 0);
@@ -541,38 +745,5 @@ mod tests {
         assert_eq!(get_faults_tolerated(7), 2);
         assert_eq!(get_faults_tolerated(28), 9);
         assert_eq!(get_faults_tolerated(64), 21);
-    }
-}
-
-impl From<&Summary> for pb::DkgPayload {
-    fn from(summary: &Summary) -> Self {
-        Self {
-            val: Some(pb::dkg_payload::Val::Summary(pb::Summary::from(summary))),
-        }
-    }
-}
-
-impl From<&Dealings> for pb::DkgPayload {
-    fn from(dealings: &Dealings) -> Self {
-        Self {
-            val: Some(pb::dkg_payload::Val::Dealings(pb::Dealings {
-                dealings: dealings.messages.iter().map(pb::DkgMessage::from).collect(),
-                summary_height: dealings.start_height.get(),
-            })),
-        }
-    }
-}
-
-impl TryFrom<pb::DkgPayload> for Payload {
-    type Error = String;
-    fn try_from(summary: pb::DkgPayload) -> Result<Self, Self::Error> {
-        match summary.val.ok_or("Val missing in DkgPayload")? {
-            pb::dkg_payload::Val::Summary(summary) => {
-                Ok(Payload::Summary(Summary::try_from(summary)?))
-            }
-            pb::dkg_payload::Val::Dealings(dealings) => {
-                Ok(Payload::Dealings(Dealings::try_from(dealings)?))
-            }
-        }
     }
 }

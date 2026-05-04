@@ -1,32 +1,49 @@
 [package]
 name = "ic-crypto-internal-threshold-sig-bls12381"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-arrayvec = "0.5.1"
-base64 = "0.11.0"
-hex = "0.4"
+base64 = { workspace = true }
+cached = { version = "0.49", default-features = false }
+hex = { workspace = true }
 ic-crypto-internal-bls12-381-type = { path = "../../bls12_381/type" }
 ic-crypto-internal-seed = { path = "../../seed" }
-ic-crypto-internal-threshold-sig-bls12381-der = { path = "der_utils"}
 ic-crypto-internal-types = { path = "../../types" }
-ic-crypto-sha = { path = "../../../../sha" }
+ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
+ic-crypto-sha2 = { path = "../../../../sha2" }
 ic-types = { path = "../../../../../types/types" }
-lazy_static = "1.4.0"
-rand = "0.8"
-rand_chacha = "0.3"
-serde = { version = "1.0.99", features = [ "derive" ] }
-serde_bytes = "0.11"
-serde_cbor = "0.11.1"
-strum_macros = "0.23.0"
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+parking_lot = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
+strum_macros = { workspace = true }
+subtle = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
-criterion = { version = "0.3", features = ["html_reports"] }
-proptest = "1.0"
-proptest-derive = "0.3.0"
+criterion = { workspace = true }
+ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
+proptest = { workspace = true }
+proptest-derive = { workspace = true }
 
 [[bench]]
 name = "zk"
+harness = false
+
+[[bench]]
+name = "bls"
+harness = false
+
+[[bench]]
+name = "dlog"
+harness = false
+
+[[bench]]
+name = "fs_nidkg"
 harness = false

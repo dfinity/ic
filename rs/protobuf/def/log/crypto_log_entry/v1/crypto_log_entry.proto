@@ -34,4 +34,8 @@ message CryptoLogEntry {
   google.protobuf.StringValue signature_shares = 26;
   google.protobuf.StringValue signature_inputs = 27;
   google.protobuf.UInt64Value log_id = 28;
+  google.protobuf.StringValue vetkd_args = 29;
+  google.protobuf.StringValue vetkd_key_share = 30;
+  google.protobuf.StringValue vetkd_key_shares = 31;
+  google.protobuf.StringValue vetkd_key = 32;
 }

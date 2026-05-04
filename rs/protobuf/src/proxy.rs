@@ -33,7 +33,7 @@
 //! };
 //!
 //! // Encode.
-//! let bytes: Vec<u8> = pb::Block::proxy_encode(b).unwrap();
+//! let bytes: Vec<u8> = pb::Block::proxy_encode(b);
 //!
 //! // Decode.
 //! assert_eq!(
@@ -45,7 +45,7 @@
 //! );
 //! ```
 
-use prost::{DecodeError, EncodeError};
+use prost::DecodeError;
 use std::convert::{Infallible, TryFrom, TryInto};
 use std::error::Error;
 
@@ -57,7 +57,7 @@ mod tests;
 /// convert from one to the other and back.
 pub trait ProtoProxy<T> {
     /// Encodes `t` into a vector via this proxy.
-    fn proxy_encode(t: T) -> Result<Vec<u8>, EncodeError>;
+    fn proxy_encode(t: T) -> Vec<u8>;
 
     /// Decodes a `T` from a slice via this proxy.
     fn proxy_decode(bytes: &[u8]) -> Result<T, ProxyDecodeError>;
@@ -69,9 +69,8 @@ where
     M: prost::Message + TryInto<T> + Default,
     M::Error: Into<ProxyDecodeError>,
 {
-    fn proxy_encode(t: T) -> Result<Vec<u8>, EncodeError> {
-        let mut buf = vec![];
-        t.into().encode(&mut buf).map(|()| buf)
+    fn proxy_encode(t: T) -> Vec<u8> {
+        t.into().encode_to_vec()
     }
 
     fn proxy_decode(bytes: &[u8]) -> Result<T, ProxyDecodeError> {
@@ -118,6 +117,9 @@ pub enum ProxyDecodeError {
     /// Certification version not implemented.
     UnknownCertificationVersion(u32),
 
+    /// State sync version not implemented.
+    UnknownStateSyncVersion(u32),
+
     /// Generic error.
     Other(String),
 }
@@ -130,7 +132,7 @@ impl ProxyDecodeError {
         T: Error + Eq + 'static,
     {
         self.source()
-            .map_or(false, |err| err.downcast_ref() == Some(&other_err))
+            .is_some_and(|err| err.downcast_ref() == Some(&other_err))
     }
 }
 
@@ -153,35 +155,34 @@ impl From<bincode::Error> for ProxyDecodeError {
 impl std::fmt::Display for ProxyDecodeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::DecodeError(err) => write!(f, "Protobuf decoding error: {}", err),
-            Self::CborDecodeError(err) => write!(f, "CBOR decoding error: {}", err),
-            Self::MissingField(name) => write!(f, "Missing required struct field: {}", name),
+            Self::DecodeError(err) => write!(f, "Protobuf decoding error: {err}"),
+            Self::CborDecodeError(err) => write!(f, "CBOR decoding error: {err}"),
+            Self::MissingField(name) => write!(f, "Missing required struct field: {name}"),
             Self::ValueOutOfRange { typ, err } => {
-                write!(f, "Value out of range for type {}: {}", typ, err)
+                write!(f, "Value out of range for type {typ}: {err}")
             }
-            Self::InvalidPrincipalId(err) => write!(f, "{}", err),
-            Self::InvalidCanisterId(err) => write!(f, "{}", err),
+            Self::InvalidPrincipalId(err) => write!(f, "{err}"),
+            Self::InvalidCanisterId(err) => write!(f, "{err}"),
             Self::InvalidDigestLength { expected, actual } => write!(
                 f,
-                "Digest: expected a blob of length {}, got {}",
-                expected, actual
+                "Digest: expected a blob of length {expected}, got {actual}"
             ),
             Self::InvalidMessageId { expected, actual } => write!(
                 f,
-                "MessageID: expected a blob of length {}, got {}",
-                expected, actual
+                "MessageID: expected a blob of length {expected}, got {actual}"
             ),
-            Self::ReplicaVersionParseError(err) => write!(f, "{}", err),
+            Self::ReplicaVersionParseError(err) => write!(f, "{err}"),
             Self::DuplicateEntry { key, v1, v2 } => write!(
                 f,
-                "Entry {:?} repeats multiple times. Previous: {}, current: {}",
-                key, v1, v2
+                "Entry {key:?} repeats multiple times. Previous: {v1}, current: {v2}"
             ),
             Self::UnknownCertificationVersion(version) => write!(
                 f,
-                "Replica does not implement certification version {}",
-                version
+                "Replica does not implement certification version {version}"
             ),
+            Self::UnknownStateSyncVersion(version) => {
+                write!(f, "Replica does not implement state sync version {version}")
+            }
             Self::Other(msg) => f.write_str(msg),
         }
     }
@@ -214,4 +215,19 @@ where
     Ok(T::try_from(
         field.ok_or(ProxyDecodeError::MissingField(field_name))?,
     )?)
+}
+
+/// Converts a variable-length slice into a fixed-length slice
+/// representing a module hash.
+/// Returns `Err(ProxyDecodeError::InvalidDigestLength({...}))` if
+/// the input slice does not have the length of 32.
+pub fn try_decode_hash(bytes: impl AsRef<[u8]>) -> Result<[u8; 32], ProxyDecodeError> {
+    let slice = bytes.as_ref();
+    let array: [u8; 32] = slice
+        .try_into()
+        .map_err(|_| ProxyDecodeError::InvalidDigestLength {
+            expected: 32,
+            actual: slice.len(),
+        })?;
+    Ok(array)
 }

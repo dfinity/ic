@@ -1,19 +1,20 @@
 use crate::consensus::metrics::{
-    PayloadBuilderMetrics, CRITICAL_ERROR_PAYLOAD_TOO_LARGE, CRITICAL_ERROR_VALIDATION_NOT_PASSED,
+    CRITICAL_ERROR_PAYLOAD_TOO_LARGE, CRITICAL_ERROR_VALIDATION_NOT_PASSED, PayloadBuilderMetrics,
 };
+use ic_consensus_utils::pool_reader::filter_past_payloads;
 use ic_interfaces::{
-    canister_http::CanisterHttpPayloadBuilder, consensus::PayloadValidationError,
-    ingress_manager::IngressSelector, messaging::XNetPayloadBuilder,
+    batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
+    consensus::{PayloadValidationError, PayloadWithSizeEstimate},
+    ingress_manager::IngressSelector,
+    messaging::XNetPayloadBuilder,
     self_validating_payload::SelfValidatingPayloadBuilder,
 };
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_types::{
-    batch::{
-        BatchPayload, CanisterHttpPayload, IngressPayload, SelfValidatingPayload,
-        ValidationContext, XNetPayload,
-    },
+    Height, NumBytes, Time,
+    batch::{BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
     consensus::Payload,
-    CountBytes, Height, NumBytes, Time,
+    messages::MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT,
 };
 use std::sync::Arc;
 
@@ -29,9 +30,9 @@ use std::sync::Arc;
 /// and that the following constraints are satisfied:
 ///
 /// - Payload size returned by [`build_payload`](BatchPayloadSectionBuilder::build_payload)
-///     `<=` `max_size` passed into [`build_payload`](BatchPayloadSectionBuilder::build_payload)
+///   `<=` `max_size` passed into [`build_payload`](BatchPayloadSectionBuilder::build_payload)
 /// - Payload size returned by [`validate_payload`](BatchPayloadSectionBuilder::validate_payload)
-///     `<=` payload size returned by [`build_payload`](BatchPayloadSectionBuilder::build_payload)
+///   `<=` payload size returned by [`build_payload`](BatchPayloadSectionBuilder::build_payload)
 ///
 /// It is advised to call the validation function after building the payload to be 100% sure.
 // [build_payload]: (BatchPayloadSectionBuilder::build_payload)
@@ -40,7 +41,9 @@ pub(crate) enum BatchPayloadSectionBuilder {
     Ingress(Arc<dyn IngressSelector>),
     XNet(Arc<dyn XNetPayloadBuilder>),
     SelfValidating(Arc<dyn SelfValidatingPayloadBuilder>),
-    CanisterHttp(Arc<dyn CanisterHttpPayloadBuilder>),
+    CanisterHttp(Arc<dyn BatchPayloadBuilder>),
+    QueryStats(Arc<dyn BatchPayloadBuilder>),
+    ChainKey(Arc<dyn BatchPayloadBuilder>),
 }
 
 impl BatchPayloadSectionBuilder {
@@ -58,23 +61,74 @@ impl BatchPayloadSectionBuilder {
         &self,
         payload: &mut BatchPayload,
         height: Height,
-        validation_context: &ValidationContext,
+        proposal_context: &ProposalContext,
         max_size: NumBytes,
         past_payloads: &[(Height, Time, Payload)],
+        payload_priority: usize,
+        metrics: &PayloadBuilderMetrics,
+        logger: &ReplicaLogger,
+    ) -> NumBytes {
+        let byte_size = self.build_payload_impl(
+            payload,
+            height,
+            proposal_context,
+            max_size,
+            past_payloads,
+            payload_priority,
+            metrics,
+            logger,
+        );
+        metrics
+            .payload_section_size_bytes
+            .with_label_values(&[self.section()])
+            .observe(byte_size.get() as f64);
+        byte_size
+    }
+
+    /// Returns the name of this section, for use as e.g. a metric label value.
+    fn section(&self) -> &str {
+        match self {
+            Self::Ingress(_) => "ingress",
+            Self::XNet(_) => "xnet",
+            Self::SelfValidating(_) => "self_validating",
+            Self::CanisterHttp(_) => "canister_http",
+            Self::QueryStats(_) => "query_stats",
+            Self::ChainKey(_) => "chain_key",
+        }
+    }
+
+    /// Internal implementation of `build_payload()`, to make it easier to
+    /// instrument the result.
+    fn build_payload_impl(
+        &self,
+        payload: &mut BatchPayload,
+        height: Height,
+        proposal_context: &ProposalContext,
+        max_size: NumBytes,
+        past_payloads: &[(Height, Time, Payload)],
+        payload_priority: usize,
         metrics: &PayloadBuilderMetrics,
         logger: &ReplicaLogger,
     ) -> NumBytes {
         match self {
             Self::Ingress(builder) => {
-                let past_payloads = builder.filter_past_payloads(past_payloads, validation_context);
-                let ingress =
-                    builder.get_ingress_payload(&past_payloads, validation_context, max_size);
-                let size = NumBytes::new(ingress.count_bytes() as u64);
+                let past_payloads = builder
+                    .filter_past_payloads(past_payloads, proposal_context.validation_context);
+                let PayloadWithSizeEstimate {
+                    payload: ingress,
+                    wire_size_estimate: size,
+                } = builder.get_ingress_payload(
+                    &past_payloads,
+                    proposal_context.validation_context,
+                    max_size,
+                );
 
                 // Validate the ingress payload as a safety measure
-                if let Err(err) =
-                    builder.validate_ingress_payload(&ingress, &past_payloads, validation_context)
-                {
+                if let Err(err) = builder.validate_ingress_payload(
+                    &ingress,
+                    &past_payloads,
+                    proposal_context.validation_context,
+                ) {
                     error!(
                         logger,
                         "Ingress payload did not pass validation, this is a bug, {:?} @{}",
@@ -104,35 +158,69 @@ impl BatchPayloadSectionBuilder {
                 size
             }
             Self::XNet(builder) => {
+                // NOTE: The XNetPayloadBuilder has some special properties that requires some extra logic.
+                // The paylaod builder can not precisely predict the size of the payload, since it is an
+                // underlying merkle tree (while most other payloads are simply vectors of messages).
+                // If we would give the XNetPayloadBuilder the precise byte limit, it would occasionally
+                // build oversized payloads. This would not be a soundness problem, since we currently
+                // allow a 2x oversize margin. However, it would trigger errors. Therefore we only hand
+                // the payload builder 95% of the available space. Though we can not prove that this would
+                // never create an oversized payload, we no longer spuriously trigger errors.
+
                 let past_payloads = builder.filter_past_payloads(past_payloads);
-                let (xnet, size) =
-                    builder.get_xnet_payload(validation_context, &past_payloads, max_size);
+                let (xnet, size) = builder.get_xnet_payload(
+                    proposal_context.validation_context,
+                    &past_payloads,
+                    max_size * (100 - MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT) / 100,
+                );
 
                 if size > max_size {
-                    error!(
-                        logger,
-                        "XNetPayload is larger than byte_limit. This is a bug, @{}",
-                        CRITICAL_ERROR_PAYLOAD_TOO_LARGE
-                    );
+                    if size > max_size * 2 {
+                        error!(
+                            logger,
+                            "XNetPayload is larger than byte_limit. Max size: {} Actual size: {} \
+                            This is a bug: {}",
+                            max_size,
+                            size,
+                            CRITICAL_ERROR_PAYLOAD_TOO_LARGE
+                        );
 
-                    metrics.critical_error_payload_too_large.inc();
-                    payload.xnet = XNetPayload::default();
-                    NumBytes::new(0)
-                } else {
-                    payload.xnet = xnet;
-                    size
+                        metrics.critical_error_payload_too_large.inc();
+                        payload.xnet = XNetPayload::default();
+                        return NumBytes::new(0);
+                    } else {
+                        warn!(
+                            logger,
+                            "XNetPayload is oversized but within margin. \
+                            Max size: {} Actual size: {}",
+                            max_size,
+                            size
+                        );
+                    }
                 }
+
+                payload.xnet = xnet;
+                size
             }
             Self::SelfValidating(builder) => {
                 let past_payloads = builder.filter_past_payloads(past_payloads);
                 let (self_validating, size) = builder.get_self_validating_payload(
-                    validation_context,
+                    proposal_context.validation_context,
                     &past_payloads,
                     max_size,
+                    payload_priority,
                 );
 
-                // NOTE: At the moment, the payload builder is calling it's own validator,
-                // so we don't have to do that here
+                // As a safety measure, the payload is validated, before submitting it.
+                if let Err(e) = builder.validate_self_validating_payload(
+                    &self_validating,
+                    proposal_context.validation_context,
+                    &past_payloads,
+                ) {
+                    error!(logger, "Created an invalid SelfValidatingPayload: {:?}", e);
+                    payload.self_validating = SelfValidatingPayload::default();
+                    return NumBytes::new(0);
+                }
 
                 // Check that the size limit is respected
                 if size > max_size {
@@ -151,45 +239,31 @@ impl BatchPayloadSectionBuilder {
                 }
             }
             Self::CanisterHttp(builder) => {
-                let past_payloads = builder.filter_past_payloads(past_payloads);
+                let past_payloads: Vec<PastPayload> =
+                    filter_past_payloads(past_payloads, |_, _, payload| {
+                        if payload.is_summary() {
+                            None
+                        } else {
+                            Some(&payload.as_ref().as_data().batch.canister_http)
+                        }
+                    });
 
-                let canister_http = builder.get_canister_http_payload(
+                let canister_http = builder.build_payload(
                     height,
-                    validation_context,
-                    &past_payloads,
                     max_size,
+                    &past_payloads,
+                    proposal_context.validation_context,
                 );
-                let size = NumBytes::new(canister_http.count_bytes() as u64);
+                let size = NumBytes::new(canister_http.len() as u64);
 
                 // Check validation as safety measure
-                match builder.validate_canister_http_payload(
+                match builder.validate_payload(
                     height,
+                    proposal_context,
                     &canister_http,
-                    validation_context,
                     &past_payloads,
                 ) {
-                    Ok(validation_size) => {
-                        if validation_size > size {
-                            error!(
-                                logger,
-                                "CanisterHttp is larger than byte_limit. This is a bug, @{}",
-                                CRITICAL_ERROR_PAYLOAD_TOO_LARGE
-                            );
-
-                            metrics.critical_error_payload_too_large.inc();
-                            payload.canister_http = CanisterHttpPayload::default();
-                            return NumBytes::new(0);
-                        }
-
-                        // NOTE: This is not a critical error, since it does not break any invariants.
-                        // It is nice to know about it nonetheless
-                        if validation_size < size {
-                            warn!(
-                                logger,
-                                "CanisterHttp validator reported size different from builder"
-                            );
-                        }
-
+                    Ok(()) => {
                         payload.canister_http = canister_http;
                         size
                     }
@@ -202,7 +276,89 @@ impl BatchPayloadSectionBuilder {
                         );
 
                         metrics.critical_error_validation_not_passed.inc();
-                        payload.canister_http = CanisterHttpPayload::default();
+                        payload.canister_http = vec![];
+                        NumBytes::new(0)
+                    }
+                }
+            }
+            Self::QueryStats(builder) => {
+                let past_payloads: Vec<PastPayload> =
+                    filter_past_payloads(past_payloads, |_, _, payload| {
+                        if payload.is_summary() {
+                            None
+                        } else {
+                            Some(&payload.as_ref().as_data().batch.query_stats)
+                        }
+                    });
+
+                let query_stats = builder.build_payload(
+                    height,
+                    max_size,
+                    &past_payloads,
+                    proposal_context.validation_context,
+                );
+                let size = NumBytes::new(query_stats.len() as u64);
+
+                // Check validation as safety measure
+                match builder.validate_payload(
+                    height,
+                    proposal_context,
+                    &query_stats,
+                    &past_payloads,
+                ) {
+                    Ok(()) => {
+                        payload.query_stats = query_stats;
+                        size
+                    }
+                    Err(err) => {
+                        error!(
+                            logger,
+                            "QueryStats payload did not pass validation, this is a bug, {:?} @{}",
+                            err,
+                            CRITICAL_ERROR_VALIDATION_NOT_PASSED
+                        );
+
+                        metrics.critical_error_validation_not_passed.inc();
+                        payload.query_stats = vec![];
+                        NumBytes::new(0)
+                    }
+                }
+            }
+            Self::ChainKey(builder) => {
+                let past_payloads: Vec<PastPayload> =
+                    filter_past_payloads(past_payloads, |_, _, payload| {
+                        if payload.is_summary() {
+                            None
+                        } else {
+                            Some(&payload.as_ref().as_data().batch.chain_key)
+                        }
+                    });
+
+                let chain_key = builder.build_payload(
+                    height,
+                    max_size,
+                    &past_payloads,
+                    proposal_context.validation_context,
+                );
+                let size = NumBytes::new(chain_key.len() as u64);
+
+                // Check validation as safety measure
+                match builder.validate_payload(height, proposal_context, &chain_key, &past_payloads)
+                {
+                    Ok(()) => {
+                        payload.chain_key = chain_key;
+                        size
+                    }
+                    Err(err) => {
+                        error!(
+                            logger,
+                            "chain_key payload did not pass validation, this is a bug, {:?} @{}",
+                            err,
+                            CRITICAL_ERROR_VALIDATION_NOT_PASSED
+                        );
+
+                        metrics.critical_error_validation_not_passed.inc();
+                        payload.chain_key = vec![];
                         NumBytes::new(0)
                     }
                 }
@@ -224,44 +380,192 @@ impl BatchPayloadSectionBuilder {
         &self,
         height: Height,
         payload: &BatchPayload,
-        validation_context: &ValidationContext,
+        proposal_context: &ProposalContext,
         past_payloads: &[(Height, Time, Payload)],
     ) -> Result<NumBytes, PayloadValidationError> {
         match self {
             Self::Ingress(builder) => {
-                let past_payloads = builder.filter_past_payloads(past_payloads, validation_context);
-                builder.validate_ingress_payload(
-                    &payload.ingress,
-                    &past_payloads,
-                    validation_context,
-                )?;
-                Ok(NumBytes::new(payload.ingress.count_bytes() as u64))
+                let past_payloads = builder
+                    .filter_past_payloads(past_payloads, proposal_context.validation_context);
+                builder
+                    .validate_ingress_payload(
+                        &payload.ingress,
+                        &past_payloads,
+                        proposal_context.validation_context,
+                    )
+                    .map_err(PayloadValidationError::from)
             }
             Self::XNet(builder) => {
                 let past_payloads = builder.filter_past_payloads(past_payloads);
-                Ok(builder.validate_xnet_payload(
-                    &payload.xnet,
-                    validation_context,
-                    &past_payloads,
-                )?)
+                builder
+                    .validate_xnet_payload(
+                        &payload.xnet,
+                        proposal_context.validation_context,
+                        &past_payloads,
+                    )
+                    .map_err(PayloadValidationError::from)
             }
             Self::SelfValidating(builder) => {
                 let past_payloads = builder.filter_past_payloads(past_payloads);
-                Ok(builder.validate_self_validating_payload(
-                    &payload.self_validating,
-                    validation_context,
-                    &past_payloads,
-                )?)
+                builder
+                    .validate_self_validating_payload(
+                        &payload.self_validating,
+                        proposal_context.validation_context,
+                        &past_payloads,
+                    )
+                    .map_err(PayloadValidationError::from)
             }
-            BatchPayloadSectionBuilder::CanisterHttp(builder) => {
-                let past_payloads = builder.filter_past_payloads(past_payloads);
-                Ok(builder.validate_canister_http_payload(
+            Self::CanisterHttp(builder) => {
+                let past_payloads: Vec<PastPayload> =
+                    filter_past_payloads(past_payloads, |_, _, payload| {
+                        if payload.is_summary() {
+                            None
+                        } else {
+                            Some(&payload.as_ref().as_data().batch.canister_http)
+                        }
+                    });
+
+                builder.validate_payload(
                     height,
+                    proposal_context,
                     &payload.canister_http,
-                    validation_context,
                     &past_payloads,
-                )?)
+                )?;
+
+                Ok(NumBytes::new(payload.canister_http.len() as u64))
+            }
+            Self::QueryStats(builder) => {
+                let past_payloads: Vec<PastPayload> =
+                    filter_past_payloads(past_payloads, |_, _, payload| {
+                        if payload.is_summary() {
+                            None
+                        } else {
+                            Some(&payload.as_ref().as_data().batch.query_stats)
+                        }
+                    });
+
+                builder.validate_payload(
+                    height,
+                    proposal_context,
+                    &payload.query_stats,
+                    &past_payloads,
+                )?;
+
+                Ok(NumBytes::new(payload.query_stats.len() as u64))
+            }
+            Self::ChainKey(builder) => {
+                let past_payloads: Vec<PastPayload> =
+                    filter_past_payloads(past_payloads, |_, _, payload| {
+                        if payload.is_summary() {
+                            None
+                        } else {
+                            Some(&payload.as_ref().as_data().batch.chain_key)
+                        }
+                    });
+
+                builder.validate_payload(
+                    height,
+                    proposal_context,
+                    &payload.chain_key,
+                    &past_payloads,
+                )?;
+
+                Ok(NumBytes::new(payload.chain_key.len() as u64))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_interfaces::messaging::XNetPayloadValidationError;
+    use ic_logger::replica_logger::no_op_logger;
+    use ic_metrics::MetricsRegistry;
+    use ic_test_utilities_types::ids::node_test_id;
+    use ic_types::{RegistryVersion, batch::ValidationContext, time::UNIX_EPOCH};
+
+    struct TestXNetPayloadBuilder {
+        return_size: u64,
+        assert_size_min: u64,
+        assert_size_max: u64,
+    }
+
+    impl XNetPayloadBuilder for TestXNetPayloadBuilder {
+        fn get_xnet_payload(
+            &self,
+            _validation_context: &ValidationContext,
+            _past_payloads: &[&XNetPayload],
+            byte_limit: NumBytes,
+        ) -> (XNetPayload, NumBytes) {
+            assert!(byte_limit <= self.assert_size_max.into());
+            assert!(byte_limit >= self.assert_size_min.into());
+            (XNetPayload::default(), NumBytes::new(self.return_size))
+        }
+
+        fn validate_xnet_payload(
+            &self,
+            _payload: &XNetPayload,
+            _validation_context: &ValidationContext,
+            _past_payloads: &[&XNetPayload],
+        ) -> Result<NumBytes, XNetPayloadValidationError> {
+            Ok(NumBytes::new(self.return_size))
+        }
+    }
+
+    /// Test that the margin for XNet is calculated correctly
+    #[test]
+    fn xnet_margin() {
+        let validation_context = ValidationContext {
+            registry_version: RegistryVersion::new(1),
+            certified_height: Height::new(0),
+            time: UNIX_EPOCH,
+        };
+        let proposal_context = ProposalContext {
+            proposer: node_test_id(0),
+            validation_context: &validation_context,
+        };
+
+        let metrics = PayloadBuilderMetrics::new(MetricsRegistry::default());
+        let mut payload = BatchPayload::default();
+
+        // Test that the size passed to the XNetPayloadBuilder is actually smaller than the maximum size
+        // and that a slightly larger payload will still pass
+        let payload_builder = BatchPayloadSectionBuilder::XNet(Arc::new(TestXNetPayloadBuilder {
+            return_size: 4 * 1024 * 1024 + 1000,
+            assert_size_min: 3 * 1024 * 1024,
+            assert_size_max: 4 * 1024 * 1024 - 1000,
+        }));
+        payload_builder.build_payload(
+            &mut payload,
+            Height::new(1),
+            &proposal_context,
+            NumBytes::new(4 * 1024 * 1024),
+            &[],
+            0,
+            &metrics,
+            &no_op_logger(),
+        );
+        assert_eq!(metrics.critical_error_payload_too_large.get(), 0);
+
+        // Test that for small limits the passed size will be 0
+        // and that a 2x oversized payload will raise a critical error
+        let payload_builder = BatchPayloadSectionBuilder::XNet(Arc::new(TestXNetPayloadBuilder {
+            return_size: 8 * 1024 * 1024 + 1000,
+            assert_size_min: 0,
+            assert_size_max: 19_000,
+        }));
+        payload_builder.build_payload(
+            &mut payload,
+            Height::new(1),
+            &proposal_context,
+            NumBytes::new(20_000),
+            &[],
+            0,
+            &metrics,
+            &no_op_logger(),
+        );
+        assert_eq!(metrics.critical_error_payload_too_large.get(), 1);
+        assert_eq!(payload.xnet, XNetPayload::default());
     }
 }

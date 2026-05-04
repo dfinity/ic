@@ -1,10 +1,12 @@
-use crate::registry::Registry;
-use ic_nns_common::registry::decode_or_panic;
+use crate::{registry::Registry, storage::with_chunks};
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_registry_keys::make_data_center_record_key;
+use ic_registry_canister_chunkify::decode_high_capacity_registry_value;
 use ic_registry_keys::NODE_OPERATOR_RECORD_KEY_PREFIX;
+use ic_registry_keys::make_data_center_record_key;
+use ic_registry_transport::pb::v1::HighCapacityRegistryValue;
 use ic_types::PrincipalId;
+use prost::Message;
 use std::convert::TryFrom;
 use std::str::from_utf8;
 
@@ -20,11 +22,16 @@ impl Registry {
         )> = vec![];
         for (key, values) in self.store.iter() {
             if key.starts_with(NODE_OPERATOR_RECORD_KEY_PREFIX.as_bytes()) {
-                let value = values.back().unwrap();
-                if value.deletion_marker {
+                let value: &HighCapacityRegistryValue = values.back().as_ref().unwrap();
+
+                let node_operator = with_chunks(|chunks| {
+                    decode_high_capacity_registry_value::<NodeOperatorRecord, _>(value, chunks)
+                });
+
+                let Some(node_operator) = node_operator else {
                     continue;
-                }
-                let node_operator = decode_or_panic::<NodeOperatorRecord>(value.value.clone());
+                };
+
                 let node_provider_id = PrincipalId::try_from(
                     &node_operator.node_provider_principal_id,
                 )
@@ -41,7 +48,7 @@ impl Registry {
                 }
                 let dc_id = node_operator.dc_id.clone();
                 let dc_key = make_data_center_record_key(&dc_id);
-                let dc_record_bytes = self
+                let dc_record_bytes = &self
                     .get(dc_key.as_bytes(), self.latest_version())
                     .ok_or_else(|| {
                         format!(
@@ -51,9 +58,8 @@ impl Registry {
                             dc_id
                         )
                     })?
-                    .value
-                    .clone();
-                let data_center = decode_or_panic::<DataCenterRecord>(dc_record_bytes);
+                    .value;
+                let data_center = DataCenterRecord::decode(dc_record_bytes.as_slice()).unwrap();
                 node_operators_and_dcs_of_node_provider
                     .push((data_center.clone(), node_operator.clone()));
             }
@@ -70,13 +76,13 @@ mod tests {
     use ic_nns_test_utils::registry::invariant_compliant_mutation;
     use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
     use ic_registry_keys::make_node_operator_record_key;
-    use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+    use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
     use maplit::btreemap;
     use std::collections::HashSet;
     use std::hash::Hash;
 
     pub fn principal(i: u64) -> PrincipalId {
-        PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
+        PrincipalId::try_from(format!("SID{i}").as_bytes().to_vec()).unwrap()
     }
 
     // Check that two vectors have the same elements. If fails if two vectors have a different
@@ -90,7 +96,7 @@ mod tests {
     // DataCenterRecord cannot implement Eq because of the Gps field being float, in the following
     // tests we assume that the presence of the Gps field is not important for the functionality
     // being tested and use this struct to compare the results of the tests with their expected results.
-    #[derive(PartialEq, Eq, Hash)]
+    #[derive(Eq, PartialEq, Hash)]
     struct DataCenterNoGps {
         id: String,
         region: String,
@@ -128,10 +134,10 @@ mod tests {
     #[test]
     fn test_get_node_operators_and_dcs_of_node_provider() {
         let mut registry = Registry::new();
-        registry.maybe_apply_mutation_internal(invariant_compliant_mutation());
+        registry.maybe_apply_mutation_internal(invariant_compliant_mutation(0));
 
         // Node Provider 1
-        let dc_id_1: String = "NY1".into();
+        let dc_id_1: String = "ny1".into();
         let node_operator_payload = AddNodeOperatorPayload {
             node_operator_principal_id: Some(principal(1)),
             node_allowance: 5,
@@ -139,6 +145,7 @@ mod tests {
             dc_id: dc_id_1.clone(),
             rewardable_nodes: btreemap! {},
             ipv6: None,
+            max_rewardable_nodes: None,
         };
         let node_operator_1 = NodeOperatorRecord::from(node_operator_payload.clone());
         registry.do_add_node_operator(node_operator_payload);
@@ -149,6 +156,7 @@ mod tests {
             dc_id: dc_id_1.clone(),
             rewardable_nodes: btreemap! {},
             ipv6: None,
+            max_rewardable_nodes: None,
         };
         let node_operator_2 = NodeOperatorRecord::from(node_operator_payload.clone());
         registry.do_add_node_operator(node_operator_payload);
@@ -159,7 +167,7 @@ mod tests {
             gps: None,
         };
 
-        let dc_id_2: String = "ZH1".into();
+        let dc_id_2: String = "zh1".into();
         let node_operator_payload = AddNodeOperatorPayload {
             node_operator_principal_id: Some(principal(3)),
             node_allowance: 7,
@@ -167,6 +175,7 @@ mod tests {
             dc_id: dc_id_2.clone(),
             rewardable_nodes: btreemap! {},
             ipv6: None,
+            max_rewardable_nodes: None,
         };
         let node_operator_3 = NodeOperatorRecord::from(node_operator_payload.clone());
         registry.do_add_node_operator(node_operator_payload);
@@ -178,7 +187,7 @@ mod tests {
         };
 
         // Node provider 2
-        let dc_id_3: String = "LA1".into();
+        let dc_id_3: String = "la1".into();
         let node_operator_payload = AddNodeOperatorPayload {
             node_operator_principal_id: Some(principal(4)),
             node_allowance: 7,
@@ -186,6 +195,7 @@ mod tests {
             dc_id: dc_id_3.clone(),
             rewardable_nodes: btreemap! {},
             ipv6: None,
+            max_rewardable_nodes: None,
         };
         let node_operator_4 = NodeOperatorRecord::from(node_operator_payload.clone());
         registry.do_add_node_operator(node_operator_payload);
@@ -235,9 +245,9 @@ mod tests {
     #[test]
     fn test_get_node_operators_and_dcs_of_node_provider_empty() {
         let mut registry = Registry::new();
-        registry.maybe_apply_mutation_internal(invariant_compliant_mutation());
+        registry.maybe_apply_mutation_internal(invariant_compliant_mutation(0));
 
-        let dc_id_1: String = "NY1".into();
+        let dc_id_1: String = "ny1".into();
         let node_operator_payload = AddNodeOperatorPayload {
             node_operator_principal_id: Some(principal(1)),
             node_allowance: 5,
@@ -245,6 +255,7 @@ mod tests {
             dc_id: dc_id_1.clone(),
             rewardable_nodes: btreemap! {},
             ipv6: None,
+            max_rewardable_nodes: None,
         };
         // Add node operator.
         registry.do_add_node_operator(node_operator_payload);
@@ -272,9 +283,11 @@ mod tests {
         // Check invariants before applying mutations
         registry.maybe_apply_mutation_internal(mutations);
 
-        assert!(registry
-            .get_node_operators_and_dcs_of_node_provider(*TEST_USER1_PRINCIPAL)
-            .unwrap()
-            .is_empty());
+        assert!(
+            registry
+                .get_node_operators_and_dcs_of_node_provider(*TEST_USER1_PRINCIPAL)
+                .unwrap()
+                .is_empty()
+        );
     }
 }

@@ -15,7 +15,7 @@ struct Block {
 
 mod pb {
     // Pretend Prost-generated message,
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(Clone, PartialEq, Eq, ::prost::Message)]
     pub struct Block {
         #[prost(uint64, tag = "1")]
         pub height: u64,
@@ -53,7 +53,7 @@ fn success() {
         payload: Blob(vec![1, 2, 3]),
     };
 
-    let bytes: Vec<u8> = pb::Block::proxy_encode(b.clone()).unwrap();
+    let bytes: Vec<u8> = pb::Block::proxy_encode(b.clone());
     assert_eq!(b, pb::Block::proxy_decode(&bytes).unwrap());
 }
 
@@ -68,6 +68,6 @@ fn missing_field() {
     b.encode(&mut bytes).unwrap();
     match <pb::Block as ProtoProxy<Block>>::proxy_decode(&bytes) {
         Err(ProxyDecodeError::MissingField("Block::payload")) => {}
-        other => panic!("Expected Err(MissingField), got {:?}", other),
+        other => panic!("Expected Err(MissingField), got {other:?}"),
     }
 }

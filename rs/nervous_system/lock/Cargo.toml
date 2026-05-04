@@ -1,0 +1,10 @@
+[package]
+name = "ic-nervous-system-lock"
+version = "0.0.1"
+edition.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+futures = { workspace = true }
+tokio = { workspace = true }

@@ -4,12 +4,16 @@
 //! including the secret key store and random number generator, and the
 //! stateless crypto lib.
 
-use crate::api::{NiDkgCspClient, NodePublicKeyData};
-use crate::key_id::KeyId;
-use crate::types::conversions::key_id_from_csp_pub_coeffs;
-use crate::types::{CspPublicCoefficients, CspSecretKey};
 use crate::Csp;
+use crate::api::NiDkgCspClient;
+use crate::key_id::{KeyId, KeyIdInstantiationError};
+use crate::types::{CspPublicCoefficients, CspSecretKey};
+use crate::vault::api::{CspPublicKeyStoreError, PublicKeyStoreCspVault};
+use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
+use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
+    CspDkgLoadPrivateKeyError, CspDkgUpdateFsEpochError,
+};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381 as clib;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
@@ -21,9 +25,9 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_logger::debug;
-use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::AlgorithmId;
-use ic_types::{NodeId, NodeIndex, NumberOfNodes};
+use ic_types::crypto::error::{KeyNotFoundError, MalformedDataError};
+use ic_types::{NodeIndex, NumberOfNodes};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[cfg(test)]
@@ -36,19 +40,6 @@ pub const NIDKG_FS_SCOPE: Scope = Scope::Const(ConstScope::NiDkgFsEncryptionKeys
 ///
 /// Please see the trait definition for full documentation.
 impl NiDkgCspClient for Csp {
-    /// Creates a key pair for encrypting threshold key shares in transmission
-    /// from dealers to receivers.
-    fn create_forward_secure_key_pair(
-        &self,
-        algorithm_id: AlgorithmId,
-        node_id: NodeId,
-    ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), ni_dkg_errors::CspDkgCreateFsKeyError>
-    {
-        debug!(self.logger; crypto.method_name => "create_forward_secure_key_pair");
-        self.csp_vault
-            .gen_forward_secure_key_pair(node_id, algorithm_id)
-    }
-
     /// Erases forward secure secret keys before a given epoch
     fn update_forward_secure_epoch(
         &self,
@@ -57,7 +48,30 @@ impl NiDkgCspClient for Csp {
     ) -> Result<(), ni_dkg_errors::CspDkgUpdateFsEpochError> {
         debug!(self.logger; crypto.method_name => "update_forward_secure_epoch", crypto.dkg_epoch => epoch.get());
 
-        let key_id = self.dkg_dealing_encryption_key_id();
+        let key_id =
+            dkg_dealing_encryption_key_id(&*self.csp_vault).map_err(|error| match error {
+                DkgDealingEncryptionKeyIdRetrievalError::KeyNotFound => {
+                    CspDkgUpdateFsEpochError::KeyNotFoundError(KeyNotFoundError {
+                        internal_error: String::from("Missing DKG dealing encryption key"),
+                        key_id: String::from(
+                            "Public key not found, therefore the key id could not be derived",
+                        ),
+                    })
+                }
+                DkgDealingEncryptionKeyIdRetrievalError::MalformedPublicKey {
+                    key_bytes,
+                    details: description,
+                } => CspDkgUpdateFsEpochError::MalformedPublicKeyError(MalformedDataError {
+                    algorithm: AlgorithmId::NiDkg_Groth20_Bls12_381,
+                    internal_error: description,
+                    data: Some(key_bytes),
+                }),
+                DkgDealingEncryptionKeyIdRetrievalError::TransientInternalError(details) => {
+                    CspDkgUpdateFsEpochError::TransientInternalError(InternalError {
+                        internal_error: details,
+                    })
+                }
+            })?;
         self.csp_vault
             .update_forward_secure_epoch(algorithm_id, key_id, epoch)
     }
@@ -66,21 +80,14 @@ impl NiDkgCspClient for Csp {
     fn create_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        _dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
         receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateDealingError> {
         debug!(self.logger; crypto.method_name => "create_dealing", crypto.dkg_epoch => epoch.get());
-        Ok(self.csp_vault.create_dealing(
-            algorithm_id,
-            dealer_index,
-            threshold,
-            epoch,
-            &receiver_keys,
-            None,
-        )?)
+        self.csp_vault
+            .create_dealing(algorithm_id, dealer_index, threshold, epoch, receiver_keys)
     }
 
     /// Creates a CSP dealing by resharing a previous secret key
@@ -94,14 +101,20 @@ impl NiDkgCspClient for Csp {
         resharing_public_coefficients: CspPublicCoefficients,
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError> {
         debug!(self.logger; crypto.method_name => "create_resharing_dealing", crypto.dkg_epoch => epoch.get());
-        let key_id = key_id_from_csp_pub_coeffs(&resharing_public_coefficients);
-        self.csp_vault.create_dealing(
+        let key_id = KeyId::try_from(&resharing_public_coefficients).map_err(|e| match e {
+            KeyIdInstantiationError::InvalidArguments(internal_error) => {
+                ni_dkg_errors::CspDkgCreateReshareDealingError::ReshareKeyIdComputationError(
+                    InternalError { internal_error },
+                )
+            }
+        })?;
+        self.csp_vault.create_resharing_dealing(
             algorithm_id,
             dealer_resharing_index,
             threshold,
             epoch,
-            &receiver_keys,
-            Some(key_id),
+            receiver_keys,
+            key_id,
         )
     }
 
@@ -109,7 +122,6 @@ impl NiDkgCspClient for Csp {
     fn verify_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -118,7 +130,6 @@ impl NiDkgCspClient for Csp {
     ) -> Result<(), ni_dkg_errors::CspDkgVerifyDealingError> {
         static_api::verify_dealing(
             algorithm_id,
-            dkg_id,
             dealer_index,
             threshold,
             epoch,
@@ -131,7 +142,6 @@ impl NiDkgCspClient for Csp {
     fn verify_resharing_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        dkg_id: NiDkgId,
         dealer_resharing_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -141,7 +151,6 @@ impl NiDkgCspClient for Csp {
     ) -> Result<(), ni_dkg_errors::CspDkgVerifyReshareDealingError> {
         static_api::verify_resharing_dealing(
             algorithm_id,
-            dkg_id,
             dealer_resharing_index,
             threshold,
             epoch,
@@ -192,13 +201,37 @@ impl NiDkgCspClient for Csp {
     fn load_threshold_signing_key(
         &self,
         algorithm_id: AlgorithmId,
-        _dkg_id: NiDkgId,
         epoch: Epoch,
         csp_transcript: CspNiDkgTranscript,
         receiver_index: NodeIndex,
     ) -> Result<(), ni_dkg_errors::CspDkgLoadPrivateKeyError> {
         debug!(self.logger; crypto.method_name => "load_threshold_signing_key", crypto.dkg_epoch => epoch.get());
-        let fs_key_id = self.dkg_dealing_encryption_key_id();
+
+        let fs_key_id =
+            dkg_dealing_encryption_key_id(&*self.csp_vault).map_err(|error| match error {
+                DkgDealingEncryptionKeyIdRetrievalError::KeyNotFound => {
+                    CspDkgLoadPrivateKeyError::KeyNotFoundError(KeyNotFoundError {
+                        internal_error: String::from("Missing DKG dealing encryption key"),
+                        key_id: String::from(
+                            "Public key not found, therefore the key id could not be derived",
+                        ),
+                    })
+                }
+                DkgDealingEncryptionKeyIdRetrievalError::MalformedPublicKey {
+                    key_bytes,
+                    details: description,
+                } => CspDkgLoadPrivateKeyError::MalformedPublicKeyError(MalformedDataError {
+                    algorithm: AlgorithmId::NiDkg_Groth20_Bls12_381,
+                    internal_error: description,
+                    data: Some(key_bytes),
+                }),
+                DkgDealingEncryptionKeyIdRetrievalError::TransientInternalError(details) => {
+                    CspDkgLoadPrivateKeyError::TransientInternalError(InternalError {
+                        internal_error: details,
+                    })
+                }
+            })?;
+
         self.csp_vault.load_threshold_signing_key(
             algorithm_id,
             epoch,
@@ -213,11 +246,73 @@ impl NiDkgCspClient for Csp {
         active_keys: BTreeSet<CspPublicCoefficients>,
     ) -> Result<(), ni_dkg_errors::CspDkgRetainThresholdKeysError> {
         debug!(self.logger; crypto.method_name => "retain_threshold_keys_if_present");
-        let active_key_ids: BTreeSet<KeyId> =
-            active_keys.iter().map(key_id_from_csp_pub_coeffs).collect();
+        let active_key_ids = active_keys
+            .iter()
+            .map(KeyId::try_from)
+            .collect::<Result<BTreeSet<KeyId>, KeyIdInstantiationError>>()
+            .map_err(
+                |key_id_instantiation_error| match key_id_instantiation_error {
+                    KeyIdInstantiationError::InvalidArguments(internal_error) => {
+                        ni_dkg_errors::CspDkgRetainThresholdKeysError::KeyIdInstantiationError(
+                            internal_error,
+                        )
+                    }
+                },
+            )?;
         self.csp_vault
             .retain_threshold_keys_if_present(active_key_ids)
     }
+
+    fn observe_minimum_epoch_in_active_transcripts(&self, epoch: Epoch) {
+        self.metrics
+            .observe_minimum_epoch_in_active_nidkg_transcripts(epoch.get());
+    }
+
+    fn observe_epoch_in_loaded_transcript(&self, epoch: Epoch) {
+        self.metrics
+            .observe_epoch_in_loaded_nidkg_transcript(epoch.get());
+    }
+}
+
+fn dkg_dealing_encryption_key_id<T: PublicKeyStoreCspVault + ?Sized>(
+    vault: &T,
+) -> Result<KeyId, DkgDealingEncryptionKeyIdRetrievalError> {
+    let pk = CspFsEncryptionPublicKey::try_from(
+        vault
+            .current_node_public_keys()
+            .map_err(|error| match error {
+                CspPublicKeyStoreError::TransientInternalError(msg) => {
+                    DkgDealingEncryptionKeyIdRetrievalError::TransientInternalError(msg)
+                }
+            })?
+            .dkg_dealing_encryption_public_key
+            .ok_or(DkgDealingEncryptionKeyIdRetrievalError::KeyNotFound)?,
+    )
+    .map_err(
+        |e| DkgDealingEncryptionKeyIdRetrievalError::MalformedPublicKey {
+            key_bytes: e.key_bytes,
+            details: format!(
+                "Unsupported public key proto as dkg dealing encryption public key: {}",
+                e.internal_error
+            ),
+        },
+    )?;
+    Ok(KeyId::from(&pk))
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+enum DkgDealingEncryptionKeyIdRetrievalError {
+    /// Missing DKG dealing encryption key
+    KeyNotFound,
+    /// The public key could not be parsed or was otherwise invalid
+    MalformedPublicKey {
+        /// Raw key data
+        key_bytes: Vec<u8>,
+        /// Auxiliary details
+        details: String,
+    },
+    /// Transient internal error occurred
+    TransientInternalError(String),
 }
 
 pub mod static_api {
@@ -229,7 +324,6 @@ pub mod static_api {
     /// Verifies a CSP dealing
     pub fn verify_dealing(
         algorithm_id: AlgorithmId,
-        _dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -260,7 +354,6 @@ pub mod static_api {
     #[allow(clippy::too_many_arguments)]
     pub fn verify_resharing_dealing(
         algorithm_id: AlgorithmId,
-        _dkg_id: NiDkgId,
         dealer_resharing_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -410,12 +503,6 @@ pub mod specialise {
     use super::*;
     use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381 as g20_internal_types;
 
-    /// An error during specialisation
-    #[derive(Debug)]
-    pub struct SpecialisationError {
-        _unexpected_type_name: &'static str,
-    }
-
     /// Converts a secret key into a forward secure secret key set.
     ///
     /// # Errors
@@ -428,8 +515,8 @@ pub mod specialise {
         } else {
             let unexpected_type_name: &'static str = secret_key.into();
             Err(ni_dkg_errors::MalformedSecretKeyError {
-                algorithm: AlgorithmId::Placeholder, // There is no on expected algorithm ID.
-                internal_error: format!("Unexpected variant: {}", unexpected_type_name),
+                algorithm: AlgorithmId::Unspecified,
+                internal_error: format!("Unexpected variant: {unexpected_type_name}"),
             })
         }
     }
@@ -451,13 +538,13 @@ pub mod specialise {
             secret_key: CspSecretKey,
         ) -> Result<threshold_types::SecretKeyBytes, ni_dkg_errors::MalformedSecretKeyError>
         {
-            if let CspSecretKey::ThresBls12_381(secret_key) = secret_key {
-                Ok(secret_key)
+            if let CspSecretKey::ThresBls12_381(secret_key) = &secret_key {
+                Ok(secret_key.clone())
             } else {
                 let unexpected_type_name: &'static str = secret_key.into();
                 Err(ni_dkg_errors::MalformedSecretKeyError {
                     algorithm: ALGORITHM_ID,
-                    internal_error: format!("Unexpected key type: {}", unexpected_type_name),
+                    internal_error: format!("Unexpected key type: {unexpected_type_name}"),
                 })
             }
         }
@@ -489,7 +576,7 @@ pub mod specialise {
                 Err(ni_dkg_errors::MalformedPublicKeyError {
                     algorithm: ALGORITHM_ID,
                     key_bytes: None,
-                    internal_error: format!("Unexpected key type: {}", unexpected_type_name),
+                    internal_error: format!("Unexpected key type: {unexpected_type_name}"),
                 })
             }
         }
@@ -510,7 +597,7 @@ pub mod specialise {
                 let unexpected_type_name: &'static str = pop.into();
                 Err(ni_dkg_errors::MalformedPopError {
                     algorithm: ALGORITHM_ID,
-                    internal_error: format!("Unexpected variant: {}", unexpected_type_name),
+                    internal_error: format!("Unexpected variant: {unexpected_type_name}"),
                     bytes: None,
                 })
             }
@@ -526,13 +613,13 @@ pub mod specialise {
             key_set: CspFsEncryptionKeySet,
         ) -> Result<clib::types::FsEncryptionKeySetWithPop, ni_dkg_errors::MalformedSecretKeyError>
         {
-            if let CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(key_set) = key_set {
-                Ok(key_set)
+            if let CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(key_set) = &key_set {
+                Ok(key_set.clone())
             } else {
                 let unexpected_type_name: &'static str = key_set.into();
                 Err(ni_dkg_errors::MalformedSecretKeyError {
                     algorithm: ALGORITHM_ID,
-                    internal_error: format!("Unexpected variant: {}", unexpected_type_name),
+                    internal_error: format!("Unexpected variant: {unexpected_type_name}"),
                 })
             }
         }
@@ -569,7 +656,7 @@ pub mod specialise {
             } else {
                 let variant_name: &'static str = dealing.into();
                 Err(ni_dkg_errors::InvalidArgumentError {
-                    message: format!("Unexpected dealing variant: {}", variant_name),
+                    message: format!("Unexpected dealing variant: {variant_name}"),
                 })
             }
         }

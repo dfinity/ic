@@ -28,11 +28,9 @@ impl Funds {
 #[cfg(target_arch = "wasm32")]
 pub mod ic0 {
     #[link(wasm_import_module = "ic0")]
-    extern "C" {
+    unsafe extern "C" {
         pub fn canister_self_copy(dst: u32, offset: u32, size: u32);
         pub fn canister_self_size() -> u32;
-        pub fn controller_copy(dst: u32, offset: u32, size: u32);
-        pub fn controller_size() -> u32;
         pub fn debug_print(offset: u32, size: u32);
         pub fn msg_arg_data_copy(dst: u32, offset: u32, size: u32);
         pub fn msg_arg_data_size() -> u32;
@@ -45,18 +43,6 @@ pub mod ic0 {
         pub fn msg_reply();
         pub fn msg_reply_data_append(offset: u32, size: u32);
         pub fn trap(offset: u32, size: u32);
-        pub fn call_simple(
-            callee_src: u32,
-            callee_size: u32,
-            name_src: u32,
-            name_size: u32,
-            reply_fun: usize,
-            reply_env: u32,
-            reject_fun: usize,
-            reject_env: u32,
-            data_src: u32,
-            data_size: u32,
-        ) -> i32;
         pub fn call_new(
             callee_src: u32,
             callee_size: u32,
@@ -95,7 +81,11 @@ pub mod ic0 {
         pub fn data_certificate_size() -> u32;
         pub fn data_certificate_copy(dst: u32, offset: u32, size: u32);
         pub fn canister_status() -> u32;
-        pub fn mint_cycles(amount: u64) -> u64;
+        pub fn canister_version() -> u64;
+        pub fn is_controller(src: u32, size: u32) -> u32;
+        pub fn in_replicated_execution() -> u32;
+        pub fn call_with_best_effort_response(timeout_seconds: u32);
+        pub fn msg_deadline() -> u64;
     }
 }
 
@@ -113,7 +103,7 @@ sharing of types between WASM and x86 programs in crates which depend on this.
 #[allow(dead_code)]
 pub mod ic0 {
     fn wrong_arch<A>(s: &str) -> A {
-        panic!("{} should only be called inside canisters", s)
+        panic!("{s} should only be called inside canisters")
     }
 
     pub unsafe fn canister_self_copy(_dst: u32, _offset: u32, _size: u32) {
@@ -121,12 +111,6 @@ pub mod ic0 {
     }
     pub unsafe fn canister_self_size() -> u32 {
         wrong_arch("canister_self_size")
-    }
-    pub unsafe fn controller_copy(_dst: u32, _offset: u32, _size: u32) {
-        wrong_arch("controller_copy")
-    }
-    pub unsafe fn controller_size() -> u32 {
-        wrong_arch("controller_size")
     }
     pub unsafe fn debug_print(_offset: u32, _size: u32) {
         println!("You tried to debug_print, that isn't supported in native code")
@@ -164,20 +148,6 @@ pub mod ic0 {
 
     pub unsafe fn trap(_offset: u32, _size: u32) {
         wrong_arch("trap")
-    }
-    pub unsafe fn call_simple(
-        _callee_src: u32,
-        _callee_size: u32,
-        _name_src: u32,
-        _name_size: u32,
-        _reply_fun: usize,
-        _reply_env: u32,
-        _reject_fun: usize,
-        _reject_env: u32,
-        _data_src: u32,
-        _data_size: u32,
-    ) -> i32 {
-        wrong_arch("call_simple")
     }
 
     pub unsafe fn call_new(
@@ -308,14 +278,30 @@ pub mod ic0 {
         wrong_arch("canister_status")
     }
 
-    pub unsafe fn mint_cycles(_amount: u64) -> u64 {
-        wrong_arch("mint_cycles")
+    pub unsafe fn canister_version() -> u64 {
+        wrong_arch("canister_version")
+    }
+
+    pub unsafe fn is_controller(_src: u32, _size: u32) -> u32 {
+        wrong_arch("is_controller")
+    }
+
+    pub unsafe fn in_replicated_execution() -> u32 {
+        wrong_arch("in_replicated_execution")
+    }
+
+    pub unsafe fn call_with_best_effort_response(_timeout_seconds: u32) {
+        wrong_arch("call_with_best_effort_response")
+    }
+
+    pub unsafe fn msg_deadline() -> u64 {
+        wrong_arch("msg_deadline")
     }
 }
 
 // Convenience wrappers around the DFINTY System API
 
-/// A thin wrapper around `call_simple`.  Calls another canisters and invokes
+/// A thin wrapper around `call_new`, `call_data_append`, and `call_perform`.  Calls another canisters and invokes
 /// on_reply/on_reject with the given `env` once reply/reject is received.
 #[allow(clippy::too_many_arguments)]
 pub fn call_raw(
@@ -396,7 +382,7 @@ pub fn call_bytes(
     method: &str,
     data: &[u8],
     funds: Funds,
-) -> impl Future<Output = futures::FutureResult<Vec<u8>>> {
+) -> impl Future<Output = futures::FutureResult<Vec<u8>>> + use<> {
     // the callback from IC dereferences the future from a raw pointer, assigns the
     // result and calls the waker
     fn callback(future_ptr: *mut ()) {
@@ -433,7 +419,7 @@ pub fn call_bytes(
         future_ptr as *mut (),
         funds,
     );
-    // 0 is a special error code, meaning call_simple call succeeded
+    // 0 is a special error code, meaning call_perform call succeeded
     if err_code != 0 {
         // Decrease the refcount as the closure will not be called.
         std::mem::drop(unsafe { RefCounted::from_raw(future_ptr) });
@@ -448,7 +434,7 @@ pub fn call_bytes_with_cleanup(
     method: &str,
     data: &[u8],
     funds: Funds,
-) -> impl Future<Output = futures::FutureResult<Vec<u8>>> {
+) -> impl Future<Output = futures::FutureResult<Vec<u8>>> + use<> {
     // the callback from IC dereferences the future from a raw pointer, assigns the
     // result and calls the waker
     fn callback(future_ptr: *mut ()) {
@@ -499,7 +485,7 @@ pub fn call_bytes_with_cleanup(
         future_ptr as *mut (),
         funds,
     );
-    // 0 is a special error code, meaning call_simple call succeeded
+    // 0 is a special error code, meaning call_perform call succeeded
     if err_code != 0 {
         // Decrease the refcount as the closure will not be called.
         unsafe { RefCounted::from_raw(future_ptr) };
@@ -569,11 +555,9 @@ where
         funds,
     ) {
         0 => Ok(()),
-        err_code =>
-            Err(format!("ic0.call_perform returned the error code '{}' indicating the call could not be made, when calling {} on canister {:?}",
-                        err_code,
-                        method,
-                        id)),
+        err_code => Err(format!(
+            "ic0.call_perform returned the error code '{err_code}' indicating the call could not be made, when calling {method} on canister {id:?}"
+        )),
     }
 }
 
@@ -688,16 +672,6 @@ pub fn id() -> CanisterId {
     CanisterId::try_from(bytes).unwrap()
 }
 
-/// Returns the controller of the canister as a blob.
-pub fn controller() -> PrincipalId {
-    let len: u32 = unsafe { ic0::controller_size() };
-    let mut bytes = vec![0; len as usize];
-    unsafe {
-        ic0::controller_copy(bytes.as_mut_ptr() as u32, 0, len);
-    }
-    PrincipalId::try_from(bytes.as_slice()).unwrap()
-}
-
 /// Returns the rejection message.
 pub fn reject_message() -> String {
     let len: u32 = unsafe { ic0::msg_reject_msg_size() };
@@ -743,9 +717,10 @@ pub fn print<S: std::convert::AsRef<str>>(s: S) {
 }
 
 /// Traps with the given message.
-pub fn trap_with(message: &str) {
+pub fn trap_with(message: &str) -> ! {
     unsafe {
         ic0::trap(message.as_ptr() as u32, message.len() as u32);
+        unreachable!()
     }
 }
 
@@ -795,7 +770,7 @@ pub fn canister_cycle_balance() -> u64 {
 /// Returns the amount of cycles in the canister's account.
 pub fn canister_cycle_balance128() -> Vec<u8> {
     let size = 16;
-    let mut buf = vec![0u8; size];
+    let mut buf = vec![0_u8; size];
     unsafe { ic0::canister_cycle_balance128(buf.as_mut_ptr() as i32) }
     buf
 }
@@ -809,7 +784,7 @@ pub fn msg_cycles_available() -> u64 {
 /// Returns the cycles available in this current message.
 pub fn msg_cycles_available128() -> u128 {
     let size = 16;
-    let mut buf = vec![0u8; size];
+    let mut buf = vec![0_u8; size];
     unsafe { ic0::msg_cycles_available128(buf.as_mut_ptr() as i32) }
     u128::from_le_bytes(buf.try_into().unwrap())
 }
@@ -823,7 +798,7 @@ pub fn msg_cycles_refunded() -> u64 {
 /// Returns the amount of cycles refunded with a response.
 pub fn msg_cycles_refunded128() -> u128 {
     let size = 16;
-    let mut buf = vec![0u8; size];
+    let mut buf = vec![0_u8; size];
     unsafe { ic0::msg_cycles_refunded128(buf.as_mut_ptr() as i32) }
     u128::from_le_bytes(buf.try_into().unwrap())
 }
@@ -837,7 +812,7 @@ pub fn msg_cycles_accept(amount: u64) -> u64 {
 /// Indicates that `amount` of cycles should be accepted in the current message.
 pub fn msg_cycles_accept128(amount_high: u64, amount_low: u64) -> u128 {
     let size = 16;
-    let mut buf = vec![0u8; size];
+    let mut buf = vec![0_u8; size];
     unsafe {
         ic0::msg_cycles_accept128(
             amount_high as i64,
@@ -867,14 +842,14 @@ pub fn data_certificate() -> Option<Vec<u8>> {
     }
 
     let n = unsafe { ic0::data_certificate_size() };
-    let mut buf = vec![0u8; n as usize];
+    let mut buf = vec![0_u8; n as usize];
     unsafe {
-        ic0::data_certificate_copy(buf.as_mut_ptr() as u32, 0u32, n);
+        ic0::data_certificate_copy(buf.as_mut_ptr() as u32, 0_u32, n);
     }
     Some(buf)
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone, Debug)]
 pub enum CanisterStatus {
     Running,
     Stopping,
@@ -886,12 +861,12 @@ pub fn canister_status() -> CanisterStatus {
         1 => CanisterStatus::Running,
         2 => CanisterStatus::Stopping,
         3 => CanisterStatus::Stopped,
-        other => panic!("Weird canister status: {}", other),
+        other => panic!("Weird canister status: {other}"),
     }
 }
 
-pub fn mint_cycles(amount: u64) -> u64 {
-    unsafe { ic0::mint_cycles(amount) }
+pub fn canister_version() -> u64 {
+    unsafe { ic0::canister_version() }
 }
 
 fn no_op(_: *mut ()) {}

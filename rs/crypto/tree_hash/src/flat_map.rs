@@ -3,9 +3,9 @@
 //!
 //! NOTE: `FlatMap` isn't a general-purpose map container.
 
+use serde::Serialize;
 use serde::de::{Deserialize, Deserializer, MapAccess, Visitor};
 use serde::ser::Serializer;
-use serde::Serialize;
 use std::fmt;
 use std::iter::{DoubleEndedIterator, Iterator};
 
@@ -26,9 +26,9 @@ mod tests;
 /// ```
 #[macro_export]
 macro_rules! flatmap {
-    ( $($key:expr => $value:expr,)+ ) => (flatmap!($($key => $value),+));
+    ( $($key:expr_2021 => $value:expr_2021,)+ ) => (flatmap!($($key => $value),+));
 
-    ( $($key:expr => $value:expr),* ) => {
+    ( $($key:expr_2021 => $value:expr_2021),* ) => {
             $crate::flat_map::FlatMap::from_key_values(vec![$(($key, $value)),*])
     };
 }
@@ -50,7 +50,7 @@ macro_rules! flatmap {
 ///  * Insert a value with an arbitrary key.
 ///
 /// Remove by key is supported, but requires O(N) time worst case.
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct FlatMap<K: Ord, V> {
     keys: Vec<K>,
     values: Vec<V>,
@@ -81,19 +81,19 @@ impl<K: Ord, V> FlatMap<K, V> {
 
     /// Constructs a map from a list of (key, value) pairs.
     ///
-    /// Entries doesn't have to be sorted. Any duplicates will be removed, it's
+    /// Entries don't have to be sorted. Any duplicates will be removed, it's
     /// not specified which duplicate is removed.
     ///
     /// Complexity: O(log(N)×N)
     pub fn from_key_values(mut kv: Vec<(K, V)>) -> Self {
-        kv.sort_by(|l, r| l.0.cmp(&r.0));
-        let mut m = Self::with_capacity(kv.len());
-        for (k, v) in kv {
-            if Some(&k) > m.last_key() {
-                let _ = m.try_append(k, v);
-            }
+        if kv.windows(2).any(|w| w[0].0 >= w[1].0) {
+            kv.sort_unstable_by(|l, r| l.0.cmp(&r.0));
+            kv.dedup_by(|l, r| l.0 == r.0);
         }
-        m
+
+        let (keys, values) = kv.into_iter().unzip();
+
+        Self { keys, values }
     }
 
     /// Searches a value by key.
@@ -114,6 +114,17 @@ impl<K: Ord, V> FlatMap<K, V> {
             .binary_search(key)
             .map(move |idx| &mut self.values[idx])
             .ok()
+    }
+
+    /// Returns references to the key/value pair with the largest key that is at most `key`.
+    ///
+    /// Complexity: O(log(N))
+    pub fn lower_bound(&self, key: &K) -> Option<(&K, &V)> {
+        match self.keys.binary_search(key) {
+            Ok(idx) => Some((&self.keys[idx], &self.values[idx])),
+            Err(0) => None,
+            Err(idx @ 1..) => Some((&self.keys[idx - 1], &self.values[idx - 1])),
+        }
     }
 
     /// Removes a value by key.

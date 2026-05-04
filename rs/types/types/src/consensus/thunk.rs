@@ -58,7 +58,7 @@ impl<T: Send + 'static> From<T> for Thunk<T> {
 
 impl<T> AsRef<T> for Thunk<T> {
     fn as_ref(&self) -> &T {
-        &*self.thunk
+        &self.thunk
     }
 }
 

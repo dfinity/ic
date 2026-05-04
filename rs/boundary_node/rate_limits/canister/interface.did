@@ -1,0 +1,159 @@
+type Version = nat64;           // Represents the config version number
+type Timestamp = nat64;         // Represents timestamp in nanoseconds since the epoch (1970-01-01)
+type RuleId = text;             // Unique identifier for each rule
+type SchemaVersion = nat64;     // Version of the schema for encoding/decoding the rules
+type IncidentId = text;         // Unique identifier for each incident
+type HeaderField = record { text; text; };
+
+
+// Input structure for defining a rule with mandatory fields within a config
+type InputRule = record {
+  incident_id: IncidentId; // Identifier for the incident, to which the rule is related
+  rule_raw: blob;          // Raw rule data (in binary format), expected to be a valid json object
+  description: text;       // Textual description of the rule
+};
+
+// Output structure for rules
+// Optional fields rule_raw and description may remain hidden while the rule is under confidentiality restrictions
+type OutputRule = record {
+  rule_id: RuleId;                   // Unique identifier for the rule
+  incident_id: IncidentId;           // Identifier for the incident, to which the rule is related
+  rule_raw: opt blob;                // Raw rule data (in binary format), expected to be a valid json object, none if the rule is currently confidential
+  description: opt text;             // Textual description of the rule, none if the rule is currently confidential
+};
+
+type OutputConfig = record {
+  schema_version: SchemaVersion; // schema version needed to deserialize the rules
+  is_redacted: bool;             // when set to `true` indicates that the config contains some confidential rules, which are not fully exposed
+  rules: vec OutputRule;
+};
+
+// Response structure for returning the requested configuration and associated metadata
+type ConfigResponse = record {
+    version: Version;         // Version of the configuration
+    active_since: Timestamp;  // Time when this configuration was added (became active)
+    config: OutputConfig;     // Contains the list of rules
+};
+
+// Verbose details of an individual rule
+// Optional rule_raw and description fields are for restricted publicly viewing access
+type OutputRuleMetadata = record {
+  rule_id: RuleId;                 // Unique identifier for the rule
+  incident_id: IncidentId;         // Identifier for the incident, to which the rule is related
+  rule_raw: opt blob;              // Raw rule data (binary format), expected to be a valid json object, none if the rule is currently confidential
+  description: opt text;           // Textual description of the rule, none if the rule is currently confidential
+  disclosed_at: opt Timestamp;     // Timestamp when the rule was disclosed, none if the rule is currently confidential
+  added_in_version: Version;       // Version when the rule was added (became active)
+  removed_in_version: opt Version; // Version when the rule was deactivated (removed), none if the rule is still active
+};
+
+type DiscloseRulesArg = variant {
+  RuleIds: vec RuleId;
+  IncidentIds: vec IncidentId;
+};
+
+// Configuration containing a list of rules that replaces the current configuration
+type InputConfig = record {
+  schema_version: SchemaVersion; // JSON schema version of the rate-limit rules
+  rules: vec InputRule;
+};
+
+type HttpRequest = record {
+  method: text;
+  url: text;
+  headers: vec HeaderField;
+  body: blob;
+};
+
+// Initialization arguments for the service
+type InitArg = record {
+  authorized_principal: opt principal; // Principal authorized to perform write operations, such as adding configurations and disclosing rules
+  registry_polling_period_secs: nat64; // IDs of existing API boundary nodes are polled from the registry with this periodicity
+};
+
+// Error types
+type AddConfigError = variant {
+    Unauthorized;                   // Indicates an unauthorized attempt to add a new config
+    InvalidInputConfig: text;       // Signifies that the provided input config is malformed
+    PolicyViolation: text;          // Signifies that a new configuration cannot be added due to some policy infringement
+    Internal: text;                 // Captures all unexpected internal errors during process
+};
+
+type DiscloseRulesError = variant {
+    Unauthorized;                   // Indicates an unauthorized attempt to disclose rules
+    InvalidUuidFormat: text;        // Signifies that an input ID provided for disclosure is not a valid UUID
+    IncidentIdNotFound: text;       // Signifies that a specified incident ID could not be found
+    RuleIdNotFound: text;           // Signifies that a specified rule ID could not be found
+    Internal: text;                 // Captures all unexpected internal errors during the disclosure process
+};
+
+type GetConfigError = variant {
+    NotFound;                       // Indicates that a config with the specified version does not exist
+    NoExistingConfigsFound;         // Indicates that no configs exist, hence nothing could be returned
+    Internal: text;                 // Captures all unexpected internal errors
+};
+
+type GetRuleByIdError = variant {
+    NotFound;                 // Indicates that a rule with the specified ID does not exist
+    InvalidUuidFormat;        // Indicates that the provided ID is not a valid UUID
+    Internal: text;                 // Captures all unexpected internal errors
+};
+
+type GetRulesByIncidentIdError = variant {
+    NotFound;                 // Indicates that an incident with the specified ID does not exist
+    InvalidUuidFormat;        // Indicates that the provided ID is not a valid UUID
+    Internal: text;                 // Captures all unexpected internal errors
+};
+
+// Response types
+type AddConfigResponse = variant {
+  Ok;
+  Err: AddConfigError;
+};
+
+type DiscloseRulesResponse = variant {
+  Ok;
+  Err: DiscloseRulesError;
+};
+
+type GetConfigResponse = variant {
+  Ok: ConfigResponse;
+  Err: GetConfigError;
+};
+
+type GetRuleByIdResponse = variant {
+  Ok: OutputRuleMetadata;
+  Err: GetRuleByIdError;
+};
+
+type GetRulesByIncidentIdResponse = variant {
+  Ok: vec OutputRuleMetadata;
+  Err: GetRulesByIncidentIdError;
+};
+
+type HttpResponse = record {
+  status_code: nat16;
+  headers: vec HeaderField;
+  body: blob;
+};
+
+service : (InitArg) -> {
+  // Adds a configuration containing a set of rate-limit rules and increments the current version by one
+  add_config: (InputConfig) -> (AddConfigResponse);
+
+  // Make the viewing of the specified rules publicly accessible
+  disclose_rules: (DiscloseRulesArg) -> (DiscloseRulesResponse);
+
+  // Fetches the rate-limit rule configuration for a specified version
+  // If no version is provided, the latest configuration is returned
+  get_config: (opt Version) -> (GetConfigResponse) query;
+
+  // Fetch the rule with metadata by its ID
+  get_rule_by_id: (RuleId) -> (GetRuleByIdResponse) query;
+
+  // Fetch all rules with metadata related to an ID of the incident
+  get_rules_by_incident_id: (IncidentId) -> (GetRulesByIncidentIdResponse) query;
+
+  // Canister metrics (Http Interface)
+  http_request: (HttpRequest) -> (HttpResponse) query;
+}

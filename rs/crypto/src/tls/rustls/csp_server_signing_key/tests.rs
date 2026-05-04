@@ -1,70 +1,55 @@
 use crate::tls::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
-use ic_crypto_internal_csp::secret_key_store::volatile_store::VolatileSecretKeyStore;
+use assert_matches::assert_matches;
+use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
+use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::CspSignature;
-use ic_crypto_internal_csp::LocalCspVault;
-use ic_crypto_internal_csp::TlsHandshakeCspVault;
-use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_tlscert;
-use ic_logger::replica_logger::no_op_logger;
-use ic_types_test_utils::ids::NODE_1;
-use rand::rngs::OsRng;
+use ic_crypto_internal_csp::vault::api::CspTlsSignError;
+use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
+use rustls::{Error as TLSError, SignatureAlgorithm, SignatureScheme, sign::SigningKey};
 use std::sync::Arc;
-use tokio_rustls::rustls::internal::msgs::enums::SignatureAlgorithm;
-use tokio_rustls::rustls::sign::SigningKey;
-use tokio_rustls::rustls::{SignatureScheme, TLSError};
-
-const NOT_AFTER: &str = "25670102030405Z";
 
 #[test]
 fn should_produce_same_signature_as_csp_server_if_ed25519_is_chosen() {
-    let csp_server = Arc::new(local_csp_server());
-    let (key_id, cert) = csp_server
-        .gen_tls_key_pair(NODE_1, NOT_AFTER)
-        .expect("Generation of TLS keys failed.");
-    let msg_to_sign = "some message";
-    let expected_sig_bytes = match csp_server
-        .tls_sign(msg_to_sign.as_bytes(), &key_id)
-        .expect("failed to sign")
-    {
-        CspSignature::Ed25519(sig_bytes) => sig_bytes.0.to_vec(),
-        _ => panic!("expected Ed25519 signature"),
-    };
+    let key_id = tls_public_key_certificate_key_id();
+    let msg_to_sign = b"some message";
+    let expected_signature_bytes = [1_u8; 64];
+    let mut vault = MockLocalCspVault::new();
+    vault
+        .expect_tls_sign()
+        .times(1)
+        .withf(move |message_, key_id_| message_ == msg_to_sign && *key_id_ == key_id)
+        .return_const(Ok(CspSignature::Ed25519(ed25519_types::SignatureBytes(
+            expected_signature_bytes,
+        ))));
 
-    let signing_key = CspServerEd25519SigningKey::new(&cert, csp_server);
+    let signing_key = CspServerEd25519SigningKey::new(key_id, Arc::new(vault));
     let signer = signing_key
         .choose_scheme(&[
             SignatureScheme::ED25519,
             SignatureScheme::ECDSA_NISTP256_SHA256,
         ])
         .expect("failed to choose scheme");
-    let sig_bytes = signer.sign(msg_to_sign.as_bytes()).expect("failed to sign");
+    let signature_bytes = signer.sign(msg_to_sign);
 
-    assert!(!sig_bytes.is_empty());
-    // We don't verify the ed25519 signature here since this is the responsibility
-    // of the csp_server.
-    assert_eq!(sig_bytes, expected_sig_bytes);
+    assert_matches!(signature_bytes, Ok(actual) if actual == expected_signature_bytes.to_vec());
 }
 
 #[test]
 fn should_return_ed25519_as_signing_key_algorithm() {
-    let csp_server = Arc::new(local_csp_server());
-    let (_, cert) = csp_server
-        .gen_tls_key_pair(NODE_1, NOT_AFTER)
-        .expect("Generation of TLS keys failed.");
-
-    let signing_key = CspServerEd25519SigningKey::new(&cert, csp_server);
+    let signing_key = CspServerEd25519SigningKey::new(
+        tls_public_key_certificate_key_id(),
+        Arc::new(MockLocalCspVault::new()),
+    );
 
     assert_eq!(signing_key.algorithm(), SignatureAlgorithm::ED25519);
 }
 
 #[test]
 fn should_return_no_signer_if_ed25519_not_offered() {
-    let csp_server = Arc::new(local_csp_server());
-    let (_, cert) = csp_server
-        .gen_tls_key_pair(NODE_1, NOT_AFTER)
-        .expect("Generation of TLS keys failed.");
-
-    let signing_key = CspServerEd25519SigningKey::new(&cert, csp_server);
+    let signing_key = CspServerEd25519SigningKey::new(
+        tls_public_key_certificate_key_id(),
+        Arc::new(MockLocalCspVault::new()),
+    );
     let signer = signing_key.choose_scheme(&[
         SignatureScheme::ECDSA_NISTP256_SHA256,
         SignatureScheme::RSA_PKCS1_SHA512,
@@ -75,12 +60,10 @@ fn should_return_no_signer_if_ed25519_not_offered() {
 
 #[test]
 fn should_return_ed25519_as_signer_scheme() {
-    let csp_server = Arc::new(local_csp_server());
-    let (_, cert) = csp_server
-        .gen_tls_key_pair(NODE_1, NOT_AFTER)
-        .expect("Generation of TLS keys failed.");
-
-    let signing_key = CspServerEd25519SigningKey::new(&cert, csp_server);
+    let signing_key = CspServerEd25519SigningKey::new(
+        tls_public_key_certificate_key_id(),
+        Arc::new(MockLocalCspVault::new()),
+    );
     let signer = signing_key
         .choose_scheme(&[
             SignatureScheme::ED25519,
@@ -88,32 +71,34 @@ fn should_return_ed25519_as_signer_scheme() {
         ])
         .expect("failed to sign");
 
-    assert_eq!(signer.get_scheme(), SignatureScheme::ED25519);
+    assert_eq!(signer.scheme(), SignatureScheme::ED25519);
 }
 
 #[test]
 fn should_return_error_from_csp() {
-    let csp_server = Arc::new(local_csp_server());
-
-    let (_, cert_without_private_key_in_store) = generate_ed25519_tlscert();
-
-    let signing_key =
-        CspServerEd25519SigningKey::new(&cert_without_private_key_in_store, csp_server);
+    let key_id = tls_public_key_certificate_key_id();
+    let msg_to_sign = b"some message";
+    let mut vault = MockLocalCspVault::new();
+    vault
+        .expect_tls_sign()
+        .times(1)
+        .withf(move |message_, key_id_| message_ == msg_to_sign && *key_id_ == key_id)
+        .return_const(Err(CspTlsSignError::SecretKeyNotFound { key_id }));
+    let signing_key = CspServerEd25519SigningKey::new(key_id, Arc::new(vault));
     let signer = signing_key
         .choose_scheme(&[SignatureScheme::ED25519])
         .expect("failed to choose scheme");
+
     let result = signer.sign("some message".as_bytes());
 
-    assert!(matches!(result, Err(TLSError::General(message))
-             if message.contains("Failed to create signature during TLS handshake by means of the CspServerEd25519Signer: SecretKeyNotFound")
-    ));
+    assert_matches!(result, Err(TLSError::General(message))
+         if message.contains("Failed to create signature during TLS handshake by means of the CspServerEd25519Signer: SecretKeyNotFound")
+    );
 }
 
-fn local_csp_server() -> LocalCspVault<OsRng, VolatileSecretKeyStore, VolatileSecretKeyStore> {
-    LocalCspVault::new_with_os_rng(
-        VolatileSecretKeyStore::new(),
-        VolatileSecretKeyStore::new(),
-        Arc::new(CryptoMetrics::none()),
-        no_op_logger(),
-    )
+fn tls_public_key_certificate_key_id() -> KeyId {
+    KeyId::from([
+        33, 64, 176, 153, 202, 203, 77, 103, 99, 53, 40, 124, 149, 143, 14, 250, 60, 107, 18, 199,
+        97, 227, 145, 240, 166, 78, 29, 145, 34, 13, 150, 32,
+    ])
 }

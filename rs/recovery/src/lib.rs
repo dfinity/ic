@@ -3,61 +3,82 @@
 //! state replay, restart of nodes, etc. The library is designed to be usable by
 //! command line interfaces. Therefore, input arguments are first captured and
 //! returned in form of a recovery [Step], holding the human-readable (and
-//! reproducable) description of the step, as well as its potential automatic
+//! reproducible) description of the step, as well as its potential automatic
 //! execution.
+use crate::{
+    cli::wait_for_confirmation,
+    file_sync_helper::remove_dir,
+    registry_helper::RegistryHelper,
+    ssh_helper::SshHelper,
+    util::{CheckpointHeight, ExecutionMode, SshUser},
+};
 use admin_helper::{AdminHelper, IcAdmin, RegistryParams};
 use command_helper::exec_cmd;
 use error::{RecoveryError, RecoveryResult};
 use file_sync_helper::{create_dir, download_binary, read_dir};
+use futures::future::join_all;
 use ic_base_types::{CanisterId, NodeId};
 use ic_cup_explorer::get_catchup_content;
-use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
-use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
-use ic_registry_nns_data_provider::create_nns_data_provider;
-use ic_registry_subnet_features::EcdsaConfig;
-use ic_replay::cmd::{AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, SubCommand};
-use ic_replay::player::StateParams;
-use ic_types::messages::HttpStatusResponse;
-use ic_types::{Height, ReplicaVersion, SubnetId};
-use slog::{info, warn, Logger};
-use ssh_helper::SshHelper;
-use std::net::IpAddr;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::str::FromStr;
-use std::{thread, time};
+use ic_protobuf::registry::replica_version::v1::{GuestLaunchMeasurements, ReplicaVersionRecord};
+use ic_registry_client_helpers::node::NodeRegistry;
+use ic_replay::{
+    cmd::{AddRegistryContentCmd, SubCommand, UpgradeSubnetToReplicaVersionCmd},
+    player::StateParams,
+};
+use ic_types::{Height, ReplicaVersion, SubnetId, messages::HttpStatusResponse};
+use registry_helper::RegistryPollingStrategy;
+use serde::{Deserialize, Serialize};
+use slog::{Logger, info, warn};
+use std::{collections::BTreeMap, env, io::ErrorKind};
+use std::{
+    net::IpAddr,
+    path::{Path, PathBuf},
+    process::Command,
+    str::FromStr,
+    thread,
+    time::{self, Duration, SystemTime},
+};
 use steps::*;
 use url::Url;
-use util::block_on;
+use util::{DataLocation, block_on};
 
 pub mod admin_helper;
 pub mod app_subnet_recovery;
+pub mod args_merger;
 pub mod cli;
 pub mod cmd;
-pub(crate) mod command_helper;
+pub mod command_helper;
 pub mod error;
 pub mod file_sync_helper;
 pub mod nns_recovery_failover_nodes;
 pub mod nns_recovery_same_nodes;
 pub mod recovery_iterator;
+pub mod recovery_state;
+pub mod registry_helper;
 pub mod replay_helper;
-pub(crate) mod ssh_helper;
+pub mod ssh_helper;
 pub mod steps;
-pub(crate) mod util;
+pub mod util;
 
+pub const RECOVERY_DIRECTORY_NAME: &str = "recovery";
+#[cfg(not(test))]
 pub const IC_DATA_PATH: &str = "/var/lib/ic/data";
+#[cfg(test)]
+pub const IC_DATA_PATH: &str = "/tmp/var/lib/ic/data";
 pub const IC_STATE_DIR: &str = "data/ic_state";
+pub const CUPS_DIR: &str = "cups";
 pub const IC_CHECKPOINTS_PATH: &str = "ic_state/checkpoints";
+pub const IC_CONSENSUS_POOL_PATH: &str = "ic_consensus_pool";
+pub const IC_CERTIFICATIONS_PATH: &str = "ic_consensus_pool/certification";
 pub const IC_JSON5_PATH: &str = "/run/ic-node/config/ic.json5";
-pub const IC_STATE_EXCLUDES: &[&str] = &["images", "tip", "backups", "fs_tmp", "cups"];
 pub const IC_STATE: &str = "ic_state";
 pub const NEW_IC_STATE: &str = "new_ic_state";
+pub const OLD_IC_STATE: &str = "old_ic_state";
 pub const IC_REGISTRY_LOCAL_STORE: &str = "ic_registry_local_store";
+pub const STATES_METADATA: &str = "states_metadata.pbuf";
 pub const CHECKPOINTS: &str = "checkpoints";
-pub const ADMIN: &str = "admin";
-pub const READONLY: &str = "readonly";
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct NeuronArgs {
     dfx_hsm_pin: String,
     slot: String,
@@ -68,15 +89,21 @@ pub struct NeuronArgs {
 #[derive(Debug)]
 pub struct NodeMetrics {
     _ip: IpAddr,
+    pub catch_up_package_height: Height,
     pub finalization_height: Height,
-    certification_height: Height,
+    pub certification_height: Height,
+    pub certification_share_height: Height,
+    pub manifest_height: Height,
 }
 
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct RecoveryArgs {
     pub dir: PathBuf,
     pub nns_url: Url,
     pub replica_version: Option<ReplicaVersion>,
-    pub key_file: Option<PathBuf>,
+    pub admin_key_file: Option<PathBuf>,
+    pub test_mode: bool,
+    pub skip_prompts: bool,
 }
 
 /// The recovery struct comprises working directories for the recovery of a
@@ -89,16 +116,17 @@ pub struct RecoveryArgs {
 #[derive(Clone)]
 pub struct Recovery {
     pub recovery_dir: PathBuf,
-    pub binary_dir: PathBuf,
     pub data_dir: PathBuf,
     pub work_dir: PathBuf,
+    pub local_store_path: PathBuf,
 
     pub admin_helper: AdminHelper,
+    pub registry_helper: RegistryHelper,
 
-    pub key_file: Option<PathBuf>,
-    ssh_confirmation: bool,
+    pub admin_key_file: Option<PathBuf>,
+    pub ssh_confirmation: bool,
 
-    logger: Logger,
+    pub logger: Logger,
 }
 
 impl Recovery {
@@ -108,100 +136,160 @@ impl Recovery {
         logger: Logger,
         args: RecoveryArgs,
         neuron_args: Option<NeuronArgs>,
-        ssh_confirmation: bool,
+        registry_nns_url: Url,
+        registry_polling_strategy: RegistryPollingStrategy,
     ) -> RecoveryResult<Self> {
-        let recovery_dir = args.dir.join("recovery");
+        //  If `args.test_mode` is false, we are in production mode and should always ask for
+        //  confirmation for SSH operations (even if `args.skip_prompts` is true), as production
+        //  Yubikeys need physical confirmation.
+        //  Otherwise, then rely on `args.skip_prompts`.
+        let ssh_confirmation = !args.test_mode || !args.skip_prompts;
+        let recovery_dir = args.dir.join(RECOVERY_DIRECTORY_NAME);
         let binary_dir = recovery_dir.join("binaries");
         let data_dir = recovery_dir.join("original_data");
         let work_dir = recovery_dir.join("working_dir");
+        let local_store_path = work_dir.join("data").join(IC_REGISTRY_LOCAL_STORE);
+        let nns_pem = recovery_dir.join("nns.pem");
 
-        let r = Self {
-            recovery_dir,
-            binary_dir: binary_dir.clone(),
-            data_dir,
-            work_dir,
-            admin_helper: AdminHelper::new(binary_dir.clone(), args.nns_url, neuron_args),
-            key_file: args.key_file,
-            ssh_confirmation,
-            logger,
-        };
+        let to_create: Vec<&Path> = vec![&binary_dir, &data_dir, &work_dir, &local_store_path];
 
-        r.create_dirs()?;
+        match Recovery::create_dirs(&to_create) {
+            Err(RecoveryError::IoError(s, err)) => match err.kind() {
+                ErrorKind::PermissionDenied => Err(RecoveryError::IoError(
+                    format!(
+                        "No permission to create recovery directory. Consider manually \
+                        creating the directory with the right permissions by running:\n\n  \
+                        sudo mkdir -p {} && sudo chown $USER {}\n",
+                        recovery_dir.display(),
+                        recovery_dir.display()
+                    ),
+                    err,
+                )),
+                _ => Err(RecoveryError::IoError(s, err)),
+            },
+            x => x,
+        }?;
 
-        if !binary_dir.join("ic-admin").exists() {
-            if let Some(version) = args.replica_version {
-                block_on(download_binary(
-                    &r.logger,
-                    version,
-                    String::from("ic-admin"),
-                    r.binary_dir.clone(),
-                ))?;
-            } else {
-                info!(r.logger, "No ic-admin version provided, skipping download.");
-            }
-        } else {
-            info!(r.logger, "ic-admin exists, skipping download.");
+        let registry_helper = RegistryHelper::new(
+            logger.clone(),
+            registry_nns_url,
+            local_store_path.clone(),
+            nns_pem.as_path(),
+            registry_polling_strategy,
+        );
+
+        if ssh_confirmation {
+            wait_for_confirmation(&logger);
         }
 
-        Ok(r)
-    }
+        let ic_admin = match env::var("IC_ADMIN_PATH") {
+            // if IC_ADMIN_PATH is set, use that
+            Ok(ic_admin_path) => PathBuf::from(ic_admin_path),
+            // Otherwise, either download ic-admin or use the one from 'binary_dir'
+            Err(std::env::VarError::NotPresent) => {
+                let local_ic_admin_path = binary_dir.join("ic-admin");
 
-    /// Construct a [Url] for the NNS endpoint of the given node IP
-    pub fn get_nns_endpoint(node_ip: IpAddr) -> RecoveryResult<Url> {
-        Url::parse(&format!("http://[{}]:8080", node_ip)).map_err(|e| {
-            RecoveryError::invalid_output_error(format!("Failed to parse NNS URL: {}", e))
+                if local_ic_admin_path.exists() {
+                    // env var not set, but local ic admin was found, so use that
+                    local_ic_admin_path
+                } else if let Some(version) = args.replica_version {
+                    block_on(download_binary(
+                        &logger,
+                        &version,
+                        String::from("ic-admin"),
+                        &binary_dir,
+                    ))?;
+
+                    // we expect 'download_binary' to download the binary to
+                    // <binary_dir>/ic-admin
+                    local_ic_admin_path
+                } else {
+                    // the env var is not set, the binary does not exist locally and we have no version
+                    // to download.
+                    info!(
+                        logger,
+                        "No ic-admin version provided, file may not exist: '{:?}'",
+                        local_ic_admin_path
+                    );
+                    local_ic_admin_path
+                }
+            }
+            Err(e) => panic!("Could not read IC_ADMIN_PATH: {:?}", e),
+        };
+
+        let admin_helper = AdminHelper::new(ic_admin, args.nns_url, neuron_args);
+
+        Ok(Self {
+            recovery_dir,
+            data_dir,
+            work_dir,
+            local_store_path,
+            admin_helper,
+            registry_helper,
+            admin_key_file: args.admin_key_file,
+            ssh_confirmation,
+            logger,
         })
     }
 
-    /// Set recovery to a different NNS by creating a new [AdminHelper].
-    pub fn set_nns(&mut self, nns_url: Url, neuron_args: Option<NeuronArgs>) {
-        self.admin_helper = AdminHelper::new(self.binary_dir.clone(), nns_url, neuron_args);
-    }
-
     // Create directories used to store downloaded states, binaries and results
-    fn create_dirs(&self) -> RecoveryResult<()> {
-        create_dir(&self.binary_dir)?;
-        create_dir(&self.data_dir)?;
-        create_dir(&self.work_dir)
+    fn create_dirs(dirs: &[&Path]) -> RecoveryResult<()> {
+        for dir in dirs {
+            create_dir(dir)?;
+        }
+
+        Ok(())
     }
 
-    /// Return a recovery [AdminStep] to halt or unhalt the given subnet
-    pub fn halt_subnet(&self, subnet_id: SubnetId, is_halted: bool, keys: &[String]) -> impl Step {
+    /// Removes all the checkpoints except the "highest" one.
+    ///
+    /// Returns an error when there are no checkpoints.
+    pub fn remove_all_but_highest_checkpoints(
+        checkpoint_path: &Path,
+        logger: &Logger,
+    ) -> RecoveryResult<Height> {
+        let checkpoints = Self::get_checkpoint_names(checkpoint_path)?;
+        let (max_name, max_height) = Self::get_latest_checkpoint_name_and_height(checkpoint_path)?;
+
+        for checkpoint in checkpoints {
+            if checkpoint == max_name {
+                continue;
+            }
+
+            info!(logger, "Deleting checkpoint {}", checkpoint);
+            remove_dir(&checkpoint_path.join(checkpoint))?;
+        }
+
+        Ok(max_height)
+    }
+
+    /// Return a recovery [AdminStep] to take the given subnet offline for repairs
+    pub fn take_subnet_offline_for_repairs(
+        &self,
+        subnet_id: SubnetId,
+        subnet_readonly_keys: &[String],
+        node_write_keys: &BTreeMap<NodeId, Vec<String>>,
+    ) -> impl Step + use<> {
         AdminStep {
             logger: self.logger.clone(),
             ic_admin_cmd: self
                 .admin_helper
-                .get_halt_subnet_command(subnet_id, is_halted, keys),
+                .get_propose_to_take_subnet_offline_for_repairs_command(
+                    subnet_id,
+                    subnet_readonly_keys,
+                    node_write_keys,
+                ),
         }
     }
 
-    /// Executes the given SSH command.
-    pub fn execute_ssh_command(
-        &self,
-        account: &str,
-        node_ip: IpAddr,
-        commands: &str,
-    ) -> RecoveryResult<Option<String>> {
-        let ssh_helper = SshHelper::new(
-            self.logger.clone(),
-            account.to_string(),
-            node_ip,
-            self.ssh_confirmation,
-            self.key_file.clone(),
-        );
-        ssh_helper.ssh(commands.to_string())
-    }
-
-    /// Returns true if ssh access to the given account and ip exists.
-    pub fn check_ssh_access(&self, account: &str, node_ip: IpAddr) -> bool {
-        let ssh_helper = SshHelper::new(
-            self.logger.clone(),
-            account.to_string(),
-            node_ip,
-            self.ssh_confirmation,
-            self.key_file.clone(),
-        );
-        ssh_helper.can_connect()
+    /// Return a recovery [AdminStep] to bring the given subnet back online after repairs
+    pub fn bring_subnet_back_online_after_repairs(&self, subnet_id: SubnetId) -> impl Step + use<> {
+        AdminStep {
+            logger: self.logger.clone(),
+            ic_admin_cmd: self
+                .admin_helper
+                .get_propose_to_bring_subnet_back_online_after_repairs_command(subnet_id),
+        }
     }
 
     // Execute an `ic-admin` command, log the output.
@@ -213,18 +301,229 @@ impl Recovery {
         Ok(())
     }
 
-    /// Return a [DownloadIcStateStep] downloading the ic_state of the given
-    /// node to the recovery data directory using the given account.
-    pub fn get_download_state_step(&self, node_ip: IpAddr, try_readonly: bool) -> impl Step {
-        DownloadIcStateStep {
+    /// Return a [DownloadCertificationsStep] downloading the certification pools of all reachable
+    /// nodes in the given subnet to the recovery data directory using the readonly account.
+    /// If auto-retry is false, the user will be prompted on what to do (skip or continue). In
+    /// non-interactive recoveries, auto-retry should be set to true.
+    pub fn get_download_certs_step(
+        &self,
+        subnet_id: SubnetId,
+        ssh_user: SshUser,
+        key_file: Option<PathBuf>,
+        auto_retry: bool,
+    ) -> impl Step + use<> {
+        DownloadCertificationsStep {
             logger: self.logger.clone(),
-            try_readonly,
-            node_ip,
-            target: self.data_dir.display().to_string(),
-            working_dir: self.work_dir.display().to_string(),
+            subnet_id,
+            registry_helper: self.registry_helper.clone(),
+            work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            key_file,
+            auto_retry,
+            ssh_user,
         }
+    }
+
+    /// Return a [MergeCertificationPoolsStep] moving certifications and share from all
+    /// downloaded pools into a new pool to be used during replay.
+    pub fn get_merge_certification_pools_step(&self) -> impl Step + use<> {
+        MergeCertificationPoolsStep {
+            logger: self.logger.clone(),
+            work_dir: self.work_dir.clone(),
+        }
+    }
+
+    /// Return a [DownloadIcDataStep] downloading the consensus pool of the given node.
+    /// Certifications are only included if they do not already exist in the work directory.
+    pub fn get_download_consensus_pool_step(
+        &self,
+        node_ip: IpAddr,
+        ssh_user: SshUser,
+        key_file: Option<PathBuf>,
+    ) -> RecoveryResult<impl Step + use<>> {
+        let ssh_helper = SshHelper::new(
+            self.logger.clone(),
+            ssh_user,
+            node_ip,
+            self.ssh_confirmation,
+            key_file.clone(),
+        );
+
+        let consensus_pool_path = PathBuf::from(IC_CONSENSUS_POOL_PATH);
+        let mut includes = vec![
+            consensus_pool_path.join("replica_version"),
+            consensus_pool_path.join("consensus"),
+        ];
+
+        // If we already have some certifications, we do not download them again.
+        if !self
+            .work_dir
+            .join("data")
+            .join(IC_CERTIFICATIONS_PATH)
+            .exists()
+        {
+            includes.push(consensus_pool_path.join("certification"));
+        }
+
+        self.get_download_data_step(
+            ssh_helper, /*keep_downloaded_data=*/ false, includes,
+            /*include_config=*/ false,
+        )
+    }
+
+    /// Return the list of paths to include when downloading a node's "production" state (i.e. at
+    /// /var/lib/ic/data) with rsync.
+    /// One of them is the latest checkpoint, which is looked up remotely via ssh or locally on
+    /// disk, based on the value of `execution_mode`.
+    ///
+    /// If `checkpoint_height_to_download` is `CheckpointHeight::Specified`, the checkpoint at the
+    /// specified height is downloaded. If it does not exist, an error is returned.
+    /// If it is `CheckpointHeight::Latest`, the latest checkpoint on the remote node is
+    /// downloaded.
+    ///
+    /// If there are no checkpoints, this function returns an empty list and does not consider it
+    /// an error, as the subnet could have stalled in its first DKG interval before producing any
+    /// checkpoint.
+    pub fn get_ic_state_includes(
+        logger: &Logger,
+        execution_mode: ExecutionMode<'_>,
+        checkpoint_height_to_download: CheckpointHeight,
+    ) -> RecoveryResult<Vec<PathBuf>> {
+        let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
+
+        let checkpoint_name = match checkpoint_height_to_download {
+            CheckpointHeight::Specified(height) => {
+                let name = format!("{height:016x}");
+                if !execution_mode.path_exists(&ic_checkpoints_path.join(&name))? {
+                    return Err(RecoveryError::invalid_output_error(format!(
+                        "Checkpoint {} at height {} does not exist at {}",
+                        name,
+                        height,
+                        ic_checkpoints_path.display()
+                    )));
+                }
+
+                name
+            }
+            CheckpointHeight::Latest => {
+                let Some((name, _height)) = execution_mode
+                    .get_maybe_latest_checkpoint_name_and_height(&ic_checkpoints_path)?
+                else {
+                    // No checkpoints, return an empty list of includes. This is not an error, as the
+                    // subnet could have stalled in its first DKG interval.
+                    warn!(
+                        logger,
+                        "No checkpoints found at {}. This is expected if the subnet stalled in its first \
+                        DKG interval before producing any checkpoint. If this is not the case, this is an \
+                        error. Please check the state of the node before proceeding.",
+                        ic_checkpoints_path.display()
+                    );
+                    return Ok(vec![]);
+                };
+
+                name
+            }
+        };
+
+        Ok(
+            Self::get_state_includes_with_given_checkpoint(&checkpoint_name)
+                .iter()
+                .map(|p| PathBuf::from(IC_STATE).join(p))
+                .collect(),
+        )
+    }
+
+    /// Return the list of paths to include when downloading/uploading the state with rsync.
+    ///
+    /// This function must be updated if the state layout ever changes.
+    pub fn get_state_includes_with_given_checkpoint(checkpoint_name: &str) -> Vec<PathBuf> {
+        vec![
+            PathBuf::from(STATES_METADATA),
+            PathBuf::from(CHECKPOINTS).join(checkpoint_name),
+        ]
+    }
+
+    /// Return a [DownloadIcDataStep] downloading the ic_state of the given node.
+    pub fn get_download_state_step(
+        &self,
+        node_ip: IpAddr,
+        ssh_user: SshUser,
+        key_file: Option<PathBuf>,
+        keep_downloaded_state: bool,
+        download_height: Option<u64>,
+    ) -> RecoveryResult<impl Step + use<>> {
+        let ssh_helper = SshHelper::new(
+            self.logger.clone(),
+            ssh_user,
+            node_ip,
+            self.ssh_confirmation,
+            key_file,
+        );
+
+        let includes = Self::get_ic_state_includes(
+            &self.logger,
+            ExecutionMode::Remote(&ssh_helper),
+            CheckpointHeight::from(download_height),
+        )?;
+
+        self.get_download_data_step(
+            ssh_helper,
+            keep_downloaded_state,
+            includes,
+            /*include_config=*/ true,
+        )
+    }
+
+    /// Return a [DownloadIcDataStep] downloading some data of the given node to the recovery data
+    /// directory using the given account, or with admin access if the latter cannot connect.
+    pub fn get_download_data_step(
+        &self,
+        mut ssh_helper: SshHelper,
+        keep_downloaded_data: bool,
+        data_includes: Vec<PathBuf>,
+        include_config: bool,
+    ) -> RecoveryResult<impl Step + use<>> {
+        if ssh_helper.wait_for_access().is_err() {
+            ssh_helper.ssh_user = SshUser::Admin;
+            if !ssh_helper.can_connect() {
+                return Err(RecoveryError::invalid_output_error("SSH access denied"));
+            }
+        }
+
+        info!(
+            self.logger,
+            "Continuing with account: {}", ssh_helper.ssh_user
+        );
+
+        Ok(DownloadIcDataStep {
+            logger: self.logger.clone(),
+            ssh_helper,
+            backup_dir: self.data_dir.clone(),
+            keep_downloaded_data,
+            working_dir: self.work_dir.clone(),
+            data_includes,
+            include_config,
+        })
+    }
+
+    /// Return a [CopyLocalIcStateStep] copying the ic_state of the current
+    /// node to the recovery data directory.
+    pub fn get_copy_local_state_step(
+        &self,
+        download_height: Option<u64>,
+    ) -> RecoveryResult<impl Step + use<>> {
+        let data_includes = Self::get_ic_state_includes(
+            &self.logger,
+            ExecutionMode::Local,
+            CheckpointHeight::from(download_height),
+        )?;
+
+        Ok(CopyLocalIcStateStep {
+            logger: self.logger.clone(),
+            working_dir: self.work_dir.clone(),
+            require_confirmation: self.ssh_confirmation,
+            data_includes,
+        })
     }
 
     /// Return a [ReplayStep] to replay the downloaded state of the given
@@ -234,7 +533,9 @@ impl Recovery {
         subnet_id: SubnetId,
         subcmd: Option<ReplaySubCmd>,
         canister_caller_id: Option<CanisterId>,
-    ) -> impl Step {
+        replay_until_height: Option<u64>,
+        skip_prompts: bool,
+    ) -> impl Step + use<> {
         ReplayStep {
             logger: self.logger.clone(),
             subnet_id,
@@ -242,36 +543,53 @@ impl Recovery {
             config: self.work_dir.join("ic.json5"),
             subcmd,
             canister_caller_id,
+            replay_until_height,
             result: self.work_dir.join(replay_helper::OUTPUT_FILE_NAME),
+            skip_prompts,
         }
     }
 
     /// Return a [ReplayStep] to replay the downloaded state of the given
-    /// subnet and execute [SubCommand::AddAndBlessReplicaVersion].
+    /// subnet and execute [SubCommand::UpgradeSubnetToReplicaVersion].
     pub fn get_replay_with_upgrade_step(
         &self,
         subnet_id: SubnetId,
-        upgrade_version: ReplicaVersion,
-    ) -> RecoveryResult<impl Step> {
-        let (upgrade_url, sha256) = Recovery::get_img_url_and_sha(&upgrade_version)?;
-        let version_record = format!(
-            r#"{{ "release_package_url": "{}", "release_package_sha256_hex": "{}" }}"#,
-            upgrade_url, sha256
-        );
+        upgrade_version: &ReplicaVersion,
+        upgrade_url: Url,
+        sha256: String,
+        guest_launch_measurements: GuestLaunchMeasurements,
+        add_and_bless_replica_version: bool,
+        replay_until_height: Option<u64>,
+        skip_prompts: bool,
+    ) -> RecoveryResult<impl Step + use<>> {
+        let version_record = ReplicaVersionRecord {
+            release_package_sha256_hex: sha256,
+            release_package_urls: vec![upgrade_url.to_string()],
+            guest_launch_measurements: Some(guest_launch_measurements),
+        };
+
         Ok(self.get_replay_step(
             subnet_id,
             Some(ReplaySubCmd {
-                cmd: SubCommand::AddAndBlessReplicaVersion(AddAndBlessReplicaVersionCmd {
+                cmd: SubCommand::UpgradeSubnetToReplicaVersion(UpgradeSubnetToReplicaVersionCmd {
                     replica_version_id: upgrade_version.to_string(),
-                    replica_version_value: version_record.clone(),
-                    update_subnet_record: true,
+                    replica_version_record: version_record.clone(),
+                    add_and_bless_replica_version,
                 }),
                 descr: format!(
-                    r#" add-and-bless-replica-version --update-subnet-record "{}" {}"#,
-                    upgrade_version, version_record
+                    r#" upgrade-subnet-to-replica-version{} "{}" "{}""#,
+                    if add_and_bless_replica_version {
+                        " --add-and-bless-replica-version"
+                    } else {
+                        ""
+                    },
+                    upgrade_version,
+                    serde_json::to_string(&version_record).unwrap()
                 ),
             }),
             None,
+            replay_until_height,
+            skip_prompts,
         ))
     }
 
@@ -282,9 +600,11 @@ impl Recovery {
         subnet_id: SubnetId,
         new_registry_local_store: PathBuf,
         canister_caller_id: &str,
-    ) -> RecoveryResult<impl Step> {
+        replay_until_height: Option<u64>,
+        skip_prompts: bool,
+    ) -> RecoveryResult<impl Step + use<>> {
         let canister_id = CanisterId::from_str(canister_caller_id).map_err(|e| {
-            RecoveryError::invalid_output_error(format!("Failed to parse canister id: {}", e))
+            RecoveryError::invalid_output_error(format!("Failed to parse canister id: {e}"))
         })?;
         Ok(self.get_replay_step(
             subnet_id,
@@ -303,6 +623,8 @@ impl Recovery {
                 ),
             }),
             Some(canister_id),
+            replay_until_height,
+            skip_prompts,
         ))
     }
 
@@ -319,6 +641,16 @@ impl Recovery {
         Ok(res)
     }
 
+    /// Get the name and the height of the latest checkpoint currently on disk
+    /// Returns an error when there are no checkpoints.
+    pub fn get_latest_checkpoint_name_and_height(
+        checkpoints_path: &Path,
+    ) -> RecoveryResult<(String, Height)> {
+        ExecutionMode::Local
+            .get_maybe_latest_checkpoint_name_and_height(checkpoints_path)?
+            .ok_or_else(|| RecoveryError::invalid_output_error("No checkpoints"))
+    }
+
     /// Parse and return the output of the replay step.
     pub fn get_replay_output(&self) -> RecoveryResult<StateParams> {
         replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))
@@ -329,80 +661,71 @@ impl Recovery {
         (replay_height / 1000 + Height::from(1)) * 1000
     }
 
-    pub fn get_validate_replay_step(&self, subnet_id: SubnetId, extra_batches: u64) -> impl Step {
-        self.get_validate_replay_step_with_nns(
-            subnet_id,
-            self.admin_helper.nns_url.clone(),
-            extra_batches,
-        )
-    }
-
-    pub fn get_validate_replay_step_with_nns(
+    pub fn get_validate_replay_step(
         &self,
         subnet_id: SubnetId,
-        validate_nns_url: Url,
         extra_batches: u64,
-    ) -> impl Step {
+    ) -> impl Step + use<> {
         ValidateReplayStep {
             logger: self.logger.clone(),
             subnet_id,
-            validate_nns_url,
+            registry_helper: self.registry_helper.clone(),
             work_dir: self.work_dir.clone(),
             extra_batches,
         }
     }
 
-    /// Return an [UploadAndRestartStep] to upload the current recovery state to
+    /// Return an [UploadStateAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
-    pub fn get_upload_and_restart_step(&self, node_ip: IpAddr) -> impl Step {
-        self.get_upload_and_restart_step_with_data_src(node_ip, self.work_dir.join(IC_STATE_DIR))
-    }
-
-    /// Return an [UploadAndRestartStep] to upload the current recovery state to
-    /// a node and restart it.
-    pub fn get_upload_and_restart_step_with_data_src(
+    pub fn get_upload_state_and_restart_step(
         &self,
-        node_ip: IpAddr,
-        data_src: PathBuf,
-    ) -> impl Step {
-        UploadAndRestartStep {
+        ssh_user: SshUser,
+        upload_method: DataLocation,
+        key_file: Option<PathBuf>,
+    ) -> impl Step + use<> {
+        UploadStateAndRestartStep {
             logger: self.logger.clone(),
-            node_ip,
+            ssh_user,
+            upload_method,
             work_dir: self.work_dir.clone(),
-            data_src,
+            data_src: self.work_dir.join(IC_STATE_DIR),
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            key_file,
+            check_ic_replay_height: true,
         }
     }
 
-    /// Lookup the image [Url] and sha hash of the given [ReplicaVersion]
-    pub fn get_img_url_and_sha(version: &ReplicaVersion) -> RecoveryResult<(Url, String)> {
-        let mut version_string = version.to_string();
-        let mut test_version = false;
-        let parts: Vec<_> = version_string.split('-').collect();
-        if parts.len() > 1 && parts[parts.len() - 1] == "test" {
-            test_version = true;
-            version_string = parts[..parts.len() - 1].join("-");
-        }
-        let url_base = format!(
-            "https://download.dfinity.systems/ic/{}/guest-os/update-img/",
-            version_string
-        );
+    /// Lookup the image [Url], and sha256 hash and guest launch measurements of the
+    /// given [ReplicaVersion].
+    pub fn get_img_url_sha_and_measurements(
+        version: &ReplicaVersion,
+    ) -> RecoveryResult<(Url, String, GuestLaunchMeasurements)> {
+        let version_string = version.to_string();
+        let url_base =
+            format!("https://download.dfinity.systems/ic/{version_string}/guest-os/update-img/");
+        let image_name = "update-img.tar.zst";
+        let invalid_url =
+            |url, e| RecoveryError::invalid_output_error(format!("Invalid Url string: {url}, {e}"));
 
-        let image_name = format!(
-            "update-img{}.tar.zst",
-            if test_version { "-test" } else { "" }
-        );
-        let upgrade_url_string = format!("{}{}", url_base, image_name);
-        let invalid_url = |url, e| {
-            RecoveryError::invalid_output_error(format!("Invalid Url string: {}, {}", url, e))
-        };
+        let upgrade_url_string = format!("{url_base}{image_name}");
         let upgrade_url =
             Url::parse(&upgrade_url_string).map_err(|e| invalid_url(upgrade_url_string, e))?;
 
-        let sha_url_string = format!("{}SHA256SUMS", url_base);
+        let sha_url_string = format!("{url_base}SHA256SUMS");
         let sha_url = Url::parse(&sha_url_string).map_err(|e| invalid_url(sha_url_string, e))?;
 
+        let sha256 = Self::get_img_sha256(&sha_url, image_name)?;
+
+        let measurements_url_string = format!("{url_base}launch-measurements.json");
+        let measurements_url = Url::parse(&measurements_url_string)
+            .map_err(|e| invalid_url(measurements_url_string, e))?;
+
+        let guest_launch_measurements = Self::get_img_measurements(&measurements_url)?;
+
+        Ok((upgrade_url, sha256, guest_launch_measurements))
+    }
+
+    fn get_img_sha256(sha_url: &Url, image_name: &str) -> RecoveryResult<String> {
         // fetch the `SHA256SUMS` file
         let mut curl = Command::new("curl");
         curl.arg(sha_url.to_string());
@@ -411,77 +734,75 @@ impl Recovery {
         // split the content into lines, then split each line into a pair (<hash>, <image_name>)
         let hashes = output
             .split('\n')
-            .map(|line| line.split(" *").collect::<Vec<_>>())
+            .map(|line| line.split(' ').collect::<Vec<_>>())
             .collect::<Vec<_>>();
 
         // return the hash for the selected image name
         for pair in hashes.iter() {
             match pair.as_slice() {
                 &[sha256, name] if name == image_name => {
-                    return Ok((upgrade_url, sha256.to_string()));
+                    return Ok(sha256.to_string());
                 }
                 _ => {}
             }
         }
 
-        Err(RecoveryError::invalid_output_error(
-            "No hash found in the SHA256SUMS file".to_string(),
-        ))
+        Err(RecoveryError::invalid_output_error(format!(
+            "No hash found in the SHA256SUMS file: {output}"
+        )))
     }
 
-    /// Return an [AdminStep] step blessing the given [ReplicaVersion].
+    fn get_img_measurements(measurements_url: &Url) -> RecoveryResult<GuestLaunchMeasurements> {
+        // fetch the `launch-measurements.json` file
+        let mut curl = Command::new("curl");
+        curl.arg(measurements_url.to_string());
+        let output = exec_cmd(&mut curl)?.unwrap_or_default();
+
+        let guest_launch_measurements = serde_json::from_str::<GuestLaunchMeasurements>(&output)
+            .map_err(RecoveryError::parsing_error)?;
+
+        Ok(guest_launch_measurements)
+    }
+
+    /// Return an [AdminStep] step electing the given [ReplicaVersion].
     /// Existence of artifacts for the given version is checked beforehand, thus
     /// generation of this step may fail if the version is invalid.
-    pub fn bless_replica_version(
+    pub fn elect_replica_version(
         &self,
         upgrade_version: &ReplicaVersion,
-    ) -> RecoveryResult<impl Step> {
-        let (upgrade_url, sha256) = Recovery::get_img_url_and_sha(upgrade_version)?;
+        upgrade_url: Url,
+        sha256: String,
+        guest_launch_measurements_path: &Path,
+    ) -> RecoveryResult<impl Step + use<>> {
         Ok(AdminStep {
             logger: self.logger.clone(),
             ic_admin_cmd: self
                 .admin_helper
-                .get_propose_to_bless_replica_version_flexible_command(
+                .get_propose_to_update_elected_replica_versions_command(
                     upgrade_version,
                     &upgrade_url,
-                    sha256,
+                    &sha256,
+                    guest_launch_measurements_path,
                 ),
         })
     }
 
     /// Return an [AdminStep] step upgrading the given subnet to the given
     /// replica version.
-    pub fn update_subnet_replica_version(
+    pub fn deploy_guestos_to_all_subnet_nodes(
         &self,
         subnet_id: SubnetId,
         upgrade_version: &ReplicaVersion,
-    ) -> impl Step {
+    ) -> impl Step + use<> {
         AdminStep {
             logger: self.logger.clone(),
             ic_admin_cmd: self
                 .admin_helper
-                .get_propose_to_update_subnet_replica_version_command(subnet_id, upgrade_version),
+                .get_propose_to_deploy_guestos_to_all_subnet_nodes_command(
+                    subnet_id,
+                    upgrade_version,
+                ),
         }
-    }
-
-    pub fn get_ecdsa_config(&self, subnet_id: SubnetId) -> RecoveryResult<Option<EcdsaConfig>> {
-        let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime");
-        rt.block_on(async {
-            let nns_data_provider = create_nns_data_provider(
-                tokio::runtime::Handle::current(),
-                vec![self.admin_helper.nns_url.clone()],
-                None,
-            );
-            let registry_client = RegistryClientImpl::new(nns_data_provider, None);
-            if let Err(err) = registry_client.poll_once() {
-                return Err(format!("couldn't poll the registry: {:?}", err));
-            };
-            let version = registry_client.get_latest_version();
-            registry_client
-                .get_ecdsa_config(subnet_id, version)
-                .map_err(|err| err.to_string())
-        })
-        .map_err(RecoveryError::UnexpectedError)
     }
 
     /// Return an [AdminStep] step updating the recovery CUP of the given
@@ -493,20 +814,26 @@ impl Recovery {
         state_hash: String,
         replacement_nodes: &[NodeId],
         registry_params: Option<RegistryParams>,
-        ecdsa_subnet_id: Option<SubnetId>,
-    ) -> RecoveryResult<impl Step> {
-        let key_ids = match self.get_ecdsa_config(subnet_id) {
-            Ok(Some(config)) => config.key_ids,
-            Ok(None) => vec![],
-            Err(err) => {
-                warn!(
-                    self.logger,
-                    "{}",
-                    format!("Failed to get ECDSA config: {:?}", err)
-                );
-                vec![]
-            }
-        };
+        initial_dkg_subnet_id: Option<SubnetId>,
+        chain_key_subnet_id: Option<SubnetId>,
+    ) -> RecoveryResult<impl Step + use<>> {
+        let chain_key_config = chain_key_subnet_id
+            .map(|id| match self.registry_helper.get_chain_key_config(id) {
+                Ok((_registry_version, Some(config))) => Some((config, id)),
+                Ok((registry_version, None)) => {
+                    info!(
+                        self.logger,
+                        "No Chain key config at registry version {}", registry_version
+                    );
+                    None
+                }
+                Err(err) => {
+                    warn!(self.logger, "Failed to get Chain Key config: {}", err);
+                    None
+                }
+            })
+            .unwrap_or_default();
+
         Ok(AdminStep {
             logger: self.logger.clone(),
             ic_admin_cmd: self
@@ -515,17 +842,17 @@ impl Recovery {
                     subnet_id,
                     checkpoint_height,
                     state_hash,
-                    key_ids,
+                    initial_dkg_subnet_id,
+                    chain_key_config,
                     replacement_nodes,
                     registry_params,
-                    ecdsa_subnet_id,
+                    SystemTime::now(),
                 ),
         })
     }
 
-    /// Return an [UploadAndRestartStep] to upload the current recovery state to
-    /// a node and restart it.
-    pub fn get_wait_for_cup_step(&self, node_ip: IpAddr) -> impl Step {
+    /// Return a [WaitForCUPStep] to wait until the recovery CUP is present on the given node.
+    pub fn get_wait_for_cup_step(&self, node_ip: IpAddr) -> impl Step + use<> {
         WaitForCUPStep {
             logger: self.logger.clone(),
             node_ip,
@@ -536,59 +863,43 @@ impl Recovery {
     /// Returns the status of a replica. It is requested from a public API.
     pub async fn get_replica_status(url: Url) -> RecoveryResult<HttpStatusResponse> {
         let joined_url = url.clone().join("api/v2/status").map_err(|e| {
-            RecoveryError::invalid_output_error(format!("failed to join URLs: {}", e))
+            RecoveryError::invalid_output_error(format!("failed to join URLs: {e}"))
         })?;
 
         let response = reqwest::Client::builder()
             .timeout(time::Duration::from_secs(6))
             .build()
             .map_err(|e| {
-                RecoveryError::invalid_output_error(format!("cannot build a reqwest client: {}", e))
+                RecoveryError::invalid_output_error(format!("cannot build a reqwest client: {e}"))
             })?
             .get(joined_url)
             .send()
             .await
             .map_err(|err| {
-                RecoveryError::invalid_output_error(format!("Failed to create request: {}", err))
+                RecoveryError::invalid_output_error(format!("Failed to create request: {err}"))
             })?;
 
-        let cbor_response = serde_cbor::from_slice(
-            &response
-                .bytes()
-                .await
-                .map_err(|e| {
-                    RecoveryError::invalid_output_error(format!(
-                        "failed to convert a response to bytes: {}",
-                        e
-                    ))
-                })?
-                .to_vec(),
-        )
+        let cbor_response = serde_cbor::from_slice(&response.bytes().await.map_err(|e| {
+            RecoveryError::invalid_output_error(format!(
+                "failed to convert a response to bytes: {e}"
+            ))
+        })?)
         .map_err(|e| {
-            RecoveryError::invalid_output_error(format!("response is not encoded as cbor: {}", e))
+            RecoveryError::invalid_output_error(format!("response is not encoded as cbor: {e}"))
         })?;
 
         serde_cbor::value::from_value::<HttpStatusResponse>(cbor_response).map_err(|e| {
             RecoveryError::invalid_output_error(format!(
-                "failed to deserialize a response to HttpStatusResponse: {}",
-                e
+                "failed to deserialize a response to HttpStatusResponse: {e}"
             ))
         })
     }
 
     /// Gets the replica version from the endpoint even if it is unhealthy.
     pub fn get_assigned_replica_version_any_health(url: Url) -> RecoveryResult<String> {
-        let version = match block_on(Recovery::get_replica_status(url)) {
-            Ok(status) => status,
-            Err(err) => return Err(err),
-        }
-        .impl_version;
-        match version {
-            Some(ver) => Ok(ver),
-            None => Err(RecoveryError::invalid_output_error(
-                "No version found in status".to_string(),
-            )),
-        }
+        let version = block_on(Recovery::get_replica_status(url))?.impl_version;
+
+        version.ok_or_else(|| RecoveryError::invalid_output_error("No version found in status"))
     }
 
     // Wait until the recovery CUP as specified in the replay output is present on the given node
@@ -599,15 +910,14 @@ impl Recovery {
         recovery_height: Height,
         state_hash: String,
     ) -> RecoveryResult<()> {
-        let node_url = Url::parse(&format!("http://[{}]:8080/", node_ip)).map_err(|err| {
+        let node_url = Url::parse(&format!("http://[{node_ip}]:8080/")).map_err(|err| {
             RecoveryError::invalid_output_error(format!(
-                "Could not parse node URL for IP {}: {}",
-                node_ip, err
+                "Could not parse node URL for IP {node_ip}: {err}"
             ))
         })?;
 
         let mut cup_present = false;
-        for i in 0..50 {
+        for i in 0..35 {
             let maybe_cup = match block_on(get_catchup_content(&node_url)) {
                 Ok(res) => res,
                 Err(e) => {
@@ -646,7 +956,7 @@ impl Recovery {
             }
 
             info!(logger, "Recovery CUP not yet present, retrying...");
-            thread::sleep(time::Duration::from_secs(10));
+            thread::sleep(time::Duration::from_secs(15));
         }
 
         if !cup_present {
@@ -659,32 +969,41 @@ impl Recovery {
     }
 
     /// Return a [CleanupStep] to remove the recovery directory and all of its contents
-    pub fn get_cleanup_step(&self) -> impl Step {
+    pub fn get_cleanup_step(&self) -> impl Step + use<> {
         CleanupStep {
             recovery_dir: self.recovery_dir.clone(),
         }
     }
 
     /// Return a [StopReplicaStep] to stop the replica with the given IP
-    pub fn get_stop_replica_step(&self, node_ip: IpAddr) -> impl Step {
+    pub fn get_stop_replica_step(&self, node_ip: IpAddr) -> impl Step + use<> {
         StopReplicaStep {
             logger: self.logger.clone(),
             node_ip,
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            key_file: self.admin_key_file.clone(),
         }
     }
 
     /// Return an [UpdateLocalStoreStep] to update the current local store using ic-replay
-    pub fn get_update_local_store_step(&self, subnet_id: SubnetId) -> impl Step {
+    pub fn get_update_local_store_step(
+        &self,
+        subnet_id: SubnetId,
+        skip_prompts: bool,
+    ) -> impl Step + use<> {
         UpdateLocalStoreStep {
             subnet_id,
             work_dir: self.work_dir.clone(),
+            skip_prompts,
         }
     }
 
     /// Return an [GetRecoveryCUPStep] to get the recovery CUP using ic-replay
-    pub fn get_recovery_cup_step(&self, subnet_id: SubnetId) -> RecoveryResult<impl Step> {
+    pub fn get_recovery_cup_step(
+        &self,
+        subnet_id: SubnetId,
+        skip_prompts: bool,
+    ) -> RecoveryResult<impl Step + use<>> {
         let state_params = self.get_replay_output()?;
         let recovery_height = Recovery::get_recovery_height(state_params.height);
         Ok(GetRecoveryCUPStep {
@@ -694,44 +1013,50 @@ impl Recovery {
             state_hash: state_params.hash,
             work_dir: self.work_dir.clone(),
             recovery_height,
+            skip_prompts,
         })
     }
 
-    /// Return a [CreateTarsStep] to create tar files of the current registry local store and ic state
-    pub fn get_create_tars_step(&self) -> impl Step {
+    /// Return a [CreateRegistryTarStep] a tar file that contains the current registry local store
+    pub fn get_create_registry_tar_step(&self) -> impl Step + use<> {
         let mut tar = Command::new("tar");
         tar.arg("-C")
             .arg(self.work_dir.join("data").join(IC_REGISTRY_LOCAL_STORE))
-            .arg("-zcvf")
+            .arg("--zstd")
+            .arg("-cvf")
             .arg(
                 self.work_dir
-                    .join(format!("{}.tar.gz", IC_REGISTRY_LOCAL_STORE)),
+                    .join(format!("{IC_REGISTRY_LOCAL_STORE}.tar.zst")),
             )
             .arg(".");
 
-        CreateTarsStep {
+        CreateRegistryTarStep {
             logger: self.logger.clone(),
             store_tar_cmd: tar,
         }
     }
 
-    pub fn get_copy_ic_state(&self, new_state_dir: PathBuf) -> impl Step {
-        CopyIcStateStep {
+    /// Return an [UploadCUPAndTarStep] uploading CUP and registry tar to the given node IP
+    pub fn get_upload_cup_and_tar_step(&self, node_ip: IpAddr) -> impl Step + use<> {
+        UploadCUPAndTarStep {
             logger: self.logger.clone(),
-            work_dir: self.work_dir.join(IC_STATE_DIR),
-            new_state_dir,
+            node_ip,
+            work_dir: self.work_dir.clone(),
+            require_confirmation: self.ssh_confirmation,
+            key_file: self.admin_key_file.clone(),
         }
     }
 
-    /// Return an [UploadCUPAndTar] uploading tars and extracted CUP to subnet nodes
-    pub fn get_upload_cup_and_tar_step(&self, subnet_id: SubnetId) -> impl Step {
-        UploadCUPAndTar {
+    /// Return a [CreateNNSRecoveryTarStep] creating a tar file that contains a tar of the registry
+    /// local store and a recovery CUP
+    pub fn get_create_nns_recovery_tar_step(
+        &self,
+        output_dir: Option<PathBuf>,
+    ) -> impl Step + use<> {
+        CreateNNSRecoveryTarStep {
             logger: self.logger.clone(),
-            nns_url: self.admin_helper.nns_url.clone(),
-            subnet_id,
             work_dir: self.work_dir.clone(),
-            require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            output_dir: output_dir.unwrap_or(self.recovery_dir.join("output")),
         }
     }
 
@@ -741,7 +1066,7 @@ impl Recovery {
         subnet_id_override: SubnetId,
         replica_version: ReplicaVersion,
         node_ids: &[NodeId],
-    ) -> impl Step {
+    ) -> impl Step + use<> {
         AdminStep {
             logger: self.logger.clone(),
             ic_admin_cmd: self.admin_helper.get_propose_to_create_test_system_subnet(
@@ -752,69 +1077,100 @@ impl Recovery {
         }
     }
 
-    /// Return a [DownloadRegistryStoreStep] to download the registry store containing entries for the given [SubnetId] from the given download node
-    pub fn get_download_regsitry_store_step(
+    /// Return a [DownloadRegistryStoreStep] to download the registry store containing entries for
+    /// the given [SubnetId] from the given download node
+    pub fn get_download_registry_store_step(
         &self,
         download_node: IpAddr,
         original_nns_id: SubnetId,
-    ) -> impl Step {
+        ssh_user: SshUser,
+        key_file: Option<PathBuf>,
+    ) -> impl Step + use<> {
         DownloadRegistryStoreStep {
             logger: self.logger.clone(),
             node_ip: download_node,
             original_nns_id,
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            ssh_user,
+            key_file,
         }
     }
 
     /// Return an [UploadAndHostTarStep] to upload and host a tar file on the given auxiliary host
     pub fn get_upload_and_host_tar(
         &self,
-        aux_host: String,
+        aux_user: SshUser,
         aux_ip: IpAddr,
         tar: PathBuf,
-    ) -> impl Step {
+    ) -> impl Step + use<> {
         UploadAndHostTarStep {
             logger: self.logger.clone(),
-            aux_host,
+            aux_user,
             aux_ip,
             tar,
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            key_file: self.admin_key_file.clone(),
         }
     }
 }
 
-pub fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetrics> {
-    let body = match reqwest::blocking::get(format!("http://[{}]:9090", ip)).and_then(|r| r.text())
-    {
-        Ok(val) => val,
-        Err(e) => {
+pub async fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetrics> {
+    let response = tokio::time::timeout(
+        Duration::from_secs(5),
+        reqwest::get(format!("http://[{ip}]:9090")),
+    )
+    .await;
+    let res = match response {
+        Ok(Ok(res)) => res,
+        e => {
             warn!(logger, "Http request failed: {:?}", e);
             return None;
         }
     };
+    let body = match res.text().await {
+        Ok(val) => val,
+        Err(e) => {
+            warn!(logger, "Http decode failed: {:?}", e);
+            return None;
+        }
+    };
     let mut node_heights = NodeMetrics {
+        catch_up_package_height: Height::from(0),
         finalization_height: Height::from(0),
         certification_height: Height::from(0),
+        certification_share_height: Height::from(0),
+        manifest_height: Height::from(0),
         _ip: *ip,
+    };
+    let set_height = |height: &mut Height, val: &str| match val.trim().parse::<u64>() {
+        Ok(val) => *height = Height::from(val),
+        Err(err) => {
+            warn!(logger, "Couldn't parse height {}: {}", val, err)
+        }
     };
     for line in body.split('\n') {
         let mut parts = line.split(' ');
         if let (Some(prefix), Some(height)) = (parts.next(), parts.next()) {
             match prefix {
-                "certification_last_certified_height" => match height.trim().parse::<u64>() {
-                    Ok(val) => node_heights.certification_height = Height::from(val),
-                    error => warn!(logger, "Couldn't parse height {}: {:?}", height, error),
-                },
-                r#"artifact_pool_consensus_height_stat{pool_type="validated",stat="max",type="finalization"}"# => {
-                    match height.trim().parse::<u64>() {
-                        Ok(val) => node_heights.finalization_height = Height::from(val),
-                        error => {
-                            warn!(logger, "Couldn't parse height {}: {:?}", height, error)
-                        }
-                    }
+                r#"artifact_pool_consensus_height_stat{pool_type="validated",stat="max",type="catch_up_package"}"# =>
+                {
+                    set_height(&mut node_heights.catch_up_package_height, height);
+                }
+                r#"artifact_pool_certification_height_stat{pool_type="validated",stat="max",type="certification"}"# =>
+                {
+                    set_height(&mut node_heights.certification_height, height);
+                }
+                r#"artifact_pool_certification_height_stat{pool_type="validated",stat="max",type="certification_share"}"# =>
+                {
+                    set_height(&mut node_heights.certification_share_height, height);
+                }
+                r#"artifact_pool_consensus_height_stat{pool_type="validated",stat="max",type="finalization"}"# =>
+                {
+                    set_height(&mut node_heights.finalization_height, height);
+                }
+                r#"state_manager_last_computed_manifest_height"# => {
+                    set_height(&mut node_heights.manifest_height, height);
                 }
                 _ => continue,
             }
@@ -823,57 +1179,255 @@ pub fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetrics> {
     Some(node_heights)
 }
 
-/// Grabs metrics from all nodes and greps for the certification and finalization heights.
-pub fn get_node_heights_from_metrics(
+/// Grabs metrics from all available nodes and greps for the certification and finalization heights.
+pub fn get_available_nodes_heights_from_metrics(
     logger: &Logger,
-    nns_url: Url,
+    registry_helper: &RegistryHelper,
     subnet_id: SubnetId,
-) -> RecoveryResult<Vec<NodeMetrics>> {
-    Ok(get_member_ips(nns_url, subnet_id)?
-        .iter()
-        .filter_map(|ip| get_node_metrics(logger, ip))
-        .collect())
+) -> RecoveryResult<BTreeMap<NodeId, NodeMetrics>> {
+    let nodes_id_to_ip = get_member_node_ids_and_ips(registry_helper, subnet_id)?;
+    let num_nodes = nodes_id_to_ip.len();
+
+    let (ids, ips): (Vec<_>, Vec<_>) = nodes_id_to_ip.into_iter().unzip();
+    let metrics = block_on(join_all(ips.iter().map(|ip| get_node_metrics(logger, ip))));
+
+    let nodes_id_to_metrics: BTreeMap<_, _> = ids
+        .into_iter()
+        .zip(metrics)
+        .filter_map(|(id, metric)| metric.map(|m| (id, m)))
+        .collect();
+
+    if num_nodes > nodes_id_to_metrics.len() {
+        warn!(
+            logger,
+            "Failed to get metrics from {} nodes!",
+            num_nodes - nodes_id_to_metrics.len()
+        );
+    }
+    Ok(nodes_id_to_metrics)
 }
 
-/// Lookup IP addresses of all members of the given subnet
-pub fn get_member_ips(nns_url: Url, subnet_id: SubnetId) -> RecoveryResult<Vec<IpAddr>> {
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime");
-    let result = rt
-        .block_on(async {
-            let nns_data_provider =
-                create_nns_data_provider(tokio::runtime::Handle::current(), vec![nns_url], None);
-            let registry_client = RegistryClientImpl::new(nns_data_provider, None);
-            if let Err(err) = registry_client.poll_once() {
-                return Err(format!("couldn't poll the registry: {:?}", err));
-            };
-            let version = registry_client.get_latest_version();
-            match registry_client.get_node_ids_on_subnet(subnet_id, version) {
-                Ok(Some(node_ids)) => Ok(node_ids
-                    .into_iter()
-                    .filter_map(|node_id| {
-                        registry_client
-                            .get_transport_info(node_id, version)
-                            .unwrap_or_default()
-                    })
-                    .collect::<Vec<_>>()),
-                other => Err(format!(
-                    "no node ids found in the registry for subnet_id={}: {:?}",
-                    subnet_id, other
-                )),
-            }
-        })
-        .map_err(RecoveryError::UnexpectedError)?;
-    result
+/// Lookup node IDs and corresponding IP addresses of all members of the given subnet
+fn get_member_node_ids_and_ips(
+    registry_helper: &RegistryHelper,
+    subnet_id: SubnetId,
+) -> RecoveryResult<BTreeMap<NodeId, IpAddr>> {
+    let (registry_version, node_ids) = registry_helper.get_node_ids_on_subnet(subnet_id)?;
+
+    let Some(node_ids) = node_ids else {
+        return Err(RecoveryError::RegistryError(format!(
+            "no node ids found in the registry version {registry_version} for subnet_id {subnet_id}"
+        )));
+    };
+
+    node_ids
         .into_iter()
-        .filter_map(|node_record| {
-            node_record.http.map(|http| {
-                http.ip_addr.parse().map_err(|err| {
-                    RecoveryError::UnexpectedError(format!(
-                        "couldn't parse ip address from the registry: {:?}",
-                        err
-                    ))
-                })
-            })
+        .map(|node_id| {
+            let node_record = match registry_helper.registry_client().get_node_record(node_id, registry_version) {
+                Ok(Some(record)) => record,
+                Ok(None) => {
+                    return Err(RecoveryError::RegistryError(format!(
+                        "node record not found for node id {node_id} in registry version {registry_version}"
+                    )));
+                }
+                Err(e) => {
+                    return Err(RecoveryError::RegistryError(format!(
+                        "failed to get node record for node id {node_id} in registry version {registry_version}: {e}"
+                    )));
+                }
+            };
+
+            let http = match node_record.http {
+                Some(http) => http,
+                None => {
+                    return Err(RecoveryError::RegistryError(format!(
+                        "no http endpoint found in the node record for node id {node_id} in registry version {registry_version}"
+                    )));
+                }
+            };
+
+            let node_ip = match http.ip_addr.parse() {
+                Ok(ip) => ip,
+                Err(e) => {
+                    return Err(RecoveryError::UnexpectedError(format!(
+                        "failed to parse IP address {} for node id {node_id} in registry version {registry_version}: {e}",
+                        http.ip_addr
+                    )));
+                }
+            };
+
+            Ok((node_id, node_ip))
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert_matches::assert_matches;
+    use ic_test_utilities_tmpdir::tmpdir;
+
+    #[test]
+    fn get_ic_state_includes_test() {
+        let logger = util::make_logger();
+
+        let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
+        create_dir(&ic_checkpoints_path).unwrap();
+        assert!(
+            read_dir(&ic_checkpoints_path).unwrap().next().is_none(),
+            "Test checkpoints directory {} is not empty. Clear it first before running the test.",
+            ic_checkpoints_path.display()
+        );
+
+        // Test: without any checkpoints, should not be an error, should return nothing
+        let includes = Recovery::get_ic_state_includes(
+            &logger,
+            ExecutionMode::Local,
+            CheckpointHeight::Latest,
+        )
+        .expect("Failed getting ic state includes");
+        assert!(includes.is_empty());
+
+        // Create some checkpoints
+        create_fake_checkpoint_dirs(
+            &ic_checkpoints_path,
+            &[
+                /*height=64800*/ "000000000000fd20",
+                /*height=64900*/ "000000000000fd84",
+            ],
+        );
+
+        // Test: without specified download height, should include the latest checkpoint
+        let includes = Recovery::get_ic_state_includes(
+            &logger,
+            ExecutionMode::Local,
+            CheckpointHeight::Latest,
+        )
+        .expect("Failed getting ic state includes");
+        assert_eq!(
+            includes,
+            vec![
+                PathBuf::from(IC_STATE).join(STATES_METADATA),
+                PathBuf::from(IC_STATE)
+                    .join(CHECKPOINTS)
+                    .join("000000000000fd84")
+            ]
+        );
+
+        // Test: with specified download height, should include the checkpoint at the download height
+        let includes = Recovery::get_ic_state_includes(
+            &logger,
+            ExecutionMode::Local,
+            CheckpointHeight::Specified(64800),
+        )
+        .expect("Failed getting ic state includes");
+        assert_eq!(
+            includes,
+            vec![
+                PathBuf::from(IC_STATE).join(STATES_METADATA),
+                PathBuf::from(IC_STATE)
+                    .join(CHECKPOINTS)
+                    .join("000000000000fd20")
+            ]
+        );
+
+        // Test: with specified download height but no checkpoint at that height, should return an error
+        let result = Recovery::get_ic_state_includes(
+            &logger,
+            ExecutionMode::Local,
+            CheckpointHeight::Specified(64700),
+        );
+        assert_matches!(result, Err(RecoveryError::OutputError(e)) if e.contains("does not exist"));
+
+        remove_dir(&ic_checkpoints_path).unwrap();
+    }
+
+    #[test]
+    fn get_latest_checkpoint_name_and_height_test() {
+        let checkpoints_dir = tmpdir("checkpoints");
+        create_fake_checkpoint_dirs(
+            checkpoints_dir.path(),
+            &[
+                /*height=64800*/ "000000000000fd20",
+                /*height=64900*/ "000000000000fd84",
+            ],
+        );
+
+        let (name, height) =
+            Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path())
+                .expect("Failed getting the latest checkpoint name and height");
+
+        assert_eq!(name, "000000000000fd84");
+        assert_eq!(height, Height::from(64900));
+    }
+
+    #[test]
+    fn get_maybe_latest_checkpoint_name_and_height_returns_error_on_invalid_checkpoint_name() {
+        let checkpoints_dir = tmpdir("checkpoints");
+        create_fake_checkpoint_dirs(
+            checkpoints_dir.path(),
+            &[
+                /*height=64800*/ "000000000000fd20",
+                /*height=64900*/ "000000000000fd84",
+                /*height=???*/ "invalid_checkpoint_name",
+            ],
+        );
+
+        assert!(
+            ExecutionMode::Local
+                .get_maybe_latest_checkpoint_name_and_height(checkpoints_dir.path())
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn get_latest_checkpoint_name_and_height_returns_error_when_no_checkpoints() {
+        let checkpoints_dir = tmpdir("checkpoints");
+
+        assert!(
+            ExecutionMode::Local
+                .get_maybe_latest_checkpoint_name_and_height(checkpoints_dir.path())
+                .expect("Failed getting the latest checkpoint name and height")
+                .is_none()
+        );
+        assert!(Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path()).is_err());
+    }
+
+    #[test]
+    fn remove_all_but_highest_checkpoints_test() {
+        let logger = util::make_logger();
+        let checkpoints_dir = tmpdir("checkpoints");
+        create_fake_checkpoint_dirs(
+            checkpoints_dir.path(),
+            &[
+                /*height=64800*/ "000000000000fd20",
+                /*height=64900*/ "000000000000fd84",
+            ],
+        );
+
+        let height = Recovery::remove_all_but_highest_checkpoints(checkpoints_dir.path(), &logger)
+            .expect("Failed to remove checkpoints");
+
+        assert_eq!(height, Height::from(64900));
+        assert_eq!(
+            Recovery::get_checkpoint_names(checkpoints_dir.path()).unwrap(),
+            vec![String::from("000000000000fd84")]
+        );
+    }
+
+    #[test]
+    fn remove_all_but_highest_checkpoints_returns_error_when_no_checkpoints() {
+        let logger = util::make_logger();
+        let checkpoints_dir = tmpdir("checkpoints");
+
+        assert!(
+            Recovery::remove_all_but_highest_checkpoints(checkpoints_dir.path(), &logger).is_err()
+        );
+    }
+
+    fn create_fake_checkpoint_dirs(root: &Path, checkpoint_names: &[&str]) {
+        for checkpoint_name in checkpoint_names {
+            create_dir(&root.join(checkpoint_name)).unwrap();
+        }
+    }
 }

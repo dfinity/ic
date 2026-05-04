@@ -8,7 +8,7 @@ use crate::visitor::{Control, Visitor};
 mod tests;
 
 /// Simple label matcher: either any label matches; or only equal labels.
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum Matcher {
     /// Match any label.
     Any,
@@ -109,7 +109,7 @@ where
     fn enter_edge(&mut self, label: &[u8]) -> Result<Control, V::Output> {
         self.path_match
             .pop()
-            .unwrap_or_else(|| panic!("edge outside subtree: {:?}", label));
+            .unwrap_or_else(|| panic!("edge outside subtree: {label:?}"));
 
         self.path_match.push(if self.is_partial_match() {
             let matcher = self.pattern.get(self.path_match.len()).unwrap();

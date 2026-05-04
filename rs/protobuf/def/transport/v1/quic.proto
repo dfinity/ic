@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package transport.v1;
+
+message HttpHeader {
+  string key = 1;
+  bytes value = 2;
+}
+
+enum HttpMethod {
+  HTTP_METHOD_UNSPECIFIED = 0;
+  HTTP_METHOD_GET = 1;
+  HTTP_METHOD_POST = 2;
+  HTTP_METHOD_PUT = 3;
+  HTTP_METHOD_DELETE = 4;
+  HTTP_METHOD_HEAD = 5;
+  HTTP_METHOD_OPTIONS = 6;
+  HTTP_METHOD_CONNECT = 7;
+  HTTP_METHOD_PATCH = 8;
+  HTTP_METHOD_TRACE = 9;
+}
+
+message HttpRequest {
+  string uri = 1;
+  repeated HttpHeader headers = 2;
+  HttpMethod method = 3;
+  bytes body = 4;
+}
+
+message HttpResponse {
+  uint32 status_code = 1;
+  repeated HttpHeader headers = 2;
+  bytes body = 3;
+}

@@ -1,43 +1,3 @@
-use std::thread;
-
-/// An object that joins a thread when it's dropped. Mostly helpful to implement
-/// graceful shutdowns.
-///
-/// Note that Rust destroys fields in the order of their declaration:
-///
-/// > The fields of a struct, tuple or enum variant are dropped in declaration
-/// order.
-///
-/// See:
-/// * https://doc.rust-lang.org/stable/reference/destructors.html
-/// * https://github.com/rust-lang/rfcs/blob/master/text/1857-stabilize-drop-order.md
-///
-/// That means that if you have a send/receive channel to talk to the thread in
-/// your struct as well, you should make JoinOnDrop the last field in your
-/// struct.
-pub struct JoinOnDrop<T>(Option<thread::JoinHandle<T>>);
-
-impl<T> JoinOnDrop<T> {
-    pub fn new(h: thread::JoinHandle<T>) -> Self {
-        Self(Some(h))
-    }
-
-    /// Explicitly joins the thread.
-    pub fn join(mut self) -> thread::Result<T> {
-        // It's OK to unwrap here because the wrapped object can only become
-        // None when it's out of scope.
-        self.0.take().unwrap().join()
-    }
-}
-
-impl<T> Drop for JoinOnDrop<T> {
-    fn drop(&mut self) {
-        if let Some(h) = self.0.take() {
-            let _ = h.join();
-        }
-    }
-}
-
 /// Applies the function to each input item in parallel and returns the results.
 /// The `i`-th element of the result corresponds to the `i`-ths input, but the
 /// function application order is non-deterministic and depends on the available
@@ -51,7 +11,7 @@ where
 {
     let mut items: Vec<(S, Option<T>)> = items.map(|i| (i, None)).collect();
     let threads = thread_pool.thread_count() as usize;
-    let items_per_thread = ((items.len() + threads - 1) / threads).max(1);
+    let items_per_thread = items.len().div_ceil(threads).max(1);
     thread_pool.scoped(|scope| {
         for items in items.chunks_mut(items_per_thread) {
             scope.execute(move || {
@@ -65,6 +25,24 @@ where
         .into_iter()
         .map(|(_, result)| result.unwrap())
         .collect()
+}
+
+/// `parallel_map(_)` if thread_pool is `Some`; `map(_)` if `None`.
+pub fn maybe_parallel_map<S, T, I, F>(
+    thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
+    items: I,
+    f: F,
+) -> Vec<T>
+where
+    S: Send,
+    T: Send,
+    I: Iterator<Item = S>,
+    F: Fn(&S) -> T + Send + Copy,
+{
+    match thread_pool {
+        Some(thread_pool) => parallel_map(thread_pool, items, f),
+        None => items.map(|x| f(&x)).collect::<Vec<T>>(),
+    }
 }
 
 #[cfg(test)]

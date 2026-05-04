@@ -1,13 +1,12 @@
 use crate::api::CspThresholdSignError;
 use crate::key_id::KeyId;
+use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::SecretKeyStore;
-use crate::types::{CspPublicCoefficients, CspSecretKey};
 use crate::types::{CspSignature, ThresBls12_381_Signature};
 use crate::vault::api::CspThresholdSignatureKeygenError;
 use crate::vault::api::ThresholdSignatureCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
-use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsScope};
-use ic_crypto_internal_seed::Seed;
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_threshold_sig_bls12381 as bls12381_clib;
 use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::CryptoError;
@@ -54,54 +53,38 @@ impl From<CspThresholdSignatureKeygenError> for CryptoError {
     }
 }
 
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
-    ThresholdSignatureCspVault for LocalCspVault<R, S, C>
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    ThresholdSignatureCspVault for LocalCspVault<R, S, C, P>
 {
-    /// See the trait for documentation.
-    ///
-    /// Warning: The secret key store has no transactions, so in the event of
-    /// a failure it is possible that some but not all keys are written.
-    fn threshold_keygen_for_test(
+    fn threshold_sign(
         &self,
         algorithm_id: AlgorithmId,
-        threshold: ic_types::NumberOfNodes,
-        signatory_eligibilty: &[bool],
-    ) -> Result<(CspPublicCoefficients, Vec<Option<KeyId>>), CspThresholdSignatureKeygenError> {
-        match algorithm_id {
-            AlgorithmId::ThresBls12_381 => {
-                let seed = Seed::from_rng(&mut *self.rng_write_lock());
-                let (public_coefficients, secret_keys) =
-                    bls12381_clib::api::keygen(seed, threshold, signatory_eligibilty)?;
-                let key_ids: Vec<Option<KeyId>> = secret_keys
-                    .iter()
-                    .map(|secret_key_maybe| {
-                        secret_key_maybe.map(|secret_key| loop {
-                            let key_id = KeyId::from(self.rng_write_lock().gen::<[u8; 32]>());
-                            let csp_secret_key = CspSecretKey::ThresBls12_381(secret_key);
-                            let result = self.sks_write_lock().insert(key_id, csp_secret_key, None);
-                            if result.is_ok() {
-                                break key_id;
-                            }
-                        })
-                    })
-                    .collect();
-                let csp_public_coefficients = CspPublicCoefficients::Bls12_381(public_coefficients);
-                Ok((csp_public_coefficients, key_ids))
-            }
-            _ => Err(CspThresholdSignatureKeygenError::UnsupportedAlgorithm {
-                algorithm: algorithm_id,
-            }),
-        }
+        message: Vec<u8>,
+        key_id: KeyId,
+    ) -> Result<CspSignature, CspThresholdSignError> {
+        let start_time = self.metrics.now();
+        let result = self.threshold_sign_internal(algorithm_id, &message[..], key_id);
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::ThresholdSignature,
+            MetricsScope::Local,
+            "threshold_sign",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        result
     }
+}
 
-    fn threshold_sign(
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    LocalCspVault<R, S, C, P>
+{
+    fn threshold_sign_internal(
         &self,
         algorithm_id: AlgorithmId,
         message: &[u8],
         key_id: KeyId,
     ) -> Result<CspSignature, CspThresholdSignError> {
-        let start_time = self.metrics.now();
-        let result = match algorithm_id {
+        match algorithm_id {
             AlgorithmId::ThresBls12_381 => {
                 let maybe_csp_key = self.sks_read_lock().get(&key_id);
                 let csp_key = maybe_csp_key.ok_or({
@@ -120,13 +103,6 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
             _ => Err(CspThresholdSignError::UnsupportedAlgorithm {
                 algorithm: algorithm_id,
             }),
-        };
-        self.metrics.observe_duration_seconds(
-            MetricsDomain::ThresholdSignature,
-            MetricsScope::Local,
-            "threshold_sign",
-            start_time,
-        );
-        result
+        }
     }
 }

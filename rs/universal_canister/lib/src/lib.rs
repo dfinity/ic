@@ -7,64 +7,49 @@
 
 pub mod management;
 
-use hex_literal::hex;
+use lazy_static::lazy_static;
+use universal_canister::Ops;
 
-/// The binary of the universal canister as compiled from
-/// `rs/universal_canister/impl`.
-///
-/// For steps on how to produce it, please see the README in
-/// `rs/universal_canister`.
-pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal_canister.wasm");
-pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("c54cce351c28b6334bfe6e88066128fc51cd374306be6bbbbf58849c3c70e2b5");
+lazy_static! {
+    /// The WASM of the Universal Canister.
+    pub static ref UNIVERSAL_CANISTER_WASM: Vec<u8> = get_universal_canister_wasm();
+    pub static ref UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM: Vec<u8> = get_universal_canister_no_heartbeat_wasm();
+    pub static ref UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] = get_universal_canister_wasm_sha256();
+    pub static ref UNIVERSAL_CANISTER_SERIALIZED_MODULE: Vec<u8> = get_universal_canister_serialized_module();
+}
 
-/// Operands used in encoding UC payloads.
-enum Ops {
-    Noop = 0,
-    PushInt = 2,
-    PushBytes = 3,
-    ReplyDataAppend = 4,
-    Reply = 5,
-    Self_ = 6,
-    Reject = 7,
-    Caller = 8,
-    RejectMessage = 10,
-    RejectCode = 11,
-    IntToBlob = 12,
-    MessagePayload = 13,
-    StableSize = 15,
-    StableGrow = 16,
-    StableRead = 17,
-    StableWrite = 18,
-    DebugPrint = 19,
-    Trap = 20,
-    SetGlobal = 21,
-    GetGlobal = 22,
-    SetPreUpgrade = 24,
-    AcceptCycles = 30,
-    PushInt64 = 31,
-    CallNew = 32,
-    CallDataAppend = 33,
-    CallPerform = 35,
-    SetHeartbeat = 40,
-    AcceptMessage = 41,
-    SetInspectMessage = 42,
-    TrapIfEq = 43,
-    CallOnCleanup = 44,
-    StableFill = 45,
-    StableSize64 = 46,
-    StableGrow64 = 47,
-    StableRead64 = 48,
-    StableWrite64 = 49,
-    Int64ToBlob = 50,
-    AcceptCycles128 = 54,
-    CallCyclesAdd128 = 55,
-    MsgArgDataSize = 56,
-    MsgArgDataCopy = 57,
-    MsgCallerSize = 58,
-    MsgCallerCopy = 59,
-    MsgRejectMsgSize = 60,
-    MsgRejectMsgCopy = 61,
+pub fn get_universal_canister_wasm() -> Vec<u8> {
+    let uc_wasm_path = std::env::var("UNIVERSAL_CANISTER_WASM_PATH")
+        .expect("UNIVERSAL_CANISTER_WASM_PATH not set");
+    std::fs::read(&uc_wasm_path)
+        .unwrap_or_else(|e| panic!("Could not read WASM from {uc_wasm_path:?}: {e:?}"))
+}
+
+pub fn get_universal_canister_no_heartbeat_wasm() -> Vec<u8> {
+    let uc_no_heartbeat_wasm_path = std::env::var("UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH")
+        .expect("UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH not set");
+    std::fs::read(&uc_no_heartbeat_wasm_path)
+        .unwrap_or_else(|e| panic!("Could not read WASM from {uc_no_heartbeat_wasm_path:?}: {e:?}"))
+}
+
+pub fn get_universal_canister_wasm_sha256() -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    *Sha256::digest(UNIVERSAL_CANISTER_WASM.as_ref() as &[u8]).as_ref()
+}
+
+pub fn get_universal_canister_serialized_module() -> Vec<u8> {
+    let serialized_module_path = std::env::var("UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH")
+        .expect("UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH not set");
+    std::fs::read(&serialized_module_path).unwrap_or_else(|e| {
+        panic!("Could not read serialized module from from {serialized_module_path:?}: {e:?}")
+    })
+}
+
+fn cycles_into_parts<Cycles: Into<u128>>(cycles: Cycles) -> (u64, u64) {
+    let amount = cycles.into();
+    let high = (amount >> 64) as u64;
+    let low = (amount & 0xffff_ffff_ffff_ffff) as u64;
+    (high, low)
 }
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
@@ -90,11 +75,17 @@ pub fn call_args() -> CallArgs {
     CallArgs::default()
 }
 
+enum CallCycles {
+    Zero,
+    Cycles(u128),
+    Max,
+}
+
 /// A builder class for building payloads for the universal canister.
 ///
 /// Payloads for the UC encode `Ops` representing what instructions to
 /// execute.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct PayloadBuilder(Vec<u8>);
 
 impl PayloadBuilder {
@@ -133,6 +124,13 @@ impl PayloadBuilder {
         self
     }
 
+    /// Pop a blob from the stack and append it to the global data on the heap.
+    /// NOTE: This does _not_ correspond to a Wasm global.
+    pub fn append_to_global_data(mut self) -> Self {
+        self.0.push(Ops::AppendGlobal as u8);
+        self
+    }
+
     pub fn append_and_reply(mut self) -> Self {
         self = self.reply_data_append();
         self.reply()
@@ -145,6 +143,11 @@ impl PayloadBuilder {
 
     pub fn int64_to_blob(mut self) -> Self {
         self.0.push(Ops::Int64ToBlob as u8);
+        self
+    }
+
+    pub fn blob_length(mut self) -> Self {
+        self.0.push(Ops::BlobLength as u8);
         self
     }
 
@@ -167,6 +170,18 @@ impl PayloadBuilder {
         self.0.push(Ops::PushBytes as u8);
         self.0.extend_from_slice(&(data.len() as u32).to_le_bytes());
         self.0.extend_from_slice(data);
+        self
+    }
+
+    pub fn push_equal_bytes(mut self, byte: u32, length: u32) -> Self {
+        self = self.push_int(byte);
+        self = self.push_int(length);
+        self.0.push(Ops::PushEqualBytes as u8);
+        self
+    }
+
+    pub fn concat(mut self) -> Self {
+        self.0.push(Ops::Concat as u8);
         self
     }
 
@@ -203,11 +218,27 @@ impl PayloadBuilder {
         self
     }
 
-    pub fn stable64_write(mut self, offset: u64, data: u64, length: u64) -> Self {
+    /// Write a blob of `data` into the stable memory at the specified `offset`.
+    ///
+    /// The `offset` integer is expected to be on the stack first, followed by the
+    /// blob `data` to write.
+    pub fn stable_write_offset_blob(mut self) -> Self {
+        self.0.push(Ops::StableWrite as u8);
+        self
+    }
+
+    pub fn stable64_write(mut self, offset: u64, data: &[u8]) -> Self {
+        self = self.push_int64(offset);
+        self = self.push_bytes(data);
+        self.0.push(Ops::StableWrite64 as u8);
+        self
+    }
+
+    pub fn stable64_fill(mut self, offset: u64, data: u64, length: u64) -> Self {
         self = self.push_int64(offset);
         self = self.push_int64(data);
         self = self.push_int64(length);
-        self.0.push(Ops::StableWrite64 as u8);
+        self.0.push(Ops::StableFill64 as u8);
         self
     }
 
@@ -222,6 +253,40 @@ impl PayloadBuilder {
     pub fn set_heartbeat<P: AsRef<[u8]>>(mut self, payload: P) -> Self {
         self = self.push_bytes(payload.as_ref());
         self.0.push(Ops::SetHeartbeat as u8);
+        self
+    }
+
+    pub fn set_global_timer_method<P: AsRef<[u8]>>(mut self, payload: P) -> Self {
+        self = self.push_bytes(payload.as_ref());
+        self.0.push(Ops::SetGlobalTimerMethod as u8);
+        self
+    }
+
+    pub fn set_on_low_wasm_memory_method<P: AsRef<[u8]>>(mut self, payload: P) -> Self {
+        self = self.push_bytes(payload.as_ref());
+        self.0.push(Ops::SetOnLowWasmMemoryMethod as u8);
+        self
+    }
+
+    pub fn set_transform<P: AsRef<[u8]>>(mut self, payload: P) -> Self {
+        self = self.push_bytes(payload.as_ref());
+        self.0.push(Ops::SetTransform as u8);
+        self
+    }
+
+    pub fn api_global_timer_set(mut self, timestamp: u64) -> Self {
+        self = self.push_int64(timestamp);
+        self.0.push(Ops::ApiGlobalTimerSet as u8);
+        self
+    }
+
+    pub fn canister_status(mut self) -> Self {
+        self.0.push(Ops::CanisterStatus as u8);
+        self
+    }
+
+    pub fn canister_version(mut self) -> Self {
+        self.0.push(Ops::CanisterVersion as u8);
         self
     }
 
@@ -242,6 +307,11 @@ impl PayloadBuilder {
         self.call_simple(callee, "query", call_args)
     }
 
+    /// A composite query from a UC to another UC.
+    pub fn composite_query<P: AsRef<[u8]>>(self, callee: P, call_args: CallArgs) -> Self {
+        self.call_simple(callee, "composite_query", call_args)
+    }
+
     /// An update from a UC to another UC.
     pub fn inter_update<P: AsRef<[u8]>>(self, callee: P, call_args: CallArgs) -> Self {
         self.call_simple(callee, "update", call_args)
@@ -253,18 +323,81 @@ impl PayloadBuilder {
         method: S,
         call_args: CallArgs,
     ) -> Self {
-        self = self.call_helper(callee, method, call_args, None);
+        self = self.call_helper(callee, method, call_args, CallCycles::Zero, None);
         self
     }
 
-    pub fn call_with_cycles<P: AsRef<[u8]>, S: ToString>(
+    pub fn call_with_cycles<P: AsRef<[u8]>, S: ToString, Cycles: Into<u128>>(
         mut self,
         callee: P,
         method: S,
         call_args: CallArgs,
-        cycles: (u64, u64),
+        cycles: Cycles,
     ) -> Self {
-        self = self.call_helper(callee, method, call_args, Some(cycles));
+        self = self.call_helper(
+            callee,
+            method,
+            call_args,
+            CallCycles::Cycles(cycles.into()),
+            None,
+        );
+        self
+    }
+
+    pub fn call_with_max_cycles<P: AsRef<[u8]>, S: ToString>(
+        mut self,
+        callee: P,
+        method: S,
+        call_args: CallArgs,
+    ) -> Self {
+        self = self.call_helper(callee, method, call_args, CallCycles::Max, None);
+        self
+    }
+
+    pub fn call_simple_with_cycles_and_best_effort_response<
+        P: AsRef<[u8]>,
+        S: ToString,
+        Cycles: Into<u128>,
+    >(
+        mut self,
+        callee: P,
+        method: S,
+        call_args: CallArgs,
+        cycles: Cycles,
+        timeout_seconds: u32,
+    ) -> Self {
+        self = self.call_helper(
+            callee,
+            method,
+            call_args,
+            CallCycles::Cycles(cycles.into()),
+            Some(timeout_seconds),
+        );
+        self
+    }
+
+    pub fn call_new<P: AsRef<[u8]>, S: ToString>(
+        mut self,
+        callee: P,
+        method: S,
+        call_args: CallArgs,
+    ) -> Self {
+        self = self.push_bytes(callee.as_ref());
+        self = self.push_bytes(method.to_string().as_bytes());
+        self = self.push_bytes(call_args.on_reply.as_slice());
+        self = self.push_bytes(call_args.on_reject.as_slice());
+        self.0.push(Ops::CallNew as u8);
+        self
+    }
+
+    pub fn call_with_best_effort_response(mut self, timeout_seconds: u32) -> Self {
+        self = self.push_int(timeout_seconds);
+        self.0.push(Ops::CallWithBestEffortResponse as u8);
+        self
+    }
+
+    pub fn call_perform(mut self) -> Self {
+        self.0.push(Ops::CallPerform as u8);
         self
     }
 
@@ -273,25 +406,66 @@ impl PayloadBuilder {
         callee: P,
         method: S,
         call_args: CallArgs,
-        cycles: Option<(u64, u64)>,
+        cycles: CallCycles,
+        timeout_secounds: Option<u32>,
     ) -> Self {
+        let method_name = method.to_string();
+        let method_name_bytes = method_name.as_bytes();
+        let payload = call_args.other_side.as_slice();
         self = self.push_bytes(callee.as_ref());
-        self = self.push_bytes(method.to_string().as_bytes());
+        self = self.push_bytes(method_name_bytes);
         self = self.push_bytes(call_args.on_reply.as_slice());
         self = self.push_bytes(call_args.on_reject.as_slice());
         self.0.push(Ops::CallNew as u8);
-        self = self.push_bytes(call_args.other_side.as_slice());
-        self.0.push(Ops::CallDataAppend as u8);
+        match cycles {
+            CallCycles::Zero => {
+                self.0.extend_from_slice(payload);
+                self.0.push(Ops::CallDataAppend as u8);
+            }
+            CallCycles::Cycles(cycles) => {
+                self.0.extend_from_slice(payload);
+                self.0.push(Ops::CallDataAppend as u8);
+                let (high_amount, low_amount) = cycles_into_parts(cycles);
+                self = self.push_int64(high_amount);
+                self = self.push_int64(low_amount);
+                self.0.push(Ops::CallCyclesAdd128 as u8);
+            }
+            CallCycles::Max => {
+                self.0.extend_from_slice(payload);
+                self = self.push_int64(method_name_bytes.len() as u64);
+                self.0.push(Ops::CallDataAppendCyclesAddMax as u8);
+            }
+        }
         if let Some(on_cleanup) = call_args.on_cleanup {
             self = self.push_bytes(on_cleanup.as_slice());
             self.0.push(Ops::CallOnCleanup as u8);
         }
-        if let Some((high_amount, low_amount)) = cycles {
-            self = self.push_int64(high_amount);
-            self = self.push_int64(low_amount);
-            self.0.push(Ops::CallCyclesAdd128 as u8);
+        if let Some(timeout) = timeout_secounds {
+            self = self.push_int(timeout);
+            self.0.push(Ops::CallWithBestEffortResponse as u8);
         }
         self.0.push(Ops::CallPerform as u8);
+        self
+    }
+
+    pub fn call_cycles_add128(mut self, high_amount: u64, low_amount: u64) -> Self {
+        self = self.push_int64(high_amount);
+        self = self.push_int64(low_amount);
+        self.0.push(Ops::CallCyclesAdd128 as u8);
+        self
+    }
+
+    pub fn call_cycles_add(mut self, amount: u64) -> Self {
+        self = self.push_int64(amount);
+        self.0.push(Ops::CallCyclesAdd as u8);
+        self
+    }
+
+    /// This function should only be used for testing the system API `ic0.call_data_append`,
+    /// but *not* for testing inter-canister calls.
+    pub fn call_data_append(mut self, bytes: &[u8]) -> Self {
+        self = self.push_bytes(bytes);
+        self.0.push(Ops::CallDataAppend as u8);
         self
     }
 
@@ -338,10 +512,51 @@ impl PayloadBuilder {
         self
     }
 
+    /// Store the current stack data (in a global variable) on the heap.
+    /// NOTE: This does _not_ correspond to a Wasm global.
+    pub fn set_global_data_from_stack(mut self) -> Self {
+        self.0.push(Ops::SetGlobal as u8);
+        self
+    }
+
+    /// Succintly encode the following code:
+    /// `self.push_bytes(&wasm().push_bytes(&vec![42; length as usize]).blob_length().reply_int().build())`
+    /// The code pushes a payload to be executed by a callee onto the caller's stack.
+    /// The payload pushes a blob of a provided length onto the callee's stack and replies with its length to the caller.
+    /// Such a payload is useful in tests exercising inter-canister call size limits
+    /// since its encoding passed to the caller is succinct, but when interpreted by the caller,
+    /// it expands to an inter-canister call argument for the callee of an arbitrary size.
+    pub fn push_bytes_wasm_push_bytes_and_reply(mut self, length: u32) -> Self {
+        self = self.push_bytes(&[Ops::PushBytes as u8]);
+        self = self.push_bytes(&length.to_le_bytes()).concat();
+        self = self.push_equal_bytes(42, length).concat();
+        self.push_bytes(&wasm().blob_length().reply_int().build())
+            .concat()
+    }
+
     /// Get data (stored in a global variable) from the heap.
     /// NOTE: This does _not_ correspond to a Wasm global.
     pub fn get_global_data(mut self) -> Self {
         self.0.push(Ops::GetGlobal as u8);
+        self
+    }
+
+    /// Increases heap-allocated global u64 counter.
+    pub fn inc_global_counter(mut self) -> Self {
+        self.0.push(Ops::IncGlobalCounter as u8);
+        self
+    }
+
+    /// Gets the heap-allocated global u64 counter.
+    pub fn get_global_counter(mut self) -> Self {
+        self.0.push(Ops::GetGlobalCounter as u8);
+        self
+    }
+
+    /// Pushes the performance counter of the specified type on top of the stack.
+    pub fn performance_counter(mut self, _type: u32) -> Self {
+        self = self.push_int(_type);
+        self.0.push(Ops::GetPerformanceCounter as u8);
         self
     }
 
@@ -373,24 +588,41 @@ impl PayloadBuilder {
         self
     }
 
-    pub fn accept_cycles(mut self, num_cycles: u64) -> Self {
-        self = self.push_int64(num_cycles);
-        self.0.push(Ops::AcceptCycles as u8);
-        self
-    }
-
-    pub fn accept_cycles128(mut self, amount: (u64, u64)) -> Self {
-        let (amount_high, amount_low) = amount;
+    pub fn accept_cycles<Cycles: Into<u128>>(mut self, cycles: Cycles) -> Self {
+        let (amount_high, amount_low) = cycles_into_parts(cycles.into());
         self = self.push_int64(amount_high);
         self = self.push_int64(amount_low);
         self.0.push(Ops::AcceptCycles128 as u8);
         self
     }
 
+    pub fn mint_cycles128<Cycles: Into<u128>>(mut self, cycles: Cycles) -> Self {
+        let (amount_high, amount_low) = cycles_into_parts(cycles.into());
+        self = self.push_int64(amount_high);
+        self = self.push_int64(amount_low);
+        self.0.push(Ops::MintCycles128 as u8);
+        self
+    }
+
+    pub fn cycles_burn128<Cycles: Into<u128>>(mut self, cycles: Cycles) -> Self {
+        let (amount_high, amount_low) = cycles_into_parts(cycles.into());
+        self = self.push_int64(amount_high);
+        self = self.push_int64(amount_low);
+        self.0.push(Ops::CyclesBurn128 as u8);
+        self
+    }
+
     pub fn call<C: Into<Call>>(mut self, call: C) -> Self {
         let call = call.into();
         let call_args = call.get_call_args();
-        self = self.call_with_cycles(call.callee, call.method, call_args, call.cycles);
+        let cycles = call.cycles;
+        self = self.call_with_cycles(call.callee, call.method, call_args, cycles);
+        self
+    }
+
+    /// Pushes the method name onto the stack.
+    pub fn msg_method_name(mut self) -> Self {
+        self.0.push(Ops::MsgMethodName as u8);
         self
     }
 
@@ -415,12 +647,30 @@ impl PayloadBuilder {
         self
     }
 
+    /// Pushes the deadline of the message onto the stack.
+    pub fn msg_deadline(mut self) -> Self {
+        self.0.push(Ops::MsgDeadline as u8);
+        self
+    }
+
     /// Pushes a blob of the given size filled with the caller data bytes starting
     /// from the given offset.
     pub fn msg_caller_copy(mut self, offset: u32, size: u32) -> Self {
         self = self.push_int(offset);
         self = self.push_int(size);
         self.0.push(Ops::MsgCallerCopy as u8);
+        self
+    }
+
+    /// Pushes the caller info data blob onto the stack.
+    pub fn msg_caller_info_data(mut self) -> Self {
+        self.0.push(Ops::MsgCallerInfoData as u8);
+        self
+    }
+
+    /// Pushes the caller info signer blob onto the stack.
+    pub fn msg_caller_info_signer(mut self) -> Self {
+        self.0.push(Ops::MsgCallerInfoSigner as u8);
         self
     }
 
@@ -439,6 +689,164 @@ impl PayloadBuilder {
         self
     }
 
+    pub fn msg_cycles_available(mut self) -> Self {
+        self.0.push(Ops::CyclesAvailable as u8);
+        self
+    }
+
+    pub fn msg_cycles_available128(mut self) -> Self {
+        self.0.push(Ops::CyclesAvailable128 as u8);
+        self
+    }
+
+    pub fn msg_cycles_refunded(mut self) -> Self {
+        self.0.push(Ops::CyclesRefunded as u8);
+        self
+    }
+
+    pub fn msg_cycles_refunded128(mut self) -> Self {
+        self.0.push(Ops::CyclesRefunded128 as u8);
+        self
+    }
+
+    pub fn msg_cycles_accept(mut self, max_amount: i64) -> Self {
+        self = self.push_int64(max_amount as u64);
+        self.0.push(Ops::AcceptCycles as u8);
+        self
+    }
+
+    pub fn msg_cycles_accept128(mut self, max_amount_high: i64, max_amount_low: i64) -> Self {
+        self = self.push_int64(max_amount_high as u64);
+        self = self.push_int64(max_amount_low as u64);
+        self.0.push(Ops::AcceptCycles128 as u8);
+        self
+    }
+
+    pub fn root_key(mut self) -> Self {
+        self.0.push(Ops::RootKey as u8);
+        self
+    }
+
+    pub fn certified_data_set(mut self, data: &[u8]) -> Self {
+        self = self.push_bytes(data);
+        self.0.push(Ops::CertifiedDataSet as u8);
+        self
+    }
+
+    pub fn data_certificate_present(mut self) -> Self {
+        self.0.push(Ops::DataCertificatePresent as u8);
+        self
+    }
+
+    pub fn data_certificate(mut self) -> Self {
+        self.0.push(Ops::DataCertificate as u8);
+        self
+    }
+
+    /// Loops until the instruction counter is at least the specified amount.
+    pub fn instruction_counter_is_at_least(mut self, amount: u64) -> Self {
+        self = self.push_int64(amount);
+        self.0.push(Ops::InstructionCounterIsAtLeast as u8);
+        self
+    }
+
+    pub fn is_controller(mut self, data: &[u8]) -> Self {
+        self = self.push_bytes(data);
+        self.0.push(Ops::IsController as u8);
+        self
+    }
+
+    pub fn in_replicated_execution(mut self) -> Self {
+        self.0.push(Ops::InReplicatedExecution as u8);
+        self
+    }
+
+    pub fn cost_call(mut self, method_name_size: u64, payload_size: u64) -> Self {
+        self = self.push_int64(method_name_size);
+        self = self.push_int64(payload_size);
+        self.0.push(Ops::CostCall as u8);
+        self
+    }
+
+    pub fn cost_create_canister(mut self) -> Self {
+        self.0.push(Ops::CostCreateCanister as u8);
+        self
+    }
+
+    pub fn cost_http_request(mut self, request_size: u64, max_res_bytes: u64) -> Self {
+        self = self.push_int64(request_size);
+        self = self.push_int64(max_res_bytes);
+        self.0.push(Ops::CostHttpRequest as u8);
+        self
+    }
+
+    pub fn cost_http_request_v2(mut self, data: &[u8]) -> Self {
+        self = self.push_bytes(data);
+        self.0.push(Ops::CostHttpRequestV2 as u8);
+        self
+    }
+
+    pub fn cost_sign_with_ecdsa(mut self, data: &[u8], curve: u32) -> Self {
+        self = self.push_bytes(data);
+        self = self.push_int(curve);
+        self.0.push(Ops::CostSignWithEcdsa as u8);
+        self
+    }
+
+    pub fn cost_sign_with_schnorr(mut self, data: &[u8], algorithm: u32) -> Self {
+        self = self.push_bytes(data);
+        self = self.push_int(algorithm);
+        self.0.push(Ops::CostSignWithSchnorr as u8);
+        self
+    }
+
+    pub fn cost_vetkd_derive_key(mut self, data: &[u8], curve: u32) -> Self {
+        self = self.push_bytes(data);
+        self = self.push_int(curve);
+        self.0.push(Ops::CostVetkdDeriveKey as u8);
+        self
+    }
+
+    /// Push `int64` with current time. The time is given as nanoseconds since 1970-01-01.
+    pub fn time(mut self) -> Self {
+        self.0.push(Ops::Time as u8);
+        self
+    }
+
+    /// Push `int64` with canister cycles balance.
+    pub fn cycles_balance(mut self) -> Self {
+        self.0.push(Ops::CyclesBalance as u8);
+        self
+    }
+
+    /// Push `blob` with canister cycles balance.
+    pub fn cycles_balance128(mut self) -> Self {
+        self.0.push(Ops::CyclesBalance128 as u8);
+        self
+    }
+
+    /// Push `blob` with canister liquid cycles balance.
+    pub fn liquid_cycles_balance128(mut self) -> Self {
+        self.0.push(Ops::LiquidCyclesBalance128 as u8);
+        self
+    }
+
+    /// Allocates heap memory until the memory size is at least the specified amount in bytes.
+    pub fn memory_size_is_at_least(mut self, amount: u64) -> Self {
+        self = self.push_int64(amount);
+        self.0.push(Ops::MemorySizeIsAtLeast as u8);
+        self
+    }
+
+    /// Grows WASM memory by the specified amount of WASM pages.
+    /// This function should only be used to test WASM memory growth,
+    /// it does not substitute the Rust allocator.
+    pub fn wasm_memory_grow(mut self, pages: u32) -> Self {
+        self = self.push_int(pages);
+        self.0.push(Ops::WasmMemoryGrow as u8);
+        self
+    }
+
     pub fn build(self) -> Vec<u8> {
         self.0
     }
@@ -448,7 +856,7 @@ pub struct Call {
     callee: Vec<u8>,
     method: String,
     args: CallArgs,
-    cycles: (u64, u64),
+    cycles: u128,
 }
 
 impl CallInterface for Call {
@@ -465,7 +873,7 @@ impl Call {
             callee: callee_vec,
             method: method.into(),
             args: CallArgs::default(),
-            cycles: (0, 0),
+            cycles: 0,
         }
     }
 
@@ -477,11 +885,11 @@ impl Call {
 pub trait CallInterface {
     fn call(&mut self) -> &mut Call;
 
-    fn cycles(mut self, cycles: (u64, u64)) -> Self
+    fn cycles<Cycles: Into<u128>>(mut self, cycles: Cycles) -> Self
     where
         Self: std::marker::Sized,
     {
-        self.call().cycles = cycles;
+        self.call().cycles = cycles.into();
         self
     }
 
@@ -489,7 +897,9 @@ pub trait CallInterface {
     where
         Self: std::marker::Sized,
     {
-        self.call().args.other_side = payload.into();
+        self.call().args.other_side = PayloadBuilder::default()
+            .push_bytes(&payload.into())
+            .build();
         self
     }
 
@@ -536,13 +946,17 @@ impl From<PayloadBuilder> for Vec<u8> {
     }
 }
 
-/// Arguments to be passed into `call_simple` or `call_with_funds`.
+/// Arguments to be passed into `call_new`.
 #[derive(Clone)]
 pub struct CallArgs {
-    pub on_reply: Vec<u8>,
-    pub on_reject: Vec<u8>,
-    pub other_side: Vec<u8>,
-    pub on_cleanup: Option<Vec<u8>>,
+    /// Instructions to be exected by the caller upon reply.
+    on_reply: Vec<u8>,
+    /// Instructions to be exected by the caller upon reject.
+    on_reject: Vec<u8>,
+    /// Instructions to be exected by the caller to produce the payload to be executed by the callee.
+    other_side: Vec<u8>,
+    /// Instructions to be exected by the caller upon cleanup.
+    on_cleanup: Option<Vec<u8>>,
 }
 
 impl Default for CallArgs {
@@ -572,13 +986,22 @@ impl CallArgs {
         self
     }
 
+    // Computes instructions to be exected by the caller to produce the provided payload to be executed by the callee.
     pub fn other_side<C: Into<Vec<u8>>>(mut self, callback: C) -> Self {
-        self.other_side = callback.into();
+        self.other_side = PayloadBuilder::default()
+            .push_bytes(&callback.into())
+            .build();
+        self
+    }
+
+    // Stores provided instructions to be exected by the caller to produce the payload to be executed by the callee.
+    pub fn eval_other_side<C: Into<Vec<u8>>>(mut self, ops_bytes: C) -> Self {
+        self.other_side = ops_bytes.into();
         self
     }
 
     // The default on_reply callback.
-    // Replies to the caller with whatever arguments passed to it.
+    // Replies to the caller of the caller with whatever arguments passed to it.
     fn default_on_reply() -> Vec<u8> {
         PayloadBuilder::default()
             .message_payload()
@@ -588,7 +1011,7 @@ impl CallArgs {
     }
 
     // The default on_reject callback.
-    // Replies to the caller with the reject code.
+    // Replies to the caller of the caller with the reject code.
     fn default_on_reject() -> Vec<u8> {
         PayloadBuilder::default()
             .reject_code()
@@ -597,10 +1020,10 @@ impl CallArgs {
             .build()
     }
 
-    // The default payload to be executed by the callee.
-    // Replies with a message stating who the callee and the caller is.
+    // Computes instructions to be executed by the caller to produce the default payload to be executed by the callee.
+    // The default payload is to reply with a message stating who the callee and the caller is.
     fn default_other_side() -> Vec<u8> {
-        PayloadBuilder::default()
+        let callback = PayloadBuilder::default()
             .push_bytes(b"Hello ")
             .reply_data_append()
             .caller()
@@ -610,7 +1033,8 @@ impl CallArgs {
             .self_()
             .reply_data_append()
             .reply()
-            .build()
+            .build();
+        PayloadBuilder::default().push_bytes(&callback).build()
     }
 }
 
@@ -618,10 +1042,7 @@ impl CallArgs {
 mod test {
     use super::*;
     #[test]
-    fn check_hardcoded_sha256_is_up_to_date() {
-        assert_eq!(
-            UNIVERSAL_CANISTER_WASM_SHA256,
-            ic_crypto_sha::Sha256::hash(UNIVERSAL_CANISTER_WASM)
-        );
+    fn try_from_macro_works() {
+        assert_eq!(Ops::GetGlobalCounter, Ops::try_from(65).unwrap());
     }
 }

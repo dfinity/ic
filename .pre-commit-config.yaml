@@ -1,141 +1,53 @@
 repos:
-- repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v2.3.0
-  hooks:
-  - id: no-commit-to-branch
-    stages: [commit]
 - repo: local
   hooks:
-  # Do not use pygrep, but use a grep shell script.
-  # Otherwise, on OSX the command line argument limit will be exceeded
-  # whenever a user runs `pre-commit run -a`
-  - id: do-not-merge
-    name: Check for "DO NOT MERGE".
-    stages: [manual]  # Only run this on CI --- it's called DO NOT MERGE, not DO NOT COMMIT.
-    entry: gitlab-ci/src/checks/do-not-merge.sh
-    language: system
-    exclude: |
-        (?x)^(
-            .pre-commit-config.yaml|
-            checks.nix
-        )$
-
-  - id: DFINITY-capitalization
-    exclude: |
-        (?x)^(
-            checks\.nix|
-            .github/CODEOWNERS|
-            .pre-commit-config.yaml|
-            .*/user_map.csv
-        )$
-    name: Check for improper capitalization of "DFINITY".
-    stages: [manual]  # Only run this on CI, as it makes no sense to run on commit.
-    entry: gitlab-ci/src/checks/dfinity-capitalization.sh
-    language: system
-
-  - id: candid_changes_are_backwards_compatible
-    name: Candid changes are backwards compatible
-    entry: gitlab-ci/src/checks/candid_changes_are_backwards_compatible.py # TODO: Uncomment (once we figure out how to not cause lots of problems for people): --also-reverse
-    # Run against all .did files where the path contains nns or registry.
-    files: (nns|registry).+[.]did$
-    # Warning: Remember to put the pipe operator at the end of all lines except the last.
-    exclude: |
-        (?x)^(
-            # Is this just test data?
-            | rs/nns/empty\.did
-            # TODO: When SNS is released, delete the next line.
-            | rs/nns/sns-wasm/canister/sns-wasm\.did
-        )$
-    language: system
-    always_run: true
-
   - id: bazel_buildifier
-    name: Auto format bazel build files.
+    name: Auto format Bazel build files.
     stages: [commit]
     entry: bazel run //:buildifier
     files: \.bazel|\.bzl$
     language: system
 
-# The following repo is maintained by us at
-# https://gitlab.com/dfinity-lab/open/pre-commit-tools.
-- repo: https://gitlab.com/dfinity-lab/open/pre-commit-tools.git
-  rev: 78d95356302554075c79ae7b55faf9ef4a1cd94c
-  hooks:
-  - id: buf-checks
-    args: ["--config=buf.yaml"]
-    exclude: |
-      (?x)(
-      rs/sns/governance/proto |
-      )
-  - id: buf-lint
-    args: ["--config=buf.yaml"]
-  - id: shfmt
-    args: ["-w", "-i", "4", "-bn", "-ci"]
-  - id: nixpkgs-fmt
-    exclude: |
-        (?x)^(
-            .*/Cargo\.nix|
-            experimental/.*
-        )$
-  - id: rustfmt
-    exclude: |
-        (?x)(
-            experimental/|
-            rust_canisters/|
-            nix/overlays/|
-            gitlab-ci/|
-            crypto/internal/crypto_lib/fs_ni_dkg/miracl_core
-        ) # exclude these directories.
-  - id: ormolu
+  - id: bazel_shfmt_format
+    name: Auto format shell files
+    stages: [commit]
+    entry: bazel run //:shfmt-format
+    files: \.sh$
+    language: system
 
-- repo: https://github.com/ambv/black
-  rev: 20.8b1
-  hooks:
-  - id: black
-    additional_dependencies: ['click==8.0.4']
-    args:
-      - --line-length=120
+  - id: bazel_ruff_format
+    name: Auto format Python files
+    stages: [commit]
+    entry: bazel run //:ruff-format
+    files: \.py$
+    language: system
 
+  - id: bazel_protobuf_format
+    name: Auto format Protobuf files
+    stages: [commit]
+    entry: bazel run //:protobuf-format
+    files: \.proto$
+    language: system
 
-- repo: https://github.com/asottile/reorder_python_imports
-  rev: v2.4.0
-  hooks:
-  - id: reorder-python-imports
-    args:
-      - --application-directories=.:gitlab-ci/src/
+  - id: bazel_rust_format
+    name: Auto format Rust files
+    stages: [commit]
+    entry: bazel run //:rustfmt
+    files: \.rs$
+    language: system
 
-- repo: https://gitlab.com/pycqa/flake8
-  rev: '3.8.4'
-  hooks:
-  - id: flake8
-    args: ["--config=gitlab-ci/src/setup.cfg"]
-
-- repo: https://github.com/pre-commit/mirrors-mypy
-  rev: 'v0.961'
-  hooks:
-  - id: mypy
-    entry: "gitlab-ci/tools/run_mypy"
-    additional_dependencies: ['types-PyYAML==6.0.11', 'types-pytz==2022.2.1.0']
-    # Print the number of files as a sanity-check
+  - id: bazel_smoke
+    name: Run all bazel test smoke targets
+    entry: bazel test --config=precommit //...
+    pass_filenames: false
+    language: system
+    always_run: true
     verbose: true
 
-- repo: https://github.com/pycqa/pydocstyle
-  rev: 5.1.1
-  hooks:
-  - id: pydocstyle
-    args:
-      - --ignore=D100,D101,D102,D103,D104,D107,D203,D205,D212,D400,D401,D415
-        # The default for pydocstyle is to match only on files that end in .py,
-        # even if pre-commit specifies other files. This makes it so Python
-        # files will be recognized regardless of extension.
-      - --match=.*
-
-- repo: https://github.com/willthames/ansible-lint.git
-  rev: v4.2.0
-  hooks:
-    - id: ansible-lint
-      files: (^|/)testnet/.+\.(yaml|yml)$
-      exclude: |
-          (?x)^(
-              testnet/tests/.*|.*/docker-compose.yml|testnet/env/shared-config\.yml
-          )$
+  - id: bazel_rust_format_check
+    name: Run rust format check
+    entry: bazel build --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect --output_groups=rustfmt_checks //...
+    pass_filenames: false
+    language: system
+    always_run: true
+    verbose: true

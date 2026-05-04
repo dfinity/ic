@@ -1,13 +1,10 @@
 use crate::addressbook::AddressEntry;
-use bitcoin::network::message::NetworkMessage;
 use std::time::{Duration, SystemTime};
 use thiserror::Error;
 use tokio::{sync::mpsc::UnboundedSender, task::JoinHandle};
 
 /// This const represents how often a ping should be sent.
 const PING_INTERVAL: Duration = Duration::from_secs(120);
-/// This const represents how long the adapter should wait for a pong message.
-const PING_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// This enum is used to represent possible errors seen when utilizing
 /// the [Connection](crate::connection::Connection) struct.
@@ -25,7 +22,7 @@ pub enum ConnectionError {
 pub type ConnectionResult<T> = Result<T, ConnectionError>;
 
 /// This struct is used to initialize a [Connection](crate::connection::Connection).
-pub struct ConnectionConfig {
+pub struct ConnectionConfig<NetworkMessage> {
     /// This field contains the address of the connection.
     pub address_entry: AddressEntry,
     /// This field contains the handle to the task that is used for managing the
@@ -33,37 +30,27 @@ pub struct ConnectionConfig {
     pub handle: JoinHandle<()>,
     /// This field is used to send network messages to the related stream.
     pub writer: UnboundedSender<NetworkMessage>,
+    /// This field is used to specify ping timeout duration.
+    pub ping_timeout: Duration,
 }
 
 /// This enum represents the various states that the connection could be in.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum ConnectionState {
     /// This variant represents that the connection has not yet been connected.
-    Initializing {
-        /// This field represents when the connection state was changed to this value.
-        timestamp: SystemTime,
-    },
+    Initializing,
     /// This variant represents that the connection is now connected with the stream.
     Connected {
         /// This field represents when the connection state was changed to this value.
         timestamp: SystemTime,
     },
     /// This variant represents that the version handshake has been completed.
-    HandshakeComplete {
-        /// This field represents when the connection state was changed to this value.
-        timestamp: SystemTime,
-    },
+    HandshakeComplete,
     /// This variant represents that the adapter has discarded the connection
     /// due to bad behavior.
-    AdapterDiscarded {
-        /// This field represents when the connection state was changed to this value.
-        timestamp: SystemTime,
-    },
+    AdapterDiscarded,
     /// This variant represents that the connection has been dropped.
-    NodeDisconnected {
-        /// This field represents when the connection state was changed to this value.
-        timestamp: SystemTime,
-    },
+    NodeDisconnected,
     /// The connection has sent a `getaddr` message and is now waiting for a response.
     AwaitingAddresses {
         /// The timestamp when the state change occurred.
@@ -71,7 +58,7 @@ pub enum ConnectionState {
     },
 }
 
-/// This enum is used to track the status of wether or not
+/// This enum is used to track the status of whether or not
 /// a ping needs to be sent to the connected BTC node.
 /// The ping is used to maintain whether or not the connection is stable.
 #[derive(Clone, Debug)]
@@ -91,7 +78,7 @@ pub enum PingState {
 
 /// This struct is used to manage a connection with a Bitcoin node.
 #[derive(Debug)]
-pub struct Connection {
+pub struct Connection<NetworkMessage> {
     /// This field is to store the BTC node address that is accessed by
     /// this connection.
     address_entry: AddressEntry,
@@ -104,28 +91,32 @@ pub struct Connection {
     writer: UnboundedSender<NetworkMessage>,
     /// This field is used to track the current ping status.
     ping_state: PingState,
+    /// Ping timeout
+    ping_timeout: Duration,
 }
 
-impl Connection {
+impl<NetworkMessage> Connection<NetworkMessage> {
     /// This function creates a new connection that will be used to manage a
     /// connection to the BTC network.
-    pub fn new(config: ConnectionConfig) -> Self {
+    pub fn new(config: ConnectionConfig<NetworkMessage>) -> Self {
         let ConnectionConfig {
             address_entry,
             handle,
             writer,
+            ping_timeout,
         } = config;
 
         let timestamp = SystemTime::now();
 
         Self {
             address_entry,
+            state: ConnectionState::Initializing,
             handle,
-            state: ConnectionState::Initializing { timestamp },
             writer,
             ping_state: PingState::Idle {
                 last_pong_at: timestamp,
             },
+            ping_timeout,
         }
     }
 
@@ -183,9 +174,7 @@ impl Connection {
     }
 
     pub fn completed_handshake(&mut self) {
-        self.state = ConnectionState::HandshakeComplete {
-            timestamp: SystemTime::now(),
-        };
+        self.state = ConnectionState::HandshakeComplete;
     }
 
     /// Used to set the connections state to the AwaitingAddresses state.
@@ -198,9 +187,7 @@ impl Connection {
     /// This function is used to set a connection to a disconnected state,
     /// which will cause the ConnectionManager to clean up this connection.
     pub fn disconnect(&mut self) {
-        self.state = ConnectionState::NodeDisconnected {
-            timestamp: SystemTime::now(),
-        };
+        self.state = ConnectionState::NodeDisconnected;
         self.handle.abort();
     }
 
@@ -208,9 +195,7 @@ impl Connection {
     /// manager will use this to clean up the connection and remove the address
     /// from the address book.
     pub fn discard(&mut self) {
-        self.state = ConnectionState::AdapterDiscarded {
-            timestamp: SystemTime::now(),
-        };
+        self.state = ConnectionState::AdapterDiscarded;
         self.handle.abort();
     }
 
@@ -218,19 +203,13 @@ impl Connection {
     pub fn is_disconnected(&self) -> bool {
         matches!(
             self.state,
-            ConnectionState::NodeDisconnected { timestamp: _ }
-        ) || matches!(
-            self.state,
-            ConnectionState::AdapterDiscarded { timestamp: _ }
+            ConnectionState::NodeDisconnected | ConnectionState::AdapterDiscarded
         )
     }
 
     /// This function checks to see if the connection is available to receive messages.
     pub fn is_available(&self) -> bool {
-        matches!(
-            self.state,
-            ConnectionState::HandshakeComplete { timestamp: _ }
-        )
+        matches!(self.state, ConnectionState::HandshakeComplete)
     }
 
     /// This function checks to see if the connection needs to perform a ping.
@@ -259,55 +238,47 @@ impl Connection {
                 ping_sent_at,
                 nonce: _,
             } => match ping_sent_at.elapsed() {
-                Ok(duration) => duration > PING_TIMEOUT,
+                Ok(duration) => duration > self.ping_timeout,
                 // Somehow the connection has a system time from the future.
                 // In this case, the ping should be marked as timed out.
                 Err(_) => true,
             },
             PingState::Idle { last_pong_at: _ } => false,
         };
+        if timed_out {
+            eprintln!("ping timed out after = {}s", self.ping_timeout.as_secs());
+        }
         timed_out && self.is_available()
     }
 }
 
 #[cfg(test)]
 mod test {
-
+    use super::*;
     use std::net::SocketAddr;
     use std::str::FromStr;
-
     use tokio::{
         runtime::Runtime,
-        sync::mpsc::{unbounded_channel, UnboundedReceiver},
+        sync::mpsc::{UnboundedReceiver, unbounded_channel},
     };
 
-    use super::*;
+    type NetworkMessage =
+        bitcoin::p2p::message::NetworkMessage<bitcoin::block::Header, bitcoin::Block>;
 
-    impl ConnectionState {
-        /// This function is used to pull the timestamp from the various states.
-        fn get_timestamp(&self) -> &SystemTime {
-            match self {
-                ConnectionState::Initializing { timestamp } => timestamp,
-                ConnectionState::Connected { timestamp } => timestamp,
-                ConnectionState::HandshakeComplete { timestamp } => timestamp,
-                ConnectionState::AdapterDiscarded { timestamp } => timestamp,
-                ConnectionState::NodeDisconnected { timestamp } => timestamp,
-                ConnectionState::AwaitingAddresses { timestamp } => timestamp,
-            }
-        }
-    }
-
-    impl Connection {
+    impl Connection<NetworkMessage> {
         /// This function creates a new connection that will be used to manage a
         /// connection to the BTC network.
-        pub fn new_with_state(config: ConnectionConfig, state: ConnectionState) -> Self {
+        pub fn new_with_state(
+            config: ConnectionConfig<NetworkMessage>,
+            state: ConnectionState,
+            last_pong_at: SystemTime,
+        ) -> Self {
             let ConnectionConfig {
                 address_entry,
                 handle,
                 writer,
+                ping_timeout,
             } = config;
-
-            let last_pong_at = *state.get_timestamp();
 
             Self {
                 address_entry,
@@ -315,22 +286,28 @@ mod test {
                 state,
                 writer,
                 ping_state: PingState::Idle { last_pong_at },
+                ping_timeout,
             }
         }
     }
 
     fn make_connection_and_receiver(
         runtime: &Runtime,
-    ) -> (Connection, UnboundedReceiver<NetworkMessage>) {
+    ) -> (
+        Connection<NetworkMessage>,
+        UnboundedReceiver<NetworkMessage>,
+    ) {
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid string");
         let address_entry = AddressEntry::Discovered(addr);
         let handle = runtime.spawn(async {});
+        #[allow(clippy::disallowed_methods)]
         let (writer, reader) = unbounded_channel();
         (
             Connection::new(ConnectionConfig {
                 address_entry,
                 handle,
                 writer,
+                ping_timeout: crate::config::DEFAULT_REQUEST_TIMEOUT,
             }),
             reader,
         )
@@ -341,9 +318,7 @@ mod test {
         let runtime = tokio::runtime::Runtime::new().expect("runtime err");
         let (mut conn, _) = make_connection_and_receiver(&runtime);
         assert!(!conn.is_disconnected());
-        conn.state = ConnectionState::NodeDisconnected {
-            timestamp: SystemTime::now(),
-        };
+        conn.state = ConnectionState::NodeDisconnected;
         assert!(conn.is_disconnected());
     }
 
@@ -352,9 +327,7 @@ mod test {
         let runtime = tokio::runtime::Runtime::new().expect("runtime err");
         let (mut conn, _) = make_connection_and_receiver(&runtime);
         assert!(!conn.is_available());
-        conn.state = ConnectionState::HandshakeComplete {
-            timestamp: SystemTime::now(),
-        };
+        conn.state = ConnectionState::HandshakeComplete;
         assert!(conn.is_available());
     }
 
@@ -363,9 +336,6 @@ mod test {
         let runtime = tokio::runtime::Runtime::new().expect("runtime err");
         let (mut conn, _) = make_connection_and_receiver(&runtime);
         conn.disconnect();
-        assert!(matches!(
-            conn.state,
-            ConnectionState::NodeDisconnected { timestamp: _ }
-        ));
+        assert!(matches!(conn.state, ConnectionState::NodeDisconnected));
     }
 }

@@ -1,91 +1,106 @@
 [package]
 name = "ic-crypto"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-arrayvec = "0.5.1"
-async-trait = "0.1.41"
-base64 = "0.11.0"
-clap = { version = "3.1.18", features = ["derive"] }
-ed25519-consensus = "2.0.1"
-hex = "0.4.2"
+bincode = { workspace = true }
+clap = { workspace = true }
+hex = { workspace = true }
+ic-adapter-metrics-server = { path = "../monitoring/adapter_metrics/server" }
+ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
-ic-crypto-internal-basic-sig-ed25519 = { path = "internal/crypto_lib/basic_sig/ed25519" }
+ic-crypto-interfaces-sig-verification = { path = "interfaces/sig_verification" }
 ic-crypto-internal-csp = { path = "internal/crypto_service_provider" }
 ic-crypto-internal-logmon = { path = "internal/logmon" }
-ic-crypto-internal-multi-sig-bls12381 = { path = "internal/crypto_lib/multi_sig/bls12_381" }
 ic-crypto-internal-seed = { path = "internal/crypto_lib/seed" }
 ic-crypto-internal-threshold-sig-bls12381 = { path = "internal/crypto_lib/threshold_sig/bls12_381" }
-ic-crypto-internal-threshold-sig-ecdsa = { path = "internal/crypto_lib/threshold_sig/tecdsa" }
-ic-crypto-internal-basic-sig-iccsa = { path = "internal/crypto_lib/basic_sig/iccsa" }
-ic-crypto-internal-test-vectors = { path = "internal/test_vectors" }
+ic-crypto-internal-threshold-sig-canister-threshold-sig = { path = "internal/crypto_lib/threshold_sig/canister_threshold_sig" }
+ic-crypto-internal-bls12-381-type = { path = "internal/crypto_lib/bls12_381/type" }
+ic-crypto-internal-bls12-381-vetkd = { path = "internal/crypto_lib/bls12_381/vetkd" }
 ic-crypto-internal-types = { path = "internal/crypto_lib/types" }
+ic-crypto-standalone-sig-verifier = { path = "standalone-sig-verifier" }
 ic-crypto-tls-cert-validation = { path = "node_key_validation/tls_cert_validation" }
 ic-crypto-tls-interfaces = { path = "tls_interfaces" }
 ic-crypto-utils-basic-sig = { path = "utils/basic_sig" }
+ic-crypto-utils-tls = { path = "utils/tls" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
+ic-ed25519 = { path = "../../packages/ic-ed25519" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
-ic-registry-client-fake = { path = "../registry/fake" }
+ic-secp256k1 = { path = "../../packages/ic-secp256k1" }
+ic-secp256r1 = { path = "../../packages/ic-secp256r1" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
-ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
+ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
-ic-utils = { path = "../utils" }
-lazy_static = "1.4.0"
-num-integer = "0.1.41"
-openssl = "0.10.29"
-parking_lot = "0.12.1"
-prometheus = { version = "0.12.0", features = [ "process" ] }
-prost = "0.10.4"
-rand = "0.8"
-rand_chacha = "0.3"
-serde = { version = "1.0.99", features = [ "derive" ] }
-serde_bytes = "0.11"
-serde_cbor = "0.11.1"
-simple_asn1 = "0.6.1"
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
-strum = "0.23.0"
-strum_macros = "0.23.0"
-tempfile = "3.1.0"
-tokio = { version = "1.15.0", features = ["full"] }
-tokio-openssl = "0.6.0"
-# We use the `dangerous_configuration` flag for rustls to be able to set custom `ClientCertVerifier` and
-# `ServerCertVerifier` in order to verify node certificates.
-tokio-rustls = { version = "0.22.0", features = ["dangerous_configuration"] }
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
-
-[build-dependencies]
-prost-build = "0.10.4"
+ic-vetkeys = { workspace = true }
+parking_lot = { workspace = true }
+rustls = { workspace = true }
+serde = { workspace = true }
+slog = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
 
 [dev-dependencies]
-criterion = "0.3.4"
-ic-crypto-internal-basic-sig-der-utils = { path = "internal/crypto_lib/basic_sig/der_utils" }
-ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "internal/crypto_lib/basic_sig/ecdsa_secp256r1" }
-ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "internal/crypto_lib/basic_sig/ecdsa_secp256k1" }
+assert_matches = { workspace = true }
+criterion = { workspace = true }
+ic-certification-test-utils = { path = "../certification/test-utils" }
+ic-crypto-for-verification-only = { path = "for_verification_only" }
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "internal/crypto_lib/basic_sig/rsa_pkcs1" }
+ic-crypto-internal-basic-sig-ed25519 = { path = "internal/crypto_lib/basic_sig/ed25519" }
+ic-crypto-internal-csp-proptest-utils = { path = "internal/crypto_service_provider/csp_proptest_utils" }
 ic-crypto-internal-csp-test-utils = { path = "internal/csp_test_utils" }
+ic-crypto-internal-test-vectors = { path = "internal/test_vectors" }
+ic-crypto-internal-threshold-sig-canister-threshold-sig-test-utils = { path = "internal/crypto_lib/threshold_sig/canister_threshold_sig/test_utils" }
 ic-crypto-internal-tls = { path = "internal/crypto_lib/tls" }
-ic-crypto-sha = { path = "sha" }
-ic-crypto-tecdsa = { path = "tecdsa" }
+ic-crypto-node-key-generation = { path = "node_key_generation" }
+ic-crypto-node-key-validation = { path = "node_key_validation" }
+ic-crypto-sha2 = { path = "sha2" }
+ic-crypto-temp-crypto = { path = "temp_crypto" }
 ic-crypto-test-utils = { path = "test_utils" }
-ic-crypto-test-utils-keygen = { path = "test_utils/keygen" }
-ic-crypto-test-utils-multi-sigs = { path = "test_utils/multi_sigs" }
-ic-crypto-test-utils-threshold-sigs = { path = "test_utils/threshold_sigs" }
+ic-crypto-test-utils-canister-sigs = { path = "test_utils/canister_sigs" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "test_utils/canister_threshold_sigs" }
+ic-crypto-test-utils-csp = { path = "test_utils/csp" }
+ic-crypto-test-utils-keygen = { path = "test_utils/keygen" }
+ic-crypto-test-utils-keys = { path = "test_utils/keys" }
+ic-crypto-test-utils-local-csp-vault = { path = "test_utils/local_csp_vault" }
+ic-crypto-test-utils-metrics = { path = "test_utils/metrics" }
+ic-crypto-test-utils-multi-sigs = { path = "test_utils/multi_sigs" }
+ic-crypto-test-utils-ni-dkg = { path = "test_utils/ni-dkg" }
+ic-crypto-test-utils-reproducible-rng = { path = "test_utils/reproducible_rng" }
+ic-crypto-test-utils-tls = { path = "test_utils/tls" }
+ic-crypto-test-utils-vetkd = { path = "test_utils/vetkd" }
+ic-crypto-tree-hash = { path = "tree_hash" }
+ic-crypto-utils-canister-threshold-sig = { path = "utils/canister_threshold_sig" }
+ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
 ic-registry-client = { path = "../registry/client" }
-ic-types-test-utils = { path = "../types/types_test_utils" }
+ic-registry-client-fake = { path = "../registry/fake" }
+ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
+ic-test-utilities-in-memory-logger = { path = "../test_utilities/in_memory_logger" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
+ic-test-utilities-time = { path = "../test_utilities/time" }
+ic-types-test-utils = { path = "../types/types_test_utils" }
+k256 = { workspace = true }
 maplit = "1.0.2"
-mockall = "0.8.3"
-proptest = "1.0"
-proptest-derive = "0.3.0"
-rsa = "0.6.1"
-slog-async = "2.5.0"
+mockall = { workspace = true }
+proptest = { workspace = true }
+proptest-derive = { workspace = true }
+prost = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+rsa = { workspace = true }
+sha2 = { workspace = true }
 
 [[bench]]
 name = "basic_sig"
@@ -100,9 +115,29 @@ name = "threshold_sig"
 harness = false
 
 [[bench]]
+name = "idkg"
+harness = false
+
+[[bench]]
+name = "tecdsa"
+harness = false
+
+[[bench]]
 name = "ni_dkg"
 harness = false
 
 [[bench]]
 name = "multi_sig"
+harness = false
+
+[[bench]]
+name = "canister_sig"
+harness = false
+
+[[bench]]
+name = "tschnorr"
+harness = false
+
+[[bench]]
+name = "vetkd"
 harness = false

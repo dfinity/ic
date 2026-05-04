@@ -1,0 +1,34 @@
+[package]
+name = "ic-crypto-test-utils-ni-dkg"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+hex = { workspace = true }
+ic-crypto-internal-bls12-381-type = { path = "../../internal/crypto_lib/bls12_381/type" }
+ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
+ic-crypto-temp-crypto = { path = "../../temp_crypto" }
+ic-interfaces = { path = "../../../interfaces" }
+ic-interfaces-registry = { path = "../../../interfaces/registry" }
+ic-logger = { path = "../../../monitoring/logger" }
+ic-protobuf = { path = "../../../protobuf" }
+ic-registry-client-fake = { path = "../../../registry/fake" }
+ic-registry-client-helpers = { path = "../../../registry/helpers" }
+ic-registry-keys = { path = "../../../registry/keys" }
+ic-registry-proto-data-provider = { path = "../../../registry/proto_data_provider" }
+ic-test-utilities-in-memory-logger = { path = "../../../test_utilities/in_memory_logger" }
+ic-types = { path = "../../../types/types" }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+serde = { workspace = true }
+serde_cbor = {  workspace = true }
+
+[dev-dependencies]
+ic-crypto-test-utils = { path = "../../test_utils" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../test_utils/reproducible_rng" }
+ic-types-test-utils = { path = "../../../types/types_test_utils" }

@@ -28,11 +28,10 @@ fn test_root() {
     // Step 3: Inspect results.
     let build_metadata = match build_metadata {
         WasmResult::Reply(reply) => Decode!(&reply, String).unwrap(),
-        WasmResult::Reject(reject) => panic!("Reject: {:?}", reject),
+        WasmResult::Reject(reject) => panic!("Reject: {reject:?}"),
     };
     assert!(
         build_metadata.contains("crate_name: ic-nervous-system-common-test-canister"),
-        "build_metadata: {:?}",
-        build_metadata
+        "build_metadata: {build_metadata:?}"
     );
 }

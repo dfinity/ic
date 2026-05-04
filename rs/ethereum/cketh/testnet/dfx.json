@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "canisters": {
+    "minter": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/ethereum/cketh/minter:cketh_minter.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/ethereum/cketh/minter/cketh_minter.wasm.gz",
+      "candid": "../minter/cketh_minter.did",
+      "shrink": false
+    },
+    "ledger": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/ledger/ledger_canister_u256.wasm.gz",
+      "candid": "../../../ledger_suite/icrc1/ledger/ledger.did",
+      "shrink": false
+    },
+    "index": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/index-ng/index_ng_canister_u256.wasm.gz",
+      "candid": "../../../ledger_suite/icrc1/index-ng/index-ng.did",
+      "shrink": false
+    },
+    "archive": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/archive/archive_canister_u256.wasm.gz",
+      "candid": "../../../ledger_suite/icrc1/archive/archive.did",
+      "shrink": false
+    },
+    "orchestrator": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/ethereum/ledger-suite-orchestrator/ledger_suite_orchestrator_canister.wasm.gz",
+      "candid": "../../ledger-suite-orchestrator/ledger_suite_orchestrator.did",
+      "shrink": false
+    },
+    "ckusdc_ledger": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/ledger/ledger_canister_u256.wasm.gz",
+      "candid": "../../../ledger_suite/icrc1/ledger/ledger.did",
+      "shrink": false
+    },
+    "ckusdc_index": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/index-ng/index_ng_canister_u256.wasm.gz",
+      "candid": "../../../ledger_suite/icrc1/index-ng/index-ng.did",
+      "shrink": false
+    },
+    "cklink_ledger": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/ledger/ledger_canister_u256.wasm.gz",
+      "candid": "../../../ledger_suite/icrc1/ledger/ledger.did",
+      "shrink": false
+    },
+    "cklink_index": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/index-ng/index_ng_canister_u256.wasm.gz",
+      "candid": "../../../ledger_suite/icrc1/index-ng/index-ng.did",
+      "shrink": false
+    },
+    "ckpepe_ledger": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/ledger/ledger_canister_u256.wasm.gz",
+      "candid": "../../../ledger_suite/icrc1/ledger/ledger.did",
+      "shrink": false
+    },
+    "ckpepe_index": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/ledger_suite/icrc1/index-ng/index_ng_canister_u256.wasm.gz",
+      "candid": "../../../ledger_suite/icrc1/index-ng/index-ng.did",
+      "shrink": false
+    }
+  },
+  "defaults": {
+    "build": {
+      "packtool": "",
+      "args": ""
+    }
+  },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:8000",
+      "type": "ephemeral"
+    }
+  }
+}

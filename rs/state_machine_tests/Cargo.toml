@@ -1,25 +1,46 @@
 [package]
 name = "ic-state-machine-tests"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-candid = "0.8.1"
-ic-crypto-internal-seed = { path= "../crypto/internal/crypto_lib/seed" }
-ic-crypto-internal-threshold-sig-bls12381 = { path= "../crypto/internal/crypto_lib/threshold_sig/bls12_381" }
-ic-crypto-internal-types = { path= "../crypto/internal/crypto_lib/types" }
-ic-crypto-tree-hash = { path= "../crypto/tree_hash" }
+candid = { workspace = true }
+ciborium = { workspace = true }
+clap = { workspace = true }
+fs_extra = { workspace = true }
+hex = { workspace = true }
+ic-artifact-pool = { path = "../artifact_pool" }
+ic-btc-adapter-client = { path = "../bitcoin/client" }
+ic-btc-consensus = { path = "../bitcoin/consensus" }
 ic-config = { path = "../config" }
+ic-consensus = { path = "../consensus" }
+ic-consensus-cup-utils = { path = "../consensus/cup_utils" }
+ic-consensus-utils = { path = "../consensus/utils" }
+ic-crypto-iccsa = { path = "../crypto/iccsa" }
+ic-crypto-test-utils-crypto-returning-ok = { path = "../crypto/test_utils/crypto_returning_ok" }
+ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
+ic-crypto-test-utils-vetkd = { path = "../crypto/test_utils/vetkd" }
+ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
+ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
+ic-ed25519 = { path = "../../packages/ic-ed25519" }
+ic-error-types = { path = "../../packages/ic-error-types" }
 ic-execution-environment = { path = "../execution_environment/" }
-ic-error-types = { path = "../types/error_types" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-http-endpoints-public = { path = "../http_endpoints/public" }
+ic-https-outcalls-consensus = { path = "../https_outcalls/consensus" }
+ic-ingress-manager = { path = "../ingress_manager" }
 ic-interfaces = { path = "../interfaces" }
+ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
+ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
+ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-messaging = { path = "../messaging" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
@@ -28,27 +49,38 @@ ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
+ic-registry-resource-limits = { path = "../registry/resource_limits" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
+ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
+ic-secp256k1 = { path = "../../packages/ic-secp256k1" }
 ic-state-layout = { path = "../state_layout" }
 ic-state-manager = { path = "../state_manager" }
+ic-test-state-machine-client = "3.0"
+ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
+ic-test-utilities-time = { path = "../test_utilities/time" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types = { path = "../types/types" }
-serde = { version = "1.0.99", features = [ "derive" ] }
-serde_cbor = "0.11.1"
-slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
-slog-term = "2.6.0"
-tempfile = "3.1.0"
-tokio = { version = "1.15.0", features = ["full"] }
-wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
+ic-types-cycles = { path = "../types/cycles" }
+ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
+maplit = "1.0.2"
+rand = { workspace = true }
+rcgen = { workspace = true }
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+slog = { workspace = true }
+slog-term = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tower = { workspace = true }
+wat = { workspace = true }
 
 [dev-dependencies]
-ic-crypto-sha = { path = "../crypto/sha" }
+ic-base-types = { path = "../types/base_types" }
 ic-universal-canister = { path = "../universal_canister/lib" }
-libflate = "1.1.2"
-tokio = { version = "1.15.0", features = ["macros"] }
-
-[[test]]
-name = "execution_test"
+proptest = { workspace = true }
+test-strategy = "0.4.0"

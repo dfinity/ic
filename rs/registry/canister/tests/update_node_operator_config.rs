@@ -5,19 +5,19 @@ use std::collections::BTreeMap;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::pb::v1::{
-    registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
+    RegistryAtomicMutateRequest, RegistryMutation, registry_mutation,
 };
+use prost::Message;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
@@ -28,7 +28,7 @@ use maplit::btreemap;
 
 #[test]
 fn test_non_governance_users_cannot_update_node_operator_config() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // An attacker got a canister that is trying to pass for the proposals
         // canister...
         let attacker_canister = set_up_universal_canister(&runtime).await;
@@ -48,12 +48,12 @@ fn test_non_governance_users_cannot_update_node_operator_config() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![RegistryMutation {
                         mutation_type: registry_mutation::Type::Insert as i32,
                         key: node_operator_key.as_bytes().to_vec(),
-                        value: encode_or_panic(&node_operator_record),
+                        value: node_operator_record.encode_to_vec(),
                     }],
                     preconditions: vec![],
                 })
@@ -69,6 +69,7 @@ fn test_non_governance_users_cannot_update_node_operator_config() {
             node_provider_id: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
             ipv6: None,
             set_ipv6_to_none: None,
+            max_rewardable_nodes: None,
         };
 
         // The anonymous end-user tries to update a node operator, bypassing
@@ -104,7 +105,7 @@ fn test_non_governance_users_cannot_update_node_operator_config() {
 
 #[test]
 fn test_accepted_proposal_mutates_the_registry() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let node_operator_key = make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL);
         let node_operator_record = NodeOperatorRecord {
             node_operator_principal_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
@@ -115,12 +116,12 @@ fn test_accepted_proposal_mutates_the_registry() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![RegistryMutation {
                         mutation_type: registry_mutation::Type::Insert as i32,
                         key: node_operator_key.as_bytes().to_vec(),
-                        value: encode_or_panic(&node_operator_record),
+                        value: node_operator_record.encode_to_vec(),
                     }],
                     preconditions: vec![],
                 })
@@ -148,6 +149,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             node_provider_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
             ipv6: Some("0:0:0:0:0:0:0:0".into()),
             set_ipv6_to_none: None,
+            max_rewardable_nodes: None,
         };
 
         // ...causing a panic
@@ -164,11 +166,12 @@ fn test_accepted_proposal_mutates_the_registry() {
         payload = UpdateNodeOperatorConfigPayload {
             node_operator_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
             node_allowance: Some(10),
-            dc_id: Some("AN1".into()),
+            dc_id: Some("an1".into()),
             rewardable_nodes: rewardable_nodes.clone(),
             node_provider_id: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
             ipv6: Some("0:0:0:0:0:0:0:0".into()),
             set_ipv6_to_none: None,
+            max_rewardable_nodes: None,
         };
 
         assert!(
@@ -188,10 +191,11 @@ fn test_accepted_proposal_mutates_the_registry() {
             NodeOperatorRecord {
                 node_operator_principal_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
                 node_allowance: 10,
-                dc_id: "AN1".into(),
+                dc_id: "an1".into(),
                 rewardable_nodes,
                 node_provider_principal_id: (*TEST_NEURON_2_OWNER_PRINCIPAL).to_vec(),
                 ipv6: Some("0:0:0:0:0:0:0:0".into()),
+                max_rewardable_nodes: BTreeMap::new(),
             },
         );
 
@@ -204,7 +208,7 @@ fn test_accepted_proposal_mutates_the_registry() {
 /// rs/registry/canister/src/mutations/do_update_node_operator_config.rs
 #[test]
 fn test_set_ipv6_none() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let node_operator_key = make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL);
         let node_operator_record = NodeOperatorRecord {
             node_operator_principal_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
@@ -215,12 +219,12 @@ fn test_set_ipv6_none() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![RegistryMutation {
                         mutation_type: registry_mutation::Type::Insert as i32,
                         key: node_operator_key.as_bytes().to_vec(),
-                        value: encode_or_panic(&node_operator_record),
+                        value: node_operator_record.encode_to_vec(),
                     }],
                     preconditions: vec![],
                 })
@@ -238,6 +242,7 @@ fn test_set_ipv6_none() {
             node_provider_id: None,
             ipv6: None,
             set_ipv6_to_none: None,
+            max_rewardable_nodes: None,
         };
 
         assert!(
@@ -267,6 +272,7 @@ fn test_set_ipv6_none() {
             node_provider_id: None,
             ipv6: None,
             set_ipv6_to_none: Some(true),
+            max_rewardable_nodes: None,
         };
         assert!(
             forward_call_via_universal_canister(

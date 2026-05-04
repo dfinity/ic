@@ -1,9 +1,10 @@
-use ic_base_types::SubnetId;
+use ic_base_types::{PrincipalId, SubnetId};
 
-#[derive(candid::CandidType, candid::Deserialize, Clone, Debug)]
+#[derive(Clone, Debug, candid::CandidType, candid::Deserialize)]
 pub struct SnsWasmCanisterInitPayload {
     pub sns_subnet_ids: Vec<SubnetId>,
     pub access_controls_enabled: bool,
+    pub allowed_principals: Vec<PrincipalId>,
 }
 
 pub struct SnsWasmCanisterInitPayloadBuilder {
@@ -17,6 +18,7 @@ impl SnsWasmCanisterInitPayloadBuilder {
             payload: SnsWasmCanisterInitPayload {
                 sns_subnet_ids: vec![],
                 access_controls_enabled: false,
+                allowed_principals: vec![],
             },
         }
     }

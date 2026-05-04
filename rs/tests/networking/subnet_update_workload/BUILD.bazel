@@ -1,0 +1,30 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_library(
+    name = "subnet_update_workload",
+    testonly = True,
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_networking_subnet_update_workload",
+    crate_root = "src/lib.rs",
+    deps = [
+        # Keep sorted.
+        "//rs/interfaces/registry",
+        "//rs/protobuf",
+        "//rs/registry/canister",
+        "//rs/registry/keys",
+        "//rs/registry/nns_data_provider",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:ic-agent",
+        "@crate_index//:slog",
+        "@crate_index//:slog-async",
+        "@crate_index//:slog-term",
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-util",
+        "@crate_index//:url",
+    ],
+)

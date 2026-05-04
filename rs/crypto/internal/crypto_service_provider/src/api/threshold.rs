@@ -2,18 +2,13 @@
 
 use crate::api::CspThresholdSignError;
 use crate::types::{CspPublicCoefficients, CspSecretKeyConversionError, CspSignature};
-
-#[cfg(test)]
-use crate::KeyId;
-
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    CspFsEncryptionPop, CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
+    CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::{AlgorithmId, CryptoResult};
-use ic_types::{NodeId, NodeIndex, NumberOfNodes};
+use ic_types::{NodeIndex, NumberOfNodes};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -39,48 +34,11 @@ pub mod threshold_sign_error;
 /// intentionally made non-static (i.e., they take a `&self` parameter) so that
 /// mocking of this trait (for testing purposes) is possible.
 pub trait ThresholdSignatureCspClient {
-    /// Generates threshold keys.
-    ///
-    /// This interface is primarily of interest for testing and demos.
-    ///
-    /// # Arguments
-    /// * `algorithm_id` indicates the algorithms to be used in the key
-    ///   generation.
-    /// * `threshold` is the minimum number of signatures that can be combined
-    ///   to make a valid threshold signature.
-    /// * `signatory_eligibility` is a boolean indicating, for each signatory,
-    ///   whether they should receive a key.  The `i`th signatory should receive
-    ///   a key if and only if `signatory_eligibility[i]==true`.
-    /// # Returns
-    /// * `CspPublicCoefficients` can be used by the caller to verify
-    ///   signatures.
-    /// * `Vec<Option<KeyId>>` contains key identifiers.  The vector has the
-    ///   same length as the input `signatory_eligibility` and the i'th entry
-    ///   contains a secret key if and only if `signatory_eligibility[i]` is
-    ///   `true`.
-    /// # Panics
-    /// * An implementation MAY panic if it is unable to access the secret key
-    ///   store to save keys or if it cannot access a suitable random number
-    ///   generator.
-    /// # Errors
-    /// * If `threshold > signatory_eligibility.len()` then it is impossible for
-    ///   the signatories to create a valid combined signature, so
-    ///   implementations MUST return an error.
-    /// * An implementation MAY return an error if it is temporarily unable to
-    ///   generate and store keys.
-    #[cfg(test)]
-    fn threshold_keygen(
-        &self,
-        algorithm_id: AlgorithmId,
-        threshold: NumberOfNodes,
-        signatory_eligibility: &[bool],
-    ) -> CryptoResult<(CspPublicCoefficients, Vec<Option<KeyId>>)>;
-
     /// Signs with a threshold key
     fn threshold_sign(
         &self,
         algorithm_id: AlgorithmId,
-        message: &[u8],
+        message: Vec<u8>,
         public_coefficients: CspPublicCoefficients,
     ) -> Result<CspSignature, CspThresholdSignError>;
 
@@ -190,36 +148,7 @@ pub trait ThresholdSignatureCspClient {
 ///   resharing DKG.
 /// * The arguments and calculation differ slightly at some of the steps in the
 ///   protocol.
-///
-/// TODO(CRP-563): Prefix the NiDkg methods with nidkg_.
-///
-/// TODO(CRP-564): Remove the csp_ prefix from argument names.
 pub trait NiDkgCspClient {
-    /// Generates a forward secure key pair used to encrypt threshold key shares
-    /// in transmission.
-    ///
-    /// Note: FS keys are NOT threshold keys.
-    ///
-    /// The secret key is stored in the secret key store.  It is not returned by
-    /// the method as that would violate the principle that secret keys never
-    /// leave the CSP.  The public key and the proof of possession are returned.
-    /// The public key can be used to verify signatures, it also needs to be
-    /// provided when signing as it is used to retrieve the secret key from the
-    /// key store.
-    ///
-    /// # Arguments
-    /// * `node_id` is the identity of the node generating the public key.
-    /// # Panics
-    /// This method MUST panic if it is unable to store the secret key.
-    /// # Errors
-    /// This method is infallible.  An error structure is included in the
-    /// signature only for future use.
-    fn create_forward_secure_key_pair(
-        &self,
-        algorithm_id: AlgorithmId,
-        node_id: NodeId,
-    ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), ni_dkg_errors::CspDkgCreateFsKeyError>;
-
     /// Updates the epoch of the (forward-secure) DKG dealing decryption key
     /// (i.e., the secret part of the DKG dealing encryption key) so that it
     /// cannot be used at epochs that are smaller than the given epoch.
@@ -232,7 +161,7 @@ pub trait NiDkgCspClient {
     /// # Errors
     /// This method SHALL return an error if:
     /// * the public key is not well formed. (`MalformedPublicKeyError`)
-    /// This method SHALL NOT return an error if:
+    ///   This method SHALL NOT return an error if:
     /// * the forward secure epoch is already higher than the epoch provided in
     ///   the method argument.  In this case the secret key is unchanged.
     fn update_forward_secure_epoch(
@@ -245,7 +174,6 @@ pub trait NiDkgCspClient {
     ///
     /// # Arguments
     /// * `algorithm_id` selects the algorithm suite to use for the scheme.
-    /// * `dkg_id` is the identifier for the distributed key being generated.
     /// * `dealer_index` the index associated with the dealer.
     /// * `threshold` is the minimum number of nodes required to generate a
     ///   valid threshold signature.
@@ -269,7 +197,6 @@ pub trait NiDkgCspClient {
     fn create_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -306,10 +233,14 @@ pub trait NiDkgCspClient {
     /// * the receiver indices are not 0..num_receivers-1 inclusive.
     ///   (`MisnumberedReceiverError`)
     /// * one of the receiver keys is invalid. (`MalformedFsPublicKeyError`)
+    /// * the key ID of the secret key to be reshared could not be computed.
+    ///   (`ReshareKeyIdComputationError`)
     /// * the key to be reshared is not present or malformed.
-    ///   (`ReshareKeyNotFoundError`, `MalformedReshareSecretKeyError`)
+    ///   (`ReshareKeyNotInSecretKeyStoreError`, `MalformedReshareSecretKeyError`)
     /// * the number of public coefficients or receiver keys is unsupported by
     ///   this machine. (`SizeError`)
+    /// * a transient error occurred while computing the resharing dealing (e.g., there was a
+    ///   problem communicating with the remote CSP vault). (`TransientInternalError`)
     #[allow(clippy::too_many_arguments)]
     fn create_resharing_dealing(
         &self,
@@ -356,11 +287,9 @@ pub trait NiDkgCspClient {
     ///   error. (`InvalidDealingError`)
     /// * the number of receiver keys is unsupported by this machine.
     ///   (`SizeError`)
-    #[allow(clippy::too_many_arguments)]
     fn verify_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        dkg_id: NiDkgId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -411,11 +340,9 @@ pub trait NiDkgCspClient {
     ///   (`InvalidDealingError`)
     /// * the number of receiver keys is unsupported by this machine.
     ///   (`SizeError`)
-    #[allow(clippy::too_many_arguments)] // The arguments are per the spec.
     fn verify_resharing_dealing(
         &self,
         algorithm_id: AlgorithmId,
-        dkg_id: NiDkgId,
         dealer_resharing_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
@@ -528,10 +455,14 @@ pub trait NiDkgCspClient {
     ///   (`MalformedSecretKeyError`)
     /// * the transcript is malformed. (`MalformedTranscriptError`)
     /// * it is unable to compute the secret key. (`InvalidTranscriptError`)
+    /// * the public key is malformed. (`MalformedPublicKeyError`)
+    /// * there is an internal error, e.g., a serialization error while inserting the threshold
+    ///   secret key into the key store. (`InternalError`)
+    /// * there is a transient internal error, e.g., an RPC error communicating with the remote CSP
+    ///   vault. (`TransientInternalError`)
     fn load_threshold_signing_key(
         &self,
         algorithm_id: AlgorithmId,
-        dkg_id: NiDkgId,
         epoch: Epoch,
         csp_transcript: CspNiDkgTranscript,
         receiver_index: NodeIndex,
@@ -546,8 +477,23 @@ pub trait NiDkgCspClient {
     /// There is no guarantee that there are secret keys matching all the listed
     /// public coefficients.  If this method is requested to retain a key that
     /// is not in the secret key store, that key will be ignored.
+    ///
+    /// # Arguments
+    /// * `active_keys` contains the public coefficients of the active keys that need to be kept.
+    ///
+    /// # Errors
+    /// This method SHALL return an error if:
+    /// * a key ID could not be computed from the public coefficients. (`KeyIdInstantiationError`)
+    /// * a transient internal error occurred while retaining the threshold keys, e.g., while
+    ///   communicating with the remote CSP vault. (`TransientInternalError`)
     fn retain_threshold_keys_if_present(
         &self,
         active_keys: BTreeSet<CspPublicCoefficients>,
     ) -> Result<(), ni_dkg_errors::CspDkgRetainThresholdKeysError>;
+
+    /// Make a metrics observation of the minimum epoch in active transcripts.
+    fn observe_minimum_epoch_in_active_transcripts(&self, epoch: Epoch);
+
+    /// Make a metrics observation of the epoch in loaded transcript.
+    fn observe_epoch_in_loaded_transcript(&self, epoch: Epoch);
 }

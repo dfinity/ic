@@ -1,8 +1,13 @@
 mod constants;
+pub mod doge;
 mod header;
+#[cfg(test)]
+mod tests;
 
+pub use crate::constants::max_target;
 pub use crate::header::{
-    is_beyond_last_checkpoint, validate_header, HeaderStore, ValidateHeaderError,
+    AuxPowHeaderValidator, HeaderStore, HeaderValidator, ValidateAuxPowHeaderError,
+    ValidateHeaderError, validate_header,
 };
 
 type BlockHeight = u32;

@@ -1,0 +1,38 @@
+# See https://github.com/editorconfig/editorconfig/wiki/EditorConfig-Properties
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# See https://doc.rust-lang.org/beta/style-guide/index.html#indentation-and-line-width
+[*.rs]
+indent_size = 4
+max_line_length = 100
+
+# See https://bazel.build/build/style-guide
+[*.bazel]
+indent_size = 4
+quote_type = double
+
+# See https://peps.python.org/pep-0008/
+[*.py]
+indent_size = 4
+
+# See https://protobuf.dev/programming-guides/style/
+[*.proto]
+indent_size = 2
+quote_type = double
+max_line_length = 80
+
+[Makefile]
+indent_size = 8
+indent_style = tab
+
+[*.{json,yaml,yml}]
+indent_style = space
+indent_size = 2

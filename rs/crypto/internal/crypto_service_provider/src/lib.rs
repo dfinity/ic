@@ -5,135 +5,53 @@
 //! Interface for the cryptographic service provider
 
 pub mod api;
+#[cfg(test)]
+pub mod builder_for_test;
 pub mod canister_threshold;
+#[cfg(test)]
 pub mod imported_test_utils;
-pub mod imported_utilities;
 pub mod key_id;
 pub mod keygen;
 pub mod public_key_store;
 pub mod secret_key_store;
 mod signer;
 pub mod threshold;
-pub mod tls;
 pub mod types;
 pub mod vault;
 
 pub use crate::vault::api::TlsHandshakeCspVault;
 pub use crate::vault::local_csp_vault::LocalCspVault;
+pub use crate::vault::remote_csp_vault::RemoteCspVault;
 pub use crate::vault::remote_csp_vault::run_csp_vault_server;
-use crate::vault::remote_csp_vault::RemoteCspVault;
 
-use crate::api::{
-    CspIDkgProtocol, CspKeyGenerator, CspSecretKeyStoreChecker, CspSigVerifier, CspSigner,
-    CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner, CspTlsHandshakeSignerProvider,
-    NiDkgCspClient, NodePublicKeyData, ThresholdSignatureCspClient,
-};
-use crate::keygen::{forward_secure_key_id, public_key_hash_as_key_id};
-use crate::public_key_store::read_node_public_keys;
+use crate::api::{CspSigner, NiDkgCspClient, ThresholdSignatureCspClient};
 use crate::secret_key_store::SecretKeyStore;
-use crate::types::CspPublicKey;
+use crate::types::{CspPublicKey, ExternalPublicKeys};
 use crate::vault::api::CspVault;
-use ic_config::crypto::{CryptoConfig, CspVaultType};
+use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
-use ic_logger::{info, new_logger, replica_logger::no_op_logger, ReplicaLogger};
-use ic_protobuf::crypto::v1::NodePublicKeys;
+use ic_logger::{ReplicaLogger, new_logger, replica_logger::no_op_logger};
 use key_id::KeyId;
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use rand::{CryptoRng, Rng};
-use secret_key_store::proto_store::ProtoSecretKeyStore;
-use std::convert::TryFrom;
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
 #[cfg(test)]
 mod tests;
 
-const SKS_DATA_FILENAME: &str = "sks_data.pb";
-const CANISTER_SKS_DATA_FILENAME: &str = "canister_sks_data.pb";
-
 /// Describes the interface of the crypto service provider (CSP), e.g. for
 /// signing and key generation. The Csp struct implements this trait.
-pub trait CryptoServiceProvider:
-    CspSigner
-    + CspSigVerifier
-    + CspKeyGenerator
-    + ThresholdSignatureCspClient
-    + NiDkgCspClient
-    + CspIDkgProtocol
-    + CspThresholdEcdsaSigner
-    + CspThresholdEcdsaSigVerifier
-    + CspSecretKeyStoreChecker
-    + CspTlsHandshakeSignerProvider
-    + NodePublicKeyData
-{
-}
+pub trait CryptoServiceProvider: CspSigner + ThresholdSignatureCspClient + NiDkgCspClient {}
 
-impl<T> CryptoServiceProvider for T where
-    T: CspSigner
-        + CspSigVerifier
-        + CspKeyGenerator
-        + ThresholdSignatureCspClient
-        + CspIDkgProtocol
-        + CspThresholdEcdsaSigner
-        + CspThresholdEcdsaSigVerifier
-        + NiDkgCspClient
-        + CspSecretKeyStoreChecker
-        + CspTlsHandshakeSignerProvider
-        + NodePublicKeyData
-{
-}
-
-struct SksKeyIds {
-    node_signing_key_id: Option<KeyId>,
-    dkg_dealing_encryption_key_id: Option<KeyId>,
-}
-
-struct PublicKeyData {
-    node_public_keys: NodePublicKeys,
-    sks_key_ids: SksKeyIds,
-}
-
-impl PublicKeyData {
-    fn new(node_public_keys: NodePublicKeys) -> Self {
-        let node_signing_key_id = match node_public_keys.node_signing_pk.to_owned() {
-            None => None,
-            Some(node_signing_pk) => {
-                let csp_pk = CspPublicKey::try_from(node_signing_pk)
-                    .expect("Unsupported public key proto as node signing public key.");
-                Some(public_key_hash_as_key_id(&csp_pk))
-            }
-        };
-
-        let dkg_dealing_encryption_key_id = match node_public_keys
-            .dkg_dealing_encryption_pk
-            .to_owned()
-        {
-            None => None,
-            Some(dkg_dealing_encryption_pk) => {
-                let csp_pk = CspFsEncryptionPublicKey::try_from(dkg_dealing_encryption_pk)
-                    .expect("Unsupported public key proto as dkg dealing encryption public key.");
-                Some(forward_secure_key_id(&csp_pk))
-            }
-        };
-        let sks_key_ids = SksKeyIds {
-            node_signing_key_id,
-            dkg_dealing_encryption_key_id,
-        };
-        PublicKeyData {
-            node_public_keys,
-            sks_key_ids,
-        }
-    }
-}
+impl<T> CryptoServiceProvider for T where T: CspSigner + ThresholdSignatureCspClient + NiDkgCspClient
+{}
 
 /// Implements `CryptoServiceProvider` that uses a `CspVault` for
 /// storing and managing secret keys.
 pub struct Csp {
     csp_vault: Arc<dyn CspVault>,
-    public_key_data: PublicKeyData,
     logger: ReplicaLogger,
+    metrics: Arc<CryptoMetrics>,
 }
 
 /// This lock provides the option to add metrics about lock acquisition times.
@@ -160,6 +78,12 @@ impl<T> CspRwLock<T> {
         // Note: The name will appear on metric dashboards and may be used in alerts, do
         // not change this unless you are also updating the monitoring.
         Self::new(content, "canister_secret_key_store".to_string(), metrics)
+    }
+
+    pub fn new_for_public_key_store(content: T, metrics: Arc<CryptoMetrics>) -> Self {
+        // Note: The name will appear on metric dashboards and may be used in alerts, do
+        // not change this unless you are also updating the monitoring.
+        Self::new(content, "public_key_store".to_string(), metrics)
     }
 
     fn new(content: T, lock_name: String, metrics: Arc<CryptoMetrics>) -> Self {
@@ -199,151 +123,31 @@ impl Csp {
     /// # Panics
     /// Panics if the `config`'s vault type is `UnixSocket` and
     /// `tokio_runtime_handle` is `None`.
-    pub fn new(
+    pub fn new_from_config(
         config: &CryptoConfig,
         tokio_runtime_handle: Option<tokio::runtime::Handle>,
         logger: Option<ReplicaLogger>,
         metrics: Arc<CryptoMetrics>,
     ) -> Self {
-        match &config.csp_vault_type {
-            CspVaultType::InReplica => Self::new_with_in_replica_vault(config, logger, metrics),
-            CspVaultType::UnixSocket(socket_path) => Self::new_with_unix_socket_vault(
-                socket_path,
-                tokio_runtime_handle.expect("missing tokio runtime handle"),
-                config,
-                logger,
-            ),
-        }
+        let logger = logger.unwrap_or_else(no_op_logger);
+        let vault = vault::vault_from_config(
+            config,
+            tokio_runtime_handle,
+            new_logger!(&logger),
+            Arc::clone(&metrics),
+        );
+        Self::new_from_vault(vault, logger, metrics)
     }
 
-    fn new_with_in_replica_vault(
-        config: &CryptoConfig,
-        logger: Option<ReplicaLogger>,
+    pub fn new_from_vault(
+        vault: Arc<dyn CspVault>,
+        logger: ReplicaLogger,
         metrics: Arc<CryptoMetrics>,
     ) -> Self {
-        let logger = logger.unwrap_or_else(no_op_logger);
-        info!(
+        Csp {
+            csp_vault: vault,
             logger,
-            "Proceeding with an in-replica csp_vault, CryptoConfig: {:?}", config
-        );
-        let secret_key_store = ProtoSecretKeyStore::open(
-            &config.crypto_root,
-            SKS_DATA_FILENAME,
-            Some(new_logger!(&logger)),
-        );
-        let canister_key_store = ProtoSecretKeyStore::open(
-            &config.crypto_root,
-            CANISTER_SKS_DATA_FILENAME,
-            Some(new_logger!(&logger)),
-        );
-        let csp_vault = Arc::new(LocalCspVault::new(
-            secret_key_store,
-            canister_key_store,
             metrics,
-            new_logger!(&logger),
-        ));
-        Self::csp_with(&config.crypto_root, logger, csp_vault)
-    }
-
-    fn new_with_unix_socket_vault(
-        socket_path: &Path,
-        rt_handle: tokio::runtime::Handle,
-        config: &CryptoConfig,
-        logger: Option<ReplicaLogger>,
-    ) -> Self {
-        let logger = logger.unwrap_or_else(no_op_logger);
-        info!(
-            logger,
-            "Proceeding with a remote csp_vault, CryptoConfig: {:?}", config
-        );
-        let csp_vault = RemoteCspVault::new(socket_path, rt_handle).unwrap_or_else(|e| {
-            panic!(
-                "Could not connect to CspVault at socket {:?}: {:?}",
-                socket_path, e
-            )
-        });
-        Self::csp_with(&config.crypto_root, logger, Arc::new(csp_vault))
-    }
-
-    fn csp_with(pk_path: &Path, logger: ReplicaLogger, csp_vault: Arc<dyn CspVault>) -> Self {
-        let node_public_keys = read_node_public_keys(pk_path).unwrap_or_default();
-        let public_key_data = PublicKeyData::new(node_public_keys);
-        Csp {
-            public_key_data,
-            csp_vault,
-            logger,
-        }
-    }
-}
-
-impl Csp {
-    /// Creates a crypto service provider for testing.
-    ///
-    /// Note: This MUST NOT be used in production as the secrecy of the random
-    /// number generator, hence the keys, is not guaranteed.
-    pub fn new_with_rng<R: 'static + Rng + CryptoRng + Send + Sync + Clone>(
-        csprng: R,
-        config: &CryptoConfig,
-    ) -> Self {
-        let node_public_keys = read_node_public_keys(&config.crypto_root).unwrap_or_default();
-        let public_key_data = PublicKeyData::new(node_public_keys);
-        Csp {
-            public_key_data,
-            csp_vault: Arc::new(LocalCspVault::new_for_test(
-                csprng,
-                ProtoSecretKeyStore::open(&config.crypto_root, SKS_DATA_FILENAME, None),
-            )),
-            logger: no_op_logger(),
-        }
-    }
-}
-
-impl Csp {
-    /// Resets public key data according to the given `NodePublicKeys`.
-    ///
-    /// Note: This is for testing only and MUST NOT be used in production.
-    pub fn reset_public_key_data(&mut self, node_public_keys: NodePublicKeys) {
-        self.public_key_data = PublicKeyData::new(node_public_keys);
-    }
-}
-
-impl NodePublicKeyData for Csp {
-    fn node_public_keys(&self) -> NodePublicKeys {
-        self.public_key_data.node_public_keys.clone()
-    }
-
-    fn node_signing_key_id(&self) -> KeyId {
-        self.public_key_data
-            .sks_key_ids
-            .node_signing_key_id
-            .to_owned()
-            .expect("Missing node signing key id")
-    }
-
-    fn dkg_dealing_encryption_key_id(&self) -> KeyId {
-        self.public_key_data
-            .sks_key_ids
-            .dkg_dealing_encryption_key_id
-            .to_owned()
-            .expect("Missing dkg dealing encryption key id")
-    }
-}
-
-impl Csp {
-    /// Creates a crypto service provider for testing.
-    ///
-    /// Note: This MUST NOT be used in production as the secrecy of the secret
-    /// key store and the canister secret key store is not guaranteed.
-    pub fn of<R: 'static + Rng + CryptoRng + Send + Sync + Clone, S: 'static + SecretKeyStore>(
-        csprng: R,
-        secret_key_store: S,
-    ) -> Self {
-        let node_public_keys = Default::default();
-        let public_key_data = PublicKeyData::new(node_public_keys);
-        Csp {
-            public_key_data,
-            csp_vault: Arc::new(LocalCspVault::new_for_test(csprng, secret_key_store)),
-            logger: no_op_logger(),
         }
     }
 }

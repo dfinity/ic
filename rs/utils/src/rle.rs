@@ -21,7 +21,7 @@ use std::fmt;
 /// assert_eq!("0xdeadbeef", format!("{:?}", DebugBlob(&[0xde, 0xad, 0xbe, 0xef][..])));
 /// assert_eq!("30×01", format!("{:?}", DebugBlob(&vec![1; 30][..])));
 /// ```
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq)]
 pub struct DebugBlob<'a>(pub &'a [u8]);
 
 impl fmt::Debug for DebugBlob<'_> {
@@ -39,7 +39,7 @@ impl fmt::Debug for DebugBlob<'_> {
         }
         let rle = display(self.0);
         if rle.len() < (self.0.len() + 1) * 2 {
-            write!(f, "{}", rle)
+            write!(f, "{rle}")
         } else {
             write!(f, "0x{}", hex::encode(self.0))
         }
@@ -70,7 +70,7 @@ pub fn display(bytes: &[u8]) -> String {
     let mut buf = String::new();
     let mut prefix = "";
     let mut emit = |count, byte| {
-        fmt::write(&mut buf, format_args!("{}{}×{:02x}", prefix, count, byte))
+        fmt::write(&mut buf, format_args!("{prefix}{count}×{byte:02x}"))
             .expect("Failed to write to string");
         prefix = " ";
     };
@@ -96,7 +96,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[should_panic(expected = "left: `8×01 4×02 4×03`,\n right: `8×01 4×02 3×03 1×04`")]
+    #[should_panic(expected = "left: 8×01 4×02 4×03\n right: 8×01 4×02 3×03 1×04")]
     fn test_debug_blob() {
         assert_eq!(
             DebugBlob(&[1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3]),

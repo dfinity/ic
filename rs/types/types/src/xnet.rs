@@ -1,8 +1,13 @@
 //! Types used by the Xnet component.
-use crate::{consensus::certification::Certification, messages::RequestOrResponse, CanisterId};
-use phantom_newtype::{AmountOf, Id};
+use crate::ProxyDecodeError;
+use crate::{consensus::certification::Certification, messages::StreamMessage};
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
+use ic_protobuf::state::queues::v1 as pb_queues;
+use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+use strum_macros::EnumIter;
 
 pub mod proto;
 
@@ -12,7 +17,7 @@ pub struct StreamIndexTag;
 pub type StreamIndex = AmountOf<StreamIndexTag, u64>;
 
 /// A gap-free `StreamIndex`-ed queue for the messages and signals of a stream.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct StreamIndexedQueue<T> {
     begin: StreamIndex,
     queue: VecDeque<T>,
@@ -129,7 +134,7 @@ impl<T> StreamIndexedQueue<T> {
     }
 
     /// Returns an iterator over the items in the queue, with their indices.
-    pub fn iter<'a>(&'a self) -> impl std::iter::Iterator<Item = (StreamIndex, &T)> + 'a {
+    pub fn iter(&self) -> impl std::iter::Iterator<Item = (StreamIndex, &T)> {
         (self.begin.get()..)
             .zip(self.queue.iter())
             .map(|(index, item)| (StreamIndex::from(index), item))
@@ -156,23 +161,163 @@ impl<T> Default for StreamIndexedQueue<T> {
 /// inducted message; but because most signals are `Accept`we represent that
 /// queue as a combination of `signals_end` (pointing just beyond the last
 /// signal) and a collection of `reject_signals`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct StreamHeader {
-    pub begin: StreamIndex,
-    pub end: StreamIndex,
+    begin: StreamIndex,
+    end: StreamIndex,
 
     /// Index of the next expected message.
-    pub signals_end: StreamIndex,
+    signals_end: StreamIndex,
 
-    /// Stream indices of rejected messages, in ascending order.
-    pub reject_signals: VecDeque<StreamIndex>,
+    /// Stream indices of rejected messages by reject reason, in ascending order.
+    reject_signals: VecDeque<RejectSignal>,
+
+    /// Flags informing the other subnet e.g. what kinds of messages will be accepted.
+    flags: StreamFlags,
+}
+
+/// Reasons for why inter canister messages may fail to be inducted into the state.
+///
+/// All reason are applicable to `Request`, whereas only `CanisterMigrating` is
+/// applicable to `Response`.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, EnumIter)]
+pub enum RejectReason {
+    /// Message enqueuing failed due to migrating canister. In contrast to
+    /// `CanisterNotFound` this is mapped to `RejectCode::SysTransient`, i.e.
+    /// the canister will be available again shortly.
+    ///
+    /// This is the only reject reason that (also) applies to to responses.
+    CanisterMigrating = 1,
+
+    /// Message enqueuing failed due to no matching canister ID. In contrast to
+    /// `CanisterMigrating` this is mapped to `RejectCode::DestinationInvalid`, i.e.
+    /// the canister was not found in any capacity on the IC.
+    CanisterNotFound = 2,
+
+    /// Canister is stopped, not accepting any messages.
+    CanisterStopped = 3,
+
+    /// Canister is stopping, only accepting responses.
+    CanisterStopping = 4,
+
+    /// Message enqueuing failed due to full in/out queue.
+    QueueFull = 5,
+
+    /// Message enqueuing would have caused the canister or subnet to run over
+    /// their memory limit.
+    OutOfMemory = 6,
+
+    /// Message enqueuing failed due to an unknown error. This is used to map
+    /// `StateError` variants that shouldn't be possible to occur for requests.
+    /// It is not expected that this reason will ever be used.
+    Unknown = 7,
+}
+
+impl RejectReason {
+    /// Produces a vector of all reject reason. Prevents having to add strum as a dependency
+    pub fn all() -> Vec<RejectReason> {
+        use strum::IntoEnumIterator;
+        Self::iter().collect()
+    }
+}
+
+impl From<RejectReason> for pb_queues::RejectReason {
+    fn from(item: RejectReason) -> Self {
+        match item {
+            RejectReason::CanisterMigrating => Self::CanisterMigrating,
+            RejectReason::CanisterNotFound => Self::CanisterNotFound,
+            RejectReason::CanisterStopped => Self::CanisterStopped,
+            RejectReason::CanisterStopping => Self::CanisterStopping,
+            RejectReason::QueueFull => Self::QueueFull,
+            RejectReason::OutOfMemory => Self::OutOfMemory,
+            RejectReason::Unknown => Self::Unknown,
+        }
+    }
+}
+
+impl TryFrom<pb_queues::RejectReason> for RejectReason {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_queues::RejectReason) -> Result<Self, Self::Error> {
+        match item {
+            pb_queues::RejectReason::Unspecified => Err(ProxyDecodeError::Other(
+                "bad reject reason {} received".into(),
+            )),
+            pb_queues::RejectReason::CanisterMigrating => Ok(Self::CanisterMigrating),
+            pb_queues::RejectReason::CanisterNotFound => Ok(Self::CanisterNotFound),
+            pb_queues::RejectReason::CanisterStopped => Ok(Self::CanisterStopped),
+            pb_queues::RejectReason::CanisterStopping => Ok(Self::CanisterStopping),
+            pb_queues::RejectReason::QueueFull => Ok(Self::QueueFull),
+            pb_queues::RejectReason::OutOfMemory => Ok(Self::OutOfMemory),
+            pb_queues::RejectReason::Unknown => Ok(Self::Unknown),
+        }
+    }
+}
+
+/// Reject signal for messages who failed to induct.
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub struct RejectSignal {
+    pub reason: RejectReason,
+    pub index: StreamIndex,
+}
+
+impl RejectSignal {
+    pub fn new(reason: RejectReason, index: StreamIndex) -> Self {
+        Self { reason, index }
+    }
+}
+
+/// Flags for `Stream`.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
+pub struct StreamFlags {
+    /// Indicates that the subnet expects responses only in the reverse stream.
+    pub deprecated_responses_only: bool,
+}
+
+impl StreamHeader {
+    pub fn new(
+        begin: StreamIndex,
+        end: StreamIndex,
+        signals_end: StreamIndex,
+        reject_signals: VecDeque<RejectSignal>,
+        flags: StreamFlags,
+    ) -> Self {
+        Self {
+            begin,
+            end,
+            signals_end,
+            reject_signals,
+            flags,
+        }
+    }
+
+    pub fn begin(&self) -> StreamIndex {
+        self.begin
+    }
+
+    pub fn end(&self) -> StreamIndex {
+        self.end
+    }
+
+    pub fn signals_end(&self) -> StreamIndex {
+        self.signals_end
+    }
+
+    pub fn reject_signals(&self) -> &VecDeque<RejectSignal> {
+        &self.reject_signals
+    }
+
+    pub fn flags(&self) -> &StreamFlags {
+        &self.flags
+    }
 }
 
 /// A continuous slice of messages pulled from a remote subnet.  The slice also
 /// includes the header with the communication session metadata.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct StreamSlice {
     header: StreamHeader,
+
     // Messages coming from a remote subnet, together with their indices.
     //
     // In case of messages, the indices are only known if there is at least one
@@ -180,11 +325,11 @@ pub struct StreamSlice {
     // None, not as a an empty queue with a fixed begin index.
     //
     // Invariant: `messages = None ∨ messages = Some(q) ∧ !q.is_empty()`
-    messages: Option<StreamIndexedQueue<RequestOrResponse>>,
+    messages: Option<StreamIndexedQueue<StreamMessage>>,
 }
 
 impl StreamSlice {
-    pub fn new(header: StreamHeader, messages: StreamIndexedQueue<RequestOrResponse>) -> Self {
+    pub fn new(header: StreamHeader, messages: StreamIndexedQueue<StreamMessage>) -> Self {
         let messages = if messages.is_empty() {
             None
         } else {
@@ -195,7 +340,7 @@ impl StreamSlice {
 
     pub fn from_parts(
         header: StreamHeader,
-        messages: Option<StreamIndexedQueue<RequestOrResponse>>,
+        messages: Option<StreamIndexedQueue<StreamMessage>>,
     ) -> Self {
         match messages {
             None => Self { header, messages },
@@ -207,11 +352,11 @@ impl StreamSlice {
         &self.header
     }
 
-    pub fn messages(&self) -> Option<&StreamIndexedQueue<RequestOrResponse>> {
+    pub fn messages(&self) -> Option<&StreamIndexedQueue<StreamMessage>> {
         self.messages.as_ref()
     }
 
-    pub fn pop_message(&mut self) -> Option<(StreamIndex, RequestOrResponse)> {
+    pub fn pop_message(&mut self) -> Option<(StreamIndex, StreamMessage)> {
         match self.messages {
             Some(ref mut q) => {
                 let result = q.pop();
@@ -227,7 +372,8 @@ impl StreamSlice {
 
 /// A slice of the stream of messages produced by the other subnet together with
 /// a cryptographic proof that the majority of the subnet agrees on it.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CertifiedStreamSlice {
     /// Serialized part of the state tree containing the stream data.
     #[serde(with = "serde_bytes")]
@@ -242,34 +388,41 @@ pub struct CertifiedStreamSlice {
     pub certification: Certification,
 }
 
-pub struct SessionTag {}
-/// Identifies a session between a given pair of sender,receiver canisters.
-pub type SessionId = Id<SessionTag, u64>;
-
-/// A QueueId. Identifies a message queue by destination, source and session ID.
-/// Note that the tuple order is an important consideration as it supports
-/// appropriate clustering of *outgoing* message streams.
-#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct QueueId {
-    pub dst_canister: CanisterId,
-    pub src_canister: CanisterId,
-    pub session_id: SessionId,
-}
-
 pub mod testing {
-    use super::{StreamHeader, StreamIndexedQueue};
-    use crate::messages::RequestOrResponse;
+    use super::{StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue};
+    use crate::messages::StreamMessage;
+
+    /// Provides test-only methods for `StreamHeader`.
+    pub trait StreamHeaderTesting {
+        fn set_begin(&mut self, begin: StreamIndex);
+        fn set_end(&mut self, end: StreamIndex);
+        fn set_flags(&mut self, flags: StreamFlags);
+    }
+
+    impl StreamHeaderTesting for super::StreamHeader {
+        fn set_begin(&mut self, begin: StreamIndex) {
+            self.begin = begin;
+        }
+
+        fn set_end(&mut self, end: StreamIndex) {
+            self.end = end;
+        }
+
+        fn set_flags(&mut self, flags: StreamFlags) {
+            self.flags = flags;
+        }
+    }
 
     /// Provides test-only methods for `StreamSlice`.
     pub trait StreamSliceTesting {
         /// Pushes a message onto the slice.
-        fn push_message(&mut self, message: RequestOrResponse);
+        fn push_message(&mut self, message: StreamMessage);
 
         fn header_mut(&mut self) -> &mut StreamHeader;
     }
 
     impl StreamSliceTesting for super::StreamSlice {
-        fn push_message(&mut self, message: RequestOrResponse) {
+        fn push_message(&mut self, message: StreamMessage) {
             match self.messages {
                 Some(ref mut q) => {
                     q.push(message);

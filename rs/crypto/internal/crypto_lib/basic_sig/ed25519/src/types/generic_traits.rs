@@ -11,7 +11,6 @@ use std::fmt;
 #[cfg(test)]
 mod tests;
 
-// Note: This is needed because Rust doesn't support const generics yet.
 impl fmt::Debug for SignatureBytes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "SignatureBytes({:?})", base64::encode(&self.0[..]))
@@ -22,10 +21,3 @@ impl fmt::Debug for PublicKeyBytes {
         write!(f, "PublicKeyBytes({:?})", base64::encode(&self.0[..]))
     }
 }
-
-impl PartialEq for SignatureBytes {
-    fn eq(&self, other: &Self) -> bool {
-        self.0[..] == other.0[..]
-    }
-}
-impl Eq for SignatureBytes {}

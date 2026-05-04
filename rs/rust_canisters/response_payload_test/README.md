@@ -9,23 +9,19 @@ Build
 
 ```bash
 # Build the Wasm binary
-cargo build --target wasm32-unknown-unknown --release
+bazel build //rs/rust_canisters/response_payload_test:response-payload-test-canister
 
-# Go to ic/rs
-cd ../..
-
-# Optional: install ic-cdk-optimizer
-cargo install ic-cdk-optimizer
-
-# Reduce the Wasm binary size
-ic-cdk-optimizer target/wasm32-unknown-unknown/release/response-payload-test-canister.wasm --output response-payload-test-canister.wasm
+# Find the optimized canister binary from the root `ic` directory:
+ls -l bazel-bin/rs/rust_canisters/response_payload_test/response-payload-test-canister.wasm
+# From other directories:
+ls -l $(bazel info bazel-bin)/rs/rust_canisters/response_payload_test/response-payload-test-canister.wasm
 ```
 
 Run
 ---
 
 ```bash
-NODE='http://[2001:4d78:40d:0:5000:67ff:fe4f:650d]:8080'
+NODE='http://[2602:fb2b:110:10:5000:67ff:fe4f:650d]:8080'
 # Payload (a json string) has to be encoded in hex.
 PAYLOAD=$(echo -n '{"response_size":  5000000}'|od -t x1 -A none|xargs|sed -e 's/ //g')
 # Run a query

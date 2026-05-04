@@ -1,5 +1,4 @@
 //! Hexadecimal conversion utilities.
-#![allow(clippy::unwrap_used)]
 use hex::FromHex;
 
 pub fn hex_to_32_bytes<T: AsRef<[u8]>>(hex: T) -> [u8; 32] {

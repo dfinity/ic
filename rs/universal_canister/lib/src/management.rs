@@ -1,5 +1,5 @@
 use crate::CallInterface;
-use crate::{wasm, Call};
+use crate::{Call, wasm};
 use candid::{CandidType, Deserialize, Encode, Principal};
 use std::convert::TryFrom;
 
@@ -9,24 +9,25 @@ use std::convert::TryFrom;
 ///
 /// ```
 /// use ic_universal_canister::{wasm, management, CallInterface};
-/// use ic_types::Cycles;
 ///
 /// // Create a new canister with some cycles.
-/// wasm().call(management::create_canister(Cycles::from(2_000_000_000_000u64).into_parts()));
+/// wasm().call(management::create_canister(2_000_000_000_000u64));
 ///
 /// // Create a new canister with a specific freezing threshold.
 /// wasm().call(
-///   management::create_canister(Cycles::from(2_000_000_000_000u64).into_parts())
-///      .with_freezing_threshold(1234)
+///   management::create_canister(2_000_000_000_000u64)
+///      .with_freezing_threshold(1234_u16)
 /// );
 ///
 /// // Create a new canister with custom callbacks.
-/// wasm().call(management::create_canister(Cycles::from(2_000_000_000_000u64).into_parts())
+/// wasm().call(management::create_canister(2_000_000_000_000u64)
 ///   .on_reply(wasm().noop()) // custom on_reply
 ///   .on_reject(wasm().noop()) // custom on_reject
 ///   .on_cleanup(wasm().noop())); // custom on_cleanup
 /// ```
-pub fn create_canister(cycles: (u64, u64)) -> CandidCallBuilder<CreateCanisterArgs> {
+pub fn create_canister<Cycles: Into<u128>>(
+    cycles: Cycles,
+) -> CandidCallBuilder<CreateCanisterArgs> {
     CandidCallBuilder {
         args: CreateCanisterArgs { settings: None },
         call: Call::new(Principal::management_canister(), "create_canister").cycles(cycles),
@@ -62,7 +63,18 @@ pub fn create_canister(cycles: (u64, u64)) -> CandidCallBuilder<CreateCanisterAr
 /// // Upgrade a canister with custom callbacks
 /// wasm().call(
 ///   management::install_code(canister_id, wasm_module)
-///      .with_mode(management::InstallMode::Upgrade)
+///      .with_mode(management::InstallMode::Upgrade(None))
+///      .on_reply(wasm().noop()) // custom on_reply
+///      .on_reject(wasm().noop()) // custom on_reject
+///      .on_cleanup(wasm().noop())); // custom on_cleanup
+///
+/// // Upgrade a canister while skipping pre_upgrade hook with custom callbacks
+/// wasm().call(
+///   management::install_code(canister_id, wasm_module)
+///      .with_mode(management::InstallMode::Upgrade(Some(management::CanisterUpgradeOptions {
+///         skip_pre_upgrade: Some(false),
+///         wasm_memory_persistence: None,
+///       })))
 ///      .on_reply(wasm().noop()) // custom on_reply
 ///      .on_reject(wasm().noop()) // custom on_reject
 ///      .on_cleanup(wasm().noop())); // custom on_cleanup
@@ -112,7 +124,7 @@ pub fn delete_canister<C: AsRef<[u8]>>(canister_id: C) -> Call {
 /// wasm().call(
 ///   management::update_settings(canister_id)
 ///      .with_controllers(vec![canister_id, canister_id])
-///      .with_freezing_threshold(1234)
+///      .with_freezing_threshold(1234_u16)
 /// );
 /// ```
 pub fn update_settings<C: AsRef<[u8]>>(canister_id: C) -> CandidCallBuilder<UpdateSettings> {
@@ -149,7 +161,7 @@ pub fn bitcoin_get_balance(
             min_confirmations,
         },
         call: Call::new(Principal::management_canister(), "bitcoin_get_balance")
-            .cycles((0, 100_000_000))
+            .cycles(100_000_000_u64)
             .on_reject(wasm().reject_message().reject()),
     }
 }
@@ -277,13 +289,25 @@ impl<Args: CandidType> From<CandidCallBuilder<Args>> for Call {
 }
 
 #[derive(CandidType, Deserialize)]
+pub enum WasmMemoryPersistence {
+    Keep,
+    Replace,
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct CanisterUpgradeOptions {
+    pub skip_pre_upgrade: Option<bool>,
+    pub wasm_memory_persistence: Option<WasmMemoryPersistence>,
+}
+
+#[derive(CandidType, Deserialize)]
 pub enum InstallMode {
     #[serde(rename = "install")]
     Install,
     #[serde(rename = "reinstall")]
     Reinstall,
     #[serde(rename = "upgrade")]
-    Upgrade,
+    Upgrade(Option<CanisterUpgradeOptions>),
 }
 
 #[derive(CandidType)]
@@ -322,7 +346,7 @@ pub struct UpdateSettings {
     settings: CanisterSettings,
 }
 
-#[derive(CandidType, Default)]
+#[derive(Default, CandidType)]
 pub struct CanisterSettings {
     pub controller: Option<Principal>,
     pub controllers: Option<Vec<Principal>>,
@@ -331,14 +355,14 @@ pub struct CanisterSettings {
     pub freezing_threshold: Option<candid::Nat>,
 }
 
-#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum Network {
     Mainnet,
     Testnet,
     Regtest,
 }
 
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct GetBalanceRequest {
     pub address: String,
     pub network: Network,

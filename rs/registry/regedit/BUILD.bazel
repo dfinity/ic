@@ -1,21 +1,19 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
-
 DEPENDENCIES = [
-    "//rs/crypto",
-    "//rs/crypto/sha",
+    # Keep sorted.
+    "//rs/crypto/sha2",
+    "//rs/crypto/utils/threshold_sig_der",
     "//rs/protobuf",
     "//rs/registry/client",
     "//rs/registry/helpers",
     "//rs/registry/keys",
     "//rs/registry/local_store",
-    "//rs/registry/nns_data_provider",
+    "//rs/registry/nns_data_provider_wrappers",
     "//rs/registry/subnet_type",
     "//rs/types/base_types",
     "//rs/types/types",
     "@crate_index//:anyhow",
-    "@crate_index//:base64",
     "@crate_index//:clap",
     "@crate_index//:prost",
     "@crate_index//:serde",
@@ -28,6 +26,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/prep",
     "//rs/registry/provisional_whitelist",
     "@crate_index//:tempfile",
@@ -39,11 +38,12 @@ ALIASES = {}
 
 rust_library(
     name = "regedit",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_regedit",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
+    visibility = ["//rs:system-tests-pkg"],
     deps = DEPENDENCIES,
 )
 
@@ -52,6 +52,10 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = [
+        "//rs:release-pkg",
+        "//rs:system-tests-pkg",
+    ],
     deps = DEPENDENCIES + [":regedit"],
 )
 

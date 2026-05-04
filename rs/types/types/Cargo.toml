@@ -1,54 +1,61 @@
 [package]
 name = "ic-types"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-base32 = "0.4.0"
-base64 = "0.11.0"
-bincode = "1.2.1"
-candid = "0.8.1"
-derive_more = { git = "https://github.com/dfinity-lab/derive_more", branch = "master" }
-hex = "0.4.2"
-http = "0.2.5"
+base64 = { workspace = true }
+bincode = { workspace = true }
+candid = { workspace = true }
+hex = { workspace = true }
 ic-base-types = { path = "../base_types" }
-ic-btc-types-internal = { path = "../../bitcoin/types/internal" }
-ic-constants = { path = "../../constants" }
+ic-btc-replica-types = { path = "../../bitcoin/replica_types" }
 ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
-ic-crypto-sha = { path = "../../crypto/sha" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
-ic-error-types = { path = "../error_types" }
-ic-ic00-types = { path = "../ic00_types" }
+ic-error-types = { path = "../../../packages/ic-error-types" }
+ic-heap-bytes = { path = "../../../packages/ic-heap-bytes" }
+ic-limits = { path = "../../limits" }
+ic-management-canister-types-private = { path = "../management_canister_types" }
 ic-protobuf = { path = "../../protobuf" }
-ic-registry-transport = { path = "../../registry/transport" }
+ic-types-cycles = { path = "../cycles" }
 ic-utils = { path = "../../utils" }
+ic-validate-eq = { path = "../../utils/validate_eq" }
+ic-validate-eq-derive = { path = "../../utils/validate_eq_derive" }
 maplit = "1.0.2"
-num-traits = "0.2.12"
+more-asserts = { workspace = true }
 once_cell = "1.8"
 phantom_newtype = { path = "../../phantom_newtype" }
-prost = "0.10.4"
-serde = { version = "1.0.99", features = ["derive"] }
-serde_bytes = "0.11"
-serde_cbor = "0.11.1"
-serde_with = "1.6.2"
-serde_json = "1.0.40"
-strum = "0.23.0"
-strum_macros = "0.23.0"
-thiserror = "1.0"
-url = { version = "2", features = ["serde"] }
+prost = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }
+serde_with = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+thiserror = { workspace = true }
+thousands = "0.2.0"
 
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
-chrono = "0.4"
+chrono = { workspace = true }
 
 [dev-dependencies]
-anyhow = "1"
-assert_matches = "1.3.0"
-hex-literal = "0.2.1"
+assert_matches = { workspace = true }
+hex-literal = "0.4.1"
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../../crypto/test_utils/canister_threshold_sigs" }
-pretty_assertions = "0.6.1"
-rand = "0.8"
+ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
+ic-exhaustive-derive = { path = "../exhaustive_derive" }
+ic-types-test-utils = { path = "../types_test_utils" }
+pretty_assertions = { workspace = true }
+rand_chacha = { workspace = true }
 rusty-fork = "0.3.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-proptest = "1.0"
-proptest-derive = "0.3.0"
+proptest = { workspace = true }
+proptest-derive = { workspace = true }

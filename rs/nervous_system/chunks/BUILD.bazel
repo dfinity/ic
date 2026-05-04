@@ -1,0 +1,50 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = [
+    "//rs/nervous_system:default_visibility",
+    "//rs/replay:__pkg__",
+])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/sha2",
+    "@crate_index//:ic-stable-structures",
+    "@crate_index//:lazy_static",
+    "@crate_index//:prost",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+]
+
+DEV_MACRO_DEPENDENCIES = [
+    # Keep sorted.
+]
+
+ALIASES = {}
+
+LIB_SRCS = glob(
+    ["src/**/*.rs"],
+    exclude = ["**/*tests.rs"],
+)
+
+rust_library(
+    name = "chunks",
+    srcs = LIB_SRCS,
+    aliases = ALIASES,
+    crate_name = "ic_nervous_system_chunks",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "chunks_test",
+    srcs = glob(["src/**"]),
+    proc_macro_deps = DEV_MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

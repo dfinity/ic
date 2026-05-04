@@ -2,31 +2,38 @@
 //! The requirements of when we should create a CatchUpPackage are given below:
 //!
 //! 1. CatchUpPackage has to include (the block of) a DKG summary that is
-//! considered finalized.
+//!    considered finalized.
 //!
 //! 2. DKG has to traverse blocks to lookup DKG payloads, therefore the interval
-//! between CatchUpPackages has to be bigger than or equal to the DKG interval.
+//!    between CatchUpPackages has to be bigger than or equal to the DKG interval.
 //!
 //! 3. The block in the CatchUpPackage has been executed, and its execution
-//! state is known.
+//!    state is known.
 //!
 //! At the moment, we will start to make a CatchUpPackage once a DKG summary
 //! block is considered finalized.
-use crate::consensus::{
-    membership::Membership, pool_reader::PoolReader, prelude::*,
-    utils::active_high_threshold_transcript, ConsensusCrypto,
+
+use ic_consensus_utils::{
+    active_high_threshold_nidkg_id, crypto::ConsensusCrypto, get_oldest_state_registry_version,
+    membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_interfaces_state_manager::{
     PermanentStateHashError::*, StateHashError, StateManager, TransientStateHashError::*,
 };
-use ic_logger::{debug, error, trace, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, error, trace};
 use ic_replicated_state::ReplicatedState;
-use ic_types::replica_config::ReplicaConfig;
+use ic_types::{
+    consensus::{
+        Block, CatchUpContent, CatchUpPackage, CatchUpPackageShare, CatchUpShareContent,
+        HasCommittee, HasHeight, HashedBlock, HashedRandomBeacon,
+    },
+    replica_config::ReplicaConfig,
+};
 use std::sync::Arc;
 
 /// CatchUpPackage maker is responsible for creating beacon shares
-pub struct CatchUpPackageMaker {
+pub(crate) struct CatchUpPackageMaker {
     replica_config: ReplicaConfig,
     membership: Arc<Membership>,
     crypto: Arc<dyn ConsensusCrypto>,
@@ -35,7 +42,7 @@ pub struct CatchUpPackageMaker {
     log: ReplicaLogger,
 }
 
-impl<'a> CatchUpPackageMaker {
+impl CatchUpPackageMaker {
     /// Instantiate a new CatchUpPackage maker and save a copy of the config.
     pub fn new(
         replica_config: ReplicaConfig,
@@ -112,7 +119,7 @@ impl<'a> CatchUpPackageMaker {
         self.report_state_divergence_if_required(pool);
 
         let current_cup_height = pool.get_catch_up_height();
-        let mut block = pool.get_highest_summary_block();
+        let mut block = pool.get_highest_finalized_summary_block();
 
         while block.height() > current_cup_height {
             let result = self.consider_block(pool, block.clone());
@@ -183,33 +190,53 @@ impl<'a> CatchUpPackageMaker {
                 None
             }
             Err(StateHashError::Transient(HashNotComputedYet(_))) => {
-                debug!(self.log, "Cannot make CUP at height {} because state hash is not computed yet. Will retry", height);
+                debug!(
+                    self.log,
+                    "Cannot make CUP at height {} because state hash is not computed yet. Will retry",
+                    height
+                );
                 None
             }
             Err(StateHashError::Permanent(StateRemoved(_))) => {
                 // This should never happen as we don't want to remove the state
                 // for CUP before the hash is fetched.
                 panic!(
-                    "State at height {} had disappeared before we had a chance to make a CUP. This should not happen.",
-                    height,
+                    "State at height {height} had disappeared before we had a chance to make a CUP. This should not happen.",
                 );
             }
             Err(StateHashError::Permanent(StateNotFullyCertified(_))) => {
-                panic!(
-                    "Height {} is not a fully certified height. This should not happen.",
-                    height,
-                );
+                panic!("Height {height} is not a fully certified height. This should not happen.",);
             }
             Ok(state_hash) => {
+                let summary = start_block.payload.as_ref().as_summary();
+                let registry_version = if summary.idkg.is_some() {
+                    // Should succeed as we already got the hash above
+                    let state = self
+                        .state_manager
+                        .get_state_at(height)
+                        .map_err(|err| {
+                            error!(
+                                self.log,
+                                "Cannot make IDKG CUP at height {}: `get_state_hash_at` \
+                                succeeded but `get_state_at` failed with {}. Will retry",
+                                height,
+                                err,
+                            )
+                        })
+                        .ok()?;
+                    get_oldest_state_registry_version(state.get_ref())
+                } else {
+                    None
+                };
                 let content = CatchUpContent::new(
                     HashedBlock::new(ic_types::crypto::crypto_hash, start_block),
                     HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon),
                     state_hash,
+                    registry_version,
                 );
                 let share_content = CatchUpShareContent::from(&content);
-                if let Some(transcript) = active_high_threshold_transcript(pool.as_cache(), height)
-                {
-                    match self.crypto.sign(&content, my_node_id, transcript.dkg_id) {
+                if let Some(dkg_id) = active_high_threshold_nidkg_id(pool.as_cache(), height) {
+                    match self.crypto.sign(&content, my_node_id, dkg_id) {
                         Ok(signature) => {
                             // Caution: The log string below is checked in replica_determinism_test.
                             // Changing the string might break the test.
@@ -240,13 +267,24 @@ impl<'a> CatchUpPackageMaker {
 mod tests {
     //! CatchUpPackageMaker unit tests
     use super::*;
-    use crate::consensus::mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{
+        Dependencies, dependencies_with_subnet_params,
+        dependencies_with_subnet_records_with_raw_state_manager,
+    };
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::{
-        message_routing::FakeMessageRouting,
-        types::ids::{node_test_id, subnet_test_id},
+    use ic_test_utilities::message_routing::FakeMessageRouting;
+    use ic_test_utilities_consensus::idkg::{
+        empty_idkg_payload, fake_ecdsa_idkg_master_public_key_id,
+        fake_signature_request_context_with_registry_version, fake_state_with_signature_requests,
     };
     use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_types::{
+        CryptoHashOfState, Height, RegistryVersion,
+        consensus::{BlockPayload, Payload, SummaryPayload, idkg::PreSigId},
+        crypto::CryptoHash,
+        messages::CallbackId,
+    };
     use std::sync::{Arc, RwLock};
 
     #[test]
@@ -275,7 +313,7 @@ mod tests {
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
-                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
 
             let message_routing = FakeMessageRouting::new();
             *message_routing.next_batch_height.write().unwrap() = Height::from(2);
@@ -285,7 +323,7 @@ mod tests {
                 replica_config,
                 membership,
                 crypto,
-                state_manager,
+                state_manager.clone(),
                 message_routing,
                 no_op_logger(),
             );
@@ -297,7 +335,7 @@ mod tests {
             pool.advance_round_normal_operation_n(interval_length);
 
             let mut proposal = pool.make_next_block();
-            let mut block = proposal.content.as_mut();
+            let block = proposal.content.as_mut();
             block.context.certified_height = block.height();
             proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
             pool.insert_validated(proposal.clone());
@@ -314,6 +352,143 @@ mod tests {
                 .expect("Expecting CatchUpPackageShare");
 
             assert_eq!(&share.content.block, proposal.content.get_hash());
+            assert_eq!(
+                share.content.state_hash,
+                state_manager.get_state_hash_at(Height::from(0)).unwrap()
+            );
+            assert_eq!(
+                share
+                    .content
+                    .oldest_registry_version_in_use_by_replicated_state,
+                None
+            );
+        })
+    }
+
+    #[test]
+    fn test_catch_up_package_maker_with_registry_version() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let interval_length = 5;
+            let committee: Vec<_> = (0..4).map(node_test_id).collect();
+            let Dependencies {
+                mut pool,
+                membership,
+                replica_config,
+                crypto,
+                state_manager,
+                ..
+            } = dependencies_with_subnet_records_with_raw_state_manager(
+                pool_config,
+                subnet_test_id(0),
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(interval_length)
+                        .build(),
+                )],
+            );
+
+            let height = Height::from(0);
+            state_manager
+                .get_mut()
+                .expect_get_state_hash_at()
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
+
+            let key_id = fake_ecdsa_idkg_master_public_key_id();
+
+            // Create three quadruple Ids and contexts, context "2" will remain unmatched.
+            let pre_sig_id1 = PreSigId(1);
+            let pre_sig_id3 = PreSigId(3);
+
+            let contexts = vec![
+                (
+                    CallbackId::new(1),
+                    fake_signature_request_context_with_registry_version(
+                        Some(pre_sig_id1),
+                        key_id.inner(),
+                        RegistryVersion::from(3),
+                    ),
+                ),
+                (
+                    CallbackId::new(2),
+                    fake_signature_request_context_with_registry_version(
+                        None,
+                        key_id.inner(),
+                        RegistryVersion::from(1),
+                    ),
+                ),
+                (
+                    CallbackId::new(3),
+                    fake_signature_request_context_with_registry_version(
+                        Some(pre_sig_id3),
+                        key_id.inner(),
+                        RegistryVersion::from(2),
+                    ),
+                ),
+            ];
+
+            state_manager
+                .get_mut()
+                .expect_get_state_at()
+                .return_const(Ok(fake_state_with_signature_requests(
+                    height,
+                    contexts.clone(),
+                )
+                .get_labeled_state()));
+
+            let message_routing = FakeMessageRouting::new();
+            *message_routing.next_batch_height.write().unwrap() = Height::from(2);
+            let message_routing = Arc::new(message_routing);
+
+            let cup_maker = CatchUpPackageMaker::new(
+                replica_config,
+                membership,
+                crypto,
+                state_manager.clone(),
+                message_routing,
+                no_op_logger(),
+            );
+
+            // Genesis CUP already exists, we won't make a new one
+            assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
+
+            // Skip the first DKG interval
+            pool.advance_round_normal_operation_n(interval_length);
+
+            let mut proposal = pool.make_next_block();
+            let block = proposal.content.as_mut();
+            block.context.certified_height = block.height();
+
+            let idkg = empty_idkg_payload(subnet_test_id(0));
+            let dkg = block.payload.as_ref().as_summary().dkg.clone();
+            block.payload = Payload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Summary(SummaryPayload {
+                    dkg,
+                    idkg: Some(idkg),
+                }),
+            );
+            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+
+            pool.advance_round_with_block(&proposal);
+
+            let share = cup_maker
+                .on_state_change(&PoolReader::new(&pool))
+                .expect("Expecting CatchUpPackageShare");
+
+            assert_eq!(&share.content.block, proposal.content.get_hash());
+            assert_eq!(
+                share.content.state_hash,
+                state_manager.get_state_hash_at(height).unwrap()
+            );
+            // Since the quadruple using registry version 1 wasn't matched, the oldest one in use
+            // by the replicated state should be the registry version of quadruple 3, which is 2.
+            assert_eq!(
+                share
+                    .content
+                    .oldest_registry_version_in_use_by_replicated_state,
+                Some(RegistryVersion::from(2))
+            );
         })
     }
 
@@ -426,7 +601,7 @@ mod tests {
                     cup_height,
                 ))));
 
-            // Nothing happens, because the state is not commited yet.
+            // Nothing happens, because the state is not committed yet.
             assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
 
             state_manager
@@ -441,7 +616,7 @@ mod tests {
             // yet.
             assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
 
-            // Now make the state manager return a hash which differes from the mocked hash
+            // Now make the state manager return a hash which differs from the mocked hash
             // in our fixtures (empty one).
             state_manager
                 .get_mut()

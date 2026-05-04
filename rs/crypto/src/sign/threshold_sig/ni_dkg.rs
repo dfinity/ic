@@ -11,7 +11,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRe
 use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::transcripts_to_retain::TranscriptsToRetain;
-use ic_types::crypto::threshold_sig::ni_dkg::{config::NiDkgConfig, NiDkgDealing, NiDkgTranscript};
+use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgTranscript, config::NiDkgConfig};
 use std::collections::HashSet;
 
 mod dealing;
@@ -22,9 +22,9 @@ mod utils;
 #[cfg(test)]
 mod test_utils;
 
-impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
+impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentImpl<C> {
     fn create_dealing(&self, config: &NiDkgConfig) -> Result<NiDkgDealing, DkgCreateDealingError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "NiDkgAlgorithm",
@@ -35,12 +35,17 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
             crypto.dkg_config => format!("{}", config),
         );
         let start_time = self.metrics.now();
-        let result =
-            dealing::create_dealing(&self.node_id, &self.csp, &self.registry_client, config);
+        let result = dealing::create_dealing(
+            &self.node_id,
+            &self.csp,
+            self.registry_client.as_ref(),
+            config,
+        );
         self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Full,
             "create_dealing",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -58,7 +63,7 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
         dealer: NodeId,
         dealing: &NiDkgDealing,
     ) -> Result<(), DkgVerifyDealingError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "NiDkgAlgorithm",
@@ -71,12 +76,18 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
             crypto.dkg_dealing => format!("{}", dealing),
         );
         let start_time = self.metrics.now();
-        let result =
-            dealing::verify_dealing(&self.csp, &self.registry_client, config, &dealer, dealing);
+        let result = dealing::verify_dealing(
+            &self.csp,
+            self.registry_client.as_ref(),
+            config,
+            &dealer,
+            dealing,
+        );
         self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Full,
             "verify_dealing",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -90,9 +101,9 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
     fn create_transcript(
         &self,
         config: &NiDkgConfig,
-        verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+        verified_dealings: BTreeMap<NodeId, NiDkgDealing>,
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "NiDkgAlgorithm",
@@ -110,10 +121,20 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
         );
         let start_time = self.metrics.now();
         let result = transcript::create_transcript(&self.csp, config, verified_dealings);
+        self.metrics.observe_parameter_size(
+            MetricsDomain::NiDkgAlgorithm,
+            "create_transcript",
+            "transcript",
+            result.as_ref().map_or(0, |transcript| {
+                bincode::serialize(transcript).map_or(0, |bytes| bytes.len())
+            }),
+            MetricsResult::from(&result),
+        );
         self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Full,
             "create_transcript",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -129,7 +150,7 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
         &self,
         transcript: &NiDkgTranscript,
     ) -> Result<LoadTranscriptResult, DkgLoadTranscriptError> {
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "NiDkgAlgorithm",
@@ -147,10 +168,31 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
             transcript,
             &logger,
         );
+
+        // Processing of the cache statistics for metrics is deliberately
+        // part of the load transcript run time metric. It is expected to take
+        // very little time, but if something goes wrong, e.g., due to a mutex
+        // locking congestion or similar, we should be able to notice that.
+        let stats = ic_crypto_internal_bls12_381_type::G2Affine::deserialize_cached_statistics();
+        self.metrics
+            .observe_bls12_381_point_cache_stats(stats.size, stats.hits, stats.misses);
+
+        let stats = ic_crypto_internal_bls12_381_type::G2Prepared::cache_statistics();
+        self.metrics
+            .observe_bls12_381_g2_prep_cache_stats(stats.size, stats.hits, stats.misses);
+
+        self.metrics.observe_parameter_size(
+            MetricsDomain::NiDkgAlgorithm,
+            "load_transcript",
+            "transcript",
+            bincode::serialize(transcript).map_or(0, |bytes| bytes.len()),
+            MetricsResult::from(&result),
+        );
         self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Full,
             "load_transcript",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;
@@ -166,9 +208,13 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
         &self,
         transcripts: HashSet<NiDkgTranscript>,
     ) -> Result<(), DkgKeyRemovalError> {
+        let mut transcripts_len = 0;
+        for transcript in &transcripts {
+            transcripts_len += bincode::serialize(transcript).map_or(0, |bytes| bytes.len());
+        }
         let transcripts = TranscriptsToRetain::new(transcripts)
             .map_err(DkgKeyRemovalError::InputValidationError)?;
-        let log_id = get_log_id(&self.logger, module_path!());
+        let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
             crypto.trait_name => "NiDkgAlgorithm",
@@ -180,10 +226,18 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
         );
         let start_time = self.metrics.now();
         let result = retain_active_keys::retain_only_active_keys(&self.csp, transcripts);
+        self.metrics.observe_parameter_size(
+            MetricsDomain::NiDkgAlgorithm,
+            "load_transcript",
+            "transcript",
+            transcripts_len,
+            MetricsResult::from(&result),
+        );
         self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Full,
             "retain_only_active_keys",
+            MetricsResult::from(&result),
             start_time,
         );
         debug!(logger;

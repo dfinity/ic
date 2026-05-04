@@ -1,0 +1,36 @@
+[package]
+name = "ic-https-outcalls-adapter-client"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+
+candid = { workspace = true }
+futures = { workspace = true }
+hyper-util = { workspace = true }
+ic-adapter-metrics-client = { path = "../../monitoring/adapter_metrics/client" }
+ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
+ic-config = { path = "../../config" }
+ic-error-types = { path = "../../../packages/ic-error-types" }
+ic-https-outcalls-service = { path = "../service" }
+ic-https-outcalls-pricing = { path = "../pricing" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
+ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-types = { path = "../../types/types" }
+prometheus = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
+tonic = { workspace = true }
+tower = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+ic-test-utilities-time = { path = "../../test_utilities/time" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
+tower-test = "0.4.0"

@@ -4,16 +4,17 @@ load("//bazel:canisters.bzl", "rust_canister")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/rust_canisters/dfn_core",
-    "//rs/types/ic00_types",
+    # Keep sorted.
+    "//rs/types/management_canister_types",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
     "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
     "@crate_index//:serde_json",
 ]
 
 MACRO_DEPENDENCIES = [
-    "@crate_index//:ic-cdk-macros",
+    # Keep sorted.
 ]
 
 DEV_DEPENDENCIES = []
@@ -27,6 +28,7 @@ rust_canister(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":ecdsa.did",
     deps = DEPENDENCIES,
 )
 

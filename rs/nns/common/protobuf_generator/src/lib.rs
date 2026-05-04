@@ -12,46 +12,20 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
 
     let mut config = Config::new();
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
-    config.type_attribute(
-        "ic_nns_common.pb.v1.CanisterId",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize, Eq, comparable::Comparable)]",
-            "#[self_describing]",
-        ]
-        .join(" "),
-    );
-    config.type_attribute(
-        "ic_nns_common.pb.v1.NeuronId",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize, Eq, std::hash::Hash, comparable::Comparable)]",
-            "#[self_describing]",
-        ]
-        .join(" "),
-    );
-    config.type_attribute(
-        "ic_nns_common.pb.v1.PrincipalId",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize, Eq, PartialOrd, Ord, std::hash::Hash, comparable::Comparable)]",
-            "#[self_describing]",
-        ]
-        .join(" "),
-    );
-    config.type_attribute(
-        "ic_nns_common.pb.v1.ProposalId",
-        [
-            "#[derive(candid::CandidType, candid::Deserialize, Eq, Copy, comparable::Comparable)]",
-            "#[self_describing]",
-        ]
-        .join(" "),
-    );
-    config.type_attribute(
-        "ic_nns_common.pb.v1.MethodAuthzInfo",
-        "#[derive(candid::CandidType, candid::Deserialize)]",
-    );
-    config.type_attribute(
-        "ic_nns_common.pb.v1.CanisterAuthzInfo",
-        "#[derive(candid::CandidType, candid::Deserialize)]",
-    );
+
+    config.type_attribute(".", "#[derive(serde::Serialize)]");
+
+    for message_name in ["NeuronId", "ProposalId"] {
+        config.type_attribute(
+            format!("ic_nns_common.pb.v1.{message_name}"),
+            [
+                "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable, Eq)]",
+                "#[derive(PartialOrd, Ord, std::hash::Hash)]",
+                "#[self_describing]",
+            ]
+            .join(" "),
+        );
+    }
 
     std::fs::create_dir_all(out).expect("failed to create output directory");
     config.out_dir(out);

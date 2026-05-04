@@ -1,0 +1,20 @@
+[package]
+name = "ic-nervous-system-proto"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+comparable = { version = "0.5.1", features = ["derive"] }
+ic-base-types = { path = "../../types/base_types" }
+prost = { workspace = true }
+rust_decimal = "1.36.0"
+serde = { workspace = true }
+
+[dev-dependencies]
+ic-nervous-system-proto-protobuf-generator = { path = "./protobuf_generator" }
+ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+tempfile = { workspace = true }

@@ -21,6 +21,12 @@ pub enum LayoutError {
 
     /// Checkpoint for the requested height not found.
     NotFound(Height),
+
+    /// Trying to remove the latest checkpoint.
+    LatestCheckpoint(Height),
+
+    /// Checkpoint at the specified height is unverified.
+    CheckpointUnverified(Height),
 }
 
 impl fmt::Display for LayoutError {
@@ -43,12 +49,27 @@ impl fmt::Display for LayoutError {
                 path.display(),
                 message,
             ),
-            Self::NotFound(height) => write!(f, "no checkpoint @{} found", height),
+            Self::NotFound(height) => write!(f, "no checkpoint @{height} found"),
             Self::AlreadyExists(height) => write!(
                 f,
-                "failed to create checkpoint at height {} because it already exists",
-                height
+                "failed to create checkpoint at height {height} because it already exists"
             ),
+            Self::LatestCheckpoint(height) => write!(
+                f,
+                "Trying to remove the latest checkpoint at height @{height}"
+            ),
+            Self::CheckpointUnverified(height) => {
+                write!(f, "Checkpoint @{height} is not verified")
+            }
+        }
+    }
+}
+
+impl std::error::Error for LayoutError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            LayoutError::IoError { io_err, .. } => Some(io_err),
+            _ => None,
         }
     }
 }

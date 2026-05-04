@@ -1,0 +1,68 @@
+load("//bazel:defs.bzl", "write_info_file_var")
+load("//ic-os/components/conformance_tests:defs.bzl", "check_unused_components_test")
+load("guestos.bzl", guestos_component_files = "component_files")
+load("hostos.bzl", hostos_component_files = "component_files")
+load("setupos.bzl", setupos_component_files = "component_files")
+
+package(default_visibility = ["//ic-os:__subpackages__"])
+
+PUBLIC_GUESTOS_EXPORTS = [
+    "networking/dev-certs/canister_http_test_ca.cert",
+    "networking/dev-certs/canister_http_test_ca.key",
+]
+
+exports_files(PUBLIC_GUESTOS_EXPORTS)
+
+exports_files(
+    glob(
+        ["**"],
+        exclude = PUBLIC_GUESTOS_EXPORTS,
+    ),
+    visibility = [
+        "//ic-os/guestos:__subpackages__",
+        "//ic-os/hostos:__subpackages__",
+        "//ic-os/setupos:__subpackages__",
+        "//ic-os/testing:__subpackages__",
+    ],
+)
+
+write_info_file_var(
+    name = "commit_timestamp_txt",
+    tags = ["manual"],
+    varname = "STABLE_COMMIT_TIMESTAMP",
+)
+
+used_components = guestos_component_files("dev") | guestos_component_files("prod") | hostos_component_files | setupos_component_files
+
+REPO_COMPONENTS = glob(
+    ["**/*"],
+    exclude = [
+        "**/BUILD.bazel",
+        "**/*.bzl",
+        "**/*.md",
+        "**/*.adoc",
+    ],
+)
+
+# files used for testing and development that aren't "used" by any ic-os variant
+ignored_repo_components = [
+    "networking/dev-certs/canister_http_test_ca.key",
+    "networking/dev-certs/root_cert_gen.sh",
+    "misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh",
+    "misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service",
+    "guestos/selinux/guestos-recovery-engine/guestos-recovery-engine.fc",
+    "guestos/selinux/guestos-recovery-engine/guestos-recovery-engine.te",
+    "misc/console-getty@/hostos-dev/override.conf",
+    "misc/console-getty@/hostos-prod/override.conf",
+    "misc/serial-getty@/guestos-dev/override.conf",
+    "misc/serial-getty@/guestos-prod/override.conf",
+    "hostos/misc/grub-upgrader/grub-upgrader.sh",
+    "hostos/misc/grub-upgrader/grub-upgrader.service",
+]
+
+check_unused_components_test(
+    name = "check_unused_components_test",
+    ignored_repo_components = ignored_repo_components,
+    repo_components = REPO_COMPONENTS,
+    used_components = used_components.keys(),
+)

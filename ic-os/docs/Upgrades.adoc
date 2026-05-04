@@ -1,0 +1,68 @@
+= Upgrades
+
+Both HostOS and GuestOS can be upgraded.
+
+[NOTE]
+GuestOS upgrades are often referred to as "Replica upgrades." While these upgrades indeed update the replica, they also upgrade all other GuestOS services.
+
+== Upgrade process
+
+|====
+10+^|HostOS 10+^| GuestOS
+|EFI|Grub|Config|Boot A|Root A|Var A|Boot B|Root B|Var B|Unallocated Reserve|EFI|Grub|Config|Boot A|Root A|Var A|Boot B|Root B|Var B|Empty
+|100 MB|100 MB|100 MB|1 GB|10 GB|10 GB|1 GB|10 GB|10 GB|20 GB|100 MB|100 MB|100 MB|1 GB|10 GB|10 GB|1 GB|10 GB|10 GB|100%FREE
+|====
+
+The disk layout for both the HostOS and GuestOS includes two sets of system partitions, partition sets "A" and "B". This A/B partitioning enables a dual-boot system that can be updated and maintained without any downtime.
+
+At any given moment, one partition set is "active", and the other is "passive".
+
+*The GuestOS upgrade process is as follows:*
+
+* The GuestOS Update image is written to the passive partition set. 
+* The active and passive partition sets are "swapped," (i.e. the active partition set becomes "passive," and the passive partition set becomes "active")
+* GuestOS reboots. After reboot, GuestOS will use the new GuestOS version on the newly active partition set, thereby upgrading the GuestOS.
+
+The same process is followed for HostOS upgrades.
+
+=== Building upgrade image
+
+The Bazel command used to build the HostOS/GuestOS images also generates a HostOS/GuestOS upgrade image:
+
+    $ bazel build //ic-os/{hostos,guestos}/envs/<TARGET>/...
+
+This command will output `update-img.tar.zst` in `/ic/bazel-bin/ic-os/{hostos,guestos}/envs/{prod,dev,dev-malicious}`, which is the tar archive of the HostOS/GuestOS update image.
+
+Note that the upgrade images include only the boot and root partitions in a tar archive. Full images, on the other hand, include the entire partition table.
+
+=== Installing upgrade image
+
+Each HostOS/GuestOS contains the manageboot script, used to install the upgrade image:
+
+    manageboot.sh upgrade-install update-img.tar
+    manageboot.sh upgrade-commit
+
+Following the execution of these commands, the system will reboot into the newly installed version. Note that unless confirmation of full operational functionality is provided, the system will rollback to the previous HostOS/GuestOS on the subsequent reboot:
+
+    manageboot.sh confirm
+
+For more information on the upgrade commands, see ic-os/components/upgrade/manageboot
+
+== SEV-SNP upgrade process
+
+When SEV-SNP is enabled, GuestOS upgrades require an additional **disk encryption key exchange** step. This is because the store partition's encryption key is derived from the SEV launch measurement. A new GuestOS version has a different launch measurement, so the new version cannot derive the old key on its own.
+
+To perform this exchange, the HostOS launches a temporary, low-resource "upgrade VM" (4 GiB memory) alongside the active GuestOS on the same physical CPU. The upgrade VM exists only to perform the key exchange. The full sequence is:
+
+1. The orchestrator installs the new image to the passive partition, same as a non-SEV upgrade.
+2. The orchestrator starts a key exchange server on the active GuestOS and requests the HostOS to launch the upgrade VM.
+3. The active GuestOS and upgrade VM perform **mutual attestation**: each side generates an SEV-SNP attestation report and verifies the other's measurement against approved launch measurements from the registry, confirms matching chip IDs (same physical CPU), and validates a TLS key binding to prevent MITM.
+4. The active GuestOS sends the disk encryption key to the upgrade VM over the attested channel. The upgrade VM writes the key to disk and shuts down.
+5. The orchestrator commits the upgrade and reboots into the new version, which uses the transferred key to unlock the store partition.
+
+The mutual attestation prevents two attack scenarios:
+
+* A malicious upgrade VM impersonating an NNS-approved version to steal the disk key.
+* A malicious old GuestOS injecting tainted data into the store partition before handing off the key to a legitimate upgrade.
+
+For implementation details, see link:../../rs/ic_os/guest_upgrade/README.md[rs/ic_os/guest_upgrade].

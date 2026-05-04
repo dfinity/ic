@@ -2,19 +2,18 @@
 //! immediately. The provided data provider is polled periodically in the
 //! background when start_polling() is called.
 use crossbeam_channel::{RecvTimeoutError, Sender, TrySendError};
-pub use ic_config::registry_client::DataProviderConfig;
 pub use ic_interfaces_registry::{
-    empty_zero_registry_record, RegistryClient, RegistryClientVersionedResult,
-    RegistryDataProvider, RegistryTransportRecord, POLLING_PERIOD, ZERO_REGISTRY_VERSION,
+    POLLING_PERIOD, RegistryClient, RegistryClientVersionedResult, RegistryDataProvider,
+    RegistryRecord, ZERO_REGISTRY_VERSION, empty_zero_registry_record,
 };
 use ic_metrics::MetricsRegistry;
 pub use ic_types::{
+    RegistryVersion, Time,
     crypto::threshold_sig::ThresholdSigPublicKey,
     registry::{RegistryClientError, RegistryDataProviderError},
     time::current_time,
-    RegistryVersion, Time,
 };
-use ic_utils::thread::JoinOnDrop;
+use ic_utils_thread::JoinOnDrop;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 use std::{collections::BTreeMap, thread::JoinHandle};
 
@@ -130,7 +129,17 @@ impl RegistryClientImpl {
     pub fn try_polling_latest_version(&self, retries: usize) -> Result<(), RegistryClientError> {
         let mut last_version = self.get_latest_version();
         for _ in 0..retries {
-            self.poll_once()?;
+            match self.poll_once() {
+                Ok(()) => {}
+                Err(RegistryClientError::DataProviderQueryFailed {
+                    source: RegistryDataProviderError::Transfer { source },
+                    ..
+                }) if source.contains("Request timed out") => {
+                    eprintln!("Request timed out, retrying.");
+                    continue;
+                }
+                Err(e) => return Err(e),
+            }
             let new_version = self.get_latest_version();
             if new_version == last_version {
                 return Ok(());
@@ -143,7 +152,7 @@ impl RegistryClientImpl {
     fn check_version(
         &self,
         version: RegistryVersion,
-    ) -> Result<RwLockReadGuard<CacheState>, RegistryClientError> {
+    ) -> Result<RwLockReadGuard<'_, CacheState>, RegistryClientError> {
         let cache_state = self.cache.read().unwrap();
         if version > cache_state.latest_version {
             return Err(RegistryClientError::VersionNotAvailable { version });
@@ -179,7 +188,7 @@ impl Drop for PollThread {
 
 #[derive(Clone)]
 struct CacheState {
-    records: Vec<RegistryTransportRecord>,
+    records: Vec<RegistryRecord>,
     timestamps: BTreeMap<RegistryVersion, Time>,
     latest_version: RegistryVersion,
 }
@@ -193,7 +202,7 @@ impl CacheState {
         }
     }
 
-    fn update(&mut self, records: Vec<RegistryTransportRecord>, new_version: RegistryVersion) {
+    fn update(&mut self, records: Vec<RegistryRecord>, new_version: RegistryVersion) {
         assert!(new_version > self.latest_version);
         self.timestamps.insert(new_version, current_time());
         for record in records {
@@ -291,27 +300,25 @@ impl RegistryClient for RegistryClientImpl {
         // 1. Skip all entries up to the first_match_index
         // 2. Filter out all versions newer than the one we are interested in
         // 3. Only consider the subsequence that starts with the given prefix
-        let res = cache_state
+        let records = cache_state
             .records
             .iter()
             .skip(first_match_index) // (1)
             .filter(|r| r.version <= version) // (2)
-            .take_while(|r| r.key.starts_with(key_prefix)) // (3)
-            .fold(vec![], |mut acc, r| {
-                // is_set iff the key is set in this transport record.
-                let is_set = r.value.is_some();
-                // if this record indicates a removal for the last key in the list, we need to
-                // remove that key.
-                if acc.last().map(|k| k == &r.key).unwrap_or(false) {
-                    if !is_set {
-                        acc.pop();
-                    }
-                } else if is_set {
-                    acc.push(r.key.clone());
-                }
-                acc
-            });
-        Ok(res)
+            .take_while(|r| r.key.starts_with(key_prefix)); // (3)
+
+        // For each key, keep only the record values for the latest record versions. We rely upon
+        // the fact that for a fixed key, the records are sorted by version.
+        let mut effective_records = BTreeMap::new();
+        for record in records {
+            effective_records.insert(record.key.clone(), &record.value);
+        }
+        // Finally, remove empty records, i.e., those for which `value` is `None`.
+        let result = effective_records
+            .into_iter()
+            .filter_map(|(key, value)| value.is_some().then_some(key))
+            .collect();
+        Ok(result)
     }
 
     fn get_latest_version(&self) -> RegistryVersion {
@@ -336,18 +343,6 @@ impl RegistryClient for RegistryClientImpl {
             .timestamps
             .get(&registry_version)
             .cloned()
-    }
-}
-
-/// An empty registry data provider that emulates a static, empty registry.
-pub struct EmptyRegistryDataProvider();
-
-impl RegistryDataProvider for EmptyRegistryDataProvider {
-    fn get_updates_since(
-        &self,
-        _version: RegistryVersion,
-    ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
-        Ok(vec![])
     }
 }
 
@@ -379,10 +374,12 @@ mod tests {
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
         let registry = RegistryClientImpl::new(data_provider, None);
 
-        assert!(registry
-            .get_test_proto("any_key", RegistryVersion::new(0))
-            .unwrap()
-            .is_none());
+        assert!(
+            registry
+                .get_test_proto("any_key", RegistryVersion::new(0))
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
@@ -403,6 +400,7 @@ mod tests {
         set("A", 3);
         set("A", 6);
         set("B", 6);
+        set("B2", 4);
         set("B2", 5);
         rem("B2", 6);
         set("B3", 5);
@@ -448,9 +446,10 @@ mod tests {
         assert_eq!(get("B", 6).unwrap(), Some(value(6)));
         assert!(get("B", latest_version + 1).is_err());
 
-        for t in 0..5 {
+        for t in 0..4 {
             assert!(get("B2", t).unwrap().is_none());
         }
+        assert_eq!(get("B2", 4).unwrap(), Some(value(4)));
         assert_eq!(get("B2", 5).unwrap(), Some(value(5)));
         assert!(get("B2", 6).unwrap().is_none());
         assert!(get("B2", latest_version + 1).is_err());
@@ -526,7 +525,7 @@ mod tests {
         let registry = RegistryClientImpl::new(data_provider.clone(), None);
 
         if let Err(e) = registry.fetch_and_start_polling() {
-            panic!("fetch_and_start_polling failed: {}", e);
+            panic!("fetch_and_start_polling failed: {e}");
         }
         std::thread::sleep(Duration::from_secs(1));
         std::mem::drop(registry);
@@ -614,6 +613,56 @@ mod tests {
 
         assert_eq!(get("C", 7).unwrap(), Some(value(7)));
     }
+
+    fn v(v: u64) -> RegistryVersion {
+        RegistryVersion::new(v)
+    }
+
+    fn value(v: u64) -> TestProto {
+        TestProto { test_value: v }
+    }
+
+    struct FakeDataProvider {
+        pub poll_counter: Arc<AtomicUsize>,
+    }
+
+    impl RegistryDataProvider for FakeDataProvider {
+        fn get_updates_since(
+            &self,
+            _version: RegistryVersion,
+        ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError> {
+            self.poll_counter.fetch_add(1, Ordering::Relaxed);
+            Ok(vec![])
+        }
+    }
+
+    struct LimitingDataProvider {
+        changelog_size: RegistryVersion,
+        data_provider: Arc<dyn RegistryDataProvider>,
+    }
+
+    impl LimitingDataProvider {
+        fn new(
+            changelog_size: RegistryVersion,
+            data_provider: Arc<dyn RegistryDataProvider>,
+        ) -> Self {
+            Self {
+                changelog_size,
+                data_provider,
+            }
+        }
+    }
+
+    impl RegistryDataProvider for LimitingDataProvider {
+        fn get_updates_since(
+            &self,
+            version: RegistryVersion,
+        ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError> {
+            let mut res = self.data_provider.get_updates_since(version)?;
+            res.retain(|r| r.version <= version + self.changelog_size);
+            Ok(res)
+        }
+    }
     #[cfg(test)]
     mod metrics {
         use ic_test_utilities_metrics::fetch_int_gauge;
@@ -643,56 +692,6 @@ mod tests {
                 fetch_int_gauge(&metrics_registry, "ic_registry_client_registry_version"),
                 Some(3)
             );
-        }
-    }
-
-    fn v(v: u64) -> RegistryVersion {
-        RegistryVersion::new(v)
-    }
-
-    fn value(v: u64) -> TestProto {
-        TestProto { test_value: v }
-    }
-
-    struct FakeDataProvider {
-        pub poll_counter: Arc<AtomicUsize>,
-    }
-
-    impl RegistryDataProvider for FakeDataProvider {
-        fn get_updates_since(
-            &self,
-            _version: RegistryVersion,
-        ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
-            self.poll_counter.fetch_add(1, Ordering::Relaxed);
-            Ok(vec![])
-        }
-    }
-
-    struct LimitingDataProvider {
-        changelog_size: RegistryVersion,
-        data_provider: Arc<dyn RegistryDataProvider>,
-    }
-
-    impl LimitingDataProvider {
-        fn new(
-            changelog_size: RegistryVersion,
-            data_provider: Arc<dyn RegistryDataProvider>,
-        ) -> Self {
-            Self {
-                changelog_size,
-                data_provider,
-            }
-        }
-    }
-
-    impl RegistryDataProvider for LimitingDataProvider {
-        fn get_updates_since(
-            &self,
-            version: RegistryVersion,
-        ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
-            let mut res = self.data_provider.get_updates_since(version)?;
-            res.retain(|r| r.version <= version + self.changelog_size);
-            Ok(res)
         }
     }
 }

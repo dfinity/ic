@@ -1,0 +1,16 @@
+[package]
+name = "stable_structures"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+ic-stable-structures = { workspace = true }
+
+[[bin]]
+name = "stable_structures"
+path = "src/main.rs"

@@ -4,39 +4,81 @@
 
 use crate::consensus::{
     metrics::{BatchStats, BlockStats},
-    pool_reader::PoolReader,
-    prelude::*,
-    utils::{crypto_hashable_to_seed, get_block_hash_string, lookup_replica_version},
+    status::{self, Status},
 };
-use crate::ecdsa::utils::EcdsaBlockReaderImpl;
-use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
-use ic_crypto::get_tecdsa_master_public_key;
-use ic_crypto::utils::ni_dkg::initial_ni_dkg_transcript_record_from_transcript;
-use ic_ic00_types::SetupInitialDKGResponse;
-use ic_interfaces::messaging::{MessageRouting, MessageRoutingError};
+use ic_consensus_chain_key::ChainKeyPayloadBuilderImpl;
+use ic_consensus_dkg::get_vetkey_public_keys;
+use ic_consensus_idkg::utils::get_idkg_subnet_public_keys_and_pre_signatures;
+use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
+use ic_error_types::RejectCode;
+use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
+use ic_interfaces::{
+    batch_payload::IntoMessages,
+    messaging::{MessageRouting, MessageRoutingError},
+};
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
-use ic_protobuf::log::consensus_log_entry::v1::ConsensusLogEntry;
-use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
+use ic_logger::{ReplicaLogger, debug, error, info, warn};
+use ic_management_canister_types_private::{ReshareChainKeyResponse, SetupInitialDKGResponse};
+use ic_protobuf::{
+    log::consensus_log_entry::v1::ConsensusLogEntry,
+    registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
+};
 use ic_types::{
-    canister_http::*,
-    consensus::ecdsa::{CompletedSignature, EcdsaBlockReader},
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
-    messages::{CallbackId, Response},
-    ReplicaVersion,
+    Height, PrincipalId, SubnetId,
+    batch::{
+        Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData,
+        ConsensusResponse,
+    },
+    consensus::{
+        Block, BlockPayload, HasVersion,
+        idkg::{self},
+    },
+    crypto::randomness_from_crypto_hashable,
+    crypto::threshold_sig::{
+        ThresholdSigPublicKey,
+        ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+    },
+    messages::{CallbackId, Payload, RejectContext},
 };
 use std::collections::BTreeMap;
 
 /// Deliver all finalized blocks from
 /// `message_routing.expected_batch_height` to `finalized_height` via
 /// `MessageRouting` and return the last delivered batch height.
-#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub fn deliver_batches(
     message_routing: &dyn MessageRouting,
+    membership: &Membership,
     pool: &PoolReader<'_>,
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
-    current_replica_version: ReplicaVersion,
+    log: &ReplicaLogger,
+    // This argument should only be used by the ic-replay tool. If it is set to `None`, we will
+    // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
+    // deliver all bathes up to the height `min(h, finalized_height)`.
+    max_batch_height_to_deliver: Option<Height>,
+) -> Result<Height, MessageRoutingError> {
+    deliver_batches_with_result_processor(
+        message_routing,
+        membership,
+        pool,
+        registry_client,
+        subnet_id,
+        log,
+        max_batch_height_to_deliver,
+        /*result_processor=*/ None,
+    )
+}
+
+/// Deliver all finalized blocks from
+/// `message_routing.expected_batch_height` to `finalized_height` via
+/// `MessageRouting` and return the last delivered batch height.
+#[allow(clippy::type_complexity)]
+pub(crate) fn deliver_batches_with_result_processor(
+    message_routing: &dyn MessageRouting,
+    membership: &Membership,
+    pool: &PoolReader<'_>,
+    registry_client: &dyn RegistryClient,
+    subnet_id: SubnetId,
     log: &ReplicaLogger,
     // This argument should only be used by the ic-replay tool. If it is set to `None`, we will
     // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
@@ -51,313 +93,369 @@ pub fn deliver_batches(
         .unwrap_or(finalized_height)
         .min(finalized_height);
 
-    let mut h = message_routing.expected_batch_height();
-    if h == Height::from(0) {
+    let mut height = message_routing.expected_batch_height();
+    if height == Height::from(0) {
         return Ok(Height::from(0));
     }
-    let mut last_delivered_batch_height = h.decrement();
-    while h <= target_height {
-        match (pool.get_finalized_block(h), pool.get_random_tape(h)) {
-            (Some(block), Some(tape)) => {
-                debug!(
-                    every_n_seconds => 5,
-                    log,
-                    "Finalized height";
-                    consensus => ConsensusLogEntry {
-                        height: Some(h.get()),
-                        hash: Some(get_block_hash_string(&block)),
-                        replica_version: Some(String::from(current_replica_version.clone()))
-                    }
-                );
-                // Compute consensus' responses to subnet calls.
-                let consensus_responses = generate_responses_to_subnet_calls(&block, log);
-
-                if block.payload.is_summary() {
-                    info!(log, "Delivering finalized batch at CUP height of {}", h);
-                }
-                // When we are not deliverying CUP block, we must check replica_version
-                else {
-                    match pool.registry_version(h).and_then(|registry_version| {
-                        lookup_replica_version(registry_client, subnet_id, log, registry_version)
-                    }) {
-                        Some(replica_version) if replica_version != current_replica_version => {
-                            debug!(
-                                every_n_seconds => 5,
-                                log,
-                                "Batch of height {} is not delivered before replica upgrades to new version {}",
-                                h,
-                                replica_version.as_ref()
-                            );
-                            return Ok(last_delivered_batch_height);
-                        }
-                        None => {
-                            warn!(
-                                log,
-                                "Skipping batch delivery because replica version is unknown",
-                            );
-                            return Ok(last_delivered_batch_height);
-                        }
-                        _ => {}
-                    }
-                }
-
-                let randomness = Randomness::from(crypto_hashable_to_seed(&tape));
-                let ecdsa_subnet_public_key = pool.dkg_summary_block(&block).and_then(|summary| {
-                    let ecdsa_payload = block.payload.as_ref().as_ecdsa();
-                    ecdsa_payload.and_then(|ecdsa| {
-                        let chain = build_consensus_block_chain(pool.pool(), &summary, &block);
-                        let block_reader = EcdsaBlockReaderImpl::new(chain);
-                        let transcript_ref = match &ecdsa.key_transcript.current {
-                            Some(unmasked) => *unmasked.as_ref(),
-                            None => return None,
-                        };
-                        match block_reader.transcript(&transcript_ref) {
-                            Ok(transcript) =>  {
-                                get_tecdsa_master_public_key(&transcript)
-                                    .ok()
-                                    .map(|public_key| (ecdsa.key_transcript.key_id.clone(), public_key))
-                            }
-                            Err(err) => {
-                                warn!(
-                                    log,
-                                    "deliver_batches(): failed to translate transcript ref {:?}: {:?}",
-                                    transcript_ref, err
-                                );
-                                None
-                            }
-                        }
-                    })
-                });
-                let block_stats = BlockStats::from(&block);
-
-                // This flag can only be true, if we've called deliver_batches with a height
-                // limit.  In this case we also want to have a checkpoint for that last height.
-                let persist_batch = Some(h) == max_batch_height_to_deliver;
-                let batch = Batch {
-                    batch_number: h,
-                    requires_full_state_hash: block.payload.is_summary() || persist_batch,
-                    payload: if block.payload.is_summary() {
-                        BatchPayload::default()
-                    } else {
-                        BlockPayload::from(block.payload).into_data().batch
-                    },
-                    randomness,
-                    ecdsa_subnet_public_keys: ecdsa_subnet_public_key.into_iter().collect(),
-                    registry_version: block.context.registry_version,
-                    time: block.context.time,
-                    consensus_responses,
-                };
-                let batch_stats = BatchStats::from(&batch);
-                debug!(
-                    log,
-                    "replica {:?} delivered batch {:?} for block_hash {:?}",
-                    current_replica_version,
-                    batch_stats.batch_height,
-                    block_stats.block_hash
-                );
-                let result = message_routing.deliver_batch(batch);
-                if let Some(f) = result_processor {
-                    f(&result, block_stats, batch_stats);
-                }
-                if let Err(err) = result {
-                    warn!(every_n_seconds => 5, log, "Batch delivery failed: {:?}", err);
-                    return Err(err);
-                }
-                last_delivered_batch_height = h;
-                h = h.increment();
+    let mut last_delivered_batch_height = height.decrement();
+    while height <= target_height {
+        let Some(block) = pool.get_finalized_block(height) else {
+            warn!(
+                every_n_seconds => 30,
+                log,
+                "Do not deliver height {} because no finalized block was found. \
+                This should indicate we are waiting for state sync. \
+                Finalized height: {}",
+                height,
+                finalized_height
+            );
+            break;
+        };
+        let Some(tape) = pool.get_random_tape(height) else {
+            // Do not deliver batch if we don't have random tape
+            warn!(
+                every_n_seconds => 30,
+                log,
+                "Do not deliver height {} because RandomTape is not ready. Will re-try later",
+                height
+            );
+            break;
+        };
+        let replica_version = block.version().clone();
+        let mut block_stats = BlockStats::from(&block);
+        debug!(
+            every_n_seconds => 5,
+            log,
+            "Finalized height";
+            consensus => ConsensusLogEntry {
+                height: Some(height.get()),
+                hash: Some(block_stats.block_hash.clone()),
+                replica_version: Some(String::from(&replica_version))
             }
-            (None, _) => {
-                trace!(
+        );
+
+        if block.payload.is_summary() {
+            info!(
+                log,
+                "Delivering finalized batch at CUP height of {}", height
+            );
+        }
+        // When we are not delivering CUP block, we must check if the subnet is halted.
+        else {
+            match status::get_status(height, registry_client, subnet_id, pool, log) {
+                Some(Status::Halting | Status::Halted) => {
+                    debug!(
+                        every_n_seconds => 5,
                         log,
-                        "Do not deliver height {:?} because no finalized block was found. This should indicate we are waiting for state sync.",
-                        h);
-                break;
-            }
-            (_, None) => {
-                // Do not deliver batch if we don't have random tape
-                trace!(
-                    log,
-                    "Do not deliver height {:?} because RandomTape is not ready. Will re-try later",
-                    h
-                );
-                break;
+                        "Batch of height {} is not delivered because replica is halted",
+                        height,
+                    );
+                    return Ok(last_delivered_batch_height);
+                }
+                Some(Status::Running) => {}
+                None => {
+                    warn!(
+                        log,
+                        "Skipping batch delivery because checking if replica is halted failed",
+                    );
+                    return Ok(last_delivered_batch_height);
+                }
             }
         }
+
+        let randomness = randomness_from_crypto_hashable(&tape);
+
+        // Retrieve the dkg summary block
+        let Some(summary_block) = pool.dkg_summary_block_for_finalized_height(height) else {
+            warn!(
+                every_n_seconds => 30,
+                log,
+                "Do not deliver height {} because no summary block was found. \
+                Finalized height: {}",
+                height,
+                finalized_height
+            );
+            break;
+        };
+        let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
+
+        let mut chain_key_subnet_public_keys = BTreeMap::new();
+        let (mut idkg_subnet_public_keys, idkg_pre_signatures) =
+            get_idkg_subnet_public_keys_and_pre_signatures(
+                &block,
+                &summary_block,
+                pool,
+                log,
+                block_stats.idkg_stats.as_mut(),
+            );
+        chain_key_subnet_public_keys.append(&mut idkg_subnet_public_keys);
+
+        // Add vetKD keys to this map as well
+        let (mut nidkg_subnet_public_keys, nidkg_ids) = get_vetkey_public_keys(dkg_summary, log);
+        chain_key_subnet_public_keys.append(&mut nidkg_subnet_public_keys);
+
+        // If the subnet contains chain keys, log them on every summary block
+        if !chain_key_subnet_public_keys.is_empty() && block.payload.is_summary() {
+            info!(
+                log,
+                "Subnet {} contains chain keys: {:?}", subnet_id, chain_key_subnet_public_keys
+            );
+        }
+
+        let mut batch_stats = BatchStats::new(height);
+
+        let chain_key_data = ChainKeyData {
+            master_public_keys: chain_key_subnet_public_keys,
+            idkg_pre_signatures,
+            nidkg_ids,
+        };
+        let consensus_responses = generate_responses_to_subnet_calls(&block, &mut batch_stats, log);
+        // This flag can only be true, if we've called deliver_batches with a height
+        // limit.  In this case we also want to have a checkpoint for that last height.
+        let persist_batch = Some(height) == max_batch_height_to_deliver;
+        let requires_full_state_hash = block.payload.is_summary() || persist_batch;
+        let batch_content = match block.payload.as_ref() {
+            BlockPayload::Summary(_summary_payload) => BatchContent::Data {
+                batch_messages: BatchMessages::default(),
+                chain_key_data,
+                consensus_responses,
+                requires_full_state_hash,
+            },
+            BlockPayload::Data(data_payload) => {
+                batch_stats.add_from_payload(&data_payload.batch);
+                BatchContent::Data {
+                    batch_messages: data_payload
+                        .batch
+                        .clone()
+                        .into_messages()
+                        .map_err(|err| {
+                            error!(log, "batch payload deserialization failed: {:?}", err);
+                            err
+                        })
+                        .unwrap_or_default(),
+                    chain_key_data,
+                    consensus_responses,
+                    requires_full_state_hash,
+                }
+            }
+        };
+
+        let Some(previous_beacon) = pool.get_random_beacon(last_delivered_batch_height) else {
+            warn!(
+                every_n_seconds => 5,
+                log,
+                "No batch delivery at height {}: no random beacon found.",
+                height
+            );
+            return Ok(last_delivered_batch_height);
+        };
+        let blockmaker_ranking = match membership.get_shuffled_nodes(
+            block.height,
+            &previous_beacon,
+            &ic_crypto_prng::RandomnessPurpose::BlockmakerRanking,
+        ) {
+            Ok(nodes) => nodes,
+            Err(e) => {
+                warn!(
+                    every_n_seconds => 5,
+                    log,
+                    "No batch delivery at height {}: membership error: {:?}",
+                    height,
+                    e
+                );
+                return Ok(last_delivered_batch_height);
+            }
+        };
+        let blockmaker_metrics = BlockmakerMetrics {
+            blockmaker: blockmaker_ranking[block.rank.0 as usize],
+            failed_blockmakers: blockmaker_ranking[0..(block.rank.0 as usize)].to_vec(),
+        };
+
+        let next_checkpoint_height = dkg_summary.get_next_start_height();
+        let current_interval_length = dkg_summary.interval_length;
+        let batch = Batch {
+            batch_number: height,
+            batch_summary: Some(BatchSummary {
+                next_checkpoint_height,
+                current_interval_length,
+            }),
+            content: batch_content,
+            randomness,
+
+            registry_version: block.context.registry_version,
+            time: block.context.time,
+            blockmaker_metrics,
+            replica_version,
+        };
+
+        let result = message_routing.deliver_batch(batch);
+        if let Some(f) = result_processor {
+            f(&result, block_stats, batch_stats);
+        }
+        if let Err(err) = result {
+            warn!(every_n_seconds => 5, log, "Batch delivery failed: {:?}", err);
+            return Err(err);
+        }
+        last_delivered_batch_height = height;
+        height = height.increment();
     }
     Ok(last_delivered_batch_height)
 }
 
 /// This function creates responses to the system calls that are redirected to
 /// consensus. There are two types of calls being handled here:
-/// - Initial NiDKG transcript creation, where a response may come from summary payloads.
-/// - Threshold ECDSA signature creation, where a response may come from from data payloads.
+/// - Initial NiDKG transcript creation, where a response may come from summary or data payloads.
+/// - Canister threshold signature creation, where a response may come from from data payloads.
 /// - CanisterHttpResponse handling, where a response to a canister http request may come from data payloads.
-pub fn generate_responses_to_subnet_calls(block: &Block, log: &ReplicaLogger) -> Vec<Response> {
-    let mut consensus_responses = Vec::<Response>::new();
-    let block_payload = &block.payload;
-    if block_payload.is_summary() {
-        let summary = block_payload.as_ref().as_summary();
-        info!(
-            log,
-            "New DKG summary with config ids created: {:?}",
-            summary.dkg.configs.keys().collect::<Vec<_>>()
-        );
-        consensus_responses.append(&mut generate_responses_to_setup_initial_dkg_calls(
-            &summary.dkg.transcripts_for_new_subnets_with_callback_ids,
-            log,
-        ))
-    } else {
-        let block_payload = block_payload.as_ref().as_data();
-        if let Some(payload) = &block_payload.ecdsa {
-            consensus_responses.append(&mut generate_responses_to_sign_with_ecdsa_calls(payload));
-            consensus_responses.append(&mut generate_responses_to_initial_dealings_calls(payload));
+fn generate_responses_to_subnet_calls(
+    block: &Block,
+    stats: &mut BatchStats,
+    log: &ReplicaLogger,
+) -> Vec<ConsensusResponse> {
+    let mut consensus_responses = Vec::new();
+    match block.payload.as_ref() {
+        BlockPayload::Summary(summary_payload) => {
+            info!(
+                log,
+                "New DKG summary with config ids created: {:?}",
+                summary_payload.dkg.configs.keys().collect::<Vec<_>>()
+            );
+            consensus_responses.append(&mut generate_responses_to_remote_dkgs(
+                &summary_payload.dkg.transcripts_for_remote_subnets,
+                log,
+            ))
         }
+        BlockPayload::Data(data_payload) => {
+            consensus_responses.append(&mut generate_responses_to_remote_dkgs(
+                &data_payload.dkg.transcripts_for_remote_subnets,
+                log,
+            ));
 
-        consensus_responses.append(
-            &mut generate_execution_responses_for_canister_http_responses(
-                &block_payload.batch.canister_http,
-            ),
-        );
+            if let Some(payload) = &data_payload.idkg {
+                consensus_responses
+                    .append(&mut generate_responses_to_initial_dealings_calls(payload));
+            }
+
+            let (mut http_responses, http_stats) =
+                CanisterHttpPayloadBuilderImpl::into_messages(&data_payload.batch.canister_http);
+            consensus_responses.append(&mut http_responses);
+            stats.canister_http = http_stats;
+
+            let mut chain_key_responses =
+                ChainKeyPayloadBuilderImpl::into_messages(&data_payload.batch.chain_key);
+            consensus_responses.append(&mut chain_key_responses);
+        }
     }
     consensus_responses
 }
 
-/// This function converts the canister http responses from the batch payload
-/// into something that is recognizable by upper layers.
-pub fn generate_execution_responses_for_canister_http_responses(
-    canister_http_payload: &CanisterHttpPayload,
-) -> Vec<Response> {
-    // Deliver responses with consenus
-    canister_http_payload
-        .responses
-        .iter()
-        .map(|canister_http_response| {
-            let content = &canister_http_response.content;
-            Response {
-                // NOTE originator and respondent are not needed for these types of calls
-                originator: CanisterId::ic_00(),
-                respondent: CanisterId::ic_00(),
-                originator_reply_callback: content.id,
-                refund: Cycles::zero(),
-                response_payload: match &content.content {
-                    CanisterHttpResponseContent::Success(data) => {
-                        ic_types::messages::Payload::Data(data.clone())
-                    }
-                    CanisterHttpResponseContent::Reject(canister_http_reject) => {
-                        ic_types::messages::Payload::Reject((canister_http_reject).into())
-                    }
-                },
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RemoteDkgResults<'a> {
+    ReshareChainKey(&'a Result<NiDkgTranscript, String>),
+    SetupInitialDKG {
+        low_threshold: Option<&'a Result<NiDkgTranscript, String>>,
+        high_threshold: Option<&'a Result<NiDkgTranscript, String>>,
+    },
+}
+
+impl<'a> RemoteDkgResults<'a> {
+    fn new(id: &NiDkgId, transcript: &'a Result<NiDkgTranscript, String>) -> Self {
+        match id.dkg_tag {
+            NiDkgTag::LowThreshold => Self::SetupInitialDKG {
+                low_threshold: Some(transcript),
+                high_threshold: None,
+            },
+            NiDkgTag::HighThreshold => Self::SetupInitialDKG {
+                low_threshold: None,
+                high_threshold: Some(transcript),
+            },
+            NiDkgTag::HighThresholdForKey(_) => Self::ReshareChainKey(transcript),
+        }
+    }
+
+    fn add_transcript(
+        &mut self,
+        id: &NiDkgId,
+        transcript: &'a Result<NiDkgTranscript, String>,
+        logger: &ReplicaLogger,
+    ) {
+        let Self::SetupInitialDKG {
+            low_threshold,
+            high_threshold,
+        } = self
+        else {
+            error!(
+                logger,
+                "Cannot add a second transcript to a ReshareChainKey transcript: {id}"
+            );
+            return;
+        };
+
+        let old_val = match id.dkg_tag {
+            NiDkgTag::LowThreshold => low_threshold.replace(transcript),
+            NiDkgTag::HighThreshold => high_threshold.replace(transcript),
+            NiDkgTag::HighThresholdForKey(_) => {
+                error!(
+                    logger,
+                    "Cannot add a ReshareChainKey transcript to a SetupInitialDKG request: {id}"
+                );
+                return;
             }
+        };
+
+        if old_val.is_some() {
+            error!(
+                logger,
+                "Received a duplicate transcript for SetupInitialDKG request: {id}"
+            );
+        }
+    }
+}
+
+/// This function creates responses to finished remote DKGs
+///
+/// Responses can either be information about a failed DKG or contain the DKG transcript(s)
+/// necessary to complete the request.
+///
+/// The responses generate by this function are:
+/// - Responses to `setup_initial_dkg` system calls
+/// - Responses to `reshare_chain_key`, if the requested key is a NiDkg key
+fn generate_responses_to_remote_dkgs(
+    transcripts_for_remote_subnets: &[(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)],
+    log: &ReplicaLogger,
+) -> Vec<ConsensusResponse> {
+    let mut dkg_results: BTreeMap<CallbackId, RemoteDkgResults> = BTreeMap::new();
+    for (id, callback_id, transcript) in transcripts_for_remote_subnets.iter() {
+        dkg_results
+            .entry(*callback_id)
+            .and_modify(|transcript_result| transcript_result.add_transcript(id, transcript, log))
+            .or_insert_with(|| RemoteDkgResults::new(id, transcript));
+    }
+
+    dkg_results
+        .into_iter()
+        .filter_map(|(callback_id, transcript_result)| {
+            match transcript_result {
+                RemoteDkgResults::ReshareChainKey(key_transcript) => {
+                    Some(generate_reshare_chain_key_response(key_transcript))
+                }
+                RemoteDkgResults::SetupInitialDKG {
+                    low_threshold,
+                    high_threshold,
+                } => generate_dkg_response_payload(low_threshold, high_threshold, log),
+            }
+            .map(|payload| ConsensusResponse::new(callback_id, payload))
         })
-        // Deliver timeout responses
-        .chain(
-            canister_http_payload
-                .timeouts
-                .iter()
-                .map(|canister_http_timeout| Response {
-                    originator: CanisterId::ic_00(),
-                    respondent: CanisterId::ic_00(),
-                    originator_reply_callback: *canister_http_timeout,
-                    refund: Cycles::zero(),
-                    response_payload: ic_types::messages::Payload::Reject(
-                        ic_types::messages::RejectContext {
-                            code: ic_error_types::RejectCode::SysTransient,
-                            message: "Canister http request timed out".to_string(),
-                        },
-                    ),
-                }),
-        )
-        .chain(
-            canister_http_payload
-                .divergence_responses
-                .iter()
-                .filter_map(|divergence_response| {
-                    Some(Response {
-                        originator: CanisterId::ic_00(),
-                        respondent: CanisterId::ic_00(),
-                        originator_reply_callback: divergence_response.shares.get(0)?.content.id,
-                        refund: Cycles::zero(),
-                        response_payload: ic_types::messages::Payload::Reject(
-                            ic_types::messages::RejectContext {
-                                code: ic_error_types::RejectCode::SysTransient,
-                                message: "Canister http responses were different across replicas, and no consensus was reached".to_string(),
-                            },
-                        ),
-                    })
-                }),
-        )
         .collect()
 }
 
-struct TranscriptResults {
-    low_threshold: Option<Result<NiDkgTranscript, String>>,
-    high_threshold: Option<Result<NiDkgTranscript, String>>,
-}
-
-/// This function creates responses to the SetupInitialDKG system calls with the
-/// computed DKG key material for remote subnets, without needing values from the state.
-pub fn generate_responses_to_setup_initial_dkg_calls(
-    transcripts_for_new_subnets: &[(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)],
-    log: &ReplicaLogger,
-) -> Vec<Response> {
-    let mut consensus_responses = Vec::<Response>::new();
-
-    let mut transcripts: BTreeMap<CallbackId, TranscriptResults> = BTreeMap::new();
-
-    for (id, callback_id, transcript) in transcripts_for_new_subnets.iter() {
-        let add_transcript = |transcript_results: &mut TranscriptResults| {
-            let value = Some(transcript.clone());
-            match id.dkg_tag {
-                NiDkgTag::LowThreshold => {
-                    if transcript_results.low_threshold.is_some() {
-                        error!(
-                            log,
-                            "Multiple low threshold transcripts for {}", callback_id
-                        );
-                    }
-                    transcript_results.low_threshold = value;
-                }
-                NiDkgTag::HighThreshold => {
-                    if transcript_results.high_threshold.is_some() {
-                        error!(
-                            log,
-                            "Multiple high threshold transcripts for {}", callback_id
-                        );
-                    }
-                    transcript_results.high_threshold = value;
-                }
-            }
-        };
-        match transcripts.get_mut(callback_id) {
-            Some(existing) => add_transcript(existing),
-            None => {
-                let mut transcript_results = TranscriptResults {
-                    low_threshold: None,
-                    high_threshold: None,
-                };
-                add_transcript(&mut transcript_results);
-                transcripts.insert(*callback_id, transcript_results);
-            }
-        };
+fn generate_reshare_chain_key_response(
+    key_transcript: &Result<NiDkgTranscript, String>,
+) -> Payload {
+    match key_transcript {
+        Ok(transcript) => Payload::Data(ReshareChainKeyResponse::NiDkg(transcript.into()).encode()),
+        Err(err) => Payload::Reject(RejectContext::new(RejectCode::CanisterReject, err)),
     }
-
-    for (callback_id, transcript_results) in transcripts.into_iter() {
-        let payload = generate_dkg_response_payload(
-            transcript_results.low_threshold.as_ref(),
-            transcript_results.high_threshold.as_ref(),
-            log,
-        );
-        if let Some(response_payload) = payload {
-            consensus_responses.push(Response {
-                originator: CanisterId::ic_00(),
-                respondent: CanisterId::ic_00(),
-                originator_reply_callback: callback_id,
-                refund: Cycles::zero(),
-                response_payload,
-            });
-        }
-    }
-    consensus_responses
 }
 
 /// Generate a response payload given the low and high threshold transcripts
@@ -365,7 +463,7 @@ fn generate_dkg_response_payload(
     low_threshold: Option<&Result<NiDkgTranscript, String>>,
     high_threshold: Option<&Result<NiDkgTranscript, String>>,
     log: &ReplicaLogger,
-) -> Option<messages::Payload> {
+) -> Option<Payload> {
     match (low_threshold, high_threshold) {
         (Some(Ok(low_threshold_transcript)), Some(Ok(high_threshold_transcript))) => {
             info!(
@@ -375,15 +473,38 @@ fn generate_dkg_response_payload(
                 high_threshold_transcript.dkg_id
             );
             let low_threshold_transcript_record =
-                initial_ni_dkg_transcript_record_from_transcript(low_threshold_transcript.clone());
+                InitialNiDkgTranscriptRecord::from(low_threshold_transcript);
             let high_threshold_transcript_record =
-                initial_ni_dkg_transcript_record_from_transcript(high_threshold_transcript.clone());
+                InitialNiDkgTranscriptRecord::from(high_threshold_transcript);
 
-            // This is what we expect consensus to reply with.
-            let threshold_sig_pk = high_threshold_transcript.public_key();
+            let threshold_sig_pk = match ThresholdSigPublicKey::try_from(high_threshold_transcript)
+            {
+                Ok(key) => key,
+                Err(err) => {
+                    return Some(Payload::Reject(RejectContext::new(
+                        RejectCode::CanisterReject,
+                        format!(
+                            "Failed to extract public key from high threshold transcript with id {:?}: {}",
+                            high_threshold_transcript.dkg_id, err,
+                        ),
+                    )));
+                }
+            };
             let subnet_threshold_public_key = PublicKeyProto::from(threshold_sig_pk);
-            let key_der: Vec<u8> =
-                ic_crypto::threshold_sig_public_key_to_der(threshold_sig_pk).unwrap();
+            let key_der = match ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der(
+                threshold_sig_pk,
+            ) {
+                Ok(key) => key,
+                Err(err) => {
+                    return Some(Payload::Reject(RejectContext::new(
+                        RejectCode::CanisterReject,
+                        format!(
+                            "Failed to encode threshold signature public key of transcript id {:?} into DER: {}",
+                            high_threshold_transcript.dkg_id, err,
+                        ),
+                    )));
+                }
+            };
             let fresh_subnet_id =
                 SubnetId::new(PrincipalId::new_self_authenticating(key_der.as_slice()));
 
@@ -394,50 +515,215 @@ fn generate_dkg_response_payload(
                 subnet_threshold_public_key,
             };
 
-            Some(messages::Payload::Data(initial_transcript_records.encode()))
+            Some(Payload::Data(initial_transcript_records.encode()))
         }
-        (Some(Err(err_str1)), Some(Err(err_str2))) => {
-            Some(messages::Payload::Reject(messages::RejectContext {
-                code: ic_error_types::RejectCode::CanisterReject,
-                message: format!("{}{}", err_str1, err_str2),
-            }))
-        }
-        (Some(Err(err_str)), _) => Some(messages::Payload::Reject(messages::RejectContext {
-            code: ic_error_types::RejectCode::CanisterReject,
-            message: err_str.to_string(),
-        })),
-        (_, Some(Err(err_str))) => Some(messages::Payload::Reject(messages::RejectContext {
-            code: ic_error_types::RejectCode::CanisterReject,
-            message: err_str.to_string(),
-        })),
+        (Some(Err(err_str1)), Some(Err(err_str2))) => Some(Payload::Reject(RejectContext::new(
+            RejectCode::CanisterReject,
+            format!("{err_str1}{err_str2}"),
+        ))),
+        (Some(Err(err_str)), _) | (_, Some(Err(err_str))) => Some(Payload::Reject(
+            RejectContext::new(RejectCode::CanisterReject, err_str),
+        )),
         _ => None,
     }
 }
 
-/// Creates responses to `SignWithECDSA` system calls with the computed
-/// signature.
-pub fn generate_responses_to_sign_with_ecdsa_calls(
-    ecdsa_payload: &ecdsa::EcdsaPayload,
-) -> Vec<Response> {
-    let mut consensus_responses = Vec::<Response>::new();
-    for completed in ecdsa_payload.signature_agreements.values() {
-        if let CompletedSignature::Unreported(response) = completed {
+/// Creates responses to `ReshareChainKeyArgs` system calls with the initial
+/// dealings.
+fn generate_responses_to_initial_dealings_calls(
+    idkg_payload: &idkg::IDkgPayload,
+) -> Vec<ConsensusResponse> {
+    let mut consensus_responses = Vec::new();
+    for agreement in idkg_payload.xnet_reshare_agreements.values() {
+        if let idkg::CompletedReshareRequest::Unreported(response) = agreement {
             consensus_responses.push(response.clone());
         }
     }
     consensus_responses
 }
 
-/// Creates responses to `ComputeInitialEcdsaDealingsArgs` system calls with the initial
-/// dealings.
-fn generate_responses_to_initial_dealings_calls(
-    ecdsa_payload: &ecdsa::EcdsaPayload,
-) -> Vec<Response> {
-    let mut consensus_responses = Vec::<Response>::new();
-    for agreement in ecdsa_payload.xnet_reshare_agreements.values() {
-        if let ecdsa::CompletedReshareRequest::Unreported(response) = agreement {
-            consensus_responses.push(response.clone());
+#[cfg(test)]
+mod tests {
+    //! Finalizer unit tests
+    use super::*;
+    use crate::consensus::batch_delivery::generate_responses_to_remote_dkgs;
+    use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
+    use ic_logger::replica_logger::no_op_logger;
+    use ic_management_canister_types_private::{SetupInitialDKGResponse, VetKdCurve, VetKdKeyId};
+    use ic_test_utilities_types::ids::subnet_test_id;
+    use ic_types::{
+        PrincipalId, RegistryVersion, SubnetId,
+        batch::{BatchPayload, ValidationContext},
+        consensus::{DataPayload, Payload as ConsensusPayload, Rank, dkg::DkgDataPayload},
+        crypto::{
+            CryptoHash, CryptoHashOf,
+            threshold_sig::ni_dkg::{
+                NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
+            },
+        },
+        messages::{CallbackId, Payload},
+        time::UNIX_EPOCH,
+    };
+    use std::str::FromStr;
+
+    const TARGET_ID: NiDkgTargetId = NiDkgTargetId::new([8; 32]);
+
+    const EXPECTED_FRESH_SUBNET_ID_STR: &str =
+        "icdrs-3sfmz-hm6r3-cdzf5-cfroa-3cddh-aght7-azz25-eo34b-4strl-wae";
+
+    fn ni_dkg_id(dkg_tag: NiDkgTag) -> NiDkgId {
+        NiDkgId {
+            start_block_height: Height::from(0),
+            dealer_subnet: subnet_test_id(0),
+            dkg_tag,
+            target_subnet: NiDkgTargetSubnet::Remote(TARGET_ID),
         }
     }
-    consensus_responses
+
+    #[test]
+    fn test_generate_setup_initial_dkg_response() {
+        // Build some transcipts with matching ids and tags
+        let transcripts_for_remote_subnets = [
+            (
+                ni_dkg_id(NiDkgTag::LowThreshold),
+                CallbackId::from(1),
+                Ok(dummy_transcript_for_tests()),
+            ),
+            (
+                ni_dkg_id(NiDkgTag::HighThreshold),
+                CallbackId::from(1),
+                Ok(dummy_transcript_for_tests()),
+            ),
+        ];
+
+        let result =
+            generate_responses_to_remote_dkgs(&transcripts_for_remote_subnets[..], &no_op_logger());
+        assert_eq!(result.len(), 1);
+
+        // Deserialize the `SetupInitialDKGResponse` and check the subnet id
+        let Payload::Data(payload) = &result[0].payload else {
+            panic!("Payload was rejected unexpectedly");
+        };
+        let initial_transcript_records = SetupInitialDKGResponse::decode(payload).unwrap();
+        assert_eq!(
+            initial_transcript_records.fresh_subnet_id,
+            SubnetId::from(PrincipalId::from_str(EXPECTED_FRESH_SUBNET_ID_STR).unwrap())
+        );
+    }
+
+    #[test]
+    fn test_generate_request_chain_key_nidkg_response() {
+        let key_id: NiDkgMasterPublicKeyId = NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::Bls12_381_G2,
+            name: String::from("test_vetkd_key"),
+        });
+
+        // Build some transcipts with matching ids and tags
+        let transcripts_for_remote_subnets = [(
+            ni_dkg_id(NiDkgTag::HighThresholdForKey(key_id.clone())),
+            CallbackId::from(2),
+            Ok(dummy_transcript_for_tests()),
+        )];
+
+        let result =
+            generate_responses_to_remote_dkgs(&transcripts_for_remote_subnets[..], &no_op_logger());
+        assert_eq!(result.len(), 1);
+
+        // Deserialize the `ReshareChainKeyResponse`
+        let Payload::Data(payload) = &result[0].payload else {
+            panic!("Payload was rejected unexpectedly");
+        };
+        let response = ReshareChainKeyResponse::decode(payload).unwrap();
+        let ReshareChainKeyResponse::NiDkg(_response) = response else {
+            panic!("Expected a NiDkg response");
+        };
+    }
+
+    #[test]
+    fn test_generate_responses_for_early_remote_dkg_transcripts() {
+        let key_id: NiDkgMasterPublicKeyId = NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::Bls12_381_G2,
+            name: String::from("test_vetkd_key"),
+        });
+
+        let dummy_transcript = dummy_transcript_for_tests();
+        let dkg_data = DkgDataPayload {
+            start_height: Height::from(0),
+            messages: vec![],
+            transcripts_for_remote_subnets: vec![
+                // ReshareChainKey (NiDkg) → one response
+                (
+                    ni_dkg_id(NiDkgTag::HighThresholdForKey(key_id.clone())),
+                    CallbackId::from(42),
+                    Ok(dummy_transcript.clone()),
+                ),
+                // SetupInitialDKG: low + high threshold for same callback → one response
+                (
+                    ni_dkg_id(NiDkgTag::LowThreshold),
+                    CallbackId::from(1),
+                    Ok(dummy_transcript.clone()),
+                ),
+                (
+                    ni_dkg_id(NiDkgTag::HighThreshold),
+                    CallbackId::from(1),
+                    Ok(dummy_transcript),
+                ),
+            ],
+        };
+
+        let block_payload = BlockPayload::Data(DataPayload {
+            batch: BatchPayload::default(),
+            dkg: dkg_data,
+            idkg: None,
+        });
+
+        let payload = ConsensusPayload::new(ic_types::crypto::crypto_hash, block_payload);
+
+        let block = Block::new(
+            CryptoHashOf::from(CryptoHash(vec![0_u8; 32])),
+            payload,
+            Height::from(1),
+            Rank(0),
+            ValidationContext {
+                registry_version: RegistryVersion::from(1),
+                certified_height: Height::from(0),
+                time: UNIX_EPOCH,
+            },
+        );
+
+        let mut batch_stats = BatchStats::new(Height::from(1));
+        let responses =
+            generate_responses_to_subnet_calls(&block, &mut batch_stats, &no_op_logger());
+
+        assert_eq!(
+            responses.len(),
+            2,
+            "expected two responses: ReshareChainKey and SetupInitialDKG"
+        );
+
+        let reshare_response = responses
+            .iter()
+            .find(|r| r.callback == CallbackId::from(42))
+            .expect("expected ReshareChainKey response for callback 42");
+        let Payload::Data(payload_data) = &reshare_response.payload else {
+            panic!("ReshareChainKey payload was rejected unexpectedly");
+        };
+        let response = ReshareChainKeyResponse::decode(payload_data).unwrap();
+        let ReshareChainKeyResponse::NiDkg(_) = response else {
+            panic!("Expected a NiDkg response for early remote DKG transcript");
+        };
+
+        let setup_initial_response = responses
+            .iter()
+            .find(|r| r.callback == CallbackId::from(1))
+            .expect("expected SetupInitialDKG response for callback 1");
+        let Payload::Data(payload_data) = &setup_initial_response.payload else {
+            panic!("SetupInitialDKG payload was rejected unexpectedly");
+        };
+        let initial_response = SetupInitialDKGResponse::decode(payload_data).unwrap();
+        assert_eq!(
+            initial_response.fresh_subnet_id,
+            SubnetId::from(PrincipalId::from_str(EXPECTED_FRESH_SUBNET_ID_STR).unwrap())
+        );
+    }
 }

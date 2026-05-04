@@ -1,0 +1,276 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//rs/tests:common.bzl", "CANISTER_SANDBOX_RUNTIME_DEPS", "MESSAGE_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test_nns")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+IC_ADMIN_RUNTIME_DEPS = {
+    "IC_ADMIN_PATH": "//rs/registry/admin:ic-admin",
+}
+
+RECOVERY_TOOLS_RUNTIME_DEPS = CANISTER_SANDBOX_RUNTIME_DEPS | IC_ADMIN_RUNTIME_DEPS
+
+rust_library(
+    name = "lib",
+    testonly = True,
+    srcs = glob(["**/*.rs"]),
+    crate_name = "ic_consensus_system_test_subnet_recovery",
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/protobuf",
+        "//rs/recovery",
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:prost",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+        "@crate_index//:ssh2",
+        "@crate_index//:url",
+    ],
+)
+
+system_test_nns(
+    name = "sr_app_same_nodes_test",
+    guestos_update = "test",
+    tags = [
+        "colocate",
+        "long_test",  # since it takes longer than 5 minutes.
+        "subnet_recovery",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        ":lib",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "sr_app_no_upgrade_provision_write_access_test",
+    guestos_update = "test",
+    tags = [
+        "colocate",
+        "long_test",  # since it takes longer than 5 minutes.
+        "subnet_recovery",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        ":lib",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "sr_app_same_nodes_enable_chain_keys_test",
+    guestos_update = "test",
+    tags = [
+        "colocate",
+        "long_test",
+        "subnet_recovery",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        ":lib",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "sr_app_same_nodes_with_chain_keys_test",
+    guestos_update = "test",
+    tags = [
+        "colocate",
+        "long_test",
+        "subnet_recovery",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        ":lib",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "sr_app_failover_nodes_test",
+    guestos_update = "test",
+    tags = [
+        "colocate",
+        "long_test",  # since it takes longer than 5 minutes.
+        "subnet_recovery",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        ":lib",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "sr_app_failover_nodes_enable_chain_keys_test",
+    guestos_update = "test",
+    tags = [
+        "colocate",
+        "long_test",
+        "subnet_recovery",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        ":lib",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "sr_app_failover_nodes_with_chain_keys_test",
+    guestos_update = "test",
+    tags = [
+        "colocate",
+        "long_test",
+        "subnet_recovery",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        ":lib",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "sr_app_no_upgrade_test",
+    guestos_update = "test",
+    tags = [
+        "colocate",
+        "long_test",  # since it takes longer than 5 minutes.
+        "subnet_recovery",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        ":lib",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "sr_app_no_upgrade_local_test",
+    guestos_update = "test",
+    tags = [
+        "colocate",
+        "long_test",  # since it takes longer than 5 minutes.
+        "subnet_recovery",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        ":lib",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "sr_app_no_upgrade_enable_chain_keys_test",
+    guestos_update = "test",
+    tags = [
+        "colocate",
+        "long_test",
+        "subnet_recovery",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        ":lib",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "sr_app_no_upgrade_with_chain_keys_test",
+    guestos_update = "test",
+    tags = [
+        "colocate",
+        "long_test",
+        "subnet_recovery",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        ":lib",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "sr_app_large_no_upgrade_with_chain_keys_test",
+    enable_head_nns_variant = False,  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
+    guestos_update = "test",
+    tags = [
+        "colocate",
+        "subnet_recovery",
+        "system_test_large",  # only run as part of release-testing since this test requires many resources.
+    ],
+    test_timeout = "eternal",
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        ":lib",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "sr_nns_failover_nodes_test",
+    tags = [
+        "colocate",
+        "long_test",  # since it takes longer than 5 minutes.
+        "subnet_recovery",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS | {
+        "ORCHESTRATOR_UVM_ACTIVATION_SCRIPT": ":orchestrator_universal_vm_activation.sh",
+        "STATIC_FILE_SERVER_IMAGE": "//rs/tests:static-file-server.tar",
+    },
+    deps = [
+        # Keep sorted.
+        ":lib",
+        "//rs/recovery",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/networking/canister_http",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:ic-agent",
+        "@crate_index//:slog",
+        "@crate_index//:url",
+    ],
+)
+
+exports_files([
+    "orchestrator_universal_vm_activation.sh",
+])

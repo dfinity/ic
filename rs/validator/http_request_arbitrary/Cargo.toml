@@ -1,0 +1,13 @@
+[package]
+name = "ic-validator-http-request-arbitrary"
+description = "Test utility with IC request structures that implement arbitrary"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+[dependencies]
+arbitrary = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-types = { path = "../../types/types" }

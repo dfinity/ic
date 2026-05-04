@@ -1,0 +1,10 @@
+[Unit]
+Description=Monitor and expand ic data storage logical volume
+RequiresMountsFor=/var/lib/ic/data
+
+[Service]
+Type=simple
+ExecStart=/opt/ic/bin/monitor-expand-shared-data.py
+
+[Install]
+WantedBy=multi-user.target

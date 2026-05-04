@@ -2,19 +2,51 @@
 //! input.
 
 use assert_matches::assert_matches;
-
-use canister_test::local_test_e;
 use dfn_candid::candid;
-use on_wire::bytes;
-
 use ic_base_types::PrincipalId;
 use ic_nns_common::types::ProposalId;
-use ic_nns_governance::{init::GovernanceCanisterInitPayloadBuilder, pb::v1::ProposalInfo};
-use ic_nns_test_utils::itest_helpers::set_up_governance_canister;
+use ic_nns_governance_api::{GovernanceError, NeuronInfo, ProposalInfo};
+use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
+use ic_nns_test_utils::itest_helpers::{
+    set_up_governance_canister, state_machine_test_on_nns_subnet,
+};
+use on_wire::bytes;
+
+#[test]
+fn test_skipping_quota() {
+    state_machine_test_on_nns_subnet(|runtime| async move {
+        let canister = set_up_governance_canister(
+            &runtime,
+            GovernanceCanisterInitPayloadBuilder::new().build(),
+        )
+        .await;
+
+        // the skipping quota is set to 10_000 by `ic-cdk` macros
+        let skipped: Vec<u8> = vec![42; 9_042];
+        let res: Result<Result<NeuronInfo, GovernanceError>, String> = canister
+            .query_("get_full_neuron", candid, (0_u64, Some(skipped)))
+            .await;
+        let _ = res.unwrap();
+
+        // but the next one is rejected
+        let skipped: Vec<u8> = vec![42; 10_042];
+        let res: Result<Result<NeuronInfo, GovernanceError>, String> = canister
+            .query_("get_full_neuron", candid, (0_u64, Some(skipped)))
+            .await;
+        let err = res.unwrap_err();
+        let expected_err = "Skipping cost exceeds the limit";
+        assert!(
+            err.contains(expected_err),
+            "Expected `{expected_err}` did not occur within the observed error:\n{err}"
+        );
+
+        Ok(())
+    });
+}
 
 #[test]
 fn test_bad_proposal_id_candid_type() {
-    local_test_e(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let canister = set_up_governance_canister(
             &runtime,
             GovernanceCanisterInitPayloadBuilder::new().build(),
@@ -36,7 +68,7 @@ fn test_bad_proposal_id_candid_type() {
 
 #[test]
 fn test_bad_proposal_id_candid_encoding() {
-    local_test_e(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let canister = set_up_governance_canister(
             &runtime,
             GovernanceCanisterInitPayloadBuilder::new().build(),
@@ -58,7 +90,7 @@ fn test_bad_proposal_id_candid_encoding() {
 
 #[test]
 fn test_inexistent_proposal_id_is_not_a_bad_input() {
-    local_test_e(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let canister = set_up_governance_canister(
             &runtime,
             GovernanceCanisterInitPayloadBuilder::new().build(),

@@ -1,16 +1,16 @@
-#![allow(clippy::unwrap_used)]
 use ic_config::crypto::CryptoConfig;
-use ic_crypto::{
-    ecdsa_p256_signature_from_der_bytes, rsa_signature_from_bytes, user_public_key_from_bytes,
-    CryptoComponent,
-};
+use ic_crypto::CryptoComponent;
+use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
+use ic_crypto_internal_csp::vault::vault_from_config;
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_test_vectors::test_data;
-use ic_interfaces::crypto::BasicSigVerifierByPublicKey;
+use ic_crypto_standalone_sig_verifier::{
+    ecdsa_p256_signature_from_der_bytes, rsa_signature_from_bytes, user_public_key_from_bytes,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::{BasicSigOf, SignableMock, UserPublicKey};
-use ic_types_test_utils::ids::node_test_id;
 use std::sync::Arc;
 
 #[test]
@@ -22,9 +22,11 @@ fn should_verify_webauthn_signature_sample_1() {
             test_data::ECDSA_P256_SIG_1_DER_HEX.as_ref(),
             test_data::WEBAUTHN_MSG_1_HEX.as_bytes(),
         );
-        assert!(crypto
-            .verify_basic_sig_by_public_key(&sig, &webauthn_envelope, &pk)
-            .is_ok());
+        assert!(
+            crypto
+                .verify_basic_sig_by_public_key(&sig, &webauthn_envelope, &pk)
+                .is_ok()
+        );
     })
 }
 
@@ -37,9 +39,11 @@ fn should_verify_webauthn_signature_sample_2() {
             test_data::ECDSA_P256_SIG_2_DER_HEX.as_ref(),
             test_data::WEBAUTHN_MSG_2_HEX.as_bytes(),
         );
-        assert!(crypto
-            .verify_basic_sig_by_public_key(&sig, &webauthn_envelope, &pk)
-            .is_ok());
+        assert!(
+            crypto
+                .verify_basic_sig_by_public_key(&sig, &webauthn_envelope, &pk)
+                .is_ok()
+        );
     })
 }
 
@@ -53,9 +57,11 @@ fn should_verify_webauthn_signature_sample_rsa() {
             test_data::WEBAUTHN_MSG_2_HEX.as_bytes(),
         );
 
-        assert!(crypto
-            .verify_basic_sig_by_public_key(&sig, &webauthn_envelope, &pk)
-            .is_ok());
+        assert!(
+            crypto
+                .verify_basic_sig_by_public_key(&sig, &webauthn_envelope, &pk)
+                .is_ok()
+        );
     })
 }
 
@@ -149,11 +155,14 @@ fn rsa_verification_data(
 
 fn crypto_component(config: &CryptoConfig) -> CryptoComponent {
     let dummy_registry = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-    CryptoComponent::new_with_fake_node_id(
+
+    let vault = vault_from_config(
         config,
         None,
-        Arc::new(dummy_registry),
-        node_test_id(42),
         no_op_logger(),
-    )
+        Arc::new(CryptoMetrics::none()),
+    );
+    ic_crypto_node_key_generation::generate_node_signing_keys(vault.as_ref());
+
+    CryptoComponent::new(config, None, Arc::new(dummy_registry), no_op_logger(), None)
 }

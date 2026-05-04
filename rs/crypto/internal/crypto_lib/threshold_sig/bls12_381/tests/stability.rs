@@ -1,5 +1,6 @@
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::Epoch;
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::forward_secure::SecretKey;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::{
     types::FsEncryptionSecretKey, *,
 };
@@ -9,7 +10,8 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
-use ic_crypto_sha::Sha256;
+use ic_crypto_secrets_containers::SecretArray;
+use ic_crypto_sha2::Sha256;
 use ic_types::{NodeIndex, NumberOfNodes};
 use rand::RngCore;
 use serde::Serialize;
@@ -38,15 +40,15 @@ fn test_generating_fs_key_pair_is_stable() {
 
     assert_sha256_cbor_is(
         &key_and_pop.pop,
-        "6f05e05b030242083119968af870548287330c5033aab104c4806ac4044fd6d6",
+        "4d606b3e6a3b790c0e4b1fc4687fb3892fc5e8c4377684a25a7183f0c2a74d91",
     );
     assert_sha256_cbor_is(
         &key_and_pop.public_key,
-        "ab72b5e55db7957f5f2c3d8091dd17553cadc673eebbb44198abfad795ff4af0",
+        "707ca0f3e366812cb3f8efc734a9eff1e7aff21427082467d034f54d525327d2",
     );
     assert_sha256_cbor_is(
         &key_and_pop.secret_key,
-        "12c08d082d9e59db9ce46c39210046e77aae4c69f0ea0b46464ebc5db762af9b",
+        "25cfe9b7b5c95d6d8cab1f8f5b205470909ce1dc27612b17e987e57ea0443864",
     );
 }
 
@@ -55,14 +57,14 @@ fn test_updating_fs_secret_key_is_stable() {
     let seed = Seed::from_bytes(b"ic-crypto-kgen-seed");
     let key_and_pop = create_forward_secure_key_pair(seed, b"ic-crypto-kgen-assoc-data");
 
-    let mut sk = trusted_secret_key_into_miracl(&key_and_pop.secret_key);
+    let mut sk = SecretKey::deserialize(&key_and_pop.secret_key);
 
     let seed = Seed::from_bytes(b"ic-crypto-update-key-seed");
     update_key_inplace_to_epoch(&mut sk, Epoch::from(2), seed);
 
     assert_sha256_cbor_is(
-        &secret_key_from_miracl(&sk),
-        "7e8e048bd7e903c271a66903223d80fe5c5c8e6c8876c5b1bc8abab373a893c5",
+        &sk.serialize(),
+        "f70143bdd1fad70ac7d24cda1f5141b6e730841361fc4c8e5059ddc0a1514e15",
     );
 }
 
@@ -77,11 +79,11 @@ fn create_receiver_keys(
 
     for node_index in 0..count {
         let node_key_seed =
-            Seed::from_bytes(format!("ic-crypto-kgen-seed-node-{}", node_index).as_bytes());
+            Seed::from_bytes(format!("ic-crypto-kgen-seed-node-{node_index}").as_bytes());
         let key_and_pop =
             create_forward_secure_key_pair(node_key_seed, b"ic-crypto-kgen-assoc-data");
         pk.insert(node_index as u32, key_and_pop.public_key);
-        sk.insert(node_index as u32, key_and_pop.secret_key);
+        sk.insert(node_index as u32, key_and_pop.secret_key.clone());
     }
 
     (pk, sk)
@@ -94,23 +96,33 @@ fn create_and_verify_dealing(
     epoch: Epoch,
     resharing_secret: Option<SecretKeyBytes>,
 ) -> Dealing {
-    let keygen_seed = Seed::from_bytes(
-        format!("ic-crypto-create-dealing-keygen-seed-{}", dealer_index).as_bytes(),
-    );
+    let keygen_seed =
+        Seed::from_bytes(format!("ic-crypto-create-dealing-keygen-seed-{dealer_index}").as_bytes());
     let encryption_seed = Seed::from_bytes(
-        format!("ic-crypto-create-dealing-encryption-seed-{}", dealer_index).as_bytes(),
+        format!("ic-crypto-create-dealing-encryption-seed-{dealer_index}").as_bytes(),
     );
 
-    let dealing = create_dealing(
-        keygen_seed,
-        encryption_seed,
-        threshold,
-        receiver_keys,
-        epoch,
-        dealer_index,
-        resharing_secret,
-    )
-    .expect("Unable to create dealing");
+    let dealing = match resharing_secret {
+        Some(secret) => create_resharing_dealing(
+            keygen_seed,
+            encryption_seed,
+            threshold,
+            receiver_keys,
+            epoch,
+            dealer_index,
+            secret,
+        )
+        .expect("Unable to create resharing dealing"),
+        None => create_dealing(
+            keygen_seed,
+            encryption_seed,
+            threshold,
+            receiver_keys,
+            epoch,
+            dealer_index,
+        )
+        .expect("Unable to create dealing"),
+    };
 
     assert!(verify_dealing(dealer_index, threshold, epoch, receiver_keys, &dealing).is_ok());
 
@@ -119,17 +131,17 @@ fn create_and_verify_dealing(
 
 #[test]
 fn test_create_dealings_and_transcript_without_resharing_secret_is_stable() {
-    let nodes = 4u32;
+    let nodes = 4_u32;
     let threshold = NumberOfNodes::from(2);
 
     let (receiver_pk, receiver_sk) = create_receiver_keys(4);
     let epoch = Epoch::from(2);
 
     let expected_dealing_hashes = [
-        "5a2450f337b1f98f9ecb76d12c6c62c5bb3e4b7060107644dd5fe45f83b5e841",
-        "fa285c89f38a188cc7f594b46bb9055dc4bf93c8096dbdaef62ea6b35c1ca2f4",
-        "a3e7d69039eb5683d4df838e0cc81b14891ab778c55490aecc7980b11da68cc9",
-        "d2bfc571a4365923b29243978959e3a8afa752c80bf97bf77feb860fa394ca5b",
+        "800d77d0b316a24c89f874813a104071a9a5e2f462df1b7615cb5697d0410424",
+        "c31e537350f2faf43b3d684dee343a16077fd317f7bf9046f036c26b796d9329",
+        "8e7dba35d9e74c595135bee8cd842b407b18ff80d5e725da750cef3b960efba1",
+        "e37e1de43df69200e6959f44564023b32593213ffa7854ffcf71a70229926ba2",
     ];
 
     let mut dealings = BTreeMap::new();
@@ -149,7 +161,7 @@ fn test_create_dealings_and_transcript_without_resharing_secret_is_stable() {
 
     assert_sha256_cbor_is(
         &transcript,
-        "31eafb6249ef3164df0bb741b3d8a209e031b5eeb799798f98a107ba2defbe86",
+        "fa6e9825d6e4bed18061832d4b302267d1827e86f885ce5f0be2ff6137f076af",
     );
 
     let expected_threshold_key_hashes = [
@@ -160,7 +172,7 @@ fn test_create_dealings_and_transcript_without_resharing_secret_is_stable() {
     ];
 
     for receiver in 0..nodes {
-        let sk = trusted_secret_key_into_miracl(receiver_sk.get(&receiver).unwrap());
+        let sk = SecretKey::deserialize(receiver_sk.get(&receiver).unwrap());
 
         let key = compute_threshold_signing_key(&transcript, receiver, &sk, epoch)
             .expect("Unable to compute threshold key");
@@ -171,18 +183,20 @@ fn test_create_dealings_and_transcript_without_resharing_secret_is_stable() {
 
 #[test]
 fn test_create_dealings_and_transcript_with_resharing_secret_is_stable() {
-    let nodes = 4u32;
+    let nodes = 4_u32;
     let threshold = NumberOfNodes::from(2);
     let (receiver_pk, receiver_sk) = create_receiver_keys(nodes as usize);
     let epoch = Epoch::from(2);
 
-    let resharing_secret = SecretKeyBytes([42; SecretKeyBytes::SIZE]);
+    let resharing_secret = SecretKeyBytes::new(SecretArray::new_and_dont_zeroize_argument(
+        &[42; SecretKeyBytes::SIZE],
+    ));
 
     let expected_dealing_hashes = [
-        "e4d856cb1bd06ed3c52ecca49a3d2fd978607db9e63d7656a3ce3640b3fcf6f1",
-        "e4224c7062f3bc018ea37debe0de298df2d276db6581e197b93846eee3c0a5b1",
-        "f1d298979dc4b43b294a59ee21ab4298669c24a625ff4fb4abb2b7ac5f929cd3",
-        "77a00f09564f193d9b0d27669563351318f73ccd2e2e50d1deb88642a84af139",
+        "c20776601f7900367194bb8f37aa530fa9798a24aa4086804abfd9e65e1d45e2",
+        "57ad68aba3ec1cb8d2522de43d0bbb3678e3d7426cece31c5f491aabe7cca944",
+        "32c27739d296c456654f69eae77739217e1e965b39d969dd9e4c3150bef227e5",
+        "901a893df6228332f08e25548729030b623ec03fc8f0b9f6627cdb45d31a607a",
     ];
 
     let mut dealings = BTreeMap::new();
@@ -192,7 +206,7 @@ fn test_create_dealings_and_transcript_with_resharing_secret_is_stable() {
             &receiver_pk,
             threshold,
             epoch,
-            Some(resharing_secret),
+            Some(resharing_secret.clone()),
         );
 
         assert_sha256_cbor_is(&dealing, expected_dealing_hashes[dealer as usize]);
@@ -201,12 +215,12 @@ fn test_create_dealings_and_transcript_with_resharing_secret_is_stable() {
 
     let mut coefficients = vec![];
 
-    let mut rng = Seed::from_bytes(b"ic-crypto-generate-random-bls-coefficients").into_rng();
+    let rng = &mut Seed::from_bytes(b"ic-crypto-generate-random-bls-coefficients").into_rng();
 
     let fixed0 = hex::decode("9772c16106e9c70b2073dfe17989225dd10f3adb675365fc6d833587ad4cbd3ae692ad1e20679003f676b0b089e83feb058b3e8b9fc9552e30787cb4a541a1c3bf67a02e91fc648b2c19f4bb333e14c5c73b9bfbc5ec56dadabb07ff15d45124").unwrap();
     coefficients.push(PublicKeyBytes(fixed0.try_into().expect("Size checked")));
     for _ in 1..nodes {
-        let mut coefficient = [0u8; 96];
+        let mut coefficient = [0_u8; 96];
         rng.fill_bytes(&mut coefficient);
         coefficients.push(PublicKeyBytes(coefficient));
     }
@@ -223,7 +237,7 @@ fn test_create_dealings_and_transcript_with_resharing_secret_is_stable() {
 
     assert_sha256_cbor_is(
         &transcript,
-        "ca00ea3955fae25d49e0bfaf28034aec34173b9fb7165ad6016a7f37504715f9",
+        "0443eec56f5993494689958102470bb72a8e3f0210f6318885237cc8dbacbf22",
     );
 
     let expected_threshold_key_hashes = [
@@ -234,7 +248,7 @@ fn test_create_dealings_and_transcript_with_resharing_secret_is_stable() {
     ];
 
     for receiver in 0..nodes {
-        let sk = trusted_secret_key_into_miracl(receiver_sk.get(&receiver).unwrap());
+        let sk = SecretKey::deserialize(receiver_sk.get(&receiver).unwrap());
 
         let key = compute_threshold_signing_key(&transcript, receiver, &sk, epoch)
             .expect("Unable to compute threshold key");

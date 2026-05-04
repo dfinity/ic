@@ -1,125 +1,126 @@
-//! This module implements an MVP version of inter-canister queries. This
-//! implementation has the following restrictions:
-//!
-//! - A canister can only query other canisters on the same subnet.
-//!
-//! - A canister can only query other canisters when it is doing non-replicated
-//! execution, i.e. the originator of the processing is a Query from an end-user
-//! and not an Ingress message.
-//!
-//! - Loops are not allowed. E.g. call graphs like A -> B -> C -> A are not
-//! supported.
-//!
-//! Some interesting factoids about inter-canister query execution to keep in
-//! mind:
-//!
-//! - If a canister produces a response then there is no point in executing any
-//! more messages on it or handling any outstanding requests that it sent. This
-//! is because additional execution will not change the produced response and as
-//! we are not committing modifications to the canister state, any modifications
-//! caused by the additional execution are not needed either.
-//!
-//! - Due to the point above, while a canister has not produced a response and
-//! has outstanding requests, we store its modified state in the query context.
-//! And as soon as it has produced a response, we drop its state. Once a
-//! canister's state has been dropped, it becomes available for being queried
-//! again.
-//!
-//! - We process the outstanding requests in a depth first search manner. This
-//! means that if canister A sends canister B two requests (M1 and M2) back to
-//! back, we first fully traverse the branch from executing M1; drop the
-//! modified state of B after this branch finishes; and then start branch M2 on
-//! a clean version of B. If we did breadth first search, then we would have to
-//! maintain two distinct versions of B.
-//!
-//! - For a lack of a better strategy, always prioritise responses over
-//! requests.
-
-use super::query_allocations::QueryAllocationsUsed;
+use super::query_call_graph::evaluate_query_call_graph;
 use crate::{
-    execution::common,
+    NonReplicatedQueryKind, RoundInstructions,
+    execution::common::{self, validate_method},
     execution::nonreplicated_query::execute_non_replicated_query,
-    execution_environment::{as_round_instructions, RoundLimits},
+    execution_environment::{RoundLimits, as_round_instructions},
     hypervisor::Hypervisor,
-    metrics::{MeasurementScope, QueryHandlerMetrics},
-    NonReplicatedQueryKind,
+    metrics::{
+        CallTreeMetricsNoOp, MeasurementScope, QUERY_HANDLER_CRITICAL_ERROR, QueryHandlerMetrics,
+        SYSTEM_API_CANISTER_CYCLE_BALANCE, SYSTEM_API_CANISTER_CYCLE_BALANCE128,
+        SYSTEM_API_DATA_CERTIFICATE_COPY, SYSTEM_API_TIME,
+    },
 };
 use ic_base_types::NumBytes;
 use ic_config::flag_status::FlagStatus;
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+use ic_embedders::wasmtime_embedder::system_api::{
+    ApiType, ExecutionParameters, InstructionLimits,
+};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory};
-use ic_logger::{debug, error, fatal, warn, ReplicaLogger};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, HypervisorError, MessageMemoryUsage, SubnetAvailableMemory,
+    SystemApiCallCounters,
+};
+use ic_interfaces_state_manager::Labeled;
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_logger::{ReplicaLogger, error, info};
+use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
 };
-use ic_system_api::{ApiType, ExecutionParameters, InstructionLimits};
 use ic_types::{
+    CanisterId, NumInstructions, NumMessages, NumSlices, Time,
+    batch::QueryStats,
     ingress::WasmResult,
     messages::{
-        CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response, UserQuery,
+        CallContextId, NO_DEADLINE, Payload, Query, QuerySource, RejectContext, Request,
+        RequestOrResponse, Response, SenderInfo,
     },
-    CanisterId, Cycles, NumInstructions, NumMessages, QueryAllocation, Time,
+    methods::{FuncRef, WasmClosure, WasmMethod},
 };
-use ic_types::{
-    methods::{FuncRef, WasmClosure},
-    NumSlices,
-};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use prometheus::IntCounter;
 use std::{
-    collections::BTreeMap,
-    sync::{Arc, RwLock},
+    collections::{BTreeMap, VecDeque},
+    sync::{Arc, atomic::AtomicU64},
+    time::{Duration, Instant},
 };
 
-const ENABLE_QUERY_OPTIMIZATION: bool = true;
-
-const LOOP_DETECTED_ERROR_MSG: &str =
-    "Loop detected.  MVP inter-canister queries do not support loops.";
-
-/// A simple enum representing the different things that
-/// QueryContext::enqueue_requests() can return.
-enum EnqueueRequestsResult {
-    /// The canister had some valid messages to enqueue and they were
-    /// successfully enqueued.
-    MessagesEnqueued,
-    /// The canister had no messages to enqueue.
-    NoMessages,
-    /// A loop in the callgraph was detected so no messages were enqueued.
-    LoopDetected,
+/// The response of a query. If the query originated from a user, then it
+/// contains either `UserResponse` or `UserError`. If the query originated from
+/// a canister, then it contains `CanisterResponse`.
+pub(super) enum QueryResponse {
+    UserResponse(WasmResult),
+    UserError(UserError),
+    CanisterResponse(Response),
 }
 
-// A handy function to create a `Response` using parameters from the `Request`
-fn generate_response(request: Arc<Request>, payload: Payload) -> Response {
-    Response {
-        originator: request.sender,
-        respondent: request.receiver,
-        originator_reply_callback: request.sender_reply_callback,
-        response_payload: payload,
-        refund: Cycles::zero(),
+/// The result of execution of a query or a response callback.
+/// The execution either produces a response or returns a possibly empty set of
+/// outgoing calls with the new canister state and the call origin.
+#[allow(clippy::large_enum_variant)]
+pub(super) enum ExecutionResult {
+    Response(QueryResponse),
+    Calls(CanisterState, CallOrigin, VecDeque<Arc<Request>>),
+    SystemError(UserError),
+}
+
+/// Returns either `WasmMethod::CompositeQuery` or `WasmMethod::Query` depending
+/// on whether the given method name is exported as a composite query or not.
+fn wasm_query_method(
+    canister: &CanisterState,
+    name: String,
+) -> Result<WasmMethod, HypervisorError> {
+    // Attempt to validate method name as composite query.
+    let method = WasmMethod::CompositeQuery(name.clone());
+    match validate_method(&method, canister) {
+        Ok(_) => Ok(method),
+        Err(_) => {
+            // If validating the method as composite query fails, try as
+            // regular query instead.
+            let method = WasmMethod::Query(name);
+            validate_method(&method, canister)?;
+
+            Ok(method)
+        }
     }
 }
 
-/// Handles running a single UserQuery to completion by maintaining the call
-/// graph of the query execution between canisters.
+/// Executes a single user query along with its outgoing query calls.
 pub(super) struct QueryContext<'a> {
     log: &'a ReplicaLogger,
     hypervisor: &'a Hypervisor,
     own_subnet_type: SubnetType,
     // The state against which all queries in the context will be executed.
-    state: Arc<ReplicatedState>,
+    state: Labeled<Arc<ReplicatedState>>,
     network_topology: Arc<NetworkTopology>,
-    data_certificate: Vec<u8>,
-    canisters: BTreeMap<CanisterId, CanisterState>,
-    outstanding_requests: Vec<Arc<Request>>,
-    // Response (if available) waiting to be executed. We always process
-    // responses first if one is available hence, there will never be more than
-    // one outstanding response.
-    outstanding_response: Option<Response>,
-    query_allocations_used: Arc<RwLock<QueryAllocationsUsed>>,
-    max_canister_memory_size: NumBytes,
-    max_instructions_per_message: NumInstructions,
+    // Certificate for certified queries + canister ID of the root query of this context
+    data_certificate: Option<(Vec<u8>, CanisterId)>,
+    max_instructions_per_query: NumInstructions,
+    max_query_call_graph_depth: usize,
+    instruction_overhead_per_query_call: RoundInstructions,
     round_limits: RoundLimits,
+    // The number of concurrent calls / callbacks that is guaranteed to a canister.
+    canister_guaranteed_callback_quota: u64,
+    composite_queries: FlagStatus,
+    // Walltime at which the query has started to execute.
+    query_context_time_start: Instant,
+    query_context_time_limit: Duration,
+    query_critical_error: &'a IntCounter,
+    local_query_execution_stats: Option<&'a QueryStatsCollector>,
+    /// How many times each tracked System API call was invoked during the query execution.
+    system_api_call_counters: SystemApiCallCounters,
+    /// A map of canister IDs evaluated and executed at least once in this query context
+    /// with their stats. The information is used by the query cache for composite queries.
+    evaluated_canister_stats: BTreeMap<CanisterId, QueryStats>,
+    /// The number of transient errors.
+    transient_errors: usize,
+    cycles_account_manager: Arc<CyclesAccountManager>,
+    /// An optional atomic to observe the number of instructions used in the query.
+    /// This should only be populated for http outcalls transformations.
+    instruction_observation: Option<Arc<AtomicU64>>,
 }
 
 impl<'a> QueryContext<'a> {
@@ -128,223 +129,205 @@ impl<'a> QueryContext<'a> {
         log: &'a ReplicaLogger,
         hypervisor: &'a Hypervisor,
         own_subnet_type: SubnetType,
-        state: Arc<ReplicatedState>,
-        data_certificate: Vec<u8>,
-        query_allocations_used: Arc<RwLock<QueryAllocationsUsed>>,
+        state: Labeled<Arc<ReplicatedState>>,
+        data_certificate: Option<Vec<u8>>,
         subnet_available_memory: SubnetAvailableMemory,
-        max_canister_memory_size: NumBytes,
-        max_instructions_per_message: NumInstructions,
+        subnet_available_callbacks: i64,
+        subnet_memory_reservation: NumBytes,
+        canister_guaranteed_callback_quota: u64,
+        max_instructions_per_query: NumInstructions,
+        max_query_call_graph_depth: usize,
+        max_query_call_graph_instructions: NumInstructions,
+        max_query_call_walltime: Duration,
+        instruction_overhead_per_query_call: NumInstructions,
+        composite_queries: FlagStatus,
+        canister_id: CanisterId,
+        query_critical_error: &'a IntCounter,
+        local_query_execution_stats: Option<&'a QueryStatsCollector>,
+        cycles_account_manager: Arc<CyclesAccountManager>,
+        instruction_observation: Option<Arc<AtomicU64>>,
     ) -> Self {
-        let network_topology = Arc::new(state.metadata.network_topology.clone());
+        let network_topology = Arc::new(state.get_ref().metadata.network_topology.clone());
         let round_limits = RoundLimits {
-            instructions: as_round_instructions(max_instructions_per_message),
+            instructions: as_round_instructions(max_query_call_graph_instructions),
             subnet_available_memory,
+            subnet_available_callbacks,
             // Ignore compute allocation
             compute_allocation_used: 0,
+            subnet_memory_reservation,
         };
         Self {
             log,
             hypervisor,
             own_subnet_type,
-            canisters: BTreeMap::new(),
-            outstanding_requests: Vec::new(),
-            outstanding_response: None,
             state,
-            data_certificate,
-            query_allocations_used,
             network_topology,
-            max_canister_memory_size,
-            max_instructions_per_message,
+            data_certificate: data_certificate
+                .map(|data_certificate| (data_certificate, canister_id)),
+            max_instructions_per_query,
+            max_query_call_graph_depth,
+            instruction_overhead_per_query_call: as_round_instructions(
+                instruction_overhead_per_query_call,
+            ),
             round_limits,
+            canister_guaranteed_callback_quota,
+            composite_queries,
+            query_context_time_start: Instant::now(),
+            query_context_time_limit: max_query_call_walltime,
+            query_critical_error,
+            local_query_execution_stats,
+            system_api_call_counters: SystemApiCallCounters::default(),
+            // If the `context.run()` returns an error and hence the empty evaluated IDs set,
+            // the original canister ID should always be tracked for changes.
+            evaluated_canister_stats: BTreeMap::from([(canister_id, QueryStats::default())]),
+            transient_errors: 0,
+            cycles_account_manager,
+            instruction_observation,
         }
     }
 
-    /// Executes the given Query sent by an end user.
+    /// Executes the given query sent by an end user.
     ///
     /// - If it produces a response return the response.
     ///
     /// - If it does not produce a response and does not send further queries,
-    /// then return a response indicating that the canister did not reply.
+    ///   then return a response indicating that the canister did not reply.
     ///
     /// - If it does not produce a response and produces additional
-    /// inter-canister queries, process them till there is a response or the
-    /// call graph finishes with no reply.
+    ///   inter-canister queries, process them till there is a response or the
+    ///   call graph finishes with no reply.
     pub(super) fn run<'b>(
         &mut self,
-        query: UserQuery,
+        query: Query,
         metrics: &'b QueryHandlerMetrics,
-        cycles_account_manager: Arc<CyclesAccountManager>,
         measurement_scope: &MeasurementScope<'b>,
     ) -> Result<WasmResult, UserError> {
         let canister_id = query.receiver;
-        debug!(self.log, "Executing query for {}", canister_id);
-        let old_canister = self.state.get_active_canister(&canister_id)?;
+        let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;
+        let call_origin = CallOrigin::Query(query.source().into(), query.method_name.clone());
 
-        let subnet_size = self
-            .network_topology
-            .get_subnet_size(&cycles_account_manager.get_subnet_id())
-            .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
-        if cycles_account_manager.freeze_threshold_cycles(
-            old_canister.system_state.freeze_threshold,
-            old_canister.system_state.memory_allocation,
-            old_canister.memory_usage(self.own_subnet_type),
-            old_canister.scheduler_state.compute_allocation,
-            subnet_size,
-        ) > old_canister.system_state.balance()
-        {
-            return Err(UserError::new(
-                ErrorCode::CanisterOutOfCycles,
-                format!("Canister {} is unable to process query calls because it's frozen. Please top up the canister with cycles and try again.", canister_id))
-            );
-        }
+        let method = match wasm_query_method(old_canister, query.method_name.to_string()) {
+            Ok(method) => method,
+            Err(err) => return Err(err.into_user_error(&canister_id)),
+        };
 
-        let call_origin = CallOrigin::Query(query.source);
-        // EXC-500: Contain the usage of inter-canister query calls to the subnets
-        // that currently use it until we decide on the future of this feature and
-        // get a proper spec for it.
-        let cross_canister_query_calls_enabled = self.own_subnet_type == SubnetType::System
-            || self.own_subnet_type == SubnetType::VerifiedApplication;
-        let try_pure_query = ENABLE_QUERY_OPTIMIZATION || !cross_canister_query_calls_enabled;
-        let query_kind = if try_pure_query {
-            NonReplicatedQueryKind::Pure {
-                caller: query.source.get(),
-            }
-        } else {
-            NonReplicatedQueryKind::Stateful {
+        let query_kind = match &method {
+            WasmMethod::Query(_) => NonReplicatedQueryKind::Pure {
+                caller: query.source(),
+                sender_info: query.sender_info(),
+            },
+            WasmMethod::CompositeQuery(_) => NonReplicatedQueryKind::Stateful {
                 call_origin: call_origin.clone(),
+                sender_info: query.sender_info(),
+            },
+            WasmMethod::Update(_) | WasmMethod::System(_) => {
+                unreachable!("Expected a Wasm query method");
             }
         };
 
-        // First try to run the query as `Pure` assuming that it is not going to
-        // call other queries. `Pure` queries are about 2x faster than `Stateful`.
-        let (mut canister, mut result) = {
+        match query.source {
+            QuerySource::System => {
+                if let WasmMethod::CompositeQuery(_) = &method {
+                    return Err(UserError::new(
+                        ErrorCode::CompositeQueryCalledInReplicatedMode,
+                        "Composite query cannot be used as transform in canister http outcalls.",
+                    ));
+                }
+            }
+            QuerySource::User { .. } => (),
+        }
+
+        let instructions_before = self.round_limits.instructions;
+
+        let (mut canister, result) = {
             let measurement_scope =
                 MeasurementScope::nested(&metrics.query_initial_call, measurement_scope);
             self.execute_query(
-                old_canister,
-                query.method_name.as_str(),
-                query.method_payload.as_slice(),
+                old_canister.clone(),
+                method.clone(),
+                &query.method_payload,
                 query_kind,
                 &measurement_scope,
             )
         };
 
-        // An attempt to call another query will result in `ContractViolation`.
-        // If that's the case then retry query execution as `Stateful`.
-        if try_pure_query && cross_canister_query_calls_enabled {
-            if let Err(err) = &result {
-                if err.code() == ErrorCode::CanisterContractViolation {
-                    let measurement_scope =
-                        MeasurementScope::nested(&metrics.query_retry_call, measurement_scope);
-                    let old_canister = self.state.get_active_canister(&canister_id)?;
-                    let (new_canister, new_result) = self.execute_query(
-                        old_canister,
-                        query.method_name.as_str(),
-                        query.method_payload.as_slice(),
-                        NonReplicatedQueryKind::Stateful { call_origin },
-                        &measurement_scope,
-                    );
-                    canister = new_canister;
-                    result = new_result;
-                }
-            };
-        }
-
-        match result {
+        let result = match result {
             // If the canister produced a result or if execution failed then it
             // does not matter whether or not it produced any outgoing requests.
             // We can simply return the response we have.
             Err(err) => Err(err),
             Ok(Some(wasm_result)) => Ok(wasm_result),
-
-            Ok(None) => match self.enqueue_requests(&mut canister) {
-                EnqueueRequestsResult::LoopDetected => Err(UserError::new(
-                    ErrorCode::InterCanisterQueryLoopDetected,
-                    LOOP_DETECTED_ERROR_MSG.to_string(),
-                )),
-
-                // The canister did not produce a response and did not enqueue
-                // any requests either. As this is the very first canister in
-                // the call graph, we can declare that the query execution
-                // finished without producing an output.
-                EnqueueRequestsResult::NoMessages => Err(UserError::new(
-                    ErrorCode::CanisterDidNotReply,
-                    format!(
-                        "Canister {} did not reply to the call",
-                        canister.canister_id()
+            Ok(None) => {
+                // The query did not produce any response. We need to evaluate
+                // the query call graph. Note that if the call graph is empty,
+                // then a synthetic reject response will be generated.
+                let measurement_scope =
+                    MeasurementScope::nested(&metrics.query_spawned_calls, measurement_scope);
+                let mut requests = VecDeque::new();
+                let result = match self.extract_query_requests(&mut canister, &mut requests) {
+                    Err(err) => QueryResponse::UserError(err),
+                    Ok(()) => evaluate_query_call_graph(
+                        self,
+                        canister,
+                        call_origin,
+                        requests,
+                        self.max_query_call_graph_depth,
+                        &measurement_scope,
                     ),
-                )),
-
-                EnqueueRequestsResult::MessagesEnqueued => {
-                    self.canisters.insert(canister.canister_id(), canister);
-                    self.run_loop(canister_id, metrics, measurement_scope)
+                };
+                match result {
+                    QueryResponse::UserResponse(wasm_result) => Ok(wasm_result),
+                    QueryResponse::UserError(err) => Err(err),
+                    QueryResponse::CanisterResponse(_) => {
+                        unreachable!("A user query cannot produce a canister response.");
+                    }
                 }
-            },
+            }
+        };
+
+        match query.source {
+            QuerySource::System => {
+                let instructions_consumed = instructions_before - self.round_limits.instructions;
+                if instructions_consumed >= RoundInstructions::from(10_000_000) {
+                    info!(
+                        self.log,
+                        "Canister http transform on canister {} consumed {} instructions.",
+                        canister_id,
+                        instructions_consumed
+                    );
+                }
+            }
+            QuerySource::User { .. } => (),
         }
+
+        result
     }
 
-    // Keep processing the call graph till a result is achieved or no more
-    // outstanding calls are left.
-    fn run_loop<'b>(
-        &mut self,
-        starting_canister_id: CanisterId,
-        metrics: &'b QueryHandlerMetrics,
-        measurement_scope: &MeasurementScope<'b>,
-    ) -> Result<WasmResult, UserError> {
-        let measurement_scope =
-            MeasurementScope::nested(&metrics.query_spawned_calls, measurement_scope);
-        loop {
-            if let Some(response) = self.outstanding_response.take() {
-                debug!(self.log, "Executing response for {}", response.originator);
-                // Any result returned by `handle_response` is a query context
-                // terminating response and can be returned.
-                if let Some(result) = self.handle_response(response, &measurement_scope) {
-                    return result;
-                }
-                continue;
-            }
-
-            if let Some(request) = self.outstanding_requests.pop() {
-                debug!(self.log, "Executing request for {}", request.receiver);
-                if let Some(err) = self.handle_request(request, &measurement_scope) {
-                    return Err(err);
-                }
-                continue;
-            }
-
-            // There are no outstanding requests and responses. The call
-            // graph finished without producing a response.
-            debug!(
-                self.log,
-                "Call graph for {} finished without result", starting_canister_id
-            );
-            return Err(UserError::new(
-                ErrorCode::CanisterDidNotReply,
-                format!(
-                    "Canister {} did not reply to the call",
-                    starting_canister_id
-                ),
-            ));
-        }
-    }
-
-    // A helper function that enqueues any outgoing requests that the canister
-    // has.
-    fn enqueue_requests(&mut self, canister: &mut CanisterState) -> EnqueueRequestsResult {
-        let mut sent_messages = false;
+    // A helper function that extracts the query calls of the given canister and
+    // enqueues them onto the given deque.
+    fn extract_query_requests(
+        &self,
+        canister: &mut CanisterState,
+        requests: &mut VecDeque<Arc<Request>>,
+    ) -> Result<(), UserError> {
         let canister_id = canister.canister_id();
 
-        let outgoing_messages: Vec<_> = canister.output_into_iter().map(|(_, msg)| msg).collect();
-        let call_context_manager = canister
-            .system_state
-            .call_context_manager_mut()
-            .unwrap_or_else(|| {
-                fatal!(
+        let outgoing_messages: Vec<_> = canister.output_into_iter().collect();
+        let call_context_manager = canister.system_state.call_context_manager().ok_or_else(
+            || {
+                error!(
                     self.log,
-                    "Canister {}: Expected to find a CallContextManager",
-                    canister_id
+                    "[EXC-BUG] Canister {} does not have a call context manager. This is a bug @{}",
+                    canister_id,
+                    QUERY_HANDLER_CRITICAL_ERROR,
+                );
+                self.query_critical_error.inc();
+                UserError::new(
+                    ErrorCode::QueryCallGraphInternal,
+                    "Composite query: canister does not have a call context manager",
                 )
-            });
+            },
+        )?;
 
         // When we deserialize the canister state from the replicated state, it
         // is possible that it already had some messages in its output queues.
@@ -353,40 +336,35 @@ impl<'a> QueryContext<'a> {
         for msg in outgoing_messages {
             match msg {
                 RequestOrResponse::Request(msg) => {
-                    // Responses here are only those triggered by the Request that we sent,
-                    // so we are sure the unwrap here is safe.
                     let call_origin = call_context_manager
-                        .call_origin(
-                            call_context_manager
-                                .peek_callback(msg.sender_reply_callback)
-                                .unwrap()
-                                .call_context_id,
-                        )
-                        .unwrap();
+                        .callback(msg.sender_reply_callback)
+                        .and_then(|x| call_context_manager.call_origin(x.call_context_id));
+
                     match call_origin {
-                        // Messages of these types are not produced by this
-                        // module so must have existed on the canister's output
-                        // queue from before.
-                        CallOrigin::CanisterUpdate(_, _)
-                        | CallOrigin::Heartbeat
-                        | CallOrigin::Ingress(_, _) => continue,
+                        None => {
+                            error!(
+                                self.log,
+                                "[EXC-BUG] Canister {} does not have a call origin for callback. This is a bug @{}",
+                                canister_id,
+                                QUERY_HANDLER_CRITICAL_ERROR,
+                            );
+                            self.query_critical_error.inc();
+                            return Err(UserError::new(
+                                ErrorCode::QueryCallGraphInternal,
+                                "Composite query: canister does not have a call origin for callback",
+                            ));
+                        }
+                        Some(CallOrigin::CanisterUpdate(..))
+                        | Some(CallOrigin::Ingress(..))
+                        | Some(CallOrigin::SystemTask) => {}
 
-                        // We never serialize messages of such types in the
-                        // canister's state so these must have been produced by
-                        // this module.
-                        CallOrigin::Query(_) | CallOrigin::CanisterQuery(_, _) => {}
+                        Some(CallOrigin::Query(..)) | Some(CallOrigin::CanisterQuery(..)) => {
+                            // We never serialize messages of such types in the
+                            // canister's state so these must have been produced
+                            // by this module.
+                            requests.push_back(msg);
+                        }
                     }
-
-                    if msg.receiver == canister_id || self.canisters.contains_key(&msg.receiver) {
-                        // Call graph loop detector. There is already a canister
-                        // in the call graph that is waiting for some responses
-                        // to come back and this canister is trying to send it
-                        // messages. The MVP inter-canister queries
-                        // implementation does not support loops.
-                        return EnqueueRequestsResult::LoopDetected;
-                    }
-                    sent_messages = true;
-                    self.outstanding_requests.push(msg);
                 }
 
                 // Messages of these types are not produced by this
@@ -395,59 +373,203 @@ impl<'a> QueryContext<'a> {
                 RequestOrResponse::Response(_) => {}
             }
         }
-        if sent_messages {
-            EnqueueRequestsResult::MessagesEnqueued
-        } else {
-            EnqueueRequestsResult::NoMessages
-        }
+        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
     fn execute_query(
         &mut self,
         canister: CanisterState,
-        method_name: &str,
+        method_name: WasmMethod,
         method_payload: &[u8],
         query_kind: NonReplicatedQueryKind,
         measurement_scope: &MeasurementScope,
     ) -> (CanisterState, Result<Option<WasmResult>, UserError>) {
-        let instruction_limit = self.max_instructions_per_message.min(
-            self.query_allocations_used
-                .write()
-                .unwrap()
-                .allocation_before_execution(&canister.canister_id())
-                .into(),
-        );
-        let instruction_limits =
-            InstructionLimits::new(FlagStatus::Disabled, instruction_limit, instruction_limit);
+        if let WasmMethod::CompositeQuery(_) = &method_name
+            && self.composite_queries == FlagStatus::Disabled
+        {
+            return (
+                canister,
+                Err(UserError::new(
+                    ErrorCode::CanisterContractViolation,
+                    "Composite queries are not enabled yet",
+                )),
+            );
+        }
+        let cost_schedule = self.get_cost_schedule();
+        let subnet_size = self
+            .network_topology
+            .get_subnet_size(&self.cycles_account_manager.get_subnet_id())
+            .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
+        if self
+            .cycles_account_manager
+            .can_withdraw_cycles_with_threshold(
+                &canister.system_state,
+                Cycles::zero(),
+                canister.memory_usage(),
+                canister.message_memory_usage(),
+                canister.system_state.reserved_balance(),
+                subnet_size,
+                self.get_cost_schedule(),
+                false,
+            )
+            .is_err()
+        {
+            let canister_id = canister.canister_id();
+            return (
+                canister,
+                Err(UserError::new(
+                    ErrorCode::CanisterOutOfCycles,
+                    format!(
+                        "Canister {canister_id} is unable to process query calls because it's frozen. Please top up the canister with cycles and try again."
+                    ),
+                )),
+            );
+        }
+
+        let instruction_limit = self.max_instructions_per_query.min(NumInstructions::new(
+            self.round_limits.instructions.get().max(0) as u64,
+        ));
+        let instruction_limits = InstructionLimits::new(instruction_limit, instruction_limit);
         let execution_parameters = self.execution_parameters(&canister, instruction_limits);
 
-        let (canister, instructions_left, result) = execute_non_replicated_query(
-            query_kind,
-            method_name,
-            method_payload,
-            canister,
-            Some(self.data_certificate.clone()),
-            self.state.time(),
-            execution_parameters,
-            &self.network_topology,
-            self.hypervisor,
-            &mut self.round_limits,
-        );
+        let data_certificate = self.get_data_certificate(&canister.canister_id());
+        let (mut canister, instructions_left, result, call_context_id, system_api_call_counters) =
+            execute_non_replicated_query(
+                query_kind,
+                method_name,
+                method_payload,
+                canister,
+                data_certificate,
+                self.state.get_ref().time(),
+                execution_parameters,
+                &self.network_topology,
+                self.hypervisor,
+                &mut self.round_limits,
+                self.query_critical_error,
+                cost_schedule,
+            );
+        self.add_system_api_call_counters(system_api_call_counters);
         let instructions_executed = instruction_limit - instructions_left;
+
+        let ingress_payload_size = method_payload.len();
+        let egress_payload_size = match &result {
+            Ok(result) => match result {
+                Some(WasmResult::Reply(vec)) => vec.len(),
+                Some(WasmResult::Reject(_)) => 0,
+                None => 0,
+            },
+            Err(_) => 0,
+        };
+
+        if let Some(atomic) = self.instruction_observation.as_ref() {
+            atomic.fetch_add(
+                instructions_executed.get(),
+                std::sync::atomic::Ordering::Relaxed,
+            );
+        }
+
+        // Add query statistics to the query aggregator.
+        let stats = QueryStats {
+            num_calls: 1,
+            num_instructions: instructions_executed.get(),
+            ingress_payload_size: ingress_payload_size as u64,
+            egress_payload_size: egress_payload_size as u64,
+        };
+        self.add_evaluated_canister_stats(canister.canister_id(), &stats);
+        if let Some(query_stats) = self.local_query_execution_stats {
+            query_stats.set_epoch_from_height(self.state.height());
+            query_stats.register_query_statistics(canister.canister_id(), &stats);
+        }
+
         measurement_scope.add(
             instructions_executed,
             NumSlices::from(1),
             NumMessages::from(1),
         );
-        self.query_allocations_used
-            .write()
-            .unwrap()
-            .update_allocation_after_execution(
-                &canister,
-                QueryAllocation::from(instructions_executed),
+
+        if let Some(call_context_id) = call_context_id {
+            let _action = self.finish(
+                &mut canister,
+                call_context_id,
+                Ok(None),
+                instructions_executed,
             );
+        }
         (canister, result)
+    }
+
+    /// Adds up System API call counters.
+    fn add_system_api_call_counters(&mut self, system_api_call_counters: SystemApiCallCounters) {
+        self.system_api_call_counters
+            .saturating_add(system_api_call_counters);
+    }
+
+    /// Adds a canister ID into a set of actually executed canisters.
+    fn add_evaluated_canister_stats(&mut self, canister_id: CanisterId, stats: &QueryStats) {
+        self.evaluated_canister_stats
+            .entry(canister_id)
+            .and_modify(|s| s.saturating_accumulate(stats))
+            .or_insert(stats.clone());
+    }
+
+    /// Accumulates transient errors from result.
+    pub fn accumulate_transient_errors_from_result<R>(&mut self, result: Result<R, &UserError>) {
+        if result.is_err_and(|err| err.reject_code() == RejectCode::SysTransient) {
+            self.transient_errors += 1;
+        }
+    }
+
+    /// Accumulates transient errors from payload.
+    pub fn accumulate_transient_errors_from_payload(&mut self, payload: &Payload) {
+        if let Payload::Reject(context) = payload
+            && context.code() == RejectCode::SysTransient
+        {
+            self.transient_errors += 1;
+        }
+    }
+
+    fn finish(
+        &self,
+        canister: &mut CanisterState,
+        call_context_id: CallContextId,
+        result: Result<Option<WasmResult>, HypervisorError>,
+        instructions_used: NumInstructions,
+    ) -> CallContextAction {
+        canister
+            .system_state
+            .on_canister_result(call_context_id, result, instructions_used)
+            // This `unwrap()` cannot fail because of the non-optional `call_context_id`.
+            .unwrap()
+            .0
+    }
+
+    // Observes query metrics.
+    pub(super) fn observe_metrics(&mut self, metrics: &QueryHandlerMetrics) {
+        // Observe System API call counters in the corresponding metrics.
+        let query_system_api_calls = &metrics.query_system_api_calls;
+        query_system_api_calls
+            .with_label_values(&[SYSTEM_API_DATA_CERTIFICATE_COPY])
+            .inc_by(self.system_api_call_counters.data_certificate_copy as u64);
+        query_system_api_calls
+            .with_label_values(&[SYSTEM_API_CANISTER_CYCLE_BALANCE])
+            .inc_by(self.system_api_call_counters.canister_cycle_balance as u64);
+        query_system_api_calls
+            .with_label_values(&[SYSTEM_API_CANISTER_CYCLE_BALANCE128])
+            .inc_by(self.system_api_call_counters.canister_cycle_balance128 as u64);
+        query_system_api_calls
+            .with_label_values(&[SYSTEM_API_TIME])
+            .inc_by(self.system_api_call_counters.time as u64);
+
+        // Observe the number evaluated canisters in the corresponding metrics.
+        metrics
+            .evaluated_canisters
+            .observe(self.evaluated_canister_stats.len() as f64);
+
+        // Observe transient errors.
+        metrics
+            .transient_errors
+            .inc_by(self.transient_errors as u64);
     }
 
     fn execute_callback(
@@ -455,34 +577,35 @@ impl<'a> QueryContext<'a> {
         mut canister: CanisterState,
         response: Response,
         measurement_scope: &MeasurementScope,
-    ) -> (CanisterState, CallOrigin, CallContextAction) {
-        let canister_id = canister.canister_id();
-        let (callback, callback_id, call_context, call_context_id) =
-            match common::get_call_context_and_callback(&canister, &response, self.log) {
-                Some(r) => r,
-                None => {
-                    fatal!(
-                        self.log,
-                        "Canister {}: Expected to find a callback and call context",
-                        canister_id
-                    )
-                }
-            };
+    ) -> Result<(CanisterState, CallOrigin, CallContextAction), UserError> {
+        let err = || {
+            UserError::new(
+                ErrorCode::QueryCallGraphInternal,
+                "Composite query: no callback for response",
+            )
+        };
+        let callback = common::unregister_callback(
+            &mut canister,
+            &response,
+            self.log,
+            self.query_critical_error,
+        )
+        .ok_or_else(err)?;
+        let (call_context, call_context_id) =
+            common::get_call_context(&canister, &callback, self.log, self.query_critical_error)
+                .ok_or_else(err)?;
 
         let call_responded = call_context.has_responded();
         let call_origin = call_context.call_origin().clone();
         // Validate that the canister has an `ExecutionState`.
         if canister.execution_state.is_none() {
-            let action = canister
-                .system_state
-                .call_context_manager_mut()
-                .unwrap()
-                .on_canister_result(
-                    call_context_id,
-                    Some(callback_id),
-                    Err(HypervisorError::WasmModuleNotFound),
-                );
-            return (canister, call_origin, action);
+            let action = self.finish(
+                &mut canister,
+                call_context_id,
+                Err(HypervisorError::WasmModuleNotFound),
+                0.into(),
+            );
+            return Ok((canister, call_origin, action));
         }
 
         let closure = match response.response_payload {
@@ -490,59 +613,64 @@ impl<'a> QueryContext<'a> {
             Payload::Reject(_) => callback.on_reject.clone(),
         };
         let func_ref = match call_origin {
-            CallOrigin::Ingress(_, _)
-            | CallOrigin::CanisterUpdate(_, _)
-            | CallOrigin::Heartbeat => unreachable!("Unreachable in the QueryContext."),
-            CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
-                FuncRef::QueryClosure(closure)
+            CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
+                unreachable!("Unreachable in the QueryContext.")
             }
+            CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => FuncRef::QueryClosure(closure),
         };
 
-        let time = self.state.time();
+        let time = self.state.get_ref().time();
         // No cycles are refunded in a response to a query call.
         let incoming_cycles = Cycles::zero();
 
-        let instruction_limit = self.max_instructions_per_message.min(
-            self.query_allocations_used
-                .write()
-                .unwrap()
-                .allocation_before_execution(&canister_id)
-                .into(),
-        );
-        let instruction_limits =
-            InstructionLimits::new(FlagStatus::Disabled, instruction_limit, instruction_limit);
+        let instruction_limit = self.max_instructions_per_query.min(NumInstructions::new(
+            self.round_limits.instructions.get().max(0) as u64,
+        ));
+        let instruction_limits = InstructionLimits::new(instruction_limit, instruction_limit);
         let mut execution_parameters = self.execution_parameters(&canister, instruction_limits);
         let api_type = match response.response_payload {
-            Payload::Data(payload) => ApiType::reply_callback(
+            Payload::Data(payload) => ApiType::composite_reply_callback(
                 time,
+                call_origin.get_principal(),
                 payload.to_vec(),
                 incoming_cycles,
                 call_context_id,
                 call_responded,
-                execution_parameters.execution_mode.clone(),
+                call_context.instructions_executed(),
+                call_context.sender_info().cloned(),
             ),
-            Payload::Reject(context) => ApiType::reject_callback(
+            Payload::Reject(context) => ApiType::composite_reject_callback(
                 time,
+                call_origin.get_principal(),
                 context,
                 incoming_cycles,
                 call_context_id,
                 call_responded,
-                execution_parameters.execution_mode.clone(),
+                call_context.instructions_executed(),
+                call_context.sender_info().cloned(),
             ),
         };
+
+        let cost_schedule = self.get_cost_schedule();
+
         let (output, output_execution_state, output_system_state) = self.hypervisor.execute(
             api_type,
             time,
             canister.system_state.clone(),
-            canister.memory_usage(self.own_subnet_type),
+            canister.memory_usage(),
+            canister.message_memory_usage(),
             execution_parameters.clone(),
             func_ref,
             canister.execution_state.take().unwrap(),
             &self.network_topology,
             &mut self.round_limits,
+            self.query_critical_error,
+            &CallTreeMetricsNoOp,
+            call_context.time(),
+            cost_schedule,
         );
 
-        let canister_current_memory_usage = canister.memory_usage(self.own_subnet_type);
+        self.add_system_api_call_counters(output.system_api_call_counters);
         canister.execution_state = Some(output_execution_state);
         execution_parameters
             .instruction_limits
@@ -557,45 +685,40 @@ impl<'a> QueryContext<'a> {
             Err(callback_err) => {
                 // A trap has occurred when executing the reply/reject closure.
                 // Execute the cleanup if it exists.
-                match callback.on_cleanup {
+                match &callback.on_cleanup {
                     None => {
                         // No cleanup closure present. Return the callback error as-is.
                         (output.num_instructions_left, Err(callback_err))
                     }
-                    Some(cleanup_closure) => self.execute_cleanup(
-                        time,
-                        &mut canister,
-                        cleanup_closure,
-                        &call_origin,
-                        callback_err,
-                        canister_current_memory_usage,
-                        execution_parameters,
-                    ),
+                    Some(cleanup_closure) => {
+                        let canister_current_memory_usage = canister.memory_usage();
+                        let canister_current_message_memory_usage = canister.message_memory_usage();
+                        self.execute_cleanup(
+                            time,
+                            &mut canister,
+                            cleanup_closure.clone(),
+                            &call_origin,
+                            callback_err,
+                            canister_current_memory_usage,
+                            canister_current_message_memory_usage,
+                            execution_parameters,
+                            call_context.instructions_executed(),
+                            call_context.sender_info().cloned(),
+                        )
+                    }
                 }
             }
         };
 
-        let action = canister
-            .system_state
-            .call_context_manager_mut()
-            .unwrap()
-            .on_canister_result(call_context_id, Some(callback_id), result);
-
-        let instructions_executed = instruction_limit - instructions_left;
-        measurement_scope.add(
-            instructions_executed,
-            NumSlices::from(1),
-            NumMessages::from(1),
+        let instructions_used = NumInstructions::from(
+            instruction_limit
+                .get()
+                .saturating_sub(instructions_left.get()),
         );
-        self.query_allocations_used
-            .write()
-            .unwrap()
-            .update_allocation_after_execution(
-                &canister,
-                QueryAllocation::from(instructions_executed),
-            );
+        let action = self.finish(&mut canister, call_context_id, result, instructions_used);
 
-        (canister, call_origin, action)
+        measurement_scope.add(instructions_used, NumSlices::from(1), NumMessages::from(1));
+        Ok((canister, call_origin, action))
     }
 
     /// Execute cleanup.
@@ -612,29 +735,44 @@ impl<'a> QueryContext<'a> {
         call_origin: &CallOrigin,
         callback_err: HypervisorError,
         canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
         execution_parameters: ExecutionParameters,
+        call_context_instructions_executed: NumInstructions,
+        sender_info: Option<SenderInfo>,
     ) -> (NumInstructions, Result<Option<WasmResult>, HypervisorError>) {
         let func_ref = match call_origin {
-            CallOrigin::Ingress(_, _)
-            | CallOrigin::CanisterUpdate(_, _)
-            | CallOrigin::Heartbeat => unreachable!("Unreachable in the QueryContext."),
-            CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
+            CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
+                unreachable!("Unreachable in the QueryContext.")
+            }
+            CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => {
                 FuncRef::QueryClosure(cleanup_closure)
             }
         };
+        let cost_schedule = self.get_cost_schedule();
         let (cleanup_output, output_execution_state, output_system_state) =
             self.hypervisor.execute(
-                ApiType::Cleanup { time },
+                ApiType::CompositeCleanup {
+                    caller: call_origin.get_principal(),
+                    time,
+                    call_context_instructions_executed,
+                    sender_info,
+                },
                 time,
                 canister.system_state.clone(),
                 canister_current_memory_usage,
+                canister_current_message_memory_usage,
                 execution_parameters,
                 func_ref,
                 canister.execution_state.take().unwrap(),
                 &self.network_topology,
                 &mut self.round_limits,
+                self.query_critical_error,
+                &CallTreeMetricsNoOp,
+                time,
+                cost_schedule,
             );
 
+        self.add_system_api_call_counters(cleanup_output.system_api_call_counters);
         canister.execution_state = Some(output_execution_state);
         match cleanup_output.wasm_result {
             Ok(_) => {
@@ -658,56 +796,77 @@ impl<'a> QueryContext<'a> {
         }
     }
 
-    // Executes a query sent from one canister to another. If a loop in the call
-    // graph is detected, then an error is returned.
-    fn handle_request(
+    /// Executes a query call in its own query call context.
+    /// If the execution does not produce any response, then the function
+    /// returns the new query call context (canister and call origin) and a list
+    /// of outgoing query calls (requests).
+    /// If the execution produces a response, then the function returns it and
+    /// discards the call context and outgoing requests.
+    pub fn handle_request(
         &mut self,
         request: Arc<Request>,
         measurement_scope: &MeasurementScope,
-    ) -> Option<UserError> {
-        // we are always prioritising responses over requests so when we execute
-        // a request, there should not be any outstanding responses.
-        if self.outstanding_response.is_some() {
-            fatal!(
-                self.log,
-                "[EXC-BUG] Prioritising responses invariant failed. Handling a request when outstanding responses exist."
-            );
-        }
+    ) -> ExecutionResult {
+        // A handy function to create a `Response` using parameters from the `Request`
+        let to_query_result = |payload: Payload| {
+            QueryResponse::CanisterResponse(Response {
+                originator: request.sender,
+                respondent: request.receiver,
+                originator_reply_callback: request.sender_reply_callback,
+                response_payload: payload,
+                refund: Cycles::zero(),
+                deadline: request.deadline,
+            })
+        };
 
         let canister_id = request.receiver;
-        // As we do not support loops in the call graph, the canister that we
-        // want to execute a request on should not already be loaded.
-        if self.canisters.contains_key(&canister_id) {
-            error!(self.log, "[EXC-BUG] The canister that we want to execute a request on should not already be loaded.");
-        }
+        // Add the canister to the set of evaluated canisters early, i.e. before any errors.
+        self.add_evaluated_canister_stats(canister_id, &QueryStats::default());
 
-        let canister = match self.state.get_active_canister(&request.receiver) {
+        let canister = match self.state.get_ref().get_active_canister(&canister_id) {
             Ok(canister) => canister,
             Err(err) => {
-                let payload = Payload::Reject(RejectContext::from(err));
-                self.outstanding_response = Some(generate_response(request, payload));
-                return None;
+                return ExecutionResult::Response(to_query_result(Payload::Reject(
+                    RejectContext::from(err),
+                )));
             }
         };
 
-        let call_origin = CallOrigin::CanisterQuery(request.sender, request.sender_reply_callback);
+        let call_origin = CallOrigin::CanisterQuery(
+            request.sender,
+            request.sender_reply_callback,
+            request.method_name.clone(),
+        );
+
+        let method = match wasm_query_method(canister, request.method_name.clone()) {
+            Ok(method) => method,
+            Err(err) => {
+                return ExecutionResult::Response(to_query_result(Payload::Reject(
+                    RejectContext::from(err.into_user_error(&canister_id)),
+                )));
+            }
+        };
+
         let (mut canister, result) = self.execute_query(
-            canister,
-            request.method_name.as_str(),
+            canister.clone(),
+            method,
             request.method_payload.as_slice(),
-            NonReplicatedQueryKind::Stateful { call_origin },
+            NonReplicatedQueryKind::Stateful {
+                call_origin: call_origin.clone(),
+                // this is a nested composite query call => no sender info available
+                sender_info: None,
+            },
             measurement_scope,
         );
+
+        self.round_limits.instructions -= self.instruction_overhead_per_query_call;
 
         match result {
             // Execution of the message failed. We do not need to bother with
             // any outstanding requests and we can return a response.
-            Err(err) => {
-                let payload = Payload::Reject(RejectContext::from(err));
-                let response = generate_response(request, payload);
-                self.outstanding_response = Some(response);
-                None
-            }
+            Err(err) => ExecutionResult::Response(to_query_result(Payload::Reject(
+                RejectContext::from(err),
+            ))),
 
             Ok(opt_result) => {
                 match opt_result {
@@ -722,278 +881,200 @@ impl<'a> QueryContext<'a> {
                                 string,
                             )),
                         };
-                        self.outstanding_response = Some(generate_response(request, payload));
-                        None
+                        ExecutionResult::Response(to_query_result(payload))
                     }
-                    None => match self.enqueue_requests(&mut canister) {
-                        EnqueueRequestsResult::LoopDetected => Some(UserError::new(
-                            ErrorCode::InterCanisterQueryLoopDetected,
-                            LOOP_DETECTED_ERROR_MSG.to_string(),
-                        )),
-
-                        // The canister did not produce a response and did not
-                        // produce any outgoing requests. So produce a "did not
-                        // reply" response on its behalf.
-                        EnqueueRequestsResult::NoMessages => {
-                            let error_msg = format!("Canister {} did not reply", request.receiver);
-                            let payload = Payload::Reject(RejectContext::new(
-                                RejectCode::CanisterError,
-                                error_msg,
-                            ));
-                            self.outstanding_response = Some(generate_response(request, payload));
-                            None
+                    None => {
+                        let mut requests = VecDeque::default();
+                        match self.extract_query_requests(&mut canister, &mut requests) {
+                            Ok(()) => ExecutionResult::Calls(canister, call_origin, requests),
+                            Err(err) => ExecutionResult::SystemError(err),
                         }
+                    }
+                }
+            }
+        }
+    }
 
-                        // Canister did not produce a response but did produce
-                        // outgoing request(s). Save the canister for when the
-                        // response(s) come back in.
-                        EnqueueRequestsResult::MessagesEnqueued => {
-                            self.canisters.insert(canister.canister_id(), canister);
-                            None
-                        }
+    /// Extracts the query result from the call context action.
+    fn action_to_result(
+        &self,
+        canister_id: CanisterId,
+        action: CallContextAction,
+    ) -> Option<Result<WasmResult, UserError>> {
+        use CallContextAction::*;
+        let (result, refund) = match action {
+            Reply { payload, refund } => (Some(Ok(WasmResult::Reply(payload))), refund),
+            Reject { payload, refund } => (Some(Ok(WasmResult::Reject(payload))), refund),
+            Fail { error, refund } => (Some(Err(error.into_user_error(&canister_id))), refund),
+            // The canister did not produce a response and there are no
+            // outstanding calls in the call context. Generate a synthetic
+            // reject message.
+            NoResponse { refund } => (
+                Some(Err(UserError::new(
+                    ErrorCode::CanisterDidNotReply,
+                    format!("Canister {canister_id} did not produce a response"),
+                ))),
+                refund,
+            ),
+            // The canister did not produce a response, but there are
+            // outstanding calls in the call context that may respond.
+            NotYetResponded => (None, Cycles::zero()),
+            // This state indicates that the canister produced a response or
+            // reject earlier and we continued to keep executing it. This
+            // should not happen as once the canister has produced a response,
+            // we drop its state and do not process further messages on it.
+            AlreadyResponded => {
+                error!(
+                    self.log,
+                    "[EXC-BUG] Canister {} continued execution after responding. This is a bug @{}",
+                    canister_id,
+                    QUERY_HANDLER_CRITICAL_ERROR,
+                );
+                self.query_critical_error.inc();
+                (
+                    Some(Err(UserError::new(
+                        ErrorCode::QueryCallGraphInternal,
+                        "Composite query: canister continued execution after responding",
+                    ))),
+                    Cycles::zero(),
+                )
+            }
+        };
+
+        if !refund.is_zero() {
+            error!(
+                self.log,
+                "[EXC-BUG] Canister {} refunded {} in a response to a query call. This is a bug @{}",
+                canister_id,
+                refund,
+                QUERY_HANDLER_CRITICAL_ERROR
+            );
+            self.query_critical_error.inc();
+        }
+        result
+    }
+
+    /// Executes the response callback corresponding to the given response.
+    /// If the execution does not produce any response, then the function returns
+    /// a new canister state together with the old and new outgoing requests.
+    /// If the execution produces a response, then the function returns it and
+    /// discards the canister and outgoing requests.
+    pub fn handle_response(
+        &mut self,
+        canister: CanisterState,
+        response: Response,
+        mut requests: VecDeque<Arc<Request>>,
+        measurement_scope: &MeasurementScope,
+    ) -> ExecutionResult {
+        let canister_id = response.originator;
+        let (mut canister, call_origin, action) =
+            match self.execute_callback(canister, response, measurement_scope) {
+                Ok(r) => r,
+                Err(err) => {
+                    return ExecutionResult::SystemError(err);
+                }
+            };
+
+        match call_origin {
+            CallOrigin::CanisterUpdate(..) | CallOrigin::Ingress(..) | CallOrigin::SystemTask => {
+                error!(
+                    self.log,
+                    "[EXC-BUG] Canister {}: unexpected callback with an update origin. This is a bug @{}",
+                    canister_id,
+                    QUERY_HANDLER_CRITICAL_ERROR,
+                );
+                self.query_critical_error.inc();
+                ExecutionResult::SystemError(UserError::new(
+                    ErrorCode::QueryCallGraphInternal,
+                    "Composite query: unexpected callback with an update origin",
+                ))
+            }
+
+            CallOrigin::Query(..) => match self.action_to_result(canister.canister_id(), action) {
+                Some(Ok(wasm_result)) => {
+                    ExecutionResult::Response(QueryResponse::UserResponse(wasm_result))
+                }
+                Some(Err(error)) => ExecutionResult::Response(QueryResponse::UserError(error)),
+                None => match self.extract_query_requests(&mut canister, &mut requests) {
+                    Ok(()) => ExecutionResult::Calls(canister, call_origin, requests),
+                    Err(err) => ExecutionResult::SystemError(err),
+                },
+            },
+            CallOrigin::CanisterQuery(originator, callback_id, ref _method_name) => {
+                let canister_id = canister.canister_id();
+                let to_query_result = |payload| {
+                    let response = Response {
+                        originator,
+                        respondent: canister_id,
+                        originator_reply_callback: callback_id,
+                        refund: Cycles::zero(),
+                        response_payload: payload,
+                        // `CallOrigin::CanisterQuery` has no deadline.
+                        deadline: NO_DEADLINE,
+                    };
+                    QueryResponse::CanisterResponse(response)
+                };
+                match self.action_to_result(canister_id, action) {
+                    Some(Ok(wasm_result)) => {
+                        let payload = match wasm_result {
+                            WasmResult::Reply(payload) => Payload::Data(payload),
+                            WasmResult::Reject(reject) => Payload::Reject(RejectContext::new(
+                                RejectCode::CanisterReject,
+                                reject,
+                            )),
+                        };
+                        ExecutionResult::Response(to_query_result(payload))
+                    }
+                    Some(Err(error)) => ExecutionResult::Response(to_query_result(
+                        Payload::Reject(RejectContext::from(error)),
+                    )),
+                    None => match self.extract_query_requests(&mut canister, &mut requests) {
+                        Ok(()) => ExecutionResult::Calls(canister, call_origin, requests),
+                        Err(err) => ExecutionResult::SystemError(err),
                     },
                 }
             }
         }
     }
 
-    /// Handles results from executing a response on a canister where the sender
-    /// of the request was an end-user. This means that this is the very first
-    /// canister in the inter-canister query call graph hence if it produces a
-    /// response, it can be returned and the rest of the call graph abandoned.
-    fn handle_response_with_query_origin(
-        &mut self,
-        mut canister: CanisterState,
-        action: CallContextAction,
-    ) -> Option<Result<WasmResult, UserError>> {
-        let canister_id = canister.canister_id();
-
-        use CallContextAction::*;
-        match action {
-            Reply { payload, refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        self.log,
-                        "[EXC-BUG] No cycles are refunded in a response to a query call."
-                    );
-                }
-                Some(Ok(WasmResult::Reply(payload)))
-            }
-            Reject { payload, refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        self.log,
-                        "[EXC-BUG] No cycles are refunded in a response to a query call."
-                    );
-                }
-                Some(Ok(WasmResult::Reject(payload)))
-            }
-            NoResponse { refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        self.log,
-                        "[EXC-BUG] No cycles are refunded in a response to a query call."
-                    );
-                }
-                Some(Err(UserError::new(
-                    ErrorCode::CanisterDidNotReply,
-                    format!("Canister {} did not produce a response", canister_id),
-                )))
-            }
-            Fail { error, refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        self.log,
-                        "[EXC-BUG] No cycles are refunded in a response to a query call."
-                    );
-                }
-                Some(Err(error.into_user_error(&canister.canister_id())))
-            }
-            // No response available and there are still outstanding
-            // callbacks.  Enqueue any produced requests and continue
-            // processing the query context.
-            NotYetResponded => match self.enqueue_requests(&mut canister) {
-                EnqueueRequestsResult::LoopDetected => Some(Err(UserError::new(
-                    ErrorCode::InterCanisterQueryLoopDetected,
-                    LOOP_DETECTED_ERROR_MSG.to_string(),
-                ))),
-                EnqueueRequestsResult::NoMessages | EnqueueRequestsResult::MessagesEnqueued => {
-                    self.canisters.insert(canister.canister_id(), canister);
-                    None
-                }
-            },
-            // This state indicates that the canister produced a
-            // response or reject earlier and we continued to keep
-            // executing it.  This should not happen as once the
-            // canister has produced a response, we drop its state and
-            // do not process further messages on it.
-            AlreadyResponded => fatal!(
-                self.log,
-                "Canister {}: Should not be possible to keep executing after producing a response",
-                canister_id
-            ),
-        }
+    /// Returns true if the total number of instructions executed by queries and
+    /// response callbacks exceeds the limit in `round_limits`.
+    pub fn instruction_limit_reached(&self) -> bool {
+        self.round_limits.instructions_reached()
     }
 
-    // Handles execution results for canister where the sender of the request is
-    // a canister. Any produced response must be enqueued for further handling.
-    fn handle_response_with_canister_origin(
-        &mut self,
-        mut canister: CanisterState,
-        originator: CanisterId,
-        callback_id: CallbackId,
-        action: CallContextAction,
-    ) -> Option<Result<WasmResult, UserError>> {
-        let canister_id = canister.canister_id();
-        let logger = self.log;
-
-        // A helper function to produce and enqueue `Response`s from
-        // common fields.
-        let mut enqueue_response = |payload: Payload| {
-            let response = Response {
-                originator,
-                respondent: canister_id,
-                originator_reply_callback: callback_id,
-                response_payload: payload,
-                refund: Cycles::zero(),
-            };
-            self.outstanding_response = Some(response);
-        };
-
-        use CallContextAction::*;
-        match action {
-            Reply { payload, refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        logger,
-                        "[EXC-BUG] No cycles are refunded in a response to a query call."
-                    );
-                }
-                enqueue_response(Payload::Data(payload));
-                // The canister has produced a response so remove any other
-                // requests that it may have produced to minimize unnecessary
-                // work.
-                self.outstanding_requests
-                    .retain(|request| request.sender != canister_id);
-                None
-            }
-
-            Reject { payload, refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        logger,
-                        "[EXC-BUG] No cycles are refunded in a response to a query call."
-                    );
-                }
-                enqueue_response(Payload::Reject(RejectContext::new(
-                    RejectCode::CanisterReject,
-                    payload,
-                )));
-                // The canister has produced a response so remove any other
-                // requests that it may have produced to minimize unnecessary
-                // work.
-                self.outstanding_requests
-                    .retain(|request| request.sender != canister_id);
-                None
-            }
-
-            NoResponse { refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        logger,
-                        "[EXC-BUG] No cycles are refunded in a response to a query call."
-                    );
-                }
-                enqueue_response(Payload::Reject(RejectContext::new(
-                    RejectCode::CanisterError,
-                    "Canister did not reply".to_string(),
-                )));
-                None
-            }
-
-            Fail { error, refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        logger,
-                        "[EXC-BUG] No cycles are refunded in a response to a query call."
-                    );
-                }
-                let user_error = error.into_user_error(&canister.canister_id());
-                enqueue_response(Payload::Reject(RejectContext::from(user_error)));
-                None
-            }
-
-            // No response available and there are still outstanding
-            // callbacks so enqueue any produced requests and continue
-            // processing the query context.
-            NotYetResponded => match self.enqueue_requests(&mut canister) {
-                EnqueueRequestsResult::LoopDetected => Some(Err(UserError::new(
-                    ErrorCode::InterCanisterQueryLoopDetected,
-                    LOOP_DETECTED_ERROR_MSG.to_string(),
-                ))),
-                EnqueueRequestsResult::NoMessages | EnqueueRequestsResult::MessagesEnqueued => {
-                    self.canisters.insert(canister.canister_id(), canister);
-                    None
-                }
-            },
-
-            // This state indicates that the canister produced a
-            // response or reject earlier and we continued to keep
-            // executing it.  This should not happen as once the
-            // canister has produced a response, we drop its state and
-            // do not process further messages on it.
-            AlreadyResponded => fatal!(
-                self.log,
-                "Canister {}: Should not be possible to keep executing after producing a response",
-                canister.canister_id()
-            ),
-        }
+    /// Return whether the time limit for this query context has been reached.
+    pub fn time_limit_reached(&self) -> bool {
+        self.query_context_time_start.elapsed() >= self.query_context_time_limit
     }
 
-    // Executes a query response sent from a canister to another canister.  If
-    // executing the response produces another response that terminates the
-    // query context, it is returned; otherwise, None is returned.  Any other
-    // intermediate requests or response are enqueued by the function.
-    fn handle_response(
-        &mut self,
-        response: Response,
-        measurement_scope: &MeasurementScope,
-    ) -> Option<Result<WasmResult, UserError>> {
-        if self.outstanding_response.is_some() {
-            fatal!(
-                self.log,
-                "[EXC-BUG] Prioritising responses invariant failed. There will never be more than one outstanding response."
-            );
-        }
-
-        let canister_id = response.originator;
-        // As we are executing a response, we must have executed a request on
-        // the canister before and must have stored its state so the following
-        // should not fail.
-        let canister = self.canisters.remove(&canister_id).unwrap_or_else(|| {
-            fatal!(
-                self.log,
-                "Expected to find canister {} in the cache",
-                canister_id
-            )
-        });
-
-        let (canister, call_origin, action) =
-            self.execute_callback(canister, response, measurement_scope);
-
+    /// Returns a synthetic reject response for the case when a query call
+    /// context did not produce any response.
+    pub fn empty_response(
+        &self,
+        canister_id: CanisterId,
+        call_origin: CallOrigin,
+    ) -> QueryResponse {
+        let error = UserError::new(
+            ErrorCode::CanisterDidNotReply,
+            format!("Canister {canister_id} did not produce a response"),
+        );
         match call_origin {
-            CallOrigin::Query(_) => self.handle_response_with_query_origin(canister, action),
-
-            CallOrigin::CanisterUpdate(_, _)
-            | CallOrigin::Ingress(_, _)
-            | CallOrigin::Heartbeat => fatal!(
-                self.log,
-                "Canister {}: query path should not have created a callback with an update origin",
-                canister_id
-            ),
-
-            CallOrigin::CanisterQuery(originator, callback_id) => {
-                self.handle_response_with_canister_origin(canister, originator, callback_id, action)
+            CallOrigin::Ingress(..) | CallOrigin::CanisterUpdate(..) | CallOrigin::SystemTask => {
+                unreachable!("Expected a query call context");
+            }
+            CallOrigin::Query(..) => QueryResponse::UserError(error),
+            CallOrigin::CanisterQuery(originator, callback_id, _method_name) => {
+                let response = Response {
+                    originator,
+                    respondent: canister_id,
+                    originator_reply_callback: callback_id,
+                    refund: Cycles::zero(),
+                    response_payload: Payload::Reject(RejectContext::from(error)),
+                    // `CallOrigin::CanisterQuery` has no deadline.
+                    deadline: NO_DEADLINE,
+                };
+                QueryResponse::CanisterResponse(response)
             }
         }
     }
@@ -1005,10 +1086,45 @@ impl<'a> QueryContext<'a> {
     ) -> ExecutionParameters {
         ExecutionParameters {
             instruction_limits,
-            canister_memory_limit: canister.memory_limit(self.max_canister_memory_size),
-            compute_allocation: canister.scheduler_state.compute_allocation,
+            wasm_memory_limit: canister.wasm_memory_limit(),
+            memory_allocation: canister.memory_allocation(),
+            canister_guaranteed_callback_quota: self.canister_guaranteed_callback_quota,
+            compute_allocation: canister.compute_allocation(),
             subnet_type: self.own_subnet_type,
             execution_mode: ExecutionMode::NonReplicated,
+            // Effectively disable subnet memory resource reservation for queries.
+            subnet_memory_saturation: ResourceSaturation::default(),
         }
+    }
+
+    fn get_data_certificate(&self, canister_id: &CanisterId) -> Option<Vec<u8>> {
+        self.data_certificate.as_ref().and_then(
+            |(data_certificate, data_certificate_canister_id)| {
+                if canister_id != data_certificate_canister_id {
+                    None
+                } else {
+                    Some(data_certificate.clone())
+                }
+            },
+        )
+    }
+
+    /// Returns how many times each tracked System API call was invoked.
+    pub fn system_api_call_counters(&self) -> &SystemApiCallCounters {
+        &self.system_api_call_counters
+    }
+
+    /// Returns a list of actually executed canisters with their stats.
+    pub fn evaluated_canister_stats(&self) -> &BTreeMap<CanisterId, QueryStats> {
+        &self.evaluated_canister_stats
+    }
+
+    /// Returns a number of transient errors.
+    pub fn transient_errors(&self) -> usize {
+        self.transient_errors
+    }
+
+    pub fn get_cost_schedule(&self) -> CanisterCyclesCostSchedule {
+        self.state.get_ref().get_own_cost_schedule()
     }
 }

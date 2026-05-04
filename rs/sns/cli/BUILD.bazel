@@ -1,44 +1,57 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
+# See rs/nervous_system/feature_test.md
 DEPENDENCIES = [
-    "//rs/crypto/sha",
+    # Keep sorted.
+    "//rs/crypto/sha2",
+    "//rs/nervous_system/agent",
+    "//rs/nervous_system/candid_utils",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/common/test_keys",
+    "//rs/nervous_system/humanize",
+    "//rs/nervous_system/proto",
+    "//rs/nns/cmc",
+    "//rs/nns/common",
     "//rs/nns/constants",
+    "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
-    "//rs/protobuf",
-    "//rs/rosetta-api/ledger_canister",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_protobuf",
-    "//rs/rust_canisters/on_wire",
     "//rs/sns/governance",
+    "//rs/sns/governance/api",
     "//rs/sns/init",
     "//rs/sns/root",
-    "//rs/sns/test_utils",
     "//rs/types/base_types",
+    "//rs/types/management_canister_types",
     "@crate_index//:anyhow",
     "@crate_index//:base64",
-    "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:clap",
+    "@crate_index//:dfx-core",
+    "@crate_index//:futures",
     "@crate_index//:hex",
+    "@crate_index//:ic-agent",
+    "@crate_index//:ic-wasm",
+    "@crate_index//:itertools",
     "@crate_index//:json-patch",
     "@crate_index//:maplit",
-    "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:regex",
+    "@crate_index//:pretty_assertions",
     "@crate_index//:serde",
+    "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
     "@crate_index//:serde_yaml",
     "@crate_index//:tempfile",
+    "@crate_index//:thiserror",
+    "@crate_index//:tokio",
     "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = []
 
-DEV_DEPENDENCIES = []
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:lazy_static",
+]
 
 MACRO_DEV_DEPENDENCIES = []
 
@@ -46,30 +59,57 @@ ALIASES = {}
 
 rust_library(
     name = "cli",
-    srcs = glob(["src/*.rs"]),
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = [
+            "**/*tests.rs",
+            "main.rs",
+        ],
+    ),
     aliases = ALIASES,
     crate_name = "ic_sns_cli",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "1.0.0",
     deps = DEPENDENCIES,
 )
 
 rust_binary(
     name = "sns",
-    srcs = glob(["src/*.rs"]),
+    srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    version = "1.0.0",
+    deps = DEPENDENCIES + [":cli"],
 )
 
 rust_test(
     name = "sns_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(
+        ["src/**"],
+        exclude = ["src/main.rs"],
+    ),
     aliases = ALIASES,
-    crate_root = "src/main.rs",
-    data = ["test.png"],
+    args = [
+        # This is needed because one of the tests changes directory (namely,
+        # test_convert_to_create_service_nervous_system), while other tests
+        # assume that the current working directory remains unchanged. This does
+        # not have a significant negative impact on test execution time, because
+        # this test is very fast.
+        "--test-threads=1",
+    ],
+    crate_root = "src/lib.rs",
+    data = [
+        "test.png",
+        "test_sns_init_v2.yaml",
+    ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/sns/cli",
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_doc_test(
+    name = "sns_doctest",
+    crate = ":cli",
 )

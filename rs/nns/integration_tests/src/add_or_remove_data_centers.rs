@@ -1,18 +1,17 @@
 use assert_matches::assert_matches;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR,
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR,
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_governance::pb::v1::{GovernanceError, NnsFunction, ProposalStatus};
+use ic_nns_governance_api::{GovernanceError, NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{
         get_pending_proposals, submit_external_update_proposal,
         submit_external_update_proposal_allowing_error, wait_for_final_state,
     },
-    ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
     registry::get_value_or_panic,
 };
 use ic_protobuf::registry::dc::v1::{
@@ -20,12 +19,12 @@ use ic_protobuf::registry::dc::v1::{
 };
 use ic_registry_keys::make_data_center_record_key;
 use ic_registry_transport::{
-    deserialize_get_value_response, serialize_get_value_request, Error::KeyNotPresent,
+    Error::KeyNotPresent, deserialize_get_value_response, serialize_get_value_request,
 };
 
 #[test]
 fn test_submit_add_or_remove_data_centers_proposal() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_invariant_compliant_mutations()
             .with_test_neurons()
@@ -77,8 +76,8 @@ fn test_submit_add_or_remove_data_centers_proposal() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, proposal_id)
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         // No proposals should be pending now.
@@ -91,7 +90,7 @@ fn test_submit_add_or_remove_data_centers_proposal() {
         )
         .await;
 
-        assert_eq!(&an1_dc.id, "AN1");
+        assert_eq!(&an1_dc.id, "an1");
         assert_eq!(&an1_dc.region, "BEL");
         assert_eq!(&an1_dc.owner, "Alice");
         assert_eq!(
@@ -108,7 +107,7 @@ fn test_submit_add_or_remove_data_centers_proposal() {
         )
         .await;
 
-        assert_eq!(&bc1_dc.id, "BC1");
+        assert_eq!(&bc1_dc.id, "bc1");
         assert_eq!(&bc1_dc.region, "CAN");
         assert_eq!(&bc1_dc.owner, "Bob");
         assert!(&bc1_dc.gps.is_none());
@@ -119,7 +118,7 @@ fn test_submit_add_or_remove_data_centers_proposal() {
         )
         .await;
 
-        assert_eq!(&fm1_dc.id, "FM1");
+        assert_eq!(&fm1_dc.id, "fm1");
         assert_eq!(&fm1_dc.region, "Fremont");
         assert_eq!(&fm1_dc.owner, "Carol");
         assert!(&fm1_dc.gps.is_none());
@@ -145,8 +144,8 @@ fn test_submit_add_or_remove_data_centers_proposal() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, proposal_id)
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         // No proposals should be pending now.
@@ -202,9 +201,11 @@ fn test_submit_add_or_remove_data_centers_proposal() {
         .await
         .unwrap_err();
 
-        assert!(response
-            .error_message
-            .contains("owner must not be longer than"));
+        assert!(
+            response
+                .error_message
+                .contains("owner must not be longer than")
+        );
 
         // Should have 0 pending proposals
         let pending_proposals = get_pending_proposals(&nns_canisters.governance).await;

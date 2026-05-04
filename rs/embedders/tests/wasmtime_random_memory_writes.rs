@@ -1,37 +1,75 @@
-use ic_config::embedders::Config;
-use ic_config::flag_status::FlagStatus;
-use ic_embedders::wasm_utils::compile;
-use ic_embedders::WasmtimeEmbedder;
-use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode};
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_config::{
+    embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
+    subnet_config::SchedulerConfig,
+};
+use ic_cycles_account_manager::ResourceSaturation;
+use ic_embedders::{
+    WasmtimeEmbedder,
+    wasm_utils::compile,
+    wasmtime_embedder::system_api::{
+        ApiType, DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits,
+        SystemApiImpl, sandbox_safe_system_state::SandboxSafeSystemState,
+    },
+};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
+};
+use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages};
 use ic_sys::PAGE_SIZE;
-use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType, SystemApiImpl};
-use ic_system_api::{DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits};
-use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder,
-    mock_time,
-    state::SystemStateBuilder,
-    types::ids::{call_context_test_id, user_test_id},
-    with_test_replica_logger,
-};
+use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
+use ic_test_utilities_execution_environment::bytes_and_logging_cost;
+use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_state::SystemStateBuilder;
+use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
+use ic_types::MemoryAllocation;
 use ic_types::{
+    ComputeAllocation, NumBytes, NumInstructions, PrincipalId,
     methods::{FuncRef, WasmMethod},
-    ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
+    time::UNIX_EPOCH,
 };
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_wasm_types::BinaryEncodedWasm;
 use lazy_static::lazy_static;
 use proptest::prelude::*;
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
+use std::rc::Rc;
 use std::sync::Arc;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
+const STABLE_OP_BYTES: u64 = 37;
+
+const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
+
+const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * 1024; // 4 KiB
+
+const OS_PAGES_PER_WASM_PAGE: usize =
+    ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+/// Returns the per-Wasm-page instruction charge applied by the deterministic
+/// memory tracker when it is enabled in the default config, or 0 otherwise.
+fn dsm_charge_per_wasm_page() -> u64 {
+    use ic_config::flag_status::FlagStatus;
+    if EmbeddersConfig::default()
+        .feature_flags
+        .deterministic_memory_tracker
+        == FlagStatus::Enabled
+    {
+        OS_PAGES_PER_WASM_PAGE as u64
+    } else {
+        0
+    }
+}
 
 lazy_static! {
-    static ref MAX_SUBNET_AVAILABLE_MEMORY: AvailableMemory =
-        AvailableMemory::new(i64::MAX / 2, i64::MAX / 2);
+    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
+        SubnetAvailableMemory::new_for_testing(
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY
+        );
 }
 
 fn test_api_for_update(
@@ -42,44 +80,67 @@ fn test_api_for_update(
     instruction_limit: NumInstructions,
 ) -> SystemApiImpl {
     let caller = caller.unwrap_or_else(|| user_test_id(24).get());
-    let system_state = SystemStateBuilder::default().build();
+    let system_state = SystemStateBuilder::default()
+        .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
+        .build();
     let cycles_account_manager = Arc::new(
         CyclesAccountManagerBuilder::new()
             .with_subnet_type(subnet_type)
             .build(),
     );
-    let static_system_state = SandboxSafeSystemState::new(
+
+    let api_type = ApiType::update(
+        UNIX_EPOCH,
+        payload,
+        Cycles::zero(),
+        caller,
+        call_context_test_id(13),
+        None,
+    );
+
+    let static_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         *cycles_account_manager,
         &NetworkTopology::default(),
+        match subnet_type {
+            SubnetType::Application => SchedulerConfig::application_subnet(),
+            SubnetType::System => SchedulerConfig::system_subnet(),
+            SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
+            SubnetType::CloudEngine => SchedulerConfig::cloud_engine(),
+        }
+        .dirty_page_overhead,
+        ComputeAllocation::default(),
+        HypervisorConfig::default().subnet_callback_soft_limit as u64,
+        Default::default(),
+        Some(caller),
+        api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
-    let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
+    let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
 
     SystemApiImpl::new(
-        ApiType::update(
-            mock_time(),
-            payload,
-            Cycles::zero(),
-            caller,
-            call_context_test_id(13),
-        ),
+        api_type,
         static_system_state,
         canister_current_memory_usage,
+        canister_current_message_memory_usage,
         ExecutionParameters {
-            instruction_limits: InstructionLimits::new(
-                FlagStatus::Disabled,
-                instruction_limit,
-                instruction_limit,
-            ),
-            canister_memory_limit,
+            instruction_limits: InstructionLimits::new(instruction_limit, instruction_limit),
+            wasm_memory_limit: None,
+            memory_allocation: MemoryAllocation::default(),
+            canister_guaranteed_callback_quota: HypervisorConfig::default()
+                .canister_guaranteed_callback_quota
+                as u64,
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,
+            subnet_memory_saturation: ResourceSaturation::default(),
         },
         *MAX_SUBNET_AVAILABLE_MEMORY,
-        Memory::default(),
-        Arc::new(DefaultOutOfInstructionsHandler {}),
+        &EmbeddersConfig::default(),
+        Memory::new_for_testing(),
+        NumWasmPages::from(0),
+        Rc::new(DefaultOutOfInstructionsHandler::new(instruction_limit)),
         log,
     )
 }
@@ -99,6 +160,12 @@ fn make_module_wat(heap_size: usize) -> String {
         (func $ic0_stable_grow (param $pages i32) (result i32)))
       (import "ic0" "stable_read"
         (func $ic0_stable_read (param $dst i32) (param $offset i32) (param $size i32)))
+      (import "ic0" "stable64_read"
+        (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+      (import "ic0" "stable_write"
+        (func $ic0_stable_write (param $offset i32) (param $src i32) (param $size i32)))
+      (import "ic0" "stable64_write"
+        (func $ic0_stable64_write (param $offset i64) (param $src i64) (param $size i64)))
 
       (func $dump_heap
         (call $msg_reply_data_append (i32.const 0) (i32.mul (memory.size) (i32.const 0x10000)))
@@ -133,41 +200,290 @@ fn make_module_wat(heap_size: usize) -> String {
         (call $ic0_stable_read (i32.const 0) (i32.const 0) (i32.const 0))
       )
 
-      (memory $memory {HEAP_SIZE})
+      ;; stable_read of non-zero length
+      (func $test_stable_read_nonzero
+        (drop (call $ic0_stable_grow (i32.const 1)))
+        (call $ic0_stable_read (i32.const 0) (i32.const 0) (i32.const {STABLE_OP_BYTES}))
+      )
+
+      ;; stable64_read of non-zero length
+      (func $test_stable64_read_nonzero
+        (drop (call $ic0_stable_grow (i32.const 1)))
+        (call $ic0_stable64_read (i64.const 0) (i64.const 0) (i64.const {STABLE_OP_BYTES}))
+      )
+
+      ;; stable_write of non-zero length
+      (func $test_stable_write_nonzero
+        (drop (call $ic0_stable_grow (i32.const 1)))
+        (call $ic0_stable_write (i32.const 0) (i32.const 0) (i32.const {STABLE_OP_BYTES}))
+      )
+
+      ;; stable64_write of non-zero length
+      (func $test_stable64_write_nonzero
+        (drop (call $ic0_stable_grow (i32.const 1)))
+        (call $ic0_stable64_write (i64.const 0) (i64.const 0) (i64.const {STABLE_OP_BYTES}))
+      )
+
+      (memory $memory {heap_size})
       (export "memory" (memory $memory))
       (export "canister_query dump_heap" (func $dump_heap))
       (export "canister_update write_bytes" (func $write_bytes))
       (export "canister_update test_stable_read" (func $test_stable_read))
-    )"#,
-        HEAP_SIZE = heap_size
+      (export "canister_update test_stable_read_nonzero" (func $test_stable_read_nonzero))
+      (export "canister_update test_stable64_read_nonzero" (func $test_stable_read_nonzero))
+      (export "canister_update test_stable_write_nonzero" (func $test_stable_write_nonzero))
+      (export "canister_update test_stable64_write_nonzero" (func $test_stable64_write_nonzero))
+    )"#
     )
 }
 
-#[derive(Debug, Clone)]
+fn make_module_wat_for_api_calls(heap_size: usize) -> String {
+    format!(
+        r#"
+    (module
+      (import "ic0" "msg_reply" (func $msg_reply))
+      (import "ic0" "msg_reply_data_append"
+        (func $msg_reply_data_append (param i32) (param i32)))
+      (import "ic0" "msg_arg_data_copy"
+        (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
+      (import "ic0" "msg_arg_data_size"
+        (func $ic0_msg_arg_data_size (result i32)))
+      (import "ic0" "msg_caller_copy"
+        (func $ic0_msg_caller_copy (param i32) (param i32) (param i32)))
+      (import "ic0" "msg_caller_size"
+        (func $ic0_msg_caller_size (result i32)))
+      (import "ic0" "canister_self_copy"
+        (func $ic0_canister_self_copy (param i32) (param i32) (param i32)))
+      (import "ic0" "canister_self_size"
+        (func $ic0_canister_self_size (result i32)))
+
+      (import "ic0" "canister_cycle_balance128"
+        (func $ic0_canister_cycle_balance128 (param i32)))
+
+      (import "ic0" "stable_grow"
+        (func $ic0_stable_grow (param $pages i32) (result i32)))
+      (import "ic0" "stable_read"
+        (func $ic0_stable_read (param $dst i32) (param $offset i32) (param $size i32)))
+      (import "ic0" "stable_write"
+        (func $ic0_stable_write (param $offset i32) (param $src i32) (param $size i32)))
+
+      (func $touch_heap_with_api_calls
+        (call $ic0_msg_caller_copy (i32.const 4096) (i32.const 0) (call $ic0_msg_caller_size))
+        (call $ic0_msg_arg_data_copy (i32.const 12288) (i32.const 0) (call $ic0_msg_arg_data_size))
+        (call $ic0_canister_self_copy (i32.const 20480) (i32.const 0) (call $ic0_canister_self_size))
+        (call $ic0_canister_cycle_balance128 (i32.const 36864))
+
+        (; Write some data to page 10 using stable_read, by first copying 4
+        bytes from the second page to stable memory, then copying back ;)
+        (drop (call $ic0_stable_grow (i32.const 1)))
+        (call $ic0_stable_write (i32.const 0) (i32.const 4096) (i32.const 4))
+        (call $ic0_stable_read (i32.const 40960) (i32.const 0) (i32.const 4))
+      )
+
+      (memory $memory {heap_size})
+      (export "memory" (memory $memory))
+      (export "canister_update touch_heap_with_api_calls" (func $touch_heap_with_api_calls))
+    )"#
+    )
+}
+
+fn make_module64_wat_for_api_calls(heap_size: usize) -> String {
+    format!(
+        r#"
+    (module
+      (import "ic0" "msg_reply" (func $msg_reply))
+      (import "ic0" "msg_reply_data_append"
+        (func $msg_reply_data_append (param i64) (param i64)))
+      (import "ic0" "msg_arg_data_copy"
+        (func $ic0_msg_arg_data_copy (param i64) (param i64) (param i64)))
+      (import "ic0" "msg_arg_data_size"
+        (func $ic0_msg_arg_data_size (result i64)))
+      (import "ic0" "msg_caller_copy"
+        (func $ic0_msg_caller_copy (param i64) (param i64) (param i64)))
+      (import "ic0" "msg_caller_size"
+        (func $ic0_msg_caller_size (result i64)))
+      (import "ic0" "canister_self_copy"
+        (func $ic0_canister_self_copy (param i64) (param i64) (param i64)))
+      (import "ic0" "canister_self_size"
+        (func $ic0_canister_self_size (result i64)))
+
+      (import "ic0" "canister_cycle_balance128"
+        (func $ic0_canister_cycle_balance128 (param i64)))
+
+      (import "ic0" "stable64_grow"
+        (func $ic0_stable64_grow (param $pages i64) (result i64)))
+      (import "ic0" "stable64_read"
+        (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+      (import "ic0" "stable64_write"
+        (func $ic0_stable64_write (param $offset i64) (param $src i64) (param $size i64)))
+
+      (func $touch_heap_with_api_calls
+        (call $ic0_msg_caller_copy (i64.const 4096) (i64.const 0) (call $ic0_msg_caller_size))
+        (call $ic0_msg_arg_data_copy (i64.const 12288) (i64.const 0) (call $ic0_msg_arg_data_size))
+        (call $ic0_canister_self_copy (i64.const 20480) (i64.const 0) (call $ic0_canister_self_size))
+        (call $ic0_canister_cycle_balance128 (i64.const 36864))
+
+        (; Write some data to page 10 using stable_read, by first copying 4
+        bytes from the second page to stable memory, then copying back ;)
+        (drop (call $ic0_stable64_grow (i64.const 1)))
+        (call $ic0_stable64_write (i64.const 0) (i64.const 4096) (i64.const 4))
+        (call $ic0_stable64_read (i64.const 40960) (i64.const 0) (i64.const 4))
+      )
+
+      (memory $memory i64 {heap_size})
+      (export "memory" (memory $memory))
+      (export "canister_update touch_heap_with_api_calls" (func $touch_heap_with_api_calls))
+    )"#
+    )
+}
+
+fn make_module_wat_with_write_fun(heap_size: usize, write_fun: &str) -> String {
+    format!(
+        r#"
+    (module
+      (import "ic0" "msg_reply" (func $msg_reply))
+      (import "ic0" "msg_arg_data_copy"
+        (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
+      (import "ic0" "msg_arg_data_size"
+        (func $ic0_msg_arg_data_size (result i32)))
+
+      ;; write to memory
+      {write_fun}
+
+      (memory $memory {heap_size})
+      (export "memory" (memory $memory))
+      (export "canister_update write_bytes" (func $write_bytes))
+    )"#
+    )
+}
+
+fn make_backward_store_module_wat(
+    heap_size: usize,
+    store_inst_data_size: usize,
+    store_inst: &str,
+    load_inst: &str,
+) -> String {
+    let write_fun = format!(
+        r#"
+      (func $write_bytes
+        (local $i i32)
+        ;; copy payload to the beginning of the heap
+        (call $ic0_msg_arg_data_copy
+          (i32.const 0) ;; dst
+          (i32.const 0) ;; off
+          (call $ic0_msg_arg_data_size) ;; len
+        )
+        ;; now copy the payload[4..] using I32.store to the heap[addr;size-4]
+        (local.set $i (i32.sub (call $ic0_msg_arg_data_size) (i32.const 4)))
+        (loop $copy_loop
+          (i32.sub (local.get $i) (i32.const {store_inst_data_size}))
+          (local.set $i)
+
+          ({store_inst}
+            (i32.add (i32.load (i32.const 0)) (local.get $i))
+            ({load_inst} (i32.add (local.get $i) (i32.const 4)))
+          )
+
+          (i32.gt_s (local.get $i) (i32.const 0))
+          br_if $copy_loop
+        )
+        (call $msg_reply)
+      )
+      "#,
+    );
+    make_module_wat_with_write_fun(heap_size, &write_fun)
+}
+
+/// Note: this module may not actually do the write properly if the payload is
+/// large enough to read the destination address, because we first copy the
+/// payload to address 4 and then move it to the destination in the forward
+/// direction.
+fn make_i32_store_forward_module_wat(heap_size: usize) -> String {
+    let write_fun = r#"
+      (func $write_bytes
+        (local $i i32)
+        ;; copy payload to the beginning of the heap
+        (call $ic0_msg_arg_data_copy
+          (i32.const 0) ;; dst
+          (i32.const 0) ;; off
+          (call $ic0_msg_arg_data_size) ;; len
+        )
+        ;; now copy the payload[4..] using I32.store to the heap[addr;size-4]
+        (local.set $i (i32.const 0))
+        (loop $copy_loop
+          (i32.store
+            (i32.add (i32.load (i32.const 0)) (local.get $i))
+            (i32.load (i32.add (local.get $i) (i32.const 4)))
+          )
+
+          (i32.add (local.get $i) (i32.const 4))
+          (local.set $i)
+
+          (i32.lt_u (local.get $i) (i32.sub (call $ic0_msg_arg_data_size) (i32.const 4)))
+          br_if $copy_loop
+        )
+        (call $msg_reply)
+      )
+      "#;
+    make_module_wat_with_write_fun(heap_size, write_fun)
+}
+
+#[derive(Clone, Debug)]
 pub struct Write {
     dst: u32,
     bytes: Vec<u8>,
 }
 
-fn random_writes(heap_size: usize, num_writes: usize) -> impl Strategy<Value = Vec<Write>> {
+fn random_writes(
+    heap_size: usize,
+    num_writes: usize,
+    quant_size: usize,
+) -> impl Strategy<Value = Vec<Write>> {
     // Start generating writes at address 4096 (or higher) to avoid generating
     // writes to the first OS page. This is because we must first copy the
     // offset from the payload to Wasm memory. We store the 4-byte offset at
     // addr=0, hence dirtying the first OS page.
-    let write_strategy = (4096..heap_size).prop_flat_map(move |dst| {
-        let dst = dst as u32;
+    let write_strategy = (4096..(heap_size as u32)).prop_flat_map(move |dst| {
         // up to 128 bytes
         let remain = (heap_size - dst as usize) % 128;
-        prop::collection::vec(any::<u8>(), 0..=remain).prop_map(move |bytes| Write { dst, bytes })
+        prop::collection::vec(any::<u8>(), 0..=remain).prop_map(move |mut bytes| {
+            bytes.truncate(bytes.len() - bytes.len() % quant_size);
+            Write { dst, bytes }
+        })
     });
     prop::collection::vec(write_strategy, 1..num_writes)
 }
 
-fn buf_apply_write(heap: &mut [u8], write: &Write) {
+fn corner_case_writes(heap_size: usize, quant_size: usize) -> Vec<Vec<Write>> {
+    assert!(heap_size > 4096 * 3); // These cases assume we have at least three pages.
+
+    vec![
+        // Write zero to second page so that the contents doesn't actually
+        // change and it is no longer considered dirty.
+        vec![Write {
+            dst: 4096,
+            bytes: vec![0; quant_size],
+        }],
+        // Write that crosses a page boundary.
+        vec![Write {
+            dst: (4096 * 2 - if quant_size == 1 { 1 } else { quant_size - 1 }) as u32,
+            bytes: vec![5; if quant_size == 1 { 2 } else { quant_size }],
+        }],
+        // Write that just fits on the second page.
+        vec![Write {
+            dst: (4096 * 2 - quant_size) as u32,
+            bytes: vec![5; quant_size],
+        }],
+    ]
+}
+
+fn buf_apply_write(heap: &mut [u8], write: &Write, copies_data_to_first_page: bool) {
     // match the behavior of write_bytes: copy the i32 `addr` to heap[0;4]
     heap[0..4].copy_from_slice(&write.dst.to_le_bytes());
-    heap[write.dst as usize..(write.dst as usize + write.bytes.len() as usize)]
-        .copy_from_slice(&write.bytes)
+    if copies_data_to_first_page {
+        heap[4..4 + write.bytes.len()].copy_from_slice(&write.bytes);
+    }
+    heap[write.dst as usize..(write.dst as usize + write.bytes.len())].copy_from_slice(&write.bytes)
 }
 
 const TEST_HEAP_SIZE_BYTES: usize = WASM_PAGE_SIZE_BYTES * TEST_NUM_PAGES;
@@ -176,43 +492,46 @@ const TEST_NUM_WRITES: usize = 2000;
 const WASM_PAGE_SIZE_BYTES: usize = 65536;
 const BYTES_PER_INSTRUCTION: usize = 1;
 
-fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wabt::Error> {
-    wabt::wat2wasm(wat).map(BinaryEncodedWasm::new)
+fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wat::Error> {
+    wat::parse_str(wat).map(BinaryEncodedWasm::new)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use ic_embedders::wasm_executor::compute_page_delta;
+    use ic_embedders::{
+        wasm_executor::compute_page_delta, wasm_utils::instrumentation::WasmMemoryType,
+        wasm_utils::instrumentation::instruction_to_cost, wasmtime_embedder::CanisterMemoryType,
+        wasmtime_embedder::system_api::ModificationTracking,
+    };
     // Get .current() trait method
     use ic_interfaces::execution_environment::{HypervisorError, SystemApi};
     use ic_logger::ReplicaLogger;
     use ic_replicated_state::{PageIndex, PageMap};
-    use ic_system_api::ModificationTracking;
-    use ic_test_utilities::types::ids::canister_test_id;
+    use ic_test_utilities_types::ids::canister_test_id;
     use proptest::strategy::ValueTree;
 
     fn apply_writes_and_check_heap(
-        writes: Vec<Write>,
+        writes: &[Write],
         modification_tracking: ModificationTracking,
+        wat: &str,
+        copies_data_to_first_page: bool,
     ) {
         with_test_replica_logger(|log| {
-            let wat = make_module_wat(TEST_NUM_PAGES);
-            let wasm = wat2wasm(&wat).unwrap();
+            let wasm = wat2wasm(wat).unwrap();
 
-            let config = Config::default();
-            let embedder = WasmtimeEmbedder::new(config, log);
+            let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), log);
             let (embedder_cache, result) = compile(&embedder, &wasm);
             result.unwrap();
 
             // We will perform identical writes to wasm module's heap and this buffer.
             let mut test_heap = vec![0; TEST_HEAP_SIZE_BYTES];
             // Use SIGSEGV tracking and later compare against /proc/pic/pagemap.
-            let mut page_map = PageMap::default();
+            let mut page_map = PageMap::new_for_testing();
             let mut dirty_pages: BTreeSet<u64> = BTreeSet::new();
 
-            for write in &writes {
+            for write in writes {
                 let mut payload = write.dst.to_le_bytes().to_vec();
                 payload.extend(write.bytes.iter());
 
@@ -228,18 +547,18 @@ mod tests {
                     .new_instance(
                         canister_test_id(1),
                         &embedder_cache,
-                        &[],
-                        NumWasmPages::from(0),
-                        page_map.clone(),
+                        None,
+                        &Memory::new(page_map.clone(), NumWasmPages::from(0)),
+                        &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                         modification_tracking,
-                        api,
+                        Some(api),
                     )
                     .map_err(|r| r.0)
                     .expect("Failed to create instance");
                 instance.set_instruction_counter(i64::try_from(instruction_limit.get()).unwrap());
 
                 // Apply the write to the test buffer.
-                buf_apply_write(&mut test_heap, write);
+                buf_apply_write(&mut test_heap, write, copies_data_to_first_page);
 
                 // Apply the write to the Wasm instance.
                 println!(
@@ -256,8 +575,9 @@ mod tests {
 
                 // Compare the written regions.
                 let wasm_heap: &[u8] = unsafe {
-                    let addr = instance.heap_addr();
-                    let size_in_bytes = instance.heap_size().get() as usize * WASM_PAGE_SIZE_BYTES;
+                    let addr = instance.heap_addr(CanisterMemoryType::Heap);
+                    let size_in_bytes =
+                        instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_BYTES;
                     std::slice::from_raw_parts_mut(addr as *mut _, size_in_bytes)
                 };
                 let start = write.dst as usize;
@@ -265,11 +585,11 @@ mod tests {
                 assert_eq!(wasm_heap[start..end], test_heap[start..end]);
 
                 if modification_tracking == ModificationTracking::Track {
-                    dirty_pages.extend(result.dirty_pages.iter().map(|x| x.get()));
+                    dirty_pages.extend(result.wasm_dirty_pages.iter().map(|x| x.get()));
 
                     // Verify that wasm heap and test buffer are the same.
-                    let i = result.dirty_pages.last().unwrap().get();
-                    let offset = i as usize * PAGE_SIZE as usize;
+                    let i = result.wasm_dirty_pages.last().unwrap().get();
+                    let offset = i as usize * PAGE_SIZE;
                     let page1 = unsafe { test_heap.as_ptr().add(offset) };
                     let page2 = unsafe { wasm_heap.as_ptr().add(offset) };
                     let pages_match = unsafe {
@@ -281,10 +601,13 @@ mod tests {
                     };
                     assert!(
                         pages_match == 0,
-                        "page({}) of test buffer and Wasm heap doesn't match",
-                        i
+                        "page({i}) of test buffer and Wasm heap doesn't match"
                     );
-                    page_map.update(&compute_page_delta(&mut instance, &result.dirty_pages));
+                    page_map.update(&compute_page_delta(
+                        &mut instance,
+                        &result.wasm_dirty_pages,
+                        CanisterMemoryType::Heap,
+                    ));
                 }
             }
 
@@ -304,23 +627,37 @@ mod tests {
                     // page(0) by copying the 4-byte value to addr=0.
                     result.insert(0);
                     // Add the target pages.
-                    result.extend(writes.iter().map(|w| w.dst as u64 / PAGE_SIZE as u64));
+                    for Write { dst, bytes } in writes {
+                        if !bytes.is_empty() {
+                            // A page will not actually be considered dirty
+                            // unless the contents has changed. Memory is
+                            // initially all 0, so this means we should ignore
+                            // all zero bytes.
+                            result.extend(
+                                bytes
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(_, b)| **b != 0)
+                                    .map(|(addr, _)| (*dst as u64 + addr as u64) / PAGE_SIZE as u64)
+                                    .collect::<BTreeSet<_>>(),
+                            );
+                        }
+                    }
                     result.iter().cloned().collect()
                 };
 
                 // Check SIGSEGV against expected.
                 assert_eq!(
-                sigsegv_dirty_pages,
-                writes_pages,
-                "dirty pages returned by SIGSEGV tracking (left) don't match the expected value (right)"
-            );
+                    sigsegv_dirty_pages, writes_pages,
+                    "dirty pages returned by SIGSEGV tracking (left) don't match the expected value (right)"
+                );
             }
         });
     }
 
     fn random_payload() -> Vec<u8> {
         let mut runner = proptest::test_runner::TestRunner::deterministic();
-        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES)
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 1)
             .new_tree(&mut runner)
             .unwrap()
             .current()
@@ -343,7 +680,7 @@ mod tests {
             // properly convert `size: i32` to u64 and this process does not charge
             // more than the equivalent of `size` for values >= 2^31.
             let num_bytes = 2147483648; // equivalent to 2^31
-            let payload = vec![0u8; num_bytes];
+            let payload = vec![0_u8; num_bytes];
             let wasm = wat2wasm(
                 r#"
               (module
@@ -360,7 +697,7 @@ mod tests {
             )
             .unwrap();
 
-            let config = Config::default();
+            let config = EmbeddersConfig::default();
             let embedder = WasmtimeEmbedder::new(config, log.clone());
             let (cache, result) = compile(&embedder, &wasm);
             result.unwrap();
@@ -377,11 +714,11 @@ mod tests {
                 .new_instance(
                     canister_test_id(1),
                     &cache,
-                    &[],
-                    NumWasmPages::from(0),
-                    PageMap::default(),
+                    None,
+                    &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
+                    &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                     ModificationTracking::Ignore,
-                    api,
+                    Some(api),
                 )
                 .map_err(|r| r.0)
                 .expect("Failed to create instance");
@@ -394,11 +731,19 @@ mod tests {
             let instruction_counter = inst.instruction_counter();
             let instructions_executed = inst
                 .store_data()
-                .system_api
+                .system_api()
+                .unwrap()
                 .slice_instructions_executed(instruction_counter);
+
+            // (call $trap (i32.const 0) (i32.const 2147483648)) ;; equivalent to 2 ^ 31
+            let expected_instructions = 1 // Function is 1 instruction.
+                + instruction_to_cost(&wirm::wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
+                + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::TRAP.get()
+                + 2 * instruction_to_cost(&wirm::wasmparser::Operator::I32Const { value: 1 }, WasmMemoryType::Wasm32);
             assert_eq!(
                 instructions_executed.get(),
-                23 + (num_bytes / BYTES_PER_INSTRUCTION) as u64
+                expected_instructions
+                    + (bytes_and_logging_cost(num_bytes) / BYTES_PER_INSTRUCTION) as u64
             )
         });
     }
@@ -414,7 +759,7 @@ mod tests {
 
             // Set maximum number of instructions to some low value to trap
             // Note: system API calls get charged per call, see system_api::charges
-            let max_num_instructions = NumInstructions::new(1000);
+            let max_num_instructions = NumInstructions::new(10_000);
 
             // Consumes less than max_num_instructions.
             let instructions_consumed_without_data = get_num_instructions_consumed(
@@ -436,159 +781,358 @@ mod tests {
                     max_num_instructions,
                     subnet_type,
                 ),
-                Err(HypervisorError::InstructionLimitExceeded)
+                Err(HypervisorError::InstructionLimitExceeded(
+                    max_num_instructions
+                ))
             )
         })
     }
 
-    #[test]
-    fn test_system_api_charges() {
-        with_test_replica_logger(|log| {
-            let subnet_type = SubnetType::Application;
+    mod stable_api_charges {
+        //! These tests check the proper instructions are charged for various
+        //! stable API operations.  Each function contains a single stable read
+        //! or write, in addition to 7 instructions required for setup.
 
-            let max_num_instructions = NumInstructions::new(1000);
+        use super::*;
+        use ic_config::subnet_config::SchedulerConfig;
+        use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
+        use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
+        use ic_logger::replica_logger::no_op_logger;
 
-            let instructions_consumed_without_data = get_num_instructions_consumed(
-                log,
+        // (drop (call $ic0_stable_grow (i32.const 1)))
+        // (call $ic0_stable64_read (i64.const 0) (i64.const 0) (i64.const {STABLE_OP_BYTES}))
+        fn setup_instruction_overhead() -> u64 {
+            instruction_to_cost(&wirm::wasmparser::Operator::Drop, WasmMemoryType::Wasm32)
+                + instruction_to_cost(&wirm::wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
+                + ic_embedders::wasmtime_embedder::system_api_complexity::overhead_native::STABLE_GROW.get()
+                + instruction_to_cost(&wirm::wasmparser::Operator::I32Const { value: 1 }, WasmMemoryType::Wasm32)
+                + instruction_to_cost(&wirm::wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
+                + 3 * instruction_to_cost(&wirm::wasmparser::Operator::I32Const { value: 1 }, WasmMemoryType::Wasm32)
+                + 1 // Function is 1 instruction.
+        }
+
+        #[test]
+        fn empty_stable_read_charge() {
+            let instructions_consumed = get_num_instructions_consumed(
+                no_op_logger(),
                 "test_stable_read",
                 vec![],
-                max_num_instructions,
-                subnet_type,
+                MAX_NUM_INSTRUCTIONS,
+                SubnetType::Application,
             )
             .unwrap();
-            // The `test_stable_read()` snippet consists of 7 instructions: 4 constants,
-            // stable_grow(), stable_read(), drop.
-            // Check that the number of consumed instructions get adjusted for the
-            // `stable_read()` System API call overhead.
+            // Additional charge for an empty read should just be the overhead.
             assert_eq!(
-                instructions_consumed_without_data.get(),
-                7 + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
-                    .get() as u64
+                instructions_consumed.get(),
+                setup_instruction_overhead()
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
+                        .get()
             );
-        })
+        }
+
+        #[test]
+        fn nonempty_stable_read_charge() {
+            let instructions_consumed = get_num_instructions_consumed(
+                no_op_logger(),
+                "test_stable_read_nonzero",
+                vec![],
+                MAX_NUM_INSTRUCTIONS,
+                SubnetType::Application,
+            )
+            .unwrap();
+            // Read of `STABLE_OP_BYTES` should cost an additional instruction
+            // for each byte, plus charges for accessing and dirtying the
+            // destination heap page.
+            assert_eq!(
+                instructions_consumed.get(),
+                setup_instruction_overhead()
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
+                        .get()
+                    + STABLE_OP_BYTES
+                    + dsm_charge_per_wasm_page()
+                    + dsm_charge_per_wasm_page()
+            );
+        }
+
+        #[test]
+        fn nonempty_stable64_read_charge() {
+            let instructions_consumed = get_num_instructions_consumed(
+                no_op_logger(),
+                "test_stable64_read_nonzero",
+                vec![],
+                MAX_NUM_INSTRUCTIONS,
+                SubnetType::Application,
+            )
+            .unwrap();
+            // Read of `STABLE_OP_BYTES` should cost an additional instruction
+            // for each byte, plus charges for accessing and dirtying the
+            // destination heap page.
+            assert_eq!(
+                instructions_consumed.get(),
+                setup_instruction_overhead()
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE64_READ
+                        .get()
+                    + STABLE_OP_BYTES
+                    + dsm_charge_per_wasm_page()
+                    + dsm_charge_per_wasm_page()
+            );
+        }
+
+        #[test]
+        fn stable_read_charge_system_subnet() {
+            let instructions_consumed = get_num_instructions_consumed(
+                no_op_logger(),
+                "test_stable_read_nonzero",
+                vec![],
+                MAX_NUM_INSTRUCTIONS,
+                SubnetType::System,
+            )
+            .unwrap();
+            // Fixed cost plus charges for accessing and dirtying the
+            // destination heap page.
+            assert_eq!(
+                instructions_consumed.get(),
+                setup_instruction_overhead()
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
+                        .get()
+                    + STABLE_OP_BYTES
+                    + dsm_charge_per_wasm_page()
+                    + dsm_charge_per_wasm_page()
+            );
+        }
+
+        #[test]
+        fn nonempty_stable_write_charge() {
+            let instructions_consumed = get_num_instructions_consumed(
+                no_op_logger(),
+                "test_stable_write_nonzero",
+                vec![],
+                MAX_NUM_INSTRUCTIONS,
+                SubnetType::Application,
+            )
+            .unwrap();
+            // Write of `STABLE_OP_BYTES` should cost an additional instruction
+            // for each byte, a dirty page overhead charge, plus charges for
+            // accessing and dirtying the source heap page.
+            assert_eq!(
+                instructions_consumed.get(),
+                setup_instruction_overhead()
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
+                        .get()
+                    + STABLE_OP_BYTES
+                    + SchedulerConfig::application_subnet()
+                        .dirty_page_overhead
+                        .get()
+                    + dsm_charge_per_wasm_page() + dsm_charge_per_wasm_page()
+            );
+        }
+
+        #[test]
+        fn nonempty_stable_write_charge_system_subnet() {
+            let instructions_consumed = get_num_instructions_consumed(
+                no_op_logger(),
+                "test_stable_write_nonzero",
+                vec![],
+                MAX_NUM_INSTRUCTIONS,
+                SubnetType::System,
+            )
+            .unwrap();
+            // Dirty page overhead plus charges for accessing and dirtying the
+            // source heap page.
+            assert_eq!(
+                instructions_consumed.get(),
+                setup_instruction_overhead()
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
+                        .get()
+                    + STABLE_OP_BYTES
+                    + SchedulerConfig::system_subnet().dirty_page_overhead.get()
+                    + dsm_charge_per_wasm_page() + dsm_charge_per_wasm_page()
+            );
+        }
+
+        #[test]
+        fn nonempty_stable64_write_charge() {
+            let instructions_consumed = get_num_instructions_consumed(
+                no_op_logger(),
+                "test_stable64_write_nonzero",
+                vec![],
+                MAX_NUM_INSTRUCTIONS,
+                SubnetType::Application,
+            )
+            .unwrap();
+            // Write of `STABLE_OP_BYTES` should cost an additional instruction
+            // for each byte, a dirty page overhead charge, plus charges for
+            // accessing and dirtying the source heap page.
+            assert_eq!(
+                instructions_consumed.get(),
+                setup_instruction_overhead()
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
+                        .get()
+                    + STABLE_OP_BYTES
+                    + SchedulerConfig::application_subnet()
+                        .dirty_page_overhead
+                        .get()
+                    + dsm_charge_per_wasm_page() + dsm_charge_per_wasm_page()
+            );
+        }
+
+        #[test]
+        fn nonempty_stable64_write_charge_system_subnet() {
+            let instructions_consumed = get_num_instructions_consumed(
+                no_op_logger(),
+                "test_stable64_write_nonzero",
+                vec![],
+                MAX_NUM_INSTRUCTIONS,
+                SubnetType::System,
+            )
+            .unwrap();
+            // Dirty page overhead plus charges for accessing and dirtying the
+            // source heap page.
+            assert_eq!(
+                instructions_consumed.get(),
+                setup_instruction_overhead()
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
+                        .get()
+                    + STABLE_OP_BYTES
+                    + SchedulerConfig::system_subnet().dirty_page_overhead.get()
+                    + dsm_charge_per_wasm_page() + dsm_charge_per_wasm_page()
+            );
+        }
     }
 
     #[test]
     fn test_proportional_instructions_consumption_to_data_size() {
-        with_test_replica_logger(|log| {
-            let subnet_type = SubnetType::Application;
-            let dst: u32 = 0;
+        for subnet_type in [
+            SubnetType::Application,
+            SubnetType::VerifiedApplication,
+            SubnetType::System,
+        ] {
+            with_test_replica_logger(|log| {
+                let dst: u32 = 0;
 
-            let mut payload: Vec<u8> = dst.to_le_bytes().to_vec();
-            payload.extend(random_payload());
-            let payload_size = payload.len() - 4;
+                let dirty_heap_cost = match EmbeddersConfig::default().metering_type {
+                    ic_config::embedders::MeteringType::New => match subnet_type {
+                        SubnetType::System => {
+                            SchedulerConfig::system_subnet().dirty_page_overhead.get()
+                        }
+                        SubnetType::Application => SchedulerConfig::application_subnet()
+                            .dirty_page_overhead
+                            .get(),
+                        SubnetType::VerifiedApplication => {
+                            SchedulerConfig::verified_application_subnet()
+                                .dirty_page_overhead
+                                .get()
+                        }
+                        SubnetType::CloudEngine => {
+                            SchedulerConfig::cloud_engine().dirty_page_overhead.get()
+                        }
+                    },
+                    _ => 0,
+                };
 
-            let mut double_size_payload: Vec<u8> = payload.clone();
-            double_size_payload.extend(random_payload());
+                let mut payload: Vec<u8> = dst.to_le_bytes().to_vec();
+                payload.extend(random_payload());
+                let payload_size = payload.len() - 4;
 
-            let instructions_consumed_without_data = get_num_instructions_consumed(
-                log.clone(),
-                "write_bytes",
-                dst.to_le_bytes().to_vec(),
-                MAX_NUM_INSTRUCTIONS,
-                subnet_type,
-            )
-            .unwrap();
+                let mut double_size_payload: Vec<u8> = payload.clone();
+                double_size_payload.extend(random_payload());
 
-            {
-                // Number of instructions consumed only for copying the payload.
-                let consumed_instructions = get_num_instructions_consumed(
-                    log.clone(),
-                    "write_bytes",
-                    payload,
-                    MAX_NUM_INSTRUCTIONS,
-                    subnet_type,
-                )
-                .unwrap()
-                    - instructions_consumed_without_data;
-                assert_eq!(
-                    consumed_instructions.get(),
-                    (payload_size / BYTES_PER_INSTRUCTION) as u64
-                );
-            }
+                // The deterministic memory tracker charges at 64 KiB Wasm page
+                // granularity. Use InstanceStats to get the actual Wasm page
+                // counts and compute the exact tracker charge.
+                let tracker_charge =
+                    |stats: &ic_interfaces::execution_environment::InstanceStats| -> u64 {
+                        stats.wasm_accessed_wasm_pages_count as u64 * dsm_charge_per_wasm_page()
+                            + stats.wasm_dirty_wasm_pages_count as u64 * dsm_charge_per_wasm_page()
+                    };
 
-            {
-                // Number of instructions consumed increased with the size of the data.
-                let consumed_instructions = get_num_instructions_consumed(
-                    log,
-                    "write_bytes",
-                    double_size_payload,
-                    MAX_NUM_INSTRUCTIONS,
-                    subnet_type,
-                )
-                .unwrap()
-                    - instructions_consumed_without_data;
+                let (instructions_consumed_without_data, dry_run_stats, dry_run_instance_stats) =
+                    run_and_get_stats(
+                        log.clone(),
+                        "write_bytes",
+                        dst.to_le_bytes().to_vec(),
+                        MAX_NUM_INSTRUCTIONS,
+                        subnet_type,
+                    )
+                    .unwrap();
+                let dry_run_dirty_heap = dry_run_stats.wasm_dirty_pages.len() as u64;
+                let dry_run_tracker = tracker_charge(&dry_run_instance_stats);
 
-                assert_eq!(
-                    consumed_instructions.get(),
-                    (2 * payload_size / BYTES_PER_INSTRUCTION) as u64
-                );
-            }
-        })
+                {
+                    // Number of instructions consumed only for copying the payload.
+                    let (consumed_instructions, run_stats, instance_stats) = run_and_get_stats(
+                        log.clone(),
+                        "write_bytes",
+                        payload,
+                        MAX_NUM_INSTRUCTIONS,
+                        subnet_type,
+                    )
+                    .unwrap();
+                    let dirty_heap = run_stats.wasm_dirty_pages.len() as u64;
+                    let consumed_instructions =
+                        consumed_instructions - instructions_consumed_without_data;
+                    assert_eq!(
+                        (consumed_instructions.get()
+                            - dirty_heap * dirty_heap_cost
+                            - tracker_charge(&instance_stats)) as usize,
+                        (payload_size / BYTES_PER_INSTRUCTION)
+                            - (dry_run_dirty_heap * dirty_heap_cost + dry_run_tracker) as usize,
+                    );
+                }
+
+                {
+                    // Number of instructions consumed increased with the size of the data.
+                    let (consumed_instructions, run_stats, instance_stats) = run_and_get_stats(
+                        log,
+                        "write_bytes",
+                        double_size_payload,
+                        MAX_NUM_INSTRUCTIONS,
+                        subnet_type,
+                    )
+                    .unwrap();
+                    let dirty_heap = run_stats.wasm_dirty_pages.len() as u64;
+                    let consumed_instructions =
+                        consumed_instructions - instructions_consumed_without_data;
+
+                    assert_eq!(
+                        (consumed_instructions.get()
+                            - dirty_heap * dirty_heap_cost
+                            - tracker_charge(&instance_stats)) as usize,
+                        (2 * payload_size / BYTES_PER_INSTRUCTION)
+                            - (dry_run_dirty_heap * dirty_heap_cost + dry_run_tracker) as usize
+                    );
+                }
+            })
+        }
     }
 
-    #[test]
-    fn test_no_instructions_consumption_based_on_data_size_on_system_subnet() {
-        with_test_replica_logger(|log| {
-            let subnet_type = SubnetType::System;
-            let dst: u32 = 0;
-
-            let mut payload: Vec<u8> = dst.to_le_bytes().to_vec();
-            payload.extend(random_payload());
-
-            let mut double_size_payload: Vec<u8> = payload.clone();
-            double_size_payload.extend(random_payload());
-
-            let instructions_consumed_without_data = get_num_instructions_consumed(
-                log.clone(),
-                "write_bytes",
-                dst.to_le_bytes().to_vec(),
-                MAX_NUM_INSTRUCTIONS,
-                subnet_type,
-            )
-            .unwrap();
-
-            {
-                // Number of instructions consumed for copying the payload is zero.
-                let consumed_instructions = get_num_instructions_consumed(
-                    log.clone(),
-                    "write_bytes",
-                    payload,
-                    MAX_NUM_INSTRUCTIONS,
-                    subnet_type,
-                )
-                .unwrap()
-                    - instructions_consumed_without_data;
-                assert_eq!(consumed_instructions.get(), 0);
-            }
-
-            {
-                // Number of instructions consumed for copying the payload is zero.
-                let consumed_instructions = get_num_instructions_consumed(
-                    log,
-                    "write_bytes",
-                    double_size_payload,
-                    MAX_NUM_INSTRUCTIONS,
-                    subnet_type,
-                )
-                .unwrap()
-                    - instructions_consumed_without_data;
-                assert_eq!(consumed_instructions.get(), 0);
-            }
-        })
-    }
-
-    fn get_num_instructions_consumed(
+    fn run_and_get_stats(
         log: ReplicaLogger,
         method: &str,
         payload: Vec<u8>,
         max_num_instructions: NumInstructions,
         subnet_type: SubnetType,
-    ) -> Result<NumInstructions, HypervisorError> {
+    ) -> Result<
+        (
+            NumInstructions,
+            ic_embedders::InstanceRunResult,
+            ic_interfaces::execution_environment::InstanceStats,
+        ),
+        HypervisorError,
+    > {
         let wat = make_module_wat(2 * TEST_NUM_PAGES);
         let wasm = wat2wasm(&wat).unwrap();
 
-        let config = Config::default();
+        let config = EmbeddersConfig {
+            dirty_page_overhead: match subnet_type {
+                SubnetType::System => SchedulerConfig::system_subnet(),
+                SubnetType::Application => SchedulerConfig::application_subnet(),
+                SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
+                SubnetType::CloudEngine => SchedulerConfig::cloud_engine(),
+            }
+            .dirty_page_overhead,
+            ..EmbeddersConfig::default()
+        };
         let embedder = WasmtimeEmbedder::new(config, log.clone());
         let (cache, result) = compile(&embedder, &wasm);
         result.unwrap();
@@ -598,25 +1142,39 @@ mod tests {
             .new_instance(
                 canister_test_id(1),
                 &cache,
-                &[],
-                NumWasmPages::from(0),
-                PageMap::default(),
+                None,
+                &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
+                &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                 ModificationTracking::Track,
-                api,
+                Some(api),
             )
             .map_err(|r| r.0)
             .expect("Failed to create instance");
         inst.set_instruction_counter(i64::try_from(instruction_limit.get()).unwrap());
 
-        inst.run(FuncRef::Method(WasmMethod::Update(method.into())))?;
+        let res = inst.run(FuncRef::Method(WasmMethod::Update(method.into())))?;
 
         let instruction_counter = inst.instruction_counter();
         let instructions_executed = inst
             .store_data()
-            .system_api
+            .system_api()
+            .unwrap()
             .slice_instructions_executed(instruction_counter);
+        let stats = inst.get_stats();
 
-        Ok(instructions_executed)
+        Ok((instructions_executed, res, stats))
+    }
+
+    fn get_num_instructions_consumed(
+        log: ReplicaLogger,
+        method: &str,
+        payload: Vec<u8>,
+        max_num_instructions: NumInstructions,
+        subnet_type: SubnetType,
+    ) -> Result<NumInstructions, HypervisorError> {
+        let (num_instructions, _, _) =
+            run_and_get_stats(log, method, payload, max_num_instructions, subnet_type)?;
+        Ok(num_instructions)
     }
 
     #[test]
@@ -624,8 +1182,10 @@ mod tests {
         // The seed value will always be the same for a particular version of
         // Proptest and algorithm, but may change across releases.
         let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_module_wat(TEST_NUM_PAGES);
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 1);
         // Random, *non-empty* writes
-        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES)
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 1)
             .new_tree(&mut runner)
             .unwrap()
             .current()
@@ -633,7 +1193,323 @@ mod tests {
             .filter(|w| !w.bytes.is_empty())
             .cloned()
             .collect();
-        apply_writes_and_check_heap(writes, ModificationTracking::Track);
+        for writes in corner_writes {
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, false)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, false);
+    }
+
+    #[test]
+    fn wasmtime_random_memory_writes_i32store() {
+        // The seed value will always be the same for a particular version of
+        // Proptest and algorithm, but may change across releases.
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_backward_store_module_wat(TEST_NUM_PAGES, 4, "i32.store", "i32.load");
+        let wat2 = make_i32_store_forward_module_wat(TEST_NUM_PAGES);
+        // Random, *non-empty* writes
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 4)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current()
+            .iter()
+            .filter(|w| !w.bytes.is_empty())
+            .cloned()
+            .collect();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 4);
+        for writes in &corner_writes {
+            apply_writes_and_check_heap(writes, ModificationTracking::Track, &wat, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true);
+
+        for writes in &corner_writes {
+            apply_writes_and_check_heap(writes, ModificationTracking::Track, &wat2, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat2, true);
+    }
+
+    #[test]
+    fn wasmtime_random_memory_writes_i32store8() {
+        // The seed value will always be the same for a particular version of
+        // Proptest and algorithm, but may change across releases.
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_backward_store_module_wat(TEST_NUM_PAGES, 1, "i32.store8", "i32.load8_u");
+        // Random, *non-empty* writes
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 1)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current()
+            .iter()
+            .filter(|w| !w.bytes.is_empty())
+            .cloned()
+            .collect();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 1);
+        for writes in corner_writes {
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true);
+    }
+
+    #[test]
+    fn wasmtime_random_memory_writes_i32store16() {
+        // The seed value will always be the same for a particular version of
+        // Proptest and algorithm, but may change across releases.
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_backward_store_module_wat(TEST_NUM_PAGES, 2, "i32.store16", "i32.load16_u");
+        // Random, *non-empty* writes
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 2)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current()
+            .iter()
+            .filter(|w| !w.bytes.is_empty())
+            .cloned()
+            .collect();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 2);
+        for writes in corner_writes {
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true);
+    }
+
+    #[test]
+    fn wasmtime_random_memory_writes_i64store() {
+        // The seed value will always be the same for a particular version of
+        // Proptest and algorithm, but may change across releases.
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_backward_store_module_wat(TEST_NUM_PAGES, 8, "i64.store", "i64.load");
+        // Random, *non-empty* writes
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 8)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current()
+            .iter()
+            .filter(|w| !w.bytes.is_empty())
+            .cloned()
+            .collect();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 8);
+        for writes in corner_writes {
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true);
+    }
+
+    #[test]
+    fn wasmtime_random_memory_writes_i64store8() {
+        // The seed value will always be the same for a particular version of
+        // Proptest and algorithm, but may change across releases.
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_backward_store_module_wat(TEST_NUM_PAGES, 1, "i64.store8", "i64.load8_u");
+        // Random, *non-empty* writes
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 1)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current()
+            .iter()
+            .filter(|w| !w.bytes.is_empty())
+            .cloned()
+            .collect();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 1);
+        for writes in corner_writes {
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true);
+    }
+
+    #[test]
+    fn wasmtime_random_memory_writes_i64store16() {
+        // The seed value will always be the same for a particular version of
+        // Proptest and algorithm, but may change across releases.
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_backward_store_module_wat(TEST_NUM_PAGES, 2, "i64.store16", "i64.load16_u");
+        // Random, *non-empty* writes
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 2)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current()
+            .iter()
+            .filter(|w| !w.bytes.is_empty())
+            .cloned()
+            .collect();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 2);
+        for writes in corner_writes {
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true);
+    }
+
+    #[test]
+    fn wasmtime_random_memory_writes_i64store32() {
+        // The seed value will always be the same for a particular version of
+        // Proptest and algorithm, but may change across releases.
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_backward_store_module_wat(TEST_NUM_PAGES, 4, "i64.store32", "i64.load32_u");
+        // Random, *non-empty* writes
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 4)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current()
+            .iter()
+            .filter(|w| !w.bytes.is_empty())
+            .cloned()
+            .collect();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 4);
+        for writes in corner_writes {
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true);
+    }
+
+    #[test]
+    fn wasmtime_random_memory_writes_f32store() {
+        // The seed value will always be the same for a particular version of
+        // Proptest and algorithm, but may change across releases.
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_backward_store_module_wat(TEST_NUM_PAGES, 4, "f32.store", "f32.load");
+        // Random, *non-empty* writes
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 4)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current()
+            .iter()
+            .filter(|w| !w.bytes.is_empty())
+            .cloned()
+            .collect();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 4);
+        for writes in corner_writes {
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true);
+    }
+
+    #[test]
+    fn wasmtime_random_memory_writes_f64store() {
+        // The seed value will always be the same for a particular version of
+        // Proptest and algorithm, but may change across releases.
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_backward_store_module_wat(TEST_NUM_PAGES, 8, "f64.store", "f64.load");
+        // Random, *non-empty* writes
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 8)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current()
+            .iter()
+            .filter(|w| !w.bytes.is_empty())
+            .cloned()
+            .collect();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 8);
+        for writes in corner_writes {
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true);
+    }
+
+    #[test]
+    fn touch_heap_with_api_calls() {
+        with_test_replica_logger(|log| {
+            let wat = make_module_wat_for_api_calls(TEST_NUM_PAGES);
+            let wasm = wat2wasm(&wat).unwrap();
+            let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), log);
+            let (embedder_cache, result) = compile(&embedder, &wasm);
+            result.unwrap();
+
+            let mut dirty_pages: BTreeSet<u64> = BTreeSet::new();
+
+            let payload = vec![0, 1, 2, 3, 4, 5, 6, 7];
+
+            let api = test_api_for_update(
+                no_op_logger(),
+                None,
+                payload,
+                SubnetType::Application,
+                MAX_NUM_INSTRUCTIONS,
+            );
+            let instruction_limit = api.slice_instruction_limit();
+            let mut instance = embedder
+                .new_instance(
+                    canister_test_id(1),
+                    &embedder_cache,
+                    None,
+                    &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
+                    &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
+                    ModificationTracking::Track,
+                    Some(api),
+                )
+                .map_err(|r| r.0)
+                .expect("Failed to create instance");
+            instance.set_instruction_counter(i64::try_from(instruction_limit.get()).unwrap());
+
+            let result = instance
+                .run(FuncRef::Method(WasmMethod::Update(
+                    "touch_heap_with_api_calls".to_string(),
+                )))
+                .expect("call to touch_heap_with_api_calls failed");
+            dirty_pages.extend(result.wasm_dirty_pages.iter().map(|x| x.get()));
+
+            let mut expected_dirty_pages: BTreeSet<u64> = BTreeSet::new();
+            expected_dirty_pages.insert(1); // caller_copy
+            expected_dirty_pages.insert(3); // data_copy
+            expected_dirty_pages.insert(5); // canister_self_copy
+            expected_dirty_pages.insert(9); // canister_cycle_balance128
+            expected_dirty_pages.insert(9); // msg_cycles_available128
+            expected_dirty_pages.insert(10); // stable_read
+
+            assert_eq!(expected_dirty_pages, dirty_pages);
+        });
+    }
+
+    #[test]
+    fn touch_heap64_with_api_calls() {
+        with_test_replica_logger(|log| {
+            let wat = make_module64_wat_for_api_calls(TEST_NUM_PAGES);
+            let wasm = wat2wasm(&wat).unwrap();
+            let config = EmbeddersConfig::default();
+            let embedder = WasmtimeEmbedder::new(config, log);
+            let (embedder_cache, result) = compile(&embedder, &wasm);
+            result.unwrap();
+
+            let mut dirty_pages: BTreeSet<u64> = BTreeSet::new();
+
+            let payload = vec![0, 1, 2, 3, 4, 5, 6, 7];
+
+            let api = test_api_for_update(
+                no_op_logger(),
+                None,
+                payload,
+                SubnetType::Application,
+                MAX_NUM_INSTRUCTIONS,
+            );
+            let instruction_limit = api.slice_instruction_limit();
+            let mut instance = embedder
+                .new_instance(
+                    canister_test_id(1),
+                    &embedder_cache,
+                    None,
+                    &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
+                    &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
+                    ModificationTracking::Track,
+                    Some(api),
+                )
+                .map_err(|r| r.0)
+                .expect("Failed to create instance");
+            instance.set_instruction_counter(i64::try_from(instruction_limit.get()).unwrap());
+
+            let result = instance
+                .run(FuncRef::Method(WasmMethod::Update(
+                    "touch_heap_with_api_calls".to_string(),
+                )))
+                .expect("call to touch_heap_with_api_calls failed");
+            dirty_pages.extend(result.wasm_dirty_pages.iter().map(|x| x.get()));
+
+            let mut expected_dirty_pages: BTreeSet<u64> = BTreeSet::new();
+            expected_dirty_pages.insert(1); // caller_copy
+            expected_dirty_pages.insert(3); // data_copy
+            expected_dirty_pages.insert(5); // canister_self_copy
+            expected_dirty_pages.insert(9); // canister_cycle_balance128
+            expected_dirty_pages.insert(9); // msg_cycles_available128
+            expected_dirty_pages.insert(10); // stable_read
+
+            assert_eq!(expected_dirty_pages, dirty_pages);
+        });
     }
 
     #[test]
@@ -641,8 +1517,10 @@ mod tests {
         // The seed value will always be the same for a particular version of
         // Proptest and algorithm, but may change across releases.
         let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_module_wat(TEST_NUM_PAGES);
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 1);
         // Random, *non-empty* writes
-        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES)
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 1)
             .new_tree(&mut runner)
             .unwrap()
             .current()
@@ -650,6 +1528,9 @@ mod tests {
             .filter(|w| !w.bytes.is_empty())
             .cloned()
             .collect();
-        apply_writes_and_check_heap(writes, ModificationTracking::Ignore);
+        for writes in corner_writes {
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, false)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Ignore, &wat, false);
     }
 }

@@ -1,10 +1,79 @@
+load("@python_deps//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
 package(default_visibility = ["//visibility:public"])
 
-exports_files([
-    "docker_tar.py",
-    "build_vfat_image.py",
-    "build_ext4_image.py",
-    "build_disk_image.py",
-    "build_upgrade_image.py",
-    "verity_sign.py",
-])
+# Process wrapper for commands that are run as part of the ic-os build.
+sh_binary(
+    name = "proc_wrapper",
+    srcs = ["proc_wrapper.sh"],
+)
+
+# Common libs
+py_library(
+    name = "crc",
+    srcs = ["crc.py"],
+)
+
+py_library(
+    name = "utils",
+    srcs = ["utils.py"],
+)
+
+# Build tools
+py_binary(
+    name = "build_container_base_image",
+    srcs = ["build_container_base_image.py"],
+    deps = [
+        requirement("loguru"),
+        requirement("invoke"),
+        requirement("simple_parsing"),
+    ],
+)
+
+py_binary(
+    name = "build_container_filesystem_tar",
+    srcs = ["build_container_filesystem_tar.py"],
+    deps = [
+        requirement("invoke"),
+    ],
+)
+
+py_binary(
+    name = "build_disk_image",
+    srcs = ["build_disk_image.py"],
+)
+
+py_binary(
+    name = "build_ext4_image",
+    srcs = ["build_ext4_image.py"],
+)
+
+py_binary(
+    name = "build_fat32_image",
+    srcs = ["build_fat32_image.py"],
+    deps = [":utils"],
+)
+
+py_binary(
+    name = "build_lvm_image",
+    srcs = ["build_lvm_image.py"],
+    deps = [":crc"],
+)
+
+py_binary(
+    name = "build_upgrade_image",
+    srcs = ["build_upgrade_image.py"],
+)
+
+py_binary(
+    name = "build_vfat_image",
+    srcs = ["build_vfat_image.py"],
+    deps = [":utils"],
+)
+
+py_binary(
+    name = "verity_sign",
+    srcs = ["verity_sign.py"],
+)

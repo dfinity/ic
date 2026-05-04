@@ -10,7 +10,7 @@ use ic_registry_client_helpers::{
     subnet::SubnetRegistry,
 };
 use prometheus::{GaugeVec, IntCounter, Opts};
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 use std::{
     collections::BTreeMap,
     convert::TryFrom,
@@ -18,7 +18,7 @@ use std::{
     time::Duration,
 };
 
-use super::{get_node_operator_id, Error};
+use super::{Error, get_node_operator_id};
 
 /// Function that generates a random value in the range [`low`, `high`), i.e.
 /// inclusive of `low` and exclusive of `high`
@@ -97,8 +97,10 @@ impl ProximityMap {
         // the replica is running.
         let registry_version = registry.get_latest_version();
         let own_operator = get_node_operator_id(&node, registry.as_ref(), &registry_version, &log)
-            .map(|own_operator| node_operator_to_string(&own_operator))
-            .unwrap_or_else(|| OPERATOR_UNKNOWN.into());
+            .map_or_else(
+                || OPERATOR_UNKNOWN.into(),
+                |own_operator| node_operator_to_string(&own_operator),
+            );
         let metric_rtt_ema = metrics_registry.register(GaugeVec::new(Opts::new(METRIC_RTT_EMA, "Exponential moving average of roundtrip time in seconds as measured by XNetPayloadBuilder, by source and destination DC operator.").const_label(LABEL_FROM, own_operator), &[LABEL_TO]).unwrap());
         let metric_unknown_dcop = metrics_registry.int_counter(
             METRIC_UNKNOWN_DCOP,
@@ -149,12 +151,11 @@ impl ProximityMap {
         for (i, node) in nodes.iter().enumerate() {
             if let Some(node_operator) =
                 get_node_operator_id(node, self.registry.as_ref(), &version, &self.log)
+                && let Some(node_weight) = self.weight(&node_operator)
             {
-                if let Some(node_weight) = self.weight(&node_operator) {
-                    node_weights[i] = node_weight;
-                    total_weight += node_weight;
-                    weighted_nodes += 1;
-                }
+                node_weights[i] = node_weight;
+                total_weight += node_weight;
+                weighted_nodes += 1;
             }
         }
 
@@ -184,7 +185,7 @@ impl ProximityMap {
         let node = nodes[node_index];
         let node_record = self
             .registry
-            .get_transport_info(node, version)
+            .get_node_record(node, version)
             .map_err(|e| Error::RegistryGetNodeInfoFailed(node, e))?;
 
         match node_record {
@@ -197,7 +198,7 @@ impl ProximityMap {
     /// observed `duration`.
     pub fn observe_roundtrip_time(&self, node: NodeId, duration: Duration) {
         // Bound durations to between 1µs and 1s (specifically avoiding 0).
-        let duration_nanos = (duration.as_nanos() as u64).max(1_000).min(NANOS_PER_SEC);
+        let duration_nanos = (duration.as_nanos() as u64).clamp(1_000, NANOS_PER_SEC);
 
         let version = self.registry.get_latest_version();
         if let Some(node_operator) =
@@ -240,8 +241,8 @@ impl ProximityMap {
 /// Returns the string representation of `node_operator` as `PrincipalId`; or
 /// `"unknown"` if the conversion to `PrincipalId` fails.
 fn node_operator_to_string(node_operator: &[u8]) -> String {
-    PrincipalId::try_from(node_operator)
-        .ok()
-        .map(|node_operator| node_operator.to_string())
-        .unwrap_or_else(|| OPERATOR_UNKNOWN.into())
+    PrincipalId::try_from(node_operator).ok().map_or_else(
+        || OPERATOR_UNKNOWN.into(),
+        |node_operator| node_operator.to_string(),
+    )
 }

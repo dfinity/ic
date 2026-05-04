@@ -1,33 +1,74 @@
+use ic_heap_bytes::DeterministicHeapBytes;
 use serde::{Deserialize, Serialize};
 
-/// Represents an error that can happen when parsing a Wasm module using
-/// `parity_wasm`.
-///
-/// Note that ideally we would wrap a `parity_wasm::elements:Error` here but
-/// unfortunately it does not derive `Serialize` and `Deserialize` which is
-/// required by other types that this error gets embedded in. So, instead wrap
-/// only the error message.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct ParityWasmError(String);
+/// Create a link to this section of the Execution Errors documentation.
+pub fn doc_ref(section: &str) -> String {
+    format!("https://internetcomputer.org/docs/current/references/execution-errors#{section}")
+}
 
-impl ParityWasmError {
-    /// Creates a new `ParityWasmError` out of an error message.
+pub enum ErrorHelp {
+    UserError {
+        suggestion: String,
+        doc_link: String,
+    },
+    ToolchainError,
+    InternalError,
+}
+
+impl std::fmt::Display for ErrorHelp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ErrorHelp::UserError {
+                suggestion,
+                doc_link,
+            } => {
+                if !suggestion.is_empty() {
+                    write!(f, "{suggestion}")?;
+                    if !doc_link.is_empty() {
+                        write!(f, " See documentation: {doc_link}")
+                    } else {
+                        Ok(())
+                    }
+                } else {
+                    Ok(())
+                }
+            }
+            ErrorHelp::ToolchainError => write!(
+                f,
+                "If you are running this canister in a test environment (e.g., dfx), make sure the test environment is up to date. Otherwise, this is likely an error with the compiler/CDK toolchain being used to build the canister. Please report the error to IC devs on the forum: https://forum.dfinity.org and include which language/CDK was used to create the canister."
+            ),
+            ErrorHelp::InternalError => write!(
+                f,
+                "This is an internal error on the IC. Please report it to IC devs on the forum: https://forum.dfinity.org"
+            ),
+        }
+    }
+}
+
+pub trait AsErrorHelp {
+    fn error_help(&self) -> ErrorHelp;
+}
+
+/// Represents an error that can happen when parsing or encoding a Wasm module
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, DeterministicHeapBytes, Serialize)]
+pub struct WasmError(String);
+
+impl WasmError {
+    /// Creates a new `WasmError` out of an error message.
     pub fn new(error_message: String) -> Self {
         Self(error_message)
     }
 }
 
-impl std::fmt::Display for ParityWasmError {
+impl std::fmt::Display for WasmError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
 /// Different errors that be returned by `validate_wasm_binary`
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, DeterministicHeapBytes, Serialize)]
 pub enum WasmValidationError {
-    /// Failure in party_wasm when deserializing the wasm module.  
-    ParityDeserializeError(ParityWasmError),
     /// wasmtime::Module::validate() failed
     WasmtimeValidation(String),
     /// Failed to decode the canister module.
@@ -38,23 +79,53 @@ pub enum WasmValidationError {
     InvalidImportSection(String),
     /// Module contains an invalid export section
     InvalidExportSection(String),
+    /// Same function name is exported multiple times (with different types).
+    DuplicateExport {
+        name: String,
+    },
+    /// There are too many exports defined in the module.
+    TooManyExports {
+        defined: usize,
+        allowed: usize,
+    },
+    /// The total length of exported function names is too large.
+    ExportedNamesTooLong {
+        total_length: usize,
+        allowed: usize,
+    },
     /// Module contains an invalid data section
     InvalidDataSection(String),
+    // Module contains an invalid table section.
+    InvalidTableSection(String),
     /// Module contains an invalid custom section
     InvalidCustomSection(String),
+    /// Module contains an invalid global section
+    InvalidGlobalSection(String),
     /// Module contains too many globals.
-    TooManyGlobals { defined: usize, allowed: usize },
+    TooManyGlobals {
+        defined: usize,
+        allowed: usize,
+    },
     /// Module contains too many functions.
-    TooManyFunctions { defined: usize, allowed: usize },
+    TooManyFunctions {
+        defined: usize,
+        allowed: usize,
+    },
     /// Module contains too many custom sections.
-    TooManyCustomSections { defined: usize, allowed: usize },
-    /// Module defines an invalid index for a local function.
-    InvalidFunctionIndex { index: usize, import_count: usize },
+    TooManyCustomSections {
+        defined: usize,
+        allowed: usize,
+    },
     /// A function was too complex.
     FunctionComplexityTooHigh {
         index: usize,
         complexity: usize,
         allowed: usize,
+    },
+    /// A function contains an unsupported Wasm instruction.
+    UnsupportedWasmInstruction {
+        index: usize,
+        instruction: String,
     },
     /// A function was too large.
     FunctionTooLarge {
@@ -62,79 +133,240 @@ pub enum WasmValidationError {
         size: usize,
         allowed: usize,
     },
+    /// A function name was too large.
+    FunctionNameTooLarge {
+        index: usize,
+        size: usize,
+        allowed: usize,
+        name: String,
+    },
+    /// The code section is too large.
+    CodeSectionTooLarge {
+        size: u32,
+        allowed: u32,
+    },
+    /// The total module size is too large.
+    ModuleTooLarge {
+        size: u64,
+        allowed: u64,
+    },
+    // The initial Wasm64 heap memory is too large.
+    InitialWasm64MemoryTooLarge {
+        declared_size: u64,
+        allowed_size: u64,
+    },
 }
 
 impl std::fmt::Display for WasmValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::ParityDeserializeError(err) => {
-                write!(f, "Failed to deserialize wasm module with {}", err)
-            }
             Self::WasmtimeValidation(err) => {
-                write!(f, "Wasmtime failed to validate wasm module {}", err)
+                write!(f, "Wasmtime failed to validate wasm module {err}")
             }
             Self::DecodingError(err) => {
-                write!(f, "Failed to decode wasm module: {}", err)
+                write!(f, "Failed to decode wasm module: {err}")
             }
             Self::InvalidFunctionSignature(err) => {
-                write!(f, "Wasm module has an invalid function signature. {}", err)
+                write!(f, "Wasm module has an invalid function signature. {err}")
             }
             Self::InvalidImportSection(err) => {
-                write!(f, "Wasm module has an invalid import section. {}", err)
+                write!(f, "Wasm module has an invalid import section. {err}")
             }
             Self::InvalidExportSection(err) => {
-                write!(f, "Wasm module has an invalid export section. {}", err)
+                write!(f, "Wasm module has an invalid export section. {err}")
+            }
+            Self::DuplicateExport { name } => {
+                write!(
+                    f,
+                    "Duplicate function '{name}' exported multiple times \
+                    with different call types: update, query, or composite_query."
+                )
+            }
+            Self::TooManyExports { defined, allowed } => {
+                write!(
+                    f,
+                    "The number of exported functions called \
+                    `canister_update <name>`, `canister_query <name>`, or \
+                    `canister_composite_query <name>` is {defined} which exceeds {allowed}."
+                )
+            }
+            Self::ExportedNamesTooLong {
+                total_length,
+                allowed,
+            } => {
+                write!(
+                    f,
+                    "The sum of `<name>` lengths in exported \
+                    functions called `canister_update <name>`, `canister_query <name>`, \
+                    or `canister_composite_query <name>` is {total_length} which exceeds \
+                    the allowed limit of {allowed}."
+                )
             }
             Self::InvalidDataSection(err) => {
-                write!(f, "Wasm module has an invalid data section. {}", err)
+                write!(f, "Wasm module has an invalid data section. {err}")
+            }
+            Self::InvalidTableSection(err) => {
+                write!(f, "Wasm module has an invalid table section. {err}")
             }
             Self::InvalidCustomSection(err) => {
-                write!(f, "Wasm module has an invalid custom section. {}", err)
+                write!(f, "Wasm module has an invalid custom section. {err}")
+            }
+            Self::InvalidGlobalSection(err) => {
+                write!(f, "Wasm module has an invalid global section. {err}")
             }
             Self::TooManyGlobals { defined, allowed } => write!(
                 f,
-                "Wasm module defined {} globals which exceeds the maximum number allowed {}.",
-                defined, allowed
+                "Wasm module defined {defined} \
+                    globals which exceeds the maximum number allowed {allowed}.",
             ),
             Self::TooManyFunctions { defined, allowed } => write!(
                 f,
-                "Wasm module defined {} functions which exceeds the maximum number allowed {}.",
-                defined, allowed
+                "Wasm module defined {defined} \
+                    functions which exceeds the maximum number allowed {allowed}.",
             ),
             Self::TooManyCustomSections { defined, allowed } => write!(
                 f,
-                "Wasm module defined {} custom sections which exceeds the maximum number allowed {}.",
-                defined, allowed
+                "Wasm module defined {defined} \
+                    custom sections which exceeds the maximum number allowed {allowed}.",
             ),
-            Self::InvalidFunctionIndex {
+            Self::FunctionComplexityTooHigh {
                 index,
-                import_count,
+                complexity,
+                allowed,
             } => write!(
                 f,
-                "Function has index {} but should start from {}.",
-                index, import_count
+                "Wasm module contains a function at index {index} \
+                    with complexity {complexity} \
+                    which exceeds the maximum complexity allowed {allowed}.",
             ),
-            Self::FunctionComplexityTooHigh{ index, complexity, allowed } => write!(
+            Self::UnsupportedWasmInstruction { index, instruction } => write!(
                 f,
-                "Wasm module contains a function at index {} with complexity {} which exceeds the maximum complexity allowed {}",
-                index, complexity, allowed
+                "Wasm module contains a function at index {index} \
+                    with unsupported instruction {instruction}.",
             ),
-            Self::FunctionTooLarge{index, size, allowed} => write!(
+            Self::FunctionTooLarge {
+                index,
+                size,
+                allowed,
+            } => write!(
                 f,
-                "Wasm module contains a function at index {} of size {} that exceeds the maximum allowed size of {}",
-                index, size, allowed,
+                "Wasm module contains a function at index {index} \
+                    of size {size} that exceeds the maximum allowed size of {allowed}.",
+            ),
+            Self::FunctionNameTooLarge {
+                index,
+                size,
+                allowed,
+                name,
+            } => write!(
+                f,
+                "Wasm module contains a function at index {index} \
+                    with name '{name}' of size {size} bytes that exceeds the maximum allowed size of {allowed} bytes.",
+            ),
+            Self::CodeSectionTooLarge { size, allowed } => write!(
+                f,
+                "Wasm module code section size of {size} \
+                    exceeds the maximum allowed size of {allowed}.",
+            ),
+            WasmValidationError::ModuleTooLarge { size, allowed } => write!(
+                f,
+                "Wasm module size of {size} exceeds the maximum \
+                    allowed size of {allowed}.",
+            ),
+            Self::InitialWasm64MemoryTooLarge {
+                declared_size,
+                allowed_size,
+            } => write!(
+                f,
+                "Wasm module declares an initial Wasm64 heap memory size of {declared_size} pages \
+                    which exceeds the maximum allowed size of {allowed_size} pages.",
             ),
         }
     }
 }
 
+impl AsErrorHelp for WasmValidationError {
+    fn error_help(&self) -> ErrorHelp {
+        match self {
+            WasmValidationError::DecodingError(_)
+            | WasmValidationError::WasmtimeValidation(_)
+            | WasmValidationError::InvalidExportSection(_)
+            | WasmValidationError::InvalidFunctionSignature(_)
+            | WasmValidationError::InvalidImportSection(_)
+            | WasmValidationError::InvalidDataSection(_)
+            | WasmValidationError::InvalidTableSection(_)
+            | WasmValidationError::InvalidCustomSection(_)
+            | WasmValidationError::InvalidGlobalSection(_)
+            | WasmValidationError::UnsupportedWasmInstruction { .. }
+            | WasmValidationError::TooManyCustomSections { .. } => ErrorHelp::ToolchainError,
+            WasmValidationError::DuplicateExport { name } => ErrorHelp::UserError {
+                suggestion: format!(
+                    "Try defining different versions of the function for each \
+                call type, e.g. `{name}_update`, `{name}_query`, etc."
+                ),
+                doc_link: doc_ref("wasm-module-duplicate-exports"),
+            },
+            WasmValidationError::TooManyExports { .. } => ErrorHelp::UserError {
+                suggestion: "Try combining multiple endpoints into a single endpoint.".to_string(),
+                doc_link: doc_ref("wasm-module-exports-too-many-methods"),
+            },
+            WasmValidationError::ExportedNamesTooLong { .. } => ErrorHelp::UserError {
+                suggestion: "Try using shorter method names.".to_string(),
+                doc_link: doc_ref("wasm-module-sum-of-exported-name-lengths-too-large"),
+            },
+            WasmValidationError::TooManyFunctions { .. } => ErrorHelp::UserError {
+                suggestion: "Try spliting this canister into multiple canisters.".to_string(),
+                doc_link: doc_ref("wasm-module-too-many-functions"),
+            },
+            WasmValidationError::TooManyGlobals { .. } => ErrorHelp::UserError {
+                suggestion: "Try collecting multiple globals into a single \
+                structured which can be stored on the heap."
+                    .to_string(),
+                doc_link: doc_ref("wasm-module-too-many-globals"),
+            },
+            WasmValidationError::FunctionComplexityTooHigh { .. } => ErrorHelp::UserError {
+                suggestion: "Try breaking large functions up into multiple \
+                smaller functions."
+                    .to_string(),
+                doc_link: doc_ref("wasm-module-function-complexity-too-high"),
+            },
+            WasmValidationError::FunctionTooLarge { .. } => ErrorHelp::UserError {
+                suggestion: "Try breaking large functions up into multiple \
+                smaller functions."
+                    .to_string(),
+                doc_link: doc_ref("wasm-module-function-too-large"),
+            },
+            WasmValidationError::FunctionNameTooLarge { .. } => ErrorHelp::UserError {
+                suggestion: "Try using shorter function names.".to_string(),
+                doc_link: doc_ref("wasm-module-function-name-too-large"),
+            },
+            WasmValidationError::CodeSectionTooLarge { .. } => ErrorHelp::UserError {
+                suggestion: "Try shrinking the module code section using tools like \
+                `ic-wasm` or splitting the logic across multiple canisters."
+                    .to_string(),
+                doc_link: doc_ref("wasm-module-code-section-too-large"),
+            },
+            WasmValidationError::ModuleTooLarge { .. } => ErrorHelp::UserError {
+                suggestion: "Try shrinking the module using tools like \
+                `ic-wasm` or splitting the logic across multiple canisters."
+                    .to_string(),
+                doc_link: doc_ref("wasm-module-too-large"),
+            },
+            WasmValidationError::InitialWasm64MemoryTooLarge { .. } => ErrorHelp::UserError {
+                suggestion: "Try reducing the initial Wasm64 heap memory size.".to_string(),
+                doc_link: doc_ref("wasm-module-initial-wasm64-memory-too-large"),
+            },
+        }
+    }
+}
+
 /// Different errors that can be returned by `instrument`
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, DeterministicHeapBytes, Serialize)]
 pub enum WasmInstrumentationError {
-    /// Failure in party_wasm when deserializing the wasm module
-    ParityDeserializeError(ParityWasmError),
-    /// Failure in party_wasm when serializing the wasm module
-    ParitySerializeError(ParityWasmError),
+    /// Failure in deserialization the wasm module
+    WasmDeserializeError(WasmError),
+    /// Failure in serialization the wasm module
+    WasmSerializeError(WasmError),
     /// Incorrect number of memory sections
     IncorrectNumberMemorySections {
         expected: usize,
@@ -144,45 +376,55 @@ pub enum WasmInstrumentationError {
         offset: usize,
         len: usize,
     },
-    InvalidExport(String),
+    InvalidFunctionType(String),
 }
 
 impl std::fmt::Display for WasmInstrumentationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::ParityDeserializeError(err) => {
-                write!(f, "Failed to deserialize wasm module with {}", err)
+            Self::WasmDeserializeError(err) => {
+                write!(f, "Failed to deserialize wasm module with {err}")
             }
-            Self::ParitySerializeError(err) => {
-                write!(f, "Failed to serialize wasm module with {}", err)
+            Self::WasmSerializeError(err) => {
+                write!(f, "Failed to serialize wasm module with {err}")
             }
             Self::IncorrectNumberMemorySections { expected, got } => write!(
                 f,
-                "Wasm module has {} memory sections but should have had {}",
-                got, expected
+                "Wasm module has {got} memory sections but should have had {expected}"
             ),
             Self::InvalidDataSegment { offset, len } => write!(
                 f,
-                "Wasm module has invalid data segment of {} bytes at {}",
-                len, offset
+                "Wasm module has invalid data segment of {len} bytes at {offset}"
             ),
-            Self::InvalidExport(err) => {
-                write!(f, "Failed to export: {}", err)
-            }
+            Self::InvalidFunctionType(err) => write!(f, "Invalid function type: {err}"),
+        }
+    }
+}
+
+impl AsErrorHelp for WasmInstrumentationError {
+    fn error_help(&self) -> ErrorHelp {
+        match self {
+            WasmInstrumentationError::WasmDeserializeError(_)
+            | WasmInstrumentationError::WasmSerializeError(_) => ErrorHelp::InternalError,
+            WasmInstrumentationError::IncorrectNumberMemorySections { .. }
+            | WasmInstrumentationError::InvalidDataSegment { .. }
+            | WasmInstrumentationError::InvalidFunctionType(_) => ErrorHelp::ToolchainError,
         }
     }
 }
 
 /// Different errors that be returned by the Wasm engine
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, DeterministicHeapBytes, Serialize)]
 pub enum WasmEngineError {
     FailedToInitializeEngine,
-    FailedToInstantiateModule,
+    FailedToInstantiateModule(String),
     FailedToSetAsyncStack,
     FailedToSetWasmStack,
     FailedToSerializeModule(String),
     FailedToDeserializeModule(String),
     FailedToApplySystemChanges(String),
+    Other(String),
+    Unexpected(String),
 }
 
 impl std::fmt::Display for WasmEngineError {
@@ -191,8 +433,8 @@ impl std::fmt::Display for WasmEngineError {
             Self::FailedToInitializeEngine => {
                 write!(f, "Failed to initialize engine")
             }
-            Self::FailedToInstantiateModule => {
-                write!(f, "Failed to instantiate module")
+            Self::FailedToInstantiateModule(s) => {
+                write!(f, "Failed to instantiate module: {s}")
             }
             Self::FailedToSetWasmStack => {
                 write!(f, "Failed to set Wasm stack")
@@ -201,13 +443,19 @@ impl std::fmt::Display for WasmEngineError {
                 write!(f, "Failed to set async stack")
             }
             Self::FailedToSerializeModule(s) => {
-                write!(f, "Failed to serialize module: {}", s)
+                write!(f, "Failed to serialize module: {s}")
             }
             Self::FailedToDeserializeModule(s) => {
-                write!(f, "Failed to deserialize module: {}", s)
+                write!(f, "Failed to deserialize module: {s}")
             }
             Self::FailedToApplySystemChanges(s) => {
-                write!(f, "Failed to apply system changes: {}", s)
+                write!(f, "Failed to apply system changes: {s}")
+            }
+            Self::Other(s) => {
+                write!(f, "WasmEngineError: {s}")
+            }
+            Self::Unexpected(s) => {
+                write!(f, "Unexpected WasmEngineError: {s}")
             }
         }
     }

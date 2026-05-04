@@ -1,0 +1,6 @@
+exports_files(
+    [
+        "helper.sh",
+    ],
+    visibility = ["//visibility:public"],
+)

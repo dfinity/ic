@@ -1,0 +1,125 @@
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
+sh_binary(
+    name = "shfmt-fix",
+    srcs = ["shfmt.sh"],
+    data = [
+        "//:shfmt",
+    ],
+    env = {
+        "SHFMT": "$(rootpath //:shfmt)",
+    },
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "shfmt-check",
+    srcs = ["shfmt.sh"],
+    data = [
+        "//:shfmt",
+    ],
+    env = {
+        "SHFMT": "$(rootpath //:shfmt)",
+        # read by our script to differentiate between write & check
+        "SHFMT_CHECK": "1",
+    },
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "ruff-fix",
+    srcs = ["ruff-fix.sh"],
+    data = [
+        "//:ruff",
+    ],
+    env = {
+        "RUFF": "$(rootpath //:ruff)",
+    },
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "ruff-check",
+    srcs = ["ruff-check.sh"],
+    data = [
+        "//:ruff",
+    ],
+    env = {
+        "RUFF": "$(rootpath //:ruff)",
+    },
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "buf-fix",
+    srcs = ["buf-fix.sh"],
+    data = [
+        "@rules_buf_toolchains//:buf",
+    ],
+    env = {
+        "BUF": "$(rootpath @rules_buf_toolchains//:buf)",
+    },
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "buf-check",
+    srcs = ["buf-check.sh"],
+    data = [
+        "@rules_buf_toolchains//:buf",
+    ],
+    env = {
+        "BUF": "$(rootpath @rules_buf_toolchains//:buf)",
+    },
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "DFINITY-capitalization-check",
+    srcs = ["DFINITY-capitalization-check.sh"],
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "do-not-merge-check",
+    srcs = ["do-not-merge-check.sh"],
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "buildifier-fix",
+    actual = "//bazel:buildifier",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "buildifier-check",
+    actual = "//bazel:buildifier.check",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "gazelle-check",
+    actual = "//:gazelle",
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "buf-breaking-check",
+    srcs = ["buf-breaking-check.sh"],
+    data = ["@rules_buf_toolchains//:buf"],
+    env = {
+        "BUF": "$(rootpath @rules_buf_toolchains//:buf)",
+    },
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "did-check",
+    srcs = ["did-check.sh"],
+    data = ["//rs/tools/check_did"],
+    env = {
+        "DID_CHECK_BIN": "$(rootpath //rs/tools/check_did)",
+    },
+    visibility = ["//visibility:public"],
+)

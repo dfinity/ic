@@ -1,11 +1,14 @@
 [package]
 name = "ic-test-utilities-logger"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-logger = { path = "../../monitoring/logger" }
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
-slog-scope = "4.1.2"
-slog-term = "2.6.0"
+slog = { workspace = true }
+slog-scope = { workspace = true }
+slog-term = { workspace = true }
 

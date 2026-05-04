@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 //! Tests for external and generic conversions
 use super::*;
 use ic_types::crypto::{CombinedMultiSig, CombinedThresholdSig, IndividualMultiSig};
@@ -27,7 +26,7 @@ fn should_not_obtain_threshold_sig_share_of_from_csp_signature_if_csp_sig_type_d
         result.unwrap_err(),
         CryptoError::MalformedSignature {
             algorithm: AlgorithmId::ThresBls12_381,
-            sig_bytes: sig_bytes.as_ref().to_owned(),
+            sig_bytes: sig_bytes.to_vec(),
             internal_error: "Not an individual threshold signature".to_string(),
         }
     );
@@ -56,7 +55,7 @@ fn should_not_obtain_combined_threshold_sig_of_from_csp_signature_if_csp_sig_typ
         result.unwrap_err(),
         CryptoError::MalformedSignature {
             algorithm: AlgorithmId::ThresBls12_381,
-            sig_bytes: sig_bytes.as_ref().to_owned(),
+            sig_bytes: sig_bytes.to_vec(),
             internal_error: "Not a combined threshold signature".to_string(),
         }
     );
@@ -85,9 +84,11 @@ fn should_fail_to_convert_threshold_sig_share_of_to_csp_signature_if_wrong_size(
     let sig_share: ThresholdSigShareOf<CryptoHashableTestDummy> =
         ThresholdSigShareOf::new(ThresholdSigShare(sig_bytes.to_vec()));
 
-    assert!(CspSignature::try_from(&sig_share)
-        .unwrap_err()
-        .is_malformed_signature());
+    assert!(
+        CspSignature::try_from(&sig_share)
+            .unwrap_err()
+            .is_malformed_signature()
+    );
 }
 
 #[test]
@@ -113,9 +114,11 @@ fn should_fail_to_convert_combined_threshold_sig_of_to_csp_signature_if_wrong_si
     let combined_sig: CombinedThresholdSigOf<CryptoHashableTestDummy> =
         CombinedThresholdSigOf::new(CombinedThresholdSig(sig_bytes.to_vec()));
 
-    assert!(CspSignature::try_from(&combined_sig)
-        .unwrap_err()
-        .is_malformed_signature());
+    assert!(
+        CspSignature::try_from(&combined_sig)
+            .unwrap_err()
+            .is_malformed_signature()
+    );
 }
 
 #[test]
@@ -141,9 +144,11 @@ fn should_fail_to_convert_individual_multi_sig_of_to_csp_signature_if_wrong_size
     let sig_share: IndividualMultiSigOf<CryptoHashableTestDummy> =
         IndividualMultiSigOf::new(IndividualMultiSig(sig_bytes.to_vec()));
 
-    assert!(CspSignature::try_from(&sig_share)
-        .unwrap_err()
-        .is_malformed_signature());
+    assert!(
+        CspSignature::try_from(&sig_share)
+            .unwrap_err()
+            .is_malformed_signature()
+    );
 }
 
 #[test]
@@ -169,9 +174,11 @@ fn should_fail_to_convert_combined_multi_sig_of_to_csp_signature_if_wrong_size()
     let combined_sig: CombinedMultiSigOf<CryptoHashableTestDummy> =
         CombinedMultiSigOf::new(CombinedMultiSig(sig_bytes.to_vec()));
 
-    assert!(CspSignature::try_from(&combined_sig)
-        .unwrap_err()
-        .is_malformed_signature());
+    assert!(
+        CspSignature::try_from(&combined_sig)
+            .unwrap_err()
+            .is_malformed_signature()
+    );
 }
 
 fn individual_csp_threshold_sig(

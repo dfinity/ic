@@ -5,12 +5,12 @@ package state.v1;
 import "state/sync/v1/manifest.proto";
 
 message StateMetadata {
-    state.sync.v1.Manifest manifest = 1;
+  state.sync.v1.Manifest manifest = 1;
 }
 
 message StatesMetadata {
-    // Checkpoint metadata indexed by height.
-    map<uint64, StateMetadata> by_height = 1;
+  // Checkpoint metadata indexed by height.
+  map<uint64, StateMetadata> by_height = 1;
 
-    reserved 2;
+  reserved 2;
 }

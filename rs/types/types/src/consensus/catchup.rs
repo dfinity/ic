@@ -1,31 +1,33 @@
 //! Defines types that allow outdated replicas to catch up to the latest state.
 
 use crate::{
-    consensus::{
-        Block, Committee, HasCommittee, HasHeight, HasVersion, HashedBlock, HashedRandomBeacon,
-        RandomBeacon, ThresholdSignature, ThresholdSignatureShare,
-    },
-    crypto::threshold_sig::ni_dkg::NiDkgId,
-    crypto::*,
     CryptoHashOfState, Height, RegistryVersion, ReplicaVersion,
+    consensus::{
+        Block, Committee, ConsensusMessageHashable, HasCommittee, HasHeight, HasVersion,
+        HashedBlock, HashedRandomBeacon, ThresholdSignature, ThresholdSignatureShare,
+    },
+    crypto::*,
+    node_id_into_protobuf, node_id_try_from_option,
 };
-use ic_protobuf::types::v1 as pb;
+use ic_protobuf::{
+    proxy::{ProxyDecodeError, try_from_option_field},
+    types::v1 as pb,
+};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use std::cmp::{Ordering, PartialOrd};
 use std::convert::TryFrom;
 
-/// CatchUpContent contains all necessary data to bootstrap a subnet's
-/// participant.
+/// [`CatchUpContent`] contains all necessary data to bootstrap a subnet's participant.
 pub type CatchUpContent = CatchUpContentT<HashedBlock>;
 
-/// A generic struct shared between CatchUpContent and CatchUpContentShare.
-/// Consists of objects all occuring at a specific height which we will refer to
+/// A generic struct shared between [`CatchUpContent`] and [`CatchUpShareContent`].
+/// Consists of objects all occurring at a specific height which we will refer to
 /// as the catch up height.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct CatchUpContentT<T> {
     /// Replica version that was running when this CUP was created.
-    version: ReplicaVersion,
+    pub version: ReplicaVersion,
     /// A finalized Block that contains DKG summary.
     pub block: T,
     /// The RandomBeacon that is used at the catchup height.
@@ -33,24 +35,30 @@ pub struct CatchUpContentT<T> {
     /// Hash of the subnet execution state that has been fully computed at the
     /// catchup height.
     pub state_hash: CryptoHashOfState,
+    /// The oldest registry version that is still referenced by
+    /// structures in replicated state.
+    pub oldest_registry_version_in_use_by_replicated_state: Option<RegistryVersion>,
 }
 
 impl CatchUpContent {
-    /// Create a new CatchUpContent
+    /// Creates a new [`CatchUpContent`]
     pub fn new(
         block: HashedBlock,
         random_beacon: HashedRandomBeacon,
         state_hash: CryptoHashOfState,
+        oldest_registry_version_in_use_by_replicated_state: Option<RegistryVersion>,
     ) -> Self {
         Self {
             version: block.version().clone(),
             block,
             random_beacon,
             state_hash,
+            oldest_registry_version_in_use_by_replicated_state,
         }
     }
-    /// Return the registry version as recorded in the DKG summary of
-    /// the block contained in the CatchUpContent.
+
+    /// Returns the registry version as recorded in the DKG summary of
+    /// the block contained in the [`CatchUpContent`].
     pub fn registry_version(&self) -> RegistryVersion {
         self.block
             .as_ref()
@@ -61,7 +69,7 @@ impl CatchUpContent {
             .registry_version
     }
 
-    /// Create a CatchupContent from a
+    /// Creates a [`CatchUpContent`] from a [`CatchUpShareContent`].
     pub fn from_share_content(share: CatchUpShareContent, block: Block) -> Self {
         Self {
             version: share.version,
@@ -71,35 +79,52 @@ impl CatchUpContent {
             },
             random_beacon: share.random_beacon,
             state_hash: share.state_hash,
+            oldest_registry_version_in_use_by_replicated_state: share
+                .oldest_registry_version_in_use_by_replicated_state,
         }
+    }
+
+    /// Check the integrity of block, block payload and random beacon in this CUP content.
+    pub fn check_integrity(&self) -> bool {
+        let block_hash = self.block.get_hash();
+        let block = self.block.as_ref();
+        let random_beacon_hash = self.random_beacon.get_hash();
+        let random_beacon = self.random_beacon.as_ref();
+        let payload_hash = block.payload.get_hash();
+        let block_payload = block.payload.as_ref();
+        block.payload.is_summary() == block_payload.is_summary()
+            && &crypto_hash(random_beacon) == random_beacon_hash
+            && &crypto_hash(block) == block_hash
+            && &crypto_hash(block_payload) == payload_hash
     }
 }
 
-impl From<&CatchUpContent> for pb::CatchUpContent {
-    fn from(content: &CatchUpContent) -> Self {
+impl From<CatchUpContent> for pb::CatchUpContent {
+    fn from(content: CatchUpContent) -> Self {
+        let (block_hash, block) = content.block.decompose();
+        let (beacon_hash, beacon) = content.random_beacon.decompose();
         Self {
-            block: Some(pb::Block::from(content.block.as_ref())),
-            random_beacon: Some(pb::RandomBeacon::from(content.random_beacon.as_ref())),
-            block_hash: content.block.get_hash().clone().get().0,
-            random_beacon_hash: content.random_beacon.get_hash().clone().get().0,
-            state_hash: content.state_hash.clone().get().0,
+            block: Some(pb::Block::from(&block)),
+            random_beacon: Some(pb::RandomBeacon::from(beacon)),
+            block_hash: block_hash.get().0,
+            random_beacon_hash: beacon_hash.get().0,
+            state_hash: content.state_hash.get().0,
+            oldest_registry_version_in_use_by_replicated_state: content
+                .oldest_registry_version_in_use_by_replicated_state
+                .map(|v| v.get()),
         }
     }
 }
 
 impl TryFrom<pb::CatchUpContent> for CatchUpContent {
-    type Error = String;
-    fn try_from(content: pb::CatchUpContent) -> Result<CatchUpContent, String> {
-        let block = super::Block::try_from(
-            content
-                .block
-                .ok_or_else(|| String::from("Error: CUP missing block"))?,
-        )?;
-        let random_beacon = RandomBeacon::try_from(
-            content
-                .random_beacon
-                .ok_or_else(|| String::from("Error: CUP missing block"))?,
-        )?;
+    type Error = ProxyDecodeError;
+
+    fn try_from(content: pb::CatchUpContent) -> Result<CatchUpContent, Self::Error> {
+        let block = try_from_option_field(content.block, "CatchUpContent::block")?;
+
+        let random_beacon =
+            try_from_option_field(content.random_beacon, "CatchUpContent::random_beacon")?;
+
         Ok(Self::new(
             HashedBlock {
                 hash: CryptoHashOf::from(CryptoHash(content.block_hash)),
@@ -110,13 +135,16 @@ impl TryFrom<pb::CatchUpContent> for CatchUpContent {
                 value: random_beacon,
             },
             CryptoHashOf::from(CryptoHash(content.state_hash)),
+            content
+                .oldest_registry_version_in_use_by_replicated_state
+                .map(RegistryVersion::from),
         ))
     }
 }
 
 impl SignedBytesWithoutDomainSeparator for CatchUpContent {
     fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        pb::CatchUpContent::from(self).as_protobuf_vec()
+        pb::CatchUpContent::from(self.clone()).as_protobuf_vec()
     }
 }
 
@@ -138,46 +166,80 @@ impl<T> HasCommittee for CatchUpContentT<T> {
     }
 }
 
-/// CatchUpPackage is signed by a threshold public key. Its CatchUpContent is
+/// [`CatchUpPackage`] is signed by a threshold public key. Its [`CatchUpContent`] is
 /// only trusted if the threshold public key is trusted.
 pub type CatchUpPackage = Signed<CatchUpContent, ThresholdSignature<CatchUpContent>>;
 
-/// CatchUpContentHash is the type of a hashed `CatchUpContent`
+impl CatchUpPackage {
+    /// Returns whether this CUP is signed.
+    ///
+    /// This is `false` for Genesis and recovery CUPs.
+    pub fn is_signed(&self) -> bool {
+        !self.signature.signature.as_ref().0.is_empty()
+    }
+
+    /// Return the oldest registry version that is still referenced by
+    /// parts of the summary block, or structures in replicated state.
+    ///
+    /// P2P should keep up connections to all nodes registered in any registry
+    /// between the one returned from this function and the current
+    /// `RegistryVersion`.
+    pub fn get_oldest_registry_version_in_use(&self) -> RegistryVersion {
+        let summary_version = self
+            .content
+            .block
+            .get_value()
+            .payload
+            .as_ref()
+            .as_summary()
+            .get_oldest_registry_version_in_use();
+        let Some(cup_version) = self
+            .content
+            .oldest_registry_version_in_use_by_replicated_state
+        else {
+            return summary_version;
+        };
+        cup_version.min(summary_version)
+    }
+}
+
+/// [`CatchUpContentHash`] is the type of a hashed [`CatchUpContent`]
 pub type CatchUpContentHash = CryptoHashOf<CatchUpContent>;
 
-impl From<&CatchUpPackage> for pb::CatchUpPackage {
-    fn from(cup: &CatchUpPackage) -> Self {
+impl From<CatchUpPackage> for pb::CatchUpPackage {
+    fn from(cup: CatchUpPackage) -> Self {
         Self {
             signer: Some(pb::NiDkgId::from(cup.signature.signer)),
-            signature: cup.signature.signature.clone().get().0,
-            content: pb::CatchUpContent::from(&cup.content).as_protobuf_vec(),
+            signature: cup.signature.signature.get().0,
+            content: pb::CatchUpContent::from(cup.content).as_protobuf_vec(),
         }
     }
 }
 
 impl TryFrom<&pb::CatchUpPackage> for CatchUpPackage {
-    type Error = String;
-    fn try_from(cup: &pb::CatchUpPackage) -> Result<CatchUpPackage, String> {
-        Ok(CatchUpPackage {
+    type Error = ProxyDecodeError;
+    fn try_from(cup: &pb::CatchUpPackage) -> Result<CatchUpPackage, Self::Error> {
+        let ret = CatchUpPackage {
             content: CatchUpContent::try_from(
-                pb::CatchUpContent::decode(&cup.content[..])
-                    .map_err(|e| format!("CatchUpContent failed to decode {:?}", e))?,
+                pb::CatchUpContent::decode(cup.content.as_slice())
+                    .map_err(ProxyDecodeError::DecodeError)?,
             )?,
             signature: ThresholdSignature {
                 signature: CombinedThresholdSigOf::new(CombinedThresholdSig(cup.signature.clone())),
-                signer: NiDkgId::try_from(
-                    cup.signer
-                        .as_ref()
-                        .ok_or_else(|| String::from("Error: CUP signer not present"))?
-                        .clone(),
-                )
-                .map_err(|e| format!("Unable to decode CUP signer {:?}", e))?,
+                signer: try_from_option_field(cup.signer.clone(), "CatchUpPackage::signer")?,
             },
-        })
+        };
+        if ret.check_integrity() {
+            Ok(ret)
+        } else {
+            Err(ProxyDecodeError::Other(
+                "CatchUpPackage validity check failed".to_string(),
+            ))
+        }
     }
 }
 
-/// Content of CatchUpPackageShare uses the block hash to keep its size small.
+/// Content of [`CatchUpPackageShare`] uses the block hash to keep its size small.
 pub type CatchUpShareContent = CatchUpContentT<CryptoHashOf<Block>>;
 
 impl From<&CatchUpContent> for CatchUpShareContent {
@@ -187,17 +249,63 @@ impl From<&CatchUpContent> for CatchUpShareContent {
             block: content.block.get_hash().clone(),
             random_beacon: content.random_beacon.clone(),
             state_hash: content.state_hash.clone(),
+            oldest_registry_version_in_use_by_replicated_state: content
+                .oldest_registry_version_in_use_by_replicated_state,
         }
     }
 }
 
-/// CatchUpPackageShare is signed by individual members in a threshold
-/// committee.
+/// [`CatchUpPackageShare`] is signed by individual members in a threshold committee.
 pub type CatchUpPackageShare = Signed<CatchUpShareContent, ThresholdSignatureShare<CatchUpContent>>;
 
-/// The parameters used to request `CatchUpPackage` (by orchestrator).
+impl From<CatchUpPackageShare> for pb::CatchUpPackageShare {
+    fn from(cup_share: CatchUpPackageShare) -> Self {
+        let (beacon_hash, beacon) = cup_share.content.random_beacon.decompose();
+        Self {
+            version: cup_share.content.version.to_string(),
+            random_beacon: Some(beacon.into()),
+            state_hash: cup_share.content.state_hash.get().0,
+            block_hash: cup_share.content.block.get().0,
+            random_beacon_hash: beacon_hash.get().0,
+            signature: cup_share.signature.signature.get().0,
+            signer: Some(node_id_into_protobuf(cup_share.signature.signer)),
+            oldest_registry_version_in_use_by_replicated_state: cup_share
+                .content
+                .oldest_registry_version_in_use_by_replicated_state
+                .map(|v| v.get()),
+        }
+    }
+}
+
+impl TryFrom<pb::CatchUpPackageShare> for CatchUpPackageShare {
+    type Error = ProxyDecodeError;
+    fn try_from(cup_share: pb::CatchUpPackageShare) -> Result<Self, Self::Error> {
+        Ok(Signed {
+            content: CatchUpShareContent {
+                version: ReplicaVersion::try_from(cup_share.version.as_str())?,
+                block: CryptoHashOf::new(CryptoHash(cup_share.block_hash)),
+                random_beacon: HashedRandomBeacon::recompose(
+                    CryptoHashOf::from(CryptoHash(cup_share.random_beacon_hash)),
+                    try_from_option_field(
+                        cup_share.random_beacon,
+                        "CatchUpPackageShare::random_beacon",
+                    )?,
+                ),
+                state_hash: CryptoHashOf::from(CryptoHash(cup_share.state_hash)),
+                oldest_registry_version_in_use_by_replicated_state: cup_share
+                    .oldest_registry_version_in_use_by_replicated_state
+                    .map(RegistryVersion::from),
+            },
+            signature: ThresholdSignatureShare {
+                signature: ThresholdSigShareOf::new(ThresholdSigShare(cup_share.signature)),
+                signer: node_id_try_from_option(cup_share.signer)?,
+            },
+        })
+    }
+}
+/// The parameters used to request [`CatchUpPackage`] (by orchestrator).
 ///
-/// We make use of the `Ord` trait to determine if one `CatchUpPackage` is newer
+/// We make use of the [`Ord`] trait to determine if one [`CatchUpPackage`] is newer
 /// than the other:
 ///
 /// ```ignore
@@ -205,13 +313,13 @@ pub type CatchUpPackageShare = Signed<CatchUpShareContent, ThresholdSignatureSha
 ///   C1.height > C2.height ||
 ///   C1.height == C2.height && C1.registry_version > C2.registry_version
 /// ```
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CatchUpPackageParam {
     height: Height,
     registry_version: RegistryVersion,
 }
 
-/// The PartialOrd instance is explicitly given below to avoid relying on
+/// The [`PartialOrd`] instance is explicitly given below to avoid relying on
 /// the ordering of the struct fields.
 impl PartialOrd for CatchUpPackageParam {
     fn partial_cmp(&self, other: &CatchUpPackageParam) -> Option<Ordering> {
@@ -234,40 +342,39 @@ impl PartialOrd for CatchUpPackageParam {
 
 impl From<&CatchUpPackage> for CatchUpPackageParam {
     fn from(catch_up_package: &CatchUpPackage) -> Self {
+        Self::from(&catch_up_package.content)
+    }
+}
+
+impl From<&CatchUpContent> for CatchUpPackageParam {
+    fn from(catch_up_content: &CatchUpContent) -> Self {
         Self {
-            height: catch_up_package.height(),
-            registry_version: catch_up_package.content.registry_version(),
+            height: catch_up_content.height(),
+            registry_version: catch_up_content.registry_version(),
         }
     }
 }
 
-/// CatchUpContentProtobufBytes holds bytes that represent a protobuf serialized
-/// catch-up package
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub struct CatchUpContentProtobufBytes(pub Vec<u8>);
+impl TryFrom<&pb::CatchUpPackage> for CatchUpPackageParam {
+    type Error = ProxyDecodeError;
+    fn try_from(catch_up_package: &pb::CatchUpPackage) -> Result<Self, Self::Error> {
+        let catch_up_content = CatchUpContent::try_from(
+            pb::CatchUpContent::decode(catch_up_package.content.as_slice())
+                .map_err(ProxyDecodeError::DecodeError)?,
+        )?;
 
-/// A catch up package paired with the original protobuf. Note that the protobuf
-/// contained in this struct is only partially deserialized and has the ORIGINAL
-/// bytes CatchUpContent bytes that were signed in yet to be deserialized form.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct CUPWithOriginalProtobuf {
-    /// The CUP as [`CatchUpPackage`](type@CatchUpPackage)
-    pub cup: CatchUpPackage,
-    /// The CUP as protobuf message
-    pub protobuf: pb::CatchUpPackage,
-}
-
-impl CUPWithOriginalProtobuf {
-    /// Create a CUPWithOriginalProtobuf from a CatchUpPackage
-    pub fn from_cup(cup: CatchUpPackage) -> Self {
-        let protobuf = pb::CatchUpPackage::from(&cup);
-        Self { cup, protobuf }
+        Ok(Self::from(&catch_up_content))
     }
 }
 
-impl From<&CUPWithOriginalProtobuf> for CatchUpPackageParam {
-    fn from(c: &CUPWithOriginalProtobuf) -> Self {
-        Self::from(&c.cup)
+/// [`CatchUpContentProtobufBytes`] holds bytes that represent a protobuf serialized
+/// catch-up package
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+pub struct CatchUpContentProtobufBytes(Vec<u8>);
+
+impl From<&pb::CatchUpPackage> for CatchUpContentProtobufBytes {
+    fn from(proto: &pb::CatchUpPackage) -> Self {
+        Self(proto.content.clone())
     }
 }
 

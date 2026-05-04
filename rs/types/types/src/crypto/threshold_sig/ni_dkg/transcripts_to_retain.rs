@@ -10,7 +10,7 @@ mod tests;
 /// Transcripts that should be retained when using
 /// `NiDkgAlgorithm::retain_only_active_keys`. See the invariants in
 /// `TranscriptsToRetain::new`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct TranscriptsToRetain {
     // fields must be private to avoid invariant violations
     transcripts: HashSet<NiDkgTranscript>,
@@ -41,12 +41,13 @@ impl TranscriptsToRetain {
 
     /// Returns the minimum registry version of all transcripts
     pub fn min_registry_version(&self) -> RegistryVersion {
+        // This unwrap never panics because the invariants ensure that
+        // there are at least two elements in `transcripts`.
         self.transcripts
             .iter()
             .map(|t| t.registry_version)
             .min()
-            .unwrap() // This never panics because the invariants ensure that
-                      // there are at least two elements in `transcripts`.
+            .unwrap()
     }
 
     /// Returns a string representation of `TranscriptsToRetain`. Can be used

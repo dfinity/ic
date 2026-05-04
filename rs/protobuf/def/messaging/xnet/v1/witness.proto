@@ -19,7 +19,9 @@ message Witness {
   }
 
   // Pruned leaf or subtree.
-  message Pruned { bytes digest = 5; }
+  message Pruned {
+    bytes digest = 5;
+  }
 
   // Marker for provided data (leaf or subtree).
   message Known {}

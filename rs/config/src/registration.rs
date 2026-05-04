@@ -4,7 +4,7 @@ use std::path::PathBuf;
 /// We assume pre-agreed values when interacting with the USB HSM. The purpose
 /// of this configuration is to override one or more of the default values if
 /// necessary.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct Config {
     /// The transport PIN required for the DC-owned USB HSM.
     #[serde(default = "pin_default")]
@@ -18,12 +18,6 @@ pub struct Config {
     #[serde(default = "slot_default")]
     pub pkcs11_keycard_slot: String,
 
-    /// During registration, this file is created the first time the node is
-    /// registered with the NNS. It signals the host VM that the HSM can safely
-    /// be ejected, if necessary.
-    #[serde(default = "eject_keycard_signal_file")]
-    pub eject_keycard_signal_file: PathBuf,
-
     /// When the orchestrator runs the first time, it will attempt to contact
     /// the NNS via those URLs to initialize the registry's local store.
     /// URLs should be provided coma-separated.
@@ -33,6 +27,13 @@ pub struct Config {
     /// up the initial state of the registry's local store.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nns_pub_key_pem: Option<PathBuf>,
+
+    /// If this Sec256k1 PEM is available, use it instead of the HSM.
+    pub node_operator_pem: Option<PathBuf>,
+
+    /// Specifies the type of node rewards that the node operator expects to receive.
+    /// Examples include "type3.1" or "type1", corresponding to entries in the node rewards table in the NNS.
+    pub node_reward_type: Option<String>,
 }
 
 // We allow for the operator to only specify some of the fields while the others
@@ -50,10 +51,6 @@ fn slot_default() -> String {
     Config::default().pkcs11_keycard_slot
 }
 
-fn eject_keycard_signal_file() -> PathBuf {
-    Config::default().eject_keycard_signal_file
-}
-
 /// These are pre-agreed default values.
 impl Default for Config {
     fn default() -> Self {
@@ -61,9 +58,10 @@ impl Default for Config {
             pkcs11_keycard_transport_pin: "358138".to_string(),
             pkcs11_keycard_key_id: "01".to_string(),
             pkcs11_keycard_slot: "0".to_string(),
-            eject_keycard_signal_file: PathBuf::from("/var/lib/dfinity-node/eject-hsm"),
             nns_url: None,
             nns_pub_key_pem: None,
+            node_operator_pem: None,
+            node_reward_type: None,
         }
     }
 }

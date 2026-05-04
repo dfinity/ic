@@ -4,8 +4,8 @@ use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
@@ -14,8 +14,8 @@ use ic_protobuf::registry::dc::v1::{
     MAX_DC_OWNER_LENGTH, MAX_DC_REGION_LENGTH,
 };
 use ic_registry_keys::make_data_center_record_key;
-use ic_registry_transport::{deserialize_get_value_response, serialize_get_value_request};
 use ic_registry_transport::{Error, Error::KeyNotPresent};
+use ic_registry_transport::{deserialize_get_value_response, serialize_get_value_request};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 
 /// Attempt to get a value from the Registry and return the error if one
@@ -40,11 +40,11 @@ async fn get_value_and_unwrap_error(registry: &Canister<'_>, key: &str) -> Error
 
 #[test]
 fn test_the_anonymous_user_cannot_add_or_remove_data_centers() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let mut registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;
@@ -96,7 +96,7 @@ fn test_the_anonymous_user_cannot_add_or_remove_data_centers() {
 
 #[test]
 fn test_a_canister_other_than_the_governance_canister_cannot_add_or_remove_data_centers() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // An attacker got a canister that is trying to pass for the Governance
         // canister...
         let attacker_canister = set_up_universal_canister(&runtime).await;
@@ -109,7 +109,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_add_or_remove_data_
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;
@@ -148,11 +148,11 @@ fn test_a_canister_other_than_the_governance_canister_cannot_add_or_remove_data_
 
 #[test]
 fn test_the_governance_canister_can_add_or_remove_data_centers() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;
@@ -222,7 +222,7 @@ fn test_the_governance_canister_can_add_or_remove_data_centers() {
         )
         .await;
 
-        assert_eq!(&dc.id, "AN1");
+        assert_eq!(&dc.id, "an1"); // id converted to lowercase
         assert_eq!(&dc.region, "BEL");
         assert_eq!(&dc.owner, "Alice");
         assert_eq!(
@@ -277,7 +277,7 @@ fn test_the_governance_canister_can_add_or_remove_data_centers() {
         .await;
 
         // original values are still there
-        assert_eq!(&dc.id, "AN1");
+        assert_eq!(&dc.id, "an1"); // id converted to lowercase
         assert_eq!(&dc.region, "BEL");
         assert_eq!(&dc.owner, "Alice");
         assert_eq!(
@@ -340,7 +340,7 @@ fn test_the_governance_canister_can_add_or_remove_data_centers() {
         )
         .await;
         // new values are there
-        assert_eq!(&dc.id, "AN1");
+        assert_eq!(&dc.id, "an1"); // id converted to lowercase
         assert_eq!(&dc.region, "Not BEL");
         assert_eq!(&dc.owner, "Bob");
         assert_eq!(

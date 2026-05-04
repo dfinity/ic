@@ -1,49 +1,118 @@
-System API Performance
-======================
+Execution Benchmarks
+====================
 
-See the latest System API performance report in [SYSTEM_API](SYSTEM_API.md)
+This directory contains Execution Environment benchmarks, along with scripts
+to run them and baseline results for comparing new changes.
 
-Updating the Results
---------------------
+Quick Start
+-----------
 
-The benchmarks now cover 100% of the System API calls, so let's keep it up to date:
+1. To run all benchmarks and compare them to the committed baseline:
 
-1. All the new System API calls should be covered with a benchmark.
-2. All the changes which might affect the performance should be benchmarked with `diff-old-vs-new.sh`
-3. The final report should be added to the repo and described below in this document.
+   ```sh
+   ./rs/execution_environment/benches/run-all-benchmarks.sh | tee summary.txt
+   ```
 
-For more details about System API complexity adjustments see [EXECUTE_UPDATE](EXECUTE_UPDATE.md)
+   The summary will be generated in the `summary.txt` file.
 
-2022-03-17: Normal `release` build profile vs `release-lto` build
------------------------------------------------------------------
+   To run only the Embedders Heap benchmarks for `wasm32` query reads:
 
-Average speedup of the local changes: +20% (throughput)
-Average speedup of the local changes: -18% (time)
+   ```sh
+   INCLUDE=heap FILTER=wasm32_query_read ./rs/execution_environment/benches/run-all-benchmarks.sh
+   ```
 
-2022-03-18: Adjust complexity of all the available System APIs
---------------------------------------------------------------
+2. To update the baseline:
 
-Average speedup of the local changes: +13% (throughput)
-Average speedup of the local changes: +0% (time)
+   ```sh
+   ls *.min | while read name; do cp -v ${name} rs/execution_environment/benches/baseline/${name%@*.min}.min; done
+   git add rs/execution_environment/benches/baseline/*
+   git commit -m "Update benches baseline"
+   ```
 
-The throughput is higher due to increased complexity:
+Which benchmarks to run?
+------------------------
 
-| API Type / System API Call                 | Remote, IPS | Local, IPS  | Speedup |
-| ------------------------------------------ | ----------- | ----------- | ------- |
-| callback/ic0_msg_reject_msg_copy()/1B      |        168M |        393M |   +133% |
-| callback/ic0_msg_reject_msg_copy()/10B     |        276M |        495M |    +79% |
-| update/ic0_msg_reject()*                   |       13.3K |       99.8K |   +650% |
-| update/ic0_call_simple()                   |       80.2M |       92.6M |    +15% |
-| update/call_new+ic0_call_data_append()/1B  |       62.8M |        118M |    +87% |
-| update/call_new+ic0_call_data_append()/8K  |       17.2G |       17.1G |     -1% |
+The Execution Environment benchmarks cover the following:
 
-While the actual time executing the system calls is +- the same as there were no semantic changes:
+1. Embedders Compilation: `//rs/embedders:compilation_bench`
 
-| API Type / System API Call                 | Remote Time | Local Time  | Speedup |
-| ------------------------------------------ | ----------- | ----------- | ------- |
-| callback/ic0_msg_reject_msg_copy()/1B      |        83ms |      86.4ms |     +4% |
-| callback/ic0_msg_reject_msg_copy()/10B     |      83.1ms |      86.8ms |     +4% |
-| update/ic0_msg_reject()*                   |       224us |       230us |     +2% |
-| update/ic0_call_simple()                   |       1.50s |       1.52s |     +1% |
-| update/call_new+ic0_call_data_append()/1B  |       350ms |       355ms |     +1% |
-| update/call_new+ic0_call_data_append()/8K  |       476ms |       479ms |     +0% |
+   Benchmarks for compiling and running synthetic and real-world canisters.
+   Useful for assessing compilation-related changes and real-world application performance.
+
+2. Embedders Heap: `//rs/embedders:heap_bench`
+
+   Benchmarks for heavy memory operations on the heap.
+   Useful for assessing memory subsystem changes.
+
+3. Embedders Stable Memory: `//rs/embedders:stable_memory_bench`
+
+   Benchmarks for heavy stable memory operations.
+   Useful for assessing stable memory changes.
+
+4. System API benchmarks: `//rs/execution_environment:execute_update_bench`, etc.
+
+   Several benchmark suites to assess System API performance in various execution modes.
+   Useful for assessing System API-related changes.
+
+5. Wasm Instructions: `//rs/execution_environment:wasm_instructions_bench`
+
+   Benchmarks to assign a cost for each Wasm instruction.
+   Should be run after every wasmtime upgrade and when adding new Wasm instructions.
+
+6. Load simulator canister benchmarks: `//rs/execution_environment:load_simulator_canisters_bench`
+
+   Simulates load on a subnet by running many Rust `load_simulator_canister`s.
+   Benchmark's throughput roughly corresponds to the subnet finalization rate.
+   Useful for assessing scheduler changes, canister sandbox improvements, etc.
+
+All of these are primarily micro-benchmarks, allowing for quick development iterations.
+However, it's important to run final benchmarks on a testnet.
+
+The [subnet-load-tester](https://github.com/dfinity/subnet-load-tester) can be used
+to run scenarios on a production-like testnet.
+
+Where to run the benchmarks?
+----------------------------
+
+Both the baseline results and new change benchmarks should be run on the same host.
+The benchmark scripts enforce this and will not compare results produced on
+different hosts.
+
+The best candidate for running the benchmarks is the `zh1-spm34` host.
+
+Running the benchmarks in a dev container is also supported:
+
+   ```sh
+   ./ci/container/container-run.sh ./rs/execution_environment/benches/run-all-benchmarks.sh
+   ```
+
+Adding New Benchmarks
+---------------------
+
+1. Create a new benchmark and test it with `bazel run ...`.
+
+2. To test the new benchmark in every CI pipeline run:
+
+   ```Starlark
+   rust_ic_bench(
+      name = "my_new_bench",
+      test_name = "my_new_bench_test",
+      test_timeout = "long", # default to "moderate"
+      [...]
+   )
+   ```
+
+   Note: a single benchmark iteration should run in a reasonable amount of time:
+
+   ```sh
+   bazel run //rs/execution_environment:my_new_bench -- --test
+   ```
+
+3. To include the new benchmark in the comparison:
+
+   Edit the script: `rs/execution_environment/benches/run-all-benchmarks.sh`
+
+4. To run the benchmark nightly in CI and track the results in Grafana:
+
+   Edit the file: `.github/workflows/schedule-rust-bench.yml`
+   Add a Grafana dashboard: [example PR](https://github.com/dfinity-ops/k8s/pull/1100)

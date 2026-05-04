@@ -1,0 +1,48 @@
+load("@rules_rust//rust:defs.bzl", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/rust_canisters/canister_log",
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-timers",
+]
+
+MACRO_DEPENDENCIES = []
+
+TEST_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:candid_parser",
+]
+
+ALIASES = {}
+
+rust_canister(
+    name = "mock_treasury_manager",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    crate_features = ["test"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = "//rs/sns/treasury_manager:treasury_manager.did",
+    deps = DEPENDENCIES + [
+        "//rs/sns/treasury_manager",
+    ],
+)
+
+rust_test(
+    name = "treasury_manager_candid_api_test",
+    srcs = ["src/main.rs"],
+    data = [
+        "//rs/sns/treasury_manager:treasury_manager.did",
+    ],
+    env = {
+        "TREASURY_MANAGER_DID_PATH": "$(rootpath //rs/sns/treasury_manager:treasury_manager.did)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + TEST_DEPENDENCIES + [
+        "//rs/sns/treasury_manager",
+    ],
+)

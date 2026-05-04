@@ -1,0 +1,27 @@
+load("//bazel/tlaplus:defs.bzl", "sany_test", "tla_module", "tlc_test")
+
+tla_module(
+    name = "tla_hash",
+    src = "TLA_Hash.tla",
+)
+
+tla_module(
+    name = "spec",
+    src = "Ck_BTC.tla",
+    deps = [
+        # Keep sorted.
+        ":tla_hash",
+    ],
+)
+
+tlc_test(
+    name = "test",
+    config = "Ck_BTC.cfg",
+    spec = ":spec",
+    tags = ["manual"],
+)
+
+sany_test(
+    name = "sany",
+    module = ":spec",
+)

@@ -1,16 +1,23 @@
-load("//bazel:defs.bzl", "gzip_compress")
-load("//bazel:canisters.bzl", "optimized_canister")
-load("//bazel:transitions.bzl", "malicious_binary", "opt_debug_binary")
-load("//gitlab-ci/src/artifacts:collect.bzl", "collect_artifacts")
-load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
+load("@bazel_skylib//rules:common_settings.bzl", "string_setting")
+load("@gazelle//:def.bzl", "gazelle")
+load("@rules_python//python:pip.bzl", "compile_pip_requirements")
+load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 
 package(default_visibility = ["//visibility:public"])
 
+# WARNING! .git is the directory, not a regular file! only consume it in your rules if you know how exactly bazel works and understand implications!
+# The mainnet routing table can be updated using:
+# ```
+# bazel run //rs/registry/admin:ic-admin -- get-routing-table --json --registry-version "$(bazel run //rs/registry/admin:ic-admin -- get-registry-version)" > ./mainnet-routing-table.json
+# ```
 exports_files([
-    ".rclone.conf",
+    ".git",
+    "buf.yaml",
     "clippy.toml",
     "rustfmt.toml",
-    "WORKSPACE.bazel",
+    "mainnet-canister-revisions.json",
+    "mainnet-icos-images.bzl",
+    "mainnet-routing-table.json",
 ])
 
 alias(
@@ -18,14 +25,19 @@ alias(
     actual = "//bazel:buildifier",
 )
 
-test_suite(
-    name = "precommit",
-    tests = ["//bazel:buildifier_test"],
+alias(
+    name = "ruff-fix",
+    actual = "//pre-commit:ruff-fix",
 )
 
 alias(
-    name = "bazelifier",
-    actual = "//rs/bazelifier",
+    name = "protobuf-format",
+    actual = "//pre-commit:buf-fix",
+)
+
+alias(
+    name = "shfmt-format",
+    actual = "//pre-commit:shfmt-fix",
 )
 
 alias(
@@ -33,113 +45,264 @@ alias(
     actual = "@rules_rust//:rustfmt",
 )
 
-BINARIES = {
-    "boundary-node-control-plane": "//rs/boundary_node/control_plane:boundary-node-control-plane",
-    "boundary-node-prober": "//rs/boundary_node/prober:boundary-node-prober",
-    "canister_sandbox": "//rs/canister_sandbox",
-    "denylist-updater": "//rs/boundary_node/denylist_updater:denylist-updater",
-    "e2e-test-driver": "//rs/scenario_tests:e2e-test-driver",
-    "ic-admin": "//rs/registry/admin:ic-admin",
-    "ic-balance-exporter": "//rs/boundary_node/ic_balance_exporter:ic-balance-exporter",
-    "ic-btc-adapter": "//rs/bitcoin/adapter:ic-btc-adapter",
-    "ic-canister-http-adapter": "//rs/canister_http/adapter:ic-canister-http-adapter",
-    "ic-consensus-pool-util": "//rs/artifact_pool:ic-consensus-pool-util",
-    "ic-crypto-csp": "//rs/crypto:ic-crypto-csp",
-    "ic-nns-init": "//rs/nns/init:ic-nns-init",
-    "ic-p8s-sd": "//rs/ic_p8s_service_discovery:ic-p8s-sd",
-    "ic-p8s-service-discovery": "//rs/ic_p8s_service_discovery:ic-p8s-service-discovery",
-    "ic-prep": "//rs/prep:ic-prep",
-    "ic-recovery": "//rs/recovery:ic-recovery",
-    "ic-regedit": "//rs/registry/regedit:ic-regedit",
-    "ic-registry-replicator": "//rs/orchestrator/registry_replicator:ic-registry-replicator",
-    "ic-replay": "//rs/replay:ic-replay",
-    "ic-rosetta-api": "//rs/rosetta-api:ic-rosetta-api",
-    "ic-workload-generator": "//rs/workload_generator:ic-workload-generator",
-    "icx-proxy": "//rs/boundary_node/icx_proxy:icx-proxy",
-    "orchestrator": "//rs/orchestrator",
-    "prod-test-driver": "//rs/tests:prod-test-driver",
-    "replica": "//rs/replica",
-    "sandbox_launcher": "//rs/canister_sandbox/sandbox_launcher",
-    "sns": "//rs/sns/cli:sns",
-    "state-tool": "//rs/state_tool:state-tool",
-    "system-tests": "//rs/tests:system-tests",
-    "vsock_agent": "//rs/guestos_vsock_agent:vsock_agent",
-}
-
-malicious_binary(
-    name = "malicious_replica",
-    binary = "//rs/replica",
+alias(
+    name = "gen_rust_project",
+    actual = "@rules_rust//tools/rust_analyzer:gen_rust_project",
 )
 
-[opt_debug_binary(
-    name = name,
-    binary = BINARIES[name],
-) for name in BINARIES]
-
-filegroup(
-    name = "binaries",
-    srcs = [name for name in BINARIES],
+# See https://github.com/bazelbuild/bazel-gazelle#running-gazelle-with-bazel
+# gazelle:prefix github.com/dfinity/ic
+# gazelle:proto disable
+gazelle(
+    name = "gazelle",
 )
 
-optimized_canister(
-    name = "ledger_archive_canister",
-    wasm = "//rs/rosetta-api/ledger_canister:ledger-archive-node-canister-wasm",
-)
-
-CANISTERS = {
-    "cycles-minting-canister": "//rs/nns/cmc:cycles-minting-canister",
-    "genesis-token-canister": "//rs/nns/gtc:genesis-token-canister",
-    "governance-canister": "//rs/nns/governance:governance-canister",
-    "icrc1-archive-canister": "//rs/rosetta-api/icrc1/archive:archive_canister",
-    "icrc1-index-canister": "//rs/rosetta-api/icrc1/index:index_canister",
-    "icrc1-ledger-canister": "//rs/rosetta-api/icrc1/ledger:ledger_canister",
-    "ledger-canister": "//rs/rosetta-api/ledger_canister:ledger_canister",
-    "ledger-canister__notify-method": "//rs/rosetta-api/ledger_canister:ledger-canister-wasm-notify-method",
-    "nns-ui-canister": "//rs/nns/nns-ui:nns-ui-canister",
-    "registry-canister": "//rs/registry/canister:registry-canister",
-    "root-canister": "//rs/nns/handlers/root:root-canister",
-    "sns-governance-canister": "//rs/sns/governance:sns-governance-canister",
-    "sns-root-canister": "//rs/sns/root:sns-root-canister",
-    "sns-swap-canister": "//rs/sns/swap:sns-swap-canister",
-    "xnet-test-canister": "//rs/rust_canisters/xnet_test:xnet-test-canister",
-}
-
-[
-    gzip_compress(
-        name = name + ".wasm.gz",
-        srcs = [target],
-    )
-    for (name, target) in CANISTERS.items()
-]
-
-filegroup(
-    name = "sdk",
-    srcs = [
-        "//rs/bitcoin/adapter:ic-btc-adapter",
-        "//rs/canister_http/adapter:ic-canister-http-adapter",
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
-        "//rs/replica",
-        "//rs/starter:ic-starter",
+gazelle(
+    name = "gazelle-update-repos",
+    args = [
+        "-from_file=go.mod",
+        "-to_macro=go_deps.bzl%go_dependencies",
+        "-prune",
     ],
+    command = "update-repos",
 )
 
-collect_artifacts(
-    name = "collect_sdk",
-    srcs = [":sdk"],
+alias(
+    name = "gobin",
+    actual = "@rules_go//go",
+    visibility = ["//visibility:public"],
 )
 
-upload_artifacts(
-    name = "upload_sdk",
-    inputs = [":collect_sdk"],
-    # The actual list is on https://github.com/bazelbuild/platforms
-    remote_subdir = "sdk-release-bazel/" + select({
-        "@platforms//cpu:x86_64": "x86_64",
-        "@platforms//cpu:arm64": "arm64",
-        "//conditions:default": "unknown",
-    }) + "-" + select({
-        "@platforms//os:osx": "macos",
-        "@platforms//os:linux": "linux",
-        "//conditions:default": "unknown",
+# Builds python dependencies. To update the lockfile:
+# $ bazel run //:python-requirements.update
+compile_pip_requirements(
+    name = "python-requirements",
+    timeout = "moderate",
+    src = "requirements.in",
+    requirements_txt = "requirements.txt",
+)
+
+test_suite(
+    name = "single_large_node",  # the "_test" postfix is dropped on purpose since this target is meant for interactive use.
+    tags = ["manual"],
+    tests = ["//rs/tests/testnets:single_large_node"],
+)
+
+### Bitcoind
+
+alias(
+    name = "bitcoind",
+    actual = select({
+        "@bazel_tools//src/conditions:darwin_arm64": "@bitcoin_core_darwin_arm64//:bitcoind",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@bitcoin_core_darwin_x86//:bitcoind",
+        "@bazel_tools//src/conditions:linux_aarch64": "@bitcoin_core_linux_aarch64//:bitcoind",
+        "@bazel_tools//src/conditions:linux_x86_64": "@bitcoin_core_linux_x86//:bitcoind",
     }),
+)
+
+genrule(
+    name = "dogecoind_stub",
+    outs = ["dogecoind_stub.txt"],
+    cmd = "echo 'Not supported on this platform.' > $@",
+)
+
+alias(
+    name = "dogecoind",
+    actual = select({
+        "@bazel_tools//src/conditions:linux_x86_64": "@dogecoin_core_linux_x86//:dogecoind",
+        "//conditions:default": "//:dogecoind_stub",
+    }),
+)
+
+### ruff, python linter & formatter
+
+alias(
+    name = "ruff",
+    actual = select({
+        "@bazel_tools//src/conditions:linux_x86_64": "@ruff-x86_64-linux//:ruff",
+        "@bazel_tools//src/conditions:darwin_arm64": "@ruff-aarch64-darwin//:ruff",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@ruff-x86_64-darwin//:ruff",
+    }),
+)
+
+### rosetta-cli
+
+alias(
+    name = "rosetta-cli",
+    actual = select({
+        "@bazel_tools//src/conditions:linux_x86_64": "@rosetta-cli-x86_64-linux//:rosetta-cli-0.10.3-linux-amd64",
+        "@bazel_tools//src/conditions:darwin_arm64": "@rosetta-cli-aarch64-darwin//:rosetta-cli-0.10.3-darwin-arm64",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@rosetta-cli-x86_64-darwin//:rosetta-cli-0.10.3-darwin-amd64",
+    }),
+)
+
+### rclone, used for uploading artifacts to S3-compatible storage
+
+alias(
+    name = "rclone",
+    actual = select({
+        "@platforms//os:osx": "@rclone-x86_64-darwin//:rclone",  # No arm64 build for this version, use amd64 for now.
+        "@bazel_tools//src/conditions:linux_x86_64": "@rclone-x86_64-linux//:rclone",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
+### trivy, used by ic-os for vulnerability scanning
+
+alias(
+    name = "trivy",
+    actual = select({
+        "@bazel_tools//src/conditions:linux_x86_64": "@trivy-x86_64-linux//:trivy",
+        "@bazel_tools//src/conditions:darwin_arm64": "@trivy-aarch64-darwin//:trivy",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@trivy-x86_64-darwin//:trivy",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
+### dfx
+
+alias(
+    name = "dfx",
+    actual = select({
+        "@bazel_tools//src/conditions:darwin_x86_64": "@dfx-x86_64-darwin//:dfx",
+        "@bazel_tools//src/conditions:darwin_arm64": "@dfx-aarch64-darwin//:dfx",
+        "@bazel_tools//src/conditions:linux_x86_64": "@dfx-x86_64-linux//:dfx",
+        "@bazel_tools//src/conditions:linux_aarch64": "@dfx-aarch64-linux//:dfx",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
+### pebble & pebble DNS, used in Boundary Nodes ACME testing
+
+alias(
+    name = "pebble",
+    actual = select({
+        "@bazel_tools//src/conditions:darwin_x86_64": "@pebble-x86_64-darwin//:pebble-bin",
+        "@bazel_tools//src/conditions:darwin_arm64": "@pebble-aarch64-darwin//:pebble-bin",
+        "@bazel_tools//src/conditions:linux_x86_64": "@pebble-x86_64-linux//:pebble-bin",
+        "@bazel_tools//src/conditions:linux_aarch64": "@pebble-aarch64-linux//:pebble-bin",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
+alias(
+    name = "pebble-challtestsrv",
+    actual = select({
+        "@bazel_tools//src/conditions:darwin_x86_64": "@pebble-challtestsrv-x86_64-darwin//:pebble-challtestsrv-bin",
+        "@bazel_tools//src/conditions:darwin_arm64": "@pebble-challtestsrv-aarch64-darwin//:pebble-challtestsrv-bin",
+        "@bazel_tools//src/conditions:linux_x86_64": "@pebble-challtestsrv-x86_64-linux//:pebble-challtestsrv-bin",
+        "@bazel_tools//src/conditions:linux_aarch64": "@pebble-challtestsrv-aarch64-linux//:pebble-challtestsrv-bin",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
+### didc, used in fuzz testing
+
+alias(
+    name = "didc",
+    actual = select({
+        "@platforms//os:osx": "@didc-x86_64-darwin//file:didc",  # No arm64 build for this version, use amd64 for now.
+        "@bazel_tools//src/conditions:linux_x86_64": "@didc-x86_64-linux//file:didc",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
+### shfmt, used to format bash code
+
+alias(
+    name = "shfmt",
+    actual = select({
+        "@bazel_tools//src/conditions:linux_x86_64": "@shfmt-x86_64-linux//file:shfmt",
+        "@bazel_tools//src/conditions:darwin_arm64": "@shfmt-aarch64-darwin//file:shfmt",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@shfmt-x86_64-darwin//file:shfmt",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
+### Pocket IC
+
+# The pocket-ic server binary. Use this as a test dependency if the test
+# does not require a specific pocket-ic version (see ":pocket-ic-server-variant"
+# for details).
+# By default returns the pocket-ic server from the source tree to ensure
+# consistency within the source tree. See 'pocket_ic_mainnet_test' for
+# overrides.
+alias(
+    name = "pocket-ic-server",
+    actual = select({
+        ":pocket-ic-server-variant-mainnet": "//:pocket-ic-mainnet",
+        ":pocket-ic-server-variant-head": "//rs/pocket_ic_server:pocket-ic-server",
+        "//conditions:default": "//rs/pocket_ic_server:pocket-ic-server",
+    }),
+)
+
+# A setting to switch between different variants of pocket-ic. The
+# default pocket-ic variant/version (head) is the one as in the
+# source tree.
+string_setting(
+    name = "pocket-ic-server-variant",
+    build_setting_default = "head",
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "pocket-ic-server-variant-head",
+    flag_values = {
+        ":pocket-ic-server-variant": "head",
+    },
+)
+
+# A "mainnet" variant of the pocket-ic server which represents a
+# released version of pocket-ic.
+config_setting(
+    name = "pocket-ic-server-variant-mainnet",
+    flag_values = {
+        ":pocket-ic-server-variant": "mainnet",
+    },
+)
+
+# The pocket-ic as released; use this for tests that need to ensure consistency
+# with a release pocket-ic/replica.
+genrule(
+    name = "pocket-ic-mainnet",
+    srcs = ["@pocket-ic-mainnet-gz//file"],
+    outs = ["pocket-ic"],
+    cmd = "gunzip -c $< > $@",
+)
+
+# Upload artifacts to the CDN
+upload_artifacts(
+    name = "upload-artifacts",
+    testonly = True,
+    inputs = [
+        "//publish/binaries:bundle",
+    ] + select({
+        "@platforms//os:osx": [],
+        "//conditions:default": [
+            "//publish/binaries:bundle-legacy",  # avoid overwriting legacy artifacts
+            "//publish/canisters:bundle",
+            "//ic-os/guestos/envs/prod:bundle-update",
+            "//ic-os/guestos/envs/dev:bundle-update",  # used by nested tests
+            "//ic-os/hostos/envs/prod:bundle-update",
+            "//ic-os/hostos/envs/dev:bundle-update",  # used by nested tests
+            "//ic-os/setupos/envs/prod:bundle",
+            "//ic-os/setupos/envs/dev:bundle",  # used by nested tests
+            "//ic-os/guestos/envs/recovery:bundle-update",  # used for manual recovery
+        ],
+    }),
+    visibility = ["//visibility:public"],
+)
+
+# Artifact uploader that can be run with `bazel run ... -- BUNDLE...`
+upload_artifacts(
+    name = "artifact-uploader",
+)
+
+# Platform that can be used on arm64-darwin to cross compile to x86_64-darwin
+platform(
+    name = "macos-intel",
+    constraint_values = [
+        "@platforms//os:osx",
+        "@platforms//cpu:x86_64",
+    ],
 )

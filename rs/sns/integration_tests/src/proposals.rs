@@ -1,36 +1,39 @@
-use canister_test::Canister;
-use ic_icrc1::Account;
-use ic_ledger_core::Tokens;
-use std::collections::BTreeMap;
-use std::time::{SystemTime, UNIX_EPOCH};
-
+use canister_test::{Canister, Runtime};
 use dfn_candid::{candid, candid_one};
 use ic_canister_client_sender::Sender;
+use ic_ledger_core::Tokens;
+use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS, i2d};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
-use ic_sns_governance::pb::v1::get_proposal_response::Result::Error;
-use ic_sns_governance::pb::v1::get_proposal_response::Result::Proposal as ResponseProposal;
-use ic_sns_governance::pb::v1::governance_error::ErrorType;
-use ic_sns_governance::pb::v1::governance_error::ErrorType::PreconditionFailed;
-use ic_sns_governance::pb::v1::manage_neuron_response::Command;
-use ic_sns_governance::pb::v1::proposal::Action;
-use ic_sns_governance::pb::v1::{
-    Ballot, GetProposal, GetProposalResponse, ListProposals, ListProposalsResponse,
-    ManageNeuronResponse, Motion, NervousSystemParameters, NeuronId, NeuronPermissionList,
-    NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
-    ProposalRewardStatus, Vote, VotingRewardsParameters,
+use ic_sns_governance::{
+    pb::v1::{
+        Ballot, GetProposal, GetProposalResponse, ListProposals, ListProposalsResponse,
+        ManageNeuronResponse, Motion, NervousSystemParameters, NeuronId, NeuronPermissionList,
+        NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
+        ProposalRewardStatus, RewardEvent, Vote, VotingRewardsParameters,
+        get_proposal_response::Result::{Error, Proposal as ResponseProposal},
+        governance_error::ErrorType::{self, PreconditionFailed},
+        manage_neuron_response::Command,
+        proposal::Action,
+    },
+    proposal::{
+        PROPOSAL_MOTION_TEXT_BYTES_MAX, PROPOSAL_SUMMARY_BYTES_MAX, PROPOSAL_TITLE_BYTES_MAX,
+        PROPOSAL_URL_CHAR_MAX,
+    },
+    reward,
 };
-use ic_sns_governance::proposal::{
-    PROPOSAL_MOTION_TEXT_BYTES_MAX, PROPOSAL_SUMMARY_BYTES_MAX, PROPOSAL_TITLE_BYTES_MAX,
-    PROPOSAL_URL_CHAR_MAX,
+use ic_sns_test_utils::{
+    itest_helpers::{
+        SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo, state_machine_test_on_sns_subnet,
+    },
+    now_seconds,
 };
-use ic_sns_governance::types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
-use ic_sns_test_utils::itest_helpers::{
-    local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo,
-};
-use ic_sns_test_utils::now_seconds;
+use icrc_ledger_types::icrc1::account::Account;
 use on_wire::bytes;
+use std::{collections::BTreeMap, time::UNIX_EPOCH};
+
+const EXPECTED_MAX_BALLOT_AGE: f64 = 60.0;
 
 const MOTION_PROPOSAL_ACTION_TYPE: u64 = 1;
 
@@ -44,7 +47,7 @@ const VOTING_REWARDS_PARAMETERS: VotingRewardsParameters = VotingRewardsParamete
 /// Assert that Motion proposals can be submitted, voted on, and executed
 #[test]
 fn test_motion_proposal_execution() {
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -58,7 +61,7 @@ fn test_motion_proposal_execution() {
             };
 
             let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-                .with_ledger_account(user.get_principal_id().into(), alloc)
+                .with_ledger_account(user.get_principal_id().0.into(), alloc)
                 .with_nervous_system_parameters(system_params.clone())
                 .build();
 
@@ -130,7 +133,7 @@ fn test_motion_proposal_execution() {
 /// Assert that ManageNervousSystemParameters proposals can be submitted, voted on, and executed
 #[test]
 fn test_manage_nervous_system_parameters_proposal_execution() {
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -144,7 +147,7 @@ fn test_manage_nervous_system_parameters_proposal_execution() {
             };
 
             let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-                .with_ledger_account(user.get_principal_id().into(), alloc)
+                .with_ledger_account(user.get_principal_id().0.into(), alloc)
                 .with_nervous_system_parameters(sys_params)
                 .build();
 
@@ -220,14 +223,7 @@ fn test_manage_nervous_system_parameters_proposal_execution() {
 
 #[test]
 fn test_voting_with_three_neurons_with_the_same_stake() {
-    fn now_seconds() -> f64 {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs_f64()
-    }
-
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with three users (each will create its own neuron).
             let user_1 = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -244,9 +240,9 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
             };
 
             let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-                .with_ledger_account(user_1.get_principal_id().into(), tokens)
-                .with_ledger_account(user_2.get_principal_id().into(), tokens)
-                .with_ledger_account(user_3.get_principal_id().into(), tokens)
+                .with_ledger_account(user_1.get_principal_id().0.into(), tokens)
+                .with_ledger_account(user_2.get_principal_id().0.into(), tokens)
+                .with_ledger_account(user_3.get_principal_id().0.into(), tokens)
                 .with_nervous_system_parameters(system_params)
                 .build();
 
@@ -323,7 +319,7 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
 
             // Inspect the ballots.
             let ballots = &proposal.ballots;
-            assert_eq!(ballots.len(), 3, "{:?}", ballots);
+            assert_eq!(ballots.len(), 3, "{ballots:?}");
             for (neuron_id, accept) in [
                 (user_1_neuron_id, true),
                 (user_2_neuron_id, false),
@@ -334,18 +330,22 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
                 assert_eq!(ballot.vote, vote as i32);
 
                 // Inspect ballot ages.
-                let age_seconds = now_seconds() - ballot.cast_timestamp_seconds as f64;
+                let now_seconds = match &runtime {
+                    Runtime::StateMachine(state_machine) => state_machine
+                        .time()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs_f64(),
+                    _ => unreachable!("expected StateMachine runtime"),
+                };
+                let age_seconds = now_seconds - ballot.cast_timestamp_seconds as f64;
                 assert!(
                     0.0 < age_seconds,
-                    "age_seconds = {}. ballot = {:?}",
-                    age_seconds,
-                    ballot
+                    "age_seconds = {age_seconds}. ballot = {ballot:?}"
                 );
                 assert!(
-                    age_seconds < 30.0,
-                    "age_seconds = {}. ballot = {:?}",
-                    age_seconds,
-                    ballot
+                    age_seconds < EXPECTED_MAX_BALLOT_AGE,
+                    "age_seconds = {age_seconds}. ballot = {ballot:?}"
                 );
             }
 
@@ -370,13 +370,11 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
                 let epsilon = 10.0e-9;
                 assert!(
                     (2.0 / 3.0 - approval_rating).abs() < epsilon,
-                    "{:?}",
-                    proposal
+                    "{proposal:?}"
                 );
                 assert!(
                     (1.0 / 3.0 - disapproval_rating).abs() < epsilon,
-                    "{:?}",
-                    proposal
+                    "{proposal:?}"
                 );
             }
 
@@ -387,14 +385,14 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
 
 #[test]
 fn test_bad_proposal_id_candid_type() {
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
             let alloc = Tokens::from_tokens(1000).unwrap();
 
             let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-                .with_ledger_account(user.get_principal_id().into(), alloc)
+                .with_ledger_account(user.get_principal_id().0.into(), alloc)
                 .build();
             let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
 
@@ -417,14 +415,14 @@ fn test_bad_proposal_id_candid_type() {
 
 #[test]
 fn test_bad_proposal_id_candid_encoding() {
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
             let alloc = Tokens::from_tokens(1000).unwrap();
 
             let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-                .with_ledger_account(user.get_principal_id().into(), alloc)
+                .with_ledger_account(user.get_principal_id().0.into(), alloc)
                 .build();
             let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
 
@@ -433,8 +431,12 @@ fn test_bad_proposal_id_candid_encoding() {
                 .query_("get_proposal", bytes, b"This is not valid candid!".to_vec())
                 .await;
 
+            let expected_error = "Cannot parse header";
             match res {
-                Err(e) => assert!(e.contains("Deserialization Failed")),
+                Err(e) => assert!(
+                    e.contains(expected_error),
+                    "Expected error string \"{expected_error}\" not present in actual error. Error was: {e:?}"
+                ),
                 Ok(_) => panic!("get_proposal should fail to deserialize"),
             };
             Ok(())
@@ -444,14 +446,14 @@ fn test_bad_proposal_id_candid_encoding() {
 
 #[test]
 fn test_non_existent_proposal_id_is_not_a_bad_input() {
-    local_test_on_sns_subnet(|runtime| {
+    state_machine_test_on_sns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
             let alloc = Tokens::from_tokens(1000).unwrap();
 
             let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-                .with_ledger_account(user.get_principal_id().into(), alloc)
+                .with_ledger_account(user.get_principal_id().0.into(), alloc)
                 .build();
             let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
 
@@ -479,7 +481,7 @@ fn test_non_existent_proposal_id_is_not_a_bad_input() {
 
 #[test]
 fn test_list_proposals_determinism() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user.
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -491,7 +493,7 @@ fn test_list_proposals_determinism() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(user.get_principal_id().into(), alloc)
+            .with_ledger_account(user.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params)
             .build();
         let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
@@ -507,9 +509,9 @@ fn test_list_proposals_determinism() {
         let mut proposals = vec![];
         for i in 0..10 {
             proposals.push(Proposal {
-                title: format!("Test Motion proposal-{}", i),
+                title: format!("Test Motion proposal-{i}"),
                 action: Some(Action::Motion(Motion {
-                    motion_text: format!("Motion-{}", i),
+                    motion_text: format!("Motion-{i}"),
                 })),
                 ..Default::default()
             });
@@ -592,7 +594,7 @@ async fn list_all_proposals_through_pagination(
 
 #[test]
 fn test_proposal_format_validation() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user.
         let user = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
 
@@ -605,7 +607,7 @@ fn test_proposal_format_validation() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(user.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(user.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params)
             .build();
         let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
@@ -693,7 +695,7 @@ fn test_proposal_format_validation() {
 
 #[test]
 fn test_neuron_configuration_needed_for_proposals() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user.
         let user = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -712,7 +714,7 @@ fn test_neuron_configuration_needed_for_proposals() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(user.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(user.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params)
             .build();
 
@@ -813,7 +815,7 @@ fn test_neuron_configuration_needed_for_proposals() {
 
 #[test]
 fn test_ballots_set_for_multiple_neurons() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let alloc = Tokens::from_tokens(1000).unwrap();
 
         let params = NervousSystemParameters {
@@ -833,7 +835,7 @@ fn test_ballots_set_for_multiple_neurons() {
         let account_identifiers = users
             .iter()
             .map(|user| Account {
-                owner: user.sender.get_principal_id(),
+                owner: user.sender.get_principal_id().0,
                 subaccount: None,
             })
             .collect();
@@ -902,7 +904,7 @@ fn test_ballots_set_for_multiple_neurons() {
 
 #[test]
 fn test_vote_on_non_existent_proposal() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user.
         let user = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -915,7 +917,7 @@ fn test_vote_on_non_existent_proposal() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(user.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(user.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params)
             .build();
 
@@ -935,10 +937,7 @@ fn test_vote_on_non_existent_proposal() {
                 panic!("Registering vote on non-existent proposal should fail")
             }
             Command::Error(err) => err,
-            response => panic!(
-                "Unexpected response when registering a vote: {:?}",
-                response
-            ),
+            response => panic!("Unexpected response when registering a vote: {response:?}"),
         };
 
         assert_eq!(expected_error.error_type, ErrorType::NotFound as i32);
@@ -949,7 +948,7 @@ fn test_vote_on_non_existent_proposal() {
 
 #[test]
 fn test_ineligible_neuron_voting_fails() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user who will propose and a user who will vote
         let proposer = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let voter = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
@@ -963,8 +962,8 @@ fn test_ineligible_neuron_voting_fails() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(proposer.sender.get_principal_id().into(), alloc)
-            .with_ledger_account(voter.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(proposer.sender.get_principal_id().0.into(), alloc)
+            .with_ledger_account(voter.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params)
             .build();
 
@@ -1005,7 +1004,7 @@ fn test_ineligible_neuron_voting_fails() {
 
 #[test]
 fn test_repeated_voting_fails() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let yes_voter = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let no_voter = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
 
@@ -1019,8 +1018,8 @@ fn test_repeated_voting_fails() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(yes_voter.sender.get_principal_id().into(), alloc)
-            .with_ledger_account(no_voter.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(yes_voter.sender.get_principal_id().0.into(), alloc)
+            .with_ledger_account(no_voter.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params)
             .build();
 
@@ -1105,7 +1104,7 @@ fn test_repeated_voting_fails() {
 //          D
 #[test]
 fn test_following_and_voting() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let a = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let b = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
         let c = UserInfo::new(Sender::from_keypair(&TEST_USER3_KEYPAIR));
@@ -1121,10 +1120,10 @@ fn test_following_and_voting() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(a.sender.get_principal_id().into(), alloc)
-            .with_ledger_account(b.sender.get_principal_id().into(), alloc)
-            .with_ledger_account(c.sender.get_principal_id().into(), alloc)
-            .with_ledger_account(d.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(a.sender.get_principal_id().0.into(), alloc)
+            .with_ledger_account(b.sender.get_principal_id().0.into(), alloc)
+            .with_ledger_account(c.sender.get_principal_id().0.into(), alloc)
+            .with_ledger_account(d.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params)
             .build();
 
@@ -1233,7 +1232,7 @@ fn test_following_and_voting() {
 //   B <- C
 #[test]
 fn test_following_and_voting_from_non_proposer() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let a = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let b = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
         let c = UserInfo::new(Sender::from_keypair(&TEST_USER3_KEYPAIR));
@@ -1248,9 +1247,9 @@ fn test_following_and_voting_from_non_proposer() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(a.sender.get_principal_id().into(), alloc)
-            .with_ledger_account(b.sender.get_principal_id().into(), alloc)
-            .with_ledger_account(c.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(a.sender.get_principal_id().0.into(), alloc)
+            .with_ledger_account(b.sender.get_principal_id().0.into(), alloc)
+            .with_ledger_account(c.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params)
             .build();
 
@@ -1324,7 +1323,7 @@ fn test_following_and_voting_from_non_proposer() {
 //   C
 #[test]
 fn test_following_multiple_neurons_reach_majority() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         let a = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let b = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
         let c = UserInfo::new(Sender::from_keypair(&TEST_USER3_KEYPAIR));
@@ -1340,10 +1339,10 @@ fn test_following_multiple_neurons_reach_majority() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(a.sender.get_principal_id().into(), alloc)
-            .with_ledger_account(b.sender.get_principal_id().into(), alloc)
-            .with_ledger_account(c.sender.get_principal_id().into(), alloc)
-            .with_ledger_account(d.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(a.sender.get_principal_id().0.into(), alloc)
+            .with_ledger_account(b.sender.get_principal_id().0.into(), alloc)
+            .with_ledger_account(c.sender.get_principal_id().0.into(), alloc)
+            .with_ledger_account(d.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params)
             .build();
 
@@ -1435,7 +1434,7 @@ fn test_following_multiple_neurons_reach_majority() {
 
 #[test]
 fn test_proposal_rejection() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user who will propose and a user who will vote
         let proposer = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let voter = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
@@ -1449,8 +1448,8 @@ fn test_proposal_rejection() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(proposer.sender.get_principal_id().into(), alloc)
-            .with_ledger_account(voter.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(proposer.sender.get_principal_id().0.into(), alloc)
+            .with_ledger_account(voter.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params.clone())
             .build();
 
@@ -1534,7 +1533,7 @@ fn assert_ballot_is_cast(ballots: &BTreeMap<String, Ballot>, neuron_id: &NeuronI
         "NeuronId {} expected '{:?}', actual '{:?}'",
         neuron_id,
         vote,
-        Vote::from_i32(ballot.vote).unwrap()
+        Vote::try_from(ballot.vote).unwrap()
     );
 }
 
@@ -1555,7 +1554,7 @@ fn assert_voting_error(
 
 #[test]
 fn test_proposal_garbage_collection() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         // Initialize the ledger with an account for a user who will make proposals
         let user = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -1571,7 +1570,7 @@ fn test_proposal_garbage_collection() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(user.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(user.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params.clone())
             .build();
 
@@ -1585,9 +1584,9 @@ fn test_proposal_garbage_collection() {
         // Create a vector of proposals that can be submitted and then garbage collected
         let proposals: Vec<Proposal> = (0..10)
             .map(|i| Proposal {
-                title: format!("Motion-{}", i),
+                title: format!("Motion-{i}"),
                 action: Some(Action::Motion(Motion {
-                    motion_text: format!("Motion-{}", i),
+                    motion_text: format!("Motion-{i}"),
                 })),
                 ..Default::default()
             })
@@ -1625,6 +1624,11 @@ fn test_proposal_garbage_collection() {
             .await
             .expect("Expected set_time_warp to succeed");
 
+        sns_canisters
+            .run_periodic_tasks_now()
+            .await
+            .expect("Expected run_periodic_tasks_now to succeed");
+
         // Proposals should have been garbage_collected. Get all the proposals kept in the current
         // SNS
         let proposals_after_gc = list_all_proposals_through_pagination(
@@ -1651,12 +1655,303 @@ fn test_proposal_garbage_collection() {
     });
 }
 
+#[test]
+fn test_change_voting_rewards_round_duration() {
+    state_machine_test_on_sns_subnet(|runtime| async move {
+        // Initialize the ledger with an account for a user who will make proposals
+        let proposer = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
+        // Initialize the ledger with an account for a user who will vote so we can control when
+        // proposals are executed
+        let voter = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let original_voting_rewards_round_duration_seconds =
+            VOTING_REWARDS_PARAMETERS.round_duration_seconds.unwrap();
+        let mut current_voting_rewards_round_duration_seconds =
+            original_voting_rewards_round_duration_seconds;
+        let initial_voting_period_seconds = original_voting_rewards_round_duration_seconds / 2;
+        let critical_proposal_initial_voting_period_seconds =
+            initial_voting_period_seconds.max(5 * ONE_DAY_SECONDS);
+
+        let params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            voting_rewards_parameters: Some(VotingRewardsParameters {
+                ..VOTING_REWARDS_PARAMETERS
+            }),
+            initial_voting_period_seconds: Some(initial_voting_period_seconds),
+            wait_for_quiet_deadline_increase_seconds: Some(initial_voting_period_seconds / 4), // The default of one day is too short
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let genesis_timestamp_seconds = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
+            .with_ledger_account(proposer.sender.get_principal_id().0.into(), alloc)
+            .with_ledger_account(voter.sender.get_principal_id().0.into(), alloc)
+            .with_nervous_system_parameters(params.clone())
+            .with_genesis_timestamp_seconds(genesis_timestamp_seconds)
+            .build();
+        let total_token_supply_e8s = 2 * alloc.get_e8s();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        // Stake and claim a neuron for the proposer
+        sns_canisters
+            .stake_and_claim_neuron_with_tokens(
+                &proposer.sender,
+                Some(ONE_YEAR_SECONDS as u32),
+                100,
+            )
+            .await;
+
+        // Stake and claim a neuron for the voter
+        sns_canisters
+            .stake_and_claim_neuron_with_tokens(&voter.sender, Some(ONE_YEAR_SECONDS as u32), 100)
+            .await;
+
+        // Step 2: Run code under test.
+
+        // How far ahead in the future governance currently is.
+        let mut delta_s: i64 = 0;
+
+        // Step 2.1: Real work.
+        //
+        // After each proposal is made, voter votes in favor of it, causing it
+        // to be decided and executed. Then, time is advanced by the (current)
+        // voting rewards round duration (VRRD).
+        //
+        // Three proposals will be made:
+        //   1. Using the original VRRD.
+        //   2. Change to half the original VRRD.
+        //   3. Change to double the original VRRD.
+        //
+        // Notice that proposals 2 and 3 will be subject to their own VRRD.
+        let reward_event_0 = sns_canisters.get_latest_reward_event().await;
+
+        // Step 2.1: proposal 1.
+        let proposal_1_id = {
+            let proposal = Proposal {
+                action: Some(Action::Motion(Motion::default())),
+                ..Default::default()
+            };
+
+            sns_canisters
+                .make_proposal(&proposer.sender, &proposer.subaccount, proposal)
+                .await
+                .unwrap()
+        };
+        // Make proposal 1 pass.
+        sns_canisters
+            .vote(&voter.sender, &voter.subaccount, proposal_1_id, true)
+            .await;
+
+        // Wait for rewards.
+        delta_s += current_voting_rewards_round_duration_seconds as i64;
+        sns_canisters.set_time_warp(delta_s).await.unwrap();
+        let reward_event_1 = sns_canisters
+            .await_reward_event_after(reward_event_0.end_timestamp_seconds.unwrap())
+            .await;
+
+        // Step 2.2: proposal 2.
+        current_voting_rewards_round_duration_seconds =
+            original_voting_rewards_round_duration_seconds / 2;
+        let proposal_2_id = {
+            let action = NervousSystemParameters {
+                voting_rewards_parameters: Some(VotingRewardsParameters {
+                    round_duration_seconds: Some(current_voting_rewards_round_duration_seconds),
+                    ..VOTING_REWARDS_PARAMETERS
+                }),
+                // Don't change anything else.
+                ..Default::default()
+            };
+
+            let proposal = Proposal {
+                action: Some(Action::ManageNervousSystemParameters(action)),
+                ..Default::default()
+            };
+
+            sns_canisters
+                .make_proposal(&proposer.sender, &proposer.subaccount, proposal)
+                .await
+                .unwrap()
+        };
+        // Make proposal 2 pass.
+        sns_canisters
+            .vote(&voter.sender, &voter.subaccount, proposal_2_id, true)
+            .await;
+
+        // Wait for rewards.
+        delta_s += critical_proposal_initial_voting_period_seconds as i64;
+        sns_canisters.set_time_warp(delta_s).await.unwrap();
+        let reward_event_2 = sns_canisters
+            .await_reward_event_after(reward_event_1.end_timestamp_seconds.unwrap())
+            .await;
+
+        // Step 2.3: proposal 3.
+        current_voting_rewards_round_duration_seconds =
+            original_voting_rewards_round_duration_seconds * 2;
+        let proposal_3_id = {
+            let action = NervousSystemParameters {
+                voting_rewards_parameters: Some(VotingRewardsParameters {
+                    round_duration_seconds: Some(current_voting_rewards_round_duration_seconds),
+                    ..VOTING_REWARDS_PARAMETERS
+                }),
+                // Don't change anything else.
+                ..Default::default()
+            };
+
+            let proposal = Proposal {
+                action: Some(Action::ManageNervousSystemParameters(action)),
+                ..Default::default()
+            };
+
+            sns_canisters
+                .make_proposal(&proposer.sender, &proposer.subaccount, proposal)
+                .await
+                .unwrap()
+        };
+        // Make proposal 3 pass.
+        sns_canisters
+            .vote(&voter.sender, &voter.subaccount, proposal_3_id, true)
+            .await;
+        // Wait for rewards.
+        delta_s += critical_proposal_initial_voting_period_seconds as i64;
+        sns_canisters.set_time_warp(delta_s).await.unwrap();
+        let reward_event_3 = sns_canisters
+            .await_reward_event_after(reward_event_2.end_timestamp_seconds.unwrap())
+            .await;
+
+        // Step 3: Inspect results.
+        let reward_events = vec![
+            reward_event_1.clone(),
+            reward_event_2.clone(),
+            reward_event_3.clone(),
+        ];
+
+        // Step 3.1: Inspect RewardEvent proposals.
+        assert_eq!(reward_event_1.settled_proposals, vec![proposal_1_id],);
+        assert_eq!(reward_event_2.settled_proposals, vec![proposal_2_id],);
+        assert_eq!(reward_event_3.settled_proposals, vec![proposal_3_id],);
+
+        // Step 3.2: Inspect reward amounts
+        // Step 3.2.1: Inspect reward amount 2.
+        let reward_rate_2 =
+            VOTING_REWARDS_PARAMETERS.reward_rate_at(reward::Instant::from_seconds_since_genesis(
+                i2d(reward_event_2.end_timestamp_seconds.unwrap() - genesis_timestamp_seconds),
+            ));
+        let reward_purse_2_e8s = reward_rate_2
+            * reward::Duration::from_secs(i2d(critical_proposal_initial_voting_period_seconds))
+            * i2d(total_token_supply_e8s);
+        let undistributed_reward_purse_2_e8s =
+            i2d(reward_event_2.distributed_e8s_equivalent) - reward_purse_2_e8s;
+        assert!(
+            // We need a little leeway, because apportionment is hard.
+            (-i2d(10)..=i2d(0)).contains(&undistributed_reward_purse_2_e8s),
+            "{} vs. {}",
+            reward_event_2.distributed_e8s_equivalent,
+            reward_purse_2_e8s,
+        );
+        // Step 3.2.1: Inspect reward amount 3.
+        let reward_rate_3 =
+            VOTING_REWARDS_PARAMETERS.reward_rate_at(reward::Instant::from_seconds_since_genesis(
+                i2d(reward_event_3.end_timestamp_seconds.unwrap() - genesis_timestamp_seconds),
+            ));
+        let reward_purse_3_e8s = reward_rate_3
+            * reward::Duration::from_secs(i2d(original_voting_rewards_round_duration_seconds * 2))
+            * i2d(total_token_supply_e8s);
+        let undistributed_reward_purse_3_e8s =
+            i2d(reward_event_3.distributed_e8s_equivalent) - reward_purse_3_e8s;
+        assert!(
+            // We need a little leeway, because apportionment is hard.
+            (-i2d(10)..=i2d(0)).contains(&undistributed_reward_purse_3_e8s),
+            "{} vs. {}",
+            reward_event_3.distributed_e8s_equivalent,
+            reward_purse_3_e8s,
+        );
+
+        // Step 3.3: Assert that round numbers are as expected.
+        assert_eq!(reward_event_1.round, 1, "{reward_events:#?}",);
+        assert_eq!(
+            reward_event_2.round,
+            1 + (critical_proposal_initial_voting_period_seconds / ONE_DAY_SECONDS),
+            "{reward_events:#?}",
+        );
+        assert_eq!(
+            reward_event_3.round,
+            2 + (critical_proposal_initial_voting_period_seconds / ONE_DAY_SECONDS),
+            "{reward_events:#?}",
+        );
+
+        // Step 3.4: Inspect the times of reward_event_(2|3) to see that the new
+        // voting rewards round duration of those proposals was put into effect.
+        let delay_2_seconds = reward_event_2.end_timestamp_seconds.unwrap()
+            - reward_event_1.end_timestamp_seconds.unwrap();
+        assert_eq!(
+            delay_2_seconds, critical_proposal_initial_voting_period_seconds,
+            "{reward_events:#?}",
+        );
+        let delay_3_seconds = reward_event_3.end_timestamp_seconds.unwrap()
+            - reward_event_2.end_timestamp_seconds.unwrap();
+        assert_eq!(
+            delay_3_seconds,
+            original_voting_rewards_round_duration_seconds * 2,
+            "{reward_events:#?}",
+        );
+
+        // Step 3.5: Verify that all proposals have been marked as
+        // "rewarded". This based on the reward_event_end_timestamp_seconds.
+        let proposal_data_1 = sns_canisters.get_proposal(proposal_1_id).await;
+        let proposal_data_2 = sns_canisters.get_proposal(proposal_2_id).await;
+        let proposal_data_3 = sns_canisters.get_proposal(proposal_3_id).await;
+        assert_eq!(
+            proposal_data_1.reward_event_end_timestamp_seconds.unwrap(),
+            reward_event_1.end_timestamp_seconds.unwrap(),
+        );
+        assert_eq!(
+            proposal_data_2.reward_event_end_timestamp_seconds.unwrap(),
+            reward_event_2.end_timestamp_seconds.unwrap(),
+        );
+        assert_eq!(
+            proposal_data_3.reward_event_end_timestamp_seconds.unwrap(),
+            reward_event_3.end_timestamp_seconds.unwrap(),
+        );
+        assert_eq!(proposal_data_1.reward_event_round, reward_event_1.round,);
+        assert_eq!(proposal_data_2.reward_event_round, reward_event_2.round,);
+        assert_eq!(proposal_data_3.reward_event_round, reward_event_3.round,);
+
+        Ok(())
+    })
+}
+
 /// Test that when there are no proposals submitted during reward_distribution_period_seconds,
 /// that RewardEvents are still generated, proposals can still be processed afterwards, and
 /// that garbage collection can still take place.
+///
+/// Narrative Outline:
+///
+///     1. Three proposals are made and immediately voted in, one after another.
+///
+///     2. Between the first two proposals, there is a "long dry spell" (i.e. the period
+///        between the first two proposals is much greater than one reward round).
+///
+///     3. Because of the retention policy, the first proposal gets garbage
+///        collected some time after the third proposal.
+///
+///  After each proposal, the fact that they are rewarded is verified by inspecting
+///
+///      1. their reward_event_* fields, and
+///
+///      2. the settled_proposals field of latest_reward_event, which should contain just the
+///         ID of the most recent proposal.
 #[test]
 fn test_intermittent_proposal_submission() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
+        // Chapter 0: Prepare the world.
+
         // Initialize the ledger with an account for a user who will make proposals
         let proposer = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
         // Initialize the ledger with an account for a user who will vote so we can control when
@@ -1684,8 +1979,8 @@ fn test_intermittent_proposal_submission() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(proposer.sender.get_principal_id().into(), alloc)
-            .with_ledger_account(voter.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(proposer.sender.get_principal_id().0.into(), alloc)
+            .with_ledger_account(voter.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params.clone())
             .build();
 
@@ -1701,36 +1996,38 @@ fn test_intermittent_proposal_submission() {
             .await;
 
         // Stake and claim a neuron for the voter
-        sns_canisters
+        let voter_neuron_id = sns_canisters
             .stake_and_claim_neuron_with_tokens(&voter.sender, Some(ONE_YEAR_SECONDS as u32), 100)
             .await;
 
-        // Phase 1: First, test that submitting a proposal works as expected
-        let proposal = Proposal {
+        // Chapter 1: The first proposal is made.
+        //
+        // (Incidentally, this occurs very early in the life of the SNS. The
+        // story really begins here.)
+
+        // Make the first proposal, and vote it in (immediately).
+        let motion_proposal = Proposal {
             action: Some(Action::Motion(Motion::default())),
             ..Default::default()
         };
-
-        // Submit a motion proposal using the proposer
         let p1_id = sns_canisters
-            .make_proposal(&proposer.sender, &proposer.subaccount, proposal.clone())
+            .make_proposal(
+                &proposer.sender,
+                &proposer.subaccount,
+                motion_proposal.clone(),
+            )
             .await
             .unwrap();
-
-        // Vote on that proposal using the voter. This should result in the majority being
-        // reached for that proposal
         sns_canisters
             .vote(&voter.sender, &voter.subaccount, p1_id, true)
             .await;
 
-        // Verify that the proposal state is as expected
+        // Verify that the proposal was voted in.
         let proposal_data = sns_canisters.get_proposal(p1_id).await;
         assert!(proposal_data.decided_timestamp_seconds > 0);
         assert!(proposal_data.executed_timestamp_seconds > 0);
-        // Even though the proposal is executed, it still accepts votes until the
-        // initial_voting_period_seconds is reached and the proposal is considered ReadyToSettle.
-        // Until then, it's reward_event_round should be "unset" (0), and its RewardStatus is
-        // AcceptsVotes
+        // Even though the proposal is executed, it still accepts votes.
+        assert_eq!(proposal_data.reward_event_end_timestamp_seconds, None);
         assert_eq!(proposal_data.reward_event_round, 0);
         assert_eq!(
             proposal_data.reward_status(now_seconds(None)),
@@ -1738,96 +2035,181 @@ fn test_intermittent_proposal_submission() {
         );
 
         // Advance time to when the proposal's voting period is over.
-        let mut delta_s = (initial_voting_period_seconds) as i64;
+        let mut delta_s = initial_voting_period_seconds as i64;
         sns_canisters.set_time_warp(delta_s).await?;
 
-        // The reward_event_round should still not have changed (due to a period not elapsing), but
-        // since the initial_voting_period_seconds of the proposal has passed, it should be considered
-        // ReadyToSettle.
+        // Now that voting is over, the proposal CAN now be rewarded.
         let proposal_data = sns_canisters.get_proposal(p1_id).await;
-        assert_eq!(proposal_data.reward_event_round, 0);
         assert_eq!(
             proposal_data.reward_status(now_seconds(Some(delta_s as u64))),
             ProposalRewardStatus::ReadyToSettle
         );
+        // It has not been rewarded yet though, because a reward round has not yet elapsed.
+        assert_eq!(proposal_data.reward_event_end_timestamp_seconds, None);
+        assert_eq!(proposal_data.reward_event_round, 0);
 
-        // Since there hasn't been enough time since genesis for a reward period to complete,
-        // the round of the latest reward event should be 0.
-        let reward_event = sns_canisters.get_latest_reward_event().await;
-        let mut last_reward_round = reward_event.round;
-        assert_eq!(last_reward_round, 0);
+        // Since no reward rounds have elapsed yet, the round of the latest
+        // reward event should (still) be 0.
+        let genesis_reward_event = sns_canisters.get_latest_reward_event().await;
+        assert_eq!(genesis_reward_event.round, 0);
 
-        // Warping time again should allow for a single reward period to complete.
+        // Advance time by a reward round.
         delta_s = reward_round_duration_seconds as i64;
         sns_canisters.set_time_warp(delta_s).await?;
 
-        // RewardEvents occur on heartbeat. Allow some buffer for the heartbeat to occur to reduce
-        // flakiness.
-        let next_reward_event = sns_canisters.await_reward_event(last_reward_round).await;
-        assert_eq!(next_reward_event.round, last_reward_round + 1);
-        last_reward_round = next_reward_event.round;
+        // Wait for the first real RewardEvent.
+        let current_reward_event = sns_canisters
+            .await_reward_event_after(genesis_reward_event.end_timestamp_seconds.unwrap())
+            .await;
+        // It should include the first proposal.
+        assert_eq!(current_reward_event.settled_proposals, vec![p1_id]);
+
+        // Asserts that current is more advanced than previous. Inspects the
+        // round and end_timestamp_seconds fields.
+        let assert_reward_event_incremented =
+            |previous_reward_event: &RewardEvent, current_reward_event: &RewardEvent| {
+                let delay_seconds = current_reward_event.end_timestamp_seconds.unwrap()
+                    - previous_reward_event.end_timestamp_seconds.unwrap();
+
+                // The delay between reward events should be a whole number of rounds.
+                assert_eq!(
+                    delay_seconds % reward_round_duration_seconds,
+                    0,
+                    "current_reward_event = {current_reward_event:#?}\n\
+                 previous_reward_event = {previous_reward_event:#?}\n\
+                 reward_round_duration_seconds = {reward_round_duration_seconds}",
+                );
+
+                let delay_rounds = delay_seconds / reward_round_duration_seconds;
+                assert!(
+                    // Normally, just one reward round passes, but we have some
+                    // nondeterminism in our tests. Therefore, we relax this requirement
+                    // to avoid flakes.
+                    0 < delay_rounds && delay_rounds <= 3,
+                    "current_reward_event = {current_reward_event:#?}\n
+                 previous_reward_event = {previous_reward_event:#?}\n
+                 reward_round_duration_seconds = {reward_round_duration_seconds}",
+                );
+
+                // Assert that the round field in RewardEvent is consistent with the
+                // end_timestamp_seconds field.
+                assert_eq!(
+                    current_reward_event.round,
+                    previous_reward_event.round + delay_rounds
+                );
+            };
+
+        assert_reward_event_incremented(&genesis_reward_event, &current_reward_event);
 
         // Along with RewardEvents, the proposal should be updated with what RewardEvent
         // distributed its voting rewards.
-        let reward_event_round = sns_canisters.await_proposal_rewarding(p1_id).await;
-        assert_eq!(reward_event_round, last_reward_round);
-        assert_eq!(next_reward_event.settled_proposals, vec![p1_id]);
+        let proposal = sns_canisters.await_proposal_rewarding(p1_id).await;
+        assert_eq!(
+            proposal.reward_event_end_timestamp_seconds.unwrap(),
+            current_reward_event.end_timestamp_seconds.unwrap(),
+        );
+        assert_eq!(proposal.reward_event_round, current_reward_event.round);
+        let mut previous_reward_event = current_reward_event;
 
-        // Phase 2: Test that reward periods can occur without any proposals, and RewardEvents
-        // can still take place.
-        delta_s += reward_round_duration_seconds as i64; // Add a reward_round to the running time warp
-        sns_canisters.set_time_warp(delta_s).await?;
+        // Chapter 2: The second proposal is made after a long hiatus.
+        //
+        // Even when there are no proposals, RewardEvents are still generated.
+        // Furthermore, rewards are rolled over via the
+        // total_available_e8s_equivalent field in RewardEvent.
 
-        // Even though no proposals were submitted, a RewardEvent should have been created
-        let next_reward_event = sns_canisters.await_reward_event(last_reward_round).await;
-        assert_eq!(next_reward_event.round, last_reward_round + 1);
-        last_reward_round = next_reward_event.round;
-        assert_eq!(next_reward_event.settled_proposals, vec![]);
+        for i in 0..7 {
+            // Advance time by a reward round.
+            delta_s += reward_round_duration_seconds as i64;
+            sns_canisters.set_time_warp(delta_s).await?;
 
-        // Phase 3: Given that no Proposals were submitted in the last reward period, all periodic
-        // tasks should still succeed.
+            let current_reward_event = sns_canisters
+                .await_reward_event_after(previous_reward_event.end_timestamp_seconds.unwrap())
+                .await;
 
-        // Create another motion proposal and make sure its lifecycle works as normal.
+            // Assert rewards are rolled over during empty reward rounds. This
+            // does not apply in the first iteration, because the RewardEvent
+            // before this loop actually has a proposal, and therefore, does not
+            // contribute any roll over.
+            if i != 0 {
+                assert!(
+                    current_reward_event.total_available_e8s_equivalent
+                        > previous_reward_event.total_available_e8s_equivalent,
+                    "current_reward_event = {current_reward_event:#?}\n
+                     previous_reward_event = {previous_reward_event:#?}",
+                );
+            }
+
+            assert_eq!(current_reward_event.settled_proposals, vec![]);
+
+            assert_reward_event_incremented(&previous_reward_event, &current_reward_event);
+
+            previous_reward_event = current_reward_event;
+        }
+
+        // Record maturity of voter so that we can later see that it is indeed
+        // rewarded for their voting.
+        let voter_maturity_e8s_equivalent_before = sns_canisters
+            .get_neuron(&voter_neuron_id)
+            .await
+            .maturity_e8s_equivalent;
+
+        // Now that the SNS has experienced a hiatus in proposals, make and
+        // immediately vote in the second proposal.
         let p2_id = sns_canisters
-            .make_proposal(&proposer.sender, &proposer.subaccount, proposal.clone())
+            .make_proposal(
+                &proposer.sender,
+                &proposer.subaccount,
+                motion_proposal.clone(),
+            )
             .await
             .unwrap();
-
         sns_canisters
             .vote(&voter.sender, &voter.subaccount, p2_id, true)
             .await;
-
-        // Now warp time to the middle of the next reward period. The proposal should have been
-        // decided and executed, but since another period hasn't completed, not rewarded.
+        // Advance time past the voting deadline of the second proposal.
         delta_s += initial_voting_period_seconds as i64;
         sns_canisters.set_time_warp(delta_s).await?;
+        // Assert that the second proposal has been executed (like the first).
+        let proposal = sns_canisters.get_proposal(p2_id).await;
+        assert!(proposal.decided_timestamp_seconds > 0);
+        assert!(proposal.executed_timestamp_seconds > 0);
 
-        // Assert that the periodic proposal processing still works
-        let proposal_data = sns_canisters.get_proposal(p2_id).await;
-        assert!(proposal_data.decided_timestamp_seconds > 0);
-        assert!(proposal_data.executed_timestamp_seconds > 0);
-        assert_eq!(proposal_data.reward_event_round, 0);
-        assert_eq!(
-            proposal_data.reward_status(now_seconds(Some(delta_s as u64))),
-            ProposalRewardStatus::ReadyToSettle
-        );
-
-        // Advance time well into the next reward period.
+        // Advance time to the middle of the next reward period.
         delta_s += reward_round_duration_seconds as i64;
         sns_canisters.set_time_warp(delta_s).await?;
 
-        // A new RewardEvent should have taken place
-        let next_reward_event = sns_canisters.await_reward_event(last_reward_round).await;
-        assert_eq!(next_reward_event.round, last_reward_round + 1);
-        last_reward_round = next_reward_event.round;
+        // The second proposal should have been rewarded (and a new RewardEvent recorded).
+        let proposal = sns_canisters.await_proposal_rewarding(p2_id).await;
 
-        // And the last proposal should have been Rewarded.
-        let reward_event_round = sns_canisters.await_proposal_rewarding(p2_id).await;
-        assert_eq!(reward_event_round, last_reward_round);
-        assert_eq!(next_reward_event.settled_proposals, vec![p2_id]);
+        let current_reward_event = sns_canisters
+            .await_reward_event_after(proposal.reward_event_end_timestamp_seconds.unwrap() - 1)
+            .await;
+        assert_eq!(current_reward_event.settled_proposals, vec![p2_id]);
+        assert_reward_event_incremented(&previous_reward_event, &current_reward_event);
 
-        // Now, adjust the garbage collection parameter via proposal to make sure
-        // garbage collection still works
+        // Inspect proposal 2, comparing it against current_reward_event.
+        assert_eq!(
+            proposal.reward_event_end_timestamp_seconds.unwrap(),
+            current_reward_event.end_timestamp_seconds.unwrap(),
+            "proposal:\n{proposal:#?}\n***\nRewardEvent:\n{current_reward_event:#?}",
+        );
+        assert_eq!(proposal.reward_event_round, current_reward_event.round);
+
+        // Assert that voter has been rewarded.
+        let voter_maturity_e8s_equivalent_after = sns_canisters
+            .get_neuron(&voter_neuron_id)
+            .await
+            .maturity_e8s_equivalent;
+        assert!(
+            voter_maturity_e8s_equivalent_after > voter_maturity_e8s_equivalent_before,
+            "{voter_maturity_e8s_equivalent_after} vs. {voter_maturity_e8s_equivalent_before}",
+        );
+
+        // Chapter 3: Make and pass the third proposal, causing proposal 1 to be
+        // garbage collected.
+
+        // Adjust the GC policy via proposal. This should result in the demise
+        // of proposal 1 (verified later).
         let proposal = Proposal {
             title: "Change max_proposals_to_keep_per_action".into(),
             action: Some(Action::ManageNervousSystemParameters(
@@ -1838,38 +2220,36 @@ fn test_intermittent_proposal_submission() {
             )),
             ..Default::default()
         };
-
         let p3_id = sns_canisters
             .make_proposal(&proposer.sender, &proposer.subaccount, proposal)
             .await
             .unwrap();
 
-        // Assert that there are 3 proposals pre acceptance of the proposal via the voter user
+        // Assert that there are 3 proposals. (The third one has not been voted in yet.)
         let mut proposals = sns_canisters.list_proposals(&proposer.sender).await;
         let proposal_ids: Vec<ProposalId> = proposals.iter().map(|p| p.id.unwrap()).collect();
         assert_eq!(proposal_ids, vec![p3_id, p2_id, p1_id]);
 
+        // Vote in the GC policy change.
         sns_canisters
             .vote(&voter.sender, &voter.subaccount, p3_id, true)
             .await;
 
-        // Garbage collection happens once every 24 hours, so advance time to when it could occur
+        // Advance time such that GC is performed.
         delta_s += ONE_DAY_SECONDS as i64;
         sns_canisters.set_time_warp(delta_s).await?;
 
-        // Wait for a heartbeat to trigger a GC round.
-        for _ in 0..25 {
+        // Wait for the number of proposals to decrease.
+        for _ in 0..250 {
             proposals = sns_canisters.list_proposals(&proposer.sender).await;
             if proposals.len() < 3 {
                 // GC occurred
                 break;
             }
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            runtime.tick().await;
         }
 
-        // Assert that there are now 2 proposals. p1_id should have been garbage collected
-        // as it was the "older" proposal of Action::Motion
-        let proposals = sns_canisters.list_proposals(&proposer.sender).await;
+        // Assert that proposal 1 has disappeared.
         let proposal_ids: Vec<ProposalId> = proposals.iter().map(|p| p.id.unwrap()).collect();
         assert_eq!(proposal_ids, vec![p3_id, p2_id]);
 

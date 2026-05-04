@@ -1,0 +1,12 @@
+[package]
+name = "ic-crypto-utils-tls"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-base-types = { path = "../../../types/base_types" }
+thiserror = { workspace = true }
+x509-parser = { workspace = true }

@@ -1,0 +1,34 @@
+[package]
+name = "execution-environment-bench"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+criterion = { workspace = true }
+ic-config = { path = "../../../config" }
+ic-cycles-account-manager = { path = "../../../cycles_account_manager" }
+ic-embedders = { path = "../../../embedders" }
+ic-error-types = { path = "../../../../packages/ic-error-types" }
+ic-execution-environment = { path = "../../" }
+ic-interfaces = { path = "../../../interfaces" }
+ic-sys = { path = "../../../sys" }
+ic-limits = { path = "../../../limits" }
+ic-logger = { path = "../../../monitoring/logger" }
+ic-metrics = { path = "../../../monitoring/metrics" }
+ic-nns-constants = { path = "../../../nns/constants" }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-replicated-state = { path = "../../../replicated_state" }
+ic-test-utilities = { path = "../../../test_utilities" }
+ic-test-utilities-execution-environment = { path = "../../../test_utilities/execution_environment" }
+ic-test-utilities-state = { path = "../../../test_utilities/state" }
+ic-test-utilities-types = { path = "../../../test_utilities/types" }
+ic-types = { path = "../../../types/types" }
+ic-types-cycles = { path = "../../../types/cycles" }
+ic-wasm-types = { path = "../../../types/wasm_types" }
+lazy_static = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+wat = { workspace = true }

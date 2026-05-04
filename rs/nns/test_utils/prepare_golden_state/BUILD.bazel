@@ -1,0 +1,24 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:clap",
+    "@crate_index//:tempfile",
+]
+
+rust_library(
+    name = "prepare_golden_state",
+    srcs = ["src/lib.rs"],
+    crate_name = "ic_nns_test_utils_prepare_golden_state",
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "watch_and_prepare",
+    srcs = ["src/watch_and_prepare.rs"],
+    version = "0.0.1",
+    deps = [":prepare_golden_state"] + DEPENDENCIES,
+)

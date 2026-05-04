@@ -1,0 +1,17 @@
+[package]
+name = "ic-nervous-system-humanize"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+humantime = { workspace = true }
+ic-nervous-system-proto = { path = "../proto" }
+lazy_static = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_yaml = { workspace = true }

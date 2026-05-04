@@ -1,0 +1,35 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+# TODO: Move this library out of the nervous_system directory.
+# In the meantime, allow everyone to use this.
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/nervous_system/histogram",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:itertools",
+    "@crate_index//:lazy_static",
+]
+
+DEV_DEPENDENCIES = [
+]
+
+LIB_SRCS = glob(
+    ["src/**/*.rs"],
+    exclude = ["**/*tests*/**"],
+)
+
+rust_library(
+    name = "instruction_stats",
+    srcs = LIB_SRCS,
+    crate_name = "ic_nervous_system_instruction_stats",
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "instruction_stats_test",
+    srcs = glob(["src/**/*.rs"]),
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

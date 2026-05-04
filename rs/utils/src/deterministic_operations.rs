@@ -6,12 +6,15 @@
 /// standard library is not deterministic because it calls out to `memcpy` from
 /// libc which may copy the bytes going forward or backwards depending on the
 /// relative addresses of the two arrays.
+/// Inlining this function boosts its performance.
+#[inline(always)]
 pub fn deterministic_copy_from_slice(dst: &mut [u8], src: &[u8]) {
     if dst.len() != src.len() {
         panic!(
             "source and destination have different lengths: src has length {} and dst has length {}",
             src.len(),
-            dst.len())
+            dst.len()
+        )
     };
     #[allow(clippy::manual_memcpy)]
     for i in 0..dst.len() {

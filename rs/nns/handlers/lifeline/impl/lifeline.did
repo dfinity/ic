@@ -1,0 +1,26 @@
+type UpgradeRootProposalPayload = record {
+  module_arg: blob;
+  stop_upgrade_start: bool;
+  wasm_module: blob;
+};
+type HardResetRootToVersionPayload = record {
+  wasm_module: blob;
+  init_arg: blob;
+};
+type CanisterSettings = record {
+  controllers: opt vec principal;
+  compute_allocation: opt nat;
+  memory_allocation: opt nat;
+  freezing_threshold: opt nat;
+  reserved_cycles_limit: opt nat;
+  wasm_memory_limit: opt nat;
+  log_visibility: opt LogVisibility;
+  wasm_memory_threshold: opt nat;
+};
+type LogVisibility = variant { controllers; public };
+
+service : {
+  upgrade_root: (UpgradeRootProposalPayload) -> ();
+  hard_reset_root_to_version: (HardResetRootToVersionPayload) -> ();
+  upgrade_root_settings: (CanisterSettings) -> ();
+}

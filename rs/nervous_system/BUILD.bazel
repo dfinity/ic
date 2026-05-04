@@ -1,0 +1,12 @@
+package_group(
+    name = "default_visibility",
+    packages = [
+        # Keep sorted.
+        "//rs/nervous_system/...",
+        "//rs/nns/...",
+        "//rs/node_rewards/...",
+        "//rs/registry/...",
+        "//rs/sns/...",
+        "//rs/tests/...",
+    ],
+)

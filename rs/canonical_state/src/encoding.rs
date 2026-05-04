@@ -12,22 +12,14 @@
 
 use crate::CertificationVersion;
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_replicated_state::metadata_state::SystemMetadata;
-use ic_types::{messages::RequestOrResponse, xnet::StreamHeader, PrincipalId};
+use ic_replicated_state::metadata_state::{SubnetMetrics, SystemMetadata};
+use ic_types::{PrincipalId, messages::StreamMessage, xnet::StreamHeader};
 use serde::Serialize;
 use std::collections::BTreeSet;
 use std::convert::TryInto;
 
 pub mod old_types;
 pub mod types;
-
-#[cfg(test)]
-mod tests {
-    mod compatibility;
-    mod conversion;
-    mod encoding;
-    mod test_fixtures;
-}
 
 /// Allows a canonical type to act as a proxy for encoding a Rust type `T` as
 /// canonical CBOR, provided an `Into` implementation for `T`.
@@ -66,17 +58,14 @@ where
     }
 }
 
-/// Encodes a `RequestOrResponse` into canonical CBOR representation.
-pub fn encode_message(
-    msg: &RequestOrResponse,
-    certification_version: CertificationVersion,
-) -> Vec<u8> {
-    types::RequestOrResponse::proxy_encode((msg, certification_version)).unwrap()
+/// Encodes a `StreamMessage` into canonical CBOR representation.
+pub fn encode_message(msg: &StreamMessage, certification_version: CertificationVersion) -> Vec<u8> {
+    types::StreamMessage::proxy_encode((msg, certification_version)).unwrap()
 }
 
-/// Decodes a `RequestOrResponse` from canonical CBOR representation.
-pub fn decode_message(bytes: &[u8]) -> Result<RequestOrResponse, ProxyDecodeError> {
-    types::RequestOrResponse::proxy_decode(bytes)
+/// Decodes a `StreamMessage` from canonical CBOR representation.
+pub fn decode_message(bytes: &[u8]) -> Result<StreamMessage, ProxyDecodeError> {
+    types::StreamMessage::proxy_decode(bytes)
 }
 
 /// Encodes a `StreamHeader` into canonical CBOR representation.
@@ -103,7 +92,7 @@ pub fn encode_metadata(
 /// Encodes the list of canister ID ranges assigned to a subnet according to
 /// the interface specification.
 ///
-/// See https://sdk.dfinity.org/docs/interface-spec/index.html#state-tree-subnet
+/// See https://internetcomputer.org/docs/current/references/ic-interface-spec#state-tree-subnet
 pub fn encode_subnet_canister_ranges(ranges: Option<&Vec<(PrincipalId, PrincipalId)>>) -> Vec<u8> {
     let mut serializer = serde_cbor::Serializer::new(vec![]);
     serializer.self_describe().unwrap();
@@ -114,6 +103,14 @@ pub fn encode_subnet_canister_ranges(ranges: Option<&Vec<(PrincipalId, Principal
             .unwrap(),
     }
     serializer.into_inner()
+}
+
+/// Encodes a `SubnetMetrics` into canonical CBOR representation.
+pub fn encode_subnet_metrics(
+    metrics: &SubnetMetrics,
+    certification_version: CertificationVersion,
+) -> Vec<u8> {
+    types::SubnetMetrics::proxy_encode((metrics, certification_version)).unwrap()
 }
 
 /// Serializes controllers as a CBOR list.
@@ -129,4 +126,12 @@ pub fn encode_controllers(controllers: &BTreeSet<PrincipalId>) -> Vec<u8> {
     serializer.self_describe().unwrap();
     controllers.serialize(&mut serializer).unwrap();
     serializer.into_inner()
+}
+
+#[cfg(test)]
+mod tests {
+    mod compatibility;
+    mod conversion;
+    mod encoding;
+    mod test_fixtures;
 }

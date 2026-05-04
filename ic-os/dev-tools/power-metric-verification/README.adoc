@@ -1,0 +1,12 @@
+= Power Metric Verification
+
+This directory contains the scripts needed to perform power metric verification on a node. 
+
+* `collect_voltage_readings.sh`: collects voltage readings during alternating cycles of stress tests and rest periods. 
+* `parse_voltage_readings.py`: invoked by collect_voltage_readings.sh, parses the collected voltage readings and generates a CSV file containing the instantaneous voltage readings.
+
+After running these scripts, the resulting data can be cross-verified with the readings from an on-site power distribution unit. This comparison helps validate the readings acquired by the `ipmitool`.
+
+Note: for the scripts to work, you must install `stress-ng` and `ipmitool`
+
+    $ sudo apt-get install -y ipmitool stress-ng

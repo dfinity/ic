@@ -1,9 +1,14 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use memory_tracker::*;
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use ic_types::NumBytes;
+use memory_tracker::{
+    DirtyPageTracking, MemoryLimits, MemoryTracker, PrefetchingMemoryTracker, basic_signal_handler,
+};
 
 use libc::{self, c_void};
-use nix::sys::mman::{mmap, MapFlags, ProtFlags};
+use memory_tracker::signal_mutex::SignalMutex;
+use nix::sys::mman::{MapFlags, ProtFlags, mmap};
 use std::ptr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use lazy_static::lazy_static;
@@ -18,7 +23,7 @@ lazy_static! {
 
 struct BenchData {
     ptr: *mut c_void,
-    tracker: SigsegvMemoryTracker,
+    tracker: PrefetchingMemoryTracker,
     page_map: PageMap,
 }
 
@@ -44,15 +49,17 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
         bench.iter_with_setup(
             // Setup input data for measurement
             || {
-                let page_map = PageMap::new();
+                let page_map = PageMap::new_for_testing();
                 BenchData {
                     ptr,
-                    tracker: SigsegvMemoryTracker::new(
+                    tracker: PrefetchingMemoryTracker::new(
                         ptr,
-                        PAGE_SIZE,
+                        NumBytes::new(PAGE_SIZE as u64),
                         no_op_logger(),
                         DirtyPageTracking::Track,
                         page_map.clone(),
+                        MemoryLimits::default(),
+                        Arc::new(SignalMutex::new(|_| {})),
                     )
                     .unwrap(),
                     page_map,
@@ -60,7 +67,7 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
             },
             // Do the actual measurement
             |data| {
-                sigsegv_fault_handler_old(
+                basic_signal_handler(
                     black_box(&data.tracker),
                     &data.page_map,
                     black_box(data.ptr),
@@ -92,27 +99,29 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
         bench.iter_with_setup(
             // Setup input data for measurement
             || {
-                let page_map = PageMap::new();
+                let page_map = PageMap::new_for_testing();
                 let data = BenchData {
                     ptr,
-                    tracker: SigsegvMemoryTracker::new(
+                    tracker: PrefetchingMemoryTracker::new(
                         ptr,
-                        PAGE_SIZE,
+                        NumBytes::new(PAGE_SIZE as u64),
                         no_op_logger(),
                         DirtyPageTracking::Track,
                         page_map.clone(),
+                        MemoryLimits::default(),
+                        Arc::new(SignalMutex::new(|_| {})),
                     )
                     .unwrap(),
                     page_map,
                 };
 
-                sigsegv_fault_handler_old(&data.tracker, &data.page_map, data.ptr);
+                basic_signal_handler(&data.tracker, &data.page_map, data.ptr);
 
                 data
             },
             // Do the actual measurement
             |data| {
-                sigsegv_fault_handler_old(
+                basic_signal_handler(
                     black_box(&data.tracker),
                     &data.page_map,
                     black_box(data.ptr),

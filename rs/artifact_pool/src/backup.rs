@@ -19,17 +19,16 @@ use ic_interfaces::{
     consensus_pool::{ConsensusPool, HeightRange},
     time_source::TimeSource,
 };
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
-    consensus::{
-        BlockProposal, CatchUpPackage, ConsensusMessage, Finalization, HasHeight, Notarization,
-        RandomBeacon, RandomTape,
-    },
-    crypto::CryptoHashOf,
-    time::{Time, UNIX_EPOCH},
     Height,
+    consensus::{
+        BlockProposal, ConsensusMessage, Finalization, HasHeight, Notarization, RandomBeacon,
+        RandomTape,
+    },
+    time::{Time, UNIX_EPOCH},
 };
 use prometheus::IntCounter;
 use prost::Message;
@@ -38,20 +37,46 @@ use std::{
     io::{self, Write},
     path::{Path, PathBuf},
     sync::{
-        mpsc::{sync_channel, Receiver, SyncSender},
-        RwLock,
+        Arc, RwLock,
+        mpsc::{Receiver, SyncSender, sync_channel},
     },
     thread::{self, JoinHandle},
     time::Duration,
 };
 
 pub enum BackupArtifact {
-    Finalization(Box<Finalization>),
-    Notarization(Box<Notarization>),
-    BlockProposal(Box<BlockProposal>),
-    RandomBeacon(Box<RandomBeacon>),
-    RandomTape(Box<RandomTape>),
-    CatchUpPackage(Box<CatchUpPackage>),
+    Finalization(Finalization),
+    Notarization(Notarization),
+    BlockProposal(BlockProposal),
+    RandomBeacon(RandomBeacon),
+    RandomTape(RandomTape),
+    CatchUpPackage((Height, pb::CatchUpPackage)),
+}
+
+impl TryFrom<ConsensusMessage> for BackupArtifact {
+    type Error = ();
+    fn try_from(artifact: ConsensusMessage) -> Result<Self, Self::Error> {
+        use ConsensusMessage::*;
+        match artifact {
+            Finalization(artifact) => Ok(BackupArtifact::Finalization(artifact)),
+            Notarization(artifact) => Ok(BackupArtifact::Notarization(artifact)),
+            BlockProposal(artifact) => Ok(BackupArtifact::BlockProposal(artifact)),
+            RandomTape(artifact) => Ok(BackupArtifact::RandomTape(artifact)),
+            RandomBeacon(artifact) => Ok(BackupArtifact::RandomBeacon(artifact)),
+            CatchUpPackage(artifact) => Ok(BackupArtifact::CatchUpPackage((
+                artifact.height(),
+                pb::CatchUpPackage::from(artifact),
+            ))),
+            // Do not replace by a `_` so that we evaluate at this place if we want to
+            // backup a new artifact!
+            RandomBeaconShare(_)
+            | NotarizationShare(_)
+            | FinalizationShare(_)
+            | RandomTapeShare(_)
+            | CatchUpPackageShare(_)
+            | EquivocationProof(_) => Err(()),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -112,6 +137,10 @@ impl BackupThread {
         loop {
             match rx.recv() {
                 Ok(BackupRequest::Backup(artifacts)) => {
+                    let artifacts = artifacts
+                        .into_iter()
+                        .flat_map(BackupArtifact::try_from)
+                        .collect();
                     if let Err(err) = store_artifacts(artifacts, &self.version_path) {
                         error!(self.log, "Backup storing failed: {:?}", err);
                         self.metrics.io_errors.inc();
@@ -141,7 +170,7 @@ struct PurgingThread {
     // Path containing all backups of all versions running on the current node.
     backup_path: PathBuf,
     // The maximum age backup artifacts can reach before purging.
-    age_threshold_secs: Duration,
+    age_threshold: Duration,
     metrics: Metrics,
     log: ReplicaLogger,
     age: Box<dyn BackupAge>,
@@ -174,14 +203,14 @@ impl BackupAge for FileSystemAge {
 impl PurgingThread {
     fn new(
         backup_path: PathBuf,
-        age_threshold_secs: Duration,
+        age_threshold: Duration,
         metrics: Metrics,
         log: ReplicaLogger,
         age: Box<dyn BackupAge>,
     ) -> Self {
         Self {
             backup_path,
-            age_threshold_secs,
+            age_threshold,
             metrics,
             log,
             age,
@@ -203,7 +232,7 @@ impl PurgingThread {
                 Ok(PurgingRequest::Purge) => {
                     let start = std::time::Instant::now();
                     if let Err(err) = purge(
-                        self.age_threshold_secs,
+                        self.age_threshold,
                         &self.backup_path,
                         self.log.clone(),
                         self.age.as_ref(),
@@ -239,9 +268,10 @@ pub(super) struct Backup {
     // Thread handle of the thread executing the purging.
     purging_thread: Option<thread::JoinHandle<()>>,
     // Time interval between purges.
-    purge_interval_secs: Duration,
+    purge_interval: Duration,
     metrics: Metrics,
     log: ReplicaLogger,
+    time_source: Arc<dyn TimeSource>,
 }
 
 impl Backup {
@@ -249,18 +279,19 @@ impl Backup {
         pool: &dyn ConsensusPool,
         backup_path: PathBuf,
         version_path: PathBuf,
-        age_threshold_secs: Duration,
-        purge_interval_secs: Duration,
+        age_threshold: Duration,
+        purge_interval: Duration,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
         age: Box<dyn BackupAge>,
+        time_source: Arc<dyn TimeSource>,
     ) -> Self {
         let metrics = Metrics::new(&metrics_registry);
         let (backup_queue, backup_thread) =
             BackupThread::new(version_path.clone(), metrics.clone(), log.clone()).start();
         let (purging_queue, purging_thread) = PurgingThread::new(
             backup_path,
-            age_threshold_secs,
+            age_threshold,
             metrics.clone(),
             log.clone(),
             age,
@@ -272,9 +303,10 @@ impl Backup {
             backup_thread: Some(backup_thread),
             purging_queue,
             purging_thread: Some(purging_thread),
-            purge_interval_secs,
+            purge_interval,
             metrics,
             log,
+            time_source,
         };
 
         // Due to the fact that the backup is synced to the disk completely
@@ -296,26 +328,28 @@ impl Backup {
         pool: &dyn ConsensusPool,
         backup_path: PathBuf,
         version_path: PathBuf,
-        age_threshold_secs: Duration,
-        purge_interval_secs: Duration,
+        age_threshold: Duration,
+        purge_interval: Duration,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
+        time_source: Arc<dyn TimeSource>,
     ) -> Self {
         Self::new_with_age_func(
             pool,
             backup_path,
             version_path,
-            age_threshold_secs,
-            purge_interval_secs,
+            age_threshold,
+            purge_interval,
             metrics_registry,
             log,
             Box::new(FileSystemAge {}),
+            time_source,
         )
     }
 
     // Filters the new artifacts and asynchronously writes the relevant artifacts
     // to the disk.
-    pub fn store(&self, time_source: &dyn TimeSource, artifacts: Vec<ConsensusMessage>) {
+    pub fn store(&self, artifacts: Vec<ConsensusMessage>) {
         // If the queue is full, we will block here.
         if self
             .backup_queue
@@ -334,7 +368,8 @@ impl Backup {
         // purging has not finished yet, which is not expected with sufficiently
         // large PURGE_INTERVAL.
         let time_of_last_purge = *self.time_of_last_purge.read().unwrap();
-        if time_source.get_relative_time() - time_of_last_purge >= self.purge_interval_secs {
+        let time_now = self.time_source.get_relative_time();
+        if time_now >= time_of_last_purge + self.purge_interval {
             if self.purging_queue.send(PurgingRequest::Purge).is_err() {
                 error!(
                     self.log,
@@ -344,7 +379,7 @@ impl Backup {
             }
 
             // Set the time to current
-            *self.time_of_last_purge.write().unwrap() = time_source.get_relative_time();
+            *self.time_of_last_purge.write().unwrap() = time_now;
         }
     }
 
@@ -380,25 +415,9 @@ impl Backup {
 
 // Write all backup files to the disk. For the sake of simplicity, we write all
 // artifacts sequentially.
-fn store_artifacts(artifacts: Vec<ConsensusMessage>, path: &Path) -> Result<(), io::Error> {
-    use ConsensusMessage::*;
+fn store_artifacts(artifacts: Vec<BackupArtifact>, path: &Path) -> Result<(), io::Error> {
     artifacts
         .into_iter()
-        .filter_map(|artifact| match artifact {
-            Finalization(artifact) => Some(BackupArtifact::Finalization(Box::new(artifact))),
-            Notarization(artifact) => Some(BackupArtifact::Notarization(Box::new(artifact))),
-            BlockProposal(artifact) => Some(BackupArtifact::BlockProposal(Box::new(artifact))),
-            RandomTape(artifact) => Some(BackupArtifact::RandomTape(Box::new(artifact))),
-            RandomBeacon(artifact) => Some(BackupArtifact::RandomBeacon(Box::new(artifact))),
-            CatchUpPackage(artifact) => Some(BackupArtifact::CatchUpPackage(Box::new(artifact))),
-            // Do not replace by a `_` so that we evaluate at this place if we want to
-            // backup a new artifact!
-            RandomBeaconShare(_)
-            | NotarizationShare(_)
-            | FinalizationShare(_)
-            | RandomTapeShare(_)
-            | CatchUpPackageShare(_) => None,
-        })
         .try_for_each(|artifact| artifact.write_to_disk(path))
 }
 
@@ -407,7 +426,7 @@ fn store_artifacts(artifacts: Vec<ConsensusMessage>, path: &Path) -> Result<(), 
 /// specified retention time. Age of a leave is determined by calling the given
 /// implementation of [`BackupAge`]
 fn purge(
-    threshold_secs: Duration,
+    age_threshold: Duration,
     path: &Path,
     log: ReplicaLogger,
     age: &dyn BackupAge,
@@ -433,7 +452,7 @@ fn purge(
 
             Err(PurgingError::Permanent(err)) => return Err(err),
         };
-        if age > threshold_secs {
+        if age > age_threshold {
             fs::remove_dir_all(path)?;
         }
     }
@@ -453,20 +472,19 @@ fn get_leaves(dir: &Path, leaves: &mut Vec<PathBuf>) -> std::io::Result<()> {
             get_leaves(&path, leaves)?;
         }
     }
-    if !sub_directory_found {
-        if let Some(path_name) = dir.to_str() {
-            // We skip the folder lost+found, which is currently present on the backup
-            // volume.
-            if !path_name.contains("lost+found") {
-                leaves.push(dir.to_path_buf());
-            }
+    if !sub_directory_found && let Some(path_name) = dir.to_str() {
+        // We skip the folder lost+found, which is currently present on the backup
+        // volume.
+        if !path_name.contains("lost+found") {
+            leaves.push(dir.to_path_buf());
         }
     }
     Ok(())
 }
 
 // Returns all artifacts starting from the latest catch-up package height.
-fn get_all_persisted_artifacts(pool: &dyn ConsensusPool) -> Vec<ConsensusMessage> {
+// CUPs need to be returned as their original protobuf bytes for compatibility.
+fn get_all_persisted_artifacts(pool: &dyn ConsensusPool) -> Vec<BackupArtifact> {
     let cup_height = pool.as_cache().catch_up_package().height();
     let notarization_pool = pool.validated().notarization();
     let notarization_range = HeightRange::new(
@@ -486,13 +504,6 @@ fn get_all_persisted_artifacts(pool: &dyn ConsensusPool) -> Vec<ConsensusMessage
     let block_proposal_range = HeightRange::new(
         cup_height,
         block_proposal_pool
-            .max_height()
-            .unwrap_or_else(|| Height::from(0)),
-    );
-    let catch_up_package_pool = pool.validated().catch_up_package();
-    let catch_up_package_range = HeightRange::new(
-        cup_height,
-        catch_up_package_pool
             .max_height()
             .unwrap_or_else(|| Height::from(0)),
     );
@@ -520,11 +531,6 @@ fn get_all_persisted_artifacts(pool: &dyn ConsensusPool) -> Vec<ConsensusMessage
                 .map(ConsensusMessage::Notarization),
         )
         .chain(
-            catch_up_package_pool
-                .get_by_height_range(catch_up_package_range)
-                .map(ConsensusMessage::CatchUpPackage),
-        )
-        .chain(
             random_tape_pool
                 .get_by_height_range(random_tape_range)
                 .map(ConsensusMessage::RandomTape),
@@ -539,6 +545,11 @@ fn get_all_persisted_artifacts(pool: &dyn ConsensusPool) -> Vec<ConsensusMessage
                 .get_by_height_range(block_proposal_range)
                 .map(ConsensusMessage::BlockProposal),
         )
+        .flat_map(BackupArtifact::try_from)
+        .chain(std::iter::once(BackupArtifact::CatchUpPackage((
+            cup_height,
+            pool.validated().highest_catch_up_package_proto(),
+        ))))
         .collect()
 }
 
@@ -561,32 +572,30 @@ impl Drop for Backup {
 impl BackupArtifact {
     /// Writes the protobuf serialization of the artifact into a file in the given
     /// directory.
-    pub fn write_to_disk(&self, path: &Path) -> Result<(), std::io::Error> {
+    pub fn write_to_disk(self, path: &Path) -> Result<(), std::io::Error> {
         let (file_directory, file_name) = self.file_location(path);
         // Create the path if necessary.
         fs::create_dir_all(&file_directory)?;
         let full_path = file_directory.join(file_name);
         // If the file exists, it will be overwritten (this is required on
-        // intializations).
+        // initializations).
         let serialized = self.serialize()?;
-        ic_utils::fs::write_using_tmp_file(full_path, |writer| writer.write_all(&serialized))
+        ic_sys::fs::write_using_tmp_file(full_path, |writer| writer.write_all(&serialized))
     }
 
     /// Serializes the artifact to protobuf.
-    pub fn serialize(&self) -> Result<Vec<u8>, io::Error> {
+    pub fn serialize(self) -> Result<Vec<u8>, io::Error> {
         let mut buf = Vec::new();
         use BackupArtifact::*;
         match self {
-            Finalization(artifact) => pb::Finalization::from(artifact.as_ref()).encode(&mut buf),
-            Notarization(artifact) => pb::Notarization::from(artifact.as_ref()).encode(&mut buf),
-            BlockProposal(artifact) => pb::BlockProposal::from(artifact.as_ref()).encode(&mut buf),
-            RandomTape(artifact) => pb::RandomTape::from(artifact.as_ref()).encode(&mut buf),
-            RandomBeacon(artifact) => pb::RandomBeacon::from(artifact.as_ref()).encode(&mut buf),
-            CatchUpPackage(artifact) => {
-                pb::CatchUpPackage::from(artifact.as_ref()).encode(&mut buf)
-            }
+            Finalization(artifact) => pb::Finalization::from(artifact).encode(&mut buf),
+            Notarization(artifact) => pb::Notarization::from(artifact).encode(&mut buf),
+            BlockProposal(artifact) => pb::BlockProposal::from(artifact).encode(&mut buf),
+            RandomTape(artifact) => pb::RandomTape::from(artifact).encode(&mut buf),
+            RandomBeacon(artifact) => pb::RandomBeacon::from(artifact).encode(&mut buf),
+            CatchUpPackage((_, artifact)) => artifact.encode(&mut buf),
         }
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err.to_string()))?;
+        .map_err(|err| io::Error::other(err.to_string()))?;
         Ok(buf)
     }
 
@@ -601,67 +610,34 @@ impl BackupArtifact {
     /// ways on different replicas, so we need to put their hashes into the artifact
     /// name.
     pub fn file_location(&self, path: &Path) -> (PathBuf, String) {
-        // Create a subdir for the height
-        use BackupArtifact::*;
+        // Create a subdirectory for the height
         let (height, file_name) = match self {
-            Finalization(artifact) => (
-                artifact.height(),
-                format!(
-                    "finalization_{}_{}.bin",
-                    bytes_to_hex_str(&artifact.content.block),
-                    bytes_to_hex_str(&ic_types::crypto::crypto_hash(artifact.as_ref())),
-                ),
-            ),
-            Notarization(artifact) => (
-                artifact.height(),
-                format!(
-                    "notarization_{}_{}.bin",
-                    bytes_to_hex_str(&artifact.content.block),
-                    bytes_to_hex_str(&ic_types::crypto::crypto_hash(artifact.as_ref())),
-                ),
-            ),
-            BlockProposal(artifact) => (
-                artifact.height(),
-                format!(
-                    "block_proposal_{}_{}.bin",
-                    bytes_to_hex_str(artifact.content.get_hash()),
-                    bytes_to_hex_str(&ic_types::crypto::crypto_hash(artifact.as_ref())),
-                ),
-            ),
-            RandomTape(artifact) => (artifact.height(), "random_tape.bin".to_string()),
-            RandomBeacon(artifact) => (artifact.height(), "random_beacon.bin".to_string()),
-            CatchUpPackage(artifact) => (artifact.height(), "catch_up_package.bin".to_string()),
+            BackupArtifact::Finalization(artifact) => (artifact.height(), "finalization.bin"),
+            BackupArtifact::Notarization(artifact) => (artifact.height(), "notarization.bin"),
+            BackupArtifact::BlockProposal(artifact) => (artifact.height(), "block_proposal.bin"),
+            BackupArtifact::RandomTape(artifact) => (artifact.height(), "random_tape.bin"),
+            BackupArtifact::RandomBeacon(artifact) => (artifact.height(), "random_beacon.bin"),
+            BackupArtifact::CatchUpPackage((height, _)) => (*height, "catch_up_package.bin"),
         };
         // We group heights by directories to avoid running into any kind of unexpected
         // FS inode limitations. Each group directory will contain at most
-        // `BACKUP_GROUP_SIZE` heights.
+        // [BACKUP_GROUP_SIZE] heights.
         let group_key = (height.get() / BACKUP_GROUP_SIZE) * BACKUP_GROUP_SIZE;
         let path_with_height = path.join(group_key.to_string()).join(height.to_string());
-        (path_with_height, file_name)
+        (path_with_height, file_name.to_string())
     }
-}
-
-// Dumps a CryptoHash to a hex-encoded string.
-pub(super) fn bytes_to_hex_str<T>(hash: &CryptoHashOf<T>) -> String {
-    hash.clone()
-        .get()
-        .0
-        .iter()
-        .fold(String::new(), |mut hash, byte| {
-            hash.push_str(&format!("{:X}", byte));
-            hash
-        })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_test_utilities::{consensus::fake::*, mock_time, types::ids::node_test_id};
+    use ic_test_utilities_consensus::fake::*;
+    use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
+        RegistryVersion,
         batch::*,
         consensus::*,
         crypto::{CryptoHash, CryptoHashOf},
-        RegistryVersion,
     };
     use std::convert::TryFrom;
 
@@ -669,7 +645,9 @@ mod tests {
     fn test_random_tape_conversion() {
         let artifact = RandomTape::fake(RandomTapeContent::new(Height::from(22)));
         let mut buf = Vec::new();
-        pb::RandomTape::from(&artifact).encode(&mut buf).unwrap();
+        pb::RandomTape::from(artifact.clone())
+            .encode(&mut buf)
+            .unwrap();
         assert_eq!(
             artifact,
             RandomTape::try_from(pb::RandomTape::decode(buf.as_slice()).unwrap()).unwrap()
@@ -683,7 +661,9 @@ mod tests {
             CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
         ));
         let mut buf = Vec::new();
-        pb::Finalization::from(&artifact).encode(&mut buf).unwrap();
+        pb::Finalization::from(artifact.clone())
+            .encode(&mut buf)
+            .unwrap();
         assert_eq!(
             artifact,
             Finalization::try_from(pb::Finalization::decode(buf.as_slice()).unwrap()).unwrap()
@@ -697,7 +677,9 @@ mod tests {
             CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
         ));
         let mut buf = Vec::new();
-        pb::Notarization::from(&artifact).encode(&mut buf).unwrap();
+        pb::Notarization::from(artifact.clone())
+            .encode(&mut buf)
+            .unwrap();
         assert_eq!(
             artifact,
             Notarization::try_from(pb::Notarization::decode(buf.as_slice()).unwrap()).unwrap()
@@ -711,20 +693,22 @@ mod tests {
                 CryptoHashOf::from(CryptoHash(Vec::new())),
                 Payload::new(
                     ic_types::crypto::crypto_hash,
-                    (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                    BlockPayload::Summary(SummaryPayload::fake()),
                 ),
                 Height::from(123),
                 Rank(456),
                 ValidationContext {
                     registry_version: RegistryVersion::from(99),
                     certified_height: Height::from(42),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                 },
             ),
             node_test_id(333),
         );
         let mut buf = Vec::new();
-        pb::BlockProposal::from(&artifact).encode(&mut buf).unwrap();
+        pb::BlockProposal::from(artifact.clone())
+            .encode(&mut buf)
+            .unwrap();
         assert_eq!(
             artifact,
             BlockProposal::try_from(pb::BlockProposal::decode(buf.as_slice()).unwrap()).unwrap()

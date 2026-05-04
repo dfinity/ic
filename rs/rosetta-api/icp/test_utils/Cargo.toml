@@ -1,0 +1,26 @@
+[package]
+name = "ic-rosetta-test-utils"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+base64 = { workspace = true }
+hex = { workspace = true }
+ic-crypto-utils-threshold-sig-der = { path = "../../../crypto/utils/threshold_sig_der" }
+ic-icrc1-test-utils = { path = "../../../ledger_suite/icrc1/test_utils" }
+ic-rosetta-api = { path = "../" }
+ic-types = { path = "../../../types/types" }
+icp-ledger = { path = "../../../ledger_suite/icp" }
+nix = { workspace = true }
+rand = { workspace = true }
+reqwest = { workspace = true }
+rosetta-core = { path = "../../common/rosetta_core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+url = { workspace = true }

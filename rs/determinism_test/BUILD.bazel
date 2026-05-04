@@ -1,44 +1,41 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_ic_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    "//rs/config",
-    "//rs/cycles_account_manager",
-    "//rs/execution_environment",
-    "//rs/interfaces",
-    "//rs/interfaces/state_manager",
-    "//rs/messaging",
-    "//rs/monitoring/metrics",
-    "//rs/monitoring/metrics_exporter",
-    "//rs/protobuf",
-    "//rs/registry/client",
-    "//rs/registry/keys",
-    "//rs/registry/proto_data_provider",
-    "//rs/registry/provisional_whitelist",
-    "//rs/registry/routing_table",
-    "//rs/registry/subnet_type",
-    "//rs/replicated_state",
-    "//rs/state_manager",
-    "//rs/test_utilities",
-    "//rs/test_utilities/registry",
-    "//rs/types/ic00_types",
-    "//rs/types/types",
-    "@crate_index//:clap",
-    "@crate_index//:hex",
-    "@crate_index//:slog",
-    "@crate_index//:tokio",
-    "@wabt_rs//:wabt",
-]
-
 rust_library(
     name = "determinism_test",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = {},
     crate_name = "ic_determinism_test",
     proc_macro_deps = [],
-    version = "0.8.0",
-    deps = DEPENDENCIES,
+    version = "0.9.0",
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/execution_environment",
+        "//rs/interfaces",
+        "//rs/interfaces/state_manager",
+        "//rs/messaging",
+        "//rs/monitoring/metrics",
+        "//rs/protobuf",
+        "//rs/registry/client",
+        "//rs/registry/keys",
+        "//rs/registry/proto_data_provider",
+        "//rs/registry/provisional_whitelist",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/state_manager",
+        "//rs/test_utilities/consensus",
+        "//rs/test_utilities/registry",
+        "//rs/test_utilities/types",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+        "@crate_index//:wat",
+    ],
 )
 
 rust_test(
@@ -46,21 +43,12 @@ rust_test(
     aliases = {},
     crate = ":determinism_test",
     proc_macro_deps = [],
-    deps = DEPENDENCIES,
 )
 
-rust_test_suite(
-    name = "determinism_test_integration_tests",
+rust_ic_test_suite(
+    name = "determinism_test_integration",
     srcs = glob(["tests/**/*.rs"]),
     aliases = {},
-    data = [
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
-    ],
-    env = {
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
-    },
     proc_macro_deps = [],
-    deps = [":determinism_test"] + DEPENDENCIES,
+    deps = [":determinism_test"],
 )

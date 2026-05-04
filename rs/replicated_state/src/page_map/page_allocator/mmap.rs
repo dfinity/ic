@@ -1,21 +1,36 @@
-use crate::page_map::{FileDescriptor, FileOffset};
+use crate::page_map::{
+    FileDescriptor, FileOffset, PageAllocatorFileDescriptor, TestPageAllocatorFileDescriptorImpl,
+};
 
+use super::page_allocator_registry::PageAllocatorRegistry;
 use super::{
-    MmapPageSerialization, Page, PageAllocatorInner, PageAllocatorSerialization,
-    PageDeltaSerialization, PageInner, PageValidation, ALLOCATED_PAGES,
+    ALLOCATED_PAGES, MmapPageSerialization, Page, PageAllocatorSerialization,
+    PageDeltaSerialization, PageValidation,
 };
 use cvt::{cvt, cvt_r};
-use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
+use ic_sys::{PAGE_SIZE, PageBytes, PageIndex, page_bytes_from_ptr};
+use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use libc::{c_void, close};
-use nix::sys::mman::{madvise, mmap, munmap, MapFlags, MmapAdvise, ProtFlags};
+use nix::sys::mman::{MapFlags, MmapAdvise, ProtFlags, madvise, mmap, munmap};
+use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::os::raw::c_int;
 use std::os::unix::io::RawFd;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-const MIN_PAGES_TO_FREE: usize = 10000;
+#[cfg(target_os = "linux")]
+use ic_sys::HUGE_PAGE_SIZE;
+#[cfg(target_os = "linux")]
+use ic_types::NumOsPages;
+/// The minimum number of huge pages where the actual huge page optimization
+/// will kick in. This corresponds to 64 MiB of memory (because the huge page size is 2 MiB)
+#[cfg(target_os = "linux")]
+const MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION: NumOsPages = NumOsPages::new(32);
 
+const MIN_PAGES_TO_FREE: usize = 10000;
 // The start address of a page.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 struct PagePtr(*mut u8);
 
 // SAFETY: All shared pages are immutable.
@@ -33,17 +48,17 @@ unsafe impl Send for PagePtr {}
 ///
 /// It is exported publicly for benchmarking.
 #[derive(Clone, Debug)]
-pub struct MmapBasedPage {
+pub struct PageInner {
     ptr: PagePtr,
     offset: FileOffset,
     // The page allocator is needed only in the destructor of the page in order
     // to enqueue the page for freeing. This field is empty if the page allocator
     // does not own the backing file.
-    page_allocator: Option<Arc<MmapBasedPageAllocator>>,
+    page_allocator: Option<Arc<PageAllocatorInner>>,
     validation: PageValidation,
 }
 
-impl Drop for MmapBasedPage {
+impl Drop for PageInner {
     fn drop(&mut self) {
         if let Some(page_allocator) = self.page_allocator.as_ref() {
             page_allocator.add_dropped_page(self.ptr);
@@ -51,10 +66,8 @@ impl Drop for MmapBasedPage {
     }
 }
 
-impl PageInner for MmapBasedPage {
-    type PageAllocatorInner = MmapBasedPageAllocator;
-
-    fn contents(&self) -> &PageBytes {
+impl PageInner {
+    pub fn contents(&self) -> &PageBytes {
         // SAFETY: The provided reference to the page allocator is a witness that the
         // underlying memory is still valid.
         unsafe {
@@ -63,7 +76,7 @@ impl PageInner for MmapBasedPage {
         }
     }
 
-    fn copy_from_slice<'a>(&mut self, offset: usize, slice: &[u8]) {
+    fn copy_from_slice(&mut self, offset: usize, slice: &[u8]) {
         assert!(offset + slice.len() <= PAGE_SIZE);
         // SAFETY: The provided reference to the page allocator is a witness that the
         // underlying memory is still valid. The mutable reference to self shows that
@@ -74,7 +87,12 @@ impl PageInner for MmapBasedPage {
                 // initialized immediately after allocation.
                 assert!(self.is_valid());
             }
-            std::ptr::copy_nonoverlapping(slice.as_ptr(), self.ptr.0.add(offset), slice.len());
+            // Manually copy page one byte at a time. Compiler is able to optimize this
+            // better than std::ptr::copy_nonoverlapping().
+            deterministic_copy_from_slice(
+                std::slice::from_raw_parts_mut(self.ptr.0.add(offset), slice.len()),
+                slice,
+            );
             // Update the validation information if it wasn't initialized yet or
             // became invalid.
             if self.validation.non_zero_word_value == 0 || !self.is_valid() {
@@ -82,39 +100,40 @@ impl PageInner for MmapBasedPage {
             }
         };
     }
-}
-
-impl MmapBasedPage {
     // See the comments of `PageValidation`.
     #[inline]
     unsafe fn is_valid(&self) -> bool {
-        let ptr = self.ptr.0 as *const u16;
-        *ptr.add(self.validation.non_zero_word_index as usize)
-            == self.validation.non_zero_word_value
+        unsafe {
+            let ptr = self.ptr.0 as *const u16;
+            *ptr.add(self.validation.non_zero_word_index as usize)
+                == self.validation.non_zero_word_value
+        }
     }
 
     // See the comments of `PageValidation`.
     unsafe fn compute_validation(&self) -> PageValidation {
-        // Search for the first non-zero 8-byte word.
-        let mut ptr = self.ptr.0 as *const u64;
-        let end = self.ptr.0.add(PAGE_SIZE) as *const u64;
-        while ptr != end && *ptr == 0 {
-            ptr = ptr.add(1);
-        }
-        if ptr == end {
-            // The page contains only zeros.
-            return PageValidation::default();
-        }
-        // We found the non-zero 8-byte word. Now find the non-zero two-byte
-        // word within it. The `while` loop below is guaranteed to stop after
-        // at most four steps.
-        let mut ptr = ptr as *const u16;
-        while *ptr == 0 {
-            ptr = ptr.add(1);
-        }
-        PageValidation {
-            non_zero_word_index: ptr.offset_from(self.ptr.0 as *const u16) as u16,
-            non_zero_word_value: *ptr,
+        unsafe {
+            // Search for the first non-zero 8-byte word.
+            let mut ptr = self.ptr.0 as *const u64;
+            let end = self.ptr.0.add(PAGE_SIZE) as *const u64;
+            while ptr != end && *ptr == 0 {
+                ptr = ptr.add(1);
+            }
+            if ptr == end {
+                // The page contains only zeros.
+                return PageValidation::default();
+            }
+            // We found the non-zero 8-byte word. Now find the non-zero two-byte
+            // word within it. The `while` loop below is guaranteed to stop after
+            // at most four steps.
+            let mut ptr = ptr as *const u16;
+            while *ptr == 0 {
+                ptr = ptr.add(1);
+            }
+            PageValidation {
+                non_zero_word_index: ptr.offset_from(self.ptr.0 as *const u16) as u16,
+                non_zero_word_value: *ptr,
+            }
         }
     }
 }
@@ -131,29 +150,31 @@ impl MmapBasedPage {
 /// - the physical memory of a dropped page is freed using `madvise` when
 ///   there is sufficient number of dropped pages.
 /// - all virtual memory is freed at once the page allocator itself is dropped.
+///
 /// This approach works well with the checkpoints and allows us to avoid all
-/// the complexity and inefficiency of maintaing a thread-safe free-list.
+/// the complexity and inefficiency of maintaining a thread-safe free-list.
 ///
 /// It is exported publicly for benchmarking.
 #[derive(Debug)]
-pub struct MmapBasedPageAllocator(Mutex<Option<MmapBasedPageAllocatorCore>>);
-
-impl Default for MmapBasedPageAllocator {
-    fn default() -> Self {
-        Self::new()
-    }
+pub struct PageAllocatorInner {
+    // These two optional members cannot both be None at the same time.
+    // The core allocator is None when there is no file descriptor created,
+    // while the fd_factory can be None when the file descriptor is already created.
+    core_allocator: Mutex<Option<MmapBasedPageAllocatorCore>>,
+    fd_factory: Option<Arc<dyn PageAllocatorFileDescriptor>>,
 }
 
-impl PageAllocatorInner for MmapBasedPageAllocator {
-    type PageInner = MmapBasedPage;
-
+impl PageAllocatorInner {
     // See the comments of the corresponding method in `PageAllocator`.
-    fn allocate(
+    pub fn allocate(
         page_allocator: &Arc<Self>,
         pages: &[(PageIndex, &PageBytes)],
-    ) -> Vec<(PageIndex, Page<Self::PageInner>)> {
-        let mut guard = page_allocator.0.lock().unwrap();
-        let core = guard.get_or_insert(MmapBasedPageAllocatorCore::new());
+    ) -> Vec<(PageIndex, Page)> {
+        let mut guard = page_allocator.core_allocator.lock().unwrap();
+        let allocator_creator = || {
+            MmapBasedPageAllocatorCore::new(Arc::clone(page_allocator.fd_factory.as_ref().unwrap()))
+        };
+        let core = guard.get_or_insert_with(allocator_creator);
         // It would also be correct to increment the counters after all the
         // allocations, but doing it before gives better performance because
         // the core allocator can memory-map larger chunks.
@@ -163,97 +184,166 @@ impl PageAllocatorInner for MmapBasedPageAllocator {
             .iter()
             .map(|(page_index, contents)| {
                 let mut page = core.allocate_page(page_allocator);
+                // Lint suggestion leads to non-compiling a bug. Rustc 1.65
+                #[allow(clippy::explicit_auto_deref)]
                 page.copy_from_slice(0, *contents);
                 (*page_index, Page(Arc::new(page)))
             })
             .collect()
     }
 
+    // This is the same functionality as `allocate`, but it uses rayon to parallelize
+    // the copying of pages. This is useful when the number of pages is large.
+    pub fn allocate_fastpath(
+        page_allocator: &Arc<Self>,
+        pages: &[(PageIndex, &PageBytes)],
+    ) -> Vec<(PageIndex, Page)> {
+        let mut guard = page_allocator.core_allocator.lock().unwrap();
+        let allocator_creator = || {
+            MmapBasedPageAllocatorCore::new(Arc::clone(page_allocator.fd_factory.as_ref().unwrap()))
+        };
+        let core = guard.get_or_insert_with(allocator_creator);
+        // It would also be correct to increment the counters after all the
+        // allocations, but doing it before gives better performance because
+        // the core allocator can memory-map larger chunks.
+        ALLOCATED_PAGES.inc_by(pages.len());
+        core.allocated_pages += pages.len();
+
+        // Collect page addresses to avoid locking and copying for every page.
+        // This enables parallel copying of pages.
+        let mut allocated_pages_vec: Vec<_> = pages
+            .iter()
+            .map(|(_, _)| core.allocate_page(page_allocator))
+            .collect();
+
+        // Copy the contents of the pages in parallel using rayon parallel iterators.
+        // NB: the number of threads used are the same as the ones allocated when starting
+        // the sandbox, controlled by the embedders_config.num_rayon_page_allocator_threads.
+        allocated_pages_vec
+            .par_iter_mut()
+            .zip(pages.par_iter())
+            .for_each(|(allocated_page, delta_page)| {
+                allocated_page.copy_from_slice(0, delta_page.1);
+            });
+
+        allocated_pages_vec
+            .into_iter()
+            .zip(pages)
+            .map(|(allocated_page, delta_page)| (delta_page.0, Page(Arc::new(allocated_page))))
+            .collect()
+    }
+
     // See the comments of the corresponding method in `PageAllocator`.
-    fn serialize(&self) -> PageAllocatorSerialization {
-        let mut guard = self.0.lock().unwrap();
-        let core = guard.get_or_insert(MmapBasedPageAllocatorCore::new());
-        PageAllocatorSerialization::Mmap(FileDescriptor {
-            fd: core.file_descriptor,
+    pub fn serialize(&self) -> PageAllocatorSerialization {
+        let mut guard = self.core_allocator.lock().unwrap();
+        let allocator_creator =
+            || MmapBasedPageAllocatorCore::new(Arc::clone(self.fd_factory.as_ref().unwrap()));
+        let core = guard.get_or_insert_with(allocator_creator);
+
+        PageAllocatorSerialization {
+            id: core.id,
+            fd: FileDescriptor {
+                fd: core.file_descriptor,
+            },
+        }
+    }
+
+    // If the page allocator with the given id has already been deserialized and
+    // exists in the given `PageAllocatorRegistry`, then the function returns a
+    // reference to that page allocator.
+    // Otherwise, the function creates a new page allocator and registers it in the
+    // given `PageAllocatorRegistry`.
+    pub fn deserialize(
+        serialized_page_allocator: PageAllocatorSerialization,
+        registry: &PageAllocatorRegistry,
+    ) -> Arc<Self> {
+        let PageAllocatorSerialization { id, fd } = serialized_page_allocator;
+        registry.lookup_or_insert_with(&id, || {
+            Arc::new(Self::open(id, fd, BackingFileOwner::AnotherAllocator))
         })
     }
 
     // See the comments of the corresponding method in `PageAllocator`.
-    fn deserialize(serialized_page_allocator: PageAllocatorSerialization) -> Self {
-        match serialized_page_allocator {
-            PageAllocatorSerialization::Mmap(file_descriptor) => {
-                Self::open(file_descriptor, BackingFileOwner::AnotherAllocator)
-            }
-            PageAllocatorSerialization::Heap => {
-                // This is really unreachable. See `serialize()`.
-                unreachable!("Unexpected serialization of MmapBasedPageAllocator");
-            }
-        }
-    }
-
-    // See the comments of the corresponding method in `PageAllocator`.
-    fn serialize_page_delta<'a, I>(&'a self, page_delta: I) -> PageDeltaSerialization
+    pub fn serialize_page_delta<'a, I>(&'a self, page_delta: I) -> PageDeltaSerialization
     where
-        I: IntoIterator<Item = (PageIndex, &'a Page<Self::PageInner>)>,
+        I: IntoIterator<Item = (&'a PageIndex, &'a Page)>,
     {
         let pages: Vec<_> = page_delta
             .into_iter()
-            .map(|(page_index, page)| MmapPageSerialization {
+            .map(|(&page_index, page)| MmapPageSerialization {
                 page_index,
                 file_offset: page.0.offset,
                 validation: page.0.validation,
             })
             .collect();
-        let mut guard = self.0.lock().unwrap();
-        let core = guard.get_or_insert(MmapBasedPageAllocatorCore::new());
-        PageDeltaSerialization::Mmap {
+        let mut guard = self.core_allocator.lock().unwrap();
+        let allocator_creator =
+            || MmapBasedPageAllocatorCore::new(Arc::clone(self.fd_factory.as_ref().unwrap()));
+        let core = guard.get_or_insert_with(allocator_creator);
+
+        PageDeltaSerialization {
             file_len: core.file_len,
             pages,
         }
     }
 
     // See the comments of the corresponding method in `PageAllocator`.
-    fn deserialize_page_delta(
-        page_allocator: &Arc<MmapBasedPageAllocator>,
+    pub fn deserialize_page_delta(
+        page_allocator: &Arc<PageAllocatorInner>,
         page_delta: PageDeltaSerialization,
-    ) -> Vec<(PageIndex, Page<Self::PageInner>)> {
-        match page_delta {
-            PageDeltaSerialization::Mmap { file_len, pages } => {
-                let mut guard = page_allocator.0.lock().unwrap();
-                let core = guard.as_mut().unwrap();
-                core.grow_for_deserialization(file_len);
-                core.deserialized_pages += pages.len();
-                // Deserialized pages are considered as allocated for the purposes of the metric.
-                ALLOCATED_PAGES.inc_by(pages.len());
-                // File offsets of all pages are smaller than `file_len`, which means
-                // that the precondition of `deserialize_page()` is fulfilled after
-                // the call to `grow_for_deserialization(file_len)`.
-                pages
-                    .into_iter()
-                    .map(|ser| {
-                        let page = core.deserialize_page(&ser, page_allocator);
-                        (ser.page_index, Page(Arc::new(page)))
-                    })
-                    .collect()
-            }
-            PageDeltaSerialization::Heap(_) => {
-                // This is really unreachable. See `serialize_page_delta()`.
-                unreachable!("Unexpected serialization of page-delta in MmapBasedPageAllocator");
-            }
-        }
+    ) -> Vec<(PageIndex, Page)> {
+        let mut guard = page_allocator.core_allocator.lock().unwrap();
+        let core = guard.as_mut().unwrap();
+        core.grow_for_deserialization(page_delta.file_len);
+        core.deserialized_pages += page_delta.pages.len();
+        // Deserialized pages are considered as allocated for the purposes of the metric.
+        ALLOCATED_PAGES.inc_by(page_delta.pages.len());
+        // File offsets of all pages are smaller than `file_len`, which means
+        // that the precondition of `deserialize_page()` is fulfilled after
+        // the call to `grow_for_deserialization(file_len)`.
+        page_delta
+            .pages
+            .into_iter()
+            .map(|ser| {
+                let page = core.deserialize_page(&ser, page_allocator);
+                (ser.page_index, Page(Arc::new(page)))
+            })
+            .collect()
     }
 }
 
-impl MmapBasedPageAllocator {
-    fn new() -> Self {
-        Self(Mutex::new(None))
+#[allow(clippy::new_without_default)]
+impl PageAllocatorInner {
+    /// One always needs to instantiate a PageAllocatorInner with a file descriptor factory
+    /// which will serve as a backing file for the MmapBasedPageAllocator
+    pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
+        Self {
+            core_allocator: Mutex::new(None),
+            fd_factory: Some(fd_factory),
+        }
     }
 
-    fn open(file_descriptor: FileDescriptor, backing_file_owner: BackingFileOwner) -> Self {
-        Self(Mutex::new(Some(MmapBasedPageAllocatorCore::open(
-            file_descriptor,
-            backing_file_owner,
-        ))))
+    pub fn new_for_testing() -> Self {
+        Self {
+            core_allocator: Mutex::new(None),
+            fd_factory: Some(Arc::new(TestPageAllocatorFileDescriptorImpl::new())),
+        }
+    }
+
+    fn open(
+        id: PageAllocatorId,
+        file_descriptor: FileDescriptor,
+        backing_file_owner: BackingFileOwner,
+    ) -> Self {
+        Self {
+            core_allocator: Mutex::new(Some(MmapBasedPageAllocatorCore::open(
+                id,
+                file_descriptor,
+                backing_file_owner,
+            ))),
+            // We don't need a factory here because the file descriptor already exists
+            fd_factory: None,
+        }
     }
 
     // Adds the given page to the list of dropped pages that will be freed on the
@@ -261,7 +351,7 @@ impl MmapBasedPageAllocator {
     // Precondition: the page allocator must be the owner of the backing file.
     fn add_dropped_page(&self, page_ptr: PagePtr) {
         let dropped_pages = {
-            let mut guard = self.0.lock().unwrap();
+            let mut guard = self.core_allocator.lock().unwrap();
             let core = guard.as_mut().unwrap();
             assert_eq!(core.backing_file_owner, BackingFileOwner::CurrentAllocator);
             core.dropped_pages.push(page_ptr);
@@ -321,39 +411,60 @@ impl AllocationArea {
     // are backed a valid mutable memory.
     unsafe fn allocate_page(
         &mut self,
-        page_allocator: Option<&Arc<MmapBasedPageAllocator>>,
-    ) -> MmapBasedPage {
-        assert!(!self.is_empty());
-        let ptr = PagePtr(self.start);
-        let offset = self.offset;
-        self.start = self.start.add(PAGE_SIZE);
-        self.offset += PAGE_SIZE as FileOffset;
-        MmapBasedPage {
-            ptr,
-            offset,
-            page_allocator: page_allocator.map(Arc::clone),
-            validation: PageValidation::default(),
+        page_allocator: Option<&Arc<PageAllocatorInner>>,
+    ) -> PageInner {
+        unsafe {
+            assert!(!self.is_empty());
+            let ptr = PagePtr(self.start);
+            let offset = self.offset;
+            self.start = self.start.add(PAGE_SIZE);
+            self.offset += PAGE_SIZE as FileOffset;
+            PageInner {
+                ptr,
+                offset,
+                page_allocator: page_allocator.cloned(),
+                validation: PageValidation::default(),
+            }
         }
+    }
+}
+
+/// The unique identifier of a page allocator. It is used to ensure the 1:1
+/// correspondence of page allocators in the replica and sandbox processes.
+/// If there was a 1:n correspondence, then that would cause data corruption
+/// due to multiple page allocators in the sandbox process sharing the same
+/// backing file.
+/// See `PageAllocatorRegistry`.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+pub struct PageAllocatorId(usize);
+
+impl Default for PageAllocatorId {
+    fn default() -> Self {
+        // Each active canister creates a few page allocators per a checkpoint
+        // interval, so overflowing a 64-bit counter is practically impossible.
+        static MONOTONICALLY_INCREASING_COUNTER: AtomicUsize = AtomicUsize::new(0);
+        let id = MONOTONICALLY_INCREASING_COUNTER.fetch_add(1, Ordering::SeqCst);
+        Self(id)
     }
 }
 
 // Indicates whether the backing file is owned by the current allocator or
 // another allocator. The owner is responsible for freeing the physical memory
 // of dropped pages by punching holes in the backing file.
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 enum BackingFileOwner {
     CurrentAllocator,
     AnotherAllocator,
 }
 
 /// The actual allocator implementation. It starts with an empty file, an
-/// emty set of memory-mapped `Chunk`s, and an empty allocation area.
+/// empty set of memory-mapped `Chunk`s, and an empty allocation area.
 /// Allocation has two paths: slow and fast.
 ///
 /// The slow path is taken when the bump-pointer allocation area is empty. In
 /// that case the file grows by N pages. Those new pages are memory-mapped into
 /// a new `Chunk`. The allocation area is set to the whole extent of the new
-/// `Chunk`. The number of new pages N is not constant. It grows proportionaly
+/// `Chunk`. The number of new pages N is not constant. It grows proportionally
 /// to the number of already allocated pages to ensure that the number of
 /// expensive `mmap` operations remains low - O(log(allocated_pages)).
 ///
@@ -361,6 +472,8 @@ enum BackingFileOwner {
 /// It is expected that almost all pages take the fast path.
 #[derive(Debug)]
 struct MmapBasedPageAllocatorCore {
+    // The unique id of the page allocator.
+    id: PageAllocatorId,
     // The bump-pointer allocation area.
     allocation_area: AllocationArea,
     // The number of already allocated pages.
@@ -405,20 +518,24 @@ impl Drop for MmapBasedPageAllocatorCore {
 }
 
 impl MmapBasedPageAllocatorCore {
-    fn new() -> Self {
-        let fd = create_backing_file();
-        Self::open(FileDescriptor { fd }, BackingFileOwner::CurrentAllocator)
+    fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
+        // We get the file descriptor passed from the factory instantiated by the state manager.
+        let fd = fd_factory.get_fd();
+
+        Self::open(
+            PageAllocatorId::default(),
+            FileDescriptor { fd },
+            BackingFileOwner::CurrentAllocator,
+        )
     }
 
-    fn open(file_descriptor: FileDescriptor, backing_file_owner: BackingFileOwner) -> Self {
-        // SAFETY: The file descriptor is valid.
-        let file_len = unsafe { get_file_length(file_descriptor.fd) };
-        // The page allocator can be created only with an empty file.
-        assert_eq!(
-            file_len, 0,
-            "The page allocator was initialized with non-empty file"
-        );
-        Self {
+    fn open(
+        id: PageAllocatorId,
+        file_descriptor: FileDescriptor,
+        backing_file_owner: BackingFileOwner,
+    ) -> Self {
+        let mut page_allocator = Self {
+            id,
             allocation_area: Default::default(),
             allocated_pages: 0,
             deserialized_pages: 0,
@@ -427,10 +544,17 @@ impl MmapBasedPageAllocatorCore {
             chunks: vec![],
             dropped_pages: vec![],
             backing_file_owner,
-        }
+        };
+        // SAFETY: The file descriptor is valid.
+        let file_len = unsafe { get_file_length(file_descriptor.fd) };
+        // Depending on how this page allocator is used, the existing pages in
+        // the file may be deserialized later on. We need to prepare for that
+        // potential deserialization.
+        page_allocator.grow_for_deserialization(file_len);
+        page_allocator
     }
 
-    fn allocate_page(&mut self, page_allocator: &Arc<MmapBasedPageAllocator>) -> MmapBasedPage {
+    fn allocate_page(&mut self, page_allocator: &Arc<PageAllocatorInner>) -> PageInner {
         if self.allocation_area.is_empty() {
             // Slow path of allocation.
             self.allocation_area = self.new_allocation_area();
@@ -497,6 +621,30 @@ impl MmapBasedPageAllocatorCore {
                 mmap_size, self.file_descriptor, mmap_file_offset, err,
             )
         }) as *mut u8;
+
+        // Do madvise transparent huge page performance optimization only on Linux.
+        #[cfg(target_os = "linux")]
+        {
+            // Huge pages are 2MiB on x86_64. We only use huge pages for
+            // memory allocations that are at least MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION huge pages (i.e., 64 MiB).
+            if mmap_size >= MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION.get() as usize * HUGE_PAGE_SIZE {
+                unsafe {
+                    madvise(
+                        mmap_ptr as *mut c_void,
+                        mmap_size,
+                        MmapAdvise::MADV_HUGEPAGE,
+                    )
+                }.unwrap_or_else(|err| {
+                    // We don't need to panic, madvise failing is not a problem,
+                    // it will only mean that we are not using huge pages.
+                    println!(
+                    "MmapPageAllocator failed to madvise {} bytes at address {:?} for memory file #{}: {}",
+                    mmap_size, mmap_ptr, self.file_descriptor, err
+                    )
+                });
+            }
+        }
+
         self.chunks.push(Chunk {
             ptr: mmap_ptr,
             size: mmap_size,
@@ -572,8 +720,8 @@ impl MmapBasedPageAllocatorCore {
     fn deserialize_page(
         &self,
         serialized_page: &MmapPageSerialization,
-        page_allocator: &Arc<MmapBasedPageAllocator>,
-    ) -> MmapBasedPage {
+        page_allocator: &Arc<PageAllocatorInner>,
+    ) -> PageInner {
         let page_allocator = match self.backing_file_owner {
             BackingFileOwner::CurrentAllocator => Some(page_allocator),
             BackingFileOwner::AnotherAllocator => None,
@@ -597,10 +745,10 @@ impl MmapBasedPageAllocatorCore {
                 // `chunk.ptr + chunk.size` is valid. The page is fully contained in that
                 // address range.
                 let page_start = unsafe { chunk.ptr.add((file_offset - chunk.offset) as usize) };
-                return MmapBasedPage {
+                return PageInner {
                     ptr: PagePtr(page_start),
                     offset: file_offset,
-                    page_allocator: page_allocator.map(Arc::clone),
+                    page_allocator: page_allocator.cloned(),
                     validation: serialized_page.validation,
                 };
             }
@@ -618,23 +766,24 @@ impl MmapBasedPageAllocatorCore {
 // - the range is mapped as shared and writable.
 // - the range is not empty.
 unsafe fn madvise_remove(start_ptr: *mut u8, end_ptr: *mut u8) {
-    let ptr = start_ptr as *mut c_void;
-    let size = end_ptr.offset_from(start_ptr);
-    assert!(size > 0);
-    // MacOS does not support punching holes in the file with `MADV_REMOVE`.
-    // On MacOS we use the closest option: `MADV_DONTNEED`.
-    #[cfg(target_os = "linux")]
-    let advise = MmapAdvise::MADV_REMOVE;
-    #[cfg(not(target_os = "linux"))]
-    let advise = MmapAdvise::MADV_DONTNEED;
-    // SAFETY: the range is mapped as shared and writable by precondition.
-    madvise(ptr, size as usize, advise).unwrap_or_else(|err| {
-        panic!(
-            "Failed to madvise a page range {:?}..{:?}:
-        {}",
-            start_ptr, end_ptr, err
-        )
-    });
+    unsafe {
+        let ptr = start_ptr as *mut c_void;
+        let size = end_ptr.offset_from(start_ptr);
+        assert!(size > 0);
+        // MacOS does not support punching holes in the file with `MADV_REMOVE`.
+        // On MacOS we use the closest option: `MADV_DONTNEED`.
+        #[cfg(target_os = "linux")]
+        let advise = MmapAdvise::MADV_REMOVE;
+        #[cfg(not(target_os = "linux"))]
+        let advise = MmapAdvise::MADV_DONTNEED;
+        // SAFETY: the range is mapped as shared and writable by precondition.
+        madvise(ptr, size as usize, advise).unwrap_or_else(|err| {
+            panic!(
+                "Failed to madvise a page range {start_ptr:?}..{end_ptr:?}:
+        {err}"
+            )
+        });
+    }
 }
 
 // Frees the memory used by the given pages.
@@ -673,57 +822,16 @@ fn free_pages(mut pages: Vec<PagePtr>) {
     unsafe { madvise_remove(start_ptr, end_ptr) }
 }
 
-// A platform-specific function that creates the backing file of the page allocator.
-// On Linux it uses `memfd_create` to create an in-memory file.
-// On MacOS and WSL it uses an ordinary temporary file.
-#[cfg(target_os = "linux")]
-fn create_backing_file() -> RawFd {
-    if *ic_sys::IS_WSL {
-        return create_backing_file_portable();
-    }
-
-    match nix::sys::memfd::memfd_create(
-        &std::ffi::CString::default(),
-        nix::sys::memfd::MemFdCreateFlag::empty(),
-    ) {
-        Ok(fd) => fd,
-        Err(err) => {
-            panic!(
-                "MmapPageAllocatorCore failed to create the backing file {}",
-                err
-            )
-        }
-    }
-}
-
-#[cfg(not(target_os = "linux"))]
-fn create_backing_file() -> RawFd {
-    create_backing_file_portable()
-}
-
-fn create_backing_file_portable() -> RawFd {
-    use std::os::unix::io::IntoRawFd;
-    match tempfile::tempfile() {
-        Ok(file) => file.into_raw_fd(),
-        Err(err) => {
-            panic!(
-                "MmapPageAllocatorCore failed to create the backing file {}",
-                err
-            )
-        }
-    }
-}
-
 // A platform-specific function to truncate a file.
 // On Linux it uses `ftruncate64()`.
 // On MacOS it uses `ftruncate()` that accepts 64-bit offset.
 #[cfg(target_os = "linux")]
 unsafe fn truncate_file(fd: RawFd, offset: FileOffset) -> c_int {
-    libc::ftruncate64(fd, offset)
+    unsafe { libc::ftruncate64(fd, offset) }
 }
 #[cfg(not(target_os = "linux"))]
 unsafe fn truncate_file(fd: RawFd, offset: FileOffset) -> c_int {
-    libc::ftruncate(fd, offset)
+    unsafe { libc::ftruncate(fd, offset) }
 }
 
 // A platform-specific function to get the length of a file.
@@ -731,25 +839,26 @@ unsafe fn truncate_file(fd: RawFd, offset: FileOffset) -> c_int {
 // On MacOS it uses `fstat()` that returns 64-bit `st_size`.
 #[cfg(target_os = "linux")]
 unsafe fn get_file_length(fd: RawFd) -> FileOffset {
-    let mut stat = std::mem::MaybeUninit::<libc::stat64>::uninit();
-    cvt(libc::fstat64(fd, stat.as_mut_ptr())).unwrap_or_else(|err| {
-        panic!(
-            "MmapPageAllocator failed get the length of the file #{}: {}",
-            fd, err
-        )
-    });
-    stat.assume_init().st_size
+    unsafe {
+        let mut stat = std::mem::MaybeUninit::<libc::stat64>::uninit();
+        cvt(libc::fstat64(fd, stat.as_mut_ptr())).unwrap_or_else(|err| {
+            panic!("MmapPageAllocator failed to get the length of the file #{fd}: {err}")
+        });
+        stat.assume_init().st_size
+    }
 }
 #[cfg(not(target_os = "linux"))]
 unsafe fn get_file_length(fd: RawFd) -> FileOffset {
-    let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
-    cvt(libc::fstat(fd, stat.as_mut_ptr())).unwrap_or_else(|err| {
-        panic!(
-            "MmapPageAllocator failed get the length of the file #{}: {}",
-            fd, err
-        )
-    });
-    stat.assume_init().st_size
+    unsafe {
+        let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+        cvt(libc::fstat(fd, stat.as_mut_ptr())).unwrap_or_else(|err| {
+            panic!(
+                "MmapPageAllocator failed get the length of the file #{}: {}",
+                fd, err
+            )
+        });
+        stat.assume_init().st_size
+    }
 }
 
 #[cfg(test)]

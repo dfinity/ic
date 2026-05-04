@@ -2,22 +2,21 @@
 //!
 //! Having the public interfaces defined separately from their components
 //! helps reduce unnecessary dependencies between them.
-pub mod artifact_manager;
-pub mod artifact_pool;
+pub mod batch_payload;
 pub mod canister_http;
 pub mod certification;
-pub mod certified_stream_store;
+pub mod chain_key;
 pub mod consensus;
 pub mod consensus_pool;
 pub mod crypto;
 pub mod dkg;
-pub mod ecdsa;
 pub mod execution_environment;
-pub mod gossip_pool;
+pub mod idkg;
 pub mod ingress_manager;
 pub mod ingress_pool;
-pub mod messages;
 pub mod messaging;
+pub mod p2p;
+pub mod query_stats;
 pub mod self_validating_payload;
 pub mod time_source;
 pub mod validation;

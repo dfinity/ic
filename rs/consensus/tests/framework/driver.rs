@@ -1,23 +1,25 @@
 pub use super::types::*;
 use ic_artifact_pool::{
-    certification_pool::CertificationPoolImpl, consensus_pool::ConsensusPoolImpl, dkg_pool,
+    certification_pool::CertificationPoolImpl, consensus_pool::ConsensusPoolImpl,
+    dkg_pool::DkgPoolImpl, idkg_pool::IDkgPoolImpl,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus::consensus::ConsensusImpl;
+use ic_consensus::consensus::ConsensusBouncer;
 use ic_interfaces::{
     certification,
-    certification::{Certifier, MutableCertificationPool},
-    consensus::Consensus,
-    consensus_pool::{ChangeAction, ConsensusPool, MutableConsensusPool},
-    dkg::{ChangeAction as DkgChangeAction, Dkg as DkgInterface, MutableDkgPool},
-    time_source::TimeSource,
+    consensus_pool::{ChangeAction, Mutations as ConsensusChangeSet},
+    dkg::ChangeAction as DkgChangeAction,
+    idkg::{IDkgChangeAction, IDkgChangeSet},
+    p2p::consensus::{MutablePool, PoolMutationsProducer},
 };
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug};
 use ic_metrics::MetricsRegistry;
 use ic_test_artifact_pool::ingress_pool::TestIngressPool;
-use ic_types::consensus::ConsensusMessage;
-use std::cell::RefCell;
-use std::sync::{Arc, RwLock};
+use ic_types::{NodeId, consensus::ConsensusMessage};
+use std::{
+    cell::RefCell,
+    sync::{Arc, RwLock},
+};
 
 /// A helper that drives consensus using a separate consensus artifact pool.
 impl<'a> ConsensusDriver<'a> {
@@ -25,39 +27,55 @@ impl<'a> ConsensusDriver<'a> {
     /// component.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
+        node_id: NodeId,
         pool_config: ArtifactPoolConfig,
-        consensus: ConsensusImpl,
-        dkg: ic_consensus::dkg::DkgImpl,
-        certifier: Box<dyn Certifier + 'a>,
+        consensus: Box<
+            dyn PoolMutationsProducer<ConsensusPoolImpl, Mutations = ConsensusChangeSet>,
+        >,
+        consensus_bouncer: ConsensusBouncer,
+        dkg: ic_consensus_dkg::DkgImpl,
+        idkg: Box<dyn PoolMutationsProducer<IDkgPoolImpl, Mutations = IDkgChangeSet>>,
+        certifier: Box<
+            dyn PoolMutationsProducer<CertificationPoolImpl, Mutations = certification::Mutations>
+                + 'a,
+        >,
         consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
-        dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
+        dkg_pool: Arc<RwLock<DkgPoolImpl>>,
+        idkg_pool: Arc<RwLock<IDkgPoolImpl>>,
         logger: ReplicaLogger,
         metrics_registry: MetricsRegistry,
     ) -> ConsensusDriver<'a> {
-        let ingress_pool = RefCell::new(TestIngressPool::new(pool_config.clone()));
+        let ingress_pool = RefCell::new(TestIngressPool::new(node_id, pool_config.clone()));
         let certification_pool = Arc::new(RwLock::new(CertificationPoolImpl::new(
+            node_id,
             pool_config,
             logger.clone(),
             metrics_registry,
         )));
+        let consensus_priority =
+            BouncerState::new(&consensus_bouncer, &*consensus_pool.read().unwrap());
         ConsensusDriver {
             consensus,
+            consensus_bouncer,
             dkg,
+            idkg,
             certifier,
             logger,
             consensus_pool,
             certification_pool,
             ingress_pool,
             dkg_pool,
+            idkg_pool,
+            consensus_priority,
         }
     }
 
-    /// Run a single step of consensus, dkg and certification by repeatedly
+    /// Run a single step of consensus, dkg, certification, and idkg by repeatedly
     /// calling on_state_change and apply the changes until no more changes
     /// occur.
     ///
     /// Return a list of output messages produced in the process.
-    pub fn step(&self, time_source: &dyn TimeSource) -> Vec<InputMessage> {
+    pub fn step(&self) -> Vec<InputMessage> {
         let mut to_deliver = Vec::new();
         loop {
             let changeset = self
@@ -77,16 +95,13 @@ impl<'a> ConsensusDriver<'a> {
                     // AddToValidated are what we have produced.
                     // We will deliver them to peers.
                     ChangeAction::AddToValidated(to_add) => {
-                        debug_print_msg(&self.logger, "Deliver", to_add);
-                        to_deliver.push(InputMessage::Consensus(to_add.clone()));
+                        debug_print_msg(&self.logger, "Deliver", &to_add.msg);
+                        to_deliver.push(InputMessage::Consensus(to_add.msg.clone()));
                     }
                     _ => (),
                 }
             }
-            self.consensus_pool
-                .write()
-                .unwrap()
-                .apply_changes(time_source, changeset);
+            self.consensus_pool.write().unwrap().apply(changeset);
         }
         loop {
             let changeset = self.dkg.on_state_change(&*self.dkg_pool.read().unwrap());
@@ -97,18 +112,17 @@ impl<'a> ConsensusDriver<'a> {
                 for change_action in &changeset {
                     if let DkgChangeAction::AddToValidated(to_add) = change_action {
                         debug!(self.logger, "Deliver {:?}", to_add);
-                        to_deliver.push(InputMessage::Dkg(to_add.clone()));
+                        to_deliver.push(InputMessage::Dkg(Box::new(to_add.clone())));
                     }
                 }
                 let dkg_pool = &mut self.dkg_pool.write().unwrap();
-                dkg_pool.apply_changes(changeset);
+                dkg_pool.apply(changeset);
             }
         }
         loop {
-            let changeset = self.certifier.on_state_change(
-                self.consensus_pool.read().unwrap().as_cache(),
-                self.certification_pool.clone(),
-            );
+            let changeset = self
+                .certifier
+                .on_state_change(&*self.certification_pool.read().unwrap());
             if changeset.is_empty() {
                 break;
             }
@@ -123,7 +137,29 @@ impl<'a> ConsensusDriver<'a> {
                     }
                 }
                 let mut certification_pool = self.certification_pool.write().unwrap();
-                certification_pool.apply_changes(changeset);
+                certification_pool.apply(changeset);
+            }
+        }
+        loop {
+            let changeset = self.idkg.on_state_change(&*self.idkg_pool.read().unwrap());
+            if changeset.is_empty() {
+                break;
+            }
+            {
+                for change_action in &changeset {
+                    match change_action {
+                        IDkgChangeAction::AddToValidated(msg) => {
+                            debug!(self.logger, "IDKG Message Deliver {:?}", msg);
+                            to_deliver.push(InputMessage::IDkg(msg.clone()));
+                        }
+                        IDkgChangeAction::MoveToValidated(msg) => {
+                            debug!(self.logger, "IDKG Message Validated {:?}", msg);
+                        }
+                        _ => {}
+                    }
+                }
+                let mut idkg_pool = self.idkg_pool.write().unwrap();
+                idkg_pool.apply(changeset);
             }
         }
         to_deliver

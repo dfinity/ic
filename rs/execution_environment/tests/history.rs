@@ -3,19 +3,21 @@ use ic_error_types::{ErrorCode::CanisterNotFound, UserError};
 use ic_execution_environment::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 use ic_interfaces::execution_environment::{IngressHistoryReader, IngressHistoryWriter};
 use ic_interfaces_state_manager::Labeled;
+use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
-use ic_test_utilities::{
-    mock_time,
-    state_manager::MockStateManager,
-    types::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
-    with_test_replica_logger,
+use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_types::ids::{
+    canister_test_id, message_test_id, subnet_test_id, user_test_id,
 };
 use ic_types::{
+    ExecutionRound, Height,
     ingress::{IngressState, IngressStatus, WasmResult},
-    Height,
+    time::UNIX_EPOCH,
 };
+use tokio::sync::mpsc::{channel, error::TryRecvError};
+
 use IngressStatus::*;
 
 #[test]
@@ -46,7 +48,7 @@ fn received() -> IngressStatus {
     Known {
         receiver: canister_test_id(0).get(),
         user_id: user_test_id(0),
-        time: mock_time(),
+        time: UNIX_EPOCH,
         state: IngressState::Received,
     }
 }
@@ -55,7 +57,7 @@ fn processing() -> IngressStatus {
     Known {
         receiver: canister_test_id(0).get(),
         user_id: user_test_id(0),
-        time: mock_time(),
+        time: UNIX_EPOCH,
         state: IngressState::Processing,
     }
 }
@@ -64,7 +66,7 @@ fn completed() -> IngressStatus {
     Known {
         receiver: canister_test_id(0).get(),
         user_id: user_test_id(0),
-        time: mock_time(),
+        time: UNIX_EPOCH,
         state: IngressState::Completed(WasmResult::Reply(vec![])),
     }
 }
@@ -73,7 +75,7 @@ fn failed() -> IngressStatus {
     Known {
         receiver: canister_test_id(0).get(),
         user_id: user_test_id(0),
-        time: mock_time(),
+        time: UNIX_EPOCH,
         state: IngressState::Failed(UserError::new(CanisterNotFound, "")),
     }
 }
@@ -89,17 +91,102 @@ fn valid_transitions() -> Vec<(IngressStatus, Vec<IngressStatus>)> {
     ]
 }
 
+/// Tests that [`IngressHistoryWriterImpl`] transmits the height of the last committed state + 1
+/// for messages that complete execution.
+#[test]
+fn test_terminal_states_are_transmitted() {
+    with_test_replica_logger(|log| {
+        let current_round = ExecutionRound::from(11);
+        let expected_height = Height::from(current_round.get());
+
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        let (completed_execution_messages_tx, mut completed_execution_messages_rx) = channel(100);
+        let ingress_history_writer = IngressHistoryWriterImpl::new(
+            Config::default(),
+            log,
+            &MetricsRegistry::new(),
+            completed_execution_messages_tx,
+        );
+        let message_id = message_test_id(1);
+
+        ingress_history_writer.set_status(
+            &mut state,
+            message_id.clone(),
+            received(),
+            ExecutionRound::from(0),
+        );
+        assert_eq!(
+            completed_execution_messages_rx.try_recv(),
+            Err(TryRecvError::Empty),
+            "Non terminal state should not trigger a transmission."
+        );
+
+        ingress_history_writer.set_status(
+            &mut state,
+            message_id.clone(),
+            processing(),
+            ExecutionRound::from(0),
+        );
+        assert_eq!(
+            completed_execution_messages_rx.try_recv(),
+            Err(TryRecvError::Empty),
+            "Non terminal state should not trigger a transmission."
+        );
+
+        {
+            let mut state = state.clone();
+            ingress_history_writer.set_status(
+                &mut state,
+                message_id.clone(),
+                completed(),
+                current_round,
+            );
+            assert_eq!(
+                completed_execution_messages_rx.try_recv(),
+                Ok((message_id.clone(), expected_height)),
+                "Terminal state, `Completed`, should trigger the height of state to be sent"
+            );
+        }
+
+        {
+            let mut state = state.clone();
+            ingress_history_writer.set_status(
+                &mut state,
+                message_id.clone(),
+                failed(),
+                current_round,
+            );
+            assert_eq!(
+                completed_execution_messages_rx.try_recv(),
+                Ok((message_id.clone(), expected_height)),
+                "Terminal state, `Failed`, should trigger the height of state to be sent"
+            );
+        }
+    })
+}
+
 #[test]
 fn test_valid_transitions() {
     with_test_replica_logger(|log| {
         let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-        let ingress_history_writer =
-            IngressHistoryWriterImpl::new(Config::default(), log, &MetricsRegistry::new());
+
+        let (completed_execution_messages_tx, _) = channel(1);
+        let ingress_history_writer = IngressHistoryWriterImpl::new(
+            Config::default(),
+            log,
+            &MetricsRegistry::new(),
+            completed_execution_messages_tx,
+        );
         let message_id = message_test_id(1);
 
         for (origin_state, next_states) in valid_transitions().into_iter() {
             let mut state = state.clone();
-            ingress_history_writer.set_status(&mut state, message_id.clone(), origin_state);
+            ingress_history_writer.set_status(
+                &mut state,
+                message_id.clone(),
+                origin_state,
+                ExecutionRound::from(0),
+            );
 
             for next_state in next_states {
                 let mut state = state.clone();
@@ -107,8 +194,9 @@ fn test_valid_transitions() {
                     &mut state,
                     message_id.clone(),
                     next_state.clone(),
+                    ExecutionRound::from(0),
                 );
-                assert_eq!(state.get_ingress_status(&message_id), next_state);
+                assert_eq!(state.get_ingress_status(&message_id), &next_state);
             }
         }
     })
@@ -117,8 +205,13 @@ fn test_valid_transitions() {
 #[test]
 fn test_invalid_transitions() {
     with_test_replica_logger(|log| {
-        let ingress_history_writer =
-            IngressHistoryWriterImpl::new(Config::default(), log, &MetricsRegistry::new());
+        let (completed_execution_messages_tx, _) = channel(1);
+        let ingress_history_writer = IngressHistoryWriterImpl::new(
+            Config::default(),
+            log,
+            &MetricsRegistry::new(),
+            completed_execution_messages_tx,
+        );
         let message_id = message_test_id(1);
 
         // creates a set of valid transitions
@@ -132,7 +225,7 @@ fn test_invalid_transitions() {
             })
             .collect::<HashSet<(IngressStatus, IngressStatus)>>();
 
-        let all_statuses = vec![Unknown, received(), processing(), completed(), failed()];
+        let all_statuses = [Unknown, received(), processing(), completed(), failed()];
         // creates the cartesian product of all states and filters out the valid
         // transitions
 
@@ -154,18 +247,18 @@ fn test_invalid_transitions() {
                     &mut state,
                     message_id.clone(),
                     origin_state.clone(),
+                    ExecutionRound::from(0),
                 );
                 ingress_history_writer.set_status(
                     &mut state,
                     message_id.clone(),
                     next_state.clone(),
+                    ExecutionRound::from(0),
                 )
             });
             assert!(
                 result.is_err(),
-                "transition from {:?} to {:?} worked but should have failed",
-                origin_state,
-                next_state
+                "transition from {origin_state:?} to {next_state:?} worked but should have failed"
             );
         }
     })

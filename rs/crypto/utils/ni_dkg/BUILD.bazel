@@ -1,0 +1,46 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/protobuf",
+    "//rs/types/types",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/config",
+    "//rs/crypto/node_key_generation",
+    "//rs/crypto/node_key_validation",
+    "//rs/crypto/test_utils/ni-dkg",
+    "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/types/base_types",
+    "//rs/types/types_test_utils",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "ni_dkg",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_crypto_utils_ni_dkg",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_doc_test(
+    name = "ni_dkg_doc_test",
+    crate = ":ni_dkg",
+)
+
+rust_test(
+    name = "ni_dkg_test",
+    srcs = ["tests/tests.rs"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":ni_dkg"],
+)

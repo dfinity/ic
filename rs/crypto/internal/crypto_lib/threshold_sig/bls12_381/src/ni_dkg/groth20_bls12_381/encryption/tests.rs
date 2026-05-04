@@ -1,21 +1,24 @@
-#![allow(clippy::unwrap_used)]
 //! Tests for the CLib NiDKG forward secure encryption
-pub use rand::{Rng, RngCore, SeedableRng};
-pub use rand_chacha::ChaChaRng;
+use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
+pub use rand::{Rng, SeedableRng};
 pub use std::collections::BTreeMap;
 
 mod internal_types {
-    pub use ic_crypto_internal_types::curves::bls12_381::Fr as FrBytes;
+
     pub use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
     pub use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
     pub use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes as ThresholdPublicKeyBytes;
 }
 mod clib {
-    pub use crate::api::keygen as threshold_keygen;
+    pub use crate::api::generate_threshold_key;
     pub use crate::types::SecretKeyBytes as ThresholdSecretKeyBytes;
 }
-use super::conversions::{public_key_into_miracl, trusted_secret_key_into_miracl};
 use super::*;
+use crate::ni_dkg::fs_ni_dkg::forward_secure::{PublicKeyWithPop, SecretKey};
+use crate::ni_dkg::groth20_bls12_381::encryption::tests::ForwardSecureKeyVerificationError::{
+    Deserialization, PopVerificationFailed,
+};
+use ic_crypto_internal_bls12_381_type::Scalar;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionPop;
 use internal_types::Epoch;
 
@@ -37,46 +40,67 @@ fn constants_should_be_compatible() {
 /// Keygen should run without panicking.
 #[test]
 fn keygen_should_work() {
-    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2u8, 8u8, 1u8, 2u8];
-    create_forward_secure_key_pair(Seed::from_bytes(&[85u8; 32]), KEY_GEN_ASSOCIATED_DATA);
+    let rng = &mut ReproducibleRng::new();
+    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2_u8, 8_u8, 1_u8, 2_u8];
+    create_forward_secure_key_pair(Seed::from_rng(rng), KEY_GEN_ASSOCIATED_DATA);
 }
 
 #[test]
 fn epoch_of_a_new_key_should_be_zero() {
-    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2u8, 3u8, 0u8, 6u8];
-    let key_set =
-        create_forward_secure_key_pair(Seed::from_bytes(&[12u8; 32]), KEY_GEN_ASSOCIATED_DATA);
-    let epoch = epoch_from_miracl_secret_key(&trusted_secret_key_into_miracl(&key_set.secret_key));
+    let rng = &mut ReproducibleRng::new();
+    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2_u8, 3_u8, 0_u8, 6_u8];
+    let key_set = create_forward_secure_key_pair(Seed::from_rng(rng), KEY_GEN_ASSOCIATED_DATA);
+    let epoch = SecretKey::deserialize(&key_set.secret_key)
+        .current_epoch()
+        .unwrap();
     assert_eq!(epoch.get(), 0);
 }
 
 #[test]
 fn single_stepping_a_key_should_increment_current_epoch() {
-    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[0u8, 5u8, 0u8, 5u8];
-    let FsEncryptionKeySetWithPop { secret_key, .. } =
-        create_forward_secure_key_pair(Seed::from_bytes(&[89u8; 32]), KEY_GEN_ASSOCIATED_DATA);
-    let mut secret_key = trusted_secret_key_into_miracl(&secret_key);
+    let rng = &mut ReproducibleRng::new();
+    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[0_u8, 5_u8, 0_u8, 5_u8];
+
+    let key_with_pop = create_forward_secure_key_pair(Seed::from_rng(rng), KEY_GEN_ASSOCIATED_DATA);
+    let mut secret_key = SecretKey::deserialize(&key_with_pop.secret_key);
     for epoch in 4..8 {
         let secret_key_epoch = Epoch::from(epoch);
-        update_key_inplace_to_epoch(
-            &mut secret_key,
-            secret_key_epoch,
-            Seed::from_bytes(&[9u8; 32]),
-        );
-        let key_epoch = epoch_from_miracl_secret_key(&secret_key).get();
+        update_key_inplace_to_epoch(&mut secret_key, secret_key_epoch, Seed::from_rng(rng));
+        let key_epoch = secret_key.current_epoch().unwrap().get();
         assert_eq!(
             key_epoch, epoch,
-            "Deleted epoch {} but key epoch is {}\n",
-            epoch, key_epoch
+            "Deleted epoch {epoch} but key epoch is {key_epoch}\n"
         );
     }
 }
 
 #[test]
+fn should_not_update_key_on_current_or_past_epoch() {
+    let rng = &mut reproducible_rng();
+    let associated_data = rng.r#gen::<[u8; 4]>();
+
+    let key_with_pop = create_forward_secure_key_pair(Seed::from_rng(rng), &associated_data);
+    let mut secret_key = SecretKey::deserialize(&key_with_pop.secret_key);
+    let secret_key_epoch = Epoch::from(10);
+    update_key_inplace_to_epoch(&mut secret_key, secret_key_epoch, Seed::from_rng(rng));
+    assert_eq!(secret_key.current_epoch(), Some(secret_key_epoch));
+
+    let past_epoch = Epoch::from(9);
+    let key_before_update = secret_key.serialize();
+
+    // Update key to a previous epoch
+    update_key_inplace_to_epoch(&mut secret_key, past_epoch, Seed::from_rng(rng));
+    assert_eq!(secret_key.serialize(), key_before_update);
+    // Update key to current epoch
+    update_key_inplace_to_epoch(&mut secret_key, secret_key_epoch, Seed::from_rng(rng));
+    assert_eq!(secret_key.serialize(), key_before_update);
+}
+
+#[test]
 fn correct_keys_should_verify() {
-    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[11u8, 2u8, 19u8, 31u8];
-    let key_set =
-        create_forward_secure_key_pair(Seed::from_bytes(&[31u8; 32]), KEY_GEN_ASSOCIATED_DATA);
+    let rng = &mut ReproducibleRng::new();
+    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[11_u8, 2_u8, 19_u8, 31_u8];
+    let key_set = create_forward_secure_key_pair(Seed::from_rng(rng), KEY_GEN_ASSOCIATED_DATA);
     let verification =
         verify_forward_secure_key(&key_set.public_key, &key_set.pop, KEY_GEN_ASSOCIATED_DATA);
     assert_eq!(verification, Ok(()));
@@ -84,34 +108,29 @@ fn correct_keys_should_verify() {
 
 #[test]
 fn wrong_pop_should_not_verify() {
-    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[1u8, 9u8, 0u8, 3u8];
-    let seed = Seed::from_bytes(&[62u8; 32]);
-    let different_seed = Seed::from_bytes(&[9u8; 32]);
+    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[1_u8, 9_u8, 0_u8, 3_u8];
+    let seed = Seed::from_bytes(&[62_u8; 32]);
+    let different_seed = Seed::from_bytes(&[9_u8; 32]);
     let FsEncryptionKeySetWithPop { public_key, .. } =
         create_forward_secure_key_pair(seed, KEY_GEN_ASSOCIATED_DATA);
     let FsEncryptionKeySetWithPop { pop, .. } =
         create_forward_secure_key_pair(different_seed, KEY_GEN_ASSOCIATED_DATA);
     let verification = verify_forward_secure_key(&public_key, &pop, KEY_GEN_ASSOCIATED_DATA);
-    assert_eq!(verification, Err(()));
+    assert_eq!(verification, Err(PopVerificationFailed));
 }
 
 /// Generates valid threshold keys and the corresponding public coefficients
 fn generate_threshold_keys(
-    num_receivers: usize,
+    num_receivers: u32,
     threshold: NumberOfNodes,
     seed: Seed,
 ) -> (
     internal_types::PublicCoefficientsBytes,
     Vec<clib::ThresholdSecretKeyBytes>,
 ) {
-    let receiver_eligibility = vec![true; num_receivers];
-    let (public_coefficients, threshold_keys_maybe) =
-        clib::threshold_keygen(seed, threshold, &receiver_eligibility[..])
+    let (public_coefficients, threshold_keys) =
+        clib::generate_threshold_key(seed, threshold, NumberOfNodes::from(num_receivers))
             .expect("Test fail: Threshold keygen failed");
-    let threshold_keys = threshold_keys_maybe
-        .iter()
-        .map(|key_maybe| key_maybe.unwrap())
-        .collect::<Vec<_>>();
     let public_coefficients = internal_types::PublicCoefficientsBytes {
         coefficients: public_coefficients
             .coefficients
@@ -126,15 +145,17 @@ fn generate_threshold_keys(
 fn fs_key_message_pairs(
     threshold_keys: &[clib::ThresholdSecretKeyBytes],
     forward_secure_key_sets: &[FsEncryptionKeySetWithPop],
-) -> Vec<(FsEncryptionPublicKey, FsEncryptionPlaintext)> {
+) -> Vec<(FsEncryptionPublicKey, Scalar)> {
     threshold_keys
         .iter()
         .zip(forward_secure_key_sets)
         .map(
             |(threshold_key, FsEncryptionKeySetWithPop { public_key, .. })| {
-                let message = internal_types::FrBytes(threshold_key.0);
-                let message = FsEncryptionPlaintext::from(&message);
-                (*public_key, message)
+                (
+                    *public_key,
+                    Scalar::deserialize(&threshold_key.0.expose_secret())
+                        .expect("Invalid secret key"),
+                )
             },
         )
         .collect()
@@ -143,28 +164,21 @@ fn fs_key_message_pairs(
 #[test]
 fn encryption_should_work() {
     const NUM_RECEIVERS: u8 = 3;
-    let mut rng = ChaChaRng::from_seed([17; 32]);
-    let mut associated_data = [0u8; 22];
-    rng.fill_bytes(&mut associated_data[..]);
+    let rng = &mut ReproducibleRng::new();
+    let associated_data = rng.r#gen::<[u8; 22]>();
     let threshold = NumberOfNodes::from(2);
 
-    let (public_coefficients, threshold_keys) = generate_threshold_keys(
-        NUM_RECEIVERS as usize,
-        threshold,
-        Seed::from_bytes(&[99u8; 32]),
-    );
+    let (public_coefficients, threshold_keys) =
+        generate_threshold_keys(NUM_RECEIVERS as u32, threshold, Seed::from_rng(rng));
 
     let forward_secure_keys: Vec<FsEncryptionKeySetWithPop> = (0..NUM_RECEIVERS)
         .map(|receiver_index| {
-            create_forward_secure_key_pair(
-                Seed::from_bytes(&[receiver_index | 0x10; 32]),
-                &[receiver_index],
-            )
+            create_forward_secure_key_pair(Seed::from_rng(rng), &[receiver_index])
         })
         .collect();
 
     encrypt_and_prove(
-        Seed::from_bytes(&[0x69; 32]),
+        Seed::from_rng(rng),
         &fs_key_message_pairs(&threshold_keys, &forward_secure_keys),
         Epoch::from(4),
         &public_coefficients,
@@ -182,30 +196,23 @@ fn encryption_should_work() {
 #[test]
 fn encrypted_messages_should_decrypt() {
     const NUM_RECEIVERS: u8 = 3;
-    let mut rng = ChaChaRng::from_seed([11; 32]);
-    let mut associated_data = [0u8; 18];
-    rng.fill_bytes(&mut associated_data[..]);
+    let rng = &mut ReproducibleRng::new();
+    let associated_data = rng.r#gen::<[u8; 18]>();
     let threshold = NumberOfNodes::from(2);
 
-    let (public_coefficients, threshold_keys) = generate_threshold_keys(
-        NUM_RECEIVERS as usize,
-        threshold,
-        Seed::from_bytes(&[99u8; 32]),
-    );
+    let (public_coefficients, threshold_keys) =
+        generate_threshold_keys(NUM_RECEIVERS as u32, threshold, Seed::from_rng(rng));
 
     let forward_secure_keys: Vec<FsEncryptionKeySetWithPop> = (0..NUM_RECEIVERS)
         .map(|receiver_index| {
-            create_forward_secure_key_pair(
-                Seed::from_bytes(&[receiver_index | 0x10; 32]),
-                &[receiver_index],
-            )
+            create_forward_secure_key_pair(Seed::from_rng(rng), &[receiver_index])
         })
         .collect();
 
     let key_message_pairs = fs_key_message_pairs(&threshold_keys, &forward_secure_keys);
 
     let epoch = Epoch::from(5); // Small epoch as forward-stepping is slow
-    let seed = Seed::from_bytes(&[0x69; 32]);
+    let seed = Seed::from_rng(rng);
     let (ciphertext, ..) = encrypt_and_prove(
         seed,
         &key_message_pairs,
@@ -217,7 +224,7 @@ fn encrypted_messages_should_decrypt() {
 
     let secret_keys = forward_secure_keys
         .iter()
-        .map(|key| trusted_secret_key_into_miracl(&key.secret_key));
+        .map(|key| SecretKey::deserialize(&key.secret_key));
     let messages = key_message_pairs.iter().map(|key_message| &key_message.1);
     for ((secret_key, message), node_index) in secret_keys.zip(messages).zip(0..) {
         let plaintext_maybe = decrypt(
@@ -230,8 +237,7 @@ fn encrypted_messages_should_decrypt() {
         assert_eq!(
             plaintext_maybe.as_ref(),
             Ok(message),
-            "Plaintext doesn't match for node {}",
-            node_index
+            "Plaintext doesn't match for node {node_index}"
         );
     }
 }
@@ -247,21 +253,14 @@ fn encrypted_messages_should_decrypt() {
 fn decryption_should_fail_below_epoch() {
     const NUM_RECEIVERS: u8 = 3;
     let threshold = NumberOfNodes::from(2);
-    let mut rng = ChaChaRng::from_seed([0xbe; 32]);
-    let mut associated_data = [0u8; 10];
-    rng.fill_bytes(&mut associated_data[..]);
+    let rng = &mut ReproducibleRng::new();
+    let associated_data = rng.r#gen::<[u8; 10]>();
 
-    let (public_coefficients, threshold_keys) = generate_threshold_keys(
-        NUM_RECEIVERS as usize,
-        threshold,
-        Seed::from_bytes(&[99u8; 32]),
-    );
+    let (public_coefficients, threshold_keys) =
+        generate_threshold_keys(NUM_RECEIVERS as u32, threshold, Seed::from_rng(rng));
     let forward_secure_keys: Vec<FsEncryptionKeySetWithPop> = (0..NUM_RECEIVERS)
         .map(|receiver_index| {
-            create_forward_secure_key_pair(
-                Seed::from_bytes(&[receiver_index | 0x10; 32]),
-                &[receiver_index],
-            )
+            create_forward_secure_key_pair(Seed::from_rng(rng), &[receiver_index])
         })
         .collect();
     let key_message_pairs = fs_key_message_pairs(&threshold_keys, &forward_secure_keys);
@@ -275,7 +274,7 @@ fn decryption_should_fail_below_epoch() {
         .iter()
         .map(|epoch| {
             encrypt_and_prove(
-                Seed::from_rng(&mut rng),
+                Seed::from_rng(rng),
                 &key_message_pairs,
                 *epoch,
                 &public_coefficients,
@@ -288,12 +287,12 @@ fn decryption_should_fail_below_epoch() {
 
     let secret_keys = forward_secure_keys
         .iter()
-        .map(|key| trusted_secret_key_into_miracl(&key.secret_key));
+        .map(|key| SecretKey::deserialize(&key.secret_key));
     let messages = key_message_pairs.iter().map(|key_message| &key_message.1);
-    #[allow(clippy::iter_next_loop)] // We test just one of the receivers
-    for ((mut secret_key, message), node_index) in secret_keys.zip(messages).zip(0..).next() {
+    if let Some(((mut secret_key, message), node_index)) = secret_keys.zip(messages).zip(0..).next()
+    {
         // Delete keys below epoch
-        update_key_inplace_to_epoch(&mut secret_key, secret_key_epoch, Seed::from_rng(&mut rng));
+        update_key_inplace_to_epoch(&mut secret_key, secret_key_epoch, Seed::from_rng(rng));
 
         // Decrypts should succeed only for ciphertexts with higher epochs
         for (ciphertext_epoch, ciphertext) in encryption_epochs
@@ -312,8 +311,7 @@ fn decryption_should_fail_below_epoch() {
                 assert_eq!(
                     plaintext_maybe.as_ref(),
                     Ok(message),
-                    "Plaintext doesn't match for node {}",
-                    node_index
+                    "Plaintext doesn't match for node {node_index}"
                 );
             } else {
                 assert_eq!(
@@ -322,8 +320,7 @@ fn decryption_should_fail_below_epoch() {
                         ciphertext_epoch,
                         secret_key_epoch
                     }),
-                    "Node {} should not be able to decrypt after having deleted the current epoch",
-                    node_index
+                    "Node {node_index} should not be able to decrypt after having deleted the current epoch"
                 );
             }
         }
@@ -333,29 +330,22 @@ fn decryption_should_fail_below_epoch() {
 #[test]
 fn zk_proofs_should_verify() {
     const NUM_RECEIVERS: u8 = 3;
-    let mut rng = ChaChaRng::from_seed([33; 32]);
-    let mut associated_data = [0u8; 10];
-    rng.fill_bytes(&mut associated_data[..]);
+    let rng = &mut ReproducibleRng::new();
+    let associated_data = rng.r#gen::<[u8; 10]>();
     let threshold = NumberOfNodes::from(2);
-    let (public_coefficients, threshold_keys) = generate_threshold_keys(
-        NUM_RECEIVERS as usize,
-        threshold,
-        Seed::from_bytes(&[99u8; 32]),
-    );
+    let (public_coefficients, threshold_keys) =
+        generate_threshold_keys(NUM_RECEIVERS as u32, threshold, Seed::from_rng(rng));
 
     let forward_secure_keys: Vec<FsEncryptionKeySetWithPop> = (0..NUM_RECEIVERS)
         .map(|receiver_index| {
-            create_forward_secure_key_pair(
-                Seed::from_bytes(&[receiver_index | 0x10; 32]),
-                &[receiver_index],
-            )
+            create_forward_secure_key_pair(Seed::from_rng(rng), &[receiver_index])
         })
         .collect();
 
     let key_message_pairs = fs_key_message_pairs(&threshold_keys, &forward_secure_keys);
 
     let epoch = Epoch::from(5); // Small epoch as forward-stepping is slow
-    let seed = Seed::from_bytes(&[0x69; 32]);
+    let seed = Seed::from_rng(rng);
     let (ciphertext, chunking_proof, sharing_proof) = encrypt_and_prove(
         seed,
         &key_message_pairs,
@@ -385,30 +375,24 @@ fn zk_proofs_should_verify() {
 #[test]
 fn zk_proofs_should_not_verify_with_wrong_epoch() {
     const NUM_RECEIVERS: u8 = 3;
-    let mut rng = ChaChaRng::from_seed([48; 32]);
-    let mut associated_data = [0u8; 100];
+    let rng = &mut ReproducibleRng::new();
+    let mut associated_data = [0_u8; 100];
     rng.fill_bytes(&mut associated_data[..]);
     let threshold = NumberOfNodes::from(2);
 
-    let (public_coefficients, threshold_keys) = generate_threshold_keys(
-        NUM_RECEIVERS as usize,
-        threshold,
-        Seed::from_bytes(&[99u8; 32]),
-    );
+    let (public_coefficients, threshold_keys) =
+        generate_threshold_keys(NUM_RECEIVERS as u32, threshold, Seed::from_rng(rng));
 
     let forward_secure_keys: Vec<FsEncryptionKeySetWithPop> = (0..NUM_RECEIVERS)
         .map(|receiver_index| {
-            create_forward_secure_key_pair(
-                Seed::from_bytes(&[receiver_index | 0x10; 32]),
-                &[receiver_index],
-            )
+            create_forward_secure_key_pair(Seed::from_rng(rng), &[receiver_index])
         })
         .collect();
 
     let key_message_pairs = fs_key_message_pairs(&threshold_keys, &forward_secure_keys);
 
     let epoch = Epoch::from(5); // Small epoch as forward-stepping is slow
-    let seed = Seed::from_bytes(&[0x69; 32]);
+    let seed = Seed::from_rng(rng);
     let (ciphertext, chunking_proof, sharing_proof) = encrypt_and_prove(
         seed,
         &key_message_pairs,
@@ -443,24 +427,30 @@ fn zk_proofs_should_not_verify_with_wrong_epoch() {
     );
 }
 
-// TODO(IDX-1866)
-#[allow(clippy::result_unit_err)]
 /// Verifies that a public key is a point on the curve and that the proof of
 /// possession holds.
 ///
 /// # Errors
-/// * `Err(())` if
+/// * `Err(String)` if
 ///   - Any of the components of `public_key` is not a correct group element.
 ///   - The proof of possession doesn't verify.
 fn verify_forward_secure_key(
     public_key: &FsEncryptionPublicKey,
     pop: &FsEncryptionPop,
     associated_data: &[u8],
-) -> Result<(), ()> {
-    let crypto_public_key_with_pop = public_key_into_miracl((public_key, pop))?;
+) -> Result<(), ForwardSecureKeyVerificationError> {
+    let crypto_public_key_with_pop =
+        PublicKeyWithPop::deserialize(public_key, pop).ok_or(Deserialization)?;
+
     if crypto_public_key_with_pop.verify(associated_data) {
         Ok(())
     } else {
-        Err(())
+        Err(PopVerificationFailed)
     }
+}
+
+#[derive(Eq, PartialEq, Debug)]
+enum ForwardSecureKeyVerificationError {
+    Deserialization,
+    PopVerificationFailed,
 }

@@ -1,9 +1,0 @@
-[package]
-name = "ic-error-types"
-version = "0.8.0"
-edition = "2021"
-
-[dependencies]
-serde = { version = "1.0.99", features = ["derive"] }
-strum = "0.23.0"
-strum_macros = "0.23.0"

@@ -1,25 +1,29 @@
 [package]
 name = "canister-test"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-backoff = "0.3.0"
-candid = "0.8.1"
+backoff = { workspace = true }
+candid = { workspace = true }
 cargo_metadata = "0.14.2"
-dfn_candid={path="../dfn_candid"}
+dfn_candid = { path = "../dfn_candid" }
+escargot = "0.5.2"
 ic-canister-client = { path = "../../canister_client" }
 ic-config = { path = "../../config" }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
+ic-management-canister-types = { workspace = true }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-registry-transport = { path = "../../registry/transport" }
 ic-replica-tests = { path = "../../replica_tests" }
-ic-test-utilities = { path = "../../test_utilities" }
+ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
-escargot = "0.5.2"
 on_wire = { path = "../on_wire" }
-rand = "0.8"
-reqwest = { version = "0.11.1", features = [ "native-tls" ] }
-tokio = { version = "1.15.0", features = [ "full" ] }
-wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
-
+rand = { workspace = true }
+tokio = { workspace = true }
+wasmprinter = { workspace = true }
+wat = { workspace = true }

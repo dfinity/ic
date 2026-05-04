@@ -1,0 +1,15 @@
+[package]
+name = "ic-tracing-logging-layer"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-config = { path = "../../../config" }
+ic-base-types = { path = "../../../types/base_types" }
+time = { workspace = true }
+tracing = { workspace = true }
+tracing-appender = { workspace = true }
+tracing-subscriber = { workspace = true }

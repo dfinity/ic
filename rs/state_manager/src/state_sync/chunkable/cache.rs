@@ -23,7 +23,6 @@ fn delete_folder(log: &ReplicaLogger, path: &Path) {
 /// cache if the artifact manager aborts the corresponding state sync.
 pub struct StateSyncCache {
     entry: Option<Arc<StateSyncCacheEntry>>,
-    highest_successful_sync: Option<Height>,
     log: ReplicaLogger,
 }
 
@@ -56,34 +55,12 @@ impl Drop for StateSyncCacheEntry {
 impl StateSyncCache {
     /// Create an empty cache
     pub fn new(log: ReplicaLogger) -> Self {
-        Self {
-            entry: None,
-            highest_successful_sync: None,
-            log,
-        }
+        Self { entry: None, log }
     }
 
     /// Returns a reference to the cached entry if there is one available.
     pub fn get(&self) -> Option<Arc<StateSyncCacheEntry>> {
-        self.entry.as_ref().map(Arc::clone)
-    }
-
-    /// Tell the cache that a successful state sync has completed for `height`
-    pub fn register_successful_sync(&mut self, height: Height) {
-        let new_height = match self.highest_successful_sync {
-            Some(old_height) => height.max(old_height),
-            None => height,
-        };
-        self.highest_successful_sync = Some(new_height);
-    }
-
-    /// Returns true if we know that we successfully synced the state at
-    /// `height` using the state sync protocol
-    pub fn state_is_fetched(&self, height: Height) -> bool {
-        match self.highest_successful_sync {
-            Some(last_height) => last_height == height,
-            None => false,
-        }
+        self.entry.clone()
     }
 
     /// Pushes the state sync data to the cache without checking that
@@ -95,12 +72,38 @@ impl StateSyncCache {
         sync: &IncompleteState,
         manifest: Manifest,
         fetch_chunks: HashSet<usize>,
+        state_sync_file_group: FileGroupChunks,
+        copied_chunks_from_file_group: HashSet<ManifestChunkIndex>,
     ) {
-        // fetch_chunks, as stored by IncompleteState considers the manifest as chunk 0
+        // fetch_chunks, as stored by IncompleteState considers the meta-manifest as chunk 0
         // For the cache we store indices into the manifest's chunk table as
         // missing_chunks.
         debug_assert!(!fetch_chunks.contains(&0));
-        let missing_chunks = fetch_chunks.into_iter().map(|i| i - 1).collect();
+        let mut missing_chunks: HashSet<usize> = Default::default();
+        for i in fetch_chunks.into_iter() {
+            assert_ne!(0, i);
+            if i < FILE_GROUP_CHUNK_ID_OFFSET as usize {
+                missing_chunks.insert(i - FILE_CHUNK_ID_OFFSET);
+            } else {
+                // If it's a chunk group, the individual chunks are missing in the manifest,
+                // not the group
+                let chunks = state_sync_file_group
+                    .get(&(i as u32))
+                    .expect("Unknown chunk group");
+                missing_chunks.extend(
+                    chunks
+                        .iter()
+                        .filter(|i| !copied_chunks_from_file_group.contains(i))
+                        .map(|i| *i as usize),
+                );
+            }
+        }
+
+        debug_assert!(
+            missing_chunks
+                .iter()
+                .all(|i| *i + FILE_CHUNK_ID_OFFSET < FILE_GROUP_CHUNK_ID_OFFSET as usize)
+        );
 
         // We rename the folder to decouple the cache from active state syncs a bit.
         // Otherwise we'd have to assume that there won't be an active state sync at
@@ -150,10 +153,13 @@ impl StateSyncCache {
         // same height (and path)
         if let Some(ref entry) = self.entry {
             match sync.state {
-                DownloadState::Blank => {
+                // Retain the existing cache entry if the state is Blank or Prep.
+                // The cache is only populated after `initialize_state_on_disk()` is called,
+                // as it incorporates actual state data from previous checkpoints or syncs at that point.
+                DownloadState::Blank | DownloadState::Prep { .. } => {
                     // Keep what we have
                 }
-                _ => {
+                DownloadState::Loading { .. } | DownloadState::Complete => {
                     if sync.height >= entry.height {
                         self.entry = None;
                     }
@@ -163,20 +169,29 @@ impl StateSyncCache {
 
         match std::mem::replace(&mut sync.state, DownloadState::Blank) {
             DownloadState::Loading {
+                meta_manifest: _,
                 manifest,
+                state_sync_file_group,
                 fetch_chunks,
+                copied_chunks_from_file_group,
             } => {
                 if self.entry.is_some() {
                     // The current cache is newer
                     delete_folder(&self.log, &sync.root);
                 } else {
-                    self.push_inner(sync, manifest, fetch_chunks);
+                    self.push_inner(
+                        sync,
+                        manifest,
+                        fetch_chunks,
+                        state_sync_file_group,
+                        copied_chunks_from_file_group,
+                    );
                 }
             }
-            DownloadState::Complete(_) | DownloadState::Blank => {
+            DownloadState::Complete | DownloadState::Blank | DownloadState::Prep { .. } => {
                 // Nothing to cache
                 // Sanity check that the folder is gone (if completed, should have been moved to
-                // a permanent checkpoint, if blank, should never have been created)
+                // a permanent checkpoint, if blank or prep, should never have been created)
                 if sync.root.exists() {
                     warn!(
                         self.log,

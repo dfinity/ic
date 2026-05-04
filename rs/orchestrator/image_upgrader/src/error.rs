@@ -1,8 +1,8 @@
 use ic_http_utils::file_downloader::FileDownloadError;
 use std::error::Error;
+use std::ffi::OsStr;
 use std::fmt;
 use std::io;
-use tokio::process::Command;
 
 pub type UpgradeResult<T> = Result<T, UpgradeError>;
 
@@ -22,6 +22,8 @@ pub enum UpgradeError {
 
     /// Generic error while handling reboot time
     RebootTimeError(String),
+
+    DiskEncryptionKeyExchangeError(String),
 }
 
 impl UpgradeError {
@@ -29,8 +31,11 @@ impl UpgradeError {
         UpgradeError::RebootTimeError(msg.to_string())
     }
 
-    pub(crate) fn file_command_error(e: io::Error, cmd: &Command) -> Self {
-        UpgradeError::IoError(format!("Failed to executing command: {:?}", cmd), e)
+    pub(crate) fn manageboot_error(e: io::Error, args: &[&OsStr]) -> Self {
+        UpgradeError::IoError(
+            format!("Failed to execute manageboot command with args {args:?}"),
+            e,
+        )
     }
 }
 
@@ -38,13 +43,16 @@ impl fmt::Display for UpgradeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             UpgradeError::IoError(msg, e) => {
-                write!(f, "IO error, message: {:?}, error: {:?}", msg, e)
+                write!(f, "IO error, message: {msg:?}, error: {e:?}")
             }
-            UpgradeError::FileDownloadError(e) => write!(f, "File download error: {:?}", e),
+            UpgradeError::FileDownloadError(e) => write!(f, "File download error: {e}"),
             UpgradeError::RebootTimeError(msg) => {
-                write!(f, "Failed to read or write reboot time: {}", msg)
+                write!(f, "Failed to read or write reboot time: {msg}")
             }
-            UpgradeError::GenericError(msg) => write!(f, "Failed to upgrade: {}", msg),
+            UpgradeError::GenericError(msg) => write!(f, "Failed to upgrade: {msg}"),
+            UpgradeError::DiskEncryptionKeyExchangeError(msg) => {
+                write!(f, "Failed to exchange disk encryption key: {msg}")
+            }
         }
     }
 }
