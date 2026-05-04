@@ -553,6 +553,7 @@ impl CallOrTaskHelper {
                     round.time,
                     round.network_topology,
                     round.hypervisor.subnet_id(),
+                    round.hypervisor.metrics(),
                     round.log,
                     round.counters.state_changes_error,
                     call_tree_metrics,
@@ -577,6 +578,7 @@ impl CallOrTaskHelper {
                         round.network_topology,
                         round.hypervisor.subnet_id(),
                         is_composite_query,
+                        round.hypervisor.metrics(),
                         round.log,
                     )
                 {

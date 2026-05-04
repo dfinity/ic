@@ -26,6 +26,7 @@ use ic_replicated_state::canister_state::system_state::is_low_wasm_memory_hook_c
 use ic_replicated_state::{
     CallOrigin, ExecutionTask, NetworkTopology, SystemState, canister_state::DEFAULT_QUEUE_CAPACITY,
 };
+use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::{
     CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumInstructions, Time,
     messages::{CallContextId, CallbackId, NO_DEADLINE, RejectContext, Request, RequestMetadata},
@@ -387,16 +388,21 @@ impl SystemStateModifications {
 
     /// Verify that the changes to the system state are sound and apply them to
     /// the system state if they are.
-    pub fn apply_changes(
+    pub fn apply_changes<Metrics: CanisterLogMetrics>(
         mut self,
         time: Time,
         system_state: &mut SystemState,
         network_topology: &NetworkTopology,
         own_subnet_id: SubnetId,
         is_composite_query: bool,
+        metrics: &Metrics,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
         // Append delta logs.
+        if !self.canister_log.is_empty() {
+            // TODO(DSM-11): Move this into append_delta_log() once there is only one of it.
+            metrics.observe_delta_log_size(self.canister_log.bytes_used());
+        }
         if LOG_MEMORY_STORE_FEATURE_ENABLED {
             let log_memory_store = &mut system_state.log_memory_store;
             // TODO(DSM-11): cleanup population logic after migration is done.

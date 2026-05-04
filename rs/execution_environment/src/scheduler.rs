@@ -13,7 +13,6 @@ use crate::ic00_permissions::Ic00MethodPermissions;
 use crate::metrics::MeasurementScope;
 use crate::util::process_responses;
 use ic_config::embedders::Config as HypervisorConfig;
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
@@ -1495,57 +1494,12 @@ impl Scheduler for SchedulerImpl {
         {
             let _timer = self.metrics.round_finalization_duration.start_timer();
 
-            // TODO(DSM-103): Consider only covering actually scheduled canisters.
-            for canister in state.canisters_iter_mut() {
-                let new_log = &canister.system_state.log_memory_store;
-                let old_log = &canister.system_state.canister_log;
-                let delta_log_sizes = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-                    new_log.delta_log_sizes()
-                } else {
-                    old_log.delta_log_sizes()
-                };
-                // Observe retention from whichever log store is active,
-                // only for canisters that appended this round.
-                let retention = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-                    new_log
-                        .has_delta_log_sizes()
-                        .then(|| new_log.retention())
-                        .flatten()
-                } else {
-                    old_log
-                        .has_delta_log_sizes()
-                        .then(|| old_log.retention())
-                        .flatten()
-                };
-                if new_log.has_delta_log_sizes() || old_log.has_delta_log_sizes() {
-                    // Only clone state if delta log sizes are not empty.
-                    let canister = Arc::make_mut(canister);
-                    let new_log = &mut canister.system_state.log_memory_store;
-                    let old_log = &mut canister.system_state.canister_log;
-                    // IMPORTANT: Ensure `clear_delta_log_sizes()` is called
-                    // so the delta log sizes are empty at the end of the round.
-                    // This guarantees states remain consistent before and after a checkpoint.
-                    new_log.clear_delta_log_sizes();
-                    old_log.clear_delta_log_sizes();
-                }
-                for size in delta_log_sizes {
-                    self.metrics
-                        .canister_log_delta_memory_usage
-                        .observe(size as f64);
-                }
-                if let Some(retention) = retention {
-                    self.metrics
-                        .canister_log_retention
-                        .observe(retention.as_secs_f64());
-                }
-
-                // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
-                // cycles_out_sum += canister.system_state.queues().output_queue_cycles();
-            }
             // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
+            //
+            // for canister in state.canisters_iter_mut() {
+            //     cycles_out_sum += canister.system_state.queues().output_queue_cycles();
+            // }
             // cycles_out_sum += total_canister_balance;
-
-            // TODO(EXC-1124): Re-enable the check below once it's fixed.
             //
             // Check that amount of cycles at the beginning of the round (balances and cycles from input messages) is bigger or equal
             // than the amount of cycles at the end of the round (balances and cycles from output messages).

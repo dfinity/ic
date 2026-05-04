@@ -64,6 +64,7 @@ pub struct ReplicatedStateMetrics {
     stop_canister_calls_without_call_id: IntGauge,
     canister_snapshots_memory_usage: IntGauge,
     num_canister_snapshots: IntGauge,
+    canister_log_retention: Histogram,
 }
 
 impl ReplicatedStateMetrics {
@@ -226,6 +227,12 @@ impl ReplicatedStateMetrics {
             num_canister_snapshots: metrics_registry.int_gauge(
                 "scheduler_num_canister_snapshots",
                 "Total number of canister snapshots on this subnet.",
+            ),
+            canister_log_retention: metrics_registry.histogram(
+                "canister_log_retention_seconds",
+                "Time span between the oldest and newest records in the canister log buffer, in seconds.",
+                // 10 s .. 5×10⁶ s (~58 d), plus zero — 19 total buckets (0 + 18 powers).
+                decimal_buckets_with_zero(1, 6),
             ),
         }
     }
@@ -557,6 +564,16 @@ impl ReplicatedStateMetrics {
         };
         self.canister_log_memory_usage_v3
             .observe(log_memory_usage as f64);
+
+        // Observe retention from whichever log store is active.
+        let retention = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+            canister.system_state.log_memory_store.retention()
+        } else {
+            canister.system_state.canister_log.retention()
+        };
+        if let Some(retention) = retention {
+            self.canister_log_retention.observe(retention.as_secs_f64());
+        }
     }
 }
 
