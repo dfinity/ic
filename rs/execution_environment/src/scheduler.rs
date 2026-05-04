@@ -2213,7 +2213,7 @@ fn abort_canister(
     log: &ReplicaLogger,
 ) {
     if exec_env.abort_canister(canister, log, cost_schedule) {
-        // Reset `executed_slices` to zero.
+        // Reset `executed_rounds` to zero.
         subnet_schedule
             .get_mut(canister.canister_id())
             .executed_rounds = 0;

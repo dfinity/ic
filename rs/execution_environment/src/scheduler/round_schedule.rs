@@ -221,7 +221,7 @@ pub struct RoundSchedule {
 
     /// Canisters that were scheduled.
     scheduled_canisters: BTreeSet<CanisterId>,
-    /// Canisters that executed a long execution slice this round.
+    /// Canisters that had a long execution at the start of this round.
     long_execution_canisters: BTreeSet<CanisterId>,
     /// Canisters that advanced or completed a message execution.
     executed_canisters: BTreeSet<CanisterId>,
@@ -348,7 +348,9 @@ impl RoundSchedule {
                     }
 
                     NextExecution::ContinueLong => {
-                        self.long_execution_canisters.insert(*canister_id);
+                        if is_first_iteration {
+                            self.long_execution_canisters.insert(*canister_id);
+                        }
                         self.scheduled_canisters.insert(*canister_id);
                         Some((canister_id, next_execution))
                     }
@@ -466,7 +468,7 @@ impl RoundSchedule {
                         .long_execution_start_round
                         .get_or_insert(current_round);
                 }
-                // Completed a long execution.
+                // Completed a long execution that had started before this round.
                 NextExecution::StartNew if self.long_execution_canisters.contains(canister_id) => {
                     self.fully_executed_canisters.insert(*canister_id);
                 }
