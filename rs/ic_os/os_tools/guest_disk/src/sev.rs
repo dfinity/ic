@@ -7,18 +7,18 @@ use anyhow::{Context, Result, bail};
 use config_types::GuestVMType;
 use sev_guest::firmware::SevGuestFirmware;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
-pub struct SevDiskEncryption<'a> {
+pub struct SevDiskEncryption {
     pub sev_firmware: Box<dyn SevGuestFirmware>,
-    pub previous_key_path: &'a Path,
-    pub store_luks_header_path: &'a Path,
+    pub previous_key_path: PathBuf,
+    pub store_luks_header_path: PathBuf,
     pub guest_vm_type: GuestVMType,
-    pub metrics_file: &'a Path,
+    pub metrics_file: PathBuf,
 }
 
-impl SevDiskEncryption<'_> {
+impl SevDiskEncryption {
     fn ensure_detached_store_luks_header(&self, device_path: &Path) -> Result<()> {
         let detached_header_exists = self.store_luks_header_path.exists();
 
@@ -27,7 +27,7 @@ impl SevDiskEncryption<'_> {
             device_path.display(),
             self.store_luks_header_path.display()
         );
-        if let Err(err) = backup_luks_header_to_file(device_path, self.store_luks_header_path)
+        if let Err(err) = backup_luks_header_to_file(device_path, &self.store_luks_header_path)
             .with_context(|| {
                 format!(
                     "Failed to persist detached Store LUKS header to {}",
@@ -56,7 +56,7 @@ impl SevDiskEncryption<'_> {
         crypt_name: &str,
         new_key: &[u8],
     ) -> Result<()> {
-        let previous_key = std::fs::read(self.previous_key_path).with_context(|| {
+        let previous_key = std::fs::read(&self.previous_key_path).with_context(|| {
             format!(
                 "Could not read previous key from {}",
                 self.previous_key_path.display()
@@ -65,12 +65,12 @@ impl SevDiskEncryption<'_> {
         info!("Found previous key for store partition, will use it to unlock the partition");
         let mut crypt_device = activate_crypt_device(
             device_path,
-            LuksHeaderLocation::Detached(self.store_luks_header_path),
+            LuksHeaderLocation::Detached(&self.store_luks_header_path),
             crypt_name,
             &previous_key,
             activate_flags(Partition::Store),
             /*verify_luks_params=*/ true,
-            Some(self.metrics_file),
+            Some(self.metrics_file.as_path()),
         )
         .context("Failed to unlock store partition with previous key")?;
 
@@ -100,7 +100,7 @@ impl SevDiskEncryption<'_> {
                 "Removing previous store key file: {}",
                 self.previous_key_path.display()
             );
-            if let Err(err) = std::fs::remove_file(self.previous_key_path) {
+            if let Err(err) = std::fs::remove_file(&self.previous_key_path) {
                 debug_assert!(false, "Failed to remove previous key file: {err:?}");
                 warn!("Failed to remove previous key file: {err:?}");
             }
@@ -110,7 +110,7 @@ impl SevDiskEncryption<'_> {
     }
 }
 
-impl DiskEncryption for SevDiskEncryption<'_> {
+impl DiskEncryption for SevDiskEncryption {
     fn open(&mut self, device_path: &Path, partition: Partition, crypt_name: &str) -> Result<()> {
         let key = derive_key_from_sev_measurement(
             self.sev_firmware.as_mut(),
@@ -127,7 +127,7 @@ impl DiskEncryption for SevDiskEncryption<'_> {
                     key.as_bytes(),
                     activate_flags(partition),
                     /*verify_luks_params=*/ true,
-                    Some(self.metrics_file),
+                    Some(&self.metrics_file),
                 )
                 .context("Failed to open crypt device for var partition")?;
             }
@@ -159,12 +159,12 @@ impl DiskEncryption for SevDiskEncryption<'_> {
 
                 activate_crypt_device(
                     device_path,
-                    LuksHeaderLocation::Detached(self.store_luks_header_path),
+                    LuksHeaderLocation::Detached(&self.store_luks_header_path),
                     crypt_name,
                     key.as_bytes(),
                     activate_flags(partition),
                     /*verify_luks_params=*/ true,
-                    Some(self.metrics_file),
+                    Some(&self.metrics_file),
                 )
                 .context("Failed to initialize crypt device for store partition")?;
             }
@@ -176,8 +176,8 @@ impl DiskEncryption for SevDiskEncryption<'_> {
     fn format(&mut self, device_path: &Path, partition: Partition) -> Result<()> {
         if partition == Partition::Store && self.store_luks_header_path.exists() {
             bail!(
-                "Detached LUKS header already exists even though device is being formatted, remove \
-                the file {}",
+                "Refusing to format Store because detached LUKS header {} already exists. Remove \
+                the stale header first if you really want to reformat the device.",
                 self.store_luks_header_path.display()
             );
         }
@@ -211,9 +211,7 @@ pub fn can_open_store(
     store_luks_header_path: &Path,
     sev_firmware: &mut dyn SevGuestFirmware,
 ) -> Result<bool> {
-    // Keep key selection consistent with open() above. Unlike open(), this check must not create
-    // or refresh the detached header, so it probes the detached header first and then falls back
-    // to the attached header.
+    // Keep key selection consistent with open() above.
     if previous_key_path.exists()
         && let Ok(key) = std::fs::read(previous_key_path)
         && check_encryption_key(
@@ -235,4 +233,45 @@ pub fn can_open_store(
         derived_key.as_bytes(),
     )
     .is_ok())
+}
+
+#[mockall::automock]
+pub trait DiskCryptoOps: Send + Sync {
+    /// Returns whether the Store partition can already be unlocked locally.
+    ///
+    /// Implementations may use the previous key, the detached LUKS header, and/or the current
+    /// SEV-derived key to determine whether key exchange can be skipped.
+    fn can_open_store(
+        &self,
+        device_path: &Path,
+        previous_key_path: &Path,
+        store_luks_header_path: &Path,
+        sev_firmware: &mut dyn SevGuestFirmware,
+    ) -> Result<bool>;
+
+    /// Persists a detached LUKS header for the Store partition at `luks_header_path`.
+    fn backup_luks_header(&self, device_path: &Path, luks_header_path: &Path) -> Result<()>;
+}
+
+pub struct DefaultSevStoreCryptoOps;
+
+impl DiskCryptoOps for DefaultSevStoreCryptoOps {
+    fn can_open_store(
+        &self,
+        device_path: &Path,
+        previous_key_path: &Path,
+        store_luks_header_path: &Path,
+        sev_firmware: &mut dyn SevGuestFirmware,
+    ) -> Result<bool> {
+        can_open_store(
+            device_path,
+            previous_key_path,
+            store_luks_header_path,
+            sev_firmware,
+        )
+    }
+
+    fn backup_luks_header(&self, device_path: &Path, luks_header_path: &Path) -> Result<()> {
+        backup_luks_header_to_file(device_path, luks_header_path)
+    }
 }

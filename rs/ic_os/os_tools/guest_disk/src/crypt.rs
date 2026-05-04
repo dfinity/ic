@@ -48,12 +48,12 @@ pub enum LuksHeaderLocation<'a> {
     Detached(&'a Path),
 }
 
-/// Initializes a cryptsetup handle for `device_path`.
+/// Obtains a cryptsetup handle for `device_path`.
 /// `header_location` selects whether the LUKS header is read from the device itself or from a
 /// detached header file while `device_path` remains the data device.
-fn init_crypt_device(
+fn obtain_crypt_device_handle(
     device_path: &Path,
-    header_location: LuksHeaderLocation<'_>,
+    header_location: LuksHeaderLocation,
 ) -> Result<CryptDevice> {
     if !device_path.exists() {
         bail!("Device does not exist: {}", device_path.display());
@@ -61,21 +61,22 @@ fn init_crypt_device(
 
     match header_location {
         LuksHeaderLocation::Detached(header_path) => {
-            init_crypt_device_with_detached_header(device_path, header_path)
+            obtain_crypt_device_handle_with_detached_header(device_path, &header_path)
                 .with_context(|| format!("Detached header {} failed", header_path.display()))
         }
         LuksHeaderLocation::Attached => {
-            init_crypt_device_with_attached_header(device_path).context("Attached header failed")
+            obtain_crypt_device_handle_with_attached_header(device_path)
+                .context("Attached header failed")
         }
     }
 }
 
-fn init_crypt_device_with_attached_header(device_path: &Path) -> Result<CryptDevice> {
+fn obtain_crypt_device_handle_with_attached_header(device_path: &Path) -> Result<CryptDevice> {
     CryptInit::init(device_path)
         .context("Failed to initialize cryptographic device with attached header")
 }
 
-fn init_crypt_device_with_detached_header(
+fn obtain_crypt_device_handle_with_detached_header(
     device_path: &Path,
     header_path: &Path,
 ) -> Result<CryptDevice> {
@@ -87,7 +88,7 @@ fn init_crypt_device_with_detached_header(
 /// using the provided name and encryption key.
 pub fn activate_crypt_device(
     device_path: &Path,
-    header_location: LuksHeaderLocation<'_>,
+    header_location: LuksHeaderLocation,
     name: &str,
     encryption_key: &[u8],
     flags: CryptActivate,
@@ -133,7 +134,7 @@ pub fn deactivate_crypt_device(crypt_name: &str) -> Result<()> {
 /// WARNING: Leads to data loss on the device!
 pub fn format_crypt_device(
     device_path: &Path,
-    header_location: LuksHeaderLocation<'_>,
+    header_location: LuksHeaderLocation,
     encryption_key: &[u8],
 ) -> Result<CryptDevice> {
     if let LuksHeaderLocation::Detached(header_path) = header_location {
@@ -143,7 +144,7 @@ pub fn format_crypt_device(
             .context("Failed to set size of detached LUKS header file")?;
     }
 
-    let mut crypt_device = init_crypt_device(device_path, header_location)?;
+    let mut crypt_device = obtain_crypt_device_handle(device_path, header_location)?;
     info!(
         "Formatting {} with LUKS2 and initializing it with an encryption key",
         device_path.display()
@@ -180,9 +181,9 @@ pub fn format_crypt_device(
 /// Opens a LUKS2 device at the specified path and loads its context. Does not activate the device.
 pub fn open_luks2_device(
     device_path: &Path,
-    header_location: LuksHeaderLocation<'_>,
+    header_location: LuksHeaderLocation,
 ) -> Result<CryptDevice> {
-    let mut crypt_device = init_crypt_device(device_path, header_location)?;
+    let mut crypt_device = obtain_crypt_device_handle(device_path, header_location)?;
 
     crypt_device
         .context_handle()
@@ -195,7 +196,7 @@ pub fn open_luks2_device(
 /// Does not activate the device.
 pub fn check_encryption_key(
     device_path: &Path,
-    header_location: LuksHeaderLocation<'_>,
+    header_location: LuksHeaderLocation,
     encryption_key: &[u8],
 ) -> Result<()> {
     // This method simply checks if the key works, we don't care about LUKS parameters
@@ -221,6 +222,8 @@ pub fn backup_luks_header_to_file(device_path: &Path, header_path: &Path) -> Res
         )
     })?;
 
+    // Export into a temporary sibling path and rename it into place so we only replace an existing
+    // detached header once cryptsetup has produced a complete backup.
     let temp_dir = tempfile::tempdir_in(parent_dir)
         .context("Failed to create temporary directory for LUKS header backup")?;
     let temp_header_path = temp_dir.path().join("header");

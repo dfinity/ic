@@ -614,12 +614,10 @@ fn test_can_open_store_with_previous_key() {
     // Format device with previous key
     format_crypt_device(
         &fixture.device.path().unwrap(),
-        LuksHeaderLocation::Attached,
+        LuksHeaderLocation::Detached(&fixture.store_luks_header_path),
         PREVIOUS_KEY,
     )
     .unwrap();
-
-    fixture.assert_no_detached_store_header();
 
     // can_open_store should return true because previous key unlocks the device
     let result = fixture
@@ -629,8 +627,6 @@ fn test_can_open_store_with_previous_key() {
         result,
         "Expected can_open_store to return true when previous key works"
     );
-    fixture.assert_no_detached_store_header();
-    assert!(fixture.has_attached_luks2_header());
 }
 
 #[test]
@@ -652,12 +648,10 @@ fn test_can_open_store_with_derived_key_when_previous_key_fails() {
 
     format_crypt_device(
         &fixture.device.path().unwrap(),
-        LuksHeaderLocation::Attached,
+        LuksHeaderLocation::Detached(&fixture.store_luks_header_path),
         sev_key.as_bytes(),
     )
     .unwrap();
-
-    fixture.assert_no_detached_store_header();
 
     // can_open_store should return true because the derived SEV key can open it
     let result = fixture
@@ -667,7 +661,6 @@ fn test_can_open_store_with_derived_key_when_previous_key_fails() {
         result,
         "Expected can_open_store to return true when derived SEV key works"
     );
-    fixture.assert_no_detached_store_header();
 }
 
 #[test]

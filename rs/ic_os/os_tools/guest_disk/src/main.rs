@@ -92,9 +92,9 @@ fn run(
         Box::new(SevDiskEncryption {
             sev_firmware: sev_firmware_factory().context("Failed to open SEV firmware")?,
             guest_vm_type: guestos_config.guest_vm_type,
-            previous_key_path,
-            store_luks_header_path,
-            metrics_file: &metrics_file,
+            previous_key_path: previous_key_path.to_path_buf(),
+            store_luks_header_path: store_luks_header_path.to_path_buf(),
+            metrics_file,
         })
     } else {
         Box::new(GeneratedKeyDiskEncryption {

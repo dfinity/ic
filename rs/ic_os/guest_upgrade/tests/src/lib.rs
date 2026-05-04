@@ -8,6 +8,7 @@ use config_types::{
 };
 use futures::future::Either;
 use futures::{FutureExt, TryFutureExt};
+use guest_disk::sev::MockDiskCryptoOps;
 use guest_upgrade_client::DiskEncryptionKeyExchangeClientAgent;
 use guest_upgrade_server::DiskEncryptionKeyExchangeServerAgent;
 use guest_upgrade_shared::DEFAULT_SERVER_PORT;
@@ -265,42 +266,39 @@ impl DiskEncryptionKeyExchangeTestFixture {
         let store_device_path = self.server_store.path().to_path_buf();
         let previous_key_path = self.previous_key.path().to_path_buf();
         let store_luks_header_path = self.client_store_luks_header.path().to_path_buf();
+        let mut crypto_ops = MockDiskCryptoOps::new();
 
-        match self.client_recovered_luks_header.clone() {
-            Some(recovered_luks_header) => {
-                let expected_store_device_path = store_device_path.clone();
-                DiskEncryptionKeyExchangeClientAgent::new(
-                    self.client_guestos_config.clone(),
-                    SevRootCertificateVerification::TestOnlySkipVerification,
-                    Box::new(self.client_sev_firmware.clone()),
-                    self.registry_client.clone(),
-                    Box::new(move |_, _, _, _| Ok(can_open_disk)),
-                    Box::new(move |store_device_path, store_luks_header_path| {
-                        assert_eq!(store_device_path, expected_store_device_path.as_path());
-                        std::fs::write(store_luks_header_path, &recovered_luks_header)?;
-                        Ok(())
-                    }),
-                    store_device_path,
-                    previous_key_path,
-                    store_luks_header_path,
-                    self.server_port,
-                )
-            }
-            None => DiskEncryptionKeyExchangeClientAgent::new(
-                self.client_guestos_config.clone(),
-                SevRootCertificateVerification::TestOnlySkipVerification,
-                Box::new(self.client_sev_firmware.clone()),
-                self.registry_client.clone(),
-                Box::new(move |_, _, _, _| Ok(can_open_disk)),
-                Box::new(move |store_device_path, store_luks_header_path| {
-                    panic!("Unexpected call to backup_luks_header");
-                }),
-                store_device_path,
-                previous_key_path,
-                store_luks_header_path,
-                self.server_port,
-            ),
+        crypto_ops
+            .expect_can_open_store()
+            .returning(move |_, _, _, _| Ok(can_open_disk));
+
+        if let Some(recovered_luks_header) = self.client_recovered_luks_header.clone() {
+            let expected_store_device_path = store_device_path.clone();
+            crypto_ops
+                .expect_backup_luks_header()
+                .times(1)
+                .withf(move |store_device_path, _| {
+                    store_device_path == expected_store_device_path.as_path()
+                })
+                .returning(move |_, store_luks_header_path| {
+                    std::fs::write(store_luks_header_path, &recovered_luks_header)?;
+                    Ok(())
+                });
+        } else {
+            crypto_ops.expect_backup_luks_header().times(0);
         }
+
+        DiskEncryptionKeyExchangeClientAgent::new(
+            self.client_guestos_config.clone(),
+            SevRootCertificateVerification::TestOnlySkipVerification,
+            Box::new(self.client_sev_firmware.clone()),
+            self.registry_client.clone(),
+            Box::new(crypto_ops),
+            store_device_path,
+            previous_key_path,
+            store_luks_header_path,
+            self.server_port,
+        )
     }
 
     /// Check if the previous key file was populated correctly

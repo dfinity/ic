@@ -5499,6 +5499,7 @@ dependencies = [
  "ic_os_logging",
  "itertools 0.12.1",
  "libcryptsetup-rs",
+ "mockall",
  "nix 0.24.3",
  "parking_lot",
  "prometheus",

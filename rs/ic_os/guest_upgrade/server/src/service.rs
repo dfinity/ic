@@ -154,10 +154,13 @@ impl DiskEncryptionKeyExchangeServiceImpl {
             .map_err(|e| Status::internal(format!("Failed to create SEV firmware: {e:?}")))?;
 
         let luks_header = if self.send_luks_header {
-            let detached_header_path = &self.store_luks_header_path;
-            Some(std::fs::read(detached_header_path).map_err(|e| {
-                Status::internal(format!("Failed to read Store LUKS header: {e:#}"))
-            })?)
+            Some(
+                tokio::fs::read(&self.store_luks_header_path)
+                    .await
+                    .map_err(|e| {
+                        Status::internal(format!("Failed to read Store LUKS header: {e:#}"))
+                    })?,
+            )
         } else {
             None
         };

@@ -5,6 +5,7 @@ use attestation::attestation_package::{
 };
 use config_types::GuestOSConfig;
 use der::asn1::OctetStringRef;
+use guest_disk::sev::DiskCryptoOps;
 use guest_upgrade_shared::api::disk_encryption_key_exchange_service_client::DiskEncryptionKeyExchangeServiceClient;
 use guest_upgrade_shared::api::{GetDiskEncryptionKeyRequest, SignalStatusRequest};
 use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
@@ -37,15 +38,6 @@ const NNS_PUBLIC_KEY_PATH: &str = "/run/config/nns_public_key.pem";
 
 type ServiceClientType = DiskEncryptionKeyExchangeServiceClient<Channel>;
 
-/// (store_device, previous_key_path, store_luks_header_path, sev_firmware) -> success
-pub type CanOpenStore =
-    Box<dyn Fn(&Path, &Path, &Path, &mut dyn SevGuestFirmware) -> Result<bool> + Send + Sync>;
-
-/// Function to backup the LUKS header of a device (identified by device_path) to a file
-/// (identified by luks_header_path)
-/// Signature: (device_path, luks_header_path) -> Result
-pub type BackupLuksHeader = Box<dyn Fn(&Path, &Path) -> Result<()> + Send + Sync>;
-
 pub struct DiskEncryptionKeyExchangeClientAgent {
     guestos_config: GuestOSConfig,
     sev_firmware: Box<dyn SevGuestFirmware>,
@@ -55,10 +47,7 @@ pub struct DiskEncryptionKeyExchangeClientAgent {
     store_luks_header_path: PathBuf,
     server_port: u16,
     sev_root_certificate_verification: SevRootCertificateVerification,
-    // We mock can_open_store for easier testing, in production it calls
-    // guest_disk::sev::can_open_store, the signature corresponds to that function
-    can_open_store: CanOpenStore,
-    backup_luks_header: BackupLuksHeader,
+    crypto_ops: Box<dyn DiskCryptoOps>,
 }
 
 impl DiskEncryptionKeyExchangeClientAgent {
@@ -67,8 +56,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
         sev_root_certificate_verification: SevRootCertificateVerification,
         sev_firmware: Box<dyn SevGuestFirmware>,
         nns_registry_client: Arc<dyn RegistryClient>,
-        can_open_store: CanOpenStore,
-        backup_luks_header: BackupLuksHeader,
+        crypto_ops: Box<dyn DiskCryptoOps>,
         store_device_path: PathBuf,
         previous_key_path: PathBuf,
         store_luks_header_path: PathBuf,
@@ -83,8 +71,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
             store_luks_header_path,
             server_port,
             sev_root_certificate_verification,
-            can_open_store,
-            backup_luks_header,
+            crypto_ops,
         }
     }
 
@@ -115,7 +102,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
         // If we can already open the store, we don't need to run the key exchange.
         // (We still have to call signal_status, since the server is expecting us to signal
         // success)
-        let can_open_store = (self.can_open_store)(
+        let can_open_store = self.crypto_ops.can_open_store(
             &self.store_device_path,
             &self.previous_key_path,
             &self.store_luks_header_path,
@@ -129,13 +116,13 @@ impl DiskEncryptionKeyExchangeClientAgent {
             );
             Ok(())
         } else {
-            self.retrieve_disk_encryption_key(
+            self.retrieve_disk_encryption_data(
                 &mut upgrade_service_client,
                 &my_public_key_der,
                 &server_public_key_der,
             )
             .await
-            .context("Failed to retrieve disk encryption key")
+            .context("Failed to retrieve disk encryption data")
         };
 
         let _ignored = upgrade_service_client
@@ -148,7 +135,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
         retrieve_status
     }
 
-    async fn retrieve_disk_encryption_key(
+    async fn retrieve_disk_encryption_data(
         &mut self,
         upgrade_service_client: &mut ServiceClientType,
         my_public_key_der: &[u8],
@@ -172,7 +159,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
 
         let my_attestation_report = *my_attestation_package.attestation_report();
 
-        let get_key_response = upgrade_service_client
+        let disk_encryption_data = upgrade_service_client
             .get_disk_encryption_key(GetDiskEncryptionKeyRequest {
                 sev_attestation_package: Some(my_attestation_package.into()),
             })
@@ -180,7 +167,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
             .context("Call to get_disk_encryption_key failed")?
             .into_inner();
 
-        let server_attestation_package = get_key_response
+        let server_attestation_package = disk_encryption_data
             .sev_attestation_package
             .context("Server attestation report is missing")?;
 
@@ -203,7 +190,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
         .verify_chip_id(&[my_attestation_report.chip_id])
         .context("Server attestation report verification failed")?;
 
-        let disk_encryption_key = get_key_response
+        let disk_encryption_key = disk_encryption_data
             .key
             .context("GetKeyResponse does not contain a key")?;
 
@@ -211,13 +198,14 @@ impl DiskEncryptionKeyExchangeClientAgent {
             disk_encryption_key,
             // This can be None when upgrading from older GuestOS-s that do not populate this field.
             // TODO: Error on None once all GuestOS-s support detached headers
-            get_key_response.luks_header,
-        )?;
+            disk_encryption_data.luks_header,
+        )
+        .await?;
 
         Ok(())
     }
 
-    fn persist_disk_encryption_artifacts(
+    async fn persist_disk_encryption_artifacts(
         &self,
         disk_encryption_key: Vec<u8>,
         luks_header: Option<Vec<u8>>,
@@ -227,31 +215,34 @@ impl DiskEncryptionKeyExchangeClientAgent {
 
         match luks_header {
             Some(luks_header) => {
-                std::fs::write(&self.store_luks_header_path, &luks_header).with_context(|| {
-                    format!(
-                        "Failed to write store LUKS header to {}",
-                        self.store_luks_header_path.display()
-                    )
-                })?;
+                tokio::fs::write(&self.store_luks_header_path, &luks_header)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "Failed to write store LUKS header to {}",
+                            self.store_luks_header_path.display()
+                        )
+                    })?;
             }
             None => {
                 println!(
                     "GetKeyResponse does not contain a store LUKS header; recovering it locally from {}",
                     self.store_device_path.display()
                 );
-                (self.backup_luks_header)(&self.store_device_path, &self.store_luks_header_path)
-                    .context(
-                    "GetKeyResponse does not contain a store LUKS header and local backup failed",
-                )?;
+                self.crypto_ops
+                    .backup_luks_header(&self.store_device_path, &self.store_luks_header_path)
+                    .context("Local LUKS header backup failed")?;
             }
         }
 
-        std::fs::write(&self.previous_key_path, disk_encryption_key).with_context(|| {
-            format!(
-                "Failed to write key to {}",
-                self.previous_key_path.display()
-            )
-        })?;
+        tokio::fs::write(&self.previous_key_path, disk_encryption_key)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to write key to {}",
+                    self.previous_key_path.display()
+                )
+            })?;
 
         Ok(())
     }
