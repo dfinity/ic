@@ -457,7 +457,7 @@ impl Upgrade {
             .await;
         // Restart the current process to pick up the new local store.
         // The call should not return. If it does, it is an error.
-        Err(reexec_current_process(&self.logger).into())
+        Err(reexec_current_process(&self.logger))
     }
 
     async fn remove_state(&self) -> UpgradeResult<()> {
@@ -992,7 +992,7 @@ fn remove_node_state(
 }
 
 /// Re-execute the current process, exactly as it was originally called.
-fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
+fn reexec_current_process(logger: &ReplicaLogger) -> UpgradeError {
     let args: Vec<String> = std::env::args().collect();
     info!(
         logger,
@@ -1000,7 +1000,7 @@ fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
         &args[..]
     );
     let error = exec::Command::new(&args[0]).args(&args[1..]).exec();
-    OrchestratorError::ExecError(PathBuf::new(), error)
+    UpgradeError::ExecError(PathBuf::new(), error)
 }
 
 /// Return the threshold master public key of the given CUP, if it exists.

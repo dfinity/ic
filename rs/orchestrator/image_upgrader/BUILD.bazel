@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "//rs/http_utils",
     "//rs/monitoring/logger",
     "//rs/types/types",
+    "@crate_index//:exec",
     "@crate_index//:slog",
     "@crate_index//:tokio",
 ]

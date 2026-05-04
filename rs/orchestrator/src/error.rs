@@ -1,11 +1,7 @@
 use crate::registry_helper::RegistryError;
 use ic_image_upgrader::error::UpgradeError;
 use ic_types::{Height, NodeId, RegistryVersion};
-use std::{
-    error::Error,
-    fmt, io,
-    path::{Path, PathBuf},
-};
+use std::{error::Error, fmt, io, path::Path};
 
 pub(crate) type OrchestratorResult<T> = Result<T, OrchestratorError>;
 
@@ -25,9 +21,6 @@ pub(crate) enum OrchestratorError {
 
     /// An IO error occurred
     IoError(String, io::Error),
-
-    /// Failed to exec a new Orchestrator binary
-    ExecError(PathBuf, exec::Error),
 
     /// The provided configuration file (`ic.json5`) has invalid content.
     InvalidConfiguration(String),
@@ -78,10 +71,6 @@ impl fmt::Display for OrchestratorError {
             OrchestratorError::IoError(msg, e) => {
                 write!(f, "IO error, message: {msg}, error: {e}")
             }
-            OrchestratorError::ExecError(path, e) => write!(
-                f,
-                "Failed to exec new Orchestrator process: {path:?}, error: {e}"
-            ),
             OrchestratorError::InvalidConfiguration(msg) => {
                 write!(f, "Invalid configuration: {msg}")
             }

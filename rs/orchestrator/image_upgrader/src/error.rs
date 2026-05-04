@@ -4,6 +4,7 @@ use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt;
 use std::io;
+use std::path::PathBuf;
 
 pub type UpgradeResult<T> = Result<T, UpgradeError>;
 
@@ -27,6 +28,9 @@ pub enum UpgradeError {
     /// An error occurred when downloading, extracting or checking the hash of a
     /// downloaded file
     FileDownloadError(FileDownloadError),
+
+    /// Failed to exec a new process
+    ExecError(PathBuf, exec::Error),
 
     /// Generic error while handling reboot time
     RebootTimeError(String),
@@ -68,6 +72,9 @@ impl fmt::Display for UpgradeError {
                 write!(f, "IO error, message: {msg:?}, error: {e:?}")
             }
             UpgradeError::FileDownloadError(e) => write!(f, "File download error: {e}"),
+            UpgradeError::ExecError(path, e) => {
+                write!(f, "Failed to exec new process: {path:?}, error: {e}")
+            }
             UpgradeError::RebootTimeError(msg) => {
                 write!(f, "Failed to read or write reboot time: {msg}")
             }
