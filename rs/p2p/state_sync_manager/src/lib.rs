@@ -55,6 +55,19 @@ pub fn build_state_sync_manager<T: Send + 'static>(
     rt_handle: &tokio::runtime::Handle,
     state_sync: Arc<dyn StateSyncClient<Message = T>>,
 ) -> (Router, StateSyncManager<T>) {
+    build_state_sync_manager_with_options(log, metrics_registry, rt_handle, state_sync, true)
+}
+
+/// Like `build_state_sync_manager` but allows disabling outbound advert
+/// broadcasting. Used by AI-node state-sync-only replicas which must not
+/// announce themselves as state sources to consensus members.
+pub fn build_state_sync_manager_with_options<T: Send + 'static>(
+    log: &ReplicaLogger,
+    metrics_registry: &MetricsRegistry,
+    rt_handle: &tokio::runtime::Handle,
+    state_sync: Arc<dyn StateSyncClient<Message = T>>,
+    advertise: bool,
+) -> (Router, StateSyncManager<T>) {
     let metrics = StateSyncManagerHandlerMetrics::new(metrics_registry);
     let shared_chunk_state = Arc::new(StateSyncChunkHandler::new(
         log.clone(),
@@ -82,6 +95,7 @@ pub fn build_state_sync_manager<T: Send + 'static>(
         state_sync,
         advert_receiver,
         ongoing_state_sync: None,
+        advertise,
     };
     (router, manager)
 }
@@ -93,6 +107,10 @@ pub struct StateSyncManager<T> {
     state_sync: Arc<dyn StateSyncClient<Message = T>>,
     advert_receiver: tokio::sync::mpsc::Receiver<(Advert, NodeId)>,
     ongoing_state_sync: Option<OngoingStateSyncHandle>,
+    /// When false, this manager only consumes adverts and downloads chunks; it
+    /// does not broadcast its own state to peers. Used by passive
+    /// state-sync-only replicas (AI nodes).
+    advertise: bool,
 }
 
 impl<T: 'static + Send> StateSyncManager<T> {
@@ -118,7 +136,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
                     self.handle_advert(advert, peer_id, transport.clone()).await;
                 }
                 // Make sure we only have one active advertise task.
-                _ = interval.tick(), if advertise_task.is_empty() => {
+                _ = interval.tick(), if advertise_task.is_empty() && self.advertise => {
                     advertise_task.spawn_on(
                         Self::send_state_adverts(
                             self.rt.clone(),
@@ -340,6 +358,7 @@ mod tests {
                 metrics,
                 state_sync: Arc::new(s) as Arc<_>,
                 rt: rt.handle().clone(),
+                advertise: true,
             };
             let _ = manager.start(Arc::new(t) as Arc<_>);
             rt.block_on(async move {

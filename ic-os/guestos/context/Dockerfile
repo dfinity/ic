@@ -114,7 +114,9 @@ RUN systemctl disable \
     motd-news.timer \
     fstrim.service \
     fstrim.timer \
-    ollama.service
+    ollama.service \
+    ollama-tls.service \
+    generate-ollama-tls-cert.service
 
 # ------ GUESTOS WORK --------------------------------------------
 

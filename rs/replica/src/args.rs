@@ -36,6 +36,15 @@ pub struct ReplicaArgs {
     /// Example SubnetID: ak2jc-de3ae-aaaaa-aaaap-yai
     #[clap(long)]
     pub force_subnet: Option<String>,
+
+    /// Run the replica in passive state-sync-only mode. The node will join the
+    /// subnet's QUIC mesh as an "AI node peer" (must have a matching
+    /// `AiNodeRecord` in the registry), download state checkpoints, but will
+    /// NOT participate in consensus, message routing, execution, or serve any
+    /// public HTTP/XNet endpoints. Used by AI nodes that mirror a subnet's
+    /// state for local LLM workloads.
+    #[clap(long)]
+    pub state_sync_only: bool,
 }
 
 impl From<&ReplicaArgs> for ConfigSource {

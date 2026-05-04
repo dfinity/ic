@@ -360,8 +360,25 @@ impl Orchestrator {
             logger.clone(),
         );
 
+        // The AI node manager owns its own CatchUpPackageProvider and
+        // ProcessManager. It runs the state-sync-only replica when the local
+        // `AiNodeRecord` points at a subnet, and reuses the same on-disk
+        // layout (state_root, consensus pool, cup file) as the regular
+        // replica so cleanup logic is shared.
+        let ai_cup_provider = CatchUpPackageProvider::new(
+            Arc::clone(&registry),
+            local_cup_reader.clone(),
+            Arc::clone(&crypto) as _,
+            Arc::clone(&crypto) as _,
+            logger.clone(),
+            node_id,
+        );
         let ai_node_manager = AiNodeManager::new(
             Arc::clone(&registry),
+            ai_cup_provider,
+            replica_version.clone(),
+            args.replica_config_file.clone(),
+            args.orchestrator_data_directory.clone(),
             node_id,
             ic_binary_directory,
             logger.clone(),
@@ -375,7 +392,9 @@ impl Orchestrator {
             ipv4_configurator.get_last_applied_version(),
             registry_replicator.get_latest_certified_time(),
             replica_process,
+            ai_node_manager.get_replica_process_handle(),
             Arc::clone(&subnet_assignment),
+            ai_node_manager.get_status_handle(),
             replica_version,
             hostos_version.ok(),
             local_cup_reader,
@@ -575,7 +594,6 @@ impl Orchestrator {
             mut ssh_access_manager: SshAccessManager,
             mut firewall: Firewall,
             mut ipv4_configurator: Ipv4Configurator,
-            mut ai_node_manager: AiNodeManager,
             cancellation_token: CancellationToken,
         ) {
             loop {
@@ -599,7 +617,18 @@ impl Orchestrator {
                 firewall.check_and_update();
                 // Check and update the network configuration
                 ipv4_configurator.check_and_update().await;
-                // Check if this node should be running ollama based on AiNodeRecord
+                tokio::select! {
+                    _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
+                    _ = cancellation_token.cancelled() => break
+                }
+            }
+        }
+
+        async fn ai_node_check(
+            mut ai_node_manager: AiNodeManager,
+            cancellation_token: CancellationToken,
+        ) {
+            loop {
                 ai_node_manager.check_and_update().await;
                 tokio::select! {
                     _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
@@ -636,11 +665,10 @@ impl Orchestrator {
             );
         }
 
-        if let (Some(ssh), Some(firewall), Some(ipv4_configurator), Some(ai_node_manager)) = (
+        if let (Some(ssh), Some(firewall), Some(ipv4_configurator)) = (
             self.ssh_access_manager.take(),
             self.firewall.take(),
             self.ipv4_configurator.take(),
-            self.ai_node_manager.take(),
         ) {
             self.task_tracker.spawn(
                 "ssh_key_firewall_rules_ipv4_config",
@@ -649,9 +677,15 @@ impl Orchestrator {
                     ssh,
                     firewall,
                     ipv4_configurator,
-                    ai_node_manager,
                     cancellation_token.clone(),
                 ),
+            );
+        }
+
+        if let Some(ai_node_manager) = self.ai_node_manager.take() {
+            self.task_tracker.spawn(
+                "ai_node_management",
+                ai_node_check(ai_node_manager, cancellation_token.clone()),
             );
         }
 
