@@ -101,14 +101,20 @@ impl HostosUpgrader {
             ..
         } = hostos_version_record;
 
+        let url_count = release_package_urls.len();
+        if url_count == 0 {
+            return Err(UpgradeError::GenericError(format!(
+                "No download URLs are provided for version {version:?}"
+            )));
+        }
+
         // Load-balance, by making each node rotate the `release_package_urls` by some number.
         // Note that the order is the same for everyone; only the starting point is different.
         // This is okay because we do expect the first attempt to be successful.
-        let url_count = release_package_urls.len();
         release_package_urls.rotate_right(self.get_load_balance_number() % url_count);
 
-        let mut error = format!("No download URLs are provided for version {version:?}");
-
+        let mut error =
+            "All download URLs succeeded but the orchestrator is still alive".to_string();
         for release_package_url in release_package_urls.iter() {
             // We only ever expect this command to exit in error. If the
             // upgrade call succeeds, the HostOS will reboot and shut us down.
