@@ -18,5 +18,9 @@ RemainAfterExit=yes
 ExecStart=/opt/ic/bin/generate-ollama-tls-cert.sh
 
 [Install]
-# Pulled in by the stunnel-for-ollama unit; no need to enable globally.
+# Disabled by default in the GuestOS Dockerfile. Started on demand together
+# with `ollama-tls.service` and `ollama.service` by `manage-ollama.sh`,
+# which is itself driven by the orchestrator's `AiNodeManager` when the
+# local `AiNodeRecord` enables AI-node mode. Regular non-AI nodes never run
+# this unit and therefore never produce a "failed" cert-generation result.
 WantedBy=multi-user.target

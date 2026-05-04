@@ -11,9 +11,9 @@
 //!
 //! * `AiNodeRecord` absent  → no ollama, no replica, state wiped.
 //! * `AiNodeRecord` present, `subnet_id = None`
-//!     → ollama on, no replica, state wiped.
+//!   → ollama on, no replica, state wiped.
 //! * `AiNodeRecord` present, `subnet_id = Some(s)`
-//!     → ollama on, replica running with `--state-sync-only --force-subnet=s`.
+//!   → ollama on, replica running with `--state-sync-only --force-subnet=s`.
 //! * Subnet change `Some(a) → Some(b)` → stop replica, wipe state, then start
 //!   replica for `b`.
 //!
@@ -198,14 +198,14 @@ impl AiNodeManager {
         // (fetching newer signed CUPs from subnet peers as they become
         // available) and ensure the state-sync replica is running. The CUP
         // file on disk drives `should_download` for the running replica.
-        if let AiNodeStatus::SyncingFor(subnet_id) = desired {
-            if let Err(e) = self.refresh_cup_and_replica(subnet_id).await {
-                warn!(
-                    self.logger,
-                    "AiNodeManager: refresh_cup_and_replica failed: {}", e
-                );
-                return;
-            }
+        if let AiNodeStatus::SyncingFor(subnet_id) = desired
+            && let Err(e) = self.refresh_cup_and_replica(subnet_id).await
+        {
+            warn!(
+                self.logger,
+                "AiNodeManager: refresh_cup_and_replica failed: {}", e
+            );
+            return;
         }
 
         *self.last_applied_version.write().unwrap() = registry_version;

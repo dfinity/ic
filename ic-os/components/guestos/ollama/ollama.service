@@ -4,11 +4,11 @@ Documentation=https://ollama.com
 After=network-online.target
 Wants=network-online.target
 
-# This service is intentionally disabled by default. It ships with the
-# GuestOS image so that it can be started on demand with:
-#   systemctl enable --now ollama.service
-# See the explicit `systemctl disable ollama.service` in the GuestOS
-# Dockerfile which overrides the blanket enable loop.
+# This service is intentionally disabled by default and is started on
+# demand by `manage-ollama.sh` (driven by the orchestrator's
+# `AiNodeManager`) together with the TLS-cert generator and the stunnel
+# proxy. See the explicit `systemctl disable` lines in the GuestOS
+# Dockerfile which override the blanket enable loop.
 
 [Service]
 Type=simple
