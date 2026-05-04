@@ -2624,12 +2624,6 @@ mod tests {
                     SubnetAssignment::Assigned(_) | SubnetAssignment::Unassigned
                 )
             }
-            Err(UpgradeError::FailedToDetermineSubnetId(_)) => {
-                assert_matches!(
-                    new_subnet_assignment,
-                    SubnetAssignment::Unassigned | SubnetAssignment::Unknown
-                )
-            }
             Err(UpgradeError::ReplicatorNotCaughtUp(_, _))
             | Err(UpgradeError::RecalledReplicaVersion(_, _)) => {
                 assert_matches!(new_subnet_assignment, SubnetAssignment::Assigned(_));
