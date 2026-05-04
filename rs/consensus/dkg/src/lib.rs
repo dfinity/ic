@@ -892,10 +892,16 @@ mod tests {
                 pool.advance_round_normal_operation();
                 let early_remote = extract_remote_dkgs_from_highest_block(&pool);
                 assert_eq!(early_remote.len(), 2);
+                let mut tags = BTreeSet::new();
                 for (dkg_id, _, result) in &early_remote {
                     assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
                     assert!(result.is_ok());
+                    assert!(tags.insert(dkg_id.dkg_tag.clone()));
                 }
+                assert_eq!(
+                    tags,
+                    BTreeSet::from([NiDkgTag::LowThreshold, NiDkgTag::HighThreshold])
+                );
 
                 // After the next summary, remote transcripts are finalized and we should not
                 // attempt to create remote dealings again.
@@ -976,9 +982,15 @@ mod tests {
             let block: Block = PoolReader::new(&pool).get_finalized_tip();
             if let BlockPayload::Data(data) = block.payload.as_ref() {
                 assert_eq!(data.dkg.transcripts_for_remote_subnets.len(), 2);
+                let mut tags = BTreeSet::new();
                 for dkg in data.dkg.transcripts_for_remote_subnets.iter() {
                     assert!(dkg.2.is_err());
+                    assert!(tags.insert(dkg.0.dkg_tag.clone()));
                 }
+                assert_eq!(
+                    tags,
+                    BTreeSet::from([NiDkgTag::LowThreshold, NiDkgTag::HighThreshold])
+                );
             } else {
                 panic!("block at height {} is not a data block", block.height.get());
             }
@@ -2274,6 +2286,7 @@ mod tests {
                         "[{desc}] Expected 2 SetupInitialDKG transcripts, got {}",
                         remote_dkgs.len()
                     );
+                    let mut tags = BTreeSet::new();
                     for (dkg_id, _, result) in &remote_dkgs {
                         assert_eq!(
                             dkg_id.target_subnet,
@@ -2281,7 +2294,12 @@ mod tests {
                             "[{desc}] transcript should be for SetupInitialDKG target id"
                         );
                         assert!(result.is_ok(), "[{desc}]");
+                        assert!(tags.insert(dkg_id.dkg_tag.clone()));
                     }
+                    assert_eq!(
+                        tags,
+                        BTreeSet::from([NiDkgTag::LowThreshold, NiDkgTag::HighThreshold]),
+                    );
                 } else {
                     // Reshare comes first: 1 reshare transcript; setup's 2 exceed the limit.
                     assert_eq!(
