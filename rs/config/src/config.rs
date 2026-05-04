@@ -90,7 +90,7 @@ pub struct ConfigOptional {
 
 impl Config {
     /// Return a [Config] with default settings that put all paths under a
-    /// 'parent_dir', with the given 'subnet_id'.
+    /// 'parent_dir'.
     ///
     /// It is an alternative way to construct a Config than parsing
     /// a configuration file.
@@ -111,8 +111,10 @@ impl Config {
             csp_vault_logger: logger,
             message_routing: MessageRoutingConfig::default(),
             malicious_behavior: MaliciousBehavior::default(),
-            firewall: ReplicaFirewallConfig::default(),
-            boundary_node_firewall: BoundaryNodeFirewallConfig::default(),
+            firewall: ReplicaFirewallConfig::new(parent_dir.join("replica_firewall")),
+            boundary_node_firewall: BoundaryNodeFirewallConfig::new(
+                parent_dir.join("boundary_node_firewall"),
+            ),
             registration: RegistrationConfig::default(),
             nns_registry_replicator: NnsRegistryReplicatorConfig::default(),
             adapters_config: AdaptersConfig::default(),

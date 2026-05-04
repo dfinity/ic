@@ -16,6 +16,7 @@ use candid::{CandidType, Decode, Encode};
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use ic_base_types::{EnvironmentVariables, NumSeconds, PrincipalId};
+use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
 use ic_config::{
     execution_environment::{
         CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, DEFAULT_WASM_MEMORY_LIMIT,
@@ -2468,11 +2469,14 @@ fn failed_upgrade_hooks_consume_instructions() {
             &mut round_limits,
         );
         // Function + unreachable.
+        // `fails_before_compiling_upgrade_wasm indicates` whether the upgrade fails during the pre-upgrade hook
+        // (before the upgrade WASM is ever compiled), as opposed to failing during or after compilation of the upgrade WASM;
+        // hence no overhead applies in such a case
         let expected = NumInstructions::from(2)
             + if fails_before_compiling_upgrade_wasm {
                 NumInstructions::new(0)
             } else {
-                compilation_cost
+                DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + compilation_cost
             };
         assert_eq!(
             MAX_NUM_INSTRUCTIONS - instructions_left,
@@ -2590,12 +2594,12 @@ fn failed_install_hooks_consume_instructions() {
         assert_eq!(
             MAX_NUM_INSTRUCTIONS - instructions_left,
             // Func + unreachable.
-            NumInstructions::from(2) + compilation_cost,
+            DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + compilation_cost + NumInstructions::from(2),
             "initial instructions {} left {} diff {} expected {}",
             MAX_NUM_INSTRUCTIONS,
             instructions_left,
             MAX_NUM_INSTRUCTIONS - instructions_left,
-            NumInstructions::from(1) + compilation_cost,
+            DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + compilation_cost + NumInstructions::from(1),
         );
     }
 
@@ -2685,7 +2689,8 @@ fn install_code_respects_instruction_limit() {
     let compilation_cost = wat_compilation_cost(wasm);
     let wasm = wat::parse_str(wasm).unwrap();
 
-    let instructions_limit = NumInstructions::from(3) + compilation_cost;
+    let instructions_limit =
+        DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + NumInstructions::from(3) + compilation_cost;
 
     // Too few instructions result in failed installation.
     let mut round_limits = RoundLimits {
@@ -2720,7 +2725,9 @@ fn install_code_respects_instruction_limit() {
 
     // Enough instructions result in successful installation.
     let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(NumInstructions::from(6) + compilation_cost),
+        instructions: as_round_instructions(
+            DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + NumInstructions::from(6) + compilation_cost,
+        ),
         // Function is 1 instruction.
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
@@ -2778,7 +2785,9 @@ fn install_code_respects_instruction_limit() {
 
     // Enough instructions result in successful upgrade.
     let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(NumInstructions::from(10) + compilation_cost),
+        instructions: as_round_instructions(
+            DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + NumInstructions::from(10) + compilation_cost,
+        ),
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
@@ -2867,7 +2876,10 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     state.put_canister_state(canister.unwrap());
 
     // Installation is free, since there is no `(start)` or `canister_init` to run.
-    assert_eq!(instructions_left, MAX_NUM_INSTRUCTIONS - compilation_cost);
+    assert_eq!(
+        instructions_left,
+        MAX_NUM_INSTRUCTIONS - DEFAULT_CREATE_EXECUTION_STATE_BASE_COST - compilation_cost
+    );
 
     // No heap delta.
     assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
@@ -2911,7 +2923,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     // Installation is free, since there is no `(start)` or `canister_init` to run.
     assert_eq!(
         instructions_left,
-        instructions_before_reinstall - compilation_cost
+        instructions_before_reinstall - DEFAULT_CREATE_EXECUTION_STATE_BASE_COST - compilation_cost
     );
 
     // No heap delta.
@@ -2965,7 +2977,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     // Installation is free, since there is no `canister_pre/post_upgrade`
     assert_eq!(
         instructions_left,
-        instructions_before_upgrade - compilation_cost
+        instructions_before_upgrade - DEFAULT_CREATE_EXECUTION_STATE_BASE_COST - compilation_cost
     );
 
     // No heap delta.
@@ -3899,7 +3911,8 @@ fn cycles_correct_if_upgrade_succeeds() {
         test.canister_execution_cost(id).real(),
         test.cycles_account_manager()
             .execution_cost(
-                NumInstructions::from(5 * *DROP_MEMORY_GROW_CONST_COST)
+                DEFAULT_CREATE_EXECUTION_STATE_BASE_COST
+                    + NumInstructions::from(5 * *DROP_MEMORY_GROW_CONST_COST)
                     + wasm_compilation_cost(&wasm),
                 test.subnet_size(),
                 CanisterCyclesCostSchedule::Normal,
@@ -3923,7 +3936,8 @@ fn cycles_correct_if_upgrade_succeeds() {
         execution_cost.real(),
         test.cycles_account_manager()
             .execution_cost(
-                NumInstructions::from(11 * *DROP_MEMORY_GROW_CONST_COST)
+                DEFAULT_CREATE_EXECUTION_STATE_BASE_COST
+                    + NumInstructions::from(11 * *DROP_MEMORY_GROW_CONST_COST)
                     + wasm_compilation_cost(&wasm),
                 test.subnet_size(),
                 CanisterCyclesCostSchedule::Normal,
@@ -3966,7 +3980,7 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
     assert_eq!(
         test.canister_execution_cost(id),
         test.cycles_account_manager().execution_cost(
-            wasm_compilation_cost(&wasm),
+            DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + wasm_compilation_cost(&wasm),
             test.subnet_size(),
             CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
@@ -4049,7 +4063,8 @@ fn cycles_correct_if_upgrade_fails_at_start() {
         execution_cost.real(),
         test.cycles_account_manager()
             .execution_cost(
-                NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
+                DEFAULT_CREATE_EXECUTION_STATE_BASE_COST
+                    + NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                     + wasm_compilation_cost(&wasm2),
                 test.subnet_size(),
                 CanisterCyclesCostSchedule::Normal,
@@ -4093,7 +4108,7 @@ fn cycles_correct_if_upgrade_fails_at_pre_upgrade() {
     assert_eq!(
         test.canister_execution_cost(id),
         test.cycles_account_manager().execution_cost(
-            wasm_compilation_cost(&wasm),
+            DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + wasm_compilation_cost(&wasm),
             test.subnet_size(),
             CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
@@ -4169,7 +4184,8 @@ fn cycles_correct_if_upgrade_fails_at_post_upgrade() {
         execution_cost.real(),
         test.cycles_account_manager()
             .execution_cost(
-                NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
+                DEFAULT_CREATE_EXECUTION_STATE_BASE_COST
+                    + NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                     + wasm_compilation_cost(&wasm2),
                 test.subnet_size(),
                 CanisterCyclesCostSchedule::Normal,
@@ -4213,7 +4229,8 @@ fn cycles_correct_if_install_succeeds() {
         test.canister_execution_cost(id).real(),
         test.cycles_account_manager()
             .execution_cost(
-                NumInstructions::from(6 * *DROP_MEMORY_GROW_CONST_COST)
+                DEFAULT_CREATE_EXECUTION_STATE_BASE_COST
+                    + NumInstructions::from(6 * *DROP_MEMORY_GROW_CONST_COST)
                     + wasm_compilation_cost(&wasm),
                 test.subnet_size(),
                 CanisterCyclesCostSchedule::Normal,
@@ -4307,7 +4324,8 @@ fn cycles_correct_if_install_fails_at_start() {
         test.canister_execution_cost(id).real(),
         test.cycles_account_manager()
             .execution_cost(
-                NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST)
+                DEFAULT_CREATE_EXECUTION_STATE_BASE_COST
+                    + NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST)
                     + wasm_compilation_cost(&wasm),
                 test.subnet_size(),
                 CanisterCyclesCostSchedule::Normal,
@@ -4349,7 +4367,8 @@ fn cycles_correct_if_install_fails_at_init() {
         test.canister_execution_cost(id).real(),
         test.cycles_account_manager()
             .execution_cost(
-                NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
+                DEFAULT_CREATE_EXECUTION_STATE_BASE_COST
+                    + NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                     + wasm_compilation_cost(&wasm),
                 test.subnet_size(),
                 CanisterCyclesCostSchedule::Normal,

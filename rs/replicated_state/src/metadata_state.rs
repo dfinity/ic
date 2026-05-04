@@ -590,13 +590,9 @@ impl SystemMetadata {
         Ok(())
     }
 
-    /// Generates a new canister ID.
+    /// Computes a new canister ID for canister creation.
     ///
-    /// If a canister ID from a second canister allocation range is generated, the
-    /// first range is dropped. The last canister allocation range is never dropped.
-    ///
-    /// Returns the next canister ID that would be generated, without mutating
-    /// state.  Returns `Err` iff no more canister IDs can be generated.
+    /// Returns `Err` iff no more canister IDs are available.
     pub fn peek_new_canister_id(&self) -> Result<CanisterId, String> {
         // Start off with
         //     (canister_allocation_ranges
@@ -628,15 +624,19 @@ impl SystemMetadata {
         })?;
 
         canister_allocation_ranges
-            .generate_canister_id(self.last_generated_canister_id)
+            .next_canister_id(self.last_generated_canister_id)
             .ok_or_else(|| "Canister ID allocation was consumed".into())
     }
 
     /// Records `canister_id` as the last generated canister ID and drops any
-    /// exhausted allocation ranges.  Must be called with the ID returned by the
-    /// immediately preceding `peek_new_canister_id` call, once canister creation
-    /// has succeeded and the ID should be permanently consumed.
+    /// exhausted allocation ranges. Must be called with the canister ID returned
+    /// by the immediately preceding `peek_new_canister_id` call, once canister
+    /// creation succeeded and the canister ID should be permanently consumed.
+    ///
+    /// Note. The last canister allocation range is never dropped.
     pub fn commit_new_canister_id(&mut self, canister_id: CanisterId) {
+        debug_assert_eq!(canister_id, self.peek_new_canister_id().unwrap());
+
         self.last_generated_canister_id = Some(canister_id);
 
         while self.canister_allocation_ranges.len() > 1
@@ -651,14 +651,6 @@ impl SystemMetadata {
             // ranges are available.
             self.canister_allocation_ranges.drop_first();
         }
-    }
-
-    /// Generates and immediately commits the next canister ID.
-    /// Returns `Err` iff no more canister IDs can be generated.
-    pub fn generate_new_canister_id(&mut self) -> Result<CanisterId, String> {
-        let canister_id = self.peek_new_canister_id()?;
-        self.commit_new_canister_id(canister_id);
-        Ok(canister_id)
     }
 
     /// Returns the number of canister IDs that can still be generated.
@@ -734,11 +726,6 @@ impl SystemMetadata {
         // Preserve ingress history.
         res.ingress_history = self.ingress_history;
 
-        // "Preserve" the subnet schedule. This is actually persisted per-canister, as
-        // part of the respective canister state, so will only actually be retained for
-        // local canisters.
-        res.subnet_schedule = self.subnet_schedule;
-
         // Ensure monotonic time for migrated canisters: apply `new_subnet_batch_time`
         // if specified and not smaller than `self.batch_time`; else, default to
         // `self.batch_time`.
@@ -780,6 +767,8 @@ impl SystemMetadata {
     /// roll back `Stopping` states on all subnet B canisters.
     ///
     /// Notes:
+    ///  * `prev_state_hash` has just been set by `take_tip()` to the checkpoint
+    ///    hash (checked against the hash in the CUP). It must be preserved.
     ///  * `own_subnet_type` has just been set during `load_checkpoint()`, based on
     ///    the registry subnet record of the subnet that this node is part of.
     ///  * `batch_time`, `network_topology` and `own_subnet_features` will be set

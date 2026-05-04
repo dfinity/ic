@@ -17,6 +17,4 @@ on the process that this file is part of, see
 
 ## Fixed
 
-* Do not deadlock when doing snapshot operations that target the Governance canister.
-
 ## Security

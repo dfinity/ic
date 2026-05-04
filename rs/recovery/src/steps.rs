@@ -10,7 +10,7 @@ use crate::{
     registry_helper::RegistryHelper,
     replay_helper,
     ssh_helper::SshHelper,
-    util::{SshUser, block_on, parse_hex_str},
+    util::{ExecutionMode, SshUser, block_on, parse_hex_str},
 };
 use core::convert::From;
 use ic_artifact_pool::certification_pool::CertificationPoolImpl;
@@ -368,6 +368,7 @@ pub(crate) struct CopyLocalIcStateStep {
     pub logger: Logger,
     pub working_dir: PathBuf,
     pub require_confirmation: bool,
+    pub data_includes: Vec<PathBuf>,
 }
 
 impl Step for CopyLocalIcStateStep {
@@ -384,8 +385,7 @@ impl Step for CopyLocalIcStateStep {
         let log = self.require_confirmation.then_some(&self.logger);
 
         // State
-        let includes = Recovery::get_ic_state_includes(None)?;
-        for include in includes.iter() {
+        for include in self.data_includes.iter() {
             let src = PathBuf::from(IC_DATA_PATH).join(include);
             let dst_parent = self
                 .working_dir
@@ -627,11 +627,10 @@ impl Step for UploadStateAndRestartStep {
             let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
             // path of latest checkpoint on upload node
             let copy_from = ic_checkpoints_path.join(
-                Recovery::get_maybe_latest_checkpoint_name_remotely(
-                    &ssh_helper,
-                    &ic_checkpoints_path,
-                )?
-                .unwrap_or_default(),
+                ExecutionMode::Remote(&ssh_helper)
+                    .get_maybe_latest_checkpoint_name_and_height(&ic_checkpoints_path)?
+                    .unwrap_or_default()
+                    .0,
             );
             // path and name of checkpoint after replay
             let copy_to = upload_dir.join(CHECKPOINTS).join(max_checkpoint);

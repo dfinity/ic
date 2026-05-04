@@ -719,17 +719,13 @@ fn get_canister_ids(snapshot: &TopologySnapshot) -> (CanisterId, CanisterId, Can
     let (sys_subnet, app_subnet) = get_subnets(snapshot);
 
     let sys_subnet_canister_id_range = sys_subnet.subnet_canister_ranges()[0];
-    let sys_uc1_id = sys_subnet_canister_id_range
-        .generate_canister_id(None)
-        .unwrap();
+    let sys_uc1_id = sys_subnet_canister_id_range.next_canister_id(None).unwrap();
     let sys_uc2_id = sys_subnet_canister_id_range
-        .generate_canister_id(Some(sys_uc1_id))
+        .next_canister_id(Some(sys_uc1_id))
         .unwrap();
 
     let app_subnet_canister_id_range = app_subnet.subnet_canister_ranges()[0];
-    let app_uc_id = app_subnet_canister_id_range
-        .generate_canister_id(None)
-        .unwrap();
+    let app_uc_id = app_subnet_canister_id_range.next_canister_id(None).unwrap();
 
     (sys_uc1_id, sys_uc2_id, app_uc_id)
 }
@@ -782,6 +778,42 @@ fn get_canister_test_ids(snapshot: &TopologySnapshot) -> (CanisterId, [CanisterI
             CanisterId::try_from(PrincipalId::new_user_test_id(42)).unwrap(),
         ],
     )
+}
+
+fn query_calls_subnet_v3(env: TestEnv) {
+    let logger = env.logger();
+    let snapshot = env.topology_snapshot();
+    let socket = get_socket_addr(&snapshot);
+    let (sys_subnet_id, app_subnet_id) = get_subnet_ids(&snapshot);
+
+    block_on(async {
+        // Correct subnet ID with ic_00 and list_canisters → accepted
+        let response = Query::new_subnet(sys_subnet_id.get()).query(socket).await;
+        let status = inspect_response(response, "QuerySubnet", &logger).await;
+        assert_2xx(&status);
+
+        // Wrong subnet ID → rejected
+        let response = Query::new_subnet(app_subnet_id.get()).query(socket).await;
+        let status = inspect_response(response, "QuerySubnet", &logger).await;
+        assert_4xx(&status);
+
+        // Non-management canister with "list_canisters" → rejected
+        let (non_mgmt_canister, _) = get_canister_test_ids(&snapshot);
+        let response = Query::new_subnet(sys_subnet_id.get())
+            .with_canister_id(non_mgmt_canister.get())
+            .query(socket)
+            .await;
+        let status = inspect_response(response, "QuerySubnet", &logger).await;
+        assert_4xx(&status);
+
+        // IC_00 with wrong method → rejected
+        let response = Query::new_subnet(sys_subnet_id.get())
+            .with_method_name("install_code".to_string())
+            .query(socket)
+            .await;
+        let status = inspect_response(response, "QuerySubnet", &logger).await;
+        assert_4xx(&status);
+    });
 }
 
 fn update_calls_subnet_v4(env: TestEnv) {
@@ -859,6 +891,7 @@ fn main() -> Result<()> {
             SystemTestSubGroup::new()
                 .add_test(systest!(query_calls; query::Version::V2))
                 .add_test(systest!(query_calls; query::Version::V3))
+                .add_test(systest!(query_calls_subnet_v3))
                 .add_test(systest!(update_calls; Call::V2))
                 .add_test(systest!(update_calls; Call::V3))
                 .add_test(systest!(update_calls; Call::V4))

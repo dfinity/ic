@@ -9,8 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-Added type4.1 through type4.5 node reward types for cloud-engine sub-variants.
-
 ## Changed
 
 ## Deprecated

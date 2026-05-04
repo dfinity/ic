@@ -10,7 +10,6 @@ source /opt/ic/bin/config.sh
 
 function read_config_variables() {
     config_bitcoind_addr=$(get_config_value '.guestos_settings.guestos_dev_settings.bitcoind_addr')
-    config_socks_proxy=$(get_config_value '.guestos_settings.guestos_dev_settings.socks_proxy')
 }
 
 function usage() {
@@ -43,13 +42,6 @@ done
 
 read_config_variables
 
-# Production socks5 proxy url needs to include schema, host and port to be accepted by the adapters.
-# Testnets deploy with a development socks_proxy config value to overwrite the production socks proxy with the testnet proxy.
-SOCKS_PROXY="socks5://socks5.ic0.app:1080"
-if [ "${config_socks_proxy}" != "" ] && [ "${config_socks_proxy}" != "null" ]; then
-    SOCKS_PROXY="${config_socks_proxy}"
-fi
-
 BITCOIN_NETWORK='"testnet4"'
 DNS_SEEDS='"seed.testnet4.bitcoin.sprovoost.nl",
             "seed.testnet4.wiz.biz"'
@@ -72,7 +64,7 @@ if [ "${OUT_FILE}" == "" ]; then
     exit 1
 fi
 
-# config_bitcoind_addr indicates that we are in system test environment. No socks proxy needed.
+# config_bitcoind_addr indicates that we are in system test environment.
 if [ "${config_bitcoind_addr}" != "" ] && [ "${config_bitcoind_addr}" != "null" ]; then
     echo '{
         "network": "regtest",

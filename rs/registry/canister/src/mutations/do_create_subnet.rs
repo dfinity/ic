@@ -61,6 +61,7 @@ impl Registry {
         let request = SetupInitialDKGArgs::new(
             payload.node_ids.clone(),
             RegistryVersion::new(self.latest_version()),
+            payload.initial_dkg_subnet_id,
         );
 
         // 2a. Invoke NI-DKG on ic_00
@@ -181,12 +182,21 @@ impl Registry {
     }
 
     /// Validates runtime payload values that aren't checked by invariants.
+    /// Ensures that the initial DKG subnet exists.
     /// Ensures that the obsolete ECDSA keys are not specified.
     /// Ensures all nodes for new subnet a) exist and b) are not in another subnet.
     /// Ensure all nodes for new subnet are not already assigned as ApiBoundaryNode.
     /// Ensures that a valid `subnet_id` is specified for `KeyConfigRequest`s.
     /// Ensures that master public keys (a) exist and (b) are present on the requested subnet.
     fn validate_create_subnet_payload(&self, payload: &CreateSubnetPayload) {
+        if let Some(initial_dkg_subnet_id) = payload.initial_dkg_subnet_id
+            && self
+                .get_subnet(initial_dkg_subnet_id, self.latest_version())
+                .is_err()
+        {
+            panic!("{LOG_PREFIX}Initial DKG subnet '{initial_dkg_subnet_id}' does not exist.");
+        }
+
         // Verify that all Nodes exist
         payload.node_ids.iter().for_each(|node_id| {
             match self.get(
@@ -267,6 +277,9 @@ pub struct CreateSubnetPayload {
     pub node_ids: Vec<NodeId>,
 
     pub subnet_id_override: Option<PrincipalId>,
+    /// Optional subnet that should handle `setup_initial_dkg`.
+    /// If not set, the request is handled by the NNS subnet.
+    pub initial_dkg_subnet_id: Option<SubnetId>,
 
     pub max_ingress_bytes_per_message: u64,
     pub max_ingress_bytes_per_block: Option<u64>,
@@ -607,6 +620,7 @@ mod test {
     use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, VetKdCurve, VetKdKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+    use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::ReplicaVersion;
 
     // Note: this can only be unit-tested b/c it fails before we hit inter-canister calls
@@ -861,6 +875,18 @@ mod test {
             }),
             Some(99),
         );
+
+        futures::executor::block_on(registry.do_create_subnet(payload));
+    }
+
+    #[test]
+    #[should_panic(expected = "Initial DKG subnet 'hmpuf-nqpe4-aaaaa-aaaap-yai' does not exist")]
+    fn should_panic_if_initial_dkg_subnet_does_not_exist() {
+        let mut registry = invariant_compliant_registry(0);
+        let payload = CreateSubnetPayload {
+            initial_dkg_subnet_id: Some(subnet_test_id(9999)),
+            ..Default::default()
+        };
 
         futures::executor::block_on(registry.do_create_subnet(payload));
     }

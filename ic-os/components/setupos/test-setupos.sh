@@ -130,16 +130,26 @@ function test_verify_cpu() {
     ]' 64 1
 
     # Gen3 Success
-    test_verify_cpu_helper "verify_cpu Gen3 success" "3" '[
+
+    ## AMD SVM 2 sockets
+    test_verify_cpu_helper "verify_cpu Gen3 success AMD" "3" '[
       {"id": "cpu:0", "product": "Foobar CPU", "capabilities": {"svm": "true"}},
       {"id": "cpu:1", "product": "Foobaz CPU", "capabilities": {"svm": "true"}}
     ]' 1 0
 
-    test_verify_cpu_helper "verify_cpu Gen3 success" "3" '[
-      {"id": "cpu:0", "product": "Foobar CPU", "capabilities": {"vmx": "true"}},
+    ## Intel VMX 1 socket
+    test_verify_cpu_helper "verify_cpu Gen3 success Intel" "3" '[
+      {"id": "cpu:0", "product": "Foobar CPU", "capabilities": {"vmx": "true"}}
+    ]' 1 0
+
+    ## One unpopulated socket ignored
+    test_verify_cpu_helper "verify_cpu Gen3 success AMD 1 socket unpopulated" "3" '[
+      {"id": "cpu:0", "product": "Foobar CPU", "capabilities": {"svm": "true"}},
+      {"id": "cpu:1", "product": "Foobaz CPU", "disabled": true}
     ]' 1 0
 
     # Gen3 Failure
+    ## Missing caps
     test_verify_cpu_helper "verify_cpu Gen3 failure" "3" '[
       {"id": "cpu:0", "product": "Foobar CPU", "capabilities": {}},
       {"id": "cpu:1", "product": "Foobaz CPU", "capabilities": {}}

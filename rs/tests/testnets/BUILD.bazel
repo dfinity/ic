@@ -1,7 +1,9 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 load(
     "//rs/tests:common.bzl",
     "IC_GATEWAY_RUNTIME_DEPS",
     "MAINNET_ENV",
+    "MAINNET_NNS_SYSTEM_TEST_RUNTIME_DEPS",
     "NNS_CANISTER_RUNTIME_DEPS",
     "SNS_CANISTER_RUNTIME_DEPS",
 )
@@ -355,15 +357,10 @@ system_test_nns(
     ],
 )
 
-system_test_nns(
-    name = "nns_recovery",
-    enable_metrics = True,
-    setupos = True,
-    tags = [
-        "dynamic_testnet",
-        "manual",
-    ],
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
+rust_binary(
+    name = "nns_recovery_testnet_bin",
+    testonly = True,
+    srcs = ["nns_recovery.rs"],
     deps = [
         # Keep sorted.
         "//rs/limits",
@@ -373,6 +370,43 @@ system_test_nns(
         "@crate_index//:anyhow",
         "@crate_index//:slog",
     ],
+)
+
+system_test_nns(
+    name = "nns_recovery",
+    enable_metrics = True,
+    env = {
+        "USE_MAINNET_STATE": "false",
+    },
+    setupos = True,
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    test_driver_target = ":nns_recovery_testnet_bin",
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
+)
+
+system_test_nns(
+    name = "mainnet_nns_recovery",
+    enable_metrics = True,
+    env = MAINNET_ENV | {
+        "USE_MAINNET_STATE": "true",
+    },
+    env_inherit = ["SSH_AUTH_SOCK"],
+    guestos = "mainnet_nns_dev",  # necessary for configuring NNS public key
+    prometheus_vm_resources = {
+        "vcpus": 32,
+        "memory_kibibytes": 125000000,
+        "boot_image_minimal_size_gibibytes": 500,
+    },
+    setupos = "mainnet_nns_dev",
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    test_driver_target = ":nns_recovery_testnet_bin",
+    runtime_deps = MAINNET_NNS_SYSTEM_TEST_RUNTIME_DEPS,
 )
 
 system_test_nns(
@@ -391,11 +425,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
-        # TODO (CON-1624): Remove those dependencies once #8170 reached mainnet NNS
-        "IC_RECOVERY_PATH": "//rs/recovery:ic-recovery",
-        "IC_REPLAY_PATH": "//rs/replay:ic-replay",
-    },
+    runtime_deps = MAINNET_NNS_SYSTEM_TEST_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",

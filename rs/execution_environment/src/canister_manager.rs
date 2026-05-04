@@ -1614,9 +1614,11 @@ impl CanisterManager {
         Ok(())
     }
 
-    /// Returns the next canister ID that would be generated, without mutating
-    /// state.  Returns `Err` if the subnet can generate no more canister IDs,
-    /// or if a canister with the peeked ID already exists.
+    /// Returns the next canister ID that is available for canister creation,
+    /// without mutating state.
+    ///
+    /// Returns `Err` if the subnet can generate no more canister IDs,
+    /// or if a canister with the next canister ID already exists.
     ///
     /// The caller must follow up with `state.metadata.commit_new_canister_id`
     /// once canister creation succeeds.

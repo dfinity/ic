@@ -234,8 +234,8 @@ fn failed_create_canister_does_not_reuse_canister_id() {
         ),
         sender_canister_version: None,
     };
-    // Send enough cycles to pass the creation-fee check so the calls reach
-    // the freeze-threshold validation (where they are actually rejected).
+    // Send enough cycles to pass the creation fee check so the calls reach
+    // the freezing threshold validation (where they are actually rejected).
     let cycles_with_call: u64 = 1_000_000_000_000;
 
     // Each call is rejected during validation, so no canister ID is consumed.
