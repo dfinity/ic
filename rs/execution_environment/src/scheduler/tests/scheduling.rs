@@ -1176,12 +1176,12 @@ fn frozen_canisters_are_fully_executed() {
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores,
             max_instructions_per_round: (2 * slice).into(),
-            max_instructions_per_message: slice.into(),
+            max_instructions_per_message: (10 * slice).into(),
             max_instructions_per_slice: slice.into(),
             max_instructions_per_install_code_slice: slice.into(),
-            // Charge for every message execution enough to execute all but one canister on
-            // each core. And to prevent a second iteration.
-            instruction_overhead_per_execution: (slice / (canisters_per_core - 1) + 1).into(),
+            // Charge for every message execution more than the round limit, to ensure that.
+            // the overhead does not apply to executions skipped due to low cycles.
+            instruction_overhead_per_execution: (3 * slice).into(),
             instruction_overhead_per_canister: 0.into(),
             instruction_overhead_per_canister_for_finalization: 0.into(),
             ..SchedulerConfig::application_subnet()
@@ -1204,43 +1204,41 @@ fn frozen_canisters_are_fully_executed() {
             None,
         );
         test.send_ingress(frozen_canister_id, ingress(slice * 10));
+        // Give each canister enough AP to be able to observe charging without free
+        // compute distribution.
+        test.state_mut()
+            .canister_priority_mut(frozen_canister_id)
+            .accumulated_priority = ONE_HUNDRED_PERCENT * 2;
         canisters.push(frozen_canister_id);
     }
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // All but 2 canisters were "executed".
+    // All canisters were "executed".
     assert_eq!(
         test.scheduler()
             .metrics
             .instructions_consumed_per_message
             .get_sample_count(),
-        (canisters_per_core - 1) * 2
+        canisters_per_core * 2
+    );
+    assert_eq!(
+        zero_instruction_messages(test.metrics_registry()),
+        canisters_per_core * 2
     );
 
-    let canister_priority = |canister_id: &CanisterId| -> &ic_replicated_state::CanisterPriority {
-        test.state().canister_priority(canister_id)
-    };
     for (i, canister) in canisters.iter().enumerate() {
-        if (i as u64) < (canisters_per_core - 1) * 2 {
-            assert!(
-                test.was_fully_executed(*canister),
-                "Canister {i} should have been fully executed",
-            );
-            assert!(
-                canister_priority(canister).accumulated_priority.get() < 0,
-                "Canister {i} should have been charged"
-            );
-        } else {
-            assert!(
-                !test.was_fully_executed(*canister),
-                "Canister {i} should not have been executed",
-            );
-            assert!(
-                canister_priority(canister).accumulated_priority.get() > 0,
-                "Canister {i} should not have been charged"
-            );
-        }
+        assert!(
+            test.was_fully_executed(*canister),
+            "Canister {i} should have been fully executed",
+        );
+        assert_eq!(
+            test.state()
+                .canister_priority(canister)
+                .accumulated_priority,
+            ONE_HUNDRED_PERCENT,
+            "Canister {i} should have been charged"
+        );
     }
 }
 

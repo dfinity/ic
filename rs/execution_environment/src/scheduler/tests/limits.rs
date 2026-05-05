@@ -4,7 +4,7 @@ use super::super::test_utilities::{
     SchedulerTestBuilder, TestInstallCode, ingress, instructions, on_response, other_side,
 };
 use super::super::*;
-use super::{zero_instruction_messages, zero_instruction_overhead_config};
+use super::zero_instruction_overhead_config;
 use crate::scheduler::test_utilities::EMPTY_WASM;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_replicated_state::testing::CanisterQueuesTesting;
@@ -123,7 +123,7 @@ fn test_message_limit_from_message_overhead() {
         max_instructions_per_slice: NumInstructions::from(5_000_000_000),
         max_instructions_per_install_code_slice: NumInstructions::from(5_000_000_000),
         max_instructions_per_round: NumInstructions::from(7_000_000_000),
-        instruction_overhead_per_execution: NumInstructions::from(2_000_000),
+        instruction_overhead_per_execution: NumInstructions::from(1_999_999),
         instruction_overhead_per_canister: NumInstructions::from(0),
         instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
         ..SchedulerConfig::application_subnet()
@@ -147,7 +147,7 @@ fn test_message_limit_from_message_overhead() {
         + 1;
 
     let mut callee = canister0;
-    let mut call = other_side(callee, 0);
+    let mut call = other_side(callee, 1);
 
     for _ in 0..expected_number_of_messages * 3 {
         callee = if callee == canister1 {
@@ -155,26 +155,28 @@ fn test_message_limit_from_message_overhead() {
         } else {
             canister1
         };
-        call = other_side(callee, 0).call(call, on_response(0));
+        call = other_side(callee, 1).call(call, on_response(1));
     }
 
-    let message = ingress(0).call(call, on_response(0));
+    let message = ingress(1).call(call, on_response(1));
     test.send_ingress(canister0, message);
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // All messages are zero instruction messages.
+    // The expected number of messages were executed.
     assert_eq!(
-        zero_instruction_messages(test.metrics_registry()),
+        test.scheduler()
+            .metrics
+            .msg_execution_duration
+            .get_sample_count(),
         expected_number_of_messages
     );
-
     assert_eq!(
         test.state()
             .metadata
             .subnet_metrics
             .update_transactions_total,
-        0
+        expected_number_of_messages
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 2);
 }
