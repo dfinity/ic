@@ -811,6 +811,17 @@ fn setup_universal_canister_with_much_memory(test: &mut ExecutionTest, canister_
         .unwrap();
 }
 
+fn setup_universal_canister_with_log_memory_limit(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+) {
+    setup_universal_canister(test, canister_id);
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(1024 * 1024)
+        .build();
+    test.update_settings(canister_id, settings).unwrap();
+}
+
 /// Setups a fixed memory canister with no custom sections.
 /// Custom section size matters in canister snapshot tests
 /// since it is accounted for in canister memory usage,
@@ -1611,6 +1622,39 @@ fn test_memory_suite_increase_log_memory_limit() {
         scenario: Scenario::OtherManagement,
         memory_usage_change: MemoryUsageChange::Increase,
         setup: setup_universal_canister,
+        op,
+    };
+    test_memory_suite(params);
+}
+
+#[test]
+fn test_memory_suite_decrease_log_memory_limit() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let op = |test: &mut ExecutionTest, canister_id: CanisterId, ()| {
+        // We also set log visibility to many selected principals
+        // to make the payload of `update_settings` large enough
+        // and thereby ensure that ingress fee is forcibly charged.
+        // See `MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE` for more details.
+        let allowed_viewers: Vec<_> = (0..10).map(|i| PrincipalId::new(29, [i; 29])).collect();
+        let log_visibility = LogVisibilityV2::AllowedViewers(BoundedVec::new(allowed_viewers));
+        let settings = CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(256 * 1024)
+            .with_log_visibility(log_visibility)
+            .build();
+        let args = UpdateSettingsArgs {
+            canister_id: canister_id.get(),
+            settings,
+            sender_canister_version: None,
+        };
+        test.subnet_message(Method::UpdateSettings, args.encode())
+            .err()
+    };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        memory_usage_change: MemoryUsageChange::Decrease,
+        setup: setup_universal_canister_with_log_memory_limit,
         op,
     };
     test_memory_suite(params);
