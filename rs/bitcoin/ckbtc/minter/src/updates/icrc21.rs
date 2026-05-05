@@ -52,7 +52,7 @@ impl TokenSymbols {
 /// Field labels are kept short (e.g. "BTC address", "From subaccount") so that
 /// even with a "(N/M)" suffix the label still fits on one line at the typical
 /// hardware-wallet font size.
-pub const FIELDS_DISPLAY_TEXT_CHUNK_LEN: usize = 18;
+const FIELDS_DISPLAY_TEXT_CHUNK_LEN: usize = 18;
 
 /// An entry of the ICRC-10 supported standards list.
 #[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
