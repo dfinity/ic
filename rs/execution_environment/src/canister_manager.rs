@@ -1561,6 +1561,7 @@ impl CanisterManager {
             state.metadata.batch_time,
             self.config.default_freeze_threshold,
             Arc::clone(&self.fd_factory),
+            self.config.log_memory_store_feature,
         );
 
         system_state.consume_cycles(creation_fee);
