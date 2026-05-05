@@ -1,6 +1,8 @@
 //! Implementation of the [ICRC-21](https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md)
 //! Canister Call Consent Message standard for the ckBTC minter.
 
+use crate::Network;
+use crate::state::read_state;
 use crate::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcWithApprovalArgs};
 use candid::{CandidType, Decode, Deserialize};
 use icrc_ledger_types::icrc1::account::Subaccount;
@@ -10,13 +12,34 @@ use icrc_ledger_types::icrc21::requests::{
 };
 use icrc_ledger_types::icrc21::responses::{ConsentInfo, ConsentMessage, FieldsDisplay, Value};
 
-/// The token symbol used in consent messages. The minter burns ckBTC to
-/// release the equivalent in BTC.
-pub const TOKEN_SYMBOL: &str = "ckBTC";
-
 /// The number of decimals used to display token amounts.
 /// Both ckBTC and BTC use 8 decimals (1 BTC = 10^8 satoshis).
 pub const DECIMALS: u8 = 8;
+
+/// Token symbols used in consent messages. They depend on the configured
+/// Bitcoin network so that test deployments use the test-token names.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+struct TokenSymbols {
+    /// The ledger token, e.g. "ckBTC" on mainnet, "ckTESTBTC" otherwise.
+    ckbtc: &'static str,
+    /// The native Bitcoin token, e.g. "BTC" on mainnet, "TESTBTC" otherwise.
+    btc: &'static str,
+}
+
+impl TokenSymbols {
+    fn for_network(network: Network) -> Self {
+        match network {
+            Network::Mainnet => Self {
+                ckbtc: "ckBTC",
+                btc: "BTC",
+            },
+            Network::Testnet | Network::Regtest => Self {
+                ckbtc: "ckTESTBTC",
+                btc: "TESTBTC",
+            },
+        }
+    }
+}
 
 /// Maximum number of bytes that an argument to a ckBTC minter method can have
 /// when passed through the ICRC-21 endpoint.
@@ -57,6 +80,14 @@ pub fn icrc10_supported_standards() -> Vec<StandardRecord> {
 pub fn icrc21_canister_call_consent_message(
     consent_msg_request: ConsentMessageRequest,
 ) -> Result<ConsentInfo, Icrc21Error> {
+    let network = read_state(|s| s.btc_network);
+    build_consent_info(consent_msg_request, network)
+}
+
+fn build_consent_info(
+    consent_msg_request: ConsentMessageRequest,
+    network: Network,
+) -> Result<ConsentInfo, Icrc21Error> {
     if consent_msg_request.arg.len() > MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES {
         return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
             description: format!(
@@ -72,6 +103,8 @@ pub fn icrc21_canister_call_consent_message(
         .clone()
         .unwrap_or(DisplayMessageType::GenericDisplay);
 
+    let symbols = TokenSymbols::for_network(network);
+
     let consent_message = match consent_msg_request.method.as_str() {
         "retrieve_btc_with_approval" => {
             let args = Decode!(
@@ -83,7 +116,7 @@ pub fn icrc21_canister_call_consent_message(
                     description: format!("Failed to decode RetrieveBtcWithApprovalArgs: {e}"),
                 })
             })?;
-            build_retrieve_btc_with_approval_message(&args, &display_type)
+            build_retrieve_btc_with_approval_message(&args, &display_type, symbols)
         }
         "retrieve_btc" => {
             let args =
@@ -92,7 +125,7 @@ pub fn icrc21_canister_call_consent_message(
                         description: format!("Failed to decode RetrieveBtcArgs: {e}"),
                     })
                 })?;
-            build_retrieve_btc_message(&args, &display_type)
+            build_retrieve_btc_message(&args, &display_type, symbols)
         }
         method => {
             return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
@@ -121,18 +154,20 @@ pub fn icrc21_canister_call_consent_message(
 fn build_retrieve_btc_with_approval_message(
     args: &RetrieveBtcWithApprovalArgs,
     display_type: &DisplayMessageType,
+    symbols: TokenSymbols,
 ) -> ConsentMessage {
+    let TokenSymbols { ckbtc, btc } = symbols;
     match display_type {
         DisplayMessageType::GenericDisplay => {
             let mut message = String::new();
-            message.push_str("# Convert ckBTC to BTC");
-            message.push_str(
-                "\n\nAuthorize the ckBTC minter to burn ckBTC from your account and \
-                 send the equivalent amount in BTC (minus network and minter fees) to \
-                 the Bitcoin address below.",
-            );
+            message.push_str(&format!("# Convert {ckbtc} to {btc}"));
             message.push_str(&format!(
-                "\n\n**Amount to convert:** `{} ckBTC`",
+                "\n\nAuthorize the {ckbtc} minter to burn {ckbtc} from your account and \
+                 send the equivalent amount in {btc} (minus network and minter fees) to \
+                 the Bitcoin address below."
+            ));
+            message.push_str(&format!(
+                "\n\n**Amount to convert:** `{} {ckbtc}`",
                 format_amount(args.amount, DECIMALS)
             ));
             message.push_str(&format!(
@@ -141,7 +176,7 @@ fn build_retrieve_btc_with_approval_message(
             ));
             if let Some(subaccount) = args.from_subaccount {
                 message.push_str(&format!(
-                    "\n\n**ckBTC source subaccount:**\n`{}`",
+                    "\n\n**{ckbtc} source subaccount:**\n`{}`",
                     hex::encode(subaccount)
                 ));
             }
@@ -154,10 +189,10 @@ fn build_retrieve_btc_with_approval_message(
                 Value::TokenAmount {
                     decimals: DECIMALS,
                     amount: args.amount,
-                    symbol: TOKEN_SYMBOL.to_string(),
+                    symbol: ckbtc.to_string(),
                 },
             ));
-            push_chunked_text(&mut fields, "BTC address", &args.address);
+            push_chunked_text(&mut fields, &format!("{btc} address"), &args.address);
             if let Some(subaccount) = args.from_subaccount {
                 push_chunked_text(
                     &mut fields,
@@ -166,7 +201,7 @@ fn build_retrieve_btc_with_approval_message(
                 );
             }
             ConsentMessage::FieldsDisplayMessage(FieldsDisplay {
-                intent: "ckBTC to BTC".to_string(),
+                intent: format!("{ckbtc} to {btc}"),
                 fields,
             })
         }
@@ -176,18 +211,20 @@ fn build_retrieve_btc_with_approval_message(
 fn build_retrieve_btc_message(
     args: &RetrieveBtcArgs,
     display_type: &DisplayMessageType,
+    symbols: TokenSymbols,
 ) -> ConsentMessage {
+    let TokenSymbols { ckbtc, btc } = symbols;
     match display_type {
         DisplayMessageType::GenericDisplay => {
             let mut message = String::new();
-            message.push_str("# Convert ckBTC to BTC");
-            message.push_str(
-                "\n\nWithdraw ckBTC previously deposited to your withdrawal account \
-                 with the ckBTC minter and send the equivalent amount in BTC \
-                 (minus network and minter fees) to the Bitcoin address below.",
-            );
+            message.push_str(&format!("# Convert {ckbtc} to {btc}"));
             message.push_str(&format!(
-                "\n\n**Amount to convert:** `{} ckBTC`",
+                "\n\nWithdraw {ckbtc} previously deposited to your withdrawal account \
+                 with the {ckbtc} minter and send the equivalent amount in {btc} \
+                 (minus network and minter fees) to the Bitcoin address below."
+            ));
+            message.push_str(&format!(
+                "\n\n**Amount to convert:** `{} {ckbtc}`",
                 format_amount(args.amount, DECIMALS)
             ));
             message.push_str(&format!(
@@ -202,12 +239,12 @@ fn build_retrieve_btc_message(
                 Value::TokenAmount {
                     decimals: DECIMALS,
                     amount: args.amount,
-                    symbol: TOKEN_SYMBOL.to_string(),
+                    symbol: ckbtc.to_string(),
                 },
             )];
-            push_chunked_text(&mut fields, "BTC address", &args.address);
+            push_chunked_text(&mut fields, &format!("{btc} address"), &args.address);
             ConsentMessage::FieldsDisplayMessage(FieldsDisplay {
-                intent: "ckBTC to BTC".to_string(),
+                intent: format!("{ckbtc} to {btc}"),
                 fields,
             })
         }
@@ -221,8 +258,8 @@ fn build_retrieve_btc_message(
 ///
 /// Bitcoin addresses and the chunked subaccount hex are pure ASCII, so chunking
 /// on byte boundaries is identical to chunking on character boundaries here.
-/// We still split on `char_indices` to keep the helper safe for any future
-/// caller that passes non-ASCII text.
+/// We still iterate on Unicode scalar values via [`char`] so the helper stays
+/// safe for any future caller that passes non-ASCII text.
 fn push_chunked_text(fields: &mut Vec<(String, Value)>, label: &str, content: &str) {
     let chunks = chunk_text(content, FIELDS_DISPLAY_TEXT_CHUNK_LEN);
     if chunks.len() <= 1 {
@@ -318,7 +355,7 @@ mod tests {
     #[test]
     fn test_unsupported_method() {
         let req = make_request("update_balance", vec![], None);
-        let err = icrc21_canister_call_consent_message(req).unwrap_err();
+        let err = build_consent_info(req, Network::Mainnet).unwrap_err();
         assert!(matches!(err, Icrc21Error::UnsupportedCanisterCall(_)));
     }
 
@@ -329,7 +366,7 @@ mod tests {
             vec![0; MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES + 1],
             None,
         );
-        let err = icrc21_canister_call_consent_message(req).unwrap_err();
+        let err = build_consent_info(req, Network::Mainnet).unwrap_err();
         match err {
             Icrc21Error::UnsupportedCanisterCall(info) => {
                 assert!(info.description.contains("argument size is too large"));
@@ -350,7 +387,7 @@ mod tests {
             Encode!(&args).unwrap(),
             Some(DisplayMessageType::GenericDisplay),
         );
-        let info = icrc21_canister_call_consent_message(req).unwrap();
+        let info = build_consent_info(req, Network::Mainnet).unwrap();
         assert_eq!(info.metadata.language, "en");
         let message = match info.consent_message {
             ConsentMessage::GenericDisplayMessage(m) => m,
@@ -373,7 +410,7 @@ mod tests {
             from_subaccount: Some(subaccount),
         };
         let req = make_request("retrieve_btc_with_approval", Encode!(&args).unwrap(), None);
-        let info = icrc21_canister_call_consent_message(req).unwrap();
+        let info = build_consent_info(req, Network::Mainnet).unwrap();
         let message = match info.consent_message {
             ConsentMessage::GenericDisplayMessage(m) => m,
             other => panic!("expected GenericDisplayMessage, got {other:?}"),
@@ -396,7 +433,7 @@ mod tests {
             Encode!(&args).unwrap(),
             Some(DisplayMessageType::FieldsDisplay),
         );
-        let info = icrc21_canister_call_consent_message(req).unwrap();
+        let info = build_consent_info(req, Network::Mainnet).unwrap();
         let fields_display = match info.consent_message {
             ConsentMessage::FieldsDisplayMessage(f) => f,
             other => panic!("expected FieldsDisplayMessage, got {other:?}"),
@@ -410,7 +447,7 @@ mod tests {
                 Value::TokenAmount {
                     decimals: DECIMALS,
                     amount: 250_000,
-                    symbol: TOKEN_SYMBOL.to_string(),
+                    symbol: "ckBTC".to_string(),
                 }
             )
         );
@@ -443,7 +480,7 @@ mod tests {
             Encode!(&args).unwrap(),
             Some(DisplayMessageType::FieldsDisplay),
         );
-        let info = icrc21_canister_call_consent_message(req).unwrap();
+        let info = build_consent_info(req, Network::Mainnet).unwrap();
         let fields_display = match info.consent_message {
             ConsentMessage::FieldsDisplayMessage(f) => f,
             other => panic!("expected FieldsDisplayMessage, got {other:?}"),
@@ -515,7 +552,7 @@ mod tests {
             Encode!(&args).unwrap(),
             Some(DisplayMessageType::FieldsDisplay),
         );
-        let info = icrc21_canister_call_consent_message(req).unwrap();
+        let info = build_consent_info(req, Network::Mainnet).unwrap();
         let fields_display = match info.consent_message {
             ConsentMessage::FieldsDisplayMessage(f) => f,
             other => panic!("expected FieldsDisplayMessage, got {other:?}"),
@@ -532,6 +569,80 @@ mod tests {
             }
         }
         assert_eq!(reassembled, address);
+    }
+
+    #[test]
+    fn test_token_symbols_for_network() {
+        assert_eq!(
+            TokenSymbols::for_network(Network::Mainnet),
+            TokenSymbols {
+                ckbtc: "ckBTC",
+                btc: "BTC"
+            }
+        );
+        assert_eq!(
+            TokenSymbols::for_network(Network::Testnet),
+            TokenSymbols {
+                ckbtc: "ckTESTBTC",
+                btc: "TESTBTC"
+            }
+        );
+        assert_eq!(
+            TokenSymbols::for_network(Network::Regtest),
+            TokenSymbols {
+                ckbtc: "ckTESTBTC",
+                btc: "TESTBTC"
+            }
+        );
+    }
+
+    #[test]
+    fn test_retrieve_btc_with_approval_uses_testnet_symbols() {
+        let args = RetrieveBtcWithApprovalArgs {
+            amount: 250_000,
+            address: "tb1qexampleaddress".to_string(),
+            from_subaccount: None,
+        };
+        let req = make_request(
+            "retrieve_btc_with_approval",
+            Encode!(&args).unwrap(),
+            Some(DisplayMessageType::FieldsDisplay),
+        );
+        let info = build_consent_info(req, Network::Testnet).unwrap();
+        let fields_display = match info.consent_message {
+            ConsentMessage::FieldsDisplayMessage(f) => f,
+            other => panic!("expected FieldsDisplayMessage, got {other:?}"),
+        };
+        assert_eq!(fields_display.intent, "ckTESTBTC to TESTBTC");
+        match &fields_display.fields[0].1 {
+            Value::TokenAmount { symbol, .. } => assert_eq!(symbol, "ckTESTBTC"),
+            other => panic!("expected TokenAmount, got {other:?}"),
+        }
+        // FieldsDisplay address label uses the testnet native symbol too.
+        assert_eq!(fields_display.fields[1].0, "TESTBTC address");
+    }
+
+    #[test]
+    fn test_retrieve_btc_with_approval_generic_uses_testnet_symbols() {
+        let args = RetrieveBtcWithApprovalArgs {
+            amount: 100_000_000,
+            address: "tb1qexampleaddress".to_string(),
+            from_subaccount: None,
+        };
+        let req = make_request(
+            "retrieve_btc_with_approval",
+            Encode!(&args).unwrap(),
+            Some(DisplayMessageType::GenericDisplay),
+        );
+        let info = build_consent_info(req, Network::Regtest).unwrap();
+        let message = match info.consent_message {
+            ConsentMessage::GenericDisplayMessage(m) => m,
+            other => panic!("expected GenericDisplayMessage, got {other:?}"),
+        };
+        assert!(message.starts_with("# Convert ckTESTBTC to TESTBTC"));
+        assert!(message.contains("1 ckTESTBTC"));
+        assert!(message.contains("ckTESTBTC minter"));
+        assert!(message.contains("equivalent amount in TESTBTC"));
     }
 
     #[test]
@@ -578,7 +689,7 @@ mod tests {
             address: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa".to_string(),
         };
         let req = make_request("retrieve_btc", Encode!(&args).unwrap(), None);
-        let info = icrc21_canister_call_consent_message(req).unwrap();
+        let info = build_consent_info(req, Network::Mainnet).unwrap();
         let message = match info.consent_message {
             ConsentMessage::GenericDisplayMessage(m) => m,
             other => panic!("expected GenericDisplayMessage, got {other:?}"),
@@ -591,7 +702,7 @@ mod tests {
     #[test]
     fn test_invalid_args() {
         let req = make_request("retrieve_btc_with_approval", vec![1, 2, 3], None);
-        let err = icrc21_canister_call_consent_message(req).unwrap_err();
+        let err = build_consent_info(req, Network::Mainnet).unwrap_err();
         match err {
             Icrc21Error::UnsupportedCanisterCall(info) => {
                 assert!(info.description.contains("Failed to decode"));
