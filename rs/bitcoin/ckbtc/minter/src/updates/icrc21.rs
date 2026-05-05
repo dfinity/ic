@@ -15,7 +15,7 @@ use icrc_ledger_types::icrc21::responses::{ConsentInfo, ConsentMessage, FieldsDi
 
 /// The number of decimals used to display token amounts.
 /// Both ckBTC and BTC use 8 decimals (1 BTC = 10^8 satoshis).
-pub const DECIMALS: u8 = 8;
+const DECIMALS: u8 = 8;
 
 /// Token symbols used in consent messages. They depend on the configured
 /// Bitcoin network so that test deployments use the test-token names.
