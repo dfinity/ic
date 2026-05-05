@@ -455,6 +455,7 @@ fn should_estimate_withdrawal_fee() {
     fn estimate_withdrawal_fee_and_check(
         minter: &MinterCanister,
         withdrawal_amount: u64,
+        expected_num_utxos: usize,
     ) -> Result<WithdrawalFee, EstimateWithdrawalFeeError> {
         let utxos_before = minter.get_known_utxos(USER_PRINCIPAL);
         let result = minter.estimate_withdrawal_fee(withdrawal_amount);
@@ -463,6 +464,7 @@ fn should_estimate_withdrawal_fee() {
             utxos_before, utxos_after,
             "BUG: a query endpoint should not be able to modify state!"
         );
+        assert_eq!(utxos_before.len(), expected_num_utxos);
         result
     }
 
@@ -470,7 +472,7 @@ fn should_estimate_withdrawal_fee() {
     let minter = setup.minter();
 
     assert_eq!(
-        estimate_withdrawal_fee_and_check(&minter, DOGE),
+        estimate_withdrawal_fee_and_check(&minter, DOGE, 0),
         Err(EstimateWithdrawalFeeError::AmountTooHigh),
         "Any amount should be too high since there are no UTXOs"
     );
@@ -484,7 +486,7 @@ fn should_estimate_withdrawal_fee() {
         .expect_mint();
 
     assert_eq!(
-        estimate_withdrawal_fee_and_check(&minter, DOGE),
+        estimate_withdrawal_fee_and_check(&minter, DOGE, 2),
         Err(EstimateWithdrawalFeeError::AmountTooLow {
             min_amount: RETRIEVE_DOGE_MIN_AMOUNT
         })
@@ -495,11 +497,13 @@ fn should_estimate_withdrawal_fee() {
         dogecoin_fee: 227_000_000,
     };
     assert_eq!(
-        estimate_withdrawal_fee_and_check(&minter, RETRIEVE_DOGE_MIN_AMOUNT),
-        Ok(expected_fee)
+        estimate_withdrawal_fee_and_check(&minter, RETRIEVE_DOGE_MIN_AMOUNT, 2),
+        Ok(expected_fee),
+        "Minter logs {:?}",
+        minter.get_logs()
     );
     assert_eq!(
-        estimate_withdrawal_fee_and_check(&minter, RETRIEVE_DOGE_MIN_AMOUNT),
+        estimate_withdrawal_fee_and_check(&minter, RETRIEVE_DOGE_MIN_AMOUNT, 2),
         Ok(expected_fee),
         "BUG: estimate_withdrawal_fee should be idempotent"
     );

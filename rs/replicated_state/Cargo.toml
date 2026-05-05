@@ -26,8 +26,8 @@ ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-sys = { path = "../sys" }
-ic-types-cycles = { path = "../types/cycles" }
 ic-types = { path = "../types/types" }
+ic-types-cycles = { path = "../types/cycles" }
 ic-utils = { path = "../utils" }
 ic-validate-eq = { path = "../utils/validate_eq" }
 ic-validate-eq-derive = { path = "../utils/validate_eq_derive" }

@@ -6,6 +6,7 @@ use crate::{
         self as pb, VotingPowerEconomics,
         manage_neuron::{Configure, SetDissolveTimestamp, StartDissolving, configure::Operation},
     },
+    temporarily_disable_mission_70_voting_rewards, temporarily_enable_mission_70_voting_rewards,
 };
 use ic_cdk::println;
 use ic_nervous_system_common::{E8, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
@@ -930,4 +931,53 @@ fn test_eight_year_gang_bonus_base_e8s_is_lost_after_dissolving() {
     // Verify the neuron is dissolving and the eight year gang bonus has been set to 0.
     assert_eq!(neuron.state(now), NeuronState::Dissolving);
     assert_eq!(neuron.eight_year_gang_bonus_base_e8s, 0);
+}
+
+#[test]
+fn test_eight_year_gang_bonus_is_capped_to_stake_e8s() {
+    let _restore_on_drop = temporarily_enable_mission_70_voting_rewards();
+
+    let now = 123_456_789;
+
+    // 100 ICP stake, 100 ICP bonus base, 50 ICP in fees from rejected proposals.
+    // stake_e8s = 100 - 50 = 50 ICP, so bonus base is capped to 50 ICP.
+    // eight_year_gang_bonus = 50 / 10 = 5 ICP.
+    // With 0 dissolve delay and 0 age, both multipliers are 1.0.
+    // potential_voting_power = (50 + 5) * 1 * 1 = 55 ICP.
+    let neuron = NeuronBuilder::new_for_test(
+        1,
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 0,
+            aging_since_timestamp_seconds: now,
+        },
+    )
+    .with_cached_neuron_stake_e8s(100 * E8)
+    .with_eight_year_gang_bonus_base_e8s(100 * E8)
+    .with_neuron_fees_e8s(50 * E8)
+    .build();
+
+    assert_eq!(neuron.potential_voting_power(now), 55 * E8);
+}
+
+#[test]
+fn test_eight_year_gang_bonus_not_applied_when_mission_70_disabled() {
+    let _restore_on_drop = temporarily_disable_mission_70_voting_rewards();
+
+    let now = 123_456_789;
+
+    // 100 ICP stake with a tagged 8y-gang bonus base, but mission 70 is disabled
+    // so the bonus must not be applied. With 0 dissolve delay and 0 age, both
+    // multipliers are 1.0, so potential_voting_power = 100 * 1 * 1 = 100 ICP.
+    let neuron = NeuronBuilder::new_for_test(
+        1,
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 0,
+            aging_since_timestamp_seconds: now,
+        },
+    )
+    .with_cached_neuron_stake_e8s(100 * E8)
+    .with_eight_year_gang_bonus_base_e8s(100 * E8)
+    .build();
+
+    assert_eq!(neuron.potential_voting_power(now), 100 * E8);
 }

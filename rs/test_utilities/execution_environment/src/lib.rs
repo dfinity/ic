@@ -34,11 +34,12 @@ use ic_logger::{
     replica_logger::{no_op_logger, test_logger},
 };
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
-    CanisterUpgradeOptions, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs, InstallCodeArgsV2,
-    LoadCanisterSnapshotArgs, LogVisibilityV2, MasterPublicKeyId, Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, UpdateSettingsArgs,
+    CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterMetricsArgs,
+    CanisterMetricsResult, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
+    CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
+    InstallChunkedCodeArgs, InstallCodeArgs, InstallCodeArgsV2, LoadCanisterSnapshotArgs,
+    LogVisibilityV2, MasterPublicKeyId, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    SchnorrAlgorithm, UpdateSettingsArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -878,7 +879,7 @@ impl ExecutionTest {
     pub fn process_stopping_canisters(&mut self) {
         let state = self
             .exec_env
-            .process_stopping_canisters(self.state.take().unwrap());
+            .process_stopping_canisters(self.state.take().unwrap(), ExecutionRound::from(0));
         self.state = Some(state);
     }
 
@@ -891,6 +892,20 @@ impl ExecutionTest {
         let result = self.subnet_message(Method::CanisterStatus, payload);
         match result {
             Ok(WasmResult::Reply(bytes)) => Ok(CanisterStatusResultV2::decode(&bytes).unwrap()),
+            Ok(WasmResult::Reject(err)) => panic!("Unexpected reject: {}", err),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Returns the canister metrics by canister id.
+    pub fn canister_metrics(
+        &mut self,
+        canister_id: CanisterId,
+    ) -> Result<CanisterMetricsResult, UserError> {
+        let payload = CanisterMetricsArgs::new(canister_id).encode();
+        let result = self.subnet_message(Method::CanisterMetrics, payload);
+        match result {
+            Ok(WasmResult::Reply(bytes)) => Ok(CanisterMetricsResult::decode(&bytes).unwrap()),
             Ok(WasmResult::Reject(err)) => panic!("Unexpected reject: {}", err),
             Err(err) => Err(err),
         }
@@ -1227,6 +1242,7 @@ impl ExecutionTest {
                 time: self.time,
                 state: IngressState::Received,
             },
+            ExecutionRound::from(0),
         );
         self.state = Some(state);
         if !self.manual_execution {
@@ -1512,6 +1528,7 @@ impl ExecutionTest {
                 time: self.time,
                 state: IngressState::Received,
             },
+            ExecutionRound::from(0),
         );
 
         self.state = Some(state);
@@ -1835,8 +1852,12 @@ impl ExecutionTest {
                 }
                 canister = result.canister;
                 if let Some(ir) = result.ingress_status {
-                    self.ingress_history_writer
-                        .set_status(&mut state, ir.0, ir.1);
+                    self.ingress_history_writer.set_status(
+                        &mut state,
+                        ir.0,
+                        ir.1,
+                        ExecutionRound::from(0),
+                    );
                 };
                 executed_any = true;
             }
@@ -1895,6 +1916,7 @@ impl ExecutionTest {
                         self.install_code_instruction_limits.clone(),
                         &mut round_limits,
                         self.subnet_size(),
+                        ExecutionRound::from(0),
                     );
                 let slice_instructions_used =
                     remaining_round_instructions_before - round_limits.instructions;
@@ -1977,8 +1999,12 @@ impl ExecutionTest {
                 }
                 canister = result.canister;
                 if let Some(ir) = result.ingress_status {
-                    self.ingress_history_writer
-                        .set_status(&mut state, ir.0, ir.1);
+                    self.ingress_history_writer.set_status(
+                        &mut state,
+                        ir.0,
+                        ir.1,
+                        ExecutionRound::from(0),
+                    );
                 };
                 canisters.insert(canister_id, canister);
                 state.put_canister_states(canisters);
@@ -1992,7 +2018,7 @@ impl ExecutionTest {
     pub fn abort_all_paused_executions(&mut self) {
         let mut state = self.state.take().unwrap();
         let cost_schedule = state.get_own_cost_schedule();
-        abort_all_paused_executions(&mut state, &self.exec_env, &self.log, cost_schedule);
+        abort_all_paused_executions(&mut state, &self.exec_env, cost_schedule, &self.log);
         for (_, paused_subnet_message) in self.paused_subnet_messages.iter_mut() {
             paused_subnet_message.instructions = NumInstructions::new(0);
         }
@@ -2617,6 +2643,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_log_memory_store_feature_enabled(mut self) -> Self {
+        self.execution_config.log_memory_store_feature = FlagStatus::Enabled;
+        self
+    }
+
     pub fn without_composite_queries(mut self) -> Self {
         self.execution_config.composite_queries = FlagStatus::Disabled;
         self
@@ -2687,6 +2718,13 @@ impl ExecutionTestBuilder {
     ) -> Self {
         self.bitcoin_get_successors_follow_up_responses
             .insert(canister, follow_up_responses);
+        self
+    }
+
+    pub fn with_create_execution_state_base_cost(mut self, cost: u64) -> Self {
+        self.execution_config
+            .embedders_config
+            .create_execution_state_base_cost = cost.into();
         self
     }
 
@@ -2804,14 +2842,6 @@ impl ExecutionTestBuilder {
 
     pub fn with_max_snapshots_per_canister(mut self, max_snapshots_per_canister: usize) -> Self {
         self.execution_config.max_number_of_snapshots_per_canister = max_snapshots_per_canister;
-        self
-    }
-
-    pub fn with_environment_variables_flag(
-        mut self,
-        environment_variables_flag: FlagStatus,
-    ) -> Self {
-        self.execution_config.environment_variables = environment_variables_flag;
         self
     }
 

@@ -170,7 +170,6 @@ pub(crate) struct FinalizerMetrics {
     pub finalization_certified_state_difference: IntGauge,
     // idkg payload related metrics
     pub master_key_transcripts_created: IntCounterVec,
-    pub threshold_signature_agreements: IntCounter,
     pub idkg_available_pre_signatures: IntGaugeVec,
     pub idkg_pre_signatures_in_creation: IntGaugeVec,
     pub idkg_ongoing_xnet_reshares: IntGaugeVec,
@@ -181,6 +180,7 @@ pub(crate) struct FinalizerMetrics {
     pub canister_http_timeouts_delivered: IntCounter,
     pub canister_http_divergences_delivered: IntCounter,
     pub canister_http_flexible_candid_failures: IntCounter,
+    pub canister_http_flexible_errors_delivered: IntCounter,
     pub canister_http_payload_bytes_delivered: Histogram,
 }
 
@@ -236,10 +236,6 @@ impl FinalizerMetrics {
                 "The number of times a master key transcript is created",
                 &[KEY_ID_LABEL],
             ),
-            threshold_signature_agreements: metrics_registry.int_counter(
-                "consensus_threshold_signature_agreements",
-                "Total number of threshold signature agreements created",
-            ),
             idkg_available_pre_signatures: metrics_registry.int_gauge_vec(
                 "consensus_idkg_available_pre_signatures",
                 "The number of available IDKG pre-signatures",
@@ -281,6 +277,10 @@ impl FinalizerMetrics {
                 "canister_http_flexible_candid_failures",
                 "Total number of flexible canister http responses skipped due to candid encoding/decoding failures",
             ),
+            canister_http_flexible_errors_delivered: metrics_registry.int_counter(
+                "canister_http_flexible_errors_delivered",
+                "Total number of flexible canister http errors delivered",
+            ),
             canister_http_payload_bytes_delivered: metrics_registry.histogram(
                 "canister_http_payload_bytes_delivered",
                 "Total number of bytes in the canister http payload",
@@ -316,11 +316,17 @@ impl FinalizerMetrics {
             .inc_by(batch_stats.canister_http.timeouts as u64);
         self.canister_http_divergences_delivered
             .inc_by(batch_stats.canister_http.divergence_responses as u64);
-        self.canister_http_flexible_candid_failures.inc_by(
-            batch_stats
-                .canister_http
-                .flexible_ok_responses_candid_failures as u64,
-        );
+
+        let flexible_ok_candid_failures = batch_stats
+            .canister_http
+            .flexible_ok_responses_candid_failures as u64;
+        let flexible_error_candid_failures =
+            batch_stats.canister_http.flexible_errors_candid_failures as u64;
+        self.canister_http_flexible_candid_failures
+            .inc_by(flexible_ok_candid_failures + flexible_error_candid_failures);
+
+        self.canister_http_flexible_errors_delivered
+            .inc_by(batch_stats.canister_http.flexible_errors as u64);
         self.canister_http_payload_bytes_delivered
             .observe(batch_stats.canister_http.payload_bytes as f64);
 
@@ -345,8 +351,6 @@ impl FinalizerMetrics {
                 &self.master_key_transcripts_created,
                 &idkg.key_transcripts_created,
             );
-            self.threshold_signature_agreements
-                .inc_by(idkg.signature_agreements as u64);
             set(
                 &self.idkg_available_pre_signatures,
                 &idkg.available_pre_signatures,

@@ -41,7 +41,6 @@ use ic_registry_transport::{pb::v1::RegistryAtomicMutateRequest, upsert};
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use ic_types::{NodeId, ReplicaVersion};
 use pocket_ic::PocketIcBuilder;
-use prost::Message;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::do_create_subnet::{
@@ -163,6 +162,10 @@ async fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
     let initial_subnet_list_record =
         decode_registry_value::<SubnetListRecordPb>(&pocket_ic, make_subnet_list_record_key())
             .await;
+    assert!(
+        !initial_subnet_list_record.subnets.is_empty(),
+        "expected the registry to already contain at least one subnet before create_subnet"
+    );
 
     let payload = make_create_subnet_payload(node_ids.clone());
 
@@ -309,6 +312,7 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
         let idkg_key_rotation_period_ms = Some(12345);
         let max_parallel_pre_signature_transcripts_in_creation = Some(12345);
         let payload = CreateSubnetPayload {
+            initial_dkg_subnet_id: Some(system_subnet_id),
             chain_key_config: Some(InitialChainKeyConfig {
                 key_configs: vec![KeyConfigRequest {
                     key_config: Some(KeyConfig {
@@ -410,6 +414,7 @@ fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
     CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
+        initial_dkg_subnet_id: None,
         max_ingress_bytes_per_message: 60 * 1024 * 1024,
         max_ingress_bytes_per_block: None,
         max_ingress_messages_per_block: 1000,

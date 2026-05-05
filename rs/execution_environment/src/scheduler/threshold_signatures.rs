@@ -268,7 +268,7 @@ mod tests {
         let context = SignWithThresholdContext {
             request: RequestBuilder::new().build(),
             args,
-            deprecated_pseudo_random_id: Some([id as u8; 32]),
+            deprecated_pseudo_random_id: None,
             derivation_path: Arc::new(vec![]),
             batch_time: UNIX_EPOCH,
             nonce: None,
