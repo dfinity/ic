@@ -1433,7 +1433,6 @@ fn test_update_settings_with_different_controllers_amount() {
                         canister_b,
                         CanisterSettingsArgsBuilder::new()
                             .with_controllers(vec![canister_a.into(); controllers_count])
-                            .with_log_memory_limit(0)
                             .build(),
                     )
                     .encode(),
