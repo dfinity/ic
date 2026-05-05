@@ -5318,49 +5318,6 @@ fn can_short_circuit_state_sync() {
 }
 
 #[test]
-fn remove_states_below_protects_taken_tip_after_short_circuit_state_sync() {
-    state_manager_test(|_metrics, state_manager| {
-        let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, CertificationScope::Full, None);
-        let hash_at_1 = wait_for_checkpoint(&state_manager, Height(1));
-
-        // Commit an in-memory state (no checkpoint) at height 2 so that the
-        // tip ends up at a height that is not a checkpoint.
-        let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
-        state_manager.flush_hash_channel();
-
-        let (tip_height, state) = state_manager.take_tip();
-        assert_eq!(tip_height, Height(2));
-
-        // Fetch state at height 10 using the hash of state 1.
-        // This clones the verified checkpoint @1 to @10 and advances
-        // `latest_state_height` to 10, but does not touch `tip_height`.
-        state_manager.fetch_state(Height(10), hash_at_1.clone(), Height::new(999));
-        // let hash_at_10 = wait_for_checkpoint(&state_manager, Height(10));
-        // assert_eq!(hash_at_1, hash_at_10);
-        state_manager.flush_hash_channel();
-        assert_eq!(state_manager.latest_state_height(), Height(10));
-
-        // height 2 should be retained
-        state_manager.remove_states_below(Height(10));
-        assert!(
-            state_manager
-                .list_state_heights(CERT_ANY)
-                .contains(&Height(2)),
-            "tip height @2 should be retained by remove_states_below, \
-             got heights: {:?}",
-            state_manager.list_state_heights(CERT_ANY),
-        );
-
-        // This needs the hash @ prev_height = 2 to
-        // still be available, which is only the case if the tip-height
-        // protection kept the certification metadata at height 2 around.
-        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
-    })
-}
-
-#[test]
 fn can_reuse_chunk_hashes_when_computing_manifest() {
     use ic_state_manager::ManifestMetrics;
     use ic_state_manager::manifest::{RehashManifest, compute_manifest, validate_manifest};
@@ -9727,4 +9684,89 @@ fn certification_not_pruned() {
         assert!(sm.certifications().contains_key(&Height::new(1)));
         sm.commit_and_certify_at_height(state, Height::new(2), CertificationScope::Metadata, None);
     });
+}
+
+#[test]
+fn remove_states_below_protects_tip_height() {
+    state_manager_test(|_metrics, sm| {
+        let (_height, state) = sm.take_tip();
+        sm.commit_and_certify(state, CertificationScope::Full, None);
+        let hash_at_1 = wait_for_checkpoint(&sm, Height(1));
+
+        let (_height, state) = sm.take_tip();
+        sm.commit_and_certify(state, CertificationScope::Metadata, None);
+        sm.flush_hash_channel();
+
+        let (tip_height, state) = sm.take_tip();
+        assert_eq!(tip_height, Height(2));
+
+        // Fetch state at height 10 using the hash of state 1.
+        // This clones the verified checkpoint @1 to @10 and advances
+        // `latest_state_height` to 10, but does not touch `tip_height`.
+        sm.fetch_state(Height(10), hash_at_1.clone(), Height::new(999));
+        // let hash_at_10 = wait_for_checkpoint(&state_manager, Height(10));
+        // assert_eq!(hash_at_1, hash_at_10);
+        sm.flush_hash_channel();
+        assert_eq!(sm.latest_state_height(), Height(10));
+
+        // height 2 should be retained
+        sm.remove_states_below(Height(10));
+        assert!(
+            sm.list_state_heights(CERT_ANY).contains(&Height(2)),
+            "tip height @2 should be retained by remove_states_below, \
+             got heights: {:?}",
+            sm.list_state_heights(CERT_ANY),
+        );
+
+        // This needs the hash @ prev_height = 2 to
+        // still be available, which is only the case if the tip-height
+        // protection kept the certification metadata at height 2 around.
+        sm.commit_and_certify(state, CertificationScope::Metadata, None);
+    })
+}
+
+#[test]
+fn remove_states_below_protects_tip_height_with_optimization() {
+    state_manager_test(|_metrics, sm| {
+        let (_height, state) = sm.take_tip();
+        sm.commit_and_certify(state, CertificationScope::Full, None);
+        let hash_at_1 = wait_for_checkpoint(&sm, Height(1));
+
+        let (_height, state) = sm.take_tip();
+        sm.commit_and_certify(state, CertificationScope::Metadata, None);
+        sm.flush_hash_channel();
+
+        sm.update_fast_forward_height(Height::new(5));
+        sm.deliver_state_certification(fake_certification_for_height_with_hash(
+            Height::new(2),
+            CryptoHash(
+                hex::decode("cea29292fecbadde1cd534ce411b829ba9d8db4971794f827eddda5c5dbfcee4")
+                    .unwrap(),
+            ),
+        ));
+
+        let (tip_height, state) = sm.take_tip();
+        assert_eq!(tip_height, Height(2));
+
+        // Fetch state at height 10 using the hash of state 1.
+        // This clones the verified checkpoint @1 to @10 and advances
+        // `latest_state_height` to 10, but does not touch `tip_height`.
+        sm.fetch_state(Height(10), hash_at_1.clone(), Height::new(999));
+        sm.flush_hash_channel();
+        assert_eq!(sm.latest_state_height(), Height(10));
+
+        // height 2 should be retained
+        sm.remove_states_below(Height(10));
+        assert!(
+            sm.list_state_heights(CERT_ANY).contains(&Height(2)),
+            "tip height @2 should be retained by remove_states_below, \
+             got heights: {:?}",
+            sm.list_state_heights(CERT_ANY),
+        );
+
+        // This needs the hash @ prev_height = 2 to
+        // still be available, which is only the case if the tip-height
+        // protection kept the certification metadata at height 2 around.
+        sm.commit_and_certify(state, CertificationScope::Metadata, None);
+    })
 }
