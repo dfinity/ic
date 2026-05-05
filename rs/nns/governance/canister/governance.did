@@ -24,6 +24,7 @@ type Action = variant {
   BlessAlternativeGuestOsVersion : BlessAlternativeGuestOsVersion;
   TakeCanisterSnapshot : TakeCanisterSnapshot;
   LoadCanisterSnapshot : LoadCanisterSnapshot;
+  CreateCanisterAndInstallCode : CreateCanisterAndInstallCode;
 };
 
 type AddHotKey = record {
@@ -66,6 +67,7 @@ type CanisterSettings = record {
   freezing_threshold : opt nat64;
   controllers : opt Controllers;
   log_visibility : opt int32;
+  snapshot_visibility : opt int32;
   wasm_memory_limit : opt nat64;
   memory_allocation : opt nat64;
   compute_allocation : opt nat64;
@@ -231,6 +233,28 @@ type Countries = record {
   iso_codes : vec text;
 };
 
+type CreateCanisterAndInstallCode = record {
+  host_subnet_id : opt principal;
+  canister_settings : opt CanisterSettings;
+  wasm_module_hash : opt blob;
+  install_arg_hash : opt blob;
+};
+
+type CreateCanisterAndInstallCodeRequest = record {
+  host_subnet_id : opt principal;
+  canister_settings : opt CanisterSettings;
+  wasm_module : opt WasmModule;
+  install_arg : opt blob;
+};
+
+type CreateCanisterAndInstallCodeOk = record {
+  canister_id : opt principal;
+};
+
+type SuccessfulProposalExecutionValue = variant {
+  CreateCanisterAndInstallCode : CreateCanisterAndInstallCodeOk;
+};
+
 type CreateServiceNervousSystem = record {
   url : opt text;
   governance_parameters : opt GovernanceParameters;
@@ -380,6 +404,7 @@ type GovernanceCachedMetrics = record {
   timestamp_seconds : nat64;
   seed_neuron_count : nat64;
   spawning_neurons_count : nat64;
+  total_maturity_disbursements_in_progress_e8s_equivalent : nat64;
 
   non_self_authenticating_controller_neuron_subset_metrics : opt NeuronSubsetMetrics;
   public_neuron_subset_metrics : opt NeuronSubsetMetrics;
@@ -434,6 +459,9 @@ type InstallCode = record {
 
 type InstallCodeRequest = record {
   arg : opt blob;
+  // If we add support for chunked WASMs later, the WasmModule type should
+  // probably be used in place of this field in order to be consistent with
+  // CreateCanisterAndInstallCodeRequest.
   wasm_module : opt blob;
   skip_stopping_before_installing : opt bool;
   canister_id : opt principal;
@@ -775,6 +803,12 @@ type Neuron = record {
   // Per NNS policy, this is opt. Nevertheless, it will never be null.
   potential_voting_power : opt nat64;
 
+  // Base value (in e8s) used for the "8-year gang" dissolve delay bonus. For neurons that had the
+  // maximum dissolve delay of 8 years before the maximum was reduced, this is set to the total
+  // staked value net of fees (including staked maturity) captured at the time of migration.
+  // For all other neurons, this is 0.
+  eight_year_gang_bonus_base_e8s : opt nat64;
+
   // The maturity disbursements in progress, i.e. the disbursements that are initiated but not
   // finalized. The finalization happens 7 days after the disbursement is initiated.
   maturity_disbursements_in_progress : opt vec MaturityDisbursement;
@@ -869,6 +903,8 @@ type NeuronInfo = record {
   voting_power_refreshed_timestamp_seconds : opt nat64;
   deciding_voting_power : opt nat64;
   potential_voting_power : opt nat64;
+  // See analogous field in Neuron.
+  eight_year_gang_bonus_base_e8s : opt nat64;
 };
 
 type NeuronStakeTransfer = record {
@@ -1041,6 +1077,7 @@ type ProposalActionRequest = variant {
   BlessAlternativeGuestOsVersion : BlessAlternativeGuestOsVersion;
   TakeCanisterSnapshot : TakeCanisterSnapshot;
   LoadCanisterSnapshot : LoadCanisterSnapshot;
+  CreateCanisterAndInstallCode : CreateCanisterAndInstallCodeRequest;
 };
 
 // Creates a rented subnet from a rental request (in the Subnet Rental
@@ -1134,6 +1171,7 @@ type ProposalData = record {
   original_total_community_fund_maturity_e8s_equivalent : opt nat64;
   total_potential_voting_power : opt nat64;
   topic: opt int32;
+  success_value : opt SuccessfulProposalExecutionValue;
 };
 
 type ProposalInfo = record {
@@ -1155,6 +1193,7 @@ type ProposalInfo = record {
   proposer : opt NeuronId;
   executed_timestamp_seconds : nat64;
   total_potential_voting_power : opt nat64;
+  success_value : opt SuccessfulProposalExecutionValue;
 };
 
 type RegisterVote = record {
@@ -1401,6 +1440,10 @@ type VotingRewardParameters = record {
 
 type CustomProposalCriticality = record {
   additional_critical_native_action_ids : opt vec nat64;
+};
+
+type WasmModule = variant {
+  Inlined : blob;
 };
 
 type WaitForQuietState = record {

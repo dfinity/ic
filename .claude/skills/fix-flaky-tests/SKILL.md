@@ -58,25 +58,42 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
 
    Read `<LOG_DIR>/README.md` to understand how the logs are organized.
 
-3. Analyze the source code of `label` and the logs in `<LOG_DIR>` to determine the root cause of the flakiness.
+3. Analyze the source code of `label` and the logs in `<LOG_DIR>` to determine the root causes of the flakiness.
 
-4. Once you have determined the root cause,
-   fix the test taking `.claude/CLAUDE.md` into account.
+   Ignore failures containing the error:
+   ```
+   Retried too many times: sending a request to Farm
+   ```
+   as those are due to infrastructure issues unrelated to the test code.
 
-5. Verify the test still passes by running:
+4. When asked to just figure out the root causes without fixing them,
+   document the root causes in a markdown file and finish without running the following steps.
+
+5. Once the root causes have been determined, pick the most common or recent one
+   and fix the test by addressing that root cause taking `.claude/CLAUDE.md` into account.
+
+   Don't address multiple root causes in the same fix.
+   Prefer making separate PRs for each root cause to make it easier to review and revert if needed.
+
+6. Verify the test still passes by running:
    ```
    bazel test --test_output=errors --runs_per_test=3 --jobs=3 <label>
    ```
    This executes 3 runs of the test in parallel to increase the chances of reproducing the flakiness. If it fails, analyze the failure and fix it until it passes reliably.
 
-6. Make a draft Pull Request with the fix, following these steps:
+7. Make a draft Pull Request with the fix, following these steps:
 
    1. From the root of the repository, create a new git branch named `ai/deflake-<test_name>-<date>`,
       replacing `<test_name>` with the name of the test
       and `<date>` with the current date in `YYYY-MM-DD` format,
       and commit your fix to that branch.
 
-   2. Submit a draft PR using `gh` with the fix.
+   2. Push the branch to `origin` (assuming it's `git@github.com:dfinity/ic.git`) using:
+      ```
+      git push --set-upstream origin HEAD
+      ```
+
+   3. Submit a draft PR using `gh` with the fix.
       Name it: `fix: deflake <label>`.
       Include the root cause analysis in the PR description
       and mention the PR was created following the steps in `.claude/skills/fix-flaky-tests/SKILL.md`.

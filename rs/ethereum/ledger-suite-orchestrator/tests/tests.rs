@@ -87,7 +87,7 @@ fn should_spawn_ledger_with_correct_init_args() {
             ),
             (
                 MetadataKey::parse(MetadataKey::ICRC103_MAX_TAKE_VALUE).unwrap(),
-                LedgerMetadataValue::from(500u64),
+                LedgerMetadataValue::from(500_u64),
             ),
             (
                 MetadataKey::parse(MetadataKey::ICRC106_INDEX_PRINCIPAL).unwrap(),
@@ -876,7 +876,7 @@ mod upgrade {
                     fee: None,
                     created_at_time: None,
                     memo: None,
-                    amount: Nat::from(1_000_000u32),
+                    amount: Nat::from(1_000_000_u32),
                 },
             )
             .expect("failed to mint 1 ckUSDC");

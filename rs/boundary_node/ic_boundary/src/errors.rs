@@ -1,11 +1,16 @@
+use std::time::Duration;
+
 use anyhow::anyhow;
 use axum::{
     BoxError,
+    body::Body,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use bytes::Bytes;
 
-use ic_bn_lib::http::headers::X_IC_ERROR_CAUSE;
+use ic_bn_lib::http::{body::buffer_body, headers::X_IC_ERROR_CAUSE};
+use ic_bn_lib_common::types::http::Error as HttpError;
 use strum::{Display, IntoStaticStr};
 use tower_governor::GovernorError;
 
@@ -91,6 +96,21 @@ impl ErrorCause {
             Self::RateLimited(_) => ErrorClientFacing::RateLimited,
         }
     }
+}
+
+pub async fn buffer_body_to_bytes(
+    body: Body,
+    max_size: usize,
+    timeout: Duration,
+) -> Result<Bytes, ErrorCause> {
+    buffer_body(body, max_size, timeout)
+        .await
+        .map_err(|e| match e {
+            HttpError::BodyReadingFailed(v) => ErrorCause::UnableToReadBody(v),
+            HttpError::BodyTooBig => ErrorCause::PayloadTooLarge(max_size),
+            HttpError::BodyTimedOut => ErrorCause::BodyTimedOut,
+            _ => ErrorCause::Other(e.to_string()),
+        })
 }
 
 // Creates the response from ErrorCause and injects itself into extensions to be visible by middleware

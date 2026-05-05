@@ -25,7 +25,7 @@ fn test_statesync_test_canisters() {
 
     let canister_id = deploy_state_sync_test_canister(&env);
     let result = env
-        .query(canister_id, "read_state", Encode!(&0usize).unwrap())
+        .query(canister_id, "read_state", Encode!(&0_usize).unwrap())
         .unwrap();
     let res = assert_reply(result);
     let val = Decode!(&res, Result<u8, String>).unwrap();
@@ -36,7 +36,7 @@ fn test_statesync_test_canisters() {
     );
 
     let result = env
-        .execute_ingress(canister_id, "change_state", Encode!(&33u32).unwrap())
+        .execute_ingress(canister_id, "change_state", Encode!(&33_u32).unwrap())
         .unwrap();
     let res = assert_reply(result);
     let val = Decode!(&res, Result<u64, String>).unwrap();
@@ -47,7 +47,7 @@ fn test_statesync_test_canisters() {
     );
 
     let result = env
-        .query(canister_id, "read_state", Encode!(&0usize).unwrap())
+        .query(canister_id, "read_state", Encode!(&0_usize).unwrap())
         .unwrap();
     let res = assert_reply(result);
     let val = Decode!(&res, Result<u8, String>).unwrap();

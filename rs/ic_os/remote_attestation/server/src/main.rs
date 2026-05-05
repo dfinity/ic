@@ -163,14 +163,14 @@ mod tests {
         attestation_report
             .verify_custom_data(&SevCustomData::new(
                 SevCustomDataNamespace::RawRemoteAttestation,
-                [0u8; 32],
+                [0_u8; 32],
             ))
             .unwrap();
     }
 
     #[test]
     async fn test_31_bytes_fails() {
-        let custom_data = [0u8; 31];
+        let custom_data = [0_u8; 31];
         let request = AttestRequest {
             custom_data: Some(custom_data.to_vec()),
         };

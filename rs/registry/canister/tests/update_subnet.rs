@@ -71,6 +71,7 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
             is_halted: None,
             halt_at_cup_height: None,
             features: None,
+            resource_limits: None,
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -156,6 +157,8 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             subnet_admins: vec![],
+            resource_limits: Default::default(),
+            recalled_replica_version_ids: vec![],
         };
 
         // An attacker got a canister that is trying to pass for the governance
@@ -198,6 +201,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             is_halted: None,
             halt_at_cup_height: None,
             features: None,
+            resource_limits: None,
             max_number_of_canisters: Some(100),
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -283,6 +287,8 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal
                                 as i32,
                             subnet_admins: vec![],
+                            resource_limits: Default::default(),
+                            recalled_replica_version_ids: vec![],
                         }
                         .encode_to_vec(),
                     )],
@@ -317,6 +323,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             is_halted: Some(true),
             halt_at_cup_height: Some(true),
             features: None,
+            resource_limits: None,
             max_number_of_canisters: Some(42),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -377,6 +384,8 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                 chain_key_config: None,
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 subnet_admins: vec![],
+                resource_limits: Default::default(),
+                recalled_replica_version_ids: vec![],
             }
         );
 
@@ -462,6 +471,8 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             subnet_admins: vec![],
+            resource_limits: Default::default(),
+            recalled_replica_version_ids: vec![],
         };
 
         // Just create the registry canister and wait until the subnet_handler ID is
@@ -669,6 +680,7 @@ fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
         is_halted: None,
         halt_at_cup_height: None,
         features: None,
+        resource_limits: None,
         max_number_of_canisters: None,
         ssh_readonly_access: None,
         ssh_backup_access: None,

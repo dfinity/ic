@@ -4,7 +4,7 @@ use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
 
 const DEFAULT_IP_V6_ADDR: Ipv6Addr = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
-const DEFAULT_PORT: u16 = 8080u16;
+const DEFAULT_PORT: u16 = 8080_u16;
 
 /// The internal configuration -- any historical warts from the external
 /// configuration are removed. Anything using this struct can trust that it

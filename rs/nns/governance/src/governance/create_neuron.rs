@@ -1,6 +1,6 @@
 use crate::{
     governance::{
-        Governance, INITIAL_NEURON_DISSOLVE_DELAY, LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS,
+        Governance, INITIAL_NEURON_DISSOLVE_DELAY, LOG_PREFIX, max_dissolve_delay_seconds,
     },
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
@@ -72,12 +72,13 @@ impl Governance {
                 ),
             ));
         }
-        if dissolve_delay_seconds > MAX_DISSOLVE_DELAY_SECONDS {
+        if dissolve_delay_seconds > max_dissolve_delay_seconds() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
                 format!(
                     "Dissolve delay {dissolve_delay_seconds} is greater than the maximum \
-            dissolve delay {MAX_DISSOLVE_DELAY_SECONDS}"
+            dissolve delay {}",
+                    max_dissolve_delay_seconds()
                 ),
             ));
         }
@@ -140,11 +141,13 @@ impl Governance {
             }
         };
         let controller = controller.unwrap_or(caller);
-        if amount_e8s <= neuron_minimum_stake_e8s {
+        if amount_e8s < neuron_minimum_stake_e8s {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
-                "Amount {amount_e8s} e8s is less than the minimum stake for a neuron \
-                {neuron_minimum_stake_e8s} e8s",
+                format!(
+                    "Amount {amount_e8s} e8s is less than the minimum stake \
+                    {neuron_minimum_stake_e8s} e8s for a neuron"
+                ),
             ));
         }
         let neuron_account = Icrc1Account {

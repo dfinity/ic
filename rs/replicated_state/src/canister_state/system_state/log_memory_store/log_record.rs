@@ -4,7 +4,7 @@ use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsF
 ///
 /// Unlike `CanisterLogRecord`, it stores the content length explicitly
 /// to enable serialization and deserialization of content.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub(super) struct LogRecord {
     pub idx: u64,
     pub timestamp: u64,
@@ -17,7 +17,11 @@ impl LogRecord {
         // IMPORTANT: do not check the content length here, as we can only
         // read the record header without loading the full content,
         // but still need to know the full size of the record.
-        8 + 8 + 4 + self.len as usize
+        Self::estimate_bytes_len(self.len as usize)
+    }
+
+    pub const fn estimate_bytes_len(content_len: usize) -> usize {
+        8 + 8 + 4 + content_len
     }
 
     pub fn matches(&self, filter: &FetchCanisterLogsFilter) -> bool {

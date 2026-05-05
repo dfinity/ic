@@ -2,8 +2,7 @@ pub mod common;
 
 use crate::common::{
     HttpEndpointBuilder, MockIngressPoolThrottler, default_certified_state_reader,
-    default_get_latest_state, default_latest_certified_height, default_read_certified_state,
-    get_free_localhost_socket_addr,
+    default_get_latest_state, default_read_certified_state, get_free_localhost_socket_addr,
 };
 use async_trait::async_trait;
 use axum::body::Body;
@@ -131,15 +130,20 @@ fn test_load_shedding_read_state(
 
     let mut mock_state_manager = MockStateManager::new();
 
+    let state = Arc::new(default_get_latest_state());
+
+    let state_clone = state.clone();
     mock_state_manager
         .expect_get_latest_state()
-        .returning(default_get_latest_state);
+        .returning(move || (*state_clone).clone());
 
+    let state_clone = state.clone();
     mock_state_manager
         .expect_latest_certified_height()
-        .returning(default_latest_certified_height);
+        .returning(move || state_clone.height());
 
     let rt_clone: tokio::runtime::Handle = rt.handle().clone();
+    let state_clone = state.clone();
     mock_state_manager
         .expect_read_certified_state()
         .returning(move |labeled_tree| {
@@ -151,13 +155,14 @@ fn test_load_shedding_read_state(
                     load_shedder_returned_clone.notified().await;
                 })
             }
-            default_read_certified_state(labeled_tree)
+            default_read_certified_state(labeled_tree, (*state_clone).clone())
         });
 
     let service_is_healthy_clone = service_is_healthy.clone();
     let read_state_running_clone = read_state_running.clone();
     let load_shedder_returned_clone = load_shedder_returned.clone();
     let rt_clone: tokio::runtime::Handle = rt.handle().clone();
+    let state_clone = state.clone();
     mock_state_manager
         .expect_get_certified_state_snapshot()
         .returning(move || {
@@ -169,7 +174,7 @@ fn test_load_shedding_read_state(
                     load_shedder_returned_clone.notified().await;
                 })
             }
-            default_certified_state_reader()
+            default_certified_state_reader((*state_clone).clone())
         });
 
     let _ = HttpEndpointBuilder::new(rt.handle().clone(), config)

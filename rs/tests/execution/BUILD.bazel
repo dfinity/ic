@@ -10,6 +10,7 @@ system_test(
         "//rs/config",
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/cycles",
         "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
@@ -48,6 +49,7 @@ system_test(
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
@@ -70,6 +72,7 @@ system_test(
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/types/types_test_utils",
@@ -114,11 +117,26 @@ system_test(
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/cycles",
         "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-utils",
+    ],
+)
+
+system_test(
+    name = "resource_limits_test",
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        "//rs/config",
+        "//rs/registry/resource_limits",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
     ],
 )
 
@@ -170,6 +188,7 @@ system_test(
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",

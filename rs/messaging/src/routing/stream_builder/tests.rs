@@ -29,7 +29,8 @@ use ic_types::messages::{
 };
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::{StreamIndex, StreamIndexedQueue};
-use ic_types::{CanisterId, Cycles, SubnetId, Time};
+use ic_types::{CanisterId, SubnetId, Time};
+use ic_types_cycles::Cycles;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
@@ -814,14 +815,14 @@ fn build_streams_with_best_effort_messages() {
 #[test_strategy::proptest]
 fn build_streams_with_refunds(
     // Stream may have up to 5 initial refunds.
-    #[strategy(-5..=5isize)] initial_refunds: isize,
+    #[strategy(-5..=5_isize)] initial_refunds: isize,
     // And up to 10 total initial messages (canister plus refund).
     #[strategy(-5..=10-#initial_refunds.max(0))] initial_messages: isize,
 
     // Up to 10 refunds to be routed.
-    #[strategy(-5..=10isize)] refunds_to_route: isize,
+    #[strategy(-5..=10_isize)] refunds_to_route: isize,
     // Plus up to 10 canister messages to be routed.
-    #[strategy(-5..=10isize)] messages_to_route: isize,
+    #[strategy(-5..=10_isize)] messages_to_route: isize,
 
     #[strategy(proptest::sample::select(&[
         SubnetType::Application,
@@ -831,7 +832,7 @@ fn build_streams_with_refunds(
     subnet_type: SubnetType,
     // Set the system subnet stream message limit so that it's sometimes relevant
     // (for system subnets) and sometimes not.
-    #[strategy(1..=6usize)] system_subnet_stream_msg_limit: usize,
+    #[strategy(1..=6_usize)] system_subnet_stream_msg_limit: usize,
 ) {
     // Maximum stream messages. Also the number of canisters per subnet, as the pool
     // may only hold one refund per canister.
@@ -1056,12 +1057,12 @@ fn build_streams_with_oversized_payloads() {
         // Payloads/error message that result in `get_payload_size()` returning exactly
         // `MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 + 1`.
         let oversized_request_payload: Vec<u8> = std::iter::repeat_n(
-            0u8,
+            0_u8,
             MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize - method_name.len() + 1,
         )
         .collect();
         let oversized_response_payload: Vec<u8> =
-            std::iter::repeat_n(0u8, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 1)
+            std::iter::repeat_n(0_u8, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 1)
                 .collect();
         let oversized_error_message: String =
             "x".repeat(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize);

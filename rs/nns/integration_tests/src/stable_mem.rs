@@ -24,7 +24,7 @@ fn chunked_stable_mem_ser_deser_roundtrip() {
             .unwrap();
 
         // 10MiB, 1MiB, 1KiB, 100 bytes
-        for buffer_size in &[10 * 1024 * 1024, 1024 * 1024, 1024u32, 100] {
+        for buffer_size in &[10 * 1024 * 1024, 1024 * 1024, 1024_u32, 100] {
             canister
                 .update_("test_buffer_size", candid::<(), (u32,)>, (*buffer_size,))
                 .await

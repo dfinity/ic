@@ -59,7 +59,7 @@ fn bench_icrc1_transfers() -> BenchResult {
                     spender: test_account(i),
                     created_at_time: Some(start_time + i as u64),
                     amount: u128::MAX.into(),
-                    expected_allowance: Some(0u64.into()),
+                    expected_allowance: Some(0_u64.into()),
                     expires_at: Some(u64::MAX),
                     fee: None,
                     memo: Some(MEMO.to_vec().into()),

@@ -1,9 +1,8 @@
 use super::*;
 
 use crate::{
-    are_bless_alternative_guest_os_version_proposals_enabled,
     pb::v1::SelfDescribingValue,
-    proposals::self_describing::{LocallyDescribableProposalAction, ValueBuilder},
+    proposals::self_describing::{DocumentedAction, ValueBuilder},
 };
 
 use ic_protobuf::registry::replica_version::v1::{
@@ -27,13 +26,6 @@ impl BlessAlternativeGuestOsVersion {
     ///    a. Nonempty.
     ///    b. Each element is valid per GuestLaunchMeasurement (singular).
     pub(crate) fn validate(&self) -> Result<(), GovernanceError> {
-        if !are_bless_alternative_guest_os_version_proposals_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "BlessAlternativeGuestOsVersion proposals are not enabled yet.".to_string(),
-            ));
-        }
-
         let mut defects = Vec::new();
 
         defects.extend(validate_chip_ids(&self.chip_ids));
@@ -50,13 +42,6 @@ impl BlessAlternativeGuestOsVersion {
     }
 
     pub(crate) fn execute(&self) -> Result<(), GovernanceError> {
-        if !are_bless_alternative_guest_os_version_proposals_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "BlessAlternativeGuestOsVersion proposals are not enabled yet.".to_string(),
-            ));
-        }
-
         // Like with Motion proposals, the execution of these proposals is
         // trivial. The reason for trivial execution in this case is that the
         // way this is actually effected is by a node operator manually running
@@ -155,16 +140,12 @@ fn validate_base_guest_launch_measurements(
     defects
 }
 
-impl LocallyDescribableProposalAction for BlessAlternativeGuestOsVersion {
-    const TYPE_NAME: &'static str = "Bless Alternative GuestOS Version";
-    const TYPE_DESCRIPTION: &'static str = "Bless an alternative GuestOS version that can be \
+impl DocumentedAction for BlessAlternativeGuestOsVersion {
+    const NAME: &'static str = "Bless Alternative GuestOS Version";
+    const DESCRIPTION: &'static str = "Bless an alternative GuestOS version that can be \
         used to recover the specified set of replicas that are in a non-functional state. This \
         is a last resort recovery mechanism to be used when the replica cannot be upgraded \
         through the regular mechanisms.";
-
-    fn to_self_describing_value(&self) -> SelfDescribingValue {
-        SelfDescribingValue::from(self.clone())
-    }
 }
 
 // The following impls are for external crate types from ic_protobuf that cannot use
