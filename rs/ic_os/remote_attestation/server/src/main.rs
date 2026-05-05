@@ -11,7 +11,7 @@ use remote_attestation_shared::proto::{AttestRequest, AttestResponse};
 use sev::firmware::guest::Firmware;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::firmware::SevGuestFirmware;
-use sev_guest::is_sev_active;
+use sev_guest::is_tee_enabled;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use tonic::transport::Server;
@@ -86,7 +86,7 @@ impl RemoteAttestationService for RemoteAttestationServiceImpl {
 #[cfg(target_os = "linux")]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let service_impl = if is_sev_active()? {
+    let service_impl = if is_tee_enabled()? {
         let guestos_config: GuestOSConfig = deserialize_config(DEFAULT_GUESTOS_CONFIG_OBJECT_PATH)
             .context("Failed to read GuestOS config")?;
 

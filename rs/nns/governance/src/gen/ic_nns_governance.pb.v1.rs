@@ -2995,6 +2995,10 @@ pub struct FulfillSubnetRentalRequest {
     pub node_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
     #[prost(string, tag = "2")]
     pub replica_version_id: ::prost::alloc::string::String,
+    /// Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+    /// If not set, handling defaults to the NNS subnet.
+    #[prost(message, optional, tag = "4")]
+    pub initial_dkg_subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
 #[derive(
     candid::CandidType,

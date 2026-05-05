@@ -429,7 +429,7 @@ pub fn instruction_to_cost(i: &wirm::wasmparser::Operator, mem_type: WasmMemoryT
         // ReturnCall is on average approx. 1.5 times faster than Call
         // instruction (shown by relative benchmarks).
         Operator::ReturnCall { .. } => 3,
-        Operator::ReturnCallIndirect { .. } => 60,
+        Operator::ReturnCallIndirect { .. } => 6,
 
         // Return, drop, unreachable and nop instructions are of cost 1.
         Operator::Return { .. } | Operator::Drop | Operator::Unreachable | Operator::Nop => 1,

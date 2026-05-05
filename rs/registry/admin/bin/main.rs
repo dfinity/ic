@@ -1606,6 +1606,11 @@ struct ProposeToFulfillSubnetRentalRequestCmd {
     /// Replica version ID (40 character hexadecimal git commit ID)
     #[clap(long)]
     replica_version_id: String,
+
+    /// Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+    /// If not set, handling defaults to the NNS subnet.
+    #[clap(long)]
+    initial_dkg_subnet_id: Option<PrincipalId>,
 }
 
 impl ProposalTitle for ProposeToFulfillSubnetRentalRequestCmd {
@@ -1628,6 +1633,7 @@ impl ProposalAction for ProposeToFulfillSubnetRentalRequestCmd {
                 user: Some(self.user),
                 node_ids: Some(self.node_ids.clone()),
                 replica_version_id: Some(self.replica_version_id.clone()),
+                initial_dkg_subnet_id: self.initial_dkg_subnet_id,
             },
         )
     }

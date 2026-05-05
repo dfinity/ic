@@ -18,7 +18,7 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     ":rosetta-integration-tests-lib",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
     "//packages/pocket-ic:pocket-ic",
     "//rs/nns/constants",
     "//rs/rosetta-api/common/rosetta_core:rosetta-core",

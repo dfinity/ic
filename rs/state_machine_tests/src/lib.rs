@@ -4733,6 +4733,25 @@ impl StateMachine {
         })
     }
 
+    /// Queries the `canister_status` endpoint on the management canister of the specified sender.
+    /// Use this if the `canister_id` is controlled by `sender`.
+    pub fn canister_status_query_as(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+    ) -> Result<Result<CanisterStatusResultV2, String>, UserError> {
+        self.query_as(
+            sender,
+            CanisterId::ic_00(),
+            "canister_status",
+            (CanisterIdRecord::from(canister_id)).encode(),
+        )
+        .map(|wasm_result| match wasm_result {
+            WasmResult::Reply(reply) => Ok(Decode!(&reply, CanisterStatusResultV2).unwrap()),
+            WasmResult::Reject(reject_msg) => Err(reject_msg),
+        })
+    }
+
     /// Deletes the canister with the specified ID.
     pub fn delete_canister(&self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
         self.execute_ingress(

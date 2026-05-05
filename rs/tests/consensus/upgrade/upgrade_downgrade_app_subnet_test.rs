@@ -77,7 +77,7 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
     let target_version = bless_target_version(&env, &nns_node);
     let agent = nns_node.with_default_agent(|agent| async move { agent });
     let key_ids = make_key_ids_for_all_schemes();
-    get_chain_key_canister_and_public_key(
+    let ecdsa_state = get_chain_key_canister_and_public_key(
         &env,
         &nns_node,
         &agent,
@@ -118,7 +118,7 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         &nns_node,
         &target_version,
         SubnetType::Application,
-        None,
+        Some(&ecdsa_state),
     );
     let initial_version = get_guestos_img_version();
     info!(logger, "Upgrading to initial version: {}", initial_version);
@@ -127,7 +127,7 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         &nns_node,
         &initial_version,
         SubnetType::Application,
-        None,
+        Some(&ecdsa_state),
     );
     info!(
         logger,

@@ -945,13 +945,11 @@ fn inner_round_first_execution_is_not_a_full_execution() {
         }
     }
     let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
     for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
         total_accumulated_priority += canister_priority.accumulated_priority.get();
-        total_priority_credit += ONE_HUNDRED_PERCENT.get() * canister_priority.executed_slices;
     }
     // The accumulated priority invariant should be respected.
-    assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+    assert_eq!(total_accumulated_priority, 0);
 }
 
 #[test]
@@ -988,29 +986,27 @@ fn inner_round_long_execution_is_a_full_execution() {
 
     for canister in test.state().canisters_iter() {
         let system_state = &canister.system_state;
-        let priority = test.state().canister_priority(&canister.canister_id());
         // All canisters should be executed.
         assert_eq!(system_state.canister_metrics().executed(), 1);
         let execution_state = canister.execution_state.as_ref().unwrap();
         assert_eq!(execution_state.last_executed_round.get(), 1);
         if canister.canister_id() == target_id {
-            // The target canister was not executed first, and still have messages.
+            // The target canister was not executed first, and still has messages.
             assert_eq!(system_state.queues().ingress_queue_size(), 1);
         } else {
+            // All other canisters consumed all their inputs.
             assert_eq!(system_state.queues().ingress_queue_size(), 0);
         }
         // All canisters should be marked as fully executed. The target canister,
-        // despite still having messages, executed a full slice of instructions.
-        assert_eq!(priority.last_full_execution_round, test.last_round());
+        // despite still having messages, executed a complete slice.
+        assert!(test.was_fully_executed(canister.canister_id()));
     }
     let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
     for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
         total_accumulated_priority += canister_priority.accumulated_priority.get();
-        total_priority_credit += ONE_HUNDRED_PERCENT.get() * canister_priority.executed_slices;
     }
     // The accumulated priority invariant should be respected.
-    assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+    assert_eq!(total_accumulated_priority, 0);
 }
 
 #[test_strategy::proptest(ProptestConfig { cases: 8, ..ProptestConfig::default() })]
@@ -1058,12 +1054,10 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
         }
     }
     let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
     for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
         total_accumulated_priority += canister_priority.accumulated_priority.get();
-        total_priority_credit += ONE_HUNDRED_PERCENT.get() * canister_priority.executed_slices;
     }
-    prop_assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+    prop_assert_eq!(total_accumulated_priority, 0);
 
     // Send one more message for first half of the canisters.
     for (i, canister) in canister_ids.iter().enumerate() {
@@ -1103,12 +1097,10 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
         }
     }
     let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
     for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
         total_accumulated_priority += canister_priority.accumulated_priority.get();
-        total_priority_credit += ONE_HUNDRED_PERCENT.get() * canister_priority.executed_slices;
     }
-    prop_assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+    prop_assert_eq!(total_accumulated_priority, 0);
 }
 
 #[test]
@@ -1159,19 +1151,16 @@ fn charge_idle_canisters_for_full_execution_round() {
             }
         }
         let mut total_accumulated_priority = 0;
-        let mut total_priority_credit = 0;
         for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
             // Assert there is no divergency in accumulated priorities.
-            let priority = canister_priority.accumulated_priority
-                - ONE_HUNDRED_PERCENT * canister_priority.executed_slices;
+            let priority = canister_priority.accumulated_priority;
             assert_le!(priority.get(), 100 * MULTIPLIER);
             assert_ge!(priority.get(), -100 * MULTIPLIER);
 
             total_accumulated_priority += canister_priority.accumulated_priority.get();
-            total_priority_credit += ONE_HUNDRED_PERCENT.get() * canister_priority.executed_slices;
         }
         // The accumulated priority invariant should be respected.
-        assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+        assert_eq!(total_accumulated_priority, 0);
     }
 }
 

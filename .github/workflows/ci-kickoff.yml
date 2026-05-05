@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - master
+      - feat-ai-on-engines # special protected long-lived feature branch for experimenting with AI on cloud engines.
       - 'dev-gh-*'
       - 'public-hotfix-*'
   pull_request:
