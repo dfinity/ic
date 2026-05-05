@@ -3667,7 +3667,7 @@ impl StateMachine {
 
         env.state_manager
             .commit_and_certify(state, CertificationScope::Full, None);
-        self.state_manager.flush_hash_channel();
+        env.state_manager.flush_hash_channel();
 
         Ok(env)
     }
