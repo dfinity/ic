@@ -11,5 +11,6 @@ pub mod handlers;
 pub mod models;
 pub mod providers;
 pub mod router;
+pub mod sessions;
 pub mod state;
 pub mod tools;

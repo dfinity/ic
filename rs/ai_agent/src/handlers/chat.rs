@@ -1,22 +1,32 @@
 use std::sync::Arc;
 
 use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
-use rig::completion::{Prompt, message::Message};
-use slog::warn;
+use rig::completion::Prompt;
+use slog::{info, warn};
 
 use crate::{
-    models::{
-        ChatMessage, ChatRequest, ChatResponse, ErrorBody, request::ChatRole,
-        response::SerializableChatMessage,
-    },
-    providers::provider_not_configured,
+    models::{ChatRequest, ChatResponse, ErrorBody},
+    providers::{AiProvider, provider_not_configured},
     state::AppState,
     tools::validate_tool_names,
 };
 
-/// `POST /v1/agent/chat` — multi-turn agent invocation, with caller-managed
-/// history. The server appends the new exchange to `history` and returns the
-/// updated transcript.
+/// `POST /v1/agent/chat` — multi-turn agent invocation with
+/// server-managed transcript.
+///
+/// Wire shape:
+/// * Without `session_id`: the server creates a fresh session with
+///   an empty transcript, runs the prompt, and returns the freshly-
+///   minted session id alongside the response.
+/// * With `session_id`: the server replays the cached transcript
+///   into the agent, runs the new prompt, and appends the resulting
+///   turn (user message + any tool-call interleavings + assistant
+///   reply) back into the cached transcript.
+///
+/// The agent itself is rebuilt per request — that's cheap (struct
+/// construction + tool wiring), and it picks up `POST /v1/config`
+/// changes naturally. Per-request `preamble`, `tools`, and
+/// `max_turns` always apply.
 pub async fn chat(
     State(state): State<Arc<AppState>>,
     Json(req): Json<ChatRequest>,
@@ -36,18 +46,27 @@ pub async fn chat(
             .into_response();
     }
 
-    let provider_guard = state.provider.read().await;
-    let provider = match provider_guard.as_ref() {
-        Some(p) => p.clone(),
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(ErrorBody::new(provider_not_configured().to_string())),
-            )
-                .into_response();
-        }
+    // Resolve the provider once for this request.
+    let provider = match read_provider(&state).await {
+        Ok(p) => p,
+        Err(resp) => return resp,
     };
-    drop(provider_guard);
+
+    // Pull the cached transcript (if any). The snapshot is owned —
+    // we never hold the store mutex across the LLM `.await`.
+    let (mut history, session_id, is_new) = match req.session_id.as_deref() {
+        Some(id) => match state.sessions.get(id) {
+            Some(snap) => (snap.history, id.to_string(), false),
+            None => {
+                // Caller passed an id we don't know (or that has
+                // expired). Honour the id by keying the new session
+                // under it, rather than minting a different one and
+                // leaving the caller's id orphaned.
+                (Vec::new(), id.to_string(), true)
+            }
+        },
+        None => (Vec::new(), crate::sessions::SessionStore::fresh_id(), true),
+    };
 
     let preamble = req
         .preamble
@@ -66,42 +85,63 @@ pub async fn chat(
         }
     };
 
-    let history_msgs: Vec<Message> = req.history.iter().map(to_rig_message).collect();
-
+    // We use `prompt(...).with_history(...).extended_details()` rather
+    // than `Chat::chat(...)` because the former returns a
+    // `PromptResponse` whose `messages` field carries the new turns
+    // (user prompt + tool calls/results + final assistant) in the
+    // right order. That's exactly what we need to append to the
+    // cached transcript so the next turn sees a faithful history,
+    // including any tool-call interleavings.
     let result = agent
         .prompt(req.prompt.as_str())
-        .with_history(history_msgs)
+        .with_history(history.clone())
         .max_turns(max_turns)
         .extended_details()
         .await;
 
     match result {
         Ok(resp) => {
-            let turns_used = resp.messages.as_ref().map(Vec::len).unwrap_or(1);
-            let mut full_history: Vec<SerializableChatMessage> = req
-                .history
-                .iter()
-                .map(SerializableChatMessage::from)
-                .collect();
-            full_history.push(SerializableChatMessage::from(&ChatMessage {
-                role: ChatRole::User,
-                content: req.prompt.clone(),
-            }));
-            full_history.push(SerializableChatMessage::from(&ChatMessage {
-                role: ChatRole::Assistant,
-                content: resp.output.clone(),
-            }));
+            // Extend the snapshot with the new turns produced by this
+            // request. `messages` is `Option<Vec<Message>>`; rig only
+            // sets `None` when no new turn happened (defensive — in
+            // practice it's always populated for prompt requests).
+            if let Some(new_turns) = resp.messages.as_ref() {
+                history.extend(new_turns.iter().cloned());
+            }
+
+            // Persist the updated transcript. For new sessions this
+            // is the first `put`; for existing ones it's an
+            // `update_history` (which silently no-ops if the session
+            // was evicted while we were `await`ing — see the comment
+            // on `SessionStore::update_history`).
+            if is_new {
+                state.sessions.put(
+                    Some(session_id.clone()),
+                    history,
+                    provider.name(),
+                    provider.model().to_string(),
+                );
+                info!(
+                    state.log,
+                    "created chat session";
+                    "session_id" => &session_id,
+                    "provider" => provider.name(),
+                    "model" => provider.model()
+                );
+            } else {
+                state.sessions.update_history(&session_id, history);
+            }
+
             let body = ChatResponse {
                 response: resp.output,
-                history: full_history,
-                turns_used,
+                session_id,
                 provider: provider.name().to_string(),
                 model: provider.model().to_string(),
             };
             (StatusCode::OK, Json(body)).into_response()
         }
         Err(e) => {
-            warn!(state.log, "agent chat failed"; "error" => %e);
+            warn!(state.log, "agent chat failed"; "error" => %e, "session_id" => &session_id);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorBody::new(format!("Agent failed: {e}"))),
@@ -111,9 +151,16 @@ pub async fn chat(
     }
 }
 
-fn to_rig_message(m: &ChatMessage) -> Message {
-    match m.role {
-        ChatRole::User => Message::user(m.content.clone()),
-        ChatRole::Assistant => Message::assistant(m.content.clone()),
+/// Read the active provider, returning a 503 response if `/v1/config`
+/// hasn't been called yet.
+async fn read_provider(state: &Arc<AppState>) -> Result<AiProvider, axum::response::Response> {
+    let guard = state.provider.read().await;
+    match guard.as_ref() {
+        Some(p) => Ok(p.clone()),
+        None => Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorBody::new(provider_not_configured().to_string())),
+        )
+            .into_response()),
     }
 }

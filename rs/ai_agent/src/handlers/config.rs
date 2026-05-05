@@ -26,11 +26,18 @@ pub async fn configure(
                 model: provider.model().to_string(),
             };
             *state.provider.write().await = Some(provider);
+            // Drop all cached chat sessions: their Agents are bound
+            // to whichever GeminiClient (= API key) was active when
+            // they were built. After a re-config they would silently
+            // keep using the previous credentials, which is exactly
+            // the wrong behaviour after a key rotation.
+            let cleared = state.sessions.clear();
             info!(
                 state.log,
                 "provider configured";
                 "provider" => &resp.provider,
-                "model" => &resp.model
+                "model" => &resp.model,
+                "sessions_cleared" => cleared
             );
             (StatusCode::OK, Json(resp)).into_response()
         }

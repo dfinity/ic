@@ -7,6 +7,7 @@
 use crate::{
     config::AppConfig,
     providers::AiProvider,
+    sessions::SessionStore,
     tools::node_directory::{NodeDirectory, NodeDirectoryError},
 };
 use slog::Logger;
@@ -24,15 +25,20 @@ pub struct AppState {
     /// `AppState::new` to stay infallible, and (b) on a fresh AiNode
     /// the registry local store may not exist yet on startup.
     node_directory: OnceCell<Result<Arc<NodeDirectory>, NodeDirectoryError>>,
+    /// In-memory chat-session cache for `/v1/agent/chat`. See
+    /// [`crate::sessions`] for bounding rules.
+    pub sessions: SessionStore,
 }
 
 impl AppState {
     pub fn new(config: AppConfig, log: Logger) -> Self {
+        let sessions = SessionStore::new(config.max_sessions, config.session_idle_ttl);
         Self {
             config,
             log,
             provider: RwLock::new(None),
             node_directory: OnceCell::new(),
+            sessions,
         }
     }
 

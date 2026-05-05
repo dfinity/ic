@@ -1,7 +1,5 @@
 use serde::Serialize;
 
-use super::request::ChatMessage;
-
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {
     pub status: &'static str,
@@ -17,31 +15,28 @@ pub struct RunResponse {
     pub model: String,
 }
 
+/// Body of a successful `POST /v1/agent/chat` response.
+///
+/// `session_id` is always present — either echoed back or freshly
+/// minted on first turn. Clients should persist it and pass it on
+/// every subsequent turn.
 #[derive(Debug, Serialize)]
 pub struct ChatResponse {
     pub response: String,
-    pub history: Vec<SerializableChatMessage>,
-    pub turns_used: usize,
+    pub session_id: String,
     pub provider: String,
     pub model: String,
 }
 
+/// Body of `DELETE /v1/agent/sessions` and
+/// `DELETE /v1/agent/sessions/:id`.
 #[derive(Debug, Serialize)]
-pub struct SerializableChatMessage {
-    pub role: String,
-    pub content: String,
-}
-
-impl From<&ChatMessage> for SerializableChatMessage {
-    fn from(m: &ChatMessage) -> Self {
-        Self {
-            role: match m.role {
-                super::request::ChatRole::User => "user".to_string(),
-                super::request::ChatRole::Assistant => "assistant".to_string(),
-            },
-            content: m.content.clone(),
-        }
-    }
+pub struct ClearResponse {
+    /// "ok" on success.
+    pub status: &'static str,
+    /// How many sessions were dropped (0 or 1 for single-session
+    /// delete; 0..=N for the bulk delete).
+    pub cleared: usize,
 }
 
 #[derive(Debug, Serialize)]

@@ -8,10 +8,11 @@ use clap::Parser;
 use ic_ai_agent::{
     config::{AppConfig, DEFAULT_IC_CONFIG_PATH},
     router::build_router,
+    sessions::{DEFAULT_IDLE_TTL, DEFAULT_MAX_SESSIONS},
     state::AppState,
 };
 use slog::{Drain, Logger, info, o};
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
 #[derive(Debug, Parser)]
 #[command(name = "ic-ai-agent", about = "IC AI agent orchestration HTTP API")]
@@ -25,6 +26,16 @@ struct Cli {
     /// local store for resolving peer node IPv6 addresses.
     #[arg(long, env = "IC_AI_AGENT_IC_CONFIG", default_value = DEFAULT_IC_CONFIG_PATH)]
     ic_config: PathBuf,
+
+    /// Maximum number of concurrently-cached chat sessions before the
+    /// LRU starts evicting.
+    #[arg(long, env = "IC_AI_AGENT_MAX_SESSIONS", default_value_t = DEFAULT_MAX_SESSIONS)]
+    max_sessions: usize,
+
+    /// Per-session idle TTL in seconds. Sessions untouched for longer
+    /// than this are evicted on next access.
+    #[arg(long, env = "IC_AI_AGENT_SESSION_IDLE_TTL_SECS", default_value_t = DEFAULT_IDLE_TTL.as_secs())]
+    session_idle_ttl_secs: u64,
 }
 
 fn make_logger() -> Logger {
@@ -55,6 +66,8 @@ async fn main() -> anyhow::Result<()> {
 
     let config = AppConfig {
         ic_config_path: cli.ic_config.clone(),
+        max_sessions: cli.max_sessions,
+        session_idle_ttl: Duration::from_secs(cli.session_idle_ttl_secs),
         ..AppConfig::default()
     };
     let state = Arc::new(AppState::new(config, log.clone()));

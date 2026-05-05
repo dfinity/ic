@@ -12,26 +12,24 @@ pub struct RunRequest {
     pub max_turns: Option<usize>,
 }
 
-/// Single message in a chat history.
-#[derive(Debug, Clone, Deserialize)]
-pub struct ChatMessage {
-    pub role: ChatRole,
-    pub content: String,
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ChatRole {
-    User,
-    Assistant,
-}
-
 /// Body of `POST /v1/agent/chat`.
+///
+/// The session_id is what makes this multi-turn: omit it on the first
+/// call to start a new session (the server returns the freshly-minted
+/// id), then echo the same id on every subsequent turn. The server
+/// caches one configured Agent per session id and only the new user
+/// prompt needs to be sent each time.
+///
+/// `preamble`, `tools`, and `max_turns` are honoured only at session-
+/// creation time. They are ignored on subsequent turns of an existing
+/// session — the cached Agent's configuration wins. To change them,
+/// start a new session.
 #[derive(Debug, Deserialize)]
 pub struct ChatRequest {
     pub prompt: String,
-    #[serde(default)]
-    pub history: Vec<ChatMessage>,
+    /// Existing session id. If omitted, a new session is created and
+    /// the id is returned in the response.
+    pub session_id: Option<String>,
     pub preamble: Option<String>,
     #[serde(default)]
     pub tools: Vec<String>,

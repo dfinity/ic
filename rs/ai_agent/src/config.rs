@@ -5,7 +5,9 @@
 //! the spec). Defaults below cover the rest.
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
+
+use crate::sessions::{DEFAULT_IDLE_TTL, DEFAULT_MAX_SESSIONS};
 
 /// Default Gemini model used if `/v1/config` doesn't override it.
 ///
@@ -56,6 +58,12 @@ pub struct AppConfig {
     /// registry local store (so node ids can be resolved to IPv6
     /// addresses of peer nodes in the syncing subnet).
     pub ic_config_path: PathBuf,
+    /// Maximum number of concurrently-cached chat sessions. Tuned for
+    /// AI-node operator workloads, not for serving end users at scale.
+    pub max_sessions: usize,
+    /// Per-session idle TTL. A session that hasn't received a turn in
+    /// this long is dropped on next access.
+    pub session_idle_ttl: Duration,
 }
 
 impl Default for AppConfig {
@@ -65,6 +73,8 @@ impl Default for AppConfig {
             default_preamble: DEFAULT_PREAMBLE.to_string(),
             default_max_turns: DEFAULT_MAX_TURNS,
             ic_config_path: PathBuf::from(DEFAULT_IC_CONFIG_PATH),
+            max_sessions: DEFAULT_MAX_SESSIONS,
+            session_idle_ttl: DEFAULT_IDLE_TTL,
         }
     }
 }
