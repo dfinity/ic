@@ -426,6 +426,12 @@ impl RoundSchedule {
                 .for_each(|canister| {
                     observe_scheduled_as_first(canister);
                 });
+
+            #[cfg(debug_assertions)]
+            {
+                // Clear the debug-only fully executed canisters set.
+                subnet_schedule.fully_executed_canisters = BTreeSet::new();
+            }
         }
 
         IterationSchedule {
