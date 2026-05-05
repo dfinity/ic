@@ -38,7 +38,7 @@ use ic_test_utilities_types::{
 };
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::xnet::{StreamIndexedQueue, StreamSlice};
-use ic_types::{CanisterId, ReplicaVersion};
+use ic_types::{CanisterId, ExecutionRound, ReplicaVersion};
 use ic_types::{
     NodeId, PrincipalId, Randomness,
     batch::{Batch, BatchMessages},
@@ -2289,6 +2289,7 @@ fn test_demux_delivers_certified_stream_slices() {
             &self,
             _: &mut ReplicatedState,
             _: Vec<ic_types::messages::SignedIngress>,
+            _: ic_types::ExecutionRound,
         ) {
             // do nothing
         }
@@ -2386,6 +2387,7 @@ fn test_demux_delivers_certified_stream_slices() {
 
         demux.process_payload(
             dst_state,
+            ExecutionRound::from(0),
             BatchMessages {
                 certified_stream_slices,
                 ..Default::default()

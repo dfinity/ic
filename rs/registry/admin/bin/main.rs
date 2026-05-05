@@ -41,9 +41,9 @@ use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePaylo
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
     AddOrRemoveNodeProvider, CanisterSettings, CreateServiceNervousSystem, GovernanceError,
-    InstallCodeRequest, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
-    NnsFunction, NodeProvider, ProposalActionRequest, RewardNodeProviders, StopOrStartCanister,
-    UpdateCanisterSettings,
+    InstallCodeRequest, LoadCanisterSnapshot, MakeProposalRequest, ManageNeuronCommandRequest,
+    ManageNeuronRequest, NnsFunction, NodeProvider, ProposalActionRequest, RewardNodeProviders,
+    StopOrStartCanister, TakeCanisterSnapshot, UpdateCanisterSettings,
     add_or_remove_node_provider::Change,
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     canister_settings::{
@@ -129,6 +129,7 @@ use registry_canister::mutations::{
     do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
     do_add_node_operator::AddNodeOperatorPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
+    do_delete_subnet::DeleteSubnetPayload,
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_migrate_node_operator_directly::MigrateNodeOperatorPayload,
@@ -435,6 +436,9 @@ enum SubCommand {
     /// Submits a proposal to create a new subnet.
     ProposeToCreateSubnet(ProposeToCreateSubnetCmd),
 
+    /// Submits a proposal to delete a subnet from the registry.
+    ProposeToDeleteSubnet(ProposeToDeleteSubnetCmd),
+
     /// Propose to deploy a priorly elected GuestOS version to all subnet nodes.
     ProposeToDeployGuestosToAllSubnetNodes(ProposeToDeployGuestosToAllSubnetNodesCmd),
 
@@ -501,6 +505,12 @@ enum SubCommand {
     /// Propose to stop a canister managed by the governance.
     ProposeToStopCanister(StopCanisterCmd),
 
+    /// Propose to take a snapshot of a canister managed by the governance.
+    ProposeToTakeCanisterSnapshot(ProposeToTakeCanisterSnapshotCmd),
+
+    /// Propose to load a snapshot into a canister managed by the governance.
+    ProposeToLoadCanisterSnapshot(ProposeToLoadCanisterSnapshotCmd),
+
     /// Sets three things:
     ///
     ///     1. is_halted = true
@@ -509,7 +519,7 @@ enum SubCommand {
     ///
     /// This is the first step of subnet recovery. Previously the first step was
     /// done using propose-to-update-subnet. However, that does not support
-    /// changing ssn_node_state_write_access, which is needed when a subnet has
+    /// changing ssh_node_state_write_access, which is needed when a subnet has
     /// SEV enabled everywhere (or the subnet has no DFINITY node).
     ///
     /// At the end of subnet recovery, run propose-to-bring-subnet-back-online.
@@ -839,7 +849,7 @@ struct ProposeToTakeSubnetOfflineForRepairsCmd {
     /// This usually isn't a problem, because the list is typically empty when
     /// this proposal is used as part of subnet recovery.
     #[clap(long, num_args(1..))]
-    pub ssh_readonly_access: Vec<String>,
+    pub ssh_readonly_access: Option<Vec<String>>,
 
     /// Similar to the --ssh-readonly-access flag, but there are some important
     /// differences:
@@ -862,7 +872,7 @@ struct ProposeToTakeSubnetOfflineForRepairsCmd {
     /// clobber. However, in practice, it would probably be empty to begin with,
     /// so most likely, this won't be an issue.
     #[clap(long, value_parser, num_args(1..))]
-    pub ssh_node_state_write_access: Vec<NodeSshAccessFlagValue>,
+    pub ssh_node_state_write_access: Option<Vec<NodeSshAccessFlagValue>>,
 
     /// List of replica version IDs to recall. These versions will be marked as
     /// recalled for this subnet, preventing them from being upgraded to them. If the
@@ -899,15 +909,13 @@ impl ProposalPayload<SetSubnetOperationalLevelPayload> for ProposeToTakeSubnetOf
         let ssh_node_state_write_access = self
             .ssh_node_state_write_access
             .clone()
-            .into_iter()
-            .map(NodeSshAccess::from)
-            .collect();
+            .map(|keys| keys.into_iter().map(NodeSshAccess::from).collect());
 
         SetSubnetOperationalLevelPayload {
             subnet_id: Some(SubnetId::from(self.subnet)),
             operational_level: Some(operational_level::DOWN_FOR_REPAIRS),
-            ssh_readonly_access: Some(self.ssh_readonly_access.clone()),
-            ssh_node_state_write_access: Some(ssh_node_state_write_access),
+            ssh_readonly_access: self.ssh_readonly_access.clone(),
+            ssh_node_state_write_access,
             recalled_replica_version_ids,
         }
     }
@@ -928,14 +936,14 @@ impl FromStr for NodeSshAccessFlagValue {
         let node_id = parts.next().ok_or("Missing node ID.")?;
         let public_keys = parts
             .next()
-            .ok_or("Missing semicolon separating node ID and SSH public key.")?
+            .ok_or("Missing semicolon separating node ID and SSH public keys.")?
             .to_string();
 
         // Parse node_id.
         let node_id = PrincipalId::from_str(node_id).map_err(|err| format!("{err}"))?;
         let node_id = NodeId::from(node_id);
 
-        // Parse public_keys, by simply splitting on ','.<
+        // Parse public_keys, by simply splitting on ','.
         let public_keys = public_keys
             .split(',')
             .map(|public_key| public_key.to_string())
@@ -1021,6 +1029,33 @@ impl ProposalPayload<SetSubnetOperationalLevelPayload>
             ssh_readonly_access: Some(vec![]),
             ssh_node_state_write_access: Some(ssh_node_state_write_access),
             recalled_replica_version_ids: Some(vec![]),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to delete a subnet.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToDeleteSubnetCmd {
+    /// The subnet to delete.
+    #[clap(long)]
+    pub subnet_id: PrincipalId,
+}
+
+impl ProposalTitle for ProposeToDeleteSubnetCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Delete subnet {}", shortened_pid_string(&self.subnet_id)),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<DeleteSubnetPayload> for ProposeToDeleteSubnetCmd {
+    async fn payload(&self, _: &Agent) -> DeleteSubnetPayload {
+        DeleteSubnetPayload {
+            subnet_id: Principal::from(self.subnet_id),
         }
     }
 }
@@ -1177,6 +1212,77 @@ impl ProposalAction for StopCanisterCmd {
             action,
         };
         ProposalActionRequest::StopOrStartCanister(stop_canister)
+    }
+}
+
+/// Sub-command to submit a proposal to take a snapshot of a canister.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToTakeCanisterSnapshotCmd {
+    /// The canister to snapshot.
+    #[clap(long)]
+    pub canister_id: CanisterId,
+    /// If set, replace the existing snapshot with this hex-encoded snapshot ID.
+    #[clap(long)]
+    pub replace_snapshot: Option<String>,
+}
+
+impl ProposalTitle for ProposeToTakeCanisterSnapshotCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Take snapshot of canister {}", self.canister_id),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToTakeCanisterSnapshotCmd {
+    async fn action(&self, _agent: &Agent) -> ProposalActionRequest {
+        let replace_snapshot = self
+            .replace_snapshot
+            .as_deref()
+            .map(|s| hex::decode(s).expect("replace_snapshot is not valid hex"));
+        ProposalActionRequest::TakeCanisterSnapshot(TakeCanisterSnapshot {
+            canister_id: Some(PrincipalId::from(self.canister_id)),
+            replace_snapshot,
+        })
+    }
+}
+
+/// Sub-command to submit a proposal to load a snapshot into a canister.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToLoadCanisterSnapshotCmd {
+    /// The canister to load the snapshot into.
+    #[clap(long)]
+    pub canister_id: CanisterId,
+    /// The hex-encoded ID of the snapshot to load.
+    #[clap(long)]
+    pub snapshot_id: String,
+}
+
+impl ProposalTitle for ProposeToLoadCanisterSnapshotCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Load snapshot {} into canister {}",
+                self.snapshot_id, self.canister_id
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToLoadCanisterSnapshotCmd {
+    async fn action(&self, _agent: &Agent) -> ProposalActionRequest {
+        let snapshot_id =
+            Some(hex::decode(&self.snapshot_id).expect("snapshot_id is not valid hex"));
+        ProposalActionRequest::LoadCanisterSnapshot(LoadCanisterSnapshot {
+            canister_id: Some(PrincipalId::from(self.canister_id)),
+            snapshot_id,
+        })
     }
 }
 
@@ -1500,6 +1606,11 @@ struct ProposeToFulfillSubnetRentalRequestCmd {
     /// Replica version ID (40 character hexadecimal git commit ID)
     #[clap(long)]
     replica_version_id: String,
+
+    /// Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+    /// If not set, handling defaults to the NNS subnet.
+    #[clap(long)]
+    initial_dkg_subnet_id: Option<PrincipalId>,
 }
 
 impl ProposalTitle for ProposeToFulfillSubnetRentalRequestCmd {
@@ -1522,6 +1633,7 @@ impl ProposalAction for ProposeToFulfillSubnetRentalRequestCmd {
                 user: Some(self.user),
                 node_ids: Some(self.node_ids.clone()),
                 replica_version_id: Some(self.replica_version_id.clone()),
+                initial_dkg_subnet_id: self.initial_dkg_subnet_id,
             },
         )
     }
@@ -1815,7 +1927,7 @@ impl ProposeToBlessAlternativeGuestOsVersionCmd {
                 )
             });
         SubnetRecord::from(
-            &SubnetRecordProto::decode(&subnet_record_bytes[..]).unwrap_or_else(|err| {
+            SubnetRecordProto::decode(&subnet_record_bytes[..]).unwrap_or_else(|err| {
                 panic!(
                     "Failed to decode SubnetRecord for subnet {}: {}",
                     subnet_id, err
@@ -4451,6 +4563,7 @@ async fn main() {
             SubCommand::ProposeToCompleteCanisterMigration(_) => (),
             SubCommand::ProposeToCreateServiceNervousSystem(_) => (),
             SubCommand::ProposeToCreateSubnet(_) => (),
+            SubCommand::ProposeToDeleteSubnet(_) => (),
             SubCommand::ProposeToDeployGuestosToAllSubnetNodes(_) => (),
             SubCommand::ProposeToDeployGuestosToAllUnassignedNodes(_) => (),
             SubCommand::ProposeToDeployGuestosToSomeApiBoundaryNodes(_) => (),
@@ -4472,6 +4585,8 @@ async fn main() {
             SubCommand::ProposeToSetFirewallConfig(_) => (),
             SubCommand::ProposeToStartCanister(_) => (),
             SubCommand::ProposeToStopCanister(_) => (),
+            SubCommand::ProposeToTakeCanisterSnapshot(_) => (),
+            SubCommand::ProposeToLoadCanisterSnapshot(_) => (),
             SubCommand::ProposeToTakeSubnetOfflineForRepairs(_) => (),
             SubCommand::ProposeToUninstallCode(_) => (),
             SubCommand::ProposeToUpdateCanisterSettings(_) => (),
@@ -4814,6 +4929,21 @@ async fn main() {
             )
             .await;
         }
+        SubCommand::ProposeToDeleteSubnet(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::DeleteSubnet,
+                make_canister_client(
+                    reachable_nns_urls,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
         SubCommand::ProposeToCreateServiceNervousSystem(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_to_create_service_nervous_system(
@@ -4965,6 +5095,26 @@ async fn main() {
             propose_action_from_command(cmd, canister_client, proposer).await;
         }
         SubCommand::ProposeToStopCanister(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            propose_action_from_command(cmd, canister_client, proposer).await;
+        }
+        SubCommand::ProposeToTakeCanisterSnapshot(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            propose_action_from_command(cmd, canister_client, proposer).await;
+        }
+        SubCommand::ProposeToLoadCanisterSnapshot(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             let canister_client = make_canister_client(
                 reachable_nns_urls,
@@ -5817,7 +5967,7 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                 // subnet records are emitted as JSON
                 let value = SubnetRecordProto::decode(&bytes[..])
                     .expect("Error decoding value from registry.");
-                let subnet_record = SubnetRecord::from(&value);
+                let subnet_record = SubnetRecord::from(value);
 
                 let mut registry = Registry {
                     version,

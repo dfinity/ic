@@ -569,6 +569,103 @@ fn should_increase_and_decrease_balance_with_transfer_from() {
     assert_eq!(Some(&Tokens::from(TRANSFER_AMOUNT)), actual_balance3);
 }
 
+const AUTHORIZED_BURN_AMOUNT: u64 = 100_000_u64;
+
+#[test]
+fn should_not_consume_allowance_on_authorized_burn() {
+    // AuthorizedBurn is a privileged operation that bypasses the transfer API,
+    // so it must not deduct from any existing allowance even if the caller
+    // would match an approved spender.
+    let now = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_NOW);
+    let account_1 = account_from_u64(ACCOUNT_ID_1);
+    let spender = account_from_u64(ACCOUNT_ID_2);
+
+    let ledger = LedgerBuilder::new()
+        // Fund the account
+        .with_mint(&account_1, &Tokens::from(MINT_AMOUNT))
+        // Approve spender to spend from account_1
+        .with_approve(
+            &account_1,
+            &spender,
+            &Tokens::from(APPROVE_AMOUNT),
+            &None,
+            &None,
+            &None,
+            now,
+        )
+        // Authorized burn from account_1 (spender = None, as in AuthorizedBurn processing)
+        .with_burn(&account_1, &None, &Tokens::from(AUTHORIZED_BURN_AMOUNT))
+        .build();
+
+    // Allowance must be fully intact
+    let allowance_key = ApprovalKey::from((&account_1, &spender));
+    let actual_allowance = ledger.allowances.get(&allowance_key);
+    let expected_allowance = Allowance {
+        amount: Tokens::from(APPROVE_AMOUNT),
+        expires_at: None,
+        arrived_at: now,
+    };
+    assert_eq!(actual_allowance, Some(&expected_allowance));
+
+    // Balance reflects the burn
+    let expected_balance = Tokens::from(MINT_AMOUNT)
+        .checked_sub(&Tokens::from(AUTHORIZED_BURN_AMOUNT))
+        .unwrap();
+    assert_eq!(ledger.balances.get(&account_1), Some(&expected_balance));
+}
+
+#[test]
+fn should_consume_allowance_on_regular_burn_after_authorized_burn() {
+    // After an authorized burn, a subsequent regular burn via spender should
+    // still find the full allowance available.
+    let now = TimeStamp::from_nanos_since_unix_epoch(TIMESTAMP_NOW);
+    let account_1 = account_from_u64(ACCOUNT_ID_1);
+    let spender = account_from_u64(ACCOUNT_ID_2);
+    let regular_burn_amount: u64 = 100_000;
+
+    let ledger = LedgerBuilder::new()
+        .with_mint(&account_1, &Tokens::from(MINT_AMOUNT))
+        .with_approve(
+            &account_1,
+            &spender,
+            &Tokens::from(APPROVE_AMOUNT),
+            &None,
+            &None,
+            &None,
+            now,
+        )
+        // Authorized burn (no spender, as the ledger processes AuthorizedBurn)
+        .with_burn(&account_1, &None, &Tokens::from(AUTHORIZED_BURN_AMOUNT))
+        // Regular burn via spender — should consume from the allowance
+        .with_burn(
+            &account_1,
+            &Some(spender),
+            &Tokens::from(regular_burn_amount),
+        )
+        .build();
+
+    // Allowance should be reduced by the regular burn only, not the authorized burn
+    let allowance_key = ApprovalKey::from((&account_1, &spender));
+    let actual_allowance = ledger.allowances.get(&allowance_key);
+    let expected_remaining = Tokens::from(APPROVE_AMOUNT)
+        .checked_sub(&Tokens::from(regular_burn_amount))
+        .unwrap();
+    let expected_allowance = Allowance {
+        amount: expected_remaining,
+        expires_at: None,
+        arrived_at: now,
+    };
+    assert_eq!(actual_allowance, Some(&expected_allowance));
+
+    // Balance reflects both burns
+    let expected_balance = Tokens::from(MINT_AMOUNT)
+        .checked_sub(&Tokens::from(AUTHORIZED_BURN_AMOUNT))
+        .unwrap()
+        .checked_sub(&Tokens::from(regular_burn_amount))
+        .unwrap();
+    assert_eq!(ledger.balances.get(&account_1), Some(&expected_balance));
+}
+
 fn account_from_u64(account_id: u64) -> AccountType {
     AccountType::from(Account {
         owner: PrincipalId::new_user_test_id(account_id).0,

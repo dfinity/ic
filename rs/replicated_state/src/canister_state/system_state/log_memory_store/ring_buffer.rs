@@ -9,24 +9,24 @@ use ic_management_canister_types_private::{CanisterLogRecord, DataSize, FetchCan
 use more_asserts::assert_le;
 
 // PageMap file layout.
-pub(crate) const VIRTUAL_PAGE_SIZE: usize = 4_096;
+pub(super) const VIRTUAL_PAGE_SIZE: usize = 4_096;
 // Header layout constants.
-pub(crate) const HEADER_OFFSET: MemoryAddress = MemoryAddress::new(0);
-pub(crate) const HEADER_SIZE: MemorySize = MemorySize::new(VIRTUAL_PAGE_SIZE as u64);
+pub(super) const HEADER_OFFSET: MemoryAddress = MemoryAddress::new(0);
+pub(super) const HEADER_SIZE: MemorySize = MemorySize::new(VIRTUAL_PAGE_SIZE as u64);
 // Index table layout constants.
-pub(crate) const INDEX_TABLE_OFFSET: MemoryAddress = HEADER_OFFSET.add_size(HEADER_SIZE);
-pub(crate) const INDEX_TABLE_PAGES: usize = 1;
-pub(crate) const INDEX_TABLE_SIZE: MemorySize =
+pub(super) const INDEX_TABLE_OFFSET: MemoryAddress = HEADER_OFFSET.add_size(HEADER_SIZE);
+pub(super) const INDEX_TABLE_PAGES: usize = 1;
+pub(super) const INDEX_TABLE_SIZE: MemorySize =
     MemorySize::new((INDEX_TABLE_PAGES * VIRTUAL_PAGE_SIZE) as u64);
-pub(crate) const INDEX_ENTRY_SIZE: MemorySize = MemorySize::new(28);
-pub(crate) const INDEX_ENTRY_COUNT_MAX: u64 = INDEX_TABLE_SIZE.get() / INDEX_ENTRY_SIZE.get();
+pub(super) const INDEX_ENTRY_SIZE: MemorySize = MemorySize::new(28);
+pub(super) const INDEX_ENTRY_COUNT_MAX: u64 = INDEX_TABLE_SIZE.get() / INDEX_ENTRY_SIZE.get();
 // Data region layout constants.
-pub(crate) const DATA_REGION_OFFSET: MemoryAddress = INDEX_TABLE_OFFSET.add_size(INDEX_TABLE_SIZE);
+pub(super) const DATA_REGION_OFFSET: MemoryAddress = INDEX_TABLE_OFFSET.add_size(INDEX_TABLE_SIZE);
 
 // Ring buffer constraints.
 
 /// Maximum total size of log records returned in a single message.
-pub(crate) const RESULT_MAX_SIZE: MemorySize = MemorySize::new(2_000_000);
+pub(super) const RESULT_MAX_SIZE: MemorySize = MemorySize::new(2_000_000);
 const _: () = assert!(RESULT_MAX_SIZE.get() <= 2_000_000, "Exceeds 2 MB");
 
 // With index table of 1 page (4 KiB) and 28 bytes per entry -> 146 entries max.
@@ -34,7 +34,7 @@ const _: () = assert!(RESULT_MAX_SIZE.get() <= 2_000_000, "Exceeds 2 MB");
 // say 20% of that (400 KB). So 146 segments turns into ~55 MB total data capacity.
 // Small segments help to reduce work on refining log records filtering
 // when fetching logs.
-pub(crate) const DATA_CAPACITY_MAX: MemorySize = MemorySize::new(55_000_000); // 55 MB
+pub(super) const DATA_CAPACITY_MAX: MemorySize = MemorySize::new(55_000_000); // 55 MB
 const DATA_SEGMENT_SIZE_MAX: u64 = DATA_CAPACITY_MAX.get() / INDEX_ENTRY_COUNT_MAX;
 // Ensure data segment size is significantly smaller than max result size, say 20%.
 const _: () = assert!(5 * DATA_SEGMENT_SIZE_MAX <= RESULT_MAX_SIZE.get());
@@ -44,7 +44,7 @@ const _: () = assert!(5 * DATA_SEGMENT_SIZE_MAX <= RESULT_MAX_SIZE.get());
 /// Log memory limit can be zero to disable logging,
 /// but when it is non-zero it must be at least this value
 /// to properly account for the size of at least one OS page.
-pub(crate) const DATA_CAPACITY_MIN: usize = VIRTUAL_PAGE_SIZE;
+pub(super) const DATA_CAPACITY_MIN: usize = VIRTUAL_PAGE_SIZE;
 const _: () = assert!(VIRTUAL_PAGE_SIZE <= DATA_CAPACITY_MIN); // data capacity must be at least one page.
 
 pub(super) struct RingBuffer {
@@ -82,6 +82,21 @@ impl RingBuffer {
     /// Returns the header of the ring buffer.
     pub fn get_header(&self) -> Header {
         self.io.load_header()
+    }
+
+    /// Returns the timestamp of the oldest live record, or `None` if the
+    /// buffer is empty. Takes an already-loaded `header` to avoid a
+    /// redundant page-map read when the caller has one in hand.
+    ///
+    /// Reads the record header at `data_head` — the same access pattern used
+    /// by `load_index_table` to reconstruct its `front` entry.
+    pub fn first_timestamp(&self, header: &Header) -> Option<u64> {
+        if header.data_size.get() == 0 {
+            return None;
+        }
+        self.io
+            .load_record_without_content(header, header.data_head)
+            .map(|r| r.timestamp)
     }
 
     /// Returns the data capacity of the ring buffer.
@@ -303,7 +318,7 @@ impl RingBuffer {
     }
 }
 
-pub struct RingBufferIterator<'a> {
+pub(super) struct RingBufferIterator<'a> {
     io: &'a StructIO,
     header: Header,
     pos: MemoryPosition,

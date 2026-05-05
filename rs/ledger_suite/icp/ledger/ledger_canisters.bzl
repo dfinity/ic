@@ -27,7 +27,7 @@ LEDGER_CANISTER_DEPS = [
     # Keep sorted.
     "//packages/ic-http-types",
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
     "//rs/ledger_suite/common/ledger_canister_core",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",

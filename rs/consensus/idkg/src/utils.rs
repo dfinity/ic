@@ -2,7 +2,7 @@
 
 use crate::{
     complaints::{IDkgTranscriptLoader, TranscriptLoadStatus},
-    metrics::{IDkgPayloadMetrics, IDkgPayloadStats},
+    metrics::{IDkgPayloadMetrics, IDkgPayloadMetricsOptionExt, IDkgPayloadStats},
 };
 use ic_consensus_utils::{RoundRobin, pool_reader::PoolReader, range_len};
 use ic_crypto::get_master_public_key_from_transcript;
@@ -18,13 +18,12 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_types::{
     Height, RegistryVersion, SubnetId,
-    batch::{AvailablePreSignatures, ConsensusResponse},
+    batch::AvailablePreSignatures,
     consensus::{
         Block, HasHeight,
         idkg::{
-            CompletedSignature, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId,
-            IDkgMessage, IDkgPayload, IDkgTranscriptParamsRef, PreSigId, TranscriptLookupError,
-            TranscriptRef,
+            HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId, IDkgMessage,
+            IDkgPayload, IDkgTranscriptParamsRef, PreSigId, TranscriptLookupError, TranscriptRef,
         },
     },
     crypto::canister_threshold_sig::{
@@ -179,12 +178,11 @@ pub(super) fn block_chain_reader(
         .map(IDkgBlockReaderImpl::new)
         .map_err(|err| {
             warn!(
+                every_n_seconds => 10,
                 log,
                 "block_chain_reader(): failed to build chain cache: {}", err
             );
-            if let Some(metrics) = idkg_payload_metrics {
-                metrics.payload_errors_inc("summary_invalid_chain_cache");
-            };
+            idkg_payload_metrics.payload_errors_inc("summary_invalid_chain_cache");
             err
         })
 }
@@ -363,20 +361,6 @@ pub fn get_idkg_chain_key_config_if_enabled(
     }
 }
 
-/// Creates responses to `SignWithECDSA` and `SignWithSchnorr` system calls with the computed
-/// signature.
-pub fn generate_responses_to_signature_request_contexts(
-    idkg_payload: &IDkgPayload,
-) -> Vec<ConsensusResponse> {
-    let mut consensus_responses = Vec::new();
-    for completed in idkg_payload.signature_agreements.values() {
-        if let CompletedSignature::Unreported(response) = completed {
-            consensus_responses.push(response.clone());
-        }
-    }
-    consensus_responses
-}
-
 /// This function returns the subnet master public keys to be added to the batch, if required.
 /// We return the keys, if
 /// - The block contains an IDKG payload with current key transcript ref, and
@@ -429,6 +413,7 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
                             stats.transcript_resolution_errors += 1;
                         }
                         error!(
+                            every_n_seconds => 10,
                             log,
                             "{}: Failed to retrieve IDKg subnet master public key of key id {}: {:?}",
                             CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
@@ -450,6 +435,7 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
                     stats.transcript_resolution_errors += 1;
                 }
                 error!(
+                    every_n_seconds => 10,
                     log,
                     "{}: Failed to translate key transcript ref {:?} of key {}: {:?}",
                     CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
@@ -478,6 +464,7 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
                         stats.transcript_resolution_errors += 1;
                     }
                     error!(
+                        every_n_seconds => 10,
                         log,
                         "{}: Failed to translate Pre-signature ref of key {}: {:?}",
                         CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,

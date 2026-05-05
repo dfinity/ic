@@ -69,6 +69,56 @@ fn initialization_defaults() {
 }
 
 #[test]
+fn test_retention_across_lifecycle() {
+    use std::time::Duration;
+
+    // Empty store: no header, no retention.
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
+    assert_eq!(s.first_timestamp(), None);
+    assert_eq!(s.max_timestamp(), None);
+    assert_eq!(s.retention(), None);
+
+    // Allocated but still empty: both timestamps report None.
+    s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
+    assert_eq!(s.first_timestamp(), None);
+    assert_eq!(s.max_timestamp(), None);
+    assert_eq!(s.retention(), None);
+
+    // Single record: retention is zero.
+    let mut delta = CanisterLog::default_delta();
+    delta.add_record(1_000_000_000, b"a".to_vec());
+    s.append_delta_log(&mut delta);
+    assert_eq!(s.first_timestamp(), Some(1_000_000_000));
+    assert_eq!(s.max_timestamp(), Some(1_000_000_000));
+    assert_eq!(s.retention(), Some(Duration::ZERO));
+
+    // Multiple records: retention spans first..last.
+    let mut delta = CanisterLog::new_delta_with_next_index(s.next_idx(), TEST_LOG_MEMORY_LIMIT);
+    delta.add_record(1_500_000_000, b"b".to_vec()); // t = 1.5 s
+    delta.add_record(61_000_000_000, b"c".to_vec()); // t = 61 s
+    s.append_delta_log(&mut delta);
+    assert_eq!(s.first_timestamp(), Some(1_000_000_000));
+    assert_eq!(s.max_timestamp(), Some(61_000_000_000));
+    assert_eq!(s.retention(), Some(Duration::from_secs(60)));
+
+    // Clear empties the buffer — both timestamps report None.
+    s.clear();
+    assert_eq!(s.first_timestamp(), None);
+    assert_eq!(s.max_timestamp(), None);
+    assert_eq!(s.retention(), None);
+
+    // Reappend, then deallocate — both caches go empty.
+    let mut delta = CanisterLog::new_delta_with_next_index(s.next_idx(), TEST_LOG_MEMORY_LIMIT);
+    delta.add_record(2_000_000_000, b"d".to_vec());
+    s.append_delta_log(&mut delta);
+    assert!(s.retention().is_some());
+    s.deallocate();
+    assert_eq!(s.first_timestamp(), None);
+    assert_eq!(s.max_timestamp(), None);
+    assert_eq!(s.retention(), None);
+}
+
+#[test]
 fn test_appending_to_uninitialized_store_is_no_op() {
     let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     let mut delta = CanisterLog::default_delta();
@@ -620,42 +670,6 @@ fn test_deallocate_when_resize_to_zero() {
 
     assert!(s.maybe_page_map().is_none());
     assert_eq!(s.byte_capacity(), 0);
-}
-
-#[test]
-fn test_delta_log_sizes() {
-    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
-    s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
-
-    // Batch A.
-    let mut delta = CanisterLog::new_delta_with_next_index(0, TEST_LOG_MEMORY_LIMIT);
-    delta.add_record(1, b"a1".to_vec());
-    delta.add_record(2, b"a2".to_vec());
-    let size_a = delta.bytes_used();
-    s.append_delta_log(&mut delta);
-
-    // Batch B.
-    let mut delta = CanisterLog::new_delta_with_next_index(s.next_idx(), TEST_LOG_MEMORY_LIMIT);
-    delta.add_record(3, b"b1".to_vec());
-    delta.add_record(4, b"b2".to_vec());
-    delta.add_record(5, b"b3".to_vec());
-    let size_b = delta.bytes_used();
-    s.append_delta_log(&mut delta);
-
-    // Batch C.
-    let mut delta = CanisterLog::new_delta_with_next_index(s.next_idx(), TEST_LOG_MEMORY_LIMIT);
-    delta.add_record(6, b"c1".to_vec());
-    delta.add_record(7, b"c2".to_vec());
-    delta.add_record(8, b"c3".to_vec());
-    delta.add_record(9, b"c4".to_vec());
-    let size_c = delta.bytes_used();
-    s.append_delta_log(&mut delta);
-
-    // Assert main log has all records and correct used space.
-    assert_eq!(s.records(None).len(), 9);
-    assert_eq!(s.delta_log_sizes(), vec![size_a, size_b, size_c]);
-    s.clear_delta_log_sizes();
-    assert_eq!(s.delta_log_sizes(), Vec::<usize>::new()); // Call after clear_delta_log_sizes.
 }
 
 #[test]

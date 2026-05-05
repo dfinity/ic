@@ -554,6 +554,8 @@ pub struct CanisterHttpResponseMetadata {
     pub replica_version: ::prost::alloc::string::String,
     #[prost(uint32, tag = "6")]
     pub content_size: u32,
+    #[prost(bool, tag = "7")]
+    pub is_reject: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseContent {
@@ -598,6 +600,8 @@ pub struct CanisterHttpResponseWithConsensus {
     pub signatures: ::prost::alloc::vec::Vec<CanisterHttpResponseSignature>,
     #[prost(uint32, tag = "9")]
     pub content_size: u32,
+    #[prost(bool, tag = "10")]
+    pub is_reject: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpShare {
@@ -630,10 +634,14 @@ pub struct FlexibleCanisterHttpTimeout {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FlexibleCanisterHttpResponsesTooLarge {
     #[prost(message, repeated, tag = "1")]
-    pub metadata_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
+    pub all_seen_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
+    #[prost(uint32, tag = "2")]
+    pub total_requests: u32,
+    #[prost(uint32, tag = "3")]
+    pub min_responses: u32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct FlexibleCanisterHttpTooManyRequestErrors {
+pub struct FlexibleCanisterHttpTooManyRejects {
     #[prost(message, repeated, tag = "1")]
     pub reject_responses: ::prost::alloc::vec::Vec<FlexibleCanisterHttpResponseWithProof>,
 }
@@ -653,7 +661,7 @@ pub mod flexible_canister_http_error {
         #[prost(message, tag = "3")]
         ResponsesTooLarge(super::FlexibleCanisterHttpResponsesTooLarge),
         #[prost(message, tag = "4")]
-        TooManyRequestErrors(super::FlexibleCanisterHttpTooManyRequestErrors),
+        TooManyRejects(super::FlexibleCanisterHttpTooManyRejects),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -689,8 +697,6 @@ pub struct CanisterHttpArtifact {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgPayload {
-    #[prost(message, repeated, tag = "1")]
-    pub signature_agreements: ::prost::alloc::vec::Vec<CompletedSignature>,
     #[prost(message, optional, tag = "5")]
     pub next_unused_transcript_id:
         ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscriptId>,
@@ -709,6 +715,8 @@ pub struct IDkgPayload {
     pub available_pre_signatures: ::prost::alloc::vec::Vec<AvailablePreSignature>,
     #[prost(message, repeated, tag = "15")]
     pub pre_signatures_in_creation: ::prost::alloc::vec::Vec<PreSignatureInProgress>,
+    #[prost(bool, tag = "17")]
+    pub empty_signature_agreements_flag: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConsensusResponse {
@@ -996,13 +1004,6 @@ pub struct PreSignatureTranscriptRef {
     pub blinder_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
     #[prost(message, optional, tag = "3")]
     pub key_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CompletedSignature {
-    #[prost(message, optional, tag = "3")]
-    pub unreported: ::core::option::Option<ConsensusResponse>,
-    #[prost(bytes = "vec", tag = "4")]
-    pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgReshareRequest {

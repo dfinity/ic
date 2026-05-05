@@ -334,6 +334,7 @@ fn setup_execution_helper(
             logger.clone(),
             Arc::clone(&cycles_account_manager),
             wasm_executor,
+            config.embedders_config.create_execution_state_base_cost,
             config.embedders_config.cost_to_compile_wasm_instruction,
             config.embedders_config.dirty_page_overhead,
             config.canister_guaranteed_callback_quota,
@@ -345,7 +346,6 @@ fn setup_execution_helper(
         logger.clone(),
         metrics_registry,
         completed_execution_messages_tx,
-        Arc::clone(&state_reader),
     ));
     let ingress_history_reader = Box::new(IngressHistoryReaderImpl::new(Arc::clone(&state_reader)));
 
@@ -372,6 +372,7 @@ fn setup_execution_helper(
         config.max_environment_variables,
         config.max_environment_variable_name_length,
         config.max_environment_variable_value_length,
+        config.log_memory_store_feature,
     );
     let canister_manager = Arc::new(CanisterManager::new(
         Arc::clone(&hypervisor),
@@ -379,7 +380,6 @@ fn setup_execution_helper(
         canister_manager_config,
         Arc::clone(&cycles_account_manager),
         Arc::clone(&fd_factory),
-        config.environment_variables,
     ));
 
     let exec_env = Arc::new(ExecutionEnvironment::new(

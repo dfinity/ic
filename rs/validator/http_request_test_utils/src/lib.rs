@@ -9,7 +9,7 @@ use ic_types::crypto::{CanisterSig, Signable};
 use ic_types::messages::{
     Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
     HttpReadStateContent, HttpRequest, HttpRequestEnvelope, HttpUserQuery, MessageId, Query,
-    ReadState, SignedDelegation, SignedIngressContent,
+    RawSignedSenderInfo, ReadState, SignedDelegation, SignedIngressContent,
 };
 use ic_types::time::GENESIS;
 use ic_types::{CanisterId, PrincipalId, Time};
@@ -176,6 +176,20 @@ impl<C: HttpRequestEnvelopeContent, T> HttpRequestBuilderGeneric<C, T> {
 
     pub fn with_nonce(mut self, nonce: Vec<u8>) -> Self {
         self.content.set_nonce(nonce);
+        self
+    }
+}
+
+impl<T> HttpRequestBuilderGeneric<HttpCanisterUpdate, T> {
+    pub fn with_sender_info(mut self, sender_info: RawSignedSenderInfo) -> Self {
+        self.content.sender_info = Some(sender_info);
+        self
+    }
+}
+
+impl<T> HttpRequestBuilderGeneric<HttpUserQuery, T> {
+    pub fn with_sender_info(mut self, sender_info: RawSignedSenderInfo) -> Self {
+        self.content.sender_info = Some(sender_info);
         self
     }
 }

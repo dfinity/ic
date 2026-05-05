@@ -1465,7 +1465,7 @@ mod test {
     async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine_with_mission_70()
      {
         let _restore_on_drop = temporarily_enable_mission_70_voting_rewards();
-        test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(3476).await;
+        test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(3464).await;
     }
 
     async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(
