@@ -2628,6 +2628,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_log_memory_store_feature_enabled(mut self) -> Self {
+        self.execution_config.log_memory_store_feature = FlagStatus::Enabled;
+        self
+    }
+
     pub fn without_composite_queries(mut self) -> Self {
         self.execution_config.composite_queries = FlagStatus::Disabled;
         self
