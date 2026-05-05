@@ -1,18 +1,19 @@
 use crate::InternalHttpQueryHandler;
-use ic_base_types::{CanisterId, NumSeconds};
-use ic_config::execution_environment::{
-    INSTRUCTION_OVERHEAD_PER_QUERY_CALL, LOG_MEMORY_STORE_FEATURE_ENABLED,
-};
+use candid::{Decode, Encode};
+use ic_base_types::{CanisterId, NumSeconds, PrincipalId};
+use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
 use ic_error_types::{ErrorCode, UserError};
+use ic_management_canister_types_private::{CanisterIdRange, ListCanistersResponse};
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
+use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     NumInstructions,
     ingress::WasmResult,
     messages::{Query, QuerySource},
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use more_asserts::{assert_gt, assert_lt};
 use std::sync::Arc;
 
@@ -480,6 +481,7 @@ fn query_compiled_once() {
                 user_id: user_test_id(2),
                 ingress_expiry: 0,
                 nonce: None,
+                sender_info: None,
             },
             receiver: canister_id,
             method_name: "query".to_string(),
@@ -500,48 +502,36 @@ fn queries_to_frozen_canisters_are_rejected() {
     let mut test = ExecutionTestBuilder::new().build();
     let freezing_threshold = NumSeconds::from(3_000_000_000);
 
-    // Create two canisters A and B with different amount of cycles.
-    // Canister A will not have enough to process queries in contrast
-    // to Canister B which will have more than enough.
-    //
-    // The amount of cycles is calculated based on previous runs of
-    // the test. It needs to be _just_ enough to allow for the canister
-    // to be installed (the canister is created with the provisional
-    // create canister api that doesn't require additional cycles).
-    //
-    // 300_000_002_460 cycles are needed as prepayment for max install_code instructions
-    //       5_000_000 cycles are needed for update call execution
-    //       3_201_730 cycles are needed for log memory store
-    //          41_070 cycles are needed to cover freeze_threshold_cycles
-    //                 of the canister history memory usage (134 bytes)
-    let low_cycles = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        Cycles::new(300_008_835_260)
-    } else {
-        Cycles::new(300_005_633_530)
-    };
-    let canister_a = test.universal_canister_with_cycles(low_cycles).unwrap();
+    // Create two canisters A and B with the same freezing threshold.
+    // Canister A has few cycles and is frozen; canister B has plenty and is not.
+    // Using a very high freezing threshold so that canister A is frozen
+    // regardless of the exact cycle costs (no need to compute precise balances).
+    let canister_a = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
+        .unwrap();
     test.update_freezing_threshold(canister_a, freezing_threshold)
         .unwrap();
 
-    let high_cycles = Cycles::new(1_000_000_000_000_000);
-    let canister_b = test.universal_canister_with_cycles(high_cycles).unwrap();
+    let canister_b = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000_000))
+        .unwrap();
     test.update_freezing_threshold(canister_b, freezing_threshold)
         .unwrap();
 
-    // Canister A is below its freezing threshold, so queries will be rejected.
+    // Canister A is frozen, so queries are rejected.
     let result = test.non_replicated_query(canister_a, "query", wasm().reply().build());
     assert_eq!(
         result,
         Err(UserError::new(
             ErrorCode::CanisterOutOfCycles,
             format!(
-                "Canister {canister_a} is unable to process query calls because it's frozen. Please top up the canister with cycles and try again."
+                "Canister {canister_a} is unable to process query calls because it's frozen. \
+                 Please top up the canister with cycles and try again."
             )
         )),
     );
 
-    // Canister B has a high cycles balance that's above its freezing
-    // threshold and so it can still process queries.
+    // Canister B is not frozen, so queries succeed.
     let result = test.non_replicated_query(canister_b, "query", wasm().reply().build());
     assert!(result.is_ok());
 }
@@ -573,6 +563,7 @@ fn composite_query_works_in_non_replicated_mode() {
                     user_id: user_test_id(0),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canister,
                 method_name: "query".to_string(),
@@ -602,6 +593,7 @@ fn composite_query_fails_if_disabled() {
                     user_id: user_test_id(0),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canister,
                 method_name: "query".to_string(),
@@ -670,6 +662,7 @@ fn composite_query_single_user_response() {
                     user_id: user_test_id(2),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
@@ -718,6 +711,7 @@ fn composite_query_single_canister_response() {
                     user_id: user_test_id(2),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
@@ -765,6 +759,7 @@ fn composite_query_no_user_response() {
                     user_id: user_test_id(2),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
@@ -823,6 +818,7 @@ fn composite_query_no_canister_response() {
                     user_id: user_test_id(2),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
@@ -865,6 +861,7 @@ fn composite_query_chained_calls() {
                     user_id: user_test_id(2),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canister_a,
                 method_name: "composite_query".to_string(),
@@ -1272,6 +1269,7 @@ fn query_call_exceeds_instructions_limit() {
                     user_id: user_test_id(1),
                     ingress_expiry: 0,
                     nonce: None,
+                    sender_info: None,
                 },
                 receiver: canister,
                 method_name: "query".to_string(),
@@ -1287,5 +1285,77 @@ fn query_call_exceeds_instructions_limit() {
             &format!(
                 "Error from Canister {canister}: Canister exceeded the limit of {instructions_limit} instructions for single message execution."
             )
+    );
+}
+
+// Subnet with a Normal cost schedule has no subnet admins concept; any caller
+// must be rejected with CanisterRejectedMessage.
+#[test]
+fn test_list_canisters_no_subnet_admins() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let err = test
+        .non_replicated_query(CanisterId::ic_00(), "list_canisters", Encode!().unwrap())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterRejectedMessage);
+}
+
+// Subnet has admins configured, but the caller is not one of them.
+#[test]
+fn test_list_canisters_non_admin_rejected() {
+    let admin: PrincipalId = user_test_id(1).get();
+    let non_admin = user_test_id(2);
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin])
+        .build();
+    test.set_user_id(non_admin);
+    let err = test
+        .non_replicated_query(CanisterId::ic_00(), "list_canisters", Encode!().unwrap())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidSubnetAdmin);
+}
+
+// Admin caller receives correct ranges: 5-7 coalesced, gap, 10 alone, gap,
+// 12-15 coalesced.
+#[test]
+fn test_list_canisters_success() {
+    let admin: PrincipalId = user_test_id(1).get();
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin])
+        .build();
+    test.set_user_id(user_test_id(1));
+
+    // IDs 5, 6, 7 are consecutive (coalesce into [5,7]), ID 10 is isolated
+    // ([10,10]), and IDs 12, 13, 14, 15 are consecutive (coalesce into [12,15]).
+    for raw_id in [5_u64, 6, 7, 10, 12, 13, 14, 15] {
+        test.state_mut().put_canister_state(
+            CanisterStateBuilder::new()
+                .with_canister_id(CanisterId::from(raw_id))
+                .build(),
+        );
+    }
+
+    let reply = test
+        .non_replicated_query(CanisterId::ic_00(), "list_canisters", Encode!().unwrap())
+        .unwrap();
+    let response = Decode!(&reply.bytes(), ListCanistersResponse).unwrap();
+
+    assert_eq!(
+        response.canisters,
+        vec![
+            CanisterIdRange {
+                start: CanisterId::from(5_u64),
+                end: CanisterId::from(7_u64),
+            },
+            CanisterIdRange {
+                start: CanisterId::from(10_u64),
+                end: CanisterId::from(10_u64),
+            },
+            CanisterIdRange {
+                start: CanisterId::from(12_u64),
+                end: CanisterId::from(15_u64),
+            },
+        ]
     );
 }

@@ -218,6 +218,7 @@ impl ValidFulfillSubnetRentalRequest {
             // These are the main things that distinguish this subnet from "normal" subnets.
             canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Free),
             subnet_admins: Some(vec![self.user]),
+            resource_limits: Default::default(),
 
             // Copy values from self.
             node_ids: self
@@ -238,6 +239,7 @@ impl ValidFulfillSubnetRentalRequest {
 
             subnet_type: SubnetType::Application,
             subnet_id_override: None,
+            initial_dkg_subnet_id: None,
             start_as_nns: false,
             is_halted: false,
             chain_key_config: None,

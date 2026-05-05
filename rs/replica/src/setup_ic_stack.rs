@@ -286,6 +286,7 @@ pub fn construct_ic_stack(
         log.clone(),
         rt_handle_http.clone(),
         subnet_id,
+        subnet_type,
         root_subnet_id,
         registry.clone(),
         Arc::clone(&crypto) as Arc<_>,

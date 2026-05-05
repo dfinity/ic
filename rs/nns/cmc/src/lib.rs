@@ -1,5 +1,5 @@
 #![allow(deprecated)]
-pub use ic_management_canister_types_private::CanisterSettingsArgs;
+pub use ic_management_canister_types::CanisterSettings;
 
 use candid::{CandidType, Nat};
 use ic_cdk::api::call::{CallResult, RejectionCode};
@@ -149,7 +149,7 @@ pub struct NotifyCreateCanister {
     pub subnet_type: Option<String>,
     pub subnet_selection: Option<SubnetSelection>,
 
-    pub settings: Option<CanisterSettingsArgs>,
+    pub settings: Option<CanisterSettings>,
 }
 
 /// Error for notify endpoints
@@ -174,7 +174,7 @@ pub struct CreateCanister {
     #[deprecated(note = "use subnet_selection instead")]
     pub subnet_type: Option<String>,
     pub subnet_selection: Option<SubnetSelection>,
-    pub settings: Option<CanisterSettingsArgs>,
+    pub settings: Option<CanisterSettings>,
 }
 
 /// Error for create_canister endpoint
@@ -565,10 +565,10 @@ mod tests {
         assert_eq!(
             (TokensToCycles {
                 xdr_permyriad_per_icp: 21_042,
-                cycles_per_xdr: 123_456_789_123u128.into()
+                cycles_per_xdr: 123_456_789_123_u128.into()
             })
             .to_cycles(Tokens::new(123, 0).unwrap()),
-            31952666407731u128.into()
+            31952666407731_u128.into()
         );
     }
 

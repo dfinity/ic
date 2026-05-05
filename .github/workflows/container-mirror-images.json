@@ -28,8 +28,8 @@
     },
     {
       "image": "letsencrypt/pebble",
-      "repo": "docker.io",
-      "sha256": "fc5a537bf8fbc7cc63aa24ec3142283aa9b6ba54529f86eb8ff31fbde7c5b258"
+      "repo": "ghcr.io",
+      "sha256": "68cf1ec8a8db96f64244d5f559c448bc8e54f2934e0dd53a414eabffda7a6f22"
     },
     {
       "image": "library/python",

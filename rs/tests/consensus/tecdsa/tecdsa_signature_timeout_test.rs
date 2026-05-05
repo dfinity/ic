@@ -48,7 +48,7 @@ fn test(env: TestEnv) {
         )
         .await;
         let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
-        let message_hash = vec![0xabu8; 32];
+        let message_hash = vec![0xab_u8; 32];
         for key_id in key_ids {
             // Get the public key first to make sure feature is working
             let _public_key = get_public_key_with_logger(&key_id, &msg_can, &log)
@@ -63,14 +63,9 @@ fn test(env: TestEnv) {
             )
             .await
             .unwrap_err();
-            let expected_message = if key_id.is_idkg_key() {
-                "Signature request expired"
-            } else {
-                "Chain key request expired"
-            };
             let expected_reject = RejectResponse {
                 reject_code: RejectCode::CanisterReject,
-                reject_message: expected_message.to_string(),
+                reject_message: "Chain key request expired".to_string(),
                 error_code: Some("IC0406".to_string()),
             };
             match error {

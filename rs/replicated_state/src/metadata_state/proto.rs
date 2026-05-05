@@ -1,4 +1,5 @@
 use super::*;
+use crate::CanisterPriority;
 use ic_base_types::subnet_id_try_from_option;
 use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto;
 use ic_protobuf::state::system_metadata::v1::ThresholdSignatureAgreementsEntry;
@@ -13,7 +14,7 @@ use ic_protobuf::{
     },
     types::v1 as pb_types,
 };
-use ic_types::subnet_id_try_from_protobuf;
+use ic_types::{AccumulatedPriority, ExecutionRound, subnet_id_try_from_protobuf};
 
 impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
     fn from(item: &NetworkTopology) -> Self {
@@ -51,6 +52,20 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                     }
                 })
                 .collect(),
+            full_topology: item
+                .full_topology
+                .as_ref()
+                .map(|ft| pb_metadata::FullTopology {
+                    subnets: ft
+                        .subnets
+                        .iter()
+                        .map(|(subnet_id, subnet_topology)| pb_metadata::SubnetsEntry {
+                            subnet_id: Some(subnet_id_into_protobuf(*subnet_id)),
+                            subnet_topology: Some(subnet_topology.into()),
+                        })
+                        .collect(),
+                    routing_table: Some(ft.routing_table.as_ref().into()),
+                }),
         }
     }
 }
@@ -109,6 +124,28 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             chain_key_enabled_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
+            full_topology: match item.full_topology {
+                None => None,
+                Some(ft) => {
+                    let mut ft_subnets = BTreeMap::new();
+                    for entry in ft.subnets {
+                        ft_subnets.insert(
+                            subnet_id_try_from_option(entry.subnet_id, "FullTopology::subnets::K")?,
+                            try_from_option_field(
+                                entry.subnet_topology,
+                                "FullTopology::subnets::V",
+                            )?,
+                        );
+                    }
+                    let ft_routing_table: Arc<RoutingTable> =
+                        try_from_option_field(ft.routing_table, "FullTopology::routing_table")
+                            .map(Arc::new)?;
+                    Some(FullTopology {
+                        subnets: ft_subnets,
+                        routing_table: ft_routing_table,
+                    })
+                }
+            },
         })
     }
 }
@@ -246,12 +283,12 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                 item.consumed_cycles_http_outcalls,
                 "SubnetMetrics::consumed_cycles_http_outcalls",
             )
-            .unwrap_or_else(|_| NominalCycles::from(0_u128)),
+            .unwrap_or_else(|_| NominalCycles::zero()),
             consumed_cycles_ecdsa_outcalls: try_from_option_field(
                 item.consumed_cycles_ecdsa_outcalls,
                 "SubnetMetrics::consumed_cycles_ecdsa_outcalls",
             )
-            .unwrap_or_else(|_| NominalCycles::from(0_u128)),
+            .unwrap_or_else(|_| NominalCycles::zero()),
             threshold_signature_agreements,
             consumed_cycles_by_use_case,
             num_canisters: try_from_option_field(
@@ -298,6 +335,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
             certification_version: item.certification_version as u32,
             heap_delta_estimate: item.heap_delta_estimate.get(),
             own_subnet_features: Some(item.own_subnet_features.into()),
+            own_resource_limits: Some(item.own_resource_limits.into()),
             subnet_metrics: Some((&item.subnet_metrics).into()),
             bitcoin_get_successors_follow_up_responses: item
                 .bitcoin_get_successors_follow_up_responses
@@ -332,12 +370,28 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                 )
                 .collect(),
             blockmaker_metrics_time_series: Some((&item.blockmaker_metrics_time_series).into()),
+            subnet_schedule: item
+                .subnet_schedule
+                .iter()
+                .map(|(canister_id, priority)| pb_metadata::CanisterPriority {
+                    canister_id: Some(pb_types::CanisterId::from(*canister_id)),
+                    accumulated_priority: priority.accumulated_priority.get(),
+                    executed_rounds: priority.executed_rounds,
+                    long_execution_start_round: priority
+                        .long_execution_start_round
+                        .map(|round| round.get()),
+                    last_full_execution_round: priority.last_full_execution_round.get(),
+                })
+                .collect(),
         }
     }
 }
 
 /// Decodes a `SystemMetadata` proto. The metrics are provided as a side-channel
 /// for recording errors without being forced to return `Err(_)`.
+///
+/// `fallback_subnet_schedule` is used for backward compatibility when loading
+/// old checkpoints that don't have the `subnet_schedule` field in the proto.
 impl
     TryFrom<(
         pb_metadata::SystemMetadata,
@@ -348,7 +402,7 @@ impl
     type Error = ProxyDecodeError;
 
     fn try_from(
-        (item, subnet_schedule, metrics): (
+        (item, fallback_subnet_schedule, metrics): (
             pb_metadata::SystemMetadata,
             SubnetSchedule,
             &dyn CheckpointLoadingMetrics,
@@ -361,6 +415,31 @@ impl
                 try_from_option_field(entry.subnet_stream, "SystemMetadata::streams::V")?,
             );
         }
+
+        let subnet_schedule = if !item.subnet_schedule.is_empty() {
+            let mut priorities = BTreeMap::new();
+            for entry in &item.subnet_schedule {
+                let canister_id = CanisterId::try_from(entry.canister_id.clone().ok_or(
+                    ProxyDecodeError::MissingField("CanisterPriority::canister_id"),
+                )?)?;
+                priorities.insert(
+                    canister_id,
+                    CanisterPriority {
+                        accumulated_priority: AccumulatedPriority::new(entry.accumulated_priority),
+                        executed_rounds: entry.executed_rounds,
+                        long_execution_start_round: entry
+                            .long_execution_start_round
+                            .map(ExecutionRound::new),
+                        last_full_execution_round: ExecutionRound::new(
+                            entry.last_full_execution_round,
+                        ),
+                    },
+                );
+            }
+            SubnetSchedule::new(priorities)
+        } else {
+            fallback_subnet_schedule
+        };
 
         let canister_allocation_ranges: CanisterIdRanges = match item.canister_allocation_ranges {
             Some(canister_allocation_ranges) => canister_allocation_ranges.try_into()?,
@@ -426,6 +505,7 @@ impl
             // properly set this value.
             own_subnet_type: SubnetType::default(),
             own_subnet_features: item.own_subnet_features.unwrap_or_default().into(),
+            own_resource_limits: item.own_resource_limits.unwrap_or_default().into(),
             node_public_keys,
             api_boundary_nodes,
             // Note: `load_checkpoint()` will set this to the contents of `split_marker.pbuf`,
@@ -465,7 +545,7 @@ impl
                 Some(subnet_metrics) => subnet_metrics.try_into()?,
                 None => SubnetMetrics::default(),
             },
-            expected_compiled_wasms: BTreeSet::new(),
+            expected_compiled_wasms: Arc::new(BTreeSet::new()),
             bitcoin_get_successors_follow_up_responses,
             blockmaker_metrics_time_series: match item.blockmaker_metrics_time_series {
                 Some(blockmaker_metrics) => (blockmaker_metrics, metrics).try_into()?,

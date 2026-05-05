@@ -8,6 +8,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::messages::MAX_RESPONSE_COUNT_BYTES;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
+use ic_types_test_utils::ids::canister_test_id;
+use std::sync::Arc;
 
 const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
 
@@ -216,4 +218,39 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
     // On system subnets limits will not be enforced for local messages, so running with 0 available
     // memory should also lead to inducting messages on local subnet.
     run_test(0, SubnetType::System);
+}
+
+#[test]
+fn induct_messages_on_same_subnet_destination_not_found() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let source = test.create_canister();
+
+    // A subnet-local nonexistent canister.
+    let dest = canister_test_id(13);
+    assert_ne!(source, dest);
+    assert_eq!(
+        test.state().metadata.network_topology.route(dest.get()),
+        Some(test.state().metadata.own_subnet_id)
+    );
+
+    let request = Arc::new(
+        RequestBuilder::default()
+            .sender(source)
+            .receiver(dest)
+            .build(),
+    );
+    test.canister_state_mut(source)
+        .push_output_request(request, UNIX_EPOCH)
+        .unwrap();
+
+    test.induct_messages_on_same_subnet();
+
+    // The request is still in the output queue, it's MR's job to reject it.
+    assert_eq!(
+        test.canister_state(source)
+            .system_state
+            .queues()
+            .output_queues_message_count(),
+        1
+    );
 }

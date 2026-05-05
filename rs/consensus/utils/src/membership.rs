@@ -299,7 +299,7 @@ pub mod test {
                         )
                     })
                     .count(),
-                get_faults_tolerated(subnet_members.len()) + 1usize
+                get_faults_tolerated(subnet_members.len()) + 1_usize
             );
         }
     }

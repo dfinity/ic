@@ -89,7 +89,7 @@ fn test_initiate_maturity_disbursement_to_provided_account_successful() {
                 to_account: Some(Account {
                     owner: Some(PrincipalId::new_user_test_id(2)),
                     subaccount: Some(Subaccount {
-                        subaccount: vec![2u8; 32]
+                        subaccount: vec![2_u8; 32]
                     }),
                 }),
                 to_account_identifier: None,
@@ -112,7 +112,7 @@ fn test_initiate_maturity_disbursement_to_provided_account_successful() {
             destination: Some(Destination::AccountToDisburseTo(Account {
                 owner: Some(PrincipalId::new_user_test_id(2)),
                 subaccount: Some(Subaccount {
-                    subaccount: vec![2u8; 32]
+                    subaccount: vec![2_u8; 32]
                 }),
             })),
             timestamp_of_disbursement_seconds: NOW_SECONDS,
@@ -206,7 +206,7 @@ fn test_initiate_maturity_disbursement_account_identifier_invalid() {
                 percentage_to_disburse: 50,
                 to_account: None,
                 to_account_identifier: Some(AccountIdentifierProto {
-                    hash: vec![1u8; 1000],
+                    hash: vec![1_u8; 1000],
                 }),
             },
             NOW_SECONDS,
@@ -233,11 +233,11 @@ fn test_initiate_maturity_disbursement_both_account_and_account_identifier_inval
                 to_account: Some(Account {
                     owner: Some(PrincipalId::new_user_test_id(2)),
                     subaccount: Some(Subaccount {
-                        subaccount: vec![2u8; 32]
+                        subaccount: vec![2_u8; 32]
                     }),
                 }),
                 to_account_identifier: Some(AccountIdentifierProto {
-                    hash: vec![3u8; 32],
+                    hash: vec![3_u8; 32],
                 }),
             },
             NOW_SECONDS,
@@ -342,7 +342,7 @@ fn test_initiate_maturity_disbursement_neuron_invalid_destination() {
                 to_account: Some(Account {
                     owner: Some(PrincipalId::new_user_test_id(2)),
                     subaccount: Some(Subaccount {
-                        subaccount: vec![1u8; 33],
+                        subaccount: vec![1_u8; 33],
                     }),
                 }),
                 to_account_identifier: None,

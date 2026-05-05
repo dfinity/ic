@@ -1,4 +1,0 @@
-exports_files(
-    ["candid-check.sh"],
-    visibility = ["//visibility:public"],
-)

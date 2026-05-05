@@ -5,7 +5,7 @@ use ic_types::consensus::idkg::{
     schnorr::PreSignatureTranscriptError,
 };
 
-use crate::crypto::ErrorReproducibility;
+use crate::{chain_key::ChainKeyAgreementValidationError, crypto::ErrorReproducibility};
 
 impl ErrorReproducibility for PreSignatureQuadrupleError {
     fn is_reproducible(&self) -> bool {
@@ -58,6 +58,20 @@ impl ErrorReproducibility for BuildSignatureInputsError {
             BuildSignatureInputsError::ThresholdSchnorrSigInputsCreationError(err) => {
                 err.is_reproducible()
             }
+        }
+    }
+}
+
+impl ErrorReproducibility for ChainKeyAgreementValidationError {
+    fn is_reproducible(&self) -> bool {
+        match self {
+            ChainKeyAgreementValidationError::DecodingError(_) => true,
+            ChainKeyAgreementValidationError::BuildSignatureInputsError(err) => {
+                err.is_reproducible()
+            }
+            ChainKeyAgreementValidationError::VetKd(err) => err.is_reproducible(),
+            ChainKeyAgreementValidationError::Ecdsa(err) => err.is_reproducible(),
+            ChainKeyAgreementValidationError::Schnorr(err) => err.is_reproducible(),
         }
     }
 }

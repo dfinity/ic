@@ -274,7 +274,7 @@ fn transcript_with_single_dealing<R: CryptoComponentRng>(
         .create_dealing(dkg_config)
         .expect("internal error: failed to create dealing");
     dealer_crypto
-        .create_transcript(dkg_config, &map_with(dealer_id, dealing))
+        .create_transcript(dkg_config, map_with(dealer_id, dealing))
         .expect("internal error: failed to create transcript")
 }
 

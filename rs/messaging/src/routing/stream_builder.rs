@@ -14,7 +14,7 @@ use ic_types::messages::{
     Request, RequestOrResponse, Response, StreamMessage,
 };
 use ic_types::{CountBytes, SubnetId};
-use ic_types_cycles::{Cycles, NominalCycles};
+use ic_types_cycles::{CompoundCycles, Cycles};
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
@@ -225,6 +225,7 @@ impl StreamBuilderImpl {
         reject_code: RejectCode,
         reject_message: String,
     ) {
+        let own_cost_schedule = state.get_own_cost_schedule();
         state
             .push_input(
                 Response {
@@ -257,8 +258,9 @@ impl StreamBuilderImpl {
                     response
                 );
                 self.metrics.critical_error_induct_response_failed.inc();
-                state.observe_lost_cycles_due_to_dropped_messages(NominalCycles::from(
-                    req.payment.get(),
+                state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                    req.payment,
+                    own_cost_schedule,
                 ));
             });
     }
@@ -682,6 +684,7 @@ impl StreamBuilderImpl {
         streams: &mut BTreeMap<SubnetId, Stream>,
     ) {
         let mut cycles_lost = Cycles::zero();
+        let own_cost_schedule = state.get_own_cost_schedule();
         state.take_refunds(|refund| {
             match network_topology.route(refund.recipient().get()) {
                 Some(dst_subnet_id) => {
@@ -723,7 +726,10 @@ impl StreamBuilderImpl {
                 }
             }
         });
-        state.observe_lost_cycles_due_to_dropped_messages(NominalCycles::from(cycles_lost.get()));
+        state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+            cycles_lost,
+            own_cost_schedule,
+        ));
     }
 }
 

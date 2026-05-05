@@ -1,7 +1,7 @@
 SEV Attestation
 ===============
 
-This crate provides types and utilities for SEV-SNP attestation.
+SEV-SNP attestation verification library. Parses and validates attestation packages (report + certificate chain), verifying measurements, signatures, custom data, and chip identity. Used by both the canister and OS-level attestation flows.
 
 Folder structure:
 

@@ -25,12 +25,11 @@ use ic_test_utilities_types::ids::{
 };
 use ic_types::{
     ComputeAllocation, MemoryAllocation, NumInstructions, PrincipalId, Time,
-    batch::CanisterCyclesCostSchedule,
     messages::{CallContextId, CallbackId, NO_DEADLINE, RejectContext},
     methods::SystemMethod,
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use std::collections::BTreeMap;
 
 pub const CANISTER_CURRENT_MEMORY_USAGE: NumBytes = NumBytes::new(0);
@@ -94,6 +93,7 @@ impl ApiTypeBuilder {
             Cycles::zero(),
             user_test_id(1).get(),
             CallContextId::from(1),
+            None,
         )
     }
 
@@ -111,6 +111,7 @@ impl ApiTypeBuilder {
             vec![],
             user_test_id(1).get(),
             CallContextId::new(1),
+            None,
         )
     }
 
@@ -121,6 +122,7 @@ impl ApiTypeBuilder {
             subnet_test_id(1),
             vec![],
             Some(vec![1]),
+            None,
         )
     }
 
@@ -132,6 +134,7 @@ impl ApiTypeBuilder {
             vec![],
             Some(vec![1]),
             CallContextId::from(1),
+            None,
         )
     }
 
@@ -144,6 +147,7 @@ impl ApiTypeBuilder {
             CallContextId::new(1),
             false,
             0.into(),
+            None,
         )
     }
 
@@ -156,6 +160,7 @@ impl ApiTypeBuilder {
             CallContextId::new(1),
             false,
             0.into(),
+            None,
         )
     }
 
@@ -168,6 +173,7 @@ impl ApiTypeBuilder {
             call_context_test_id(1),
             false,
             0.into(),
+            None,
         )
     }
 
@@ -180,6 +186,7 @@ impl ApiTypeBuilder {
             call_context_test_id(1),
             false,
             0.into(),
+            None,
         )
     }
 
@@ -189,6 +196,7 @@ impl ApiTypeBuilder {
             "test".to_string(),
             vec![],
             UNIX_EPOCH,
+            None,
         )
     }
 
@@ -261,6 +269,7 @@ pub fn get_system_state() -> SystemState {
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
+            None,
         )
         .unwrap();
     system_state

@@ -12,12 +12,11 @@ use ic_embedders::wasmtime_embedder::system_api::{ApiType, ExecutionParameters};
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallContextId, RequestMetadata};
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{NumInstructions, Time};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use prometheus::IntCounter;
 
 // Execute non replicated query.
@@ -70,17 +69,24 @@ pub fn execute_non_replicated_query(
 
     let mut preserve_changes = false;
     let (api_type, call_context_id) = match query_kind {
-        NonReplicatedQueryKind::Pure { caller } => (
+        NonReplicatedQueryKind::Pure {
+            caller,
+            sender_info,
+        } => (
             ApiType::non_replicated_query(
                 time,
                 caller,
                 hypervisor.subnet_id(),
                 payload.to_vec(),
                 data_certificate,
+                sender_info,
             ),
             None,
         ),
-        NonReplicatedQueryKind::Stateful { call_origin } => {
+        NonReplicatedQueryKind::Stateful {
+            call_origin,
+            sender_info,
+        } => {
             preserve_changes = true;
             let caller = match call_origin {
                 CallOrigin::Query(source, ..) => source.get(),
@@ -94,6 +100,7 @@ pub fn execute_non_replicated_query(
                     Cycles::zero(),
                     time,
                     RequestMetadata::for_new_call_tree(time),
+                    sender_info.clone(),
                 )
                 .unwrap();
             (
@@ -104,6 +111,7 @@ pub fn execute_non_replicated_query(
                     payload.to_vec(),
                     data_certificate,
                     call_context_id,
+                    sender_info,
                 ),
                 Some(call_context_id),
             )
