@@ -286,8 +286,12 @@ impl LogMemoryStore {
 
     /// Returns the projected memory usage after `resize(limit)` would complete,
     /// without mutating any state.
-    pub fn memory_usage_for_limit(feature_flag: FlagStatus, limit: NumBytes) -> NumBytes {
-        if feature_flag == FlagStatus::Disabled || limit == NumBytes::new(0) {
+    ///
+    /// Uses the canister's per-store `feature_flag` so that the projection
+    /// matches what `resize` will actually do, regardless of the current
+    /// global config value.
+    pub fn memory_usage_for_limit(&self, limit: NumBytes) -> NumBytes {
+        if self.feature_flag == FlagStatus::Disabled || limit == NumBytes::new(0) {
             return NumBytes::new(0);
         }
         let overhead =

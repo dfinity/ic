@@ -40,7 +40,6 @@ use ic_replicated_state::canister_state::execution_state::{
     CustomSectionType, Memory, SandboxMemory, WasmExecutionMode,
 };
 use ic_replicated_state::canister_state::system_state::ReservationError;
-use ic_replicated_state::canister_state::system_state::log_memory_store::LogMemoryStore;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
     self, CHUNK_SIZE, ChunkValidationResult, WasmChunkHash, WasmChunkStore,
 };
@@ -358,7 +357,10 @@ impl CanisterManager {
         // invalidate `threshold`) is deferred to the end of this function.
         let canister_memory_usage = canister.memory_usage();
         let new_log_memory_usage = if let Some(limit) = settings.log_memory_limit() {
-            LogMemoryStore::memory_usage_for_limit(self.config.log_memory_store_feature, limit)
+            canister
+                .system_state
+                .log_memory_store
+                .memory_usage_for_limit(limit)
         } else {
             canister.log_memory_store_memory_usage()
         };
