@@ -210,34 +210,34 @@ where
             // Things to consider when chosing offset:
             // - chunk store changes memory usage by 1 MiB at most
             // - canister logging changes memory by 1 OS-page of 4 KiB
-            match scenario_params.memory_usage_change {
-                MemoryUsageChange::Increase => {
-                    // Increasing memory is often done on already installed
-                    // canister, which does not increase canister log, so
-                    // we don't have to account for that.
-                    let memory_allocation_crossed_offset = 512 * KIB;
-                    // What increases memory usage: chunk upload, installing code (canister logs).
-                    memory_usage_after_setup.get() + memory_allocation_crossed_offset
+            match scenario_params.scenario {
+                Scenario::IncreaseMemoryAllocation => {
+                    assert_ge!(memory_usage_after_setup.get(), GIB);
+                    memory_usage_after_setup.get() - GIB
                 }
-                MemoryUsageChange::None => match scenario_params.scenario {
-                    Scenario::IncreaseMemoryAllocation => {
-                        assert_ge!(memory_usage_after_setup.get(), GIB);
-                        memory_usage_after_setup.get() - GIB
+                Scenario::DecreaseMemoryAllocation => memory_usage_after_setup.get() + GIB,
+                _ => match scenario_params.memory_usage_change {
+                    MemoryUsageChange::Increase => {
+                        // Increasing memory is often done on already installed
+                        // canister, which does not increase canister log, so
+                        // we don't have to account for that.
+                        let memory_allocation_crossed_offset = 512 * KIB;
+                        // What increases memory usage: chunk upload, installing code (canister logs).
+                        memory_usage_after_setup.get() + memory_allocation_crossed_offset
                     }
-                    Scenario::DecreaseMemoryAllocation => memory_usage_after_setup.get() + GIB,
-                    _ => memory_usage_after_setup.get(),
+                    MemoryUsageChange::None => memory_usage_after_setup.get(),
+                    MemoryUsageChange::Decrease => {
+                        // Decreasing memory is often done by uninstalling canister
+                        // which also clears canister logs, so we need to account for that.
+                        let memory_allocation_crossed_offset = 2 * KIB;
+                        // What decreases memory usage: clearning chunk store, uninstalling/deleting canister (canister logs).
+                        assert_ge!(
+                            memory_usage_after_setup.get(),
+                            memory_allocation_crossed_offset
+                        );
+                        memory_usage_after_setup.get() - memory_allocation_crossed_offset
+                    }
                 },
-                MemoryUsageChange::Decrease => {
-                    // Decreasing memory is often done by uninstalling canister
-                    // which also clears canister logs, so we need to account for that.
-                    let memory_allocation_crossed_offset = 2 * KIB;
-                    // What decreases memory usage: clearning chunk store, uninstalling/deleting canister (canister logs).
-                    assert_ge!(
-                        memory_usage_after_setup.get(),
-                        memory_allocation_crossed_offset
-                    );
-                    memory_usage_after_setup.get() - memory_allocation_crossed_offset
-                }
             }
         }
         MemoryAllocation::Large => 80 * GIB,
@@ -309,18 +309,18 @@ where
     // Ensure that memory allocation is "crossed" if applicable.
     if let MemoryAllocation::CrossedDuringTest = run_params.memory_allocation {
         let current_memory_usage = test.canister_state(canister_id).memory_usage().get();
-        match scenario_params.memory_usage_change {
-            MemoryUsageChange::Increase => assert_lt!(current_memory_usage, memory_allocation),
-            MemoryUsageChange::None => match scenario_params.scenario {
-                Scenario::IncreaseMemoryAllocation => {
-                    assert_gt!(current_memory_usage, memory_allocation)
-                }
-                Scenario::DecreaseMemoryAllocation => {
-                    assert_lt!(current_memory_usage, memory_allocation)
-                }
-                _ => assert_eq!(current_memory_usage, memory_allocation),
+        match scenario_params.scenario {
+            Scenario::IncreaseMemoryAllocation => {
+                assert_gt!(current_memory_usage, memory_allocation)
+            }
+            Scenario::DecreaseMemoryAllocation => {
+                assert_lt!(current_memory_usage, memory_allocation)
+            }
+            _ => match scenario_params.memory_usage_change {
+                MemoryUsageChange::Increase => assert_lt!(current_memory_usage, memory_allocation),
+                MemoryUsageChange::None => assert_eq!(current_memory_usage, memory_allocation),
+                MemoryUsageChange::Decrease => assert_gt!(current_memory_usage, memory_allocation),
             },
-            MemoryUsageChange::Decrease => assert_gt!(current_memory_usage, memory_allocation),
         }
     }
 
@@ -417,36 +417,38 @@ where
                 }
             };
         }
-        match scenario_params.memory_usage_change {
-            MemoryUsageChange::Increase => {
-                assert_le!(initial_allocated_bytes, final_allocated_bytes);
-                // New bytes are *allocated* if and only if the memory usage is not covered
-                // by memory allocation, i.e., if memory allocation is "large".
-                assert_eq!(
-                    newly_allocated_bytes.get() > 0,
-                    !matches!(run_params.memory_allocation, MemoryAllocation::Large)
-                )
+        // If memory usage does not change, then allocated bytes
+        // only change if memory allocation changes.
+        match scenario_params.scenario {
+            Scenario::IncreaseMemoryAllocation => {
+                assert_lt!(initial_allocated_bytes, final_allocated_bytes)
             }
-            // If memory usage does not change, then allocated bytes
-            // only change if memory allocation changes.
-            MemoryUsageChange::None => match scenario_params.scenario {
-                Scenario::IncreaseMemoryAllocation => {
-                    assert_lt!(initial_allocated_bytes, final_allocated_bytes)
+            Scenario::DecreaseMemoryAllocation => {
+                // If memory usage exceeds memory allocation, then
+                // no bytes are deallocated when memory allocation decreases.
+                if initial_memory_usage.get() > memory_allocation {
+                    assert_eq!(initial_allocated_bytes, final_allocated_bytes);
+                } else {
+                    assert_gt!(initial_allocated_bytes, final_allocated_bytes);
                 }
-                Scenario::DecreaseMemoryAllocation => {
-                    // If memory usage exceeds memory allocation, then
-                    // no bytes are deallocated when memory allocation decreases.
-                    if initial_memory_usage.get() > memory_allocation {
-                        assert_eq!(initial_allocated_bytes, final_allocated_bytes);
-                    } else {
-                        assert_gt!(initial_allocated_bytes, final_allocated_bytes);
-                    }
+            }
+            _ => match scenario_params.memory_usage_change {
+                MemoryUsageChange::Increase => {
+                    assert_le!(initial_allocated_bytes, final_allocated_bytes);
+                    // New bytes are *allocated* if and only if the memory usage is not covered
+                    // by memory allocation, i.e., if memory allocation is "large".
+                    assert_eq!(
+                        newly_allocated_bytes.get() > 0,
+                        !matches!(run_params.memory_allocation, MemoryAllocation::Large)
+                    )
                 }
-                _ => assert_eq!(initial_allocated_bytes, final_allocated_bytes),
+                MemoryUsageChange::None => {
+                    assert_eq!(initial_allocated_bytes, final_allocated_bytes)
+                }
+                MemoryUsageChange::Decrease => {
+                    assert_ge!(initial_allocated_bytes, final_allocated_bytes)
+                }
             },
-            MemoryUsageChange::Decrease => {
-                assert_ge!(initial_allocated_bytes, final_allocated_bytes)
-            }
         };
         // Ensure that memory allocation is "crossed" if applicable.
         if let MemoryAllocation::CrossedDuringTest = run_params.memory_allocation {
@@ -457,18 +459,18 @@ where
                 .memory_allocation
                 .pre_allocated_bytes()
                 .get();
-            match scenario_params.memory_usage_change {
-                MemoryUsageChange::Increase => {
+            match scenario_params.scenario {
+                Scenario::IncreaseMemoryAllocation => {
+                    assert_lt!(current_memory_usage, current_memory_allocation)
+                }
+                Scenario::DecreaseMemoryAllocation => {
                     assert_gt!(current_memory_usage, current_memory_allocation)
                 }
-                MemoryUsageChange::None => match scenario_params.scenario {
-                    Scenario::IncreaseMemoryAllocation => {
-                        assert_lt!(current_memory_usage, current_memory_allocation)
-                    }
-                    Scenario::DecreaseMemoryAllocation => {
+                _ => match scenario_params.memory_usage_change {
+                    MemoryUsageChange::Increase => {
                         assert_gt!(current_memory_usage, current_memory_allocation)
                     }
-                    _ => {
+                    MemoryUsageChange::None => {
                         // Memory allocation is set to match the memory usage after setup,
                         // but canister history memory usage can increase even in case of `MemoryUsageChange::None`.
                         let canister_history_memory_usage_increase =
@@ -479,10 +481,10 @@ where
                                 + canister_history_memory_usage_increase.get()
                         );
                     }
+                    MemoryUsageChange::Decrease => {
+                        assert_lt!(current_memory_usage, current_memory_allocation)
+                    }
                 },
-                MemoryUsageChange::Decrease => {
-                    assert_lt!(current_memory_usage, current_memory_allocation)
-                }
             }
         }
     } else {
