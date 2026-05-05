@@ -26,7 +26,7 @@ package(default_visibility = ["//visibility:public"])
         deps = [
             # Keep sorted.
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
@@ -119,7 +119,7 @@ package(default_visibility = ["//visibility:public"])
         deps = [
             # Keep sorted.
             "//packages/ic-http-types",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
@@ -286,7 +286,7 @@ package(default_visibility = ["//visibility:public"])
             # Keep sorted.
             ":ledger",
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/icrc1",
             "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests" + name_suffix,
             "//rs/ledger_suite/common/ledger_canister_core",
@@ -340,7 +340,7 @@ package(default_visibility = ["//visibility:public"])
         deps = [
             # Keep sorted.
             ":ledger" + name_suffix,
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
@@ -387,7 +387,7 @@ package(default_visibility = ["//visibility:public"])
         deps = [
             # Keep sorted.
             "//packages/ic-http-types",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
@@ -449,7 +449,7 @@ rust_ic_test(
     deps = [
         # Keep sorted.
         ":ledger",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/ledger_suite/common/ledger_canister_core",
         "//rs/ledger_suite/icrc1/test_utils",
         "//rs/state_machine_tests",

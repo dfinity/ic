@@ -19,9 +19,8 @@ use ic_replicated_state::{
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
-    AccumulatedPriority, CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, ExecutionRound,
-    Height, LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
-    batch::TotalQueryStats,
+    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, ExecutionRound, Height,
+    MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time, batch::TotalQueryStats,
 };
 use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_utils::thread::maybe_parallel_map;
@@ -168,11 +167,7 @@ pub struct ExecutionStateBits {
 #[derive(Debug)]
 pub struct CanisterStateBits {
     pub controllers: BTreeSet<PrincipalId>,
-    pub last_full_execution_round: ExecutionRound,
     pub compute_allocation: ComputeAllocation,
-    pub accumulated_priority: AccumulatedPriority,
-    pub priority_credit: AccumulatedPriority,
-    pub long_execution_mode: LongExecutionMode,
     pub execution_state_bits: Option<ExecutionStateBits>,
     pub memory_allocation: MemoryAllocation,
     pub wasm_memory_threshold: NumBytes,
@@ -195,6 +190,7 @@ pub struct CanisterStateBits {
     pub global_timer_nanos: Option<u64>,
     pub canister_version: u64,
     pub consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+    pub consumed_cycles_by_use_cases_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,
     pub instructions_executed: NumInstructions,
     pub ingress_messages_executed: u64,
     pub remote_subnet_messages_executed: u64,

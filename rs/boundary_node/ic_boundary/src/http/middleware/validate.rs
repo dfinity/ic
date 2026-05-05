@@ -17,7 +17,8 @@ use crate::{
     errors::{ApiError, ErrorCause},
     http::{
         PATH_CALL_V2, PATH_CALL_V3, PATH_CALL_V4, PATH_QUERY_V2, PATH_QUERY_V3, PATH_READ_STATE_V2,
-        PATH_READ_STATE_V3, PATH_SUBNET_READ_STATE_V2, PATH_SUBNET_READ_STATE_V3, RequestType,
+        PATH_READ_STATE_V3, PATH_SUBNET_CALL_V4, PATH_SUBNET_QUERY_V3, PATH_SUBNET_READ_STATE_V2,
+        PATH_SUBNET_READ_STATE_V3, RequestType,
     },
 };
 
@@ -70,12 +71,14 @@ pub async fn validate_subnet_request(
     let request_type = match matched_path.as_str() {
         PATH_SUBNET_READ_STATE_V2 => RequestType::ReadStateSubnetV2,
         PATH_SUBNET_READ_STATE_V3 => RequestType::ReadStateSubnetV3,
+        PATH_SUBNET_QUERY_V3 => RequestType::QuerySubnetV3,
+        PATH_SUBNET_CALL_V4 => RequestType::CallSubnetV4,
         _ => panic!("unknown path, should never happen"),
     };
 
     request.extensions_mut().insert(request_type);
 
-    // Decode canister_id from URL
+    // Decode subnet ID from URL
     let principal_id: PrincipalId = Principal::from_text(subnet_id.as_str())
         .map_err(|err| {
             ErrorCause::MalformedRequest(format!("Unable to decode subnet_id from URL: {err}"))

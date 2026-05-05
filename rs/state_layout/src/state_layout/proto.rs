@@ -15,14 +15,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 .into_iter()
                 .map(|controller| controller.into())
                 .collect(),
-            last_full_execution_round: item.last_full_execution_round.get(),
             compute_allocation: item.compute_allocation.as_percent(),
-            accumulated_priority: item.accumulated_priority.get(),
-            priority_credit: item.priority_credit.get(),
-            long_execution_mode: pb_canister_state_bits::LongExecutionMode::from(
-                item.long_execution_mode,
-            )
-            .into(),
             execution_state_bits: item.execution_state_bits.as_ref().map(|v| v.into()),
             memory_allocation: item.memory_allocation.pre_allocated_bytes().get(),
             wasm_memory_threshold: Some(item.wasm_memory_threshold.get()),
@@ -46,6 +39,16 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             canister_version: item.canister_version,
             consumed_cycles_by_use_cases: item
                 .consumed_cycles_by_use_cases
+                .into_iter()
+                .map(
+                    |(use_case, cycles)| pb_canister_state_bits::ConsumedCyclesByUseCase {
+                        use_case: pb_canister_state_bits::CyclesUseCase::from(use_case).into(),
+                        cycles: Some((&cycles).into()),
+                    },
+                )
+                .collect(),
+            consumed_cycles_by_use_cases_as_counters: item
+                .consumed_cycles_by_use_cases_as_counters
                 .into_iter()
                 .map(
                     |(use_case, cycles)| pb_canister_state_bits::ConsumedCyclesByUseCase {
@@ -131,26 +134,33 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             );
         }
 
+        let mut consumed_cycles_by_use_cases_as_counters = BTreeMap::new();
+        for x in value.consumed_cycles_by_use_cases_as_counters.into_iter() {
+            consumed_cycles_by_use_cases_as_counters.insert(
+                CyclesUseCase::try_from(
+                    pb_canister_state_bits::CyclesUseCase::try_from(x.use_case).map_err(|_| {
+                        ProxyDecodeError::ValueOutOfRange {
+                            typ: "CyclesUseCase",
+                            err: format!("Unexpected value of cycles use case: {}", x.use_case),
+                        }
+                    })?,
+                )?,
+                NominalCycles::try_from(x.cycles.unwrap_or_default()).unwrap_or_default(),
+            );
+        }
+
         let tasks: pb_canister_state_bits::TaskQueue =
             try_from_option_field(value.tasks, "CanisterStateBits::tasks").unwrap_or_default();
         let task_queue = TaskQueue::try_from(tasks)?;
 
         Ok(Self {
             controllers,
-            last_full_execution_round: value.last_full_execution_round.into(),
             compute_allocation: ComputeAllocation::try_from(value.compute_allocation).map_err(
                 |e| ProxyDecodeError::ValueOutOfRange {
                     typ: "ComputeAllocation",
                     err: format!("{e:?}"),
                 },
             )?,
-            accumulated_priority: value.accumulated_priority.into(),
-            priority_credit: value.priority_credit.into(),
-            long_execution_mode: pb_canister_state_bits::LongExecutionMode::try_from(
-                value.long_execution_mode,
-            )
-            .unwrap_or_default()
-            .into(),
             execution_state_bits,
             memory_allocation: MemoryAllocation::from(NumBytes::from(value.memory_allocation)),
             wasm_memory_threshold: NumBytes::new(value.wasm_memory_threshold.unwrap_or(0)),
@@ -179,6 +189,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             global_timer_nanos: value.global_timer_nanos,
             canister_version: value.canister_version,
             consumed_cycles_by_use_cases,
+            consumed_cycles_by_use_cases_as_counters,
             // TODO(MR-412): replace `unwrap_or_default` by returning an error on missing canister_history field
             canister_history: try_from_option_field(
                 value.canister_history,

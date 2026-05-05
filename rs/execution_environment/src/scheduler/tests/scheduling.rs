@@ -1003,20 +1003,15 @@ fn inner_round_long_execution_is_a_full_execution() {
             assert_eq!(system_state.queues().ingress_queue_size(), 0);
         }
         // All canisters should be marked as fully executed. The target canister,
-        // despite still having messages, executed a full slice of instructions.
+        // despite still having messages, executed a complete slice.
         assert_eq!(priority.last_full_execution_round, test.last_round());
     }
     let mut total_accumulated_priority = 0;
-    let mut total_executed_rounds = 0;
     for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
         total_accumulated_priority += canister_priority.accumulated_priority.get();
-        total_executed_rounds += canister_priority.executed_rounds;
     }
     // The accumulated priority invariant should be respected.
-    assert_eq!(
-        total_accumulated_priority - ONE_HUNDRED_PERCENT.get() * total_executed_rounds,
-        0
-    );
+    assert_eq!(total_accumulated_priority, 0);
 }
 
 #[test_strategy::proptest(ProptestConfig { cases: 8, ..ProptestConfig::default() })]
