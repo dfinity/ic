@@ -10,7 +10,7 @@ use crate::{
     registry_helper::RegistryHelper,
     replay_helper,
     ssh_helper::SshHelper,
-    util::{SshUser, block_on, parse_hex_str},
+    util::{ExecutionMode, SshUser, block_on, parse_hex_str},
 };
 use core::convert::From;
 use ic_artifact_pool::certification_pool::CertificationPoolImpl;
@@ -61,7 +61,7 @@ impl Step for AdminStep {
     }
 }
 
-pub struct DownloadCertificationsStep {
+pub(crate) struct DownloadCertificationsStep {
     pub logger: Logger,
     pub subnet_id: SubnetId,
     pub registry_helper: RegistryHelper,
@@ -137,7 +137,7 @@ impl Step for DownloadCertificationsStep {
     }
 }
 
-pub struct MergeCertificationPoolsStep {
+pub(crate) struct MergeCertificationPoolsStep {
     pub logger: Logger,
     pub work_dir: PathBuf,
 }
@@ -274,7 +274,7 @@ impl Step for MergeCertificationPoolsStep {
     }
 }
 
-pub struct DownloadIcDataStep {
+pub(crate) struct DownloadIcDataStep {
     pub logger: Logger,
     pub ssh_helper: SshHelper,
     pub backup_dir: PathBuf,
@@ -364,10 +364,11 @@ impl Step for DownloadIcDataStep {
     }
 }
 
-pub struct CopyLocalIcStateStep {
+pub(crate) struct CopyLocalIcStateStep {
     pub logger: Logger,
     pub working_dir: PathBuf,
     pub require_confirmation: bool,
+    pub data_includes: Vec<PathBuf>,
 }
 
 impl Step for CopyLocalIcStateStep {
@@ -384,8 +385,7 @@ impl Step for CopyLocalIcStateStep {
         let log = self.require_confirmation.then_some(&self.logger);
 
         // State
-        let includes = Recovery::get_ic_state_includes(None)?;
-        for include in includes.iter() {
+        for include in self.data_includes.iter() {
             let src = PathBuf::from(IC_DATA_PATH).join(include);
             let dst_parent = self
                 .working_dir
@@ -420,7 +420,7 @@ pub struct ReplaySubCmd {
     pub descr: String,
 }
 
-pub struct ReplayStep {
+pub(crate) struct ReplayStep {
     pub logger: Logger,
     pub subnet_id: SubnetId,
     pub work_dir: PathBuf,
@@ -497,7 +497,7 @@ impl Step for ReplayStep {
     }
 }
 
-pub struct ValidateReplayStep {
+pub(crate) struct ValidateReplayStep {
     pub logger: Logger,
     pub subnet_id: SubnetId,
     pub registry_helper: RegistryHelper,
@@ -627,11 +627,10 @@ impl Step for UploadStateAndRestartStep {
             let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
             // path of latest checkpoint on upload node
             let copy_from = ic_checkpoints_path.join(
-                Recovery::get_maybe_latest_checkpoint_name_remotely(
-                    &ssh_helper,
-                    &ic_checkpoints_path,
-                )?
-                .unwrap_or_default(),
+                ExecutionMode::Remote(&ssh_helper)
+                    .get_maybe_latest_checkpoint_name_and_height(&ic_checkpoints_path)?
+                    .unwrap_or_default()
+                    .0,
             );
             // path and name of checkpoint after replay
             let copy_to = upload_dir.join(CHECKPOINTS).join(max_checkpoint);
@@ -713,7 +712,7 @@ impl Step for UploadStateAndRestartStep {
     }
 }
 
-pub struct WaitForCUPStep {
+pub(crate) struct WaitForCUPStep {
     pub logger: Logger,
     pub node_ip: IpAddr,
     pub work_dir: PathBuf,
@@ -741,7 +740,7 @@ impl Step for WaitForCUPStep {
     }
 }
 
-pub struct CleanupStep {
+pub(crate) struct CleanupStep {
     pub recovery_dir: PathBuf,
 }
 
@@ -755,7 +754,7 @@ impl Step for CleanupStep {
     }
 }
 
-pub struct StopReplicaStep {
+pub(crate) struct StopReplicaStep {
     pub logger: Logger,
     pub node_ip: IpAddr,
     pub require_confirmation: bool,
@@ -780,7 +779,7 @@ impl Step for StopReplicaStep {
     }
 }
 
-pub struct UpdateLocalStoreStep {
+pub(crate) struct UpdateLocalStoreStep {
     pub subnet_id: SubnetId,
     pub work_dir: PathBuf,
     pub skip_prompts: bool,
@@ -810,7 +809,7 @@ impl Step for UpdateLocalStoreStep {
     }
 }
 
-pub struct GetRecoveryCUPStep {
+pub(crate) struct GetRecoveryCUPStep {
     pub subnet_id: SubnetId,
     pub config: PathBuf,
     pub state_hash: String,
@@ -851,7 +850,7 @@ impl Step for GetRecoveryCUPStep {
     }
 }
 
-pub struct CreateRegistryTarStep {
+pub(crate) struct CreateRegistryTarStep {
     pub logger: Logger,
     pub store_tar_cmd: Command,
 }
@@ -871,9 +870,8 @@ impl Step for CreateRegistryTarStep {
     }
 }
 
-pub struct UploadCUPAndTarStep {
+pub(crate) struct UploadCUPAndTarStep {
     pub logger: Logger,
-    pub registry_helper: RegistryHelper,
     pub node_ip: IpAddr,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
@@ -881,7 +879,7 @@ pub struct UploadCUPAndTarStep {
 }
 
 impl UploadCUPAndTarStep {
-    pub fn get_restart_commands(&self) -> String {
+    fn get_restart_commands(&self) -> String {
         format!(
             r#"
 cd {};
@@ -904,7 +902,7 @@ sudo systemctl status ic-replica;
         )
     }
 
-    pub fn get_upload_dir_name() -> PathBuf {
+    fn get_upload_dir_name() -> PathBuf {
         PathBuf::from("/tmp").join("subnet_recovery")
     }
 }
@@ -1042,7 +1040,7 @@ impl Step for CreateNNSRecoveryTarStep {
     }
 }
 
-pub struct DownloadRegistryStoreStep {
+pub(crate) struct DownloadRegistryStoreStep {
     pub logger: Logger,
     pub node_ip: IpAddr,
     pub original_nns_id: SubnetId,
@@ -1106,7 +1104,7 @@ impl Step for DownloadRegistryStoreStep {
     }
 }
 
-pub struct UploadAndHostTarStep {
+pub(crate) struct UploadAndHostTarStep {
     pub logger: Logger,
     pub aux_user: SshUser,
     pub aux_ip: IpAddr,
@@ -1116,7 +1114,7 @@ pub struct UploadAndHostTarStep {
 }
 
 impl UploadAndHostTarStep {
-    pub fn get_upload_dir_name() -> PathBuf {
+    fn get_upload_dir_name() -> PathBuf {
         PathBuf::from("/tmp").join("recovery_registry")
     }
 }

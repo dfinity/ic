@@ -133,7 +133,7 @@ impl AccountIdentifier {
     /// Converts this account identifier into a binary "address".
     /// The address is CRC32(identifier) . identifier.
     pub fn to_address(&self) -> AccountIdBlob {
-        let mut result = [0u8; 32];
+        let mut result = [0_u8; 32];
         result[0..4].copy_from_slice(&self.generate_checksum());
         result[4..32].copy_from_slice(&self.hash);
         result

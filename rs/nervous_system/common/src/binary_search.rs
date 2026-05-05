@@ -165,7 +165,7 @@ mod tests {
 
     proptest! {
         #[test]
-        fn test_search_properties(start in 0u64..50_000_000, pivot in 0u64..100_000_000, end in 50_000_001u64..100_000_000) {
+        fn test_search_properties(start in 0_u64..50_000_000, pivot in 0_u64..100_000_000, end in 50_000_001_u64..100_000_000) {
             let predicate = |x: &u64| *x >= pivot;
             let (highest_false, lowest_true) = search(predicate, start, end);
 

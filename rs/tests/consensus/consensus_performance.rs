@@ -66,7 +66,9 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::get_ic_build_version;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+    ic::{
+        AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
+    },
     prometheus_vm::HasPrometheus,
     simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
@@ -116,22 +118,14 @@ fn setup(env: TestEnv) {
 
     ic_builder
         .with_required_host_features(vec![HostFeature::Performance])
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_default_vm_resources(VmResources {
-                    vcpus: Some(NrOfVCPUs::new(64)),
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)),
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-                })
-                .add_nodes(1),
-        )
+        .with_resource_overrides(VmResourceOverrides {
+            vcpus: Some(NrOfVCPUs::new(64)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)),
+            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+        })
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(VmResources {
-                    vcpus: Some(NrOfVCPUs::new(64)),
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-                })
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .with_max_ingress_bytes_per_block(max_ingress_bytes)
                 .add_nodes(NODES_COUNT),

@@ -31,7 +31,7 @@ use ic_consensus_system_test_utils::upgrade::bless_replica_version;
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     ssh_access::{
-        AuthMean, generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
+        AuthMean, generate_key_strings, get_update_subnet_payload_with_keys, update_subnet_record,
         wait_until_authentication_is_granted,
     },
     upgrade::{
@@ -211,7 +211,8 @@ pub fn test(env: TestEnv) {
     });
 
     info!(log, "Update the registry with the backup key");
-    let payload = get_updatesubnetpayload_with_keys(subnet_id, None, Some(vec![backup_public_key]));
+    let payload =
+        get_update_subnet_payload_with_keys(subnet_id, None, Some(vec![backup_public_key]));
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
     let backup_mean = AuthMean::PrivateKey(backup_private_key);
     wait_until_authentication_is_granted(&log, &node_ip, "backup", &backup_mean);
@@ -277,10 +278,29 @@ pub fn test(env: TestEnv) {
     info!(log, "Started process: {}", child.id());
 
     info!(log, "Wait for archived checkpoint");
+    let checkpoint_dir = backup_dir
+        .join("data")
+        .join(subnet_id.to_string())
+        .join("ic_state/checkpoints");
+    let orig_spool_dir = backup_dir
+        .join("spool")
+        .join(subnet_id.to_string())
+        .join(initial_replica_version.to_string())
+        .join("0");
     let archive_dir = backup_dir.join("archive").join(subnet_id.to_string());
     // make sure we have some archive of the old version before upgrading to the new one
     loop {
-        if highest_dir_entry(&archive_dir, 10) > 0 {
+        let spool_height = highest_dir_entry(&orig_spool_dir, 10);
+        let checkpoint = highest_dir_entry(&checkpoint_dir, 16);
+        let archive_height = highest_dir_entry(&archive_dir, 10);
+        info!(
+            log,
+            "Waiting for archived checkpoint - Spool: {}  Checkpoint: {}  Archive: {}",
+            spool_height,
+            checkpoint,
+            archive_height,
+        );
+        if archive_height > 0 {
             info!(log, "A checkpoint has been archived");
             break;
         }
@@ -297,15 +317,6 @@ pub fn test(env: TestEnv) {
     info!(log, "Wait until the upgrade happens");
     assert_assigned_replica_version(&nns_node, &target_version, env.logger());
 
-    let checkpoint_dir = backup_dir
-        .join("data")
-        .join(subnet_id.to_string())
-        .join("ic_state/checkpoints");
-    let orig_spool_dir = backup_dir
-        .join("spool")
-        .join(subnet_id.to_string())
-        .join(initial_replica_version.to_string())
-        .join("0");
     let new_spool_dir = backup_dir
         .join("spool")
         .join(subnet_id.to_string())
@@ -481,7 +492,7 @@ fn copy_file(binary_path: &Path, backup_binaries_dir: &Path, file_name: &str) {
 
 fn highest_dir_entry(dir: &PathBuf, radix: u32) -> u64 {
     if !dir.exists() {
-        return 0u64;
+        return 0_u64;
     }
     match std::fs::read_dir(dir) {
         Ok(file_list) => file_list
@@ -496,7 +507,7 @@ fn highest_dir_entry(dir: &PathBuf, radix: u32) -> u64 {
                     .unwrap_or_else(|_| "0".to_string())
             })
             .map(|s| u64::from_str_radix(&s, radix).unwrap_or(0))
-            .fold(0u64, |a: u64, b: u64| -> u64 { a.max(b) }),
+            .fold(0_u64, |a: u64, b: u64| -> u64 { a.max(b) }),
         Err(_) => 0,
     }
 }

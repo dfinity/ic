@@ -29,7 +29,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{CanisterTimer, NumBytes, NumInstructions, Time};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CompoundCycles, Cycles, Instructions};
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
@@ -42,7 +42,7 @@ pub fn execute_call_or_task(
     clean_canister: CanisterState,
     call_or_task: CanisterCallOrTask,
     method: WasmMethod,
-    prepaid_execution_cycles: Option<Cycles>,
+    prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
     execution_parameters: ExecutionParameters,
     time: Time,
     round: RoundContext,
@@ -158,12 +158,14 @@ pub fn execute_call_or_task(
             msg.cycles(),
             *msg.sender(),
             helper.call_context_id(),
+            msg.sender_info().cloned(),
         ),
         CanisterCallOrTask::Query(msg) => ApiType::replicated_query(
             time,
             msg.method_payload().to_vec(),
             *msg.sender(),
             helper.call_context_id(),
+            msg.sender_info().cloned(),
         ),
         CanisterCallOrTask::Task(CanisterTask::Heartbeat) => ApiType::system_task(
             SystemMethod::CanisterHeartbeat,
@@ -263,6 +265,7 @@ fn finish_err(
 
     canister.system_state.apply_ingress_induction_cycles_debit(
         canister.canister_id(),
+        round.cost_schedule,
         round.log,
         round.counters.charging_from_balance_error,
     );
@@ -302,7 +305,7 @@ fn finish_err(
 struct OriginalContext {
     call_origin: CallOrigin,
     call_or_task: CanisterCallOrTask,
-    prepaid_execution_cycles: Cycles,
+    prepaid_execution_cycles: CompoundCycles<Instructions>,
     method: WasmMethod,
     execution_parameters: ExecutionParameters,
     subnet_size: usize,
@@ -374,6 +377,12 @@ impl CallOrTaskHelper {
             }
         }
 
+        let sender_info = match &original.call_or_task {
+            CanisterCallOrTask::Update(msg) | CanisterCallOrTask::Query(msg) => {
+                msg.sender_info().cloned()
+            }
+            CanisterCallOrTask::Task(_) => None,
+        };
         let call_context_id = canister
             .system_state
             .new_call_context(
@@ -381,6 +390,7 @@ impl CallOrTaskHelper {
                 original.call_or_task.cycles(),
                 original.time,
                 original.request_metadata.clone(),
+                sender_info,
             )
             .unwrap();
 
@@ -474,6 +484,7 @@ impl CallOrTaskHelper {
             .system_state
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
+                round.cost_schedule,
                 round.log,
                 round.counters.charging_from_balance_error,
             );
@@ -542,6 +553,7 @@ impl CallOrTaskHelper {
                     round.time,
                     round.network_topology,
                     round.hypervisor.subnet_id(),
+                    round.hypervisor.metrics(),
                     round.log,
                     round.counters.state_changes_error,
                     call_tree_metrics,
@@ -566,6 +578,7 @@ impl CallOrTaskHelper {
                         round.network_topology,
                         round.hypervisor.subnet_id(),
                         is_composite_query,
+                        round.hypervisor.metrics(),
                         round.log,
                     )
                 {
@@ -787,7 +800,10 @@ impl PausedExecution for PausedCallOrTaskExecution {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessageOrTask, Cycles) {
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (CanisterMessageOrTask, CompoundCycles<Instructions>) {
         info!(
             log,
             "[DTS] Aborting {:?} execution of canister {}",

@@ -152,7 +152,7 @@ pub async fn start_synching_blocks(
     recurrency_mode: RecurrencyMode,
     heartbeat: Box<dyn Fn() + Send + Sync>,
 ) -> anyhow::Result<()> {
-    let mut current_failure_streak = 0u32;
+    let mut current_failure_streak = 0_u32;
     let mut is_initial_sync = true;
     loop {
         // Don't start beating heart before initial sync is done,
@@ -206,7 +206,7 @@ pub async fn start_synching_blocks(
                     .await
                     .unwrap_or(None)
                     .map(|rosetta_block| rosetta_block.index)
-                    .unwrap_or(0u64);
+                    .unwrap_or(0_u64);
                 storage_client
                     .get_metrics()
                     .set_verified_height(highest_block_index);

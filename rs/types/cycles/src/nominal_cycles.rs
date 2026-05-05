@@ -3,7 +3,7 @@ use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
-    ops::{Add, AddAssign, Sub, SubAssign},
+    ops::{Add, AddAssign, Div, Mul, Sub, SubAssign},
 };
 
 use std::convert::{From, TryFrom};
@@ -14,19 +14,24 @@ use std::convert::{From, TryFrom};
 /// underflow. A similar struct is provided in the protobuf types.
 /// We also provide split into low and high parts as protobuf does not support
 /// u128.
-//
-// EXC-24 will introduce a separation of concepts between Cycles and NominalCycles.
+///
+/// NOTE: This is distinct from `Cycles` which should be used when updating the
+/// canister's cycle balance.
 #[derive(
     Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default, Deserialize, Serialize,
 )]
 pub struct NominalCycles(u128);
 
 impl NominalCycles {
-    pub fn new(input: u128) -> Self {
-        Self(input)
+    pub(crate) fn new_private(amount: u128) -> Self {
+        Self(amount)
     }
 
-    pub fn from_parts(high: u64, low: u64) -> Self {
+    pub const fn zero() -> Self {
+        Self(0)
+    }
+
+    fn from_parts(high: u64, low: u64) -> Self {
         Self(((high as u128) << 64) | low as u128)
     }
 
@@ -45,11 +50,9 @@ impl NominalCycles {
     pub fn low64(&self) -> u64 {
         (self.0 & 0xffff_ffff_ffff_ffff) as u64
     }
-}
 
-impl From<u128> for NominalCycles {
-    fn from(input: u128) -> Self {
-        Self::new(input)
+    pub fn is_zero(&self) -> bool {
+        self.0 == 0
     }
 }
 
@@ -81,6 +84,22 @@ impl SubAssign for NominalCycles {
     }
 }
 
+impl Mul<u64> for NominalCycles {
+    type Output = Self;
+
+    fn mul(self, rhs: u64) -> Self {
+        Self(self.0.saturating_mul(rhs as u128))
+    }
+}
+
+impl Div<u128> for NominalCycles {
+    type Output = Self;
+
+    fn div(self, rhs: u128) -> Self {
+        Self(self.0.saturating_div(rhs))
+    }
+}
+
 impl fmt::Display for NominalCycles {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
@@ -104,8 +123,26 @@ impl TryFrom<pb::NominalCycles> for NominalCycles {
     }
 }
 
+pub mod testing {
+    use super::NominalCycles;
+
+    /// Publicly exposes a testing only constructor for `NominalCycles`
+    /// for use in tests.
+    pub trait NominalCyclesTesting {
+        #[allow(clippy::new_ret_no_self)]
+        fn new(amount: u128) -> NominalCycles;
+    }
+
+    impl NominalCyclesTesting for NominalCycles {
+        fn new(amount: u128) -> NominalCycles {
+            NominalCycles(amount)
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
+    use super::testing::NominalCyclesTesting;
     use super::*;
 
     #[test]
@@ -115,7 +152,7 @@ mod test {
 
         assert_eq!(
             NominalCycles::from_parts(u64::MAX, u64::MAX),
-            NominalCycles::from(u128::MAX)
+            NominalCycles::new(u128::MAX)
         );
     }
 

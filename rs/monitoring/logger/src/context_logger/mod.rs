@@ -201,7 +201,7 @@ mod tests {
         let logger = ContextLogger::<TestContext, ExpectationLogger>::new(inner_logger);
 
         let logger = new_logger!(logger);
-        let mut logger = new_logger!(logger; sub_context1.field_u64 => 12u64);
+        let mut logger = new_logger!(logger; sub_context1.field_u64 => 12_u64);
         logger.inner_logger.expected_context.sub_context1 = Some(TestSubContext1 {
             field_u64: 12,
             field_opt_i32: None,
@@ -248,7 +248,7 @@ mod tests {
         let inner_logger = ExpectationLogger::new(slog::Level::Info);
         let logger = ContextLogger::<TestContext, ExpectationLogger>::new(inner_logger);
 
-        let mut logger = new_logger!(logger; sub_context1.field_u64 => 12u64);
+        let mut logger = new_logger!(logger; sub_context1.field_u64 => 12_u64);
         logger.inner_logger.expected_context.sub_context1 = Some(TestSubContext1 {
             field_u64: 12,
             field_opt_i32: Some(1),
@@ -264,7 +264,7 @@ mod tests {
         let inner_logger = ExpectationLogger::new(slog::Level::Info);
         let logger = ContextLogger::<TestContext, ExpectationLogger>::new(inner_logger);
 
-        let mut logger = new_logger!(logger; sub_context1.field_u64 => 12u64);
+        let mut logger = new_logger!(logger; sub_context1.field_u64 => 12_u64);
         logger.inner_logger.expected_context.sub_context1 = Some(TestSubContext1 {
             field_u64: 12,
             field_opt_i32: Some(1),
@@ -284,7 +284,7 @@ mod tests {
         let logger = ContextLogger::<TestContext, EveryNLogger>::new(inner_logger);
         info!(every_n_seconds => 1, logger, "Hello {} #{}{}", "world", 4, "!");
         info!(every_n_seconds => 1, logger, "message");
-        info!(every_n_seconds => 1, logger ; sub_context1.field_opt_i32 => 1i32);
+        info!(every_n_seconds => 1, logger ; sub_context1.field_opt_i32 => 1_i32);
         info!(every_n_seconds => 1, logger, "message" ; sub_context1.field_opt_i32 => 1);
         assert!(
             logger
@@ -305,7 +305,7 @@ mod tests {
         let logger = ContextLogger::<TestContext, EveryNLogger>::new(inner_logger);
         info!(every_n_seconds => 0, logger, "Hello {} #{}{}", "world", 4, "!");
         info!(every_n_seconds => 0, logger, "message");
-        info!(every_n_seconds => 0, logger ; sub_context1.field_opt_i32 => 1i32);
+        info!(every_n_seconds => 0, logger ; sub_context1.field_opt_i32 => 1_i32);
         info!(every_n_seconds => 0, logger, "message" ; sub_context1.field_opt_i32 => 1);
         assert!(
             logger
@@ -326,7 +326,7 @@ mod tests {
         let logger = ContextLogger::<TestContext, EveryNLogger>::new(inner_logger);
         warn!(every_n_seconds => 1, logger, "Hello {} #{}{}", "world", 4, "!");
         warn!(every_n_seconds => 1, logger, "message");
-        warn!(every_n_seconds => 1, logger ; sub_context1.field_opt_i32 => 1i32);
+        warn!(every_n_seconds => 1, logger ; sub_context1.field_opt_i32 => 1_i32);
         warn!(every_n_seconds => 1, logger, "message" ; sub_context1.field_opt_i32 => 1);
         assert!(
             logger
@@ -347,7 +347,7 @@ mod tests {
         let logger = ContextLogger::<TestContext, EveryNLogger>::new(inner_logger);
         warn!(every_n_seconds => 0, logger, "Hello {} #{}{}", "world", 4, "!");
         warn!(every_n_seconds => 0, logger, "message");
-        warn!(every_n_seconds => 0, logger ; sub_context1.field_opt_i32 => 1i32);
+        warn!(every_n_seconds => 0, logger ; sub_context1.field_opt_i32 => 1_i32);
         warn!(every_n_seconds => 0, logger, "message" ; sub_context1.field_opt_i32 => 1);
         assert!(
             logger
@@ -385,7 +385,7 @@ mod tests {
 
                 $log_macro!(
                     logger;
-                    sub_context1.field_u64 => 12u64,
+                    sub_context1.field_u64 => 12_u64,
                     sub_context1.field_opt_i32 => 45,
                     sub_context1.field_string => "foo",
                     sub_context2.field_bool => true,
@@ -395,7 +395,7 @@ mod tests {
                 $log_macro!(
                     logger,
                     "foo bar";
-                    sub_context1.field_u64 => 12u64,
+                    sub_context1.field_u64 => 12_u64,
                     sub_context1.field_opt_i32 => 45,
                     sub_context1.field_string => "foo",
                     sub_context2.field_bool => true,
@@ -405,7 +405,7 @@ mod tests {
                 $log_macro!(
                     logger,
                     "{} {} {} {} {}", 1, 2, 3, 4, 5;
-                    sub_context1.field_u64 => 12u64,
+                    sub_context1.field_u64 => 12_u64,
                     sub_context1.field_opt_i32 => 45,
                     sub_context1.field_string => "foo",
                     sub_context2.field_bool => true,

@@ -34,9 +34,9 @@ fn should_increase_minimum_withdrawal_amount_by_half() {
 
 #[proptest]
 fn test_fee_range(
-    #[strategy(arbitrary::utxo_set(5_000u64..1_000_000_000, 20..40))] mut utxos: UtxoSet,
+    #[strategy(arbitrary::utxo_set(5_000_u64..1_000_000_000, 20..40))] mut utxos: UtxoSet,
     #[strategy(0_u64..15_000)] amount: u64,
-    #[strategy(arbitrary::fee_rate(2000..10000u64))] fee_rate_in_millikoinus_per_byte: FeeRate,
+    #[strategy(arbitrary::fee_rate(2000..10000_u64))] fee_rate_in_millikoinus_per_byte: FeeRate,
 ) {
     const SMALLEST_TX_SIZE_BYTES: u64 = 225; // one input, two outputs
     const MIN_MINTER_FEE: u64 = DogecoinFeeEstimator::DUST_LIMIT;

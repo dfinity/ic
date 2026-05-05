@@ -7,10 +7,10 @@ use crate::consensus::idkg::IDkgMasterPublicKeyId;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::QuadrupleInCreation;
 use crate::consensus::idkg::{
-    CompletedReshareRequest, CompletedSignature, HasIDkgMasterPublicKeyId, IDkgPayload,
-    IDkgReshareRequest, IDkgUIDGenerator, MaskedTranscript, MasterKeyTranscript, PreSigId,
-    PseudoRandomId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, ReshareOfMaskedParams,
-    ReshareOfUnmaskedParams, UnmaskedTimesMaskedParams, UnmaskedTranscript,
+    CompletedReshareRequest, HasIDkgMasterPublicKeyId, IDkgPayload, IDkgReshareRequest,
+    IDkgUIDGenerator, MaskedTranscript, MasterKeyTranscript, PreSigId, RandomTranscriptParams,
+    RandomUnmaskedTranscriptParams, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
+    UnmaskedTimesMaskedParams, UnmaskedTranscript,
 };
 use crate::consensus::{
     Block, BlockPayload, CatchUpShareContent, ConsensusMessageHashable, Payload, SummaryPayload,
@@ -303,7 +303,7 @@ impl ExhaustiveSet for RejectCode {
 
 impl ExhaustiveSet for PrincipalId {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        let mut data = [0u8; Self::MAX_LENGTH_IN_BYTES];
+        let mut data = [0_u8; Self::MAX_LENGTH_IN_BYTES];
         rng.fill_bytes(&mut data);
         vec![Self::new(data.len(), data)]
     }
@@ -685,7 +685,7 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, MultiSignature<T>> {
 
 impl ExhaustiveSet for Witness {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        let mut digest = [0u8; 32];
+        let mut digest = [0_u8; 32];
         rng.fill_bytes(&mut digest);
         vec![Witness::new_for_testing(Digest(digest))]
     }
@@ -903,7 +903,6 @@ impl ExhaustiveSet for QuadrupleInCreation {
 #[derive(Clone)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DerivedIDkgPayload {
-    pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
     pub available_pre_signatures: BTreeMap<PreSigId, PreSignatureRef>,
     pub pre_signatures_in_creation: BTreeMap<PreSigId, PreSignatureInCreation>,
     pub uid_generator: IDkgUIDGenerator,
@@ -918,7 +917,7 @@ impl ExhaustiveSet for IDkgPayload {
         DerivedIDkgPayload::exhaustive_set(rng)
             .into_iter()
             .map(|payload| IDkgPayload {
-                signature_agreements: payload.signature_agreements,
+                empty_signature_agreements_flag: false,
                 available_pre_signatures: payload.available_pre_signatures,
                 pre_signatures_in_creation: payload.pre_signatures_in_creation,
                 uid_generator: payload.uid_generator,
@@ -1024,7 +1023,6 @@ impl HasId<IDkgMasterPublicKeyId> for MasterKeyTranscript {
 impl HasId<CallbackId> for ChainKeyAgreement {}
 impl HasId<IngressMessageId> for SignedRequestBytes {}
 impl HasId<IDkgReshareRequest> for ReshareOfUnmaskedParams {}
-impl HasId<PseudoRandomId> for CompletedSignature {}
 impl HasId<IDkgReshareRequest> for CompletedReshareRequest {}
 impl HasId<NodeIndex> for BatchSignedIDkgDealing {}
 impl HasId<SubnetId> for CertifiedStreamSlice {}

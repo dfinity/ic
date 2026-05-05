@@ -32,10 +32,6 @@ pub(crate) fn update_signature_request_contexts(
     metrics: &SchedulerMetrics,
     logger: &ReplicaLogger,
 ) {
-    let _timer = metrics
-        .round_update_signature_request_contexts_duration
-        .start_timer();
-
     // Assign a random nonce to the context in the round immediately subsequent to its successful
     // match with a pre-signature.
     for context in &mut contexts {
@@ -272,7 +268,7 @@ mod tests {
         let context = SignWithThresholdContext {
             request: RequestBuilder::new().build(),
             args,
-            pseudo_random_id: [id as u8; 32],
+            deprecated_pseudo_random_id: None,
             derivation_path: Arc::new(vec![]),
             batch_time: UNIX_EPOCH,
             nonce: None,

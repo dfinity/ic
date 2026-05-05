@@ -14,7 +14,7 @@ use ic_interfaces::{
     ingress_pool::ValidatedIngressArtifact,
     validation::{ValidationError, ValidationResult},
 };
-use ic_limits::{MAX_INGRESS_TTL, SMALL_APP_SUBNET_MAX_SIZE};
+use ic_limits::MAX_INGRESS_TTL;
 use ic_logger::warn;
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
@@ -552,11 +552,7 @@ impl IngressManager {
         let effective_canister_id = extract_effective_canister_id(msg).map_err(|_| {
             ValidationError::InvalidArtifact(InvalidIngressPayloadReason::InvalidManagementMessage)
         })?;
-        let subnet_size = state
-            .metadata
-            .network_topology
-            .get_subnet_size(&state.metadata.own_subnet_id)
-            .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
+        let subnet_size = state.get_own_subnet_size();
         match self.cycles_account_manager.ingress_induction_cost(
             signed_ingress,
             effective_canister_id,
@@ -781,7 +777,10 @@ pub(crate) mod tests {
     };
     use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
     use ic_interfaces_state_manager_mocks::MockStateManager;
-    use ic_limits::{MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET, MAX_INGRESS_MESSAGES_PER_BLOCK};
+    use ic_limits::{
+        MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET, MAX_INGRESS_MESSAGES_PER_BLOCK,
+        SMALL_APP_SUBNET_MAX_SIZE,
+    };
     use ic_management_canister_types_private::{CanisterIdRecord, IC_00, Payload};
     use ic_metrics::MetricsRegistry;
     use ic_replicated_state::CanisterState;
@@ -801,13 +800,14 @@ pub(crate) mod tests {
     use ic_types::{
         Height, RegistryVersion,
         artifact::IngressMessageId,
-        batch::{CanisterCyclesCostSchedule, IngressPayload},
+        batch::IngressPayload,
         ingress::{IngressState, IngressStatus},
         malicious_flags::MaliciousFlags,
         messages::{MessageId, SignedIngress},
         state_manager::{StateManagerError, StateManagerResult},
         time::{UNIX_EPOCH, expiry_time_from_now},
     };
+    use ic_types_cycles::CanisterCyclesCostSchedule;
     use rstest::rstest;
     use std::sync::RwLock;
     use std::{collections::HashSet, convert::TryInto, time::Duration};
@@ -1617,6 +1617,7 @@ pub(crate) mod tests {
                                     )
                                     .cost(),
                             )
+                            .with_log_memory_limit(0) // Don't pay for logs memory allocation.
                             .build(),
                     )
                     .with_canister(
@@ -1624,6 +1625,7 @@ pub(crate) mod tests {
                             .with_canister_id(canister_test_id(1))
                             // No cycles
                             .with_cycles(0_u128)
+                            .with_log_memory_limit(0) // Don't pay for logs memory allocation.
                             .build(),
                     )
                     .build(),

@@ -8,6 +8,7 @@ use ic_ledger_suite_in_memory_ledger::{
 };
 use ic_ledger_suite_state_machine_helpers::{
     TransactionGenerationParameters, generate_transactions, parse_metric, retrieve_metrics,
+    stop_and_upgrade_canister_as_controller,
 };
 use ic_ledger_test_utils::state_machine_helpers::index::{
     get_all_blocks, wait_until_sync_is_completed,
@@ -235,7 +236,7 @@ fn should_create_state_machine_with_golden_nns_state() {
     let mut setup = Setup::new();
 
     // Advance the time to make sure the ledger gets the current time for checking allowances.
-    setup.state_machine.advance_time(Duration::from_secs(1u64));
+    setup.state_machine.advance_time(Duration::from_secs(1_u64));
     setup.state_machine.tick();
 
     // Perform upgrade and downgrade testing
@@ -412,24 +413,24 @@ impl Setup {
     fn upgrade_archive_canisters(&self, wasm: &Wasm, upgrade_arg: Vec<u8>) {
         let archives = self.list_archives().archives;
         for archive_info in &archives {
-            self.state_machine
-                .upgrade_canister(
-                    archive_info.canister_id,
-                    wasm.clone().bytes(),
-                    upgrade_arg.clone(),
-                )
-                .expect("failed to upgrade archive");
+            stop_and_upgrade_canister_as_controller(
+                &self.state_machine,
+                archive_info.canister_id,
+                wasm.clone().bytes(),
+                upgrade_arg.clone(),
+            )
+            .expect("should successfully stop, upgrade, and restart archive canister");
         }
     }
 
     fn upgrade_index(&self, wasm: &Wasm) {
-        self.state_machine
-            .upgrade_canister(
-                LEDGER_INDEX_CANISTER_ID,
-                wasm.clone().bytes(),
-                Encode!(&()).unwrap(),
-            )
-            .expect("should successfully upgrade index to new local version");
+        stop_and_upgrade_canister_as_controller(
+            &self.state_machine,
+            LEDGER_INDEX_CANISTER_ID,
+            wasm.clone().bytes(),
+            Encode!(&()).unwrap(),
+        )
+        .expect("should successfully stop, upgrade, and restart index canister");
     }
 
     fn upgrade_ledger(&self, wasm: &Wasm) -> Result<(), UserError> {
@@ -440,7 +441,8 @@ impl Setup {
                 change_archive_options: None,
             }));
 
-        self.state_machine.upgrade_canister(
+        stop_and_upgrade_canister_as_controller(
+            &self.state_machine,
             LEDGER_CANISTER_ID,
             wasm.clone().bytes(),
             Encode!(&ledger_upgrade_args).unwrap(),

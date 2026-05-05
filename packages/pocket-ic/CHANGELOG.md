@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
+- The function `PocketIcBuilder::disable_ingress_validation` to specify that ingress validation
+  should be disabled for mainnet-like endpoints `/instances/<instance_id>/api/...` of the instance.
+- The functions `PocketIc::submit_call_with_effective_principal_and_sender_info`, `PocketIc::submit_call_with_sender_info`,
+  `PocketIc::update_call_with_effective_principal_and_sender_info`, `PocketIc::update_call_with_sender_info`,
+  `PocketIc::query_call_with_effective_principal_and_sender_info`, and `PocketIc::query_call_with_sender_info`
+  to make canister calls with sender info (additional information provided by the canister with which the sender principal is associated).
+- The function `PocketIcBuilder::with_test_threshold_keys_subnet` to create a test threshold keys subnet.
+
+
+
+## 13.0.0 - 2026-03-23
+
+### Added
 - The function `PocketIcBuilder::with_mainnet_nns_subnet_id` to specify that the NNS subnet should be created with the mainnet NNS subnet ID.
 - The parameter `hard_ttl` to `StartServerParams` to specify that the PocketIC server should perform a hard exit after the provided duration since its launch.
   If the library starts the server implicitly, then a default value of 10 minutes is used.

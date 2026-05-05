@@ -20,19 +20,25 @@ use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
     Memory, NumWasmPages, canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_usage_of_request,
 };
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes,
     NumInstructions, NumOsPages, PrincipalId, SubnetId, Time,
     ingress::WasmResult,
-    messages::{CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, Request},
+    messages::{
+        CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, Request, SenderInfo,
+    },
     methods::{SystemMethod, WasmClosure},
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions,
+    RequestAndResponseTransmission,
+};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
 use request_in_prep::{RequestInPrep, into_request};
-use sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications};
+use sandbox_safe_system_state::{
+    ConsumedCyclesDuringExecution, SandboxSafeSystemState, SystemStateModifications,
+};
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::time::Duration;
@@ -245,6 +251,9 @@ pub enum ApiType {
         /// request is currently under construction.
         outgoing_request: Option<RequestInPrep>,
         max_reply_size: NumBytes,
+        /// Sender info from the ingress message that invoked this method.
+        /// `None` for inter-canister update calls.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing canister methods marked as `query` in replicated mode.
@@ -258,6 +267,9 @@ pub enum ApiType {
         response_data: Vec<u8>,
         response_status: ResponseStatus,
         max_reply_size: NumBytes,
+        /// Sender info from the ingress message that invoked this method.
+        /// `None` for inter-canister query calls.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing canister methods marked as `query` in non-replicated mode.
@@ -273,6 +285,8 @@ pub enum ApiType {
         response_data: Vec<u8>,
         response_status: ResponseStatus,
         max_reply_size: NumBytes,
+        /// Sender info from the ingress message that invoked this method.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing canister methods marked as `composite_query`.
@@ -290,6 +304,8 @@ pub enum ApiType {
         max_reply_size: NumBytes,
         call_context_id: CallContextId,
         outgoing_request: Option<RequestInPrep>,
+        /// Sender info from the ingress message that invoked this method.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing closures when a `Reply` is received in replicated mode.
@@ -310,6 +326,9 @@ pub enum ApiType {
         max_reply_size: NumBytes,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
+        /// Sender info from the ingress message that created the call context.
+        /// `None` for call contexts created by inter-canister calls.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing closures when a `Reply` is received in a composite query context.
@@ -330,6 +349,8 @@ pub enum ApiType {
         max_reply_size: NumBytes,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
+        /// Sender info from the ingress message that created the call context.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing closures when a `Reject` is received in replicated mode.
@@ -349,6 +370,9 @@ pub enum ApiType {
         max_reply_size: NumBytes,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
+        /// Sender info from the ingress message that created the call context.
+        /// `None` for call contexts created by inter-canister calls.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing closures when a `Reject` is received in a composite query context.
@@ -368,6 +392,8 @@ pub enum ApiType {
         max_reply_size: NumBytes,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
+        /// Sender info from the ingress message that created the call context.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing the `canister_pre_upgrade` method.
@@ -386,6 +412,8 @@ pub enum ApiType {
         incoming_payload: Vec<u8>,
         time: Time,
         message_accepted: bool,
+        /// Sender info from the ingress message being inspected.
+        sender_info: Option<SenderInfo>,
     },
 
     // For executing the `canister_heartbeat` or `canister_global_timer` or `canister_on_low_wasm_memory` methods
@@ -413,6 +441,9 @@ pub enum ApiType {
         reject_code: i32,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
+        /// Sender info from the ingress message that created the call context.
+        /// `None` for call contexts created by inter-canister calls.
+        sender_info: Option<SenderInfo>,
     },
 
     /// Like `Cleanup`, but used in a composite query context.
@@ -421,6 +452,8 @@ pub enum ApiType {
         time: Time,
         /// The total number of instructions executed in the call context
         call_context_instructions_executed: NumInstructions,
+        /// Sender info from the ingress message that created the call context.
+        sender_info: Option<SenderInfo>,
     },
 }
 
@@ -457,6 +490,7 @@ impl ApiType {
         incoming_cycles: Cycles,
         caller: PrincipalId,
         call_context_id: CallContextId,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::Update {
             time,
@@ -468,6 +502,7 @@ impl ApiType {
             response_status: ResponseStatus::NotRepliedYet,
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+            sender_info,
         }
     }
 
@@ -476,6 +511,7 @@ impl ApiType {
         incoming_payload: Vec<u8>,
         caller: PrincipalId,
         call_context_id: CallContextId,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::ReplicatedQuery {
             time,
@@ -485,6 +521,7 @@ impl ApiType {
             response_data: vec![],
             response_status: ResponseStatus::NotRepliedYet,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+            sender_info,
         }
     }
 
@@ -494,6 +531,7 @@ impl ApiType {
         own_subnet_id: SubnetId,
         incoming_payload: Vec<u8>,
         data_certificate: Option<Vec<u8>>,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::NonReplicatedQuery {
             time,
@@ -504,6 +542,7 @@ impl ApiType {
             response_data: vec![],
             response_status: ResponseStatus::NotRepliedYet,
             max_reply_size: MAX_NON_REPLICATED_QUERY_REPLY_SIZE,
+            sender_info,
         }
     }
 
@@ -514,6 +553,7 @@ impl ApiType {
         incoming_payload: Vec<u8>,
         data_certificate: Option<Vec<u8>>,
         call_context_id: CallContextId,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::CompositeQuery {
             time,
@@ -526,6 +566,7 @@ impl ApiType {
             max_reply_size: MAX_NON_REPLICATED_QUERY_REPLY_SIZE,
             call_context_id,
             outgoing_request: None,
+            sender_info,
         }
     }
 
@@ -537,6 +578,7 @@ impl ApiType {
         call_context_id: CallContextId,
         replied: bool,
         call_context_instructions_executed: NumInstructions,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::ReplyCallback {
             time,
@@ -553,6 +595,7 @@ impl ApiType {
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             call_context_instructions_executed,
+            sender_info,
         }
     }
 
@@ -564,6 +607,7 @@ impl ApiType {
         call_context_id: CallContextId,
         replied: bool,
         call_context_instructions_executed: NumInstructions,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::CompositeReplyCallback {
             time,
@@ -580,6 +624,7 @@ impl ApiType {
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             call_context_instructions_executed,
+            sender_info,
         }
     }
 
@@ -591,6 +636,7 @@ impl ApiType {
         call_context_id: CallContextId,
         replied: bool,
         call_context_instructions_executed: NumInstructions,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::RejectCallback {
             time,
@@ -607,6 +653,7 @@ impl ApiType {
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             call_context_instructions_executed,
+            sender_info,
         }
     }
 
@@ -618,6 +665,7 @@ impl ApiType {
         call_context_id: CallContextId,
         replied: bool,
         call_context_instructions_executed: NumInstructions,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::CompositeRejectCallback {
             time,
@@ -634,6 +682,7 @@ impl ApiType {
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             call_context_instructions_executed,
+            sender_info,
         }
     }
 
@@ -646,6 +695,7 @@ impl ApiType {
         method_name: String,
         incoming_payload: Vec<u8>,
         time: Time,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self::InspectMessage {
             caller,
@@ -653,6 +703,7 @@ impl ApiType {
             incoming_payload,
             time,
             message_accepted: false,
+            sender_info,
         }
     }
 
@@ -852,13 +903,13 @@ impl std::fmt::Display for ApiType {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 enum ExecutionMemoryType {
     WasmMemory,
     StableMemory,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone, Debug)]
 /// Some cost API endpoints can fail in various ways. A return value of this
 /// type must be used by the caller to determine success or failure.
 pub enum CostReturnCode {
@@ -1673,7 +1724,7 @@ impl SystemApiImpl {
                     callback_updates: vec![],
                     cycles_balance_change: CyclesBalanceChange::zero(),
                     reserved_cycles: Cycles::zero(),
-                    consumed_cycles_by_use_case: BTreeMap::new(),
+                    consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
                     call_context_balance_taken: None,
                     request_slots_used: BTreeMap::new(),
                     requests: vec![],
@@ -1696,7 +1747,7 @@ impl SystemApiImpl {
                     callback_updates: vec![],
                     cycles_balance_change: CyclesBalanceChange::zero(),
                     reserved_cycles: Cycles::zero(),
-                    consumed_cycles_by_use_case: BTreeMap::new(),
+                    consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
                     call_context_balance_taken: None,
                     request_slots_used: BTreeMap::new(),
                     requests: vec![],
@@ -1710,7 +1761,7 @@ impl SystemApiImpl {
                     callback_updates: system_state_modifications.callback_updates,
                     cycles_balance_change: CyclesBalanceChange::zero(),
                     reserved_cycles: Cycles::zero(),
-                    consumed_cycles_by_use_case: BTreeMap::new(),
+                    consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
                     call_context_balance_taken: None,
                     request_slots_used: system_state_modifications.request_slots_used,
                     requests: system_state_modifications.requests,
@@ -1731,7 +1782,7 @@ impl SystemApiImpl {
                         callback_updates: vec![],
                         cycles_balance_change: CyclesBalanceChange::zero(),
                         reserved_cycles: Cycles::zero(),
-                        consumed_cycles_by_use_case: BTreeMap::new(),
+                        consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
                         call_context_balance_taken: None,
                         request_slots_used: BTreeMap::new(),
                         requests: vec![],
@@ -1773,7 +1824,7 @@ impl SystemApiImpl {
                         callback_updates: vec![],
                         cycles_balance_change: CyclesBalanceChange::zero(),
                         reserved_cycles: Cycles::zero(),
-                        consumed_cycles_by_use_case: BTreeMap::new(),
+                        consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
                         call_context_balance_taken: None,
                         request_slots_used: BTreeMap::new(),
                         requests: vec![],
@@ -1804,7 +1855,7 @@ impl SystemApiImpl {
                         callback_updates: vec![],
                         cycles_balance_change: CyclesBalanceChange::zero(),
                         reserved_cycles: Cycles::zero(),
-                        consumed_cycles_by_use_case: BTreeMap::new(),
+                        consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
                         call_context_balance_taken: None,
                         request_slots_used: BTreeMap::new(),
                         requests: vec![],
@@ -1830,8 +1881,8 @@ impl SystemApiImpl {
     pub fn push_output_request(
         &mut self,
         req: Request,
-        prepayment_for_response_execution: Cycles,
-        prepayment_for_response_transmission: Cycles,
+        prepayment_for_response_execution: CompoundCycles<Instructions>,
+        prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
     ) -> HypervisorResult<i32> {
         let abort = |request: Request, sandbox_safe_system_state: &mut SandboxSafeSystemState| {
             sandbox_safe_system_state.refund_cycles(request.payment);
@@ -1861,7 +1912,7 @@ impl SystemApiImpl {
             self.memory_usage.current_message_usage,
             req,
             prepayment_for_response_execution,
-            prepayment_for_response_transmission,
+            prepayment_for_call_transmission,
         ) {
             Ok(()) => Ok(0),
             Err(request) => {
@@ -1937,6 +1988,26 @@ impl SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::Cleanup { .. } => page_limit.message,
+        }
+    }
+
+    fn sender_info(&self, method_name: &str) -> Result<Option<&SenderInfo>, HypervisorError> {
+        match &self.api_type {
+            ApiType::Start { .. }
+            | ApiType::Init { .. }
+            | ApiType::PreUpgrade { .. }
+            | ApiType::SystemTask { .. } => Err(self.error_for(method_name)),
+            ApiType::Update { sender_info, .. }
+            | ApiType::ReplicatedQuery { sender_info, .. }
+            | ApiType::NonReplicatedQuery { sender_info, .. }
+            | ApiType::CompositeQuery { sender_info, .. }
+            | ApiType::ReplyCallback { sender_info, .. }
+            | ApiType::CompositeReplyCallback { sender_info, .. }
+            | ApiType::RejectCallback { sender_info, .. }
+            | ApiType::CompositeRejectCallback { sender_info, .. }
+            | ApiType::InspectMessage { sender_info, .. }
+            | ApiType::Cleanup { sender_info, .. }
+            | ApiType::CompositeCleanup { sender_info, .. } => Ok(sender_info.as_ref()),
         }
     }
 }
@@ -2407,6 +2478,98 @@ impl SystemApi for SystemApiImpl {
         trace_syscall!(
             self,
             MsgCallerCopy,
+            result,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+        result
+    }
+
+    fn ic0_msg_caller_info_data_size(&self) -> HypervisorResult<usize> {
+        let result = self
+            .sender_info("ic0_msg_caller_info_data_size")
+            .map(|sender_info| sender_info.map_or(0, |si| si.info.len()));
+        trace_syscall!(self, MsgCallerInfoDataSize, result);
+        result
+    }
+
+    fn ic0_msg_caller_info_data_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let result = self
+            .sender_info("ic0_msg_caller_info_data_copy")
+            .and_then(|sender_info| {
+                let info_bytes: &[u8] = sender_info.map_or(&[], |si| si.info.as_slice());
+                valid_subslice(
+                    "ic0.msg_caller_info_data_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
+                let slice = valid_subslice(
+                    "ic0.msg_caller_info_data_copy info",
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
+                    info_bytes,
+                )?;
+                deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
+                Ok(())
+            });
+        trace_syscall!(
+            self,
+            MsgCallerInfoDataCopy,
+            result,
+            dst,
+            offset,
+            size,
+            summarize(heap, dst, size)
+        );
+        result
+    }
+
+    fn ic0_msg_caller_info_signer_size(&self) -> HypervisorResult<usize> {
+        let result = self
+            .sender_info("ic0_msg_caller_info_signer_size")
+            .map(|sender_info| sender_info.map_or(0, |si| si.signer.get_ref().as_slice().len()));
+        trace_syscall!(self, MsgCallerInfoSignerSize, result);
+        result
+    }
+
+    fn ic0_msg_caller_info_signer_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let result = self
+            .sender_info("ic0_msg_caller_info_signer_copy")
+            .and_then(|sender_info| {
+                let id_bytes: &[u8] = sender_info.map_or(&[], |si| si.signer.get_ref().as_slice());
+                valid_subslice(
+                    "ic0.msg_caller_info_signer_copy heap",
+                    InternalAddress::new(dst),
+                    InternalAddress::new(size),
+                    heap,
+                )?;
+                let slice = valid_subslice(
+                    "ic0.msg_caller_info_signer_copy signer",
+                    InternalAddress::new(offset),
+                    InternalAddress::new(size),
+                    id_bytes,
+                )?;
+                deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
+                Ok(())
+            });
+        trace_syscall!(
+            self,
+            MsgCallerInfoSignerCopy,
             result,
             dst,
             offset,
@@ -3147,7 +3310,7 @@ impl SystemApi for SystemApiImpl {
                 self.push_output_request(
                     req.request,
                     req.prepayment_for_response_execution,
-                    req.prepayment_for_response_transmission,
+                    req.prepayment_for_call_transmission,
                 )
             }
         };
@@ -4174,6 +4337,7 @@ impl SystemApi for SystemApiImpl {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
+        let subnet_size = self.sandbox_safe_system_state.subnet_size;
         let execution_mode =
             WasmExecutionMode::from_is_wasm64(self.sandbox_safe_system_state.is_wasm64_execution);
         let cost = self
@@ -4181,6 +4345,7 @@ impl SystemApi for SystemApiImpl {
             .get_cycles_account_manager()
             .xnet_call_total_fee(
                 (method_name_size.saturating_add(payload_size)).into(),
+                subnet_size,
                 execution_mode,
                 self.get_cost_schedule(),
             );
@@ -4195,7 +4360,7 @@ impl SystemApi for SystemApiImpl {
             .sandbox_safe_system_state
             .get_cycles_account_manager()
             .canister_creation_fee(subnet_size, self.get_cost_schedule());
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_create_canister")?;
+        copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_create_canister")?;
         trace_syscall!(self, CostCreateCanister, cost);
         Ok(())
     }
@@ -4217,7 +4382,7 @@ impl SystemApi for SystemApiImpl {
                 subnet_size,
                 self.get_cost_schedule(),
             );
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request")?;
+        copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_http_request")?;
         trace_syscall!(self, CostHttpRequest, cost);
         Ok(())
     }
@@ -4270,7 +4435,7 @@ impl SystemApi for SystemApiImpl {
                 subnet_size,
                 self.get_cost_schedule(),
             );
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request_v2")?;
+        copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_http_request_v2")?;
         trace_syscall!(self, CostHttpRequestV2, cost);
         Ok(())
     }
@@ -4310,7 +4475,7 @@ impl SystemApi for SystemApiImpl {
             .sandbox_safe_system_state
             .get_cycles_account_manager()
             .ecdsa_signature_fee(subnet_size, cost_schedule);
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_ecdsa")?;
+        copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_sign_with_ecdsa")?;
         trace_syscall!(self, CostSignWithEcdsa, cost);
         Ok(CostReturnCode::Success as u32)
     }
@@ -4350,7 +4515,7 @@ impl SystemApi for SystemApiImpl {
             .sandbox_safe_system_state
             .get_cycles_account_manager()
             .schnorr_signature_fee(subnet_size, cost_schedule);
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_schnorr")?;
+        copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_sign_with_schnorr")?;
         trace_syscall!(self, CostSignWithSchnorr, cost);
         Ok(CostReturnCode::Success as u32)
     }
@@ -4390,7 +4555,7 @@ impl SystemApi for SystemApiImpl {
             .sandbox_safe_system_state
             .get_cycles_account_manager()
             .vetkd_fee(subnet_size, cost_schedule);
-        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_vetkd_derive_key")?;
+        copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_vetkd_derive_key")?;
         trace_syscall!(self, CostVetkdDeriveEncryptedKey, cost);
         Ok(CostReturnCode::Success as u32)
     }

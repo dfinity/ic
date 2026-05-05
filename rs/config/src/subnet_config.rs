@@ -108,6 +108,9 @@ pub const MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS: f64 = 5.0;
 ///
 const MAX_PAUSED_EXECUTIONS: usize = 4;
 
+/// Cost for creating a new canister.
+pub const CANISTER_CREATION_FEE: Cycles = Cycles::new(500_000_000_000);
+
 /// 10B cycles corresponds to 1 SDR cent. Assuming we can create 1 signature per
 /// second, that would come to  26k SDR per month if we spent the whole time
 /// creating signatures. At 13 nodes and 2k SDR per node per month this would
@@ -458,7 +461,7 @@ impl CyclesAccountManagerConfig {
         let ten_update_instructions_execution_fee_in_cycles = 10;
         Self {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
-            canister_creation_fee: Cycles::new(500_000_000_000),
+            canister_creation_fee: CANISTER_CREATION_FEE,
             compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
 
             // The following fields are set based on a thought experiment where
@@ -475,8 +478,8 @@ impl CyclesAccountManagerConfig {
             xnet_byte_transmission_fee: Cycles::new(1_000),
             ingress_message_reception_fee: Cycles::new(1_200_000),
             ingress_byte_reception_fee: Cycles::new(2_000),
-            // 5.6 SDR per GiB per year => 5.6e12 Cycles per year
-            gib_storage_per_second_fee: Cycles::new(177_800),
+            // 10 SDR per GiB per year => 10e12 Cycles per year
+            gib_storage_per_second_fee: Cycles::new(317_500),
             duration_between_allocation_charges: Duration::from_secs(10),
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
@@ -487,8 +490,8 @@ impl CyclesAccountManagerConfig {
             http_response_per_byte_fee: Cycles::new(800),
             max_storage_reservation_period: Duration::from_secs(300_000_000),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
-            fetch_canister_logs_base_fee: Cycles::new(1_000_000),
-            fetch_canister_logs_per_byte_fee: Cycles::new(800),
+            fetch_canister_logs_base_fee: Cycles::new(5_000_000),
+            fetch_canister_logs_per_byte_fee: Cycles::new(80),
         }
     }
 

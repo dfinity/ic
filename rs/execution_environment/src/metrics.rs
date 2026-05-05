@@ -1,11 +1,12 @@
 use ic_embedders::wasmtime_embedder::system_api::sandbox_safe_system_state::RequestMetadataStats;
-use ic_error_types::UserError;
+use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::QueryMethod;
 use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_replicated_state::metrics::{
     duration_histogram, instructions_histogram, messages_histogram, slices_histogram,
 };
+use ic_types::ingress::WasmResult;
 use ic_types::{NumInstructions, NumMessages, NumSlices, Time};
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use std::{cell::RefCell, rc::Rc, time::Instant};
@@ -186,6 +187,8 @@ pub(crate) struct QueryHandlerMetrics {
     pub transient_errors: IntCounter,
     /// Duration of a subnet query message execution, in seconds, similar to `execution_subnet_message_duration_seconds`.
     pub subnet_query_messages: HistogramVec,
+    /// Response size in bytes of a successful subnet query message execution.
+    pub subnet_query_message_response_bytes: HistogramVec,
 }
 
 impl QueryHandlerMetrics {
@@ -288,24 +291,37 @@ impl QueryHandlerMetrics {
                 decimal_buckets(-3, 2),
                 &["method_name", "status"],
             ),
+            subnet_query_message_response_bytes: metrics_registry.histogram_vec(
+                "execution_subnet_query_message_response_bytes",
+                "Response size in bytes of a successful subnet query message execution.",
+                decimal_buckets_with_zero(0, 7),
+                &["method_name"],
+            ),
         }
     }
 
-    pub fn observe_subnet_query_message<T>(
+    pub fn observe_subnet_query_message(
         &self,
         query_method: QueryMethod,
         duration: f64,
-        result: &Result<T, UserError>,
+        result: &Result<WasmResult, UserError>,
     ) {
         let method_name_label = &format!("query_ic00_{query_method}");
         let status_label = match result {
-            Ok(_) => SUCCESS_STATUS_LABEL,
+            Ok(WasmResult::Reply(_)) => SUCCESS_STATUS_LABEL,
+            Ok(WasmResult::Reject(_)) => &format!("{:?}", ErrorCode::CanisterRejectedMessage),
             Err(user_error) => &format!("{:?}", user_error.code()),
         };
 
         self.subnet_query_messages
             .with_label_values(&[method_name_label.as_str(), status_label])
             .observe(duration);
+
+        if let Ok(WasmResult::Reply(bytes)) = result {
+            self.subnet_query_message_response_bytes
+                .with_label_values(&[method_name_label.as_str()])
+                .observe(bytes.len() as f64);
+        }
     }
 }
 

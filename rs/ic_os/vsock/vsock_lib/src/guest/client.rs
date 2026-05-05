@@ -22,12 +22,14 @@ pub fn send_request_to_host(request: &Request, port: &u32) -> Result<String, Str
 }
 
 fn read_response_from_host(stream: &mut VsockStream) -> anyhow::Result<String> {
-    let mut buffer = [0; 4096];
-    let bytes_read = stream.read(&mut buffer)?;
-
-    std::str::from_utf8(&buffer[..bytes_read])
-        .map(|response| response.to_string())
-        .map_err(|e| e.into())
+    // 64 KiB - generous for current responses (typically <1 KiB) while
+    // preventing unbounded allocation from a misbehaving host.
+    const MAX_RESPONSE_SIZE: u64 = 64 * 1024;
+    let mut response = String::new();
+    stream
+        .take(MAX_RESPONSE_SIZE)
+        .read_to_string(&mut response)?;
+    Ok(response)
 }
 
 fn create_stream(port: &u32) -> Result<VsockStream, std::io::Error> {

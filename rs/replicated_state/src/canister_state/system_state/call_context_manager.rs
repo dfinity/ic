@@ -8,7 +8,7 @@ use ic_management_canister_types_private::IC_00;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, NO_DEADLINE, Request,
-    RequestMetadata,
+    RequestMetadata, SenderInfo,
 };
 use ic_types::methods::Callback;
 use ic_types::time::CoarseTime;
@@ -51,6 +51,10 @@ pub struct CallContext {
     /// The total number of instructions executed in the given call context.
     /// This value is used for the `ic0.performance_counter` type 1.
     instructions_executed: NumInstructions,
+
+    /// Sender info from the ingress message that created this call context.
+    /// `None` for call contexts created by inter-canister calls or system tasks.
+    sender_info: Option<Arc<SenderInfo>>,
 }
 
 impl CallContext {
@@ -61,6 +65,7 @@ impl CallContext {
         available_cycles: Cycles,
         time: Time,
         metadata: RequestMetadata,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self {
             call_origin,
@@ -70,6 +75,7 @@ impl CallContext {
             time,
             metadata,
             instructions_executed: NumInstructions::default(),
+            sender_info: sender_info.map(Arc::new),
         }
     }
 
@@ -143,6 +149,12 @@ impl CallContext {
     /// `None` for all other origins.
     pub fn deadline(&self) -> Option<CoarseTime> {
         self.call_origin.deadline()
+    }
+
+    /// Returns the sender info from the ingress message that created this call context.
+    /// `None` for call contexts created by inter-canister calls or system tasks.
+    pub fn sender_info(&self) -> Option<&SenderInfo> {
+        self.sender_info.as_deref()
     }
 }
 
@@ -401,6 +413,7 @@ impl CallContextManager {
         cycles: Cycles,
         time: Time,
         metadata: RequestMetadata,
+        sender_info: Option<SenderInfo>,
     ) -> CallContextId {
         self.stats.on_new_call_context(&call_origin);
 
@@ -416,6 +429,7 @@ impl CallContextManager {
                 time,
                 metadata,
                 instructions_executed: NumInstructions::default(),
+                sender_info: sender_info.map(Arc::new),
             },
         );
         debug_assert!(self.stats_ok());
@@ -928,11 +942,6 @@ pub mod testing {
 
         /// Testing only: Publicly exposes `unregister_callback()`.
         fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>>;
-
-        /// Testing only: Publicly exposes `next_callback_id`.
-        //
-        // TODO(DSM-95): Drop when no longer needed.
-        fn set_next_callback_id(&mut self, next_callback_id: u64);
     }
 
     impl CallContextManagerTesting for CallContextManager {
@@ -956,10 +965,6 @@ pub mod testing {
 
         fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>> {
             self.unregister_callback(callback_id)
-        }
-
-        fn set_next_callback_id(&mut self, next_callback_id: u64) {
-            self.next_callback_id = next_callback_id;
         }
     }
 }

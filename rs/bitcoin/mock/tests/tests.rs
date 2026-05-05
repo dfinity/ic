@@ -19,7 +19,7 @@ use std::str::FromStr;
 
 fn generate_tx_id() -> Txid {
     let mut rng = thread_rng();
-    let mut bytes = [1u8; 32];
+    let mut bytes = [1_u8; 32];
     rng.fill(&mut bytes);
     bytes.into()
 }
