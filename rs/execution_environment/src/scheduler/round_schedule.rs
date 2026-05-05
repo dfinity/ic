@@ -416,6 +416,12 @@ impl RoundSchedule {
                 .for_each(|canister| {
                     observe_scheduled_as_first(canister);
                 });
+
+            #[cfg(debug_assertions)]
+            {
+                // Clear the debug-only fully executed canisters set.
+                subnet_schedule.fully_executed_canisters = BTreeSet::new();
+            }
         }
 
         IterationSchedule {
@@ -501,6 +507,11 @@ impl RoundSchedule {
             let canister_priority = subnet_schedule.get_mut(*canister_id);
             canister_priority.executed_rounds += 1;
             canister_priority.last_full_execution_round = current_round;
+
+            #[cfg(debug_assertions)]
+            subnet_schedule
+                .fully_executed_canisters
+                .insert(*canister_id);
         }
 
         // Add all canisters to the subnet schedule; and charge any immediate or

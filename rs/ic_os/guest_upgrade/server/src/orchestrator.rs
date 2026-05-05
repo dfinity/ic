@@ -9,7 +9,7 @@ use {
     config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config},
     config_types::GuestOSConfig,
     sev::firmware::guest::Firmware,
-    sev_guest::is_sev_active,
+    sev_guest::is_tee_enabled,
     vsock_lib::LinuxVSockClient,
 };
 
@@ -20,12 +20,12 @@ pub fn new_disk_encryption_key_exchange_server_agent_for_orchestrator(
     handle: Handle,
     registry_client: Arc<dyn RegistryClient>,
 ) -> Option<DiskEncryptionKeyExchangeServerAgent> {
-    let is_sev_active = is_sev_active().unwrap_or_else(|err| {
+    let is_tee_enabled = is_tee_enabled().unwrap_or_else(|err| {
         eprintln!("Failed to check if SEV is active, assuming it is not active: {err:?}");
         false
     });
 
-    if !is_sev_active {
+    if !is_tee_enabled {
         return None;
     }
 

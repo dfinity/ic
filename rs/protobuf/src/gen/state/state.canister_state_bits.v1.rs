@@ -732,6 +732,12 @@ pub struct CanisterStateBits {
     /// happens the refund amount is subtracted from consumed amount.
     #[prost(message, repeated, tag = "36")]
     pub consumed_cycles_by_use_cases: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
+    /// Consumed cycles by use case presented as counters. The consumed amount is
+    /// only updated once the refund is known to perform a single accounting step.
+    /// These counters facilitate programming retrieval of metrics and performing
+    /// various aggregations on them more easily than their gauge counterparts.
+    #[prost(message, repeated, tag = "65")]
+    pub consumed_cycles_by_use_cases_as_counters: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
     #[prost(message, optional, tag = "37")]
     pub canister_history: ::core::option::Option<CanisterHistory>,
     /// Resource reservation cycles.

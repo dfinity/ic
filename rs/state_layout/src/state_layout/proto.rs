@@ -47,6 +47,16 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                     },
                 )
                 .collect(),
+            consumed_cycles_by_use_cases_as_counters: item
+                .consumed_cycles_by_use_cases_as_counters
+                .into_iter()
+                .map(
+                    |(use_case, cycles)| pb_canister_state_bits::ConsumedCyclesByUseCase {
+                        use_case: pb_canister_state_bits::CyclesUseCase::from(use_case).into(),
+                        cycles: Some((&cycles).into()),
+                    },
+                )
+                .collect(),
             canister_history: Some((&item.canister_history).into()),
             wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
             total_query_stats: Some((&item.total_query_stats).into()),
@@ -124,6 +134,21 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             );
         }
 
+        let mut consumed_cycles_by_use_cases_as_counters = BTreeMap::new();
+        for x in value.consumed_cycles_by_use_cases_as_counters.into_iter() {
+            consumed_cycles_by_use_cases_as_counters.insert(
+                CyclesUseCase::try_from(
+                    pb_canister_state_bits::CyclesUseCase::try_from(x.use_case).map_err(|_| {
+                        ProxyDecodeError::ValueOutOfRange {
+                            typ: "CyclesUseCase",
+                            err: format!("Unexpected value of cycles use case: {}", x.use_case),
+                        }
+                    })?,
+                )?,
+                NominalCycles::try_from(x.cycles.unwrap_or_default()).unwrap_or_default(),
+            );
+        }
+
         let tasks: pb_canister_state_bits::TaskQueue =
             try_from_option_field(value.tasks, "CanisterStateBits::tasks").unwrap_or_default();
         let task_queue = TaskQueue::try_from(tasks)?;
@@ -164,6 +189,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             global_timer_nanos: value.global_timer_nanos,
             canister_version: value.canister_version,
             consumed_cycles_by_use_cases,
+            consumed_cycles_by_use_cases_as_counters,
             // TODO(MR-412): replace `unwrap_or_default` by returning an error on missing canister_history field
             canister_history: try_from_option_field(
                 value.canister_history,
