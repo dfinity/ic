@@ -766,6 +766,32 @@ fn start_iteration_first_iteration_charges_rate_limited_canisters() {
     }
 }
 
+/// start_iteration drops idle canisters (no inputs or heap delta / install
+/// code debits) with 0-100 accumulated priority from the subnet schedule.
+#[test]
+fn start_iteration_idle_between_0_and_100_dropped_from_schedule() {
+    let mut fixture = RoundScheduleFixture::new();
+
+    // Simulate a bunch of idle canisters with varying AP.
+    let ap_minus_1 = fixture.canister();
+    *fixture.canister_priority_mut(ap_minus_1) = priority(-1);
+    let ap_0 = fixture.canister();
+    *fixture.canister_priority_mut(ap_0) = priority(0);
+    let ap_99 = fixture.canister();
+    *fixture.canister_priority_mut(ap_99) = priority(99);
+    let ap_101 = fixture.canister();
+    *fixture.canister_priority_mut(ap_101) = priority(101);
+
+    fixture.start_iteration(true);
+
+    // `start_iteration()` drops idle canisters with 0-100 AP.
+    assert!(!fixture.has_canister_priority(&ap_0));
+    assert!(!fixture.has_canister_priority(&ap_99));
+    // But retains canisters with AP < 0 and AP > 100.
+    assert_eq!(fixture.canister_priority(&ap_minus_1), &priority(-1));
+    assert_eq!(fixture.canister_priority(&ap_101), &priority(101));
+}
+
 #[test]
 #[should_panic]
 fn start_iteration_scheduler_compute_allocation_invariant_broken() {
@@ -1213,38 +1239,37 @@ fn finish_round_charges_for_executed_rounds() {
     );
 }
 
-/// start_iteration drops an idle canister (no inputs or heap delta / install
-/// code debits) with zero accumulated priority from the subnet schedule.
+/// finish_round burns down to zero the positive AP of idle canisters (no inputs
+/// or heap delta / install code debits).
 #[test]
-fn finish_round_idle_at_zero_dropped_from_schedule() {
+fn finish_round_burns_down_idle_canister_accumulated_priority() {
     let mut fixture = RoundScheduleFixture::new();
-    let canister_id = fixture.canister_with_input();
     fixture.start_iteration(true);
-    // Simulate "canister ran and consumed its input".
-    fixture.pop_input(canister_id);
-    fixture.end_iteration(
-        &btreeset! {canister_id},
-        &btreeset! {canister_id},
-        &btreeset! {},
-    );
+    fixture.end_iteration(&btreeset! {}, &btreeset! {}, &btreeset! {});
 
-    assert!(fixture.fully_executed_canisters().contains(&canister_id));
-    assert!(
-        fixture.has_canister_priority(&canister_id),
-        "canister should be in schedule before finish_round"
-    );
+    // A bunch of idle canisters with varying AP.
+    let ap_minus_1 = fixture.canister();
+    *fixture.canister_priority_mut(ap_minus_1) = priority(-1);
+    let ap_0 = fixture.canister();
+    *fixture.canister_priority_mut(ap_0) = priority(0);
+    let ap_99 = fixture.canister();
+    *fixture.canister_priority_mut(ap_99) = priority(99);
+    let ap_101 = fixture.canister();
+    *fixture.canister_priority_mut(ap_101) = priority(101);
 
     fixture.finish_round();
-    assert!(
-        fixture.has_canister_priority(&canister_id),
-        "idle canister with zero priority should be retained in the schedule"
-    );
 
-    fixture.start_iteration(true);
+    // Nothing changes for canisters with AP <= 0.
+    assert_eq!(fixture.canister_priority(&ap_minus_1), &priority(-1));
     assert!(
-        !fixture.has_canister_priority(&canister_id),
-        "idle canister with zero priority should be dropped from schedule"
+        fixture.has_canister_priority(&ap_0) && fixture.canister_priority(&ap_0) == &priority(0)
     );
+    // Canisters with 0 < AP < 100 have their AP burned down to 0.
+    assert!(
+        fixture.has_canister_priority(&ap_99) && fixture.canister_priority(&ap_99) == &priority(0)
+    );
+    // Canisters with AP >= 100 have 100 AP burned.
+    assert_eq!(fixture.canister_priority(&ap_101), &priority(1));
 }
 
 /// finish_round applies an exponential decay to AP values outside the
