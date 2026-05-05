@@ -484,6 +484,11 @@ message CanisterStateBits {
   // the respective amount is added to the consumed amount while when a refund
   // happens the refund amount is subtracted from consumed amount.
   repeated ConsumedCyclesByUseCase consumed_cycles_by_use_cases = 36;
+  // Consumed cycles by use case presented as counters. The consumed amount is
+  // only updated once the refund is known to perform a single accounting step.
+  // These counters facilitate programming retrieval of metrics and performing
+  // various aggregations on them more easily than their gauge counterparts.
+  repeated ConsumedCyclesByUseCase consumed_cycles_by_use_cases_as_counters = 65;
   CanisterHistory canister_history = 37;
   // Resource reservation cycles.
   state.queues.v1.Cycles reserved_balance = 38;

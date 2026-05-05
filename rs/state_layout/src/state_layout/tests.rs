@@ -52,6 +52,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         global_timer_nanos: None,
         canister_version: 0,
         consumed_cycles_by_use_cases: BTreeMap::new(),
+        consumed_cycles_by_use_cases_as_counters: BTreeMap::new(),
         canister_history: CanisterHistory::default(),
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         total_query_stats: TotalQueryStats::default(),

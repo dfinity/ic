@@ -2178,8 +2178,11 @@ impl ExecutionEnvironment {
             state.metadata.subnet_call_context_manager.push_context(
                 SubnetCallContext::CanisterHttpRequest(canister_http_request_context),
             );
-            if let Some(canister_stats) = state.canister_state_make_mut(&request.sender) {
-                canister_stats
+            if let Some(canister_state) = state.canister_state_make_mut(&request.sender) {
+                canister_state
+                    .system_state
+                    .observe_consumed_cycles_for_https_outcall(nominal_http_request_fee);
+                canister_state
                     .system_state
                     .canister_metrics_mut()
                     .load_metrics_mut()

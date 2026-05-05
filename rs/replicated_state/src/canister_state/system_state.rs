@@ -153,6 +153,7 @@ pub struct CanisterMetrics {
     load_metrics: LoadMetrics,
     consumed_cycles: NominalCycles,
     consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+    consumed_cycles_by_use_cases_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,
 }
 
 impl CanisterMetrics {
@@ -163,6 +164,7 @@ impl CanisterMetrics {
         interrupted_during_execution: u64,
         consumed_cycles: NominalCycles,
         consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+        consumed_cycles_by_use_cases_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,
         instructions_executed: NumInstructions,
         load_metrics: LoadMetrics,
     ) -> Self {
@@ -173,6 +175,7 @@ impl CanisterMetrics {
             interrupted_during_execution,
             consumed_cycles,
             consumed_cycles_by_use_cases,
+            consumed_cycles_by_use_cases_as_counters,
             instructions_executed,
             load_metrics,
         }
@@ -204,6 +207,12 @@ impl CanisterMetrics {
 
     pub fn consumed_cycles_by_use_cases(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
         &self.consumed_cycles_by_use_cases
+    }
+
+    pub fn consumed_cycles_by_use_cases_as_counters(
+        &self,
+    ) -> &BTreeMap<CyclesUseCase, NominalCycles> {
+        &self.consumed_cycles_by_use_cases_as_counters
     }
 
     pub fn observe_round_scheduled(&mut self) {
@@ -1944,6 +1953,17 @@ impl SystemState {
         self.consume_cycles(CompoundCycles::<Uninstall>::new(balance, cost_schedule));
     }
 
+    /// Observes the consumed cycles for HTTPS outcalls. This should only be
+    /// called to update the counter metric on the canister level, as the gauge
+    /// metric for HTTPS outcalls is updated on the subnet level only.
+    pub fn observe_consumed_cycles_for_https_outcall(&mut self, amount: NominalCycles) {
+        *self
+            .canister_metrics
+            .consumed_cycles_by_use_cases_as_counters
+            .entry(CyclesUseCase::HTTPOutcalls)
+            .or_insert_with(NominalCycles::zero) += amount;
+    }
+
     fn observe_consumed_cycles_with_use_case(
         &mut self,
         prepayment: NominalCycles,
@@ -1978,26 +1998,53 @@ impl SystemState {
             ConsumingCycles::Refund => {}
         }
 
-        // Skip if the amounts are zero and no metric updates are needed.
-        if (consuming_cycles == ConsumingCycles::Prepayment && prepayment.is_zero())
-            || (consuming_cycles == ConsumingCycles::Refund && refund.is_zero())
-        {
+        // Skip if the consumed cycles are zero and no metric updates are needed.
+        if prepayment - refund == NominalCycles::zero() {
             return;
         }
 
         let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> =
             &mut self.canister_metrics.consumed_cycles_by_use_cases;
-
         let use_case_consumption = metric.entry(use_case).or_insert_with(NominalCycles::zero);
+        let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> = &mut self
+            .canister_metrics
+            .consumed_cycles_by_use_cases_as_counters;
+        let use_case_consumption_as_counter =
+            metric.entry(use_case).or_insert_with(NominalCycles::zero);
 
         match consuming_cycles {
             ConsumingCycles::Prepayment => {
                 *use_case_consumption += prepayment;
                 self.canister_metrics.consumed_cycles += prepayment;
+                match use_case {
+                    CyclesUseCase::Instructions | CyclesUseCase::RequestAndResponseTransmission => {
+                        // These use cases are accounted for during refund
+                        // for the counter metrics.
+                    }
+                    CyclesUseCase::Memory
+                    | CyclesUseCase::ComputeAllocation
+                    | CyclesUseCase::Uninstall
+                    | CyclesUseCase::IngressInduction
+                    | CyclesUseCase::CanisterCreation
+                    | CyclesUseCase::BurnedCycles => {
+                        *use_case_consumption_as_counter += prepayment;
+                    }
+
+                    CyclesUseCase::ECDSAOutcalls
+                    | CyclesUseCase::SchnorrOutcalls
+                    | CyclesUseCase::VetKd
+                    | CyclesUseCase::HTTPOutcalls
+                    | CyclesUseCase::DeletedCanisters
+                    | CyclesUseCase::DroppedMessages
+                    | CyclesUseCase::NonConsumed => {
+                        // These use cases should not be tracked on the canister level.
+                    }
+                }
             }
             ConsumingCycles::Refund => {
                 *use_case_consumption -= refund;
                 self.canister_metrics.consumed_cycles -= refund;
+                *use_case_consumption_as_counter += prepayment - refund;
             }
         }
     }
