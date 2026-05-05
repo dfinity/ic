@@ -4,11 +4,9 @@ use super::test_utilities::{
     SchedulerTest, SchedulerTestBuilder, ingress, instructions, on_response, other_side,
 };
 use super::*;
-use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
-use ic_registry_subnet_type::SubnetType;
+use ic_config::subnet_config::SchedulerConfig;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_types::ComputeAllocation;
-use ic_types::ingress::IngressStatus;
 use ic_types::methods::SystemMethod;
 use ic_types_cycles::Cycles;
 use more_asserts::{assert_ge, assert_gt, assert_le};
@@ -180,10 +178,10 @@ fn execute_idle_and_canisters_with_messages() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // We update `last_full_execution_round` for the canister without any
+    // We do not update `last_full_execution_round` for the canister without any
     // input messages.
-    assert!(test.was_fully_executed(idle));
-    // But not its counts of rounds scheduled or executed.
+    assert!(!test.was_fully_executed(idle));
+    // Nor its counts of rounds scheduled or executed.
     let idle = test.canister_state(idle);
     assert_eq!(idle.system_state.canister_metrics().rounds_scheduled(), 0);
     assert_eq!(idle.system_state.canister_metrics().executed(), 0);
@@ -732,7 +730,7 @@ fn scheduler_respects_compute_allocation(
     let (
         mut test,
         scheduler_cores,
-        _messages_per_canister,
+        messages_per_canister,
         _instructions_per_round,
         _instructions_per_message,
     ) = test;
@@ -745,10 +743,10 @@ fn scheduler_respects_compute_allocation(
     // to be executed by a thread.
     let mut scheduled_first_counters = HashMap::<CanisterId, usize>::new();
 
-    // Because we may be left with as little free compute capacity as 1, run for
+    // Because we may be left with as little free compute capacity as 100, run for
     // enough rounds that every canister gets a chance to be scheduled at least once
-    // for free, i.e. `100 * number_of_canisters` rounds.
-    let number_of_rounds = 100 * number_of_canisters;
+    // for free, i.e. `number_of_canisters` rounds.
+    let number_of_rounds = number_of_canisters;
 
     let canister_ids: Vec<_> = test.state().canister_states().keys().cloned().collect();
 
@@ -781,7 +779,7 @@ fn scheduler_respects_compute_allocation(
         };
 
         prop_assert!(
-            *count >= expected_count,
+            *count >= std::cmp::min(expected_count, messages_per_canister),
             "Canister {} (allocation {}) should have been scheduled \
                     {} out of {} rounds, was scheduled only {} rounds instead.",
             canister_id,
@@ -791,106 +789,6 @@ fn scheduler_respects_compute_allocation(
             *count
         );
     }
-}
-
-#[test]
-fn scheduler_resets_accumulated_priorities() {
-    /// Create `scheduler_cores * 2` canisters with 2 messages each and execute 2 rounds.
-    /// Return number of executed second ingress messages.
-    fn executed_messages_after_two_rounds(scheduler_cores: usize, reset_interval: u64) -> usize {
-        /// Count the number of executed ingress messages.
-        fn executed_messages(test: &SchedulerTest, ingress_ids: &[MessageId]) -> usize {
-            ingress_ids
-                .iter()
-                .filter_map(|ingress_id| match test.ingress_status(ingress_id) {
-                    IngressStatus::Known {
-                        // There is no response, so messages are in the failed state
-                        state: IngressState::Failed(_),
-                        ..
-                    } => Some(()),
-                    _ => None,
-                })
-                .count()
-        }
-
-        // There must twice more canisters than the scheduler cores
-        let num_canisters = scheduler_cores * 2;
-
-        let subnet_config = SubnetConfig::new(SubnetType::Application);
-        let mut test = SchedulerTestBuilder::new()
-            .with_scheduler_config(SchedulerConfig {
-                scheduler_cores,
-                // Increase the overhead to execute just one message per round per core
-                instruction_overhead_per_execution: subnet_config
-                    .scheduler_config
-                    .max_instructions_per_round,
-                // Reset accumulated priority every second round
-                accumulated_priority_reset_interval: reset_interval.into(),
-                ..subnet_config.scheduler_config
-            })
-            .build();
-
-        // Create canisters with 2 messages each
-        let mut canister_ids = Vec::with_capacity(num_canisters);
-        let mut first_ingress_ids = Vec::with_capacity(num_canisters);
-        let mut second_ingress_ids = Vec::with_capacity(num_canisters);
-        for _ in 0..num_canisters {
-            let canister_id = test.create_canister();
-            canister_ids.push(canister_id);
-            first_ingress_ids.push(test.send_ingress(canister_id, ingress(5)));
-            second_ingress_ids.push(test.send_ingress(canister_id, ingress(5)));
-        }
-
-        // Execute the first round. Only first `scheduler_cores` messages
-        // must be executed (marked as `E`):
-        // Canister ID:        0 1 2 3 (scheduler_cores * 2)
-        // 1st message states: E E . .
-        // 2nd message states: . . . .
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
-        // After the first round, only the first `scheduler_cores` messages will be executed
-        assert_eq!(
-            scheduler_cores,
-            executed_messages(&test, &first_ingress_ids)
-        );
-        assert_eq!(0, executed_messages(&test, &second_ingress_ids));
-
-        // Execute the second round
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
-        // Return number of executed second ingress messages
-        executed_messages(&test, &second_ingress_ids)
-    }
-
-    // Note: the DTS scheduler requires at least 2 scheduler cores
-    let scheduler_cores = 2;
-
-    // When there is no reset round, canisters with the same compute allocation
-    // get scheduled fairly, one by one:
-    //
-    // 1. After the first round, some two canisters will be executed.
-    // 2. After the second round, the other two canisters will be executed.
-    //
-    // After two rounds, all canisters will be executed once (marked as `E`):
-    //
-    //     Canister ID:        0 1 2 3 (scheduler_cores * 2)
-    //     1st message states: E E E E
-    //     2nd message states: . . . . <-- num_executed_second_messages == 0
-    let num_executed_second_messages = executed_messages_after_two_rounds(scheduler_cores, 100);
-    assert_eq!(0, num_executed_second_messages);
-
-    // When the accumulated priorities get reset every round, accumulated priority
-    // becomes irrelevant. Scheduler will be trying to execute every round
-    // the same two canisters:
-    //
-    // 1. After the first round, some two canister will be executed.
-    // 2. After the second round, the same two canisters will be executed.
-    //
-    // After two rounds, two canisters will be executed twice (marked as `E`):
-    //
-    //     Canister ID:        0 1 2 3 (scheduler_cores * 2)
-    //     1st message states: E E . .
-    //     2nd message states: E E . . <-- num_executed_second_messages == scheduler_cores
-    let num_executed_second_messages = executed_messages_after_two_rounds(scheduler_cores, 1);
-    assert_eq!(scheduler_cores, num_executed_second_messages);
 }
 
 #[test]
@@ -1103,67 +1001,6 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
     prop_assert_eq!(total_accumulated_priority, 0);
 }
 
-#[test]
-fn charge_idle_canisters_for_full_execution_round() {
-    let scheduler_cores = 2;
-    let num_rounds = 100;
-    let slice = 20;
-    let mut test = SchedulerTestBuilder::new()
-        .with_scheduler_config(SchedulerConfig {
-            scheduler_cores,
-            max_instructions_per_round: slice.into(),
-            max_instructions_per_message: slice.into(),
-            max_instructions_per_slice: slice.into(),
-            max_instructions_per_install_code_slice: slice.into(),
-            ..zero_instruction_overhead_config()
-        })
-        .build();
-
-    // Bump up the round number.
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    // Create many idle canisters.
-    for _ in 0..scheduler_cores * 2 {
-        test.create_canister();
-    }
-
-    // Create many busy canisters.
-    for _ in 0..scheduler_cores * 2 {
-        let canister_id = test.create_canister();
-        for _ in 0..num_rounds {
-            test.send_ingress(canister_id, ingress(slice));
-        }
-    }
-
-    for round in 0..num_rounds {
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-        for canister in test.state().canisters_iter() {
-            // Assert that we punished all idle canisters, not just top `scheduler_cores`.
-            if round == 0 && !canister.has_input() {
-                assert_ne!(test.last_round(), 0.into());
-                assert_eq!(
-                    test.state()
-                        .canister_priority(&canister.canister_id())
-                        .last_full_execution_round,
-                    test.last_round()
-                );
-            }
-        }
-        let mut total_accumulated_priority = 0;
-        for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
-            // Assert there is no divergency in accumulated priorities.
-            let priority = canister_priority.accumulated_priority;
-            assert_le!(priority.get(), 100 * MULTIPLIER);
-            assert_ge!(priority.get(), -100 * MULTIPLIER);
-
-            total_accumulated_priority += canister_priority.accumulated_priority.get();
-        }
-        // The accumulated priority invariant should be respected.
-        assert_eq!(total_accumulated_priority, 0);
-    }
-}
-
 /// Canisters with inputs but without enough cycles to execute them do get
 /// categorized as "fully executed" when their inputs are consumed, even though
 /// they didn't actually execute any message.
@@ -1245,9 +1082,9 @@ fn frozen_canisters_are_fully_executed() {
 }
 
 /// Canisters with heartbeats or timers but without enough cycles to execute them
-/// do not get executed, but are charged as idle.
+/// do not get scheduled.
 #[test]
-fn frozen_canisters_with_heartbeats_or_timers_are_charged_as_idle() {
+fn frozen_canisters_with_heartbeats_or_timers_are_not_scheduled() {
     let scheduler_cores = 2;
     let canisters_per_core = 2;
     let slice = 100;
@@ -1308,11 +1145,15 @@ fn frozen_canisters_with_heartbeats_or_timers_are_charged_as_idle() {
         0
     );
 
-    // But all canisters were marked as fully executed, because they were idle.
-    for (i, canister) in canisters.iter().enumerate() {
-        assert!(
-            test.was_fully_executed(*canister),
-            "Canister {i} should have been charged as idle",
+    // Or scheduled.
+    assert_eq!(test.state().metadata.subnet_schedule.len(), 0);
+    for canister in canisters.iter() {
+        assert_eq!(
+            test.canister_state(*canister)
+                .system_state
+                .canister_metrics()
+                .rounds_scheduled(),
+            0
         );
     }
 }
