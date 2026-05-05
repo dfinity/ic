@@ -591,14 +591,13 @@ impl CanisterManager {
             } else {
                 NumInstructions::new(0)
             };
-            let old_log_memory_usage = canister.memory_usage();
-            let new_log_memory_usage = canister
+            let new_log_store_memory_usage = canister
                 .system_state
                 .log_memory_store
                 .memory_usage_for_limit(requested_limit);
-            let new_log_canister_memory_usage = old_log_memory_usage
+            let new_canister_memory_usage = canister_memory_usage
                 - canister.log_memory_store_memory_usage()
-                + new_log_memory_usage;
+                + new_log_store_memory_usage;
             self.cycles_and_memory_usage_checks_and_updates(
                 subnet_size,
                 cost_schedule,
@@ -606,8 +605,8 @@ impl CanisterManager {
                 sender,
                 log_resize_instructions,
                 round_limits,
-                new_log_canister_memory_usage,
-                old_log_memory_usage,
+                new_canister_memory_usage,
+                canister_memory_usage,
                 subnet_memory_saturation,
             )?;
             round_limits.instructions -= as_round_instructions(log_resize_instructions);
