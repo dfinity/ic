@@ -7,7 +7,10 @@ use config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::GuestOSConfig;
 use guest_disk::generated_key::{DEFAULT_GENERATED_KEY_PATH, GeneratedKeyDiskEncryption};
 use guest_disk::sev::SevDiskEncryption;
-use guest_disk::{DEFAULT_PREVIOUS_SEV_KEY_PATH, DiskEncryption, Partition, crypt_name};
+use guest_disk::{
+    DEFAULT_PREVIOUS_SEV_KEY_PATH, DEFAULT_STORE_LUKS_HEADER_PATH, DiskEncryption, Partition,
+    crypt_name,
+};
 use nix::unistd::getuid;
 use sev_guest::firmware::SevGuestFirmware;
 use std::ffi::{CStr, c_char, c_int, c_void};
@@ -64,6 +67,7 @@ fn main() -> Result<()> {
                 .map(|x| Box::new(x) as _)
         },
         Path::new(DEFAULT_PREVIOUS_SEV_KEY_PATH),
+        Path::new(DEFAULT_STORE_LUKS_HEADER_PATH),
         Path::new(DEFAULT_GENERATED_KEY_PATH),
         Path::new(METRICS_DIR),
     )
@@ -77,6 +81,7 @@ fn run(
     is_tee_enabled: bool,
     sev_firmware_factory: impl Fn() -> Result<Box<dyn SevGuestFirmware>>,
     previous_key_path: &Path,
+    store_luks_header_path: &Path,
     generated_key_path: &Path,
     metrics_dir: &Path,
 ) -> Result<()> {
@@ -87,8 +92,9 @@ fn run(
         Box::new(SevDiskEncryption {
             sev_firmware: sev_firmware_factory().context("Failed to open SEV firmware")?,
             guest_vm_type: guestos_config.guest_vm_type,
-            previous_key_path,
-            metrics_file: &metrics_file,
+            previous_key_path: previous_key_path.to_path_buf(),
+            store_luks_header_path: store_luks_header_path.to_path_buf(),
+            metrics_file,
         })
     } else {
         Box::new(GeneratedKeyDiskEncryption {
