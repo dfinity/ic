@@ -1,5 +1,8 @@
-use crate::DiskEncryptionKeyExchangeServerAgent;
+use crate::{DEFAULT_SUCCESS_TIMEOUT, DiskEncryptionKeyExchangeServerAgent};
 use anyhow::Context;
+use attestation::attestation_package::SevRootCertificateVerification;
+use guest_disk::DEFAULT_STORE_LUKS_HEADER_PATH;
+use guest_upgrade_shared::{DEFAULT_SERVER_PORT, STORE_DEVICE};
 use ic_interfaces_registry::RegistryClient;
 use std::sync::Arc;
 use tokio::runtime::Handle;
@@ -67,8 +70,14 @@ pub fn new_disk_encryption_key_exchange_server_agent_for_orchestrator(
         handle,
         Box::new(LinuxVSockClient::default()),
         sev_firmware_factory,
+        SevRootCertificateVerification::Verify,
         trusted_execution_config,
         registry_client,
+        STORE_DEVICE.into(),
+        DEFAULT_STORE_LUKS_HEADER_PATH.into(),
+        /*send_luks_header=*/ true,
+        DEFAULT_SERVER_PORT,
+        DEFAULT_SUCCESS_TIMEOUT,
     ))
 }
 
