@@ -631,7 +631,15 @@ impl Tool for IcMetrics {
                 to narrow), `get` returns current samples, `summary` returns a curated \
                 dashboard for the chosen source, `rate` computes a per-second delta \
                 against the previous call. Targets a specific peer node by `node_id` \
-                (resolved via the local registry) or by raw `ipv6`."
+                (resolved via the local registry) or by raw `ipv6`.\n\
+                \n\
+                IMPORTANT: do NOT query the local node (this AI node). It is a passive \
+                state-sync observer, not an active subnet member, so its metrics are \
+                not representative of subnet health — replica counters will be near \
+                zero, consensus metrics will be missing entirely, and node_exporter \
+                will reflect only this AI node's own host. Always pick a `node_id` \
+                of an active consensus member (use `ic_state` op=`subnet` to list \
+                them and copy a node id from the `nodes` array)."
                 .to_string(),
             parameters: json!({
                 "type": "object",
