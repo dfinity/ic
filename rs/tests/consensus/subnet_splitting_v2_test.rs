@@ -81,11 +81,17 @@ fn main() -> Result<()> {
 
 /// Setup an IC with
 /// 1. one NNS subnet,
-/// 2. one Application subnet with 8 nodes, which will be later split,
-/// 3. one Verified Application subnet which will send xnet messages to canisters on the Application
+/// 2. one System subnet which will handle the initial DKG,
+/// 3. one Application subnet with 8 nodes, which will be later split,
+/// 4. one Verified Application subnet which will send xnet messages to canisters on the Application
 ///    subnet.
 fn setup(env: TestEnv) {
     InternetComputer::new()
+        .add_subnet(
+            Subnet::fast_single_node(SubnetType::System)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
+        )
+        // the subnet which will handle the initial DKG
         .add_subnet(
             Subnet::fast_single_node(SubnetType::System)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
@@ -152,6 +158,7 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
     );
 
     let nns_subnet = get_nns_subnet(&env);
+    let initial_dkg_subnet = get_initial_dkg_subnet(&env);
     let source_subnet = get_source_subnet(&env);
     let original_source_subnet_canister_ranges = source_subnet.subnet_canister_ranges();
     let nns_canister_ranges = nns_subnet.subnet_canister_ranges();
@@ -167,6 +174,7 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
         &source_subnet,
         test_params.canister_migration_list.clone(),
         destination_subnet_nodes.clone(),
+        Some(initial_dkg_subnet.subnet_id),
     )
     .await;
 
@@ -880,9 +888,17 @@ fn get_third_subnet(env: &TestEnv) -> SubnetSnapshot {
 }
 
 fn get_nns_subnet(env: &TestEnv) -> SubnetSnapshot {
-    env.topology_snapshot()
+    env.topology_snapshot().root_subnet()
+}
+
+fn get_initial_dkg_subnet(env: &TestEnv) -> SubnetSnapshot {
+    let topology = env.topology_snapshot();
+    topology
         .subnets()
-        .find(|subnet| subnet.subnet_type() == SubnetType::System)
+        .find(|subnet| {
+            subnet.subnet_type() == SubnetType::System
+                && subnet.subnet_id != topology.root_subnet_id()
+        })
         .expect("There should be at least one subnet for every subnet type")
 }
 
@@ -891,6 +907,7 @@ async fn propose_to_split_subnet(
     source_subnet: &SubnetSnapshot,
     canister_ranges_to_migrate: Vec<CanisterIdRange>,
     node_ids_to_migrate: Vec<NodeId>,
+    initial_dkg_subnet_id: Option<SubnetId>,
 ) {
     let topology = env.topology_snapshot();
     let nns_node = get_nns_subnet(env)
@@ -902,6 +919,7 @@ async fn propose_to_split_subnet(
         destination_canister_ranges: canister_ranges_to_migrate,
         destination_node_ids: node_ids_to_migrate,
         source_subnet_id: source_subnet.subnet_id,
+        initial_dkg_subnet_id,
     };
 
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
