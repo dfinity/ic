@@ -2,6 +2,7 @@
 //! Canister Call Consent Message standard for the ckBTC minter.
 
 use crate::Network;
+use crate::address::BitcoinAddress;
 use crate::state::read_state;
 use crate::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcWithApprovalArgs};
 use candid::{CandidType, Decode, Deserialize};
@@ -101,6 +102,7 @@ fn build_consent_info(
                     description: format!("Failed to decode RetrieveBtcWithApprovalArgs: {e}"),
                 })
             })?;
+            validate_address(&args.address, network)?;
             build_retrieve_btc_with_approval_message(&args, &display_type, symbols)
         }
         "retrieve_btc" => {
@@ -110,6 +112,7 @@ fn build_consent_info(
                         description: format!("Failed to decode RetrieveBtcArgs: {e}"),
                     })
                 })?;
+            validate_address(&args.address, network)?;
             build_retrieve_btc_message(&args, &display_type, symbols)
         }
         method => {
@@ -254,6 +257,22 @@ fn build_retrieve_btc_message(
 
 fn format_subaccount(subaccount: &Subaccount) -> String {
     hex::encode(subaccount)
+}
+
+/// Verifies that `address` parses as a valid Bitcoin address on the configured
+/// network before it gets interpolated into a consent message. This both
+/// guarantees the user is shown a meaningful (parseable) destination and rules
+/// out Markdown-injection vectors in the GenericDisplay output (e.g. an
+/// "address" that contains newlines or backticks crafted to fake additional
+/// fields). Uses the same parser as `retrieve_btc[_with_approval]`, so any
+/// address the consent endpoint accepts is also accepted by the actual call.
+fn validate_address(address: &str, network: Network) -> Result<(), Icrc21Error> {
+    BitcoinAddress::parse(address, network).map_err(|e| {
+        Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+            description: format!("Invalid Bitcoin destination address: {e}"),
+        })
+    })?;
+    Ok(())
 }
 
 fn format_amount(amount: u64, decimals: u8) -> String {
@@ -420,7 +439,7 @@ mod tests {
     fn test_retrieve_btc_with_approval_fields_display_no_subaccount() {
         let args = RetrieveBtcWithApprovalArgs {
             amount: 250_000,
-            address: "tb1qexampleaddres".to_string(),
+            address: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq".to_string(),
             from_subaccount: None,
         };
         let req = make_request(
@@ -506,7 +525,7 @@ mod tests {
     fn test_retrieve_btc_with_approval_uses_testnet_symbols() {
         let args = RetrieveBtcWithApprovalArgs {
             amount: 250_000,
-            address: "tb1qexampleaddress".to_string(),
+            address: "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx".to_string(),
             from_subaccount: None,
         };
         let req = make_request(
@@ -532,7 +551,7 @@ mod tests {
     fn test_retrieve_btc_with_approval_generic_uses_testnet_symbols() {
         let args = RetrieveBtcWithApprovalArgs {
             amount: 100_000_000,
-            address: "tb1qexampleaddress".to_string(),
+            address: "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx".to_string(),
             from_subaccount: None,
         };
         let req = make_request(
@@ -540,7 +559,7 @@ mod tests {
             Encode!(&args).unwrap(),
             Some(DisplayMessageType::GenericDisplay),
         );
-        let info = build_consent_info(req, Network::Regtest).unwrap();
+        let info = build_consent_info(req, Network::Testnet).unwrap();
         let message = match info.consent_message {
             ConsentMessage::GenericDisplayMessage(m) => m,
             other => panic!("expected GenericDisplayMessage, got {other:?}"),
@@ -577,6 +596,43 @@ mod tests {
                 assert!(info.description.contains("Failed to decode"));
             }
             _ => panic!("expected UnsupportedCanisterCall, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn test_malformed_address_is_rejected() {
+        // The minter must not interpolate an unparseable address into the
+        // Markdown consent message — that would be a Markdown-injection vector
+        // (e.g. an "address" containing newlines, backticks, or '#' that fakes
+        // additional fields).
+        for bad_address in [
+            "not-a-real-address",
+            "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq\n# You will receive 100 BTC",
+            "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa`\n\n**Amount:** 100 BTC\n`",
+            "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx", // valid testnet but on Mainnet
+        ] {
+            let args = RetrieveBtcWithApprovalArgs {
+                amount: 50_000,
+                address: bad_address.to_string(),
+                from_subaccount: None,
+            };
+            let req = make_request(
+                "retrieve_btc_with_approval",
+                Encode!(&args).unwrap(),
+                Some(DisplayMessageType::GenericDisplay),
+            );
+            let err = build_consent_info(req, Network::Mainnet).unwrap_err();
+            match err {
+                Icrc21Error::UnsupportedCanisterCall(info) => {
+                    assert!(
+                        info.description
+                            .contains("Invalid Bitcoin destination address"),
+                        "unexpected error description: {}",
+                        info.description
+                    );
+                }
+                other => panic!("expected UnsupportedCanisterCall, got {other:?}"),
+            }
         }
     }
 }
