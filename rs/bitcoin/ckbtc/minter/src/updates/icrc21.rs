@@ -42,18 +42,6 @@ impl TokenSymbols {
     }
 }
 
-/// Maximum number of characters per `Value::Text` field for the FieldsDisplay
-/// variant. Hardware wallets like the Ledger Nano S+ have a small display and
-/// cannot fit a full Bitcoin address (up to 62 characters for bech32m) or a
-/// 64-character hex subaccount on a single screen. Long values are split into
-/// multiple fields with a "(N/M)" pagination suffix in the label so each chunk
-/// fits on a single screen with the label on top.
-///
-/// Field labels are kept short (e.g. "BTC address", "From subaccount") so that
-/// even with a "(N/M)" suffix the label still fits on one line at the typical
-/// hardware-wallet font size.
-const FIELDS_DISPLAY_TEXT_CHUNK_LEN: usize = 18;
-
 /// An entry of the ICRC-10 supported standards list.
 #[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
 pub struct StandardRecord {
@@ -180,22 +168,34 @@ fn build_retrieve_btc_with_approval_message(
             ConsentMessage::GenericDisplayMessage(message)
         }
         DisplayMessageType::FieldsDisplay => {
-            let mut fields = Vec::new();
-            fields.push((
-                "Amount".to_string(),
-                Value::TokenAmount {
-                    decimals: DECIMALS,
-                    amount: args.amount,
-                    symbol: ckbtc.to_string(),
-                },
-            ));
-            push_chunked_text(&mut fields, &format!("{btc} address"), &args.address);
+            // Long values (Bitcoin addresses, subaccount hex) are sent as a
+            // single `Value::Text` per the ICRC-21 spec — wallets are
+            // responsible for paginating them across screens. See e.g. the
+            // Ledger ICP app, which calls `handle_ui_message` to chunk the
+            // value into device-sized pages.
+            let mut fields = vec![
+                (
+                    "Amount".to_string(),
+                    Value::TokenAmount {
+                        decimals: DECIMALS,
+                        amount: args.amount,
+                        symbol: ckbtc.to_string(),
+                    },
+                ),
+                (
+                    format!("{btc} address"),
+                    Value::Text {
+                        content: args.address.clone(),
+                    },
+                ),
+            ];
             if let Some(subaccount) = args.from_subaccount {
-                push_chunked_text(
-                    &mut fields,
-                    "From subaccount",
-                    &format_subaccount(&subaccount),
-                );
+                fields.push((
+                    "From subaccount".to_string(),
+                    Value::Text {
+                        content: format_subaccount(&subaccount),
+                    },
+                ));
             }
             ConsentMessage::FieldsDisplayMessage(FieldsDisplay {
                 intent: format!("{ckbtc} to {btc}"),
@@ -230,73 +230,26 @@ fn build_retrieve_btc_message(
             ));
             ConsentMessage::GenericDisplayMessage(message)
         }
-        DisplayMessageType::FieldsDisplay => {
-            let mut fields = vec![(
-                "Amount".to_string(),
-                Value::TokenAmount {
-                    decimals: DECIMALS,
-                    amount: args.amount,
-                    symbol: ckbtc.to_string(),
-                },
-            )];
-            push_chunked_text(&mut fields, &format!("{btc} address"), &args.address);
-            ConsentMessage::FieldsDisplayMessage(FieldsDisplay {
-                intent: format!("{ckbtc} to {btc}"),
-                fields,
-            })
-        }
+        DisplayMessageType::FieldsDisplay => ConsentMessage::FieldsDisplayMessage(FieldsDisplay {
+            intent: format!("{ckbtc} to {btc}"),
+            fields: vec![
+                (
+                    "Amount".to_string(),
+                    Value::TokenAmount {
+                        decimals: DECIMALS,
+                        amount: args.amount,
+                        symbol: ckbtc.to_string(),
+                    },
+                ),
+                (
+                    format!("{btc} address"),
+                    Value::Text {
+                        content: args.address.clone(),
+                    },
+                ),
+            ],
+        }),
     }
-}
-
-/// Pushes a `(label, Value::Text)` field, splitting `content` into chunks of at
-/// most [`FIELDS_DISPLAY_TEXT_CHUNK_LEN`] characters when needed. When chunked,
-/// the label gets a "(i/n)" suffix so a hardware-wallet user can tell where
-/// each chunk fits in the whole value.
-///
-/// Bitcoin addresses and the chunked subaccount hex are pure ASCII, so chunking
-/// on byte boundaries is identical to chunking on character boundaries here.
-/// We still iterate on Unicode scalar values via [`char`] so the helper stays
-/// safe for any future caller that passes non-ASCII text.
-fn push_chunked_text(fields: &mut Vec<(String, Value)>, label: &str, content: &str) {
-    let chunks = chunk_text(content, FIELDS_DISPLAY_TEXT_CHUNK_LEN);
-    if chunks.len() <= 1 {
-        fields.push((
-            label.to_string(),
-            Value::Text {
-                content: content.to_string(),
-            },
-        ));
-        return;
-    }
-    let total = chunks.len();
-    for (i, chunk) in chunks.into_iter().enumerate() {
-        fields.push((
-            format!("{label} ({}/{total})", i + 1),
-            Value::Text { content: chunk },
-        ));
-    }
-}
-
-fn chunk_text(content: &str, max_chars: usize) -> Vec<String> {
-    assert!(max_chars > 0, "max_chars must be greater than zero");
-    if content.is_empty() {
-        return vec![String::new()];
-    }
-    let mut chunks = Vec::new();
-    let mut current = String::new();
-    let mut count = 0;
-    for c in content.chars() {
-        current.push(c);
-        count += 1;
-        if count == max_chars {
-            chunks.push(std::mem::take(&mut current));
-            count = 0;
-        }
-    }
-    if !current.is_empty() {
-        chunks.push(current);
-    }
-    chunks
 }
 
 fn format_subaccount(subaccount: &Subaccount) -> String {
@@ -417,52 +370,10 @@ mod tests {
     }
 
     #[test]
-    fn test_retrieve_btc_with_approval_fields_display_short_address() {
-        // A 16-character address fits in a single chunk so the label is not
-        // suffixed with "(i/n)".
-        let args = RetrieveBtcWithApprovalArgs {
-            amount: 250_000,
-            address: "tb1qexampleaddres".to_string(),
-            from_subaccount: None,
-        };
-        let req = make_request(
-            "retrieve_btc_with_approval",
-            Encode!(&args).unwrap(),
-            Some(DisplayMessageType::FieldsDisplay),
-        );
-        let info = build_consent_info(req, Network::Mainnet).unwrap();
-        let fields_display = match info.consent_message {
-            ConsentMessage::FieldsDisplayMessage(f) => f,
-            other => panic!("expected FieldsDisplayMessage, got {other:?}"),
-        };
-        assert_eq!(fields_display.intent, "ckBTC to BTC");
-        assert_eq!(fields_display.fields.len(), 2);
-        assert_eq!(
-            fields_display.fields[0],
-            (
-                "Amount".to_string(),
-                Value::TokenAmount {
-                    decimals: DECIMALS,
-                    amount: 250_000,
-                    symbol: "ckBTC".to_string(),
-                }
-            )
-        );
-        assert_eq!(
-            fields_display.fields[1],
-            (
-                "BTC address".to_string(),
-                Value::Text {
-                    content: "tb1qexampleaddres".to_string(),
-                }
-            )
-        );
-    }
-
-    #[test]
-    fn test_retrieve_btc_with_approval_fields_display_long_address_and_subaccount() {
-        // Bech32 address (42 chars) and subaccount (64 hex chars) both exceed
-        // FIELDS_DISPLAY_TEXT_CHUNK_LEN and must be paginated.
+    fn test_retrieve_btc_with_approval_fields_display() {
+        // Long values (Bitcoin address, subaccount hex) are emitted as a
+        // single Value::Text — wallets paginate them across screens. The
+        // number of fields is therefore independent of the value length.
         let mut subaccount = [0_u8; 32];
         subaccount[0] = 0xab;
         subaccount[31] = 0xcd;
@@ -483,62 +394,57 @@ mod tests {
             other => panic!("expected FieldsDisplayMessage, got {other:?}"),
         };
         assert_eq!(fields_display.intent, "ckBTC to BTC");
+        assert_eq!(
+            fields_display.fields,
+            vec![
+                (
+                    "Amount".to_string(),
+                    Value::TokenAmount {
+                        decimals: DECIMALS,
+                        amount: 250_000,
+                        symbol: "ckBTC".to_string(),
+                    }
+                ),
+                ("BTC address".to_string(), Value::Text { content: address }),
+                (
+                    "From subaccount".to_string(),
+                    Value::Text {
+                        content: hex::encode(subaccount)
+                    }
+                ),
+            ]
+        );
+    }
 
-        // Address: 42 chars / 18 = 3 chunks (18 + 18 + 6).
-        // Subaccount: 64 chars / 18 = 4 chunks (18 + 18 + 18 + 10).
-        // Plus 1 amount field => 1 + 3 + 4 = 8 fields.
-        assert_eq!(fields_display.fields.len(), 8);
-
-        assert_eq!(fields_display.fields[0].0, "Amount");
-        assert!(matches!(
-            fields_display.fields[0].1,
-            Value::TokenAmount { .. }
-        ));
-
-        // Address chunks.
-        assert_eq!(fields_display.fields[1].0, "BTC address (1/3)");
-        assert_eq!(fields_display.fields[2].0, "BTC address (2/3)");
-        assert_eq!(fields_display.fields[3].0, "BTC address (3/3)");
-        let chunk_lens: Vec<usize> = (1..=3)
-            .map(|i| match &fields_display.fields[i].1 {
-                Value::Text { content } => content.chars().count(),
-                _ => panic!("expected Text"),
-            })
-            .collect();
-        assert_eq!(chunk_lens, vec![18, 18, 6]);
-        // Reassemble and check the original is preserved exactly.
-        let mut reassembled = String::new();
-        for i in 1..=3 {
-            if let Value::Text { content } = &fields_display.fields[i].1 {
-                reassembled.push_str(content);
-            }
-        }
-        assert_eq!(reassembled, address);
-
-        // Subaccount chunks.
-        for (i, expected_label) in [
-            "From subaccount (1/4)",
-            "From subaccount (2/4)",
-            "From subaccount (3/4)",
-            "From subaccount (4/4)",
-        ]
-        .iter()
-        .enumerate()
-        {
-            assert_eq!(fields_display.fields[4 + i].0, *expected_label);
-        }
-        let mut subaccount_reassembled = String::new();
-        for i in 4..8 {
-            if let Value::Text { content } = &fields_display.fields[i].1 {
-                subaccount_reassembled.push_str(content);
-            }
-        }
-        assert_eq!(subaccount_reassembled, hex::encode(subaccount));
+    #[test]
+    fn test_retrieve_btc_with_approval_fields_display_no_subaccount() {
+        let args = RetrieveBtcWithApprovalArgs {
+            amount: 250_000,
+            address: "tb1qexampleaddres".to_string(),
+            from_subaccount: None,
+        };
+        let req = make_request(
+            "retrieve_btc_with_approval",
+            Encode!(&args).unwrap(),
+            Some(DisplayMessageType::FieldsDisplay),
+        );
+        let info = build_consent_info(req, Network::Mainnet).unwrap();
+        let fields_display = match info.consent_message {
+            ConsentMessage::FieldsDisplayMessage(f) => f,
+            other => panic!("expected FieldsDisplayMessage, got {other:?}"),
+        };
+        assert_eq!(fields_display.fields.len(), 2);
+        // No subaccount field when from_subaccount is None.
+        assert!(
+            !fields_display
+                .fields
+                .iter()
+                .any(|(label, _)| label == "From subaccount")
+        );
     }
 
     #[test]
     fn test_retrieve_btc_fields_display() {
-        // Mainnet legacy address — 34 chars => 2 chunks (18 + 16).
         let address = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa".to_string();
         let args = RetrieveBtcArgs {
             amount: 50_000,
@@ -555,17 +461,20 @@ mod tests {
             other => panic!("expected FieldsDisplayMessage, got {other:?}"),
         };
         assert_eq!(fields_display.intent, "ckBTC to BTC");
-        assert_eq!(fields_display.fields.len(), 3);
-        assert_eq!(fields_display.fields[1].0, "BTC address (1/2)");
-        assert_eq!(fields_display.fields[2].0, "BTC address (2/2)");
-        let mut reassembled = String::new();
-        for i in 1..=2 {
-            if let Value::Text { content } = &fields_display.fields[i].1 {
-                reassembled.push_str(content);
-                assert!(content.chars().count() <= FIELDS_DISPLAY_TEXT_CHUNK_LEN);
-            }
-        }
-        assert_eq!(reassembled, address);
+        assert_eq!(
+            fields_display.fields,
+            vec![
+                (
+                    "Amount".to_string(),
+                    Value::TokenAmount {
+                        decimals: DECIMALS,
+                        amount: 50_000,
+                        symbol: "ckBTC".to_string(),
+                    }
+                ),
+                ("BTC address".to_string(), Value::Text { content: address }),
+            ]
+        );
     }
 
     #[test]
@@ -640,43 +549,6 @@ mod tests {
         assert!(message.contains("1 ckTESTBTC"));
         assert!(message.contains("ckTESTBTC minter"));
         assert!(message.contains("equivalent amount in TESTBTC"));
-    }
-
-    #[test]
-    fn test_chunk_text() {
-        assert_eq!(chunk_text("", 5), vec![""]);
-        assert_eq!(chunk_text("abcde", 5), vec!["abcde"]);
-        assert_eq!(chunk_text("abcdef", 5), vec!["abcde", "f"]);
-        assert_eq!(chunk_text("abcdefghij", 5), vec!["abcde", "fghij"]);
-        // Ensure splitting on char boundaries (multi-byte chars).
-        let multi_byte = "αβγδε";
-        let chunks = chunk_text(multi_byte, 2);
-        assert_eq!(chunks, vec!["αβ", "γδ", "ε"]);
-    }
-
-    #[test]
-    fn test_push_chunked_text_no_chunk_when_short() {
-        let mut fields = Vec::new();
-        push_chunked_text(&mut fields, "Label", "short");
-        assert_eq!(fields.len(), 1);
-        assert_eq!(fields[0].0, "Label");
-        assert_eq!(
-            fields[0].1,
-            Value::Text {
-                content: "short".to_string()
-            }
-        );
-    }
-
-    #[test]
-    fn test_push_chunked_text_chunks_when_long() {
-        let mut fields = Vec::new();
-        // 36 chars => 2 chunks of 18.
-        let content: String = (0..36).map(|i| (b'a' + (i % 26) as u8) as char).collect();
-        push_chunked_text(&mut fields, "Long", &content);
-        assert_eq!(fields.len(), 2);
-        assert_eq!(fields[0].0, "Long (1/2)");
-        assert_eq!(fields[1].0, "Long (2/2)");
     }
 
     #[test]
