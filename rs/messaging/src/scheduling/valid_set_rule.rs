@@ -17,7 +17,7 @@ use ic_metrics::{MetricsRegistry, buckets::decimal_buckets, buckets::linear_buck
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    Time,
+    ExecutionRound, Time,
     ingress::{IngressState, IngressStatus},
     messages::{
         HttpRequestContent, Ingress, ParseIngressError, SignedIngress,
@@ -104,7 +104,12 @@ impl VsrMetrics {
 
 pub(crate) trait ValidSetRule: Send {
     /// Inducts the provided messages into the ReplicatedState.
-    fn induct_messages(&self, state: &mut ReplicatedState, msgs: Vec<SignedIngress>);
+    fn induct_messages(
+        &self,
+        state: &mut ReplicatedState,
+        msgs: Vec<SignedIngress>,
+        current_round: ExecutionRound,
+    );
 }
 
 pub(crate) struct ValidSetRuleImpl<
@@ -138,7 +143,13 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
     /// Tries to induct a single ingress message and sets the message status in
     /// `state` accordingly (to `Received` if successful; or to `Failed` with
     /// the relevant error code on failure).
-    fn induct_message(&self, state: &mut ReplicatedState, msg: SignedIngress, subnet_size: usize) {
+    fn induct_message(
+        &self,
+        state: &mut ReplicatedState,
+        msg: SignedIngress,
+        subnet_size: usize,
+        current_round: ExecutionRound,
+    ) {
         trace!(self.log, "induct_message");
         let ingress_content = msg.content();
         let message_id = ingress_content.id();
@@ -160,6 +171,7 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
                         time,
                         state: IngressState::Received,
                     },
+                    current_round,
                 );
                 LABEL_VALUE_SUCCESS
             }
@@ -182,6 +194,7 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
                         time,
                         state: IngressState::Failed(UserError::new(error_code, err.to_string())),
                     },
+                    current_round,
                 );
                 err.to_label_value()
             }
@@ -331,12 +344,17 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
 impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>> ValidSetRule
     for ValidSetRuleImpl<IngressHistoryWriter_>
 {
-    fn induct_messages(&self, state: &mut ReplicatedState, msgs: Vec<SignedIngress>) {
+    fn induct_messages(
+        &self,
+        state: &mut ReplicatedState,
+        msgs: Vec<SignedIngress>,
+        current_round: ExecutionRound,
+    ) {
         let subnet_size = state.get_own_subnet_size();
         for msg in msgs {
             let message_id = msg.content().id();
             if !self.is_duplicate(state, &msg) {
-                self.induct_message(state, msg, subnet_size);
+                self.induct_message(state, msg, subnet_size, current_round);
             } else {
                 self.observe_inducted_ingress_status(LABEL_VALUE_DUPLICATE);
                 debug!(self.log, "Didn't induct duplicate message {}", message_id);

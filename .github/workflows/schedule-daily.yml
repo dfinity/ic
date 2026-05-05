@@ -52,20 +52,26 @@ jobs:
               --keep_going --test_timeout=43200
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
-# the main purpose of bazel-build-all-no-cache is to detect dead URLS of external dependencies, the actual build of the ic is tested in build-ic
-# we've moved it to schedule-daily because the ubuntu servers frequently return 503 errors and we don't want this job blocking releases
-  bazel-build-all-no-cache:
-    name: Bazel Build All No Cache
+  nns-recovery-mainnet-state:
+    name: Bazel Test NNS Recovery with Mainnet State
     runs-on: *dind-large-setup
     container: *container-setup
-    timeout-minutes: 90
+    timeout-minutes: 180
+    environment: Nightly Tests
     steps:
       - *checkout
       - uses: ./.github/actions/netrc
-      - name: Run Bazel Build All No Cache
+      - *backup-pod-access
+      - name: Run NNS Recovery Test with Mainnet State
         uses: ./.github/actions/bazel
         with:
-          run: bazel build --config=stamped --config=local //...
+          run: |
+            bazel test \
+              --config=flaky_retry \
+              --config=stamped \
+              //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state \
+              --test_arg=--set-required-host-features=dc=zh1 \
+              --keep_going --test_timeout=7200
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   bazel-test-bare-metal:
@@ -106,6 +112,7 @@ jobs:
 
           # Run SEV tests
           bazel test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
+          bazel test //rs/tests/nested:hostos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
           bazel test //rs/tests/nested:sev_recovery --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
 
           bazel clean

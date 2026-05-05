@@ -147,7 +147,7 @@ pub use utils::{MegaKeyFromRegistryError, retrieve_mega_public_key_from_registry
 ///      * Check signature
 ///      * Verify that the openings are correct against the commitment polynomial
 /// 1. Load transcript with openings: at some the complainer `r` will eventually collect at least two shares (because dealing had support of 3 nodes) (see [`IDkgProtocol::load_transcript_with_openings`]):
-///      * With enough correct shares, do polynomial interpolation to reconstruct the polynomial from the faulty dealing.      
+///      * With enough correct shares, do polynomial interpolation to reconstruct the polynomial from the faulty dealing.
 ///      * Compute own shares from reconstructed polynomial
 ///      * Combine reconstructed shares with shares from other dealing and store combined shares in canister secret key store.
 ///
@@ -355,7 +355,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
     fn create_transcript(
         &self,
         params: &IDkgTranscriptParams,
-        dealings: &BatchSignedIDkgDealings,
+        dealings: BatchSignedIDkgDealings,
     ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;

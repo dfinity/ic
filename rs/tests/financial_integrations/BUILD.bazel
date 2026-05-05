@@ -9,7 +9,7 @@ system_test(
     },
     deps = [
         "//packages/icrc-ledger-agent:icrc_ledger_agent",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/crypto/tree_hash",
         "//rs/ledger_suite/common/ledger_core",
         "//rs/ledger_suite/icrc1/ledger",

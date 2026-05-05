@@ -155,3 +155,8 @@ CANISTER_SANDBOX_RUNTIME_DEPS = {
     "LAUNCHER_BINARY": "//rs/canister_sandbox:sandbox_launcher",
     "COMPILER_BINARY": "//rs/canister_sandbox:compiler_sandbox",
 }
+
+MAINNET_NNS_SYSTEM_TEST_RUNTIME_DEPS = IC_GATEWAY_RUNTIME_DEPS | {
+    "IC_RECOVERY_PATH": "//rs/recovery:ic-recovery",
+    "IC_REPLAY_PATH": "//rs/replay:ic-replay",
+}

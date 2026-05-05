@@ -35,7 +35,7 @@ mod create_transcript {
         let csp = MockAllCryptoServiceProvider::new();
         let verified_dealings = BTreeMap::new();
 
-        let result = create_transcript(&csp, &config, &verified_dealings);
+        let result = create_transcript(&csp, &config, verified_dealings);
 
         assert_eq!(
             result,
@@ -55,7 +55,7 @@ mod create_transcript {
         let csp = MockAllCryptoServiceProvider::new();
         let verified_dealings = verified_dealings(&[(NODE_1, dealing_1()), (NODE_2, dealing_2())]);
 
-        let result = create_transcript(&csp, &config, &verified_dealings);
+        let result = create_transcript(&csp, &config, verified_dealings);
 
         assert_eq!(
             result,
@@ -91,7 +91,7 @@ mod create_transcript {
             (MISSING_NODE_ID_IN_DEALERS_2, dealing_3()),
         ]);
 
-        let _panic = create_transcript(&csp, &config, &verified_dealings).unwrap_err();
+        let _panic = create_transcript(&csp, &config, verified_dealings).unwrap_err();
     }
 
     #[test]
@@ -104,7 +104,7 @@ mod create_transcript {
         let csp = MockAllCryptoServiceProvider::new();
         let verified_dealings = verified_dealings(&[(NODE_1, dealing_1()), (NODE_2, dealing_2())]);
 
-        let result = create_transcript(&csp, &config, &verified_dealings);
+        let result = create_transcript(&csp, &config, verified_dealings);
 
         assert_eq!(
             result.unwrap_err(),
@@ -129,7 +129,7 @@ mod create_transcript {
             (NODE_3, dealing_3()),
         ]);
 
-        let result = create_transcript(&csp, &config, &verified_dealings);
+        let result = create_transcript(&csp, &config, verified_dealings);
 
         assert!(result.is_ok())
     }
@@ -163,7 +163,7 @@ mod create_transcript {
             .return_const(Ok(empty_ni_csp_dkg_transcript()));
         let verified_dealings = verified_dealings(&[(NODE_1, dealing_1()), (NODE_3, dealing_3())]);
 
-        let _ = create_transcript(&csp, &config, &verified_dealings);
+        let _ = create_transcript(&csp, &config, verified_dealings);
     }
 
     #[test]
@@ -182,7 +182,7 @@ mod create_transcript {
         let csp = csp_with_create_transcript_returning(Ok(csp_transcript.clone()));
         let verified_dealings = verified_dealings(&[(NODE_1, dealing_1()), (NODE_3, dealing_3())]);
 
-        let transcript = create_transcript(&csp, &config, &verified_dealings).unwrap();
+        let transcript = create_transcript(&csp, &config, verified_dealings).unwrap();
 
         assert_eq!(
             transcript,
@@ -215,7 +215,7 @@ mod create_transcript {
 
         let verified_dealings = verified_dealings(&[(NODE_1, dealing_1()), (NODE_3, dealing_3())]);
 
-        let _panic = create_transcript(&csp, &config, &verified_dealings).unwrap_err();
+        let _panic = create_transcript(&csp, &config, verified_dealings).unwrap_err();
     }
 
     fn csp_with_create_transcript_returning(
@@ -281,7 +281,7 @@ mod create_transcript_with_resharing {
             .return_const(Ok(empty_ni_csp_dkg_transcript()));
         let verified_dealings = verified_dealings(&[(NODE_3, dealing_3()), (NODE_6, dealing_6())]);
 
-        let result = create_transcript(&csp, &config, &verified_dealings);
+        let result = create_transcript(&csp, &config, verified_dealings);
         assert!(result.is_ok())
     }
 
@@ -303,7 +303,7 @@ mod create_transcript_with_resharing {
         let csp = MockAllCryptoServiceProvider::new();
         let verified_dealings = verified_dealings(&[(NODE_3, dealing_3()), (NODE_6, dealing_6())]);
 
-        let error = create_transcript(&csp, &config, &verified_dealings).unwrap_err();
+        let error = create_transcript(&csp, &config, verified_dealings).unwrap_err();
 
         assert_eq!(
             error,
@@ -335,7 +335,7 @@ mod create_transcript_with_resharing {
         ));
         let verified_dealings = verified_dealings(&[(NODE_3, dealing_3()), (NODE_6, dealing_6())]);
 
-        let error = create_transcript(&csp, &config, &verified_dealings).unwrap_err();
+        let error = create_transcript(&csp, &config, verified_dealings).unwrap_err();
 
         assert_eq!(
             error,

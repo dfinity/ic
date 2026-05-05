@@ -18,7 +18,7 @@ rust_library(
         # Keep sorted.
         "//packages/ic-http-types",
         "//packages/ic-metrics-assert",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
         "//rs/ledger_suite/icrc1/ledger",
         "//rs/state_machine_tests",

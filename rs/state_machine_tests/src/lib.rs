@@ -1034,6 +1034,10 @@ impl StateManager for StateMachineStateManager {
         self.deref().commit_and_certify(state, scope, batch_summary)
     }
 
+    fn tip_height(&self) -> Height {
+        self.deref().tip_height()
+    }
+
     fn take_tip(&self) -> (Height, ReplicatedState) {
         self.deref().take_tip()
     }
@@ -3410,6 +3414,7 @@ impl StateMachine {
         self.checkpointed_tick();
         let (h, mut state) = self.state_manager.take_tip();
         state.put_canister_state(source_state.canister_state(&canister_id).unwrap().clone());
+        *state.canister_priority_mut(canister_id) = *source_state.canister_priority(&canister_id);
         self.state_manager
             .commit_and_certify(state, CertificationScope::Full, None);
         self.state_manager.remove_states_below(h.increment());
@@ -4717,6 +4722,25 @@ impl StateMachine {
         canister_id: CanisterId,
     ) -> Result<Result<CanisterStatusResultV2, String>, UserError> {
         self.execute_ingress_as(
+            sender,
+            CanisterId::ic_00(),
+            "canister_status",
+            (CanisterIdRecord::from(canister_id)).encode(),
+        )
+        .map(|wasm_result| match wasm_result {
+            WasmResult::Reply(reply) => Ok(Decode!(&reply, CanisterStatusResultV2).unwrap()),
+            WasmResult::Reject(reject_msg) => Err(reject_msg),
+        })
+    }
+
+    /// Queries the `canister_status` endpoint on the management canister of the specified sender.
+    /// Use this if the `canister_id` is controlled by `sender`.
+    pub fn canister_status_query_as(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+    ) -> Result<Result<CanisterStatusResultV2, String>, UserError> {
+        self.query_as(
             sender,
             CanisterId::ic_00(),
             "canister_status",
