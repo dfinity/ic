@@ -6,7 +6,6 @@ use crate::address::BitcoinAddress;
 use crate::state::read_state;
 use crate::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcWithApprovalArgs};
 use candid::{CandidType, Decode, Deserialize};
-use icrc_ledger_types::icrc1::account::Subaccount;
 use icrc_ledger_types::icrc21::errors::{ErrorInfo, Icrc21Error};
 use icrc_ledger_types::icrc21::lib::MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES;
 use icrc_ledger_types::icrc21::requests::{
@@ -145,23 +144,18 @@ fn build_retrieve_btc_with_approval_message(
     symbols: TokenSymbols,
 ) -> ConsentMessage {
     let TokenSymbols { ckbtc, btc } = symbols;
+    let amount = format_amount(args.amount, DECIMALS);
     match display_type {
         DisplayMessageType::GenericDisplay => {
-            let mut message = String::new();
-            message.push_str(&format!("# Convert {ckbtc} to {btc}"));
-            message.push_str(&format!(
-                "\n\nAuthorize the {ckbtc} minter to burn {ckbtc} from your account and \
+            let mut message = format!(
+                "# Convert {ckbtc} to {btc}\n\n\
+                 Authorize the {ckbtc} minter to burn {ckbtc} from your account and \
                  send the equivalent amount in {btc} (minus network and minter fees) to \
-                 the Bitcoin address below."
-            ));
-            message.push_str(&format!(
-                "\n\n**Amount to convert:** `{} {ckbtc}`",
-                format_amount(args.amount, DECIMALS)
-            ));
-            message.push_str(&format!(
-                "\n\n**Bitcoin destination address:**\n`{}`",
-                args.address
-            ));
+                 the Bitcoin address below.\n\n\
+                 **Amount to convert:** `{amount} {ckbtc}`\n\n\
+                 **Bitcoin destination address:**\n`{address}`",
+                address = args.address,
+            );
             if let Some(subaccount) = args.from_subaccount {
                 message.push_str(&format!(
                     "\n\n**{ckbtc} source subaccount:**\n`{}`",
@@ -196,7 +190,7 @@ fn build_retrieve_btc_with_approval_message(
                 fields.push((
                     "From subaccount".to_string(),
                     Value::Text {
-                        content: format_subaccount(&subaccount),
+                        content: hex::encode(subaccount),
                     },
                 ));
             }
@@ -214,25 +208,17 @@ fn build_retrieve_btc_message(
     symbols: TokenSymbols,
 ) -> ConsentMessage {
     let TokenSymbols { ckbtc, btc } = symbols;
+    let amount = format_amount(args.amount, DECIMALS);
     match display_type {
-        DisplayMessageType::GenericDisplay => {
-            let mut message = String::new();
-            message.push_str(&format!("# Convert {ckbtc} to {btc}"));
-            message.push_str(&format!(
-                "\n\nWithdraw {ckbtc} previously deposited to your withdrawal account \
-                 with the {ckbtc} minter and send the equivalent amount in {btc} \
-                 (minus network and minter fees) to the Bitcoin address below."
-            ));
-            message.push_str(&format!(
-                "\n\n**Amount to convert:** `{} {ckbtc}`",
-                format_amount(args.amount, DECIMALS)
-            ));
-            message.push_str(&format!(
-                "\n\n**Bitcoin destination address:**\n`{}`",
-                args.address
-            ));
-            ConsentMessage::GenericDisplayMessage(message)
-        }
+        DisplayMessageType::GenericDisplay => ConsentMessage::GenericDisplayMessage(format!(
+            "# Convert {ckbtc} to {btc}\n\n\
+             Withdraw {ckbtc} previously deposited to your withdrawal account \
+             with the {ckbtc} minter and send the equivalent amount in {btc} \
+             (minus network and minter fees) to the Bitcoin address below.\n\n\
+             **Amount to convert:** `{amount} {ckbtc}`\n\n\
+             **Bitcoin destination address:**\n`{address}`",
+            address = args.address,
+        )),
         DisplayMessageType::FieldsDisplay => ConsentMessage::FieldsDisplayMessage(FieldsDisplay {
             intent: format!("{ckbtc} to {btc}"),
             fields: vec![
@@ -253,10 +239,6 @@ fn build_retrieve_btc_message(
             ],
         }),
     }
-}
-
-fn format_subaccount(subaccount: &Subaccount) -> String {
-    hex::encode(subaccount)
 }
 
 /// Verifies that `address` parses as a valid Bitcoin address on the configured
