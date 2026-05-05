@@ -4,8 +4,8 @@ use super::subnet_call_context_manager::{
     SubnetCallContext, SubnetCallContextManager, ThresholdArguments,
 };
 use super::*;
-use crate::InputQueueType;
 use crate::testing::{CanisterQueuesTesting, StreamTesting};
+use crate::{CanisterPriority, InputQueueType};
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_ecdsa_presig_quadruple,
@@ -202,12 +202,12 @@ fn init_allocation_ranges_if_empty() {
 }
 
 #[test]
-fn generate_new_canister_id_no_allocation_ranges() {
-    let mut system_metadata = SystemMetadata::new(SUBNET_0, SubnetType::Application);
+fn peek_new_canister_id_no_allocation_ranges() {
+    let system_metadata = SystemMetadata::new(SUBNET_0, SubnetType::Application);
 
     assert_eq!(
         Err("Canister ID allocation was consumed".into()),
-        system_metadata.generate_new_canister_id()
+        system_metadata.peek_new_canister_id()
     );
     assert_eq!(None, system_metadata.last_generated_canister_id);
 }
@@ -219,7 +219,7 @@ fn generate_new_canister_id_no_allocation_ranges() {
 ///          \ canister_migrations.ranges()
 /// ```
 #[test]
-fn generate_new_canister_id() {
+fn peek_and_commit_new_canister_id() {
     fn range(start: u64, end: u64) -> CanisterIdRange {
         CanisterIdRange {
             start: start.into(),
@@ -269,10 +269,9 @@ fn generate_new_canister_id() {
     /// Asserts that the next generated canister ID is the expected one.
     /// And that `last_generated_canister_id` is updated accordingly.
     fn assert_next_generated(expected: u64, system_metadata: &mut SystemMetadata) {
-        assert_eq!(
-            Ok(expected.into()),
-            system_metadata.generate_new_canister_id()
-        );
+        let canister_id = system_metadata.peek_new_canister_id().unwrap();
+        assert_eq!(CanisterId::from(expected), canister_id);
+        system_metadata.commit_new_canister_id(canister_id);
         assert_eq!(
             Some(expected.into()),
             system_metadata.last_generated_canister_id
@@ -300,7 +299,7 @@ fn generate_new_canister_id() {
     // No more canister IDs can be generated.
     assert_eq!(
         Err("Canister ID allocation was consumed".into()),
-        system_metadata.generate_new_canister_id()
+        system_metadata.peek_new_canister_id()
     );
     // But last generated is the same.
     assert_eq!(Some(30.into()), system_metadata.last_generated_canister_id);
@@ -370,16 +369,38 @@ fn system_metadata_roundtrip_encoding() {
     system_metadata.bitcoin_get_successors_follow_up_responses =
         btreemap! { 10.into() => vec![vec![1], vec![2]] };
 
+    // Observe two `BlockmakerMetrics` on successive days.
+    system_metadata.blockmaker_metrics_time_series.observe(
+        Time::from_nanos_since_unix_epoch(0),
+        &BlockmakerMetrics {
+            blockmaker: node_test_id(1),
+            failed_blockmakers: vec![node_test_id(2)],
+        },
+    );
+    system_metadata.blockmaker_metrics_time_series.observe(
+        Time::from_nanos_since_unix_epoch(0) + Duration::from_secs(24 * 3600),
+        &BlockmakerMetrics {
+            blockmaker: node_test_id(3),
+            failed_blockmakers: vec![node_test_id(4)],
+        },
+    );
+
+    // Add scheduling priority for a canister.
+    *system_metadata
+        .subnet_schedule
+        .get_mut(CanisterId::from_u64(1)) = CanisterPriority {
+        accumulated_priority: 100.into(),
+        executed_rounds: 2,
+        long_execution_start_round: Some(3.into()),
+        last_full_execution_round: 4.into(),
+    };
+
     // Validates that a roundtrip encode-decode results in the same `SystemMetadata`.
     fn validate_roundtrip_encoding(system_metadata: &SystemMetadata) {
         let proto = pb::SystemMetadata::from(system_metadata);
         assert_eq!(
             *system_metadata,
-            (
-                proto,
-                system_metadata.subnet_schedule.clone(),
-                &DummyMetrics as &dyn CheckpointLoadingMetrics
-            )
+            (proto, &DummyMetrics as &dyn CheckpointLoadingMetrics)
                 .try_into()
                 .unwrap()
         );
@@ -398,30 +419,6 @@ fn system_metadata_roundtrip_encoding() {
 
     // Set `last_generated_canister_id` to valid, but migrated canister ID.
     system_metadata.last_generated_canister_id = Some(15.into());
-    validate_roundtrip_encoding(&system_metadata);
-
-    // Observe two `BlockmakerMetrics` on successive days.
-    system_metadata.blockmaker_metrics_time_series.observe(
-        Time::from_nanos_since_unix_epoch(0),
-        &BlockmakerMetrics {
-            blockmaker: node_test_id(1),
-            failed_blockmakers: vec![node_test_id(2)],
-        },
-    );
-    system_metadata.blockmaker_metrics_time_series.observe(
-        Time::from_nanos_since_unix_epoch(0) + Duration::from_secs(24 * 3600),
-        &BlockmakerMetrics {
-            blockmaker: node_test_id(3),
-            failed_blockmakers: vec![node_test_id(4)],
-        },
-    );
-    validate_roundtrip_encoding(&system_metadata);
-
-    // Add scheduling priority for a canister.
-    system_metadata
-        .subnet_schedule
-        .get_mut(CanisterId::from_u64(1))
-        .accumulated_priority = 1.into();
     validate_roundtrip_encoding(&system_metadata);
 }
 

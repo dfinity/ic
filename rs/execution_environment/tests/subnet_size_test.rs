@@ -378,6 +378,7 @@ fn simulate_execute_install_code_cost(subnet_type: SubnetType, subnet_size: usiz
             filtered_subnet_config(subnet_type, KeepFeesFilter::Execution),
             HypervisorConfig {
                 embedders_config: EmbeddersConfig {
+                    create_execution_state_base_cost: NumInstructions::from(0),
                     cost_to_compile_wasm_instruction: NumInstructions::from(0),
                     ..Default::default()
                 },

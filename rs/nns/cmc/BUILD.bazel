@@ -8,7 +8,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-dummy-getrandom-for-wasm",
     "//packages/ic-http-types",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
     "//rs/crypto/tree_hash",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",

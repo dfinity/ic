@@ -121,6 +121,7 @@ fn dts_state_machine_config(subnet_config: SubnetConfig) -> StateMachineConfig {
         subnet_config,
         HypervisorConfig {
             embedders_config: EmbeddersConfig {
+                create_execution_state_base_cost: 0.into(),
                 cost_to_compile_wasm_instruction: 0.into(),
                 ..EmbeddersConfig::default()
             },

@@ -17,7 +17,7 @@ package_group(
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
     "//rs/crypto/sha2",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/canisters",

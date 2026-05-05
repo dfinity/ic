@@ -421,6 +421,7 @@ fn verify_paths(
     };
 
     let mut last_request_status_id: Option<MessageId> = None;
+    let mut last_canister_ranges_subnet_id = None;
 
     // Convert the paths to slices to make it easier to match below.
     let paths: Vec<Vec<&[u8]>> = paths
@@ -506,7 +507,20 @@ fn verify_paths(
             {
                 metrics.observe_read_state_path(endpoint, "subnet_canister_ranges");
             }
-            [b"canister_ranges", _subnet_id] if target == Target::Subnet => {
+            [b"canister_ranges", subnet_id] if target == Target::Subnet => {
+                let subnet_id = parse_principal_id(subnet_id)?;
+                if let Some(last_id) = last_canister_ranges_subnet_id
+                    && subnet_id != last_id
+                {
+                    return Err(HttpError {
+                        status: StatusCode::BAD_REQUEST,
+                        message: format!(
+                            "More than one non-unique subnet ID exists \
+                                in canister_ranges paths: {last_id} and {subnet_id}."
+                        ),
+                    });
+                }
+                last_canister_ranges_subnet_id = Some(subnet_id);
                 metrics.observe_read_state_path(endpoint, "canister_ranges");
             }
             [b"request_status", request_id]
@@ -1067,6 +1081,113 @@ mod test {
         )
         .expect_err("Should fail");
         assert_eq!(err.status, StatusCode::NOT_FOUND);
+    }
+
+    #[rstest]
+    fn requesting_canister_ranges_with_multiple_non_unique_subnet_ids_fails(
+        #[values(Version::V2, Version::V3)] version: Version,
+    ) {
+        let metrics = test_metrics();
+        let state = fake_replicated_state();
+        let err = verify_paths(
+            &metrics,
+            Target::Subnet,
+            version,
+            &state,
+            &user_test_id(1),
+            &[
+                Path::new(vec![
+                    Label::from("canister_ranges"),
+                    subnet_test_id(2).get().to_vec().into(),
+                ]),
+                Path::new(vec![
+                    Label::from("canister_ranges"),
+                    subnet_test_id(3).get().to_vec().into(),
+                ]),
+            ],
+            &CanisterIdSet::all(),
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
+        )
+        .expect_err(
+            "Should fail because requesting /canister_ranges \
+            for multiple subnet ids is not allowed",
+        );
+        assert_eq!(err.status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            err.message,
+            format!(
+                "More than one non-unique subnet ID exists \
+                    in canister_ranges paths: {} and {}.",
+                subnet_test_id(2).get(),
+                subnet_test_id(3).get()
+            )
+        );
+    }
+
+    #[rstest]
+    fn requesting_canister_ranges_with_multiple_unique_subnet_ids_succeeds(
+        #[values(Version::V2, Version::V3)] version: Version,
+    ) {
+        let metrics = test_metrics();
+        let state = fake_replicated_state();
+        assert_eq!(
+            verify_paths(
+                &metrics,
+                Target::Subnet,
+                version,
+                &state,
+                &user_test_id(1),
+                &[
+                    Path::new(vec![
+                        Label::from("canister_ranges"),
+                        subnet_test_id(2).get().to_vec().into(),
+                    ]),
+                    Path::new(vec![
+                        Label::from("canister_ranges"),
+                        subnet_test_id(2).get().to_vec().into(),
+                    ]),
+                ],
+                &CanisterIdSet::all(),
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
+            ),
+            Ok(()),
+            "Should succeed because it is okay to request /canister_ranges \
+            path multiple times for the same subnet id"
+        );
+    }
+
+    #[rstest]
+    fn requesting_canister_ranges_with_invalid_subnet_id_fails(
+        #[values(Version::V2, Version::V3)] version: Version,
+    ) {
+        let metrics = test_metrics();
+        let state = fake_replicated_state();
+        let err = verify_paths(
+            &metrics,
+            Target::Subnet,
+            version,
+            &state,
+            &user_test_id(1),
+            &[Path::new(vec![
+                Label::from("canister_ranges"),
+                Label::from("very_much_invalid_subnet_id!!!"),
+            ])],
+            &CanisterIdSet::all(),
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
+        )
+        .expect_err(
+            "Should fail because requesting /canister_ranges \
+            with an invalid subnet id should be rejected",
+        );
+        assert_eq!(err.status, StatusCode::BAD_REQUEST);
+        assert!(
+            err.message.starts_with("Could not parse principal ID:"),
+            "unexpected message: {}",
+            err.message
+        );
     }
 
     #[rstest]
