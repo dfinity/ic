@@ -184,10 +184,7 @@ impl Display for NeuronStoreError {
                 )
             }
             NeuronStoreError::SubaccountAlreadyExists { subaccount } => {
-                write!(
-                    f,
-                    "There is already a neuron with subaccount {subaccount:?}."
-                )
+                write!(f, "There is already a neuron with subaccount {subaccount}.")
             }
             NeuronStoreError::InvalidOperation { reason } => {
                 write!(f, "Invalid operation: {reason}")

@@ -1095,7 +1095,7 @@ impl RandomnessGenerator for SequentialMockRng {
 fn test_new_neuron_subaccount_succeeds_without_collision() {
     let neuron_store = NeuronStore::new(BTreeMap::new());
 
-    let expected_bytes = [42u8; 32];
+    let expected_bytes = [42_u8; 32];
     let mut rng = SequentialMockRng::new(vec![expected_bytes]);
 
     let observed = neuron_store.new_neuron_subaccount(&mut rng);
@@ -1105,8 +1105,8 @@ fn test_new_neuron_subaccount_succeeds_without_collision() {
 
 #[test]
 fn test_new_neuron_subaccount_retries_on_collision() {
-    let colliding_bytes = [1u8; 32];
-    let unique_bytes = [2u8; 32];
+    let colliding_bytes = [1_u8; 32];
+    let unique_bytes = [2_u8; 32];
 
     // Create a neuron store with a neuron whose subaccount matches colliding_bytes.
     let neuron = NeuronBuilder::new(
@@ -1135,7 +1135,7 @@ fn test_new_neuron_subaccount_retries_on_collision() {
 #[test]
 fn test_ensure_subaccount_available_succeeds_when_unused() {
     let neuron_store = NeuronStore::new(BTreeMap::new());
-    let subaccount = Subaccount([42u8; 32]);
+    let subaccount = Subaccount([42_u8; 32]);
 
     let observed = neuron_store.ensure_subaccount_available(subaccount);
 
@@ -1144,7 +1144,7 @@ fn test_ensure_subaccount_available_succeeds_when_unused() {
 
 #[test]
 fn test_ensure_subaccount_available_fails_on_collision() {
-    let colliding_bytes = [1u8; 32];
+    let colliding_bytes = [1_u8; 32];
     let neuron = NeuronBuilder::new(
         NeuronId { id: 1 },
         Subaccount(colliding_bytes),
