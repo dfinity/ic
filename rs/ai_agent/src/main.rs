@@ -21,8 +21,8 @@ struct Cli {
     addr: SocketAddr,
 
     /// Path to the replica `ic.json5` config. Used by `ic_state` to find
-    /// the on-disk state root, and by `ic_metrics` / `ic_logs` to find
-    /// the registry local store for resolving peer node IPv6 addresses.
+    /// the on-disk state root, and by `ic_metrics` to find the registry
+    /// local store for resolving peer node IPv6 addresses.
     #[arg(long, env = "IC_AI_AGENT_IC_CONFIG", default_value = DEFAULT_IC_CONFIG_PATH)]
     ic_config: PathBuf,
 }

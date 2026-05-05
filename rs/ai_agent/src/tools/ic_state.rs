@@ -462,8 +462,7 @@ impl Tool for IcState {
             description: "Query the Internet Computer state for canister, subnet, or node \
                 information. Use this when the operator asks about what's deployed, \
                 who controls a canister, cycles balance, module hash, or node \
-                membership. Does not return metrics or logs — use `ic_metrics` or \
-                `ic_logs` for those."
+                membership. Does not return metrics — use `ic_metrics` for that."
                 .to_string(),
             parameters: json!({
                 "type": "object",

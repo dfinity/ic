@@ -5,16 +5,19 @@
 
 use rig::tool::Tool;
 
-use super::{Calculator, CurrentDateTime, IcLogs, IcMetrics, IcState};
+use super::{Calculator, CurrentDateTime, IcMetrics, IcState};
 
 /// Returns the names of all built-in tools.
+///
+/// `ic_logs` is intentionally absent: the module is currently a TODO
+/// stub (see `ic_logs.rs`). It will be added back here once the
+/// implementation lands.
 pub fn registered_tool_names() -> &'static [&'static str] {
     &[
         Calculator::NAME,
         CurrentDateTime::NAME,
         IcState::NAME,
         IcMetrics::NAME,
-        IcLogs::NAME,
     ]
 }
 

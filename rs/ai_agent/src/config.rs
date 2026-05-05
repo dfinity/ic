@@ -16,21 +16,23 @@ pub const DEFAULT_GEMINI_MODEL: &str = "gemini-flash-latest";
 
 /// Default agent system prompt.
 ///
-/// IC observability tools (`ic_state`, `ic_metrics`, `ic_logs`) are described
-/// here so the LLM knows to reach for them. Without an explicit mention, the
-/// model tends to fall back to "I don't have access to live data" answers
-/// instead of using the tools wired into the agent.
+/// IC observability tools (`ic_state`, `ic_metrics`) are described here so
+/// the LLM knows to reach for them. Without an explicit mention, the model
+/// tends to fall back to "I don't have access to live data" answers instead
+/// of using the tools wired into the agent.
+///
+/// `ic_logs` is intentionally not advertised here — it's a TODO (see
+/// `tools/ic_logs.rs`). When it lands, add it back to this prompt with a
+/// description of when to prefer it over `ic_metrics`.
 pub const DEFAULT_PREAMBLE: &str = "You are a concise, helpful assistant. \
     When tools are provided, prefer using them for any factual, computational, \
     or time-sensitive request. \
     \
     You can also query Internet Computer node observability: `ic_state` for \
-    canister/subnet/node metadata read from the locally synced state, \
-    `ic_metrics` for replica/orchestrator/host Prometheus metrics, and \
-    `ic_logs` for recent systemd journal output. Prefer `ic_state` for \
-    \"what exists\", `ic_metrics` for \"how is it performing\", and \
-    `ic_logs` for \"what happened recently\". Always cite the metric name \
-    or log timestamp range you used.";
+    canister/subnet/node metadata read from the locally synced state, and \
+    `ic_metrics` for replica/orchestrator/host Prometheus metrics. Prefer \
+    `ic_state` for \"what exists\" and `ic_metrics` for \"how is it \
+    performing\". Always cite the metric name you used.";
 
 /// Default cap on tool-call turns per agent invocation.
 pub const DEFAULT_MAX_TURNS: usize = 5;
@@ -50,8 +52,8 @@ pub struct AppConfig {
     pub default_preamble: String,
     pub default_max_turns: usize,
     /// Path to the replica `ic.json5` config. Used by `ic_state` to discover
-    /// the on-disk state root, and by `ic_metrics` / `ic_logs` to discover
-    /// the registry local store (so node ids can be resolved to IPv6
+    /// the on-disk state root, and by `ic_metrics` to discover the
+    /// registry local store (so node ids can be resolved to IPv6
     /// addresses of peer nodes in the syncing subnet).
     pub ic_config_path: PathBuf,
 }

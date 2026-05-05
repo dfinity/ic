@@ -18,7 +18,7 @@ use slog::warn;
 use crate::{
     config::ConfigRequest,
     state::AppState,
-    tools::{Calculator, CurrentDateTime, IcLogs, IcMetrics, IcState},
+    tools::{Calculator, CurrentDateTime, IcMetrics, IcState},
 };
 
 /// Active AI provider client. Currently Gemini-only; new providers slot in
@@ -65,12 +65,15 @@ impl AiProvider {
     /// can reference any of them by name.
     ///
     /// Takes `Arc<AppState>` so the IC observability tools (`ic_state`,
-    /// `ic_metrics`, `ic_logs`) can pick up the shared replica config
-    /// path and lazily-built node directory. Tools that fail to
-    /// construct (typically `ic_state` on a node where `ic.json5` is
-    /// missing or unreadable) are skipped with a warning rather than
-    /// failing the whole agent build — the other tools may still be
-    /// useful and we don't want one bad path to take the agent down.
+    /// `ic_metrics`) can pick up the shared replica config path and
+    /// lazily-built node directory. Tools that fail to construct
+    /// (typically `ic_state` on a node where `ic.json5` is missing or
+    /// unreadable) are skipped with a warning rather than failing the
+    /// whole agent build — the other tools may still be useful and we
+    /// don't want one bad path to take the agent down.
+    ///
+    /// `ic_logs` is intentionally not wired up here — it's a TODO,
+    /// see `tools/ic_logs.rs`.
     pub async fn build_agent(
         &self,
         state: &Arc<AppState>,
@@ -96,9 +99,7 @@ impl AiProvider {
                     }
                 }
 
-                builder = builder
-                    .tool(IcMetrics::new(state.clone()))
-                    .tool(IcLogs::new(state.clone()));
+                builder = builder.tool(IcMetrics::new(state.clone()));
 
                 Ok(builder.build())
             }

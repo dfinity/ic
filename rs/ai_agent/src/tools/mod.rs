@@ -8,6 +8,9 @@
 
 pub mod calculator;
 pub mod current_datetime;
+// `ic_logs` is currently a TODO stub — see the module docs in
+// `ic_logs.rs`. Kept in the tree (not deleted) so the placeholder
+// stays visible to anyone browsing the tools directory.
 pub mod ic_logs;
 pub mod ic_metrics;
 pub mod ic_state;
@@ -16,7 +19,6 @@ pub mod registry;
 
 pub use calculator::Calculator;
 pub use current_datetime::CurrentDateTime;
-pub use ic_logs::IcLogs;
 pub use ic_metrics::IcMetrics;
 pub use ic_state::IcState;
 pub use registry::{registered_tool_names, validate_tool_names};

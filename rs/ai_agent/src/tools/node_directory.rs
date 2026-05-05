@@ -1,11 +1,12 @@
 //! Shared helper: resolve `NodeId -> Ipv6Addr` from the local registry
 //! store.
 //!
-//! Both `ic_metrics` and `ic_logs` need to talk to a peer node in the
-//! subnet that this AiNode is shadowing. The LLM passes a textual node
-//! id (which it discovered via `ic_state`); we look it up in the
-//! registry the orchestrator-managed state-sync replica keeps on disk
-//! and return the IPv6 published in the node's `NodeRecord.http`.
+//! `ic_metrics` (and, when implemented, `ic_logs`) needs to talk to a
+//! peer node in the subnet that this AiNode is shadowing. The LLM
+//! passes a textual node id (which it discovered via `ic_state`); we
+//! look it up in the registry the orchestrator-managed state-sync
+//! replica keeps on disk and return the IPv6 published in the node's
+//! `NodeRecord.http`.
 //!
 //! Single instance per process. Holds a `RegistryClientImpl` backed by
 //! a `LocalStoreImpl`. We never spawn the background polling thread —
