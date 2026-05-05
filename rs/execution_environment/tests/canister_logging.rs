@@ -2638,10 +2638,10 @@ fn test_log_memory_store_feature_flag_via_execution_test_builder() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
     assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .log_memory_store
-            .byte_capacity(),
+        test.canister_status(canister_id)
+            .unwrap()
+            .log_memory_store_size()
+            .get(),
         0,
     );
 
@@ -2651,10 +2651,10 @@ fn test_log_memory_store_feature_flag_via_execution_test_builder() {
         .build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
     assert_gt!(
-        test.canister_state(canister_id)
-            .system_state
-            .log_memory_store
-            .byte_capacity(),
+        test.canister_status(canister_id)
+            .unwrap()
+            .log_memory_store_size()
+            .get(),
         0,
     );
 }
