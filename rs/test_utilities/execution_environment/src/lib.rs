@@ -2003,7 +2003,7 @@ impl ExecutionTest {
     pub fn abort_all_paused_executions(&mut self) {
         let mut state = self.state.take().unwrap();
         let cost_schedule = state.get_own_cost_schedule();
-        abort_all_paused_executions(&mut state, &self.exec_env, &self.log, cost_schedule);
+        abort_all_paused_executions(&mut state, &self.exec_env, cost_schedule, &self.log);
         for (_, paused_subnet_message) in self.paused_subnet_messages.iter_mut() {
             paused_subnet_message.instructions = NumInstructions::new(0);
         }
@@ -2698,6 +2698,13 @@ impl ExecutionTestBuilder {
     ) -> Self {
         self.bitcoin_get_successors_follow_up_responses
             .insert(canister, follow_up_responses);
+        self
+    }
+
+    pub fn with_create_execution_state_base_cost(mut self, cost: u64) -> Self {
+        self.execution_config
+            .embedders_config
+            .create_execution_state_base_cost = cost.into();
         self
     }
 

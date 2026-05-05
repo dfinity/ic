@@ -733,7 +733,7 @@ pub(crate) fn create_valid_transcript<R: Rng + CryptoRng>(
         .filter_by_dealers(&params)
         .next()
         .expect("Empty dealers");
-    let idkg_transcript = dealer.create_transcript_or_panic(&params, &dealings);
+    let idkg_transcript = dealer.create_transcript_or_panic(&params, dealings);
     (dealer.id(), params, idkg_transcript)
 }
 
