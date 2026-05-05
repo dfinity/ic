@@ -399,7 +399,7 @@ mod tests {
 
     #[test]
     fn test_retrieve_btc_with_approval_generic_display_with_subaccount() {
-        let mut subaccount = [0u8; 32];
+        let mut subaccount = [0_u8; 32];
         subaccount[31] = 0x42;
         let args = RetrieveBtcWithApprovalArgs {
             amount: 100_000_000,
