@@ -11193,6 +11193,7 @@ dependencies = [
  "ic-btc-replica-types",
  "ic-error-types 0.2.0",
  "ic-protobuf",
+ "ic-types-cycles",
  "ic-utils 0.9.0",
  "num-traits",
  "serde",
