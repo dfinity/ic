@@ -6,11 +6,11 @@ use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
-use ic_protobuf::registry::subnet::v1::SubnetListRecord;
+use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
 use ic_registry_canister_client::CanisterRegistryClient;
 use ic_registry_keys::{
     DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
-    NODE_REWARDS_TABLE_KEY, make_subnet_list_record_key,
+    NODE_REWARDS_TABLE_KEY, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_types::registry::RegistryClientError;
 use rewards_calculation::types::{RewardableNode, UnixTsNanos};
@@ -61,6 +61,29 @@ impl RegistryQuerier {
                 Ok(SubnetId::from(principal))
             })
             .collect()
+    }
+
+    /// Returns the [`SubnetRecord`] for the given subnet at the specified registry version,
+    /// or `None` if the record does not exist.
+    pub fn get_subnet_record(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> Result<Option<SubnetRecord>, String> {
+        let key = make_subnet_record_key(subnet_id);
+        let record_bytes = self
+            .registry_client
+            .get_value(key.as_str(), version)
+            .map_err(|e| format!("Failed to get SubnetRecord for {subnet_id}: {e:?}"))?;
+
+        match record_bytes {
+            Some(bytes) => {
+                let record = SubnetRecord::decode(bytes.as_slice())
+                    .map_err(|e| format!("Failed to decode SubnetRecord for {subnet_id}: {e:?}"))?;
+                Ok(Some(record))
+            }
+            None => Ok(None),
+        }
     }
 
     /// Returns the NodeRewardsTable at the specified version.

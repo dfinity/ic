@@ -547,6 +547,8 @@ mod tests {
                             ic_icrc1::Operation::FeeCollector { .. } => {
                                 panic!("FeeCollector107 not implemented")
                             }
+                            ic_icrc1::Operation::AuthorizedMint { .. }
+                            | ic_icrc1::Operation::AuthorizedBurn { .. } => continue,
                         };
                         let args = match arg_with_caller.arg {
                             LedgerEndpointArg::TransferArg(arg) => Encode!(&arg),

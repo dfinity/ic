@@ -3,7 +3,7 @@
 
 use crate::execution_environment::ExecutionResponse;
 use crate::{
-    ExecuteMessageResult, RoundLimits, as_round_instructions,
+    ExecuteMessageResult, HypervisorMetrics, RoundLimits, as_round_instructions,
     canister_manager::types::CanisterManagerError, metrics::CallTreeMetrics,
 };
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
@@ -360,14 +360,14 @@ pub(crate) fn validate_snapshot_visibility(
     canister: &CanisterState,
     caller: &PrincipalId,
     method_name: &str,
-) -> Result<(), UserError> {
+) -> Result<(), CanisterManagerError> {
     if !crate::canister_settings::VisibilitySettings::from(canister.snapshot_visibility())
         .has_access(caller, canister.controllers())
     {
-        return Err(UserError::new(
-            ErrorCode::CanisterRejectedMessage,
-            format!("Caller {caller} is not allowed to call {method_name}"),
-        ));
+        return Err(CanisterManagerError::CanisterSnapshotAccessDenied {
+            caller: *caller,
+            method_name: method_name.to_string(),
+        });
     }
     Ok(())
 }
@@ -507,6 +507,7 @@ fn try_apply_canister_state_changes(
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
     is_composite_query: bool,
+    metrics: &HypervisorMetrics,
     log: &ReplicaLogger,
 ) -> HypervisorResult<RequestMetadataStats> {
     subnet_available_memory
@@ -523,6 +524,7 @@ fn try_apply_canister_state_changes(
         network_topology,
         subnet_id,
         is_composite_query,
+        metrics,
         log,
     )
 }
@@ -546,6 +548,7 @@ pub fn apply_canister_state_changes(
     time: Time,
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
+    metrics: &HypervisorMetrics,
     log: &ReplicaLogger,
     state_changes_error: &IntCounter,
     call_tree_metrics: &dyn CallTreeMetrics,
@@ -572,6 +575,7 @@ pub fn apply_canister_state_changes(
         network_topology,
         subnet_id,
         is_composite_query,
+        metrics,
         log,
     ) {
         Ok(request_stats) => {
@@ -745,7 +749,7 @@ mod test {
         );
 
         if let ExecutionResponse::Request(response) = response {
-            assert_eq!(response.refund, Cycles::from(1000u128));
+            assert_eq!(response.refund, Cycles::from(1000_u128));
         } else {
             panic!("Unexpected response.");
         }

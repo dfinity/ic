@@ -121,6 +121,10 @@ fn initial_state() -> Labeled<Arc<ReplicatedState>> {
 }
 
 impl StateManager for FakeStateManager {
+    fn tip_height(&self) -> Height {
+        self.tip_height()
+    }
+
     fn take_tip(&self) -> (Height, Self::State) {
         (
             self.tip_height(),
@@ -692,6 +696,10 @@ impl RefMockStateManager {
 }
 
 impl StateManager for RefMockStateManager {
+    fn tip_height(&self) -> Height {
+        self.mock.read().unwrap().tip_height()
+    }
+
     fn take_tip(&self) -> (Height, Self::State) {
         self.mock.read().unwrap().take_tip()
     }

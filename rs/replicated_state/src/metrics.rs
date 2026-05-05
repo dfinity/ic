@@ -64,6 +64,7 @@ pub struct ReplicatedStateMetrics {
     stop_canister_calls_without_call_id: IntGauge,
     canister_snapshots_memory_usage: IntGauge,
     num_canister_snapshots: IntGauge,
+    canister_log_retention: Histogram,
 }
 
 impl ReplicatedStateMetrics {
@@ -227,6 +228,12 @@ impl ReplicatedStateMetrics {
                 "scheduler_num_canister_snapshots",
                 "Total number of canister snapshots on this subnet.",
             ),
+            canister_log_retention: metrics_registry.histogram(
+                "canister_log_retention_seconds",
+                "Time span between the oldest and newest records in the canister log buffer, in seconds.",
+                // 10 s .. 5×10⁶ s (~58 d), plus zero — 19 total buckets (0 + 18 powers).
+                decimal_buckets_with_zero(1, 6),
+            ),
         }
     }
 
@@ -342,22 +349,22 @@ impl ReplicatedStateMetrics {
                 }
                 CanisterStatus::Stopped => num_stopped_canisters += 1,
             }
-            match canister.next_task() {
-                Some(&ExecutionTask::PausedExecution { .. }) => {
+            match canister.system_state.task_queue.paused_or_aborted_task() {
+                Some(ExecutionTask::PausedExecution { .. }) => {
                     num_paused_exec += 1;
                 }
-                Some(&ExecutionTask::PausedInstallCode(_)) => {
+                Some(ExecutionTask::PausedInstallCode(_)) => {
                     num_paused_install += 1;
                 }
-                Some(&ExecutionTask::AbortedExecution { .. }) => {
+                Some(ExecutionTask::AbortedExecution { .. }) => {
                     num_aborted_exec += 1;
                 }
-                Some(&ExecutionTask::AbortedInstallCode { .. }) => {
+                Some(ExecutionTask::AbortedInstallCode { .. }) => {
                     num_aborted_install += 1;
                 }
-                Some(&ExecutionTask::Heartbeat)
-                | Some(&ExecutionTask::GlobalTimer)
-                | Some(&ExecutionTask::OnLowWasmMemory)
+                Some(ExecutionTask::Heartbeat)
+                | Some(ExecutionTask::GlobalTimer)
+                | Some(ExecutionTask::OnLowWasmMemory)
                 | None => {}
             }
             consumed_cycles_total += canister.system_state.canister_metrics().consumed_cycles();
@@ -557,6 +564,16 @@ impl ReplicatedStateMetrics {
         };
         self.canister_log_memory_usage_v3
             .observe(log_memory_usage as f64);
+
+        // Observe retention from whichever log store is active.
+        let retention = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+            canister.system_state.log_memory_store.retention()
+        } else {
+            canister.system_state.canister_log.retention()
+        };
+        if let Some(retention) = retention {
+            self.canister_log_retention.observe(retention.as_secs_f64());
+        }
     }
 }
 

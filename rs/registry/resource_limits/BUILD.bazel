@@ -12,6 +12,7 @@ rust_library(
         "//rs/protobuf",
         "//rs/types/types",
         "@crate_index//:candid",
+        "@crate_index//:clap",
         "@crate_index//:serde",
     ],
 )

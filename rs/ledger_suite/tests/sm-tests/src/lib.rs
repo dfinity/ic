@@ -379,7 +379,10 @@ fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
             cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         },
-        feature_flags: Some(FeatureFlags { icrc2: true }),
+        feature_flags: Some(FeatureFlags {
+            icrc2: true,
+            icrc152: false,
+        }),
         index_principal: None,
     }
 }
@@ -452,8 +455,8 @@ where
         ],
     );
 
-    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1.0));
-    assert_eq!(5_000_000u64, balance_of(&env, canister_id, p2.0));
+    assert_eq!(10_000_000_u64, balance_of(&env, canister_id, p1.0));
+    assert_eq!(5_000_000_u64, balance_of(&env, canister_id, p2.0));
 }
 
 pub fn test_metadata_icp_ledger<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
@@ -744,14 +747,14 @@ where
     );
 
     assert_eq!(15_000_000, total_supply(&env, canister_id));
-    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1.0));
-    assert_eq!(5_000_000u64, balance_of(&env, canister_id, p2.0));
+    assert_eq!(10_000_000_u64, balance_of(&env, canister_id, p1.0));
+    assert_eq!(5_000_000_u64, balance_of(&env, canister_id, p2.0));
 
     transfer(&env, canister_id, p1.0, p2.0, 1_000_000).expect("transfer failed");
 
     assert_eq!(15_000_000 - FEE, total_supply(&env, canister_id));
-    assert_eq!(9_000_000u64 - FEE, balance_of(&env, canister_id, p1.0));
-    assert_eq!(6_000_000u64, balance_of(&env, canister_id, p2.0));
+    assert_eq!(9_000_000_u64 - FEE, balance_of(&env, canister_id, p1.0));
+    assert_eq!(6_000_000_u64, balance_of(&env, canister_id, p2.0));
 }
 
 pub fn test_tx_deduplication<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
@@ -845,7 +848,7 @@ where
                 from_subaccount: None,
                 to: p2.0.into(),
                 fee: None,
-                amount: Nat::from(1_000_000u32),
+                amount: Nat::from(1_000_000_u32),
                 created_at_time: Some(now),
                 memo: None,
             }
@@ -898,7 +901,7 @@ where
                 from_subaccount: None,
                 to: p2.0.into(),
                 fee: None,
-                amount: Nat::from(1_000_000u32),
+                amount: Nat::from(1_000_000_u32),
                 created_at_time: Some(now),
                 memo: Some(Memo::default()),
             }
@@ -1023,7 +1026,7 @@ where
     assert_eq!(
         mint_error,
         TransferError::BadFee {
-            expected_fee: Nat::from(0u64)
+            expected_fee: Nat::from(0_u64)
         }
     );
 
@@ -1052,7 +1055,7 @@ where
     assert_eq!(
         burn_error,
         TransferError::BadFee {
-            expected_fee: Nat::from(0u64)
+            expected_fee: Nat::from(0_u64)
         }
     );
 
@@ -1083,7 +1086,7 @@ where
     assert_eq!(
         burn_from_error,
         TransferFromError::BadFee {
-            expected_fee: Nat::from(0u64)
+            expected_fee: Nat::from(0_u64)
         }
     );
 
@@ -1113,7 +1116,7 @@ where
     );
 
     assert_eq!(
-        10_000_000u64,
+        10_000_000_u64,
         balance_of(
             &env,
             canister_id,
@@ -1124,7 +1127,7 @@ where
         )
     );
     assert_eq!(
-        10_000_000u64,
+        10_000_000_u64,
         balance_of(
             &env,
             canister_id,
@@ -1148,7 +1151,7 @@ where
     .expect("transfer failed");
 
     assert_eq!(
-        6_000_000u64,
+        6_000_000_u64,
         balance_of(
             &env,
             canister_id,
@@ -1187,7 +1190,7 @@ where
                 from_subaccount: None,
                 to: p2.0.into(),
                 fee: None,
-                amount: Nat::from(1_000_000u32),
+                amount: Nat::from(1_000_000_u32),
                 created_at_time: Some(now - tx_window - 1),
                 memo: None,
             }
@@ -1208,15 +1211,15 @@ where
                 from_subaccount: None,
                 to: p2.0.into(),
                 fee: None,
-                amount: Nat::from(1_000_000u32),
+                amount: Nat::from(1_000_000_u32),
                 created_at_time: Some(now + Duration::from_secs(5 * 60).as_nanos() as u64),
                 memo: None
             }
         )
     );
 
-    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1.0));
-    assert_eq!(0u64, balance_of(&env, canister_id, p2.0));
+    assert_eq!(10_000_000_u64, balance_of(&env, canister_id, p1.0));
+    assert_eq!(0_u64, balance_of(&env, canister_id, p2.0));
 }
 
 fn test_controllers<T>(
@@ -1468,7 +1471,7 @@ pub fn test_archiving<T>(
 
     let archive_info = list_archives(&env, canister_id);
     assert_eq!(archive_info.len(), 1);
-    assert_eq!(archive_info[0].block_range_start, 0u8);
+    assert_eq!(archive_info[0].block_range_start, 0_u8);
     assert_eq!(archive_info[0].block_range_end, NUM_BLOCKS_TO_ARCHIVE - 1);
 
     let archive_principal = archive_info[0].canister_id;
@@ -1552,7 +1555,7 @@ pub fn test_archiving<T>(
 
     let archive_info = list_archives(&env, canister_id);
     assert_eq!(archive_info.len(), 1);
-    assert_eq!(archive_info[0].block_range_start, 0u8);
+    assert_eq!(archive_info[0].block_range_start, 0_u8);
     assert_eq!(
         archive_info[0].block_range_end,
         2 * NUM_BLOCKS_TO_ARCHIVE - 1
@@ -1930,7 +1933,7 @@ where
     // We didn't set the max_memo_length in the init params of the ledger
     // so the memo will be accepted only if it's 32 bytes or less.
     for i in 0..=32 {
-        assert!(transfer_with_memo(&vec![0u8; i]).is_ok(), "Memo size: {i}");
+        assert!(transfer_with_memo(&vec![0_u8; i]).is_ok(), "Memo size: {i}");
     }
     expect_memo_length_error(transfer_with_memo, &[0_u8; 33]);
 
@@ -1945,7 +1948,7 @@ where
 
     // Now the ledger should accept memos up to 64 bytes.
     for i in 0..=64 {
-        assert!(transfer_with_memo(&vec![0u8; i]).is_ok(), "Memo size: {i}");
+        assert!(transfer_with_memo(&vec![0_u8; i]).is_ok(), "Memo size: {i}");
     }
     expect_memo_length_error(transfer_with_memo, &[0_u8; 65]);
 
@@ -2543,7 +2546,7 @@ where
     assert_eq!(
         send_approval(&env, canister_id, from.0, &approve_args),
         Err(ApproveError::AllowanceChanged {
-            current_allowance: Nat::from(150_000u32)
+            current_allowance: Nat::from(150_000_u32)
         })
     );
     let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
@@ -2559,7 +2562,7 @@ where
     assert_eq!(
         send_approval(&env, canister_id, from.0, &approve_args),
         Err(ApproveError::AllowanceChanged {
-            current_allowance: Nat::from(150_000u32)
+            current_allowance: Nat::from(150_000_u32)
         })
     );
     let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
@@ -2601,7 +2604,7 @@ where
     assert_eq!(
         send_approval(&env, canister_id, from.0, &approve_args),
         Err(ApproveError::InsufficientFunds {
-            balance: Nat::from(5_000u32)
+            balance: Nat::from(5_000_u32)
         })
     );
     let allowance = Account::get_allowance(&env, canister_id, from.0, spender.0);
@@ -2926,12 +2929,12 @@ where
 
     assert_eq!(allowances[0].from_account, approver);
     assert_eq!(allowances[0].to_spender, spender);
-    assert_eq!(allowances[0].allowance, Nat::from(1u64));
+    assert_eq!(allowances[0].allowance, Nat::from(1_u64));
     assert_eq!(allowances[0].expires_at, None);
 
     assert_eq!(allowances[1].from_account, approver);
     assert_eq!(allowances[1].to_spender, spender_sub);
-    assert_eq!(allowances[1].allowance, Nat::from(2u64));
+    assert_eq!(allowances[1].allowance, Nat::from(2_u64));
     assert_eq!(allowances[1].expires_at, expiration_far);
 
     args.take = Some(Nat::from(1_u64));
@@ -2954,12 +2957,12 @@ where
 
     assert_eq!(allowances[0].from_account, approver_sub);
     assert_eq!(allowances[0].to_spender, spender);
-    assert_eq!(allowances[0].allowance, Nat::from(3u64));
+    assert_eq!(allowances[0].allowance, Nat::from(3_u64));
     assert_eq!(allowances[0].expires_at, None);
 
     assert_eq!(allowances[1].from_account, approver_sub);
     assert_eq!(allowances[1].to_spender, spender_sub);
-    assert_eq!(allowances[1].allowance, Nat::from(4u64));
+    assert_eq!(allowances[1].allowance, Nat::from(4_u64));
     assert_eq!(allowances[1].expires_at, expiration_near);
 
     env.advance_time(Duration::from_secs(10));
@@ -3256,7 +3259,10 @@ where
     );
 
     let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
-        feature_flags: Some(FeatureFlags { icrc2: true }),
+        feature_flags: Some(FeatureFlags {
+            icrc2: true,
+            icrc152: false,
+        }),
         ..UpgradeArgs::default()
     }));
 
@@ -3350,7 +3356,7 @@ where
     assert_eq!(
         send_transfer_from(&env, canister_id, spender.0, &transfer_from_args),
         Err(TransferFromError::InsufficientFunds {
-            balance: Nat::from(50_000u32)
+            balance: Nat::from(50_000_u32)
         })
     );
     assert_eq!(balance_of(&env, canister_id, from.0), 50_000);
@@ -3362,7 +3368,7 @@ where
     assert_eq!(
         send_transfer_from(&env, canister_id, spender.0, &transfer_from_args),
         Err(TransferFromError::InsufficientAllowance {
-            allowance: Nat::from(10_000u32)
+            allowance: Nat::from(10_000_u32)
         })
     );
     assert_eq!(balance_of(&env, canister_id, from.0), 50_000);
@@ -4383,7 +4389,7 @@ pub fn test_cycles_for_archive_creation_default_spawns_archive<T>(
     T: CandidType,
 {
     let account = Account::from(PrincipalId::new_user_test_id(1).0);
-    let initial_balances = vec![(account, 100_000_000u64)];
+    let initial_balances = vec![(account, 100_000_000_u64)];
 
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
@@ -4456,11 +4462,11 @@ pub mod metadata {
         let env = StateMachine::new();
 
         let forbidden_metadata: Vec<(String, Value)> = vec![
-            (METADATA_DECIMALS.to_string(), 8u64.into()),
+            (METADATA_DECIMALS.to_string(), 8_u64.into()),
             (METADATA_NAME.to_string(), "BogusName".into()),
             (METADATA_SYMBOL.to_string(), "BN".into()),
-            (METADATA_FEE.to_string(), Nat::from(10_000u64).into()),
-            (METADATA_MAX_MEMO_LENGTH.to_string(), 8u64.into()),
+            (METADATA_FEE.to_string(), Nat::from(10_000_u64).into()),
+            (METADATA_MAX_MEMO_LENGTH.to_string(), 8_u64.into()),
         ];
 
         let args = encode_init_args(InitArgs {
@@ -4524,7 +4530,7 @@ pub mod metadata {
         // Verify that specifying any of the forbidden metadata in the init args is not possible.
         for forbidden_metadata in FORBIDDEN_METADATA.iter() {
             let args = encode_init_args(InitArgs {
-                metadata: vec![(forbidden_metadata.to_string(), 8u64.into())],
+                metadata: vec![(forbidden_metadata.to_string(), 8_u64.into())],
                 ..init_args(vec![])
             });
             let args = Encode!(&args).unwrap();
@@ -4550,7 +4556,7 @@ pub mod metadata {
         // Verify that also upgrading does not accept the forbidden metadata
         for forbidden_metadata in FORBIDDEN_METADATA.iter() {
             let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(UpgradeArgs {
-                metadata: Some(vec![(forbidden_metadata.to_string(), 8u64.into())]),
+                metadata: Some(vec![(forbidden_metadata.to_string(), 8_u64.into())]),
                 ..UpgradeArgs::default()
             }));
             match env.upgrade_canister(
@@ -5164,7 +5170,7 @@ pub mod archiving {
             .first()
             .expect("should return one archive info");
         assert!(
-            first_archive_info.archived_range.contains(&0u64),
+            first_archive_info.archived_range.contains(&0_u64),
             "expected archived_range {:?} to contain block number 0",
             first_archive_info.archived_range
         );
@@ -6019,7 +6025,7 @@ pub fn test_icrc3_blocks_compatibility_with_production_ledger<T>(
                         test_ledger_id,
                         "icrc3_get_blocks",
                         Encode!(&vec![GetBlocksRequest {
-                            start: Nat::from(0u64),
+                            start: Nat::from(0_u64),
                             length: Nat::from(production_blocks.len() as u64),
                         }])
                         .unwrap(),
@@ -6092,5 +6098,588 @@ pub fn test_http_request_decoding_quota(env: &StateMachine, canister_id: Caniste
             || err
                 .description()
                 .contains("Decoding cost exceeds the limit")
+    );
+}
+
+use icrc_ledger_types::icrc152::{
+    Icrc152BurnArgs, Icrc152BurnError, Icrc152MintArgs, Icrc152MintError,
+};
+
+// ---------------------------------------------------------------------------
+// ICRC-152 test helpers
+// ---------------------------------------------------------------------------
+
+fn icrc152_mint(
+    env: &StateMachine,
+    ledger: CanisterId,
+    caller: PrincipalId,
+    args: &Icrc152MintArgs,
+) -> Result<Nat, Icrc152MintError> {
+    Decode!(
+        &env.execute_ingress_as(caller, ledger, "icrc152_mint", Encode!(args).unwrap())
+            .expect("failed to call icrc152_mint")
+            .bytes(),
+        Result<Nat, Icrc152MintError>
+    )
+    .expect("failed to decode icrc152_mint response")
+}
+
+fn icrc152_burn(
+    env: &StateMachine,
+    ledger: CanisterId,
+    caller: PrincipalId,
+    args: &Icrc152BurnArgs,
+) -> Result<Nat, Icrc152BurnError> {
+    Decode!(
+        &env.execute_ingress_as(caller, ledger, "icrc152_burn", Encode!(args).unwrap())
+            .expect("failed to call icrc152_burn")
+            .bytes(),
+        Result<Nat, Icrc152BurnError>
+    )
+    .expect("failed to decode icrc152_burn response")
+}
+
+fn setup_icrc152<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+    initial_balances: Vec<(Account, u64)>,
+) -> (StateMachine, CanisterId)
+where
+    T: CandidType,
+{
+    let env = StateMachine::new();
+    let args = encode_init_args(InitArgs {
+        feature_flags: Some(FeatureFlags {
+            icrc2: true,
+            icrc152: true,
+        }),
+        ..init_args(initial_balances)
+    });
+    let args = Encode!(&args).unwrap();
+    let canister_id = env.install_canister(ledger_wasm, args, None).unwrap();
+    (env, canister_id)
+}
+
+fn now_nanos(env: &StateMachine) -> u64 {
+    env.time()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64
+}
+
+// ---------------------------------------------------------------------------
+// ICRC-152 integration tests — error cases
+// ---------------------------------------------------------------------------
+
+pub fn test_icrc152_feature_flag_disabled<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    // Default setup has icrc152: false
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+    let controller = PrincipalId::new_anonymous();
+    let p1 = PrincipalId::new_user_test_id(1);
+
+    let mint_args = Icrc152MintArgs {
+        to: Account::from(p1.0),
+        amount: Nat::from(1_000_000_u64),
+        created_at_time: now_nanos(&env),
+        reason: None,
+    };
+    let result = icrc152_mint(&env, canister_id, controller, &mint_args);
+    match result {
+        Err(Icrc152MintError::GenericError { message, .. }) => {
+            assert!(
+                message.contains("not enabled"),
+                "expected 'not enabled' message, got: {message}"
+            );
+        }
+        other => panic!("expected GenericError for disabled flag, got: {other:?}"),
+    }
+
+    let burn_args = Icrc152BurnArgs {
+        from: Account::from(p1.0),
+        amount: Nat::from(1_000_u64),
+        created_at_time: now_nanos(&env),
+        reason: None,
+    };
+    let result = icrc152_burn(&env, canister_id, controller, &burn_args);
+    match result {
+        Err(Icrc152BurnError::GenericError { message, .. }) => {
+            assert!(
+                message.contains("not enabled"),
+                "expected 'not enabled' message, got: {message}"
+            );
+        }
+        other => panic!("expected GenericError for disabled flag, got: {other:?}"),
+    }
+}
+
+pub fn test_icrc152_unauthorized<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let (env, canister_id) = setup_icrc152(ledger_wasm, encode_init_args, vec![]);
+    let non_controller = PrincipalId::new_user_test_id(42);
+    let p1 = PrincipalId::new_user_test_id(1);
+
+    let mint_args = Icrc152MintArgs {
+        to: Account::from(p1.0),
+        amount: Nat::from(1_000_000_u64),
+        created_at_time: now_nanos(&env),
+        reason: None,
+    };
+    let result = icrc152_mint(&env, canister_id, non_controller, &mint_args);
+    match result {
+        Err(Icrc152MintError::Unauthorized(_)) => {}
+        other => panic!("expected Unauthorized for mint, got: {other:?}"),
+    }
+
+    let burn_args = Icrc152BurnArgs {
+        from: Account::from(p1.0),
+        amount: Nat::from(1_000_u64),
+        created_at_time: now_nanos(&env),
+        reason: None,
+    };
+    let result = icrc152_burn(&env, canister_id, non_controller, &burn_args);
+    match result {
+        Err(Icrc152BurnError::Unauthorized(_)) => {}
+        other => panic!("expected Unauthorized for burn, got: {other:?}"),
+    }
+}
+
+pub fn test_icrc152_validation<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let (env, canister_id) = setup_icrc152(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(p1.0), 10_000_000)],
+    );
+    let controller = PrincipalId::new_anonymous();
+
+    // --- Zero amount ---
+    let result = icrc152_mint(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152MintArgs {
+            to: Account::from(p1.0),
+            amount: Nat::from(0_u64),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc152MintError::GenericError { message, .. }) => {
+            assert!(message.contains("greater than 0"), "got: {message}");
+        }
+        other => panic!("expected GenericError for zero mint amount, got: {other:?}"),
+    }
+
+    let result = icrc152_burn(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152BurnArgs {
+            from: Account::from(p1.0),
+            amount: Nat::from(0_u64),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc152BurnError::GenericError { message, .. }) => {
+            assert!(message.contains("greater than 0"), "got: {message}");
+        }
+        other => panic!("expected GenericError for zero burn amount, got: {other:?}"),
+    }
+
+    // --- Invalid account: anonymous principal ---
+    let result = icrc152_mint(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152MintArgs {
+            to: Account {
+                owner: Principal::anonymous(),
+                subaccount: None,
+            },
+            amount: Nat::from(1_000_u64),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc152MintError::InvalidAccount(_)) => {}
+        other => panic!("expected InvalidAccount for anonymous mint target, got: {other:?}"),
+    }
+
+    let result = icrc152_burn(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152BurnArgs {
+            from: Account {
+                owner: Principal::anonymous(),
+                subaccount: None,
+            },
+            amount: Nat::from(1_000_u64),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc152BurnError::InvalidAccount(_)) => {}
+        other => panic!("expected InvalidAccount for anonymous burn source, got: {other:?}"),
+    }
+
+    // --- Invalid account: minting account ---
+    let result = icrc152_mint(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152MintArgs {
+            to: MINTER,
+            amount: Nat::from(1_000_u64),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc152MintError::InvalidAccount(_)) => {}
+        other => panic!("expected InvalidAccount for minting account mint, got: {other:?}"),
+    }
+
+    let result = icrc152_burn(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152BurnArgs {
+            from: MINTER,
+            amount: Nat::from(1_000_u64),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc152BurnError::InvalidAccount(_)) => {}
+        other => panic!("expected InvalidAccount for minting account burn, got: {other:?}"),
+    }
+
+    // --- Reason too long (> 1024 bytes) ---
+    let long_reason = "x".repeat(1025);
+    let result = icrc152_mint(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152MintArgs {
+            to: Account::from(p1.0),
+            amount: Nat::from(1_000_u64),
+            created_at_time: now_nanos(&env),
+            reason: Some(long_reason.clone()),
+        },
+    );
+    match result {
+        Err(Icrc152MintError::GenericError { message, .. }) => {
+            assert!(message.contains("1024"), "got: {message}");
+        }
+        other => panic!("expected GenericError for long reason (mint), got: {other:?}"),
+    }
+
+    let result = icrc152_burn(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152BurnArgs {
+            from: Account::from(p1.0),
+            amount: Nat::from(1_000_u64),
+            created_at_time: now_nanos(&env),
+            reason: Some(long_reason),
+        },
+    );
+    match result {
+        Err(Icrc152BurnError::GenericError { message, .. }) => {
+            assert!(message.contains("1024"), "got: {message}");
+        }
+        other => panic!("expected GenericError for long reason (burn), got: {other:?}"),
+    }
+
+    // --- Insufficient balance for burn ---
+    let result = icrc152_burn(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152BurnArgs {
+            from: Account::from(p1.0),
+            amount: Nat::from(999_999_999_u64),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc152BurnError::InsufficientBalance { .. }) => {}
+        other => panic!("expected InsufficientBalance, got: {other:?}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ICRC-152 integration tests — happy path
+// ---------------------------------------------------------------------------
+
+pub fn test_icrc152_mint_and_burn<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let (env, canister_id) = setup_icrc152(ledger_wasm, encode_init_args, vec![]);
+    let controller = PrincipalId::new_anonymous();
+
+    let supply_before = total_supply(&env, canister_id);
+    assert_eq!(supply_before, 0);
+
+    // --- Mint ---
+    let mint_amount = 5_000_000_u64;
+    let mint_result = icrc152_mint(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152MintArgs {
+            to: Account::from(p1.0),
+            amount: Nat::from(mint_amount),
+            created_at_time: now_nanos(&env),
+            reason: Some("test mint".to_string()),
+        },
+    );
+    let mint_block_idx = mint_result.expect("icrc152_mint should succeed");
+    assert_eq!(mint_block_idx, Nat::from(0_u64));
+
+    assert_eq!(balance_of(&env, canister_id, p1.0), mint_amount);
+    assert_eq!(total_supply(&env, canister_id), mint_amount);
+
+    // Verify block type via icrc3_get_blocks
+    let blocks = icrc3_get_blocks(&env, canister_id, 0, 1);
+    assert_eq!(blocks.blocks.len(), 1);
+    let btype = match &blocks.blocks[0].block {
+        ICRC3Value::Map(m) => m
+            .iter()
+            .find(|(k, _)| k.as_str() == "btype")
+            .map(|(_, v)| v.clone()),
+        other => panic!("expected Map block, got: {other:?}"),
+    };
+    assert_eq!(
+        btype,
+        Some(ICRC3Value::Text("122mint".to_string())),
+        "mint block should have btype 122mint"
+    );
+
+    // --- Burn ---
+    let burn_amount = 2_000_000_u64;
+    let burn_result = icrc152_burn(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152BurnArgs {
+            from: Account::from(p1.0),
+            amount: Nat::from(burn_amount),
+            created_at_time: now_nanos(&env),
+            reason: Some("test burn".to_string()),
+        },
+    );
+    let burn_block_idx = burn_result.expect("icrc152_burn should succeed");
+    assert_eq!(burn_block_idx, Nat::from(1_u64));
+
+    assert_eq!(
+        balance_of(&env, canister_id, p1.0),
+        mint_amount - burn_amount
+    );
+    assert_eq!(total_supply(&env, canister_id), mint_amount - burn_amount);
+
+    // Verify burn block type
+    let blocks = icrc3_get_blocks(&env, canister_id, 1, 1);
+    assert_eq!(blocks.blocks.len(), 1);
+    let btype = match &blocks.blocks[0].block {
+        ICRC3Value::Map(m) => m
+            .iter()
+            .find(|(k, _)| k.as_str() == "btype")
+            .map(|(_, v)| v.clone()),
+        other => panic!("expected Map block, got: {other:?}"),
+    };
+    assert_eq!(
+        btype,
+        Some(ICRC3Value::Text("122burn".to_string())),
+        "burn block should have btype 122burn"
+    );
+}
+
+pub fn test_icrc152_deduplication<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let (env, canister_id) = setup_icrc152(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(p1.0), 10_000_000)],
+    );
+    let controller = PrincipalId::new_anonymous();
+    let ts = now_nanos(&env);
+
+    // First mint succeeds
+    let mint_args = Icrc152MintArgs {
+        to: Account::from(p1.0),
+        amount: Nat::from(1_000_u64),
+        created_at_time: ts,
+        reason: None,
+    };
+    let first = icrc152_mint(&env, canister_id, controller, &mint_args);
+    assert!(first.is_ok(), "first mint should succeed");
+
+    // Duplicate mint (same created_at_time, same args) returns Duplicate
+    let dup = icrc152_mint(&env, canister_id, controller, &mint_args);
+    match dup {
+        Err(Icrc152MintError::Duplicate { .. }) => {}
+        other => panic!("expected Duplicate for repeated mint, got: {other:?}"),
+    }
+
+    // Mint with different created_at_time succeeds
+    let mint_args2 = Icrc152MintArgs {
+        to: Account::from(p1.0),
+        amount: Nat::from(1_000_u64),
+        created_at_time: ts + 1,
+        reason: None,
+    };
+    let second = icrc152_mint(&env, canister_id, controller, &mint_args2);
+    assert!(second.is_ok(), "mint with different ts should succeed");
+
+    // Burn deduplication
+    let burn_args = Icrc152BurnArgs {
+        from: Account::from(p1.0),
+        amount: Nat::from(500_u64),
+        created_at_time: ts + 2,
+        reason: None,
+    };
+    let first_burn = icrc152_burn(&env, canister_id, controller, &burn_args);
+    assert!(first_burn.is_ok(), "first burn should succeed");
+
+    let dup_burn = icrc152_burn(&env, canister_id, controller, &burn_args);
+    match dup_burn {
+        Err(Icrc152BurnError::Duplicate { .. }) => {}
+        other => panic!("expected Duplicate for repeated burn, got: {other:?}"),
+    }
+}
+
+pub fn test_icrc152_supported_standards<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    // With icrc152 disabled (default setup)
+    let (env, canister_id_disabled) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
+    let standards_disabled: Vec<String> = supported_standards(&env, canister_id_disabled)
+        .into_iter()
+        .map(|s| s.name)
+        .collect();
+    assert!(
+        !standards_disabled.contains(&"ICRC-152".to_string()),
+        "ICRC-152 should NOT be in supported_standards when disabled"
+    );
+    let block_types_disabled: Vec<String> = supported_block_types(&env, canister_id_disabled)
+        .into_iter()
+        .map(|bt| bt.block_type)
+        .collect();
+    assert!(
+        !block_types_disabled.contains(&"122mint".to_string()),
+        "122mint should NOT be in supported_block_types when disabled"
+    );
+    assert!(
+        !block_types_disabled.contains(&"122burn".to_string()),
+        "122burn should NOT be in supported_block_types when disabled"
+    );
+
+    // With icrc152 enabled
+    let (env, canister_id_enabled) = setup_icrc152(ledger_wasm, encode_init_args, vec![]);
+    let standards_enabled: Vec<String> = supported_standards(&env, canister_id_enabled)
+        .into_iter()
+        .map(|s| s.name)
+        .collect();
+    assert!(
+        standards_enabled.contains(&"ICRC-152".to_string()),
+        "ICRC-152 should be in supported_standards when enabled, got: {standards_enabled:?}"
+    );
+    let block_types_enabled: Vec<String> = supported_block_types(&env, canister_id_enabled)
+        .into_iter()
+        .map(|bt| bt.block_type)
+        .collect();
+    assert!(
+        block_types_enabled.contains(&"122mint".to_string()),
+        "122mint should be in supported_block_types when enabled, got: {block_types_enabled:?}"
+    );
+    assert!(
+        block_types_enabled.contains(&"122burn".to_string()),
+        "122burn should be in supported_block_types when enabled, got: {block_types_enabled:?}"
+    );
+}
+
+pub fn test_icrc152_total_volume<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    use ic_ledger_suite_state_machine_helpers::parse_metric;
+
+    const TOTAL_VOLUME_METRIC: &str = "total_volume";
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    let (env, canister_id) = setup_icrc152(ledger_wasm, encode_init_args, vec![]);
+    let controller = PrincipalId::new_anonymous();
+
+    // No transactions yet — total volume should be 0
+    assert_eq!(0, parse_metric(&env, canister_id, TOTAL_VOLUME_METRIC));
+
+    // Mint 1B (enough to register as >= 1 in the total_volume metric after dividing by 10^decimals)
+    let mint_amount = 1_000_000_000_u64;
+    icrc152_mint(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152MintArgs {
+            to: Account::from(p1.0),
+            amount: Nat::from(mint_amount),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    )
+    .expect("mint failed");
+
+    let volume_after_mint = parse_metric(&env, canister_id, TOTAL_VOLUME_METRIC);
+    assert!(
+        volume_after_mint > 0,
+        "total_volume should increase after authorized mint, got {volume_after_mint}"
+    );
+
+    // Burn 300M
+    let burn_amount = 300_000_000_u64;
+    icrc152_burn(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152BurnArgs {
+            from: Account::from(p1.0),
+            amount: Nat::from(burn_amount),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    )
+    .expect("burn failed");
+
+    let volume_after_burn = parse_metric(&env, canister_id, TOTAL_VOLUME_METRIC);
+    assert!(
+        volume_after_burn > volume_after_mint,
+        "total_volume should increase after authorized burn, got {volume_after_burn} (was {volume_after_mint})"
     );
 }
