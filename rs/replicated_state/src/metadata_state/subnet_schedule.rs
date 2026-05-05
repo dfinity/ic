@@ -112,7 +112,7 @@ impl SubnetSchedule {
     }
 
     /// Retains only the priorities for which the predicate returns `true`.
-    pub(crate) fn retain(&mut self, f: impl FnMut(&CanisterId, &mut CanisterPriority) -> bool) {
+    pub fn retain(&mut self, f: impl FnMut(&CanisterId, &mut CanisterPriority) -> bool) {
         self.priorities.retain(f);
     }
 

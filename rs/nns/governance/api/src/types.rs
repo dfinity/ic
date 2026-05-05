@@ -2826,6 +2826,9 @@ pub struct FulfillSubnetRentalRequest {
     pub user: Option<PrincipalId>,
     pub node_ids: Option<Vec<PrincipalId>>,
     pub replica_version_id: Option<String>,
+    /// Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+    /// If not set, handling defaults to the NNS subnet.
+    pub initial_dkg_subnet_id: Option<PrincipalId>,
 }
 
 #[derive(
