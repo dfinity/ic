@@ -1011,20 +1011,20 @@ fn inner_round_long_execution_is_a_full_execution() {
 
     for canister in test.state().canisters_iter() {
         let system_state = &canister.system_state;
-        let priority = test.state().canister_priority(&canister.canister_id());
         // All canisters should be executed.
         assert_eq!(system_state.canister_metrics().executed(), 1);
         let execution_state = canister.execution_state.as_ref().unwrap();
         assert_eq!(execution_state.last_executed_round.get(), 1);
         if canister.canister_id() == target_id {
-            // The target canister was not executed first, and still have messages.
+            // The target canister was not executed first, and still has messages.
             assert_eq!(system_state.queues().ingress_queue_size(), 1);
         } else {
+            // All other canisters consumed all their inputs.
             assert_eq!(system_state.queues().ingress_queue_size(), 0);
         }
         // All canisters should be marked as fully executed. The target canister,
         // despite still having messages, executed a complete slice.
-        assert_eq!(priority.last_full_execution_round, test.last_round());
+        assert!(test.was_fully_executed(canister.canister_id()));
     }
     let mut total_accumulated_priority = 0;
     for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
