@@ -9,12 +9,14 @@ use crate::canister_state::system_state::log_memory_store::{
     header::Header,
     log_record::LogRecord,
     memory::MemorySize,
-    ring_buffer::{DATA_CAPACITY_MIN, HEADER_SIZE, RingBuffer, VIRTUAL_PAGE_SIZE},
+    ring_buffer::{
+        DATA_CAPACITY_MIN, HEADER_SIZE, INDEX_TABLE_PAGES, RingBuffer, VIRTUAL_PAGE_SIZE,
+    },
 };
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_config::flag_status::FlagStatus;
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
-use ic_types::CanisterLog;
+use ic_types::{CanisterLog, NumBytes};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::VecDeque;
@@ -372,6 +374,22 @@ impl LogMemoryStore {
         self.get_header()
             .map(|h| h.data_size.get() as usize)
             .unwrap_or(0)
+    }
+
+    /// Returns the projected memory usage after `resize(limit)` would complete,
+    /// without mutating any state.
+    ///
+    /// Uses the canister's per-store `feature_flag` so that the projection
+    /// matches what `resize` will actually do, regardless of the current
+    /// global config value.
+    pub fn memory_usage_for_limit(&self, limit: NumBytes) -> NumBytes {
+        if self.feature_flag == FlagStatus::Disabled || limit == NumBytes::new(0) {
+            return NumBytes::new(0);
+        }
+        let overhead =
+            NumBytes::new(HEADER_SIZE.get() + INDEX_TABLE_PAGES as u64 * VIRTUAL_PAGE_SIZE as u64);
+        let data_capacity = limit.max(NumBytes::new(DATA_CAPACITY_MIN as u64));
+        overhead + data_capacity
     }
 
     /// Returns the canister log records, optionally filtered.
