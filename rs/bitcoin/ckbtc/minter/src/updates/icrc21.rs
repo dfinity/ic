@@ -7,6 +7,7 @@ use crate::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcWithApprovalArgs}
 use candid::{CandidType, Decode, Deserialize};
 use icrc_ledger_types::icrc1::account::Subaccount;
 use icrc_ledger_types::icrc21::errors::{ErrorInfo, Icrc21Error};
+use icrc_ledger_types::icrc21::lib::MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES;
 use icrc_ledger_types::icrc21::requests::{
     ConsentMessageMetadata, ConsentMessageRequest, DisplayMessageType,
 };
@@ -40,10 +41,6 @@ impl TokenSymbols {
         }
     }
 }
-
-/// Maximum number of bytes that an argument to a ckBTC minter method can have
-/// when passed through the ICRC-21 endpoint.
-pub const MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES: usize = 500;
 
 /// Maximum number of characters per `Value::Text` field for the FieldsDisplay
 /// variant. Hardware wallets like the Ledger Nano S+ have a small display and
@@ -88,7 +85,7 @@ fn build_consent_info(
     consent_msg_request: ConsentMessageRequest,
     network: Network,
 ) -> Result<ConsentInfo, Icrc21Error> {
-    if consent_msg_request.arg.len() > MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES {
+    if consent_msg_request.arg.len() > MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize {
         return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
             description: format!(
                 "The argument size is too large. The maximum allowed size is \
@@ -363,7 +360,7 @@ mod tests {
     fn test_argument_too_large() {
         let req = make_request(
             "retrieve_btc_with_approval",
-            vec![0; MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES + 1],
+            vec![0; MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize + 1],
             None,
         );
         let err = build_consent_info(req, Network::Mainnet).unwrap_err();
