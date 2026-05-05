@@ -383,9 +383,8 @@ impl CanisterManager {
             canister.system_state.environment_variables = environment_variables.clone();
         }
 
-        // Controllers: validate count and apply.
-        let controllers = settings.controllers();
-        if let Some(controllers) = &controllers
+        // Controllers: validate count (apply after log memory limit at end).
+        if let Some(controllers) = settings.controllers()
             && controllers.len() > self.config.max_controllers
         {
             return Err(CanisterManagerError::InvalidSettings {
@@ -394,12 +393,6 @@ impl CanisterManager {
                     self.config.max_controllers
                 ),
             });
-        }
-        if let Some(controllers) = controllers {
-            canister.system_state.controllers.clear();
-            for principal in controllers {
-                canister.system_state.controllers.insert(principal);
-            }
         }
 
         // Reserved cycles limit: validate and apply before the deferred
@@ -625,6 +618,15 @@ impl CanisterManager {
                     .filter(|_| log_memory_store.would_resize(limit))
                     .map(|m| m.canister_log_resize_duration.start_timer());
                 log_memory_store.resize(limit, self.fd_factory.clone());
+            }
+        }
+
+        // Controllers: apply after log memory limit so reveal_top_up in log
+        // resize errors uses the original controllers.
+        if let Some(controllers) = settings.controllers() {
+            canister.system_state.controllers.clear();
+            for principal in controllers {
+                canister.system_state.controllers.insert(principal);
             }
         }
 
