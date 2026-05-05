@@ -33,8 +33,6 @@ struct RoundScheduleFixture {
     state: ReplicatedState,
     current_round: ExecutionRound,
     next_canister_id: u64,
-    // Keeps MetricsRegistry alive for self.metrics.
-    _registry: MetricsRegistry,
     metrics: SchedulerMetrics,
     logger: ic_logger::ReplicaLogger,
 }
@@ -62,7 +60,6 @@ impl RoundScheduleFixture {
             state: ReplicatedState::new(subnet_test_id(1), SubnetType::Application),
             current_round: ExecutionRound::new(1),
             next_canister_id: 0,
-            _registry: registry,
             metrics,
             logger: ic_logger::replica_logger::test_logger(Some(slog::Level::Info)),
         }
