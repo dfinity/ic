@@ -609,6 +609,9 @@ impl CanisterManager {
             canister.system_state.environment_variables = environment_variables.clone();
         }
 
+        // Recompute after the log store resize so the subnet memory update
+        // accounts for any memory change from the resize.
+        let new_memory_bytes = new_memory_allocation.allocated_bytes(canister.memory_usage());
         // Update round_limits: subnet memory.
         if new_memory_bytes >= old_memory_bytes {
             // Settings were validated before so this should always succeed.
