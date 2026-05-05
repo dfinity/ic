@@ -22993,6 +22993,7 @@ dependencies = [
  "base64 0.13.1",
  "config_types",
  "hkdf",
+ "linux_kernel_command_line",
  "pem",
  "rand 0.8.5",
  "sev",

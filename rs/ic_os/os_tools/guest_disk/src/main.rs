@@ -57,7 +57,7 @@ fn main() -> Result<()> {
     run(
         args,
         &guestos_config,
-        sev_guest::is_sev_active().context("Failed to check if SEV is active")?,
+        sev_guest::is_tee_enabled().context("Failed to check if SEV is active")?,
         || {
             ::sev::firmware::guest::Firmware::open()
                 .context("Failed to open /dev/sev-guest")
@@ -74,7 +74,7 @@ fn main() -> Result<()> {
 fn run(
     args: Args,
     guestos_config: &GuestOSConfig,
-    is_sev_active: bool,
+    is_tee_enabled: bool,
     sev_firmware_factory: impl Fn() -> Result<Box<dyn SevGuestFirmware>>,
     previous_key_path: &Path,
     generated_key_path: &Path,
@@ -83,7 +83,7 @@ fn run(
     libcryptsetup_rs::set_log_callback::<()>(Some(cryptsetup_log), None);
 
     let metrics_file = metrics_file_path(metrics_dir, args.partition());
-    let mut encryption: Box<dyn DiskEncryption> = if is_sev_active {
+    let mut encryption: Box<dyn DiskEncryption> = if is_tee_enabled {
         Box::new(SevDiskEncryption {
             sev_firmware: sev_firmware_factory().context("Failed to open SEV firmware")?,
             guest_vm_type: guestos_config.guest_vm_type,
