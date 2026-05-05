@@ -799,7 +799,7 @@ service : (minter_arg : MinterArg) -> {
 
     // Returns a human-readable consent message describing the requested
     // canister call. See the ICRC-21 standard for details:
-    // https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md
+    // https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-21/ICRC-21.md
     icrc21_canister_call_consent_message : (Icrc21ConsentMessageRequest) -> (variant { Ok : Icrc21ConsentInfo; Err : Icrc21Error });
 
     // }}} Section "ICRC-10 / ICRC-21"
