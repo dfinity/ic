@@ -54,7 +54,7 @@ impl<const N: usize> HistogramData<N> {
     /// suitable for passing directly to `ic_metrics_encoder::MetricsEncoder::encode_histogram`.
     pub fn per_bucket_counts(&self) -> Vec<(f64, f64)> {
         let mut result = Vec::with_capacity(N + 1);
-        let mut prev_cumulative = 0u64;
+        let mut prev_cumulative = 0_u64;
         for (le, cumulative) in self.buckets() {
             let per_bucket = cumulative.saturating_sub(prev_cumulative);
             result.push((le, per_bucket as f64));
