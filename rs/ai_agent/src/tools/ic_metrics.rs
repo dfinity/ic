@@ -35,9 +35,19 @@ use serde_json::json;
 
 use crate::state::AppState;
 
-/// Default port mapping for each known scrape source. Confirmed
-/// against the GuestOS Prometheus job configs in
-/// `dfinity/ic-observability-stack`.
+// Per-source URL parameters. Each scrape source on a GuestOS node
+// exposes Prometheus exposition with a slightly different shape —
+// these constants are the source of truth, verified against live
+// nodes:
+//
+//   replica       → http://[ipv6]:9090/   (root, plain HTTP)
+//   orchestrator  → http://[ipv6]:9091/   (root, plain HTTP)
+//   node_exporter → https://[ipv6]:9100/metrics
+//                                         (self-signed TLS, /metrics path)
+//
+// The HTTPS-with-self-signed-cert quirk on node_exporter means we have
+// to disable certificate validation on the shared HTTP client; see
+// `IcMetrics::new` below.
 const REPLICA_PORT: u16 = 9090;
 const ORCHESTRATOR_PORT: u16 = 9091;
 const NODE_EXPORTER_PORT: u16 = 9100;
@@ -159,31 +169,89 @@ impl Source {
             Self::NodeExporter => "node_exporter",
         }
     }
+
+    /// URL scheme this source listens on. node_exporter terminates TLS
+    /// (with a self-signed cert); the replica and orchestrator are
+    /// plain HTTP on a loopback-style admin port.
+    fn scheme(self) -> &'static str {
+        match self {
+            Self::Replica | Self::Orchestrator => "http",
+            Self::NodeExporter => "https",
+        }
+    }
+
+    /// URL path. The replica and orchestrator serve their full
+    /// exposition at `/`; node_exporter at `/metrics` per upstream
+    /// convention.
+    fn path(self) -> &'static str {
+        match self {
+            Self::Replica | Self::Orchestrator => "/",
+            Self::NodeExporter => "/metrics",
+        }
+    }
 }
 
-/// Summary metric set per source (§4.3 of the spec). Stable order so
-/// the LLM sees the same fields every time.
-const REPLICA_SUMMARY: &[&str] = &[
-    "replica_last_finalized_certified_height",
-    "mr_blocks_proposed_total",
-    "consensus_dkg_validator_time_seconds",
-    "state_manager_states_count",
-    "process_resident_memory_bytes",
-    "process_cpu_seconds_total",
-];
+// Curated `summary` metric sets per source. Every name below has been
+// verified against a real GuestOS node's exposition output — *not*
+// cross-referenced from upstream docs, where naming drifts. Order is
+// intentional: most-actionable first, so an LLM that only quotes the
+// first few entries still surfaces the most useful signal.
+//
+// When the IC code base renames a metric, update these lists in lockstep
+// — `op = "summary"` will silently return zero samples for a stale name
+// rather than erroring.
 
-const ORCHESTRATOR_SUMMARY: &[&str] = &[
-    "orchestrator_dre_assigned_replica_version",
-    "orchestrator_replica_started_count",
-    "orchestrator_iteration_count_total",
-];
-
+/// node_exporter (host VM) — primary triage source. Covers CPU, memory,
+/// swap, disk space, disk I/O saturation, network throughput, PSI
+/// (pressure stall), clock health, file-descriptor exhaustion, and live
+/// TCP socket count. Filesystem and disk metrics are per-mount/per-device,
+/// so the LLM should narrow with `op = "get"` + label filter (e.g.
+/// `mountpoint="/var/lib/ic/data"` for the IC state partition) to make
+/// sense of multi-sample results.
 const NODE_EXPORTER_SUMMARY: &[&str] = &[
     "node_load1",
+    "node_load5",
+    "node_load15",
     "node_memory_MemAvailable_bytes",
+    "node_memory_MemTotal_bytes",
+    "node_memory_SwapFree_bytes",
+    "node_memory_SwapTotal_bytes",
     "node_filesystem_avail_bytes",
-    "node_network_receive_bytes_total",
+    "node_filesystem_size_bytes",
     "node_disk_io_time_seconds_total",
+    "node_network_receive_bytes_total",
+    "node_network_transmit_bytes_total",
+    "node_pressure_io_stalled_seconds_total",
+    "node_time_seconds",
+    "node_filefd_allocated",
+    "node_filefd_maximum",
+    "node_netstat_Tcp_CurrEstab",
+];
+
+/// replica (consensus + state-sync internals). Health-focused: certified
+/// height, checkpoint count, batch height, block production, peer-count
+/// sanity, critical-error counter, RSS. Heavier debugging paths (QUIC,
+/// state-sync detail) live behind `op = "get"`.
+const REPLICA_SUMMARY: &[&str] = &[
+    "state_manager_latest_certified_height",
+    "state_manager_checkpoints_on_disk_count",
+    "consensus_batch_height",
+    "mr_blocks_proposed_total",
+    "mr_subnet_size",
+    "critical_errors",
+    "process_resident_memory_bytes",
+];
+
+/// orchestrator (replica supervisor + upgrade manager). Small surface;
+/// most names are zero in steady state and only move when something is
+/// going wrong, which is exactly what we want to surface in a summary.
+const ORCHESTRATOR_SUMMARY: &[&str] = &[
+    "orchestrator_cup_deserialization_failed_total",
+    "orchestrator_failed_consecutive_upgrade_checks_total",
+    "orchestrator_replica_process_start_attempts_total",
+    "orchestrator_state_removal_failed_total",
+    "orchestrator_key_rotation_status",
+    "reboot_duration_seconds",
 ];
 
 /// Cache key for the rate computation. Labels are serialised
@@ -220,10 +288,17 @@ pub struct IcMetrics {
 
 impl IcMetrics {
     pub fn new(state: Arc<AppState>) -> Self {
+        // node_exporter terminates TLS with a self-signed certificate
+        // (per GuestOS provisioning). Replica and orchestrator both
+        // serve plain HTTP, so the only cost of disabling cert
+        // validation here is on the node_exporter path. We rely on
+        // (a) reaching the node over an IPv6 address that came from
+        // the registry and (b) the node_exporter port being firewalled
+        // to the IC peer mesh — both of which the LLM can't subvert
+        // through this tool.
         let http = reqwest::Client::builder()
             .timeout(SCRAPE_TIMEOUT)
-            // The ic-observability-stack scrape jobs talk plain HTTP;
-            // there's no certificate to validate.
+            .danger_accept_invalid_certs(true)
             .build()
             .expect("reqwest client builder is infallible with default features");
         Self {
@@ -253,14 +328,17 @@ impl IcMetrics {
         Ok((ip, Some(nid.to_string())))
     }
 
-    /// Build the scrape URL for a given source + IPv6.
+    /// Build the scrape URL for a given source + IPv6. The shape
+    /// (scheme, port, path) varies by source — see the comment block
+    /// next to the port constants at the top of the file for the full
+    /// matrix.
     fn build_url(source: Source, ipv6: Ipv6Addr) -> String {
-        // Prometheus exposition is on `/metrics` by convention; the
-        // replica and orchestrator currently expose at `/` (which
-        // also serves an index page) — we go through `/metrics` for
-        // all three to be consistent. The IC observability scrape
-        // jobs use this path.
-        format!("http://[{}]:{}/metrics", ipv6, source.port())
+        format!(
+            "{scheme}://[{ipv6}]:{port}{path}",
+            scheme = source.scheme(),
+            port = source.port(),
+            path = source.path(),
+        )
     }
 
     /// Fetch and parse a scrape from the given URL.
@@ -532,21 +610,41 @@ impl Tool for IcMetrics {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Fetch and analyze Prometheus metrics from one of three IC node sources: \
-                `replica`, `orchestrator`, or `node_exporter` (guest VM). Operations: \
-                `list` to discover metric names, `get` for current values, `summary` \
-                for a curated set of operationally important metrics, `rate` for \
-                per-second deltas. Use this for performance and resource questions. \
-                Targets a specific peer node by `node_id` (resolved via the local \
-                registry) or by raw `ipv6`."
+            description: "Fetch and analyze Prometheus metrics from one of three IC node \
+                sources. Pick `source` based on the question:\n\
+                \n\
+                * `node_exporter` (guest VM) — DEFAULT for general health, performance, \
+                  and resource questions: CPU load, memory, swap, disk space, disk I/O \
+                  saturation, network throughput, file descriptors, TCP socket counts, \
+                  PSI pressure-stall, clock health. The most useful source for \
+                  troubleshooting; start here.\n\
+                * `replica` — IC-specific consensus and state-sync internals: certified \
+                  height, checkpoints on disk, block production rate, subnet membership, \
+                  critical-error counter. Use when the question is about IC liveness or \
+                  state-sync.\n\
+                * `orchestrator` — replica supervisor and upgrade manager: CUP \
+                  deserialization failures, failed upgrade checks, replica restarts, \
+                  key rotation status, reboot timing. Use for upgrade and orchestration \
+                  issues.\n\
+                \n\
+                Operations: `list` discovers metric names (use a `metric` substring \
+                to narrow), `get` returns current samples, `summary` returns a curated \
+                dashboard for the chosen source, `rate` computes a per-second delta \
+                against the previous call. Targets a specific peer node by `node_id` \
+                (resolved via the local registry) or by raw `ipv6`."
                 .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
                     "source": {
                         "type": "string",
-                        "enum": ["replica", "orchestrator", "node_exporter"],
-                        "description": "Which scrape endpoint to read."
+                        "enum": ["node_exporter", "replica", "orchestrator"],
+                        "description":
+                            "Which scrape endpoint to read. \
+                             `node_exporter` for host-level CPU/memory/disk/network \
+                             (preferred default); \
+                             `replica` for IC consensus/state-sync internals; \
+                             `orchestrator` for upgrade/CUP/restart issues."
                     },
                     "op": {
                         "type": "string",
