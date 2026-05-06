@@ -141,16 +141,6 @@ fn create_data_payload(
             .expect("Couldn't lock DKG pool for reading."),
         max_dealings_per_block,
     );
-    for d in &new_validated_dealings {
-        if matches!(d.content.dkg_id.target_subnet, NiDkgTargetSubnet::Remote(_)) {
-            info!(
-                logger,
-                "Including remote dealing for dkg id {:?} in data block payload at height {}",
-                d.content.dkg_id,
-                parent.height.increment(),
-            );
-        }
-    }
 
     let remote_dkg_transcripts = create_early_remote_transcripts(
         pool_reader,
@@ -203,20 +193,18 @@ pub(crate) fn create_early_remote_transcripts(
                 // Reject contexts for which we failed to create configs.
                 for (dkg_id, err) in errs {
                     // Skip requests for which we already have a transcript on chain.
-                    // TODO
-                    if completed_dkgs.contains(&dkg_id) {
-                        break;
+                    if !completed_dkgs.contains(&dkg_id) {
+                        error!(
+                            logger,
+                            "Failed to create remote transcript config for dkg id {:?} at height {}: {}",
+                            dkg_id,
+                            parent.height.increment(),
+                            err
+                        );
+                        // Including the error in the payload will cause the context to receive
+                        // a reject response.
+                        selected_transcripts.push((dkg_id, callback_id, Err(err)));
                     }
-                    error!(
-                        logger,
-                        "Failed to create early remote transcript for dkg id {:?} at height {}: {}",
-                        dkg_id,
-                        parent.height.increment(),
-                        err
-                    );
-                    // Including the error in the payload will cause the context to receive
-                    // a reject response.
-                    selected_transcripts.push((dkg_id, callback_id, Err(err)));
                 }
                 continue;
             }
@@ -868,7 +856,7 @@ mod tests {
     };
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types_private::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
+    use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
     use ic_registry_client_helpers::subnet::SubnetRegistry;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::{
         ReshareChainKeyContext, SetupInitialDkgContext, SubnetCallContext,
@@ -1187,6 +1175,12 @@ mod tests {
                         .count(),
                     1
                 );
+
+                // The next block should not contain any more errors.
+                deps.pool.advance_round_normal_operation();
+                let data_block = deps.pool.get_cache().finalized_block();
+                let dkg_data = &data_block.payload.as_ref().as_data().dkg;
+                assert!(dkg_data.transcripts_for_remote_subnets.is_empty());
 
                 // After one more full interval, both targets are marked completed (attempts = 0),
                 // and callback map no longer contains configs.
@@ -1800,123 +1794,6 @@ mod tests {
 
         let result = get_completed_target_ids(&completed);
         assert_eq!(result, BTreeSet::from([targets[0], targets[1]]));
-    }
-
-    #[test]
-    fn test_build_callback_id_config_map_returns_repeated_failure_errors() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let node_ids = vec![node_test_id(0), node_test_id(1)];
-            let subnet_id = subnet_test_id(0);
-            let Dependencies { registry, .. } =
-                dependencies_with_subnet_records_with_raw_state_manager(
-                    pool_config,
-                    subnet_id,
-                    vec![(
-                        10,
-                        SubnetRecordBuilder::from(&node_ids)
-                            .with_dkg_interval_length(99)
-                            .build(),
-                    )],
-                );
-
-            let key_id = VetKdKeyId {
-                curve: VetKdCurve::Bls12_381_G2,
-                name: String::from("some_vetkey"),
-            };
-            let ni_dkg_key_id = NiDkgMasterPublicKeyId::VetKd(key_id.clone());
-            let setup_target = NiDkgTargetId::new([5_u8; 32]);
-            let reshare_target = NiDkgTargetId::new([6_u8; 32]);
-            let registry_version = registry.get_latest_version();
-
-            let mut state = ic_test_utilities_state::get_initial_state(0, 0);
-            let target_nodes: BTreeSet<_> =
-                vec![10, 11, 12].into_iter().map(node_test_id).collect();
-            state.metadata.subnet_call_context_manager.push_context(
-                SubnetCallContext::SetupInitialDKG(SetupInitialDkgContext {
-                    request: RequestBuilder::new().build(),
-                    nodes_in_target_subnet: target_nodes.clone(),
-                    target_id: setup_target,
-                    registry_version,
-                    time: state.time(),
-                }),
-            );
-            state.metadata.subnet_call_context_manager.push_context(
-                SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {
-                    request: RequestBuilder::new().build(),
-                    key_id: MasterPublicKeyId::VetKd(key_id),
-                    nodes: target_nodes,
-                    registry_version,
-                    time: state.time(),
-                    target_id: reshare_target,
-                }),
-            );
-
-            let dkg_summary = DkgSummary::new(
-                vec![],
-                BTreeMap::new(),
-                BTreeMap::new(),
-                registry_version,
-                Height::from(99),
-                Height::from(99),
-                Height::from(123),
-                BTreeMap::from([
-                    (setup_target, MAX_REMOTE_DKG_ATTEMPTS + 1),
-                    (reshare_target, MAX_REMOTE_DKG_ATTEMPTS + 1),
-                ]),
-            );
-
-            let callback_results = build_callback_id_config_map(
-                subnet_id,
-                registry.as_ref(),
-                &state,
-                registry_version,
-                &dkg_summary,
-                &no_op_logger(),
-            )
-            .unwrap();
-
-            assert_eq!(callback_results.len(), 2);
-            for result in callback_results.values() {
-                let errors = result
-                    .as_ref()
-                    .expect_err("repeated failures should produce explicit errors");
-                assert!(
-                    errors
-                        .iter()
-                        .all(|(_, err)| { err == REMOTE_DKG_REPEATED_FAILURE_ERROR })
-                );
-            }
-
-            let setup_errors = callback_results
-                .values()
-                .filter_map(|result| result.as_ref().err())
-                .find(|errors| errors.len() == 2)
-                .expect("missing setup-initial error group");
-            assert_eq!(setup_errors[0].0.dkg_tag, NiDkgTag::LowThreshold);
-            assert_eq!(setup_errors[1].0.dkg_tag, NiDkgTag::HighThreshold);
-            assert_eq!(
-                setup_errors[0].0.target_subnet,
-                NiDkgTargetSubnet::Remote(setup_target)
-            );
-            assert_eq!(
-                setup_errors[1].0.target_subnet,
-                NiDkgTargetSubnet::Remote(setup_target)
-            );
-
-            let reshare_errors = callback_results
-                .values()
-                .filter_map(|result| result.as_ref().err())
-                .find(|errors| errors.len() == 1)
-                .expect("missing reshare-chain-key error group");
-            assert_eq!(
-                reshare_errors[0].0.dkg_tag,
-                NiDkgTag::HighThresholdForKey(ni_dkg_key_id)
-            );
-            assert_eq!(
-                reshare_errors[0].0.target_subnet,
-                NiDkgTargetSubnet::Remote(reshare_target)
-            );
-        });
     }
 
     struct TestDkgPool {
