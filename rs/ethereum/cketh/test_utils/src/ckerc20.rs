@@ -117,6 +117,7 @@ impl CkErc20Setup {
                 .ledger
                 .unwrap();
 
+            self.env.tick();
             self.cketh =
                 self.cketh
                     .assert_has_unique_events_in_order(&[EventPayload::AddedCkErc20Token {
