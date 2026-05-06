@@ -1,12 +1,12 @@
 // Set up a testnet containing:
-//   one 1-node System/NNS subnet, by default 20 unassigned nodes distributed
-//   round-robin across 30 datacenters (so each of the first 20 DCs gets 1 node),
+//   one 1-node System/NNS subnet, by default 60 unassigned nodes distributed
+//   round-robin across 10 AWS datacenters (so each DC gets 6 nodes),
 //   one API boundary node, one ic-gateway, and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 6 vCPUs, 24GiB of RAM, and 50 GiB disk.
 //
 // The number of unassigned nodes can be overridden via the NUM_UNASSIGNED_NODES
-// env var (e.g. NUM_UNASSIGNED_NODES=60 will spin up 60 unassigned nodes,
-// distributed round-robin across the 30 DCs, yielding 2 nodes per DC).
+// env var (e.g. NUM_UNASSIGNED_NODES=30 will spin up 30 unassigned nodes,
+// distributed round-robin across the 10 DCs, yielding 3 nodes per DC).
 //
 // You can setup this testnet by executing the following commands:
 //
@@ -78,9 +78,6 @@ enum NodeProvider {
     // Required because of DFINITY-capitalization-check pre-commit
     #[allow(clippy::upper_case_acronyms)]
     DFINITY,
-    Alusion,
-    OneSixtyTwoDigitalCapital,
-    DecentralizedEntitiesFoundation,
 }
 
 impl NodeProvider {
@@ -91,9 +88,6 @@ impl NodeProvider {
         // the principals don't overlap.
         match self {
             NodeProvider::DFINITY => PrincipalId::new_user_test_id(3000),
-            NodeProvider::Alusion => PrincipalId::new_user_test_id(3001),
-            NodeProvider::OneSixtyTwoDigitalCapital => PrincipalId::new_user_test_id(3002),
-            NodeProvider::DecentralizedEntitiesFoundation => PrincipalId::new_user_test_id(3003),
         }
     }
 }
@@ -109,246 +103,89 @@ struct DcConfig {
     node_provider: NodeProvider,
 }
 
+/// 10 AWS regions distributed across the globe. Each entry corresponds to an
+/// AWS region; the `id` is the AWS region code, and lat/long are taken from
+/// the public location of the region.
 const DATA_CENTERS: &[DcConfig] = &[
     DcConfig {
-        id: "Fremont",
-        region: "North America,US,California",
-        owner: "Hurricane Electric",
-        latitude: 37.549,
-        longitude: -121.989,
-        node_provider: NodeProvider::DFINITY,
-    },
-    DcConfig {
-        id: "Brussels",
-        region: "Europe,BE,Brussels Capital",
-        owner: "Digital Realty",
-        latitude: 50.839,
-        longitude: 4.348,
-        node_provider: NodeProvider::DFINITY,
-    },
-    DcConfig {
-        id: "HongKong 1",
-        region: "Asia,HK,HongKong",
-        owner: "Unicom",
-        latitude: 22.284,
-        longitude: 114.269,
-        node_provider: NodeProvider::DFINITY,
-    },
-    DcConfig {
-        id: "Sterling",
+        id: "us-east-1",
         region: "North America,US,Virginia",
-        owner: "CyrusOne",
-        latitude: 39.004,
-        longitude: -77.408,
+        owner: "Amazon Web Services",
+        latitude: 38.945,
+        longitude: -77.448,
         node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Tokyo",
-        region: "Asia,JP,Tokyo",
-        owner: "Equinix",
-        latitude: 35.682,
-        longitude: 139.692,
+        id: "us-west-2",
+        region: "North America,US,Oregon",
+        owner: "Amazon Web Services",
+        latitude: 45.871,
+        longitude: -119.688,
         node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "London",
-        region: "Europe,GB,London",
-        owner: "Telehouse",
-        latitude: 51.508,
-        longitude: -0.076,
-        node_provider: NodeProvider::DFINITY,
-    },
-    DcConfig {
-        id: "Frankfurt",
-        region: "Europe,DE,Hessen",
-        owner: "Interxion",
-        latitude: 50.110,
-        longitude: 8.682,
-        node_provider: NodeProvider::DFINITY,
-    },
-    DcConfig {
-        id: "Singapore",
-        region: "Asia,SG,Singapore",
-        owner: "Equinix",
-        latitude: 1.290,
-        longitude: 103.851,
-        node_provider: NodeProvider::DFINITY,
-    },
-    DcConfig {
-        id: "Sao Paulo",
+        id: "sa-east-1",
         region: "South America,BR,Sao Paulo",
-        owner: "Ascenty",
+        owner: "Amazon Web Services",
         latitude: -23.550,
         longitude: -46.633,
         node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Sydney",
-        region: "Oceania,AU,New South Wales",
-        owner: "Equinix",
-        latitude: -33.868,
-        longitude: 151.207,
-        node_provider: NodeProvider::Alusion,
-    },
-    DcConfig {
-        id: "Toronto",
-        region: "North America,CA,Ontario",
-        owner: "eStruxture",
-        latitude: 43.651,
-        longitude: -79.347,
-        node_provider: NodeProvider::Alusion,
-    },
-    DcConfig {
-        id: "Mumbai",
-        region: "Asia,IN,Maharashtra",
-        owner: "Nxtra",
-        latitude: 19.076,
-        longitude: 72.878,
-        node_provider: NodeProvider::Alusion,
-    },
-    DcConfig {
-        id: "Seoul",
-        region: "Asia,KR,Seoul",
-        owner: "KINX",
-        latitude: 37.566,
-        longitude: 126.978,
-        node_provider: NodeProvider::Alusion,
-    },
-    DcConfig {
-        id: "Amsterdam",
-        region: "Europe,NL,North Holland",
-        owner: "Equinix",
-        latitude: 52.370,
-        longitude: 4.895,
-        node_provider: NodeProvider::Alusion,
-    },
-    DcConfig {
-        id: "Paris",
-        region: "Europe,FR,Ile-de-France",
-        owner: "Interxion",
-        latitude: 48.864,
-        longitude: 2.349,
-        node_provider: NodeProvider::Alusion,
-    },
-    DcConfig {
-        id: "Stockholm",
-        region: "Europe,SE,Stockholm",
-        owner: "Interxion",
-        latitude: 59.330,
-        longitude: 18.069,
-        node_provider: NodeProvider::Alusion,
-    },
-    DcConfig {
-        id: "Zurich",
-        region: "Europe,CH,Zurich",
-        owner: "Green",
-        latitude: 47.376,
-        longitude: 8.540,
-        node_provider: NodeProvider::Alusion,
-    },
-    DcConfig {
-        id: "Dublin",
+        id: "eu-west-1",
         region: "Europe,IE,Dublin",
-        owner: "Equinix",
+        owner: "Amazon Web Services",
         latitude: 53.350,
         longitude: -6.260,
-        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Chicago",
-        region: "North America,US,Illinois",
-        owner: "Equinix",
-        latitude: 41.878,
-        longitude: -87.630,
-        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
+        id: "eu-central-1",
+        region: "Europe,DE,Hessen",
+        owner: "Amazon Web Services",
+        latitude: 50.110,
+        longitude: 8.682,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Dallas",
-        region: "North America,US,Texas",
-        owner: "DataBank",
-        latitude: 32.777,
-        longitude: -96.797,
-        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
+        id: "eu-north-1",
+        region: "Europe,SE,Stockholm",
+        owner: "Amazon Web Services",
+        latitude: 59.330,
+        longitude: 18.069,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Los Angeles",
-        region: "North America,US,California",
-        owner: "CoreSite",
-        latitude: 34.052,
-        longitude: -118.244,
-        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
-    },
-    DcConfig {
-        id: "Miami",
-        region: "North America,US,Florida",
-        owner: "Equinix",
-        latitude: 25.762,
-        longitude: -80.192,
-        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
-    },
-    DcConfig {
-        id: "Bogota",
-        region: "South America,CO,Bogota",
-        owner: "Equinix",
-        latitude: 4.711,
-        longitude: -74.072,
-        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
-    },
-    DcConfig {
-        id: "Cape Town",
+        id: "af-south-1",
         region: "Africa,ZA,Western Cape",
-        owner: "Teraco",
+        owner: "Amazon Web Services",
         latitude: -33.925,
         longitude: 18.424,
-        node_provider: NodeProvider::OneSixtyTwoDigitalCapital,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Nairobi",
-        region: "Africa,KE,Nairobi",
-        owner: "PAIX",
-        latitude: -1.286,
-        longitude: 36.817,
-        node_provider: NodeProvider::DecentralizedEntitiesFoundation,
+        id: "ap-south-1",
+        region: "Asia,IN,Maharashtra",
+        owner: "Amazon Web Services",
+        latitude: 19.076,
+        longitude: 72.878,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Warsaw",
-        region: "Europe,PL,Masovia",
-        owner: "Equinix",
-        latitude: 52.230,
-        longitude: 21.012,
-        node_provider: NodeProvider::DecentralizedEntitiesFoundation,
+        id: "ap-northeast-1",
+        region: "Asia,JP,Tokyo",
+        owner: "Amazon Web Services",
+        latitude: 35.682,
+        longitude: 139.692,
+        node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "Madrid",
-        region: "Europe,ES,Madrid",
-        owner: "Interxion",
-        latitude: 40.417,
-        longitude: -3.704,
-        node_provider: NodeProvider::DecentralizedEntitiesFoundation,
-    },
-    DcConfig {
-        id: "Milan",
-        region: "Europe,IT,Lombardy",
-        owner: "Equinix",
-        latitude: 45.464,
-        longitude: 9.190,
-        node_provider: NodeProvider::DecentralizedEntitiesFoundation,
-    },
-    DcConfig {
-        id: "Osaka",
-        region: "Asia,JP,Osaka",
-        owner: "Equinix",
-        latitude: 34.694,
-        longitude: 135.502,
-        node_provider: NodeProvider::DecentralizedEntitiesFoundation,
-    },
-    DcConfig {
-        id: "Jakarta",
-        region: "Asia,ID,Jakarta",
-        owner: "DCI",
-        latitude: -6.175,
-        longitude: 106.845,
-        node_provider: NodeProvider::DecentralizedEntitiesFoundation,
+        id: "ap-southeast-2",
+        region: "Oceania,AU,New South Wales",
+        owner: "Amazon Web Services",
+        latitude: -33.868,
+        longitude: 151.207,
+        node_provider: NodeProvider::DFINITY,
     },
 ];
 
@@ -371,13 +208,12 @@ pub fn setup(env: TestEnv) {
                 .with_dkg_interval_length(Height::from(10)),
         );
 
-    // Build unassigned nodes distributed across the 30 datacenters.
+    // Build unassigned nodes distributed across the 10 AWS datacenters.
     // Each datacenter gets its own node operator. The total number of unassigned
-    // nodes defaults to 20 and can be overridden via the NUM_UNASSIGNED_NODES
+    // nodes defaults to 60 and can be overridden via the NUM_UNASSIGNED_NODES
     // env var. Nodes are distributed round-robin across DATA_CENTERS in order:
     // node index i is placed in DC (i % NUM_DCS). This means with the default
-    // of 20 nodes the first 20 DCs each get 1 node, and with 60 nodes each DC
-    // gets 2 nodes.
+    // of 60 nodes each of the 10 DCs gets 6 nodes.
     //
     // Reward types are assigned in a circular rotation across all nodes globally:
     // node index 0 -> type4.1, 1 -> type4.2, 2 -> type4.3, 3 -> type4.1, ...
@@ -388,7 +224,7 @@ pub fn setup(env: TestEnv) {
         (NodeRewardType::Type4dot2, "type4.2"),
         (NodeRewardType::Type4dot3, "type4.3"),
     ];
-    const DEFAULT_NUM_UNASSIGNED_NODES: usize = 20;
+    const DEFAULT_NUM_UNASSIGNED_NODES: usize = 60;
 
     let num_unassigned_nodes: usize = match std::env::var("NUM_UNASSIGNED_NODES") {
         Ok(v) => v
