@@ -1,5 +1,6 @@
-use crate::canister_settings::EnvironmentVariables;
+use crate::canister_settings::{CanisterSettings, EnvironmentVariables, UpdateSettingsError};
 use ic_crypto_sha2::Sha256;
+use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
 use std::collections::BTreeMap;
 
 #[test]
@@ -85,6 +86,40 @@ fn test_environment_variables_hash_output() {
     // Verify that the actual hash matches the expected hash.
     let actual = EnvironmentVariables::new(env_vars).hash();
     assert_eq!(actual, expected);
+}
+
+mod log_memory_limit {
+    use super::*;
+    use std::convert::TryFrom;
+
+    #[test]
+    fn log_memory_limit_alone_is_valid() {
+        let args = CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(4096)
+            .build();
+        assert!(CanisterSettings::try_from(args).is_ok());
+    }
+
+    #[test]
+    fn log_memory_limit_with_compute_allocation_is_valid() {
+        let args = CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(4096)
+            .with_compute_allocation(50)
+            .build();
+        assert!(CanisterSettings::try_from(args).is_ok());
+    }
+
+    #[test]
+    fn log_memory_limit_with_memory_allocation_is_forbidden() {
+        let args = CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(4096)
+            .with_memory_allocation(1 << 30)
+            .build();
+        assert!(matches!(
+            CanisterSettings::try_from(args),
+            Err(UpdateSettingsError::ForbiddenSettings { .. })
+        ));
+    }
 }
 
 mod visibility_settings {

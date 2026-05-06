@@ -434,7 +434,7 @@ fn canister_can_run_for_multiple_iterations() {
     assert_eq!(
         test.scheduler()
             .metrics
-            .inner_loop_consumed_non_zero_instructions_count
+            .inner_loop_processed_non_zero_inputs_count
             .get(),
         6
     );
