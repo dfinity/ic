@@ -287,7 +287,9 @@ fn test_icrc21_endpoints_smoke() {
     );
 
     // 2a. retrieve_btc_with_approval / GenericDisplay renders the expected
-    // Markdown sections, with the configured (mainnet) token symbols.
+    // Markdown sections, with the configured (mainnet) token symbols. The
+    // assertion is a full-string equality so any wording change has to be
+    // updated here consciously.
     let args = RetrieveBtcWithApprovalArgs {
         amount: 250_000,
         address: WITHDRAWAL_ADDRESS.to_string(),
@@ -303,13 +305,16 @@ fn test_icrc21_endpoints_smoke() {
         ConsentMessage::GenericDisplayMessage(m) => m,
         other => panic!("expected GenericDisplayMessage, got {other:?}"),
     };
-    assert!(
-        message.starts_with("# Convert ckBTC to BTC"),
-        "unexpected message header: {message}"
-    );
-    assert!(
-        message.contains("0.0025 ckBTC") && message.contains(WITHDRAWAL_ADDRESS),
-        "unexpected message body: {message}"
+    assert_eq!(
+        message,
+        format!(
+            "# Convert ckBTC to BTC\n\n\
+             Authorize the ckBTC minter to burn ckBTC from your account and \
+             send the equivalent amount in BTC (minus network and minter fees) to \
+             the Bitcoin address below.\n\n\
+             **Amount to convert:** `0.0025 ckBTC`\n\n\
+             **Bitcoin destination address:**\n`{WITHDRAWAL_ADDRESS}`"
+        )
     );
 
     // 2b. retrieve_btc_with_approval / FieldsDisplay renders the structured
