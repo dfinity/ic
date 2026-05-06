@@ -2287,20 +2287,20 @@ message Governance {
   // Map of proposal IDs to their topics for those garbage collected.
   map<uint64, Topic> topic_of_garbage_collected_proposals = 29;
 
+  // Persisted-true sentinel: the one-time eight year gang bonus base migration ran on mainnet.
+  // Retained as a rollback guard; if a previous release sees this as true, it skips the migration.
+  bool eight_year_gang_bonus_migration_done = 31;
+
   // Snapshot of each neuron's dissolve state taken while clamping to the Mission 70 maximum
   // dissolve delay. Enables restoring original dissolve states if the maximum is reversed.
   map<uint64, NeuronDissolveStateSnapshot> neuron_id_to_pre_clamp_dissolve_state = 32;
 
+  // Persisted-true sentinel: the relaxed eight year gang member induction ran on mainnet.
+  // Retained as a rollback guard; if a previous release sees this as true, it skips the migration.
+  bool relaxed_eight_year_gang_bonus_migration_done = 33;
+
   reserved 30;
   reserved "first_proposal_id_to_record_voting_history";
-
-  // Reserved id for deprecated `eight_year_gang_bonus_migration_done`.
-  reserved 31;
-  reserved "eight_year_gang_bonus_migration_done";
-
-  // Reserved id for deprecated `relaxed_eight_year_gang_bonus_migration_done`.
-  reserved 33;
-  reserved "relaxed_eight_year_gang_bonus_migration_done";
 
   reserved 6;
   reserved "authz";

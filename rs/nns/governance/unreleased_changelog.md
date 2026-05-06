@@ -15,12 +15,6 @@ on the process that this file is part of, see
 
 ## Removed
 
-* Removed the one-time eight year gang bonus base migrations (both the strict
-  and the relaxed second round). The migrations have already run on mainnet,
-  so the migration code, feature flags, and supporting tests are no longer
-  needed. Proto field numbers `31` (`eight_year_gang_bonus_migration_done`)
-  and `33` (`relaxed_eight_year_gang_bonus_migration_done`) are now reserved.
-
 ## Fixed
 
 ## Security
