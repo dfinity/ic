@@ -2116,6 +2116,7 @@ crate.annotation(
         "__tls",
         "rustls-no-provider",
     ],
+    version = "0.13.3",
     deps = [
         "@crate_index__hyper-rustls-0.27.7//:hyper_rustls",
         "@crate_index__rustls-0.23.27//:rustls",
@@ -2123,10 +2124,7 @@ crate.annotation(
         "@crate_index__rustls-platform-verifier-0.6.2//:rustls_platform_verifier",
         "@crate_index__tokio-rustls-0.26.0//:tokio_rustls",
     ],
-    version = "0.13.3",
 )
-
-
 crate.annotation(
     crate = "curve25519-dalek",
     rustc_flags = [
