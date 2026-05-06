@@ -217,6 +217,7 @@ jobs:
       - name: "Node Name"
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
+          ip address
 
       - name: Infer Bazel Args
         id: infer-bazel-args
