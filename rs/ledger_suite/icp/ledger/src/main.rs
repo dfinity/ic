@@ -73,7 +73,6 @@ use icrc_ledger_types::{
     },
 };
 use ledger_canister::{
-    ARCHIVING_CHUNK_DURATION_HISTOGRAM, ARCHIVING_CHUNKS_HISTOGRAM, ARCHIVING_DURATION_HISTOGRAM,
     LEDGER, LEDGER_VERSION, Ledger, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY, balances_len,
     get_allowances_list,
 };
@@ -1245,49 +1244,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "Number of archiving failures since canister initialization.",
     )?;
 
-    ARCHIVING_DURATION_HISTOGRAM.with_borrow(|h| {
-        encode_histogram(
-            w,
-            "ledger_archiving_duration_seconds",
-            "Duration of archiving operations in seconds.",
-            h,
-        )
-    })?;
-    ARCHIVING_CHUNK_DURATION_HISTOGRAM.with_borrow(|h| {
-        encode_histogram(
-            w,
-            "ledger_archiving_chunk_duration_seconds",
-            "Duration of individual archive chunk operations (append_blocks calls) in seconds.",
-            h,
-        )
-    })?;
-    ARCHIVING_CHUNKS_HISTOGRAM.with_borrow(|h| {
-        encode_histogram(
-            w,
-            "ledger_archiving_chunks",
-            "Number of chunks per archiving operation.",
-            h,
-        )
-    })?;
-    Ok(())
-}
-
-/// Encodes a histogram in Prometheus format. No-op if the histogram has no observations.
-fn encode_histogram<const N: usize>(
-    w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>,
-    name: &str,
-    help: &str,
-    histogram: &ledger_canister::HistogramData<N>,
-) -> std::io::Result<()> {
-    if histogram.count() == 0 {
-        return Ok(());
-    }
-    w.encode_histogram(
-        name,
-        histogram.per_bucket_counts().into_iter(),
-        histogram.sum(),
-        help,
-    )?;
+    ledger_canister::encode_archiving_metrics(w)?;
     Ok(())
 }
 

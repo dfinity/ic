@@ -507,8 +507,9 @@ pub enum LedgerArgument {
     Upgrade(Option<UpgradeArgs>),
 }
 
-pub use ic_ledger_canister_core::metrics::HistogramData;
-use ic_ledger_canister_core::metrics::{ARCHIVING_CHUNKS_BUCKETS, ARCHIVING_DURATION_BUCKETS};
+use ic_ledger_canister_core::metrics::{
+    ARCHIVING_CHUNKS_BUCKETS, ARCHIVING_DURATION_BUCKETS, HistogramData,
+};
 
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
@@ -545,12 +546,64 @@ thread_local! {
 
     static ARCHIVING_FAILURES: Cell<u64> = Cell::default();
 
-    pub static ARCHIVING_DURATION_HISTOGRAM: RefCell<HistogramData<8>> =
+    static ARCHIVING_DURATION_HISTOGRAM: RefCell<HistogramData<8>> =
         const { RefCell::new(HistogramData::new(&ARCHIVING_DURATION_BUCKETS)) };
-    pub static ARCHIVING_CHUNK_DURATION_HISTOGRAM: RefCell<HistogramData<8>> =
+    static ARCHIVING_CHUNK_DURATION_HISTOGRAM: RefCell<HistogramData<8>> =
         const { RefCell::new(HistogramData::new(&ARCHIVING_DURATION_BUCKETS)) };
-    pub static ARCHIVING_CHUNKS_HISTOGRAM: RefCell<HistogramData<4>> =
+    static ARCHIVING_CHUNKS_HISTOGRAM: RefCell<HistogramData<4>> =
         const { RefCell::new(HistogramData::new(&ARCHIVING_CHUNKS_BUCKETS)) };
+}
+
+/// Encodes the archiving histograms (`ledger_archiving_duration_seconds`,
+/// `ledger_archiving_chunk_duration_seconds`, `ledger_archiving_chunks`) in
+/// Prometheus format. Each individual histogram is omitted until it has at
+/// least one observation.
+pub fn encode_archiving_metrics(
+    w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>,
+) -> std::io::Result<()> {
+    ARCHIVING_DURATION_HISTOGRAM.with_borrow(|h| {
+        encode_histogram(
+            w,
+            "ledger_archiving_duration_seconds",
+            "Duration of archiving operations in seconds.",
+            h,
+        )
+    })?;
+    ARCHIVING_CHUNK_DURATION_HISTOGRAM.with_borrow(|h| {
+        encode_histogram(
+            w,
+            "ledger_archiving_chunk_duration_seconds",
+            "Duration of individual archive chunk operations (append_blocks calls) in seconds.",
+            h,
+        )
+    })?;
+    ARCHIVING_CHUNKS_HISTOGRAM.with_borrow(|h| {
+        encode_histogram(
+            w,
+            "ledger_archiving_chunks",
+            "Number of chunks per archiving operation.",
+            h,
+        )
+    })?;
+    Ok(())
+}
+
+fn encode_histogram<const N: usize>(
+    w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>,
+    name: &str,
+    help: &str,
+    histogram: &HistogramData<N>,
+) -> std::io::Result<()> {
+    if histogram.count() == 0 {
+        return Ok(());
+    }
+    w.encode_histogram(
+        name,
+        histogram.per_bucket_counts().into_iter(),
+        histogram.sum(),
+        help,
+    )?;
+    Ok(())
 }
 
 type StableLedgerBalances = Balances<StableBalances>;
