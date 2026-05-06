@@ -4,10 +4,6 @@ on:
   pull_request_target:
     types: [opened, reopened]
 
-permissions:
-  contents: read
-  pull-requests: write
-
 jobs:
   notify-slack-new-pr:
     name: Notify Slack for new External Contributor PR
