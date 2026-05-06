@@ -112,31 +112,21 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
     fn try_from(input: CanisterSettingsArgs) -> Result<Self, Self::Error> {
         if input.log_memory_limit.is_some() {
             let CanisterSettingsArgs {
-                controllers,
-                compute_allocation,
+                controllers: _,
+                compute_allocation: _,
                 memory_allocation,
-                freezing_threshold,
-                reserved_cycles_limit,
-                log_visibility,
-                snapshot_visibility,
+                freezing_threshold: _,
+                reserved_cycles_limit: _,
+                log_visibility: _,
+                snapshot_visibility: _,
                 log_memory_limit: _,
-                wasm_memory_limit,
-                wasm_memory_threshold,
-                environment_variables,
+                wasm_memory_limit: _,
+                wasm_memory_threshold: _,
+                environment_variables: _,
             } = &input;
-            if controllers.is_some()
-                || compute_allocation.is_some()
-                || memory_allocation.is_some()
-                || freezing_threshold.is_some()
-                || reserved_cycles_limit.is_some()
-                || log_visibility.is_some()
-                || snapshot_visibility.is_some()
-                || wasm_memory_limit.is_some()
-                || wasm_memory_threshold.is_some()
-                || environment_variables.is_some()
-            {
+            if memory_allocation.is_some() {
                 return Err(UpdateSettingsError::ForbiddenSettings {
-                    message: "log_memory_limit cannot be set together with other settings"
+                    message: "log_memory_limit cannot be set together with memory_allocation"
                         .to_string(),
                 });
             }

@@ -101,15 +101,12 @@ mod log_memory_limit {
     }
 
     #[test]
-    fn log_memory_limit_with_compute_allocation_is_forbidden() {
+    fn log_memory_limit_with_compute_allocation_is_valid() {
         let args = CanisterSettingsArgsBuilder::new()
             .with_log_memory_limit(4096)
             .with_compute_allocation(50)
             .build();
-        assert!(matches!(
-            CanisterSettings::try_from(args),
-            Err(UpdateSettingsError::ForbiddenSettings { .. })
-        ));
+        assert!(CanisterSettings::try_from(args).is_ok());
     }
 
     #[test]
