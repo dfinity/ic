@@ -473,7 +473,7 @@ fn test_fetching_from_archive_icrc3_mode() {
         .build();
     let init_args = InitArgsBuilder::for_tests()
         .with_minting_account(*TEST_ACCOUNT)
-        .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000u64)
+        .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000_u64)
         .with_transfer_fee(DEFAULT_TRANSFER_FEE)
         .with_archive_options(ArchiveOptions {
             trigger_threshold: 10,
@@ -508,7 +508,7 @@ fn test_fetching_from_archive_icrc3_mode() {
                     fee: None,
                     created_at_time: None,
                     memo: None,
-                    amount: Nat::from(1000u64),
+                    amount: Nat::from(1000_u64),
                 })
                 .await
                 .unwrap()
@@ -545,7 +545,7 @@ fn test_icrc3_vs_legacy_mode_produce_same_results() {
         .build();
     let init_args = InitArgsBuilder::for_tests()
         .with_minting_account(*TEST_ACCOUNT)
-        .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000u64)
+        .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000_u64)
         .with_transfer_fee(DEFAULT_TRANSFER_FEE)
         .with_archive_options(ArchiveOptions {
             trigger_threshold: 10,
@@ -580,7 +580,7 @@ fn test_icrc3_vs_legacy_mode_produce_same_results() {
                     fee: None,
                     created_at_time: None,
                     memo: None,
-                    amount: Nat::from(1000u64),
+                    amount: Nat::from(1000_u64),
                 })
                 .await
                 .unwrap()
@@ -659,7 +659,7 @@ fn test_icrc3_vs_legacy_callback_method_names() {
         .build();
     let init_args = InitArgsBuilder::for_tests()
         .with_minting_account(*TEST_ACCOUNT)
-        .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000u64)
+        .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000_u64)
         .with_transfer_fee(DEFAULT_TRANSFER_FEE)
         .with_archive_options(ArchiveOptions {
             trigger_threshold: 10,
@@ -695,7 +695,7 @@ fn test_icrc3_vs_legacy_callback_method_names() {
                     fee: None,
                     created_at_time: None,
                     memo: None,
-                    amount: Nat::from(1000u64),
+                    amount: Nat::from(1000_u64),
                 })
                 .await
                 .unwrap()
@@ -704,7 +704,7 @@ fn test_icrc3_vs_legacy_callback_method_names() {
 
         let legacy_response: GetBlocksResponse = agent
             .get_blocks(GetBlocksRequest {
-                start: Nat::from(0u64),
+                start: Nat::from(0_u64),
                 length: Nat::from(NUM_BLOCKS + 1), // +1 for genesis
             })
             .await
@@ -712,7 +712,7 @@ fn test_icrc3_vs_legacy_callback_method_names() {
 
         let icrc3_response: GetBlocksResult = agent
             .icrc3_get_blocks(vec![GetBlocksRequest {
-                start: Nat::from(0u64),
+                start: Nat::from(0_u64),
                 length: Nat::from(NUM_BLOCKS + 1), // +1 for genesis
             }])
             .await
@@ -746,18 +746,18 @@ fn test_icrc3_vs_legacy_callback_method_names() {
         // - Legacy response has `first_index` field
         // - ICRC-3 response has `log_length` field and blocks contain `id` (BlockWithId)
         assert!(
-            legacy_response.first_index >= 0u64,
+            legacy_response.first_index >= 0_u64,
             "Legacy response should have first_index"
         );
         assert!(
-            icrc3_response.log_length > 0u64,
+            icrc3_response.log_length > 0_u64,
             "ICRC-3 response should have log_length"
         );
 
         // Verify ICRC-3 blocks have IDs
         for block_with_id in &icrc3_response.blocks {
             assert!(
-                block_with_id.id >= 0u64,
+                block_with_id.id >= 0_u64,
                 "ICRC-3 blocks should have id field"
             );
         }
