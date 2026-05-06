@@ -268,9 +268,9 @@ fn test_compute_maturity_modulation_respects_global_bounds() {
     // 358 days at 10_000, then 7 days at 30_000 (3× recent spike).
     // 7-day average: 30_000.
     // 365-day average: (358*10_000 + 7*30_000) / 365 = 10_383.
-    // target = 2_500 * (30_000 - 10_383) / 10_383 ≈ 4_720 permyriad >> MAX (500).
+    // target = 2_500 * (30_000 - 10_383) / 10_383 ≈ 4_720 permyriad >> MAX (200).
     // With 1_000 days elapsed the speed limit is not binding, so global clamping takes over.
-    // Expected: result == MAX_MATURITY_MODULATION_PERMYRIAD.
+    // Expected: result == MATURITY_MODULATION_MAX_PERMYRIAD_MISSION_70.
     let mut rates: Vec<SampledPrice> = (1..=358)
         .map(|d| SampledPrice {
             timestamp_seconds: d * ONE_DAY_SECONDS,
@@ -284,7 +284,7 @@ fn test_compute_maturity_modulation_respects_global_bounds() {
         });
     }
     let result = compute_maturity_modulation_permyriad(&rates, 365, 0, 0);
-    assert_eq!(result, MAX_MATURITY_MODULATION_PERMYRIAD as i64);
+    assert_eq!(result, MATURITY_MODULATION_MAX_PERMYRIAD_MISSION_70);
 }
 
 #[test]
@@ -324,7 +324,7 @@ async fn test_execute_stores_rate_and_computes_modulation() {
         .expect_get_icp_to_xdr_exchange_rate()
         .return_once(move |ts| Ok(make_valid_exchange_rate(ts.unwrap(), xdr_permyriad)));
 
-    let task = UpdateIcpXdrRateRelatedData::new_with_client(&GOV, Arc::new(mock_client));
+    let task = UpdateIcpXdrRateRelatedData::new(&GOV, Arc::new(mock_client));
     let (delay, _task) = task.execute().await;
 
     GOV.with_borrow(|gov| {
@@ -378,7 +378,7 @@ async fn test_execute_xrc_failure_leaves_state_unchanged() {
             })
         });
 
-    let task = UpdateIcpXdrRateRelatedData::new_with_client(&GOV, Arc::new(mock_client));
+    let task = UpdateIcpXdrRateRelatedData::new(&GOV, Arc::new(mock_client));
     let (delay, _task) = task.execute().await;
 
     // State must be unchanged.
@@ -431,7 +431,7 @@ async fn test_execute_zero_rate_is_ignored() {
         .expect_get_icp_to_xdr_exchange_rate()
         .return_once(|_| Ok(make_valid_exchange_rate(20_500 * ONE_DAY_SECONDS, 0)));
 
-    let task = UpdateIcpXdrRateRelatedData::new_with_client(&GOV, Arc::new(mock_client));
+    let task = UpdateIcpXdrRateRelatedData::new(&GOV, Arc::new(mock_client));
     let (delay, _task) = task.execute().await;
 
     // State must be unchanged.
@@ -502,20 +502,28 @@ async fn test_execute_backfill_then_daily() {
                 55_000,
             ))
         });
-    let task = UpdateIcpXdrRateRelatedData::new_with_client(&GOV, Arc::new(mock_client_1));
+    let task = UpdateIcpXdrRateRelatedData::new(&GOV, Arc::new(mock_client_1));
     let (delay_1, _task) = task.execute().await;
     assert_eq!(delay_1, Duration::from_secs(BACKFILL_INTERVAL_SECONDS));
 
-    // Second execute(): fetches current_day. History now complete (365 days). Maturity modulation
-    // is computed and the delay should be until next midnight.
+    // Second execute(): fetches current_day, completing the 365-day history. The delay is still
+    // BACKFILL_INTERVAL_SECONDS — the modulation update happens on the next iteration via the
+    // "history complete on entry" branch.
     let mut mock_client_2 = MockXrcClient::new();
     mock_client_2
         .expect_get_icp_to_xdr_exchange_rate()
         .times(1)
         .return_once(move |_| Ok(make_valid_exchange_rate(now, 55_000)));
-    let task = UpdateIcpXdrRateRelatedData::new_with_client(&GOV, Arc::new(mock_client_2));
+    let task = UpdateIcpXdrRateRelatedData::new(&GOV, Arc::new(mock_client_2));
     let (delay_2, _task) = task.execute().await;
-    assert_eq!(delay_2, duration_until_next_midnight_utc(now));
+    assert_eq!(delay_2, Duration::from_secs(BACKFILL_INTERVAL_SECONDS));
+
+    // Third execute(): history is already complete on entry, so modulation is computed and the
+    // delay is until next midnight. No XRC call expected.
+    let mock_client_3 = MockXrcClient::new();
+    let task = UpdateIcpXdrRateRelatedData::new(&GOV, Arc::new(mock_client_3));
+    let (delay_3, _task) = task.execute().await;
+    assert_eq!(delay_3, duration_until_next_midnight_utc(now));
 
     GOV.with_borrow(|gov| {
         let mm = gov.heap_data.maturity_modulation.as_ref().unwrap();
@@ -539,7 +547,7 @@ async fn test_execute_repeated_calls_accumulate_rates() {
     mock_client
         .expect_get_icp_to_xdr_exchange_rate()
         .return_once(move |ts| Ok(make_valid_exchange_rate(ts.unwrap(), 50_000)));
-    let task = UpdateIcpXdrRateRelatedData::new_with_client(&GOV, Arc::new(mock_client));
+    let task = UpdateIcpXdrRateRelatedData::new(&GOV, Arc::new(mock_client));
     task.execute().await;
 
     GOV.with_borrow(|gov| {
@@ -559,7 +567,7 @@ async fn test_execute_repeated_calls_accumulate_rates() {
     mock_client
         .expect_get_icp_to_xdr_exchange_rate()
         .return_once(move |ts| Ok(make_valid_exchange_rate(ts.unwrap(), 60_000)));
-    let task = UpdateIcpXdrRateRelatedData::new_with_client(&GOV, Arc::new(mock_client));
+    let task = UpdateIcpXdrRateRelatedData::new(&GOV, Arc::new(mock_client));
     task.execute().await;
 
     GOV.with_borrow(|gov| {

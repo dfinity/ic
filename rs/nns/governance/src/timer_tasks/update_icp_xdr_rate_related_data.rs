@@ -7,9 +7,6 @@ use ic_cdk::println;
 use ic_nervous_system_clients::exchange_rate_canister_client::{
     ExchangeRateCanisterClient, exchange_rate_to_permyriad, validate_exchange_rate,
 };
-use ic_nervous_system_governance::maturity_modulation::{
-    MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
-};
 use ic_nervous_system_timer_task::RecurringAsyncTask;
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -45,6 +42,12 @@ const MATURITY_MODULATION_SENSITIVITY_PERMYRIAD: i64 = 2_500;
 
 /// Maximum daily change in maturity modulation: 0.3% = 30 permyriad.
 const MATURITY_MODULATION_DAILY_SPEED_LIMIT_PERMYRIAD: i64 = 30;
+
+/// Lower bound for Mission 70 maturity modulation: -10% = -1000 permyriad.
+pub(crate) const MATURITY_MODULATION_MIN_PERMYRIAD_MISSION_70: i64 = -1_000;
+
+/// Upper bound for Mission 70 maturity modulation: +2% = 200 permyriad.
+pub(crate) const MATURITY_MODULATION_MAX_PERMYRIAD_MISSION_70: i64 = 200;
 
 /// Delay between consecutive XRC calls while backfilling historical rates. At 5 seconds per call,
 /// filling the full 365-day window takes about 30 minutes.
@@ -165,8 +168,8 @@ fn compute_maturity_modulation_permyriad(
     // Global bounds have final say. The result is within [MIN, MAX] which fit in i64, so the
     // cast is safe.
     speed_limited.clamp(
-        MIN_MATURITY_MODULATION_PERMYRIAD as i128,
-        MAX_MATURITY_MODULATION_PERMYRIAD as i128,
+        MATURITY_MODULATION_MIN_PERMYRIAD_MISSION_70 as i128,
+        MATURITY_MODULATION_MAX_PERMYRIAD_MISSION_70 as i128,
     ) as i64
 }
 
@@ -176,7 +179,7 @@ pub(super) struct UpdateIcpXdrRateRelatedData {
 }
 
 impl UpdateIcpXdrRateRelatedData {
-    pub fn new_with_client(
+    pub fn new(
         governance: &'static LocalKey<RefCell<Governance>>,
         xrc_client: Arc<dyn ExchangeRateCanisterClient>,
     ) -> Self {
@@ -335,6 +338,10 @@ fn update_maturity_modulation(
     maturity_modulation: &mut MaturityModulation,
     current_day: u64,
 ) {
+    if maturity_modulation.updated_at_days_since_epoch == Some(current_day) {
+        return;
+    }
+
     let previous_permyriad = maturity_modulation.current_value_permyriad.unwrap_or(0) as i64;
     let previous_day = maturity_modulation.updated_at_days_since_epoch.unwrap_or(0);
 
@@ -412,38 +419,9 @@ impl RecurringAsyncTask for UpdateIcpXdrRateRelatedData {
             update_rates_buffer(history, rate);
         });
 
-        // If the history is still incomplete, keep backfilling at the short interval.
-        if self.get_day_to_fetch(current_day).is_some() {
-            return (Duration::from_secs(BACKFILL_INTERVAL_SECONDS), self);
-        }
-
-        // History is complete for current_day: compute maturity modulation.
-        self.governance.with_borrow_mut(|gov| {
-            let data = &mut gov.heap_data;
-            let Some(icp_price_history) = data.icp_price_history.as_ref() else {
-                println!(
-                    "{}UpdateIcpXdrRateRelatedData: icp_price_history is None \
-                     despite history being complete; skipping modulation update.",
-                    LOG_PREFIX
-                );
-                return;
-            };
-            let maturity_modulation = data
-                .maturity_modulation
-                .get_or_insert_with(MaturityModulation::default);
-            update_maturity_modulation(icp_price_history, maturity_modulation, current_day);
-            println!(
-                "{}UpdateIcpXdrRateRelatedData: maturity modulation {} permyriad \
-                 (day={}, buffer_size={})",
-                LOG_PREFIX,
-                maturity_modulation.current_value_permyriad.unwrap_or(0),
-                current_day,
-                icp_price_history.icp_xdr_rates.len(),
-            );
-        });
-
-        let now = self.governance.with_borrow(|gov| gov.env.now());
-        (duration_until_next_midnight_utc(now), self)
+        // Wait the backfill interval. The next iteration will either fetch the next missing day,
+        // or — if history is now complete — update maturity modulation via the branch above.
+        (Duration::from_secs(BACKFILL_INTERVAL_SECONDS), self)
     }
 
     fn initial_delay(&self) -> Duration {

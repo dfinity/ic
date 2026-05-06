@@ -39,8 +39,7 @@ pub fn schedule_tasks(xrc_client: Option<Arc<dyn ExchangeRateCanisterClient>>) {
     UnstakeMaturityOfDissolvedNeuronsTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
     NeuronDataValidationTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
     if let Some(xrc_client) = xrc_client {
-        UpdateIcpXdrRateRelatedData::new_with_client(&GOVERNANCE, xrc_client)
-            .schedule(&METRICS_REGISTRY);
+        UpdateIcpXdrRateRelatedData::new(&GOVERNANCE, xrc_client).schedule(&METRICS_REGISTRY);
     }
 
     run_distribute_rewards_periodic_task();
