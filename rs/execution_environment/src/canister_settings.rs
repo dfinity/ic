@@ -111,6 +111,11 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
 
     fn try_from(input: CanisterSettingsArgs) -> Result<Self, Self::Error> {
         if input.log_memory_limit.is_some() {
+            // The destructure is exhaustive so that adding a new field to
+            // CanisterSettingsArgs causes a compile error here, prompting the
+            // developer to decide whether the new field affects memory
+            // usage/allocation — if it does, it must also be rejected together
+            // with log_memory_limit below.
             let CanisterSettingsArgs {
                 controllers: _,
                 compute_allocation: _,
