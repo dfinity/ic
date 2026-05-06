@@ -667,12 +667,8 @@ pub struct TaskQueue {
 /// Next ID: 65
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
-    #[prost(uint64, tag = "2")]
-    pub last_full_execution_round: u64,
     #[prost(uint64, tag = "4")]
     pub compute_allocation: u64,
-    #[prost(int64, tag = "5")]
-    pub accumulated_priority: i64,
     #[prost(message, optional, tag = "7")]
     pub execution_state_bits: ::core::option::Option<ExecutionStateBits>,
     #[prost(uint64, tag = "8")]
@@ -736,6 +732,12 @@ pub struct CanisterStateBits {
     /// happens the refund amount is subtracted from consumed amount.
     #[prost(message, repeated, tag = "36")]
     pub consumed_cycles_by_use_cases: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
+    /// Consumed cycles by use case presented as counters. The consumed amount is
+    /// only updated once the refund is known to perform a single accounting step.
+    /// These counters facilitate programming retrieval of metrics and performing
+    /// various aggregations on them more easily than their gauge counterparts.
+    #[prost(message, repeated, tag = "65")]
+    pub consumed_cycles_by_use_cases_as_counters: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
     #[prost(message, optional, tag = "37")]
     pub canister_history: ::core::option::Option<CanisterHistory>,
     /// Resource reservation cycles.
@@ -771,10 +773,6 @@ pub struct CanisterStateBits {
     /// The next local snapshot ID.
     #[prost(uint64, tag = "46")]
     pub next_snapshot_id: u64,
-    #[prost(int64, tag = "48")]
-    pub priority_credit: i64,
-    #[prost(enumeration = "LongExecutionMode", tag = "49")]
-    pub long_execution_mode: i32,
     #[prost(uint64, optional, tag = "50")]
     pub wasm_memory_threshold: ::core::option::Option<u64>,
     /// Contains tasks that need to be executed before processing any input of the

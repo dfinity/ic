@@ -11,6 +11,7 @@ rust_test(
         "//rs/ic_os/guest_upgrade/client:lib",
         "//rs/ic_os/guest_upgrade/server",
         "//rs/ic_os/guest_upgrade/shared",
+        "//rs/ic_os/os_tools/guest_disk:guest_disk_lib",
         "//rs/ic_os/sev/attestation",
         "//rs/ic_os/sev/guest",
         "//rs/ic_os/sev/guest/testing",
