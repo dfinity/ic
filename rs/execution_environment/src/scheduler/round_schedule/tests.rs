@@ -932,10 +932,10 @@ fn end_iteration_resets_long_execution_start_round_for_completed_messages() {
     );
 }
 
-/// end_iteration resets `long_execution_start_round` for canisters with low
-/// cycle balance.
+/// end_iteration resets `long_execution_start_round` for canisters with zero
+/// instruction executions.
 #[test]
-fn end_iteration_resets_long_execution_start_round_for_low_cycle_balance() {
+fn end_iteration_resets_long_execution_start_round_for_zero_instruction_execution_canisters() {
     let mut fixture = RoundScheduleFixture::new();
     fixture.current_round = ExecutionRound::new(13);
 
@@ -945,7 +945,7 @@ fn end_iteration_resets_long_execution_start_round_for_low_cycle_balance() {
 
     // Canister runs out of cycles: the long execution terminates...
     fixture.remove_long_execution(canister_id);
-    // ...and end_iteration is called with the canister as having low cycle balance.
+    // ...and end_iteration is called with the canister as having executed a zero instruction input.
     fixture.end_iteration(&btreeset! {}, &btreeset! {}, &btreeset! {canister_id});
 
     // `long_execution_start_round` was reset.
