@@ -70,7 +70,7 @@ rust_ic_test_suite(
     deps = [
         # Keep sorted.
         ":icp_test_ledger",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/ledger_suite/common/ledger_core",
         "//rs/ledger_suite/icp:icp_ledger",
         "//rs/ledger_suite/icp/index:ic-icp-index",

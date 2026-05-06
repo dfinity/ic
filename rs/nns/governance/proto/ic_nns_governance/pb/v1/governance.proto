@@ -1992,6 +1992,9 @@ message FulfillSubnetRentalRequest {
   ic_base_types.pb.v1.PrincipalId user = 1;
   repeated ic_base_types.pb.v1.PrincipalId node_ids = 3;
   string replica_version_id = 2;
+  // Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+  // If not set, handling defaults to the NNS subnet.
+  optional ic_base_types.pb.v1.PrincipalId initial_dkg_subnet_id = 4;
 }
 
 message BlessAlternativeGuestOsVersion {
