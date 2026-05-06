@@ -646,17 +646,8 @@ async fn fetch_blocks_interval(
                         }
 
                         // Query the archive without holding any lock using ICRC-3 endpoint
-                        let archive_response = agent
-                            .agent
-                            .query(
-                                &archived_blocks.callback.canister_id,
-                                &archived_blocks.callback.method,
-                            )
-                            .with_arg(Encode!(&archived_blocks.args)?)
-                            .call()
-                            .await?;
-
-                        let arch_blocks_result = Decode!(&archive_response, GetBlocksResult)?;
+                        let arch_blocks_result =
+                            agent.icrc3_get_blocks_from_archive(archived_blocks).await?;
 
                         // Process blocks from archive result
                         for block_with_id in arch_blocks_result.blocks.into_iter() {
