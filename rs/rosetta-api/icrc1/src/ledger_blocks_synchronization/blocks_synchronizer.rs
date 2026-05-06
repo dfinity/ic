@@ -5,9 +5,7 @@ use anyhow::{Context, bail};
 use candid::{Decode, Encode, Nat, Principal};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
-use icrc_ledger_types::icrc3::blocks::{
-    BlockRange, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
-};
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResponse, GetBlocksResult};
 use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
 use std::{cmp, collections::HashMap, ops::RangeInclusive, sync::Arc, time::Duration};
@@ -690,28 +688,15 @@ async fn fetch_blocks_interval(
                         )
                         .await?;
 
-                        let arg = Encode!(&GetBlocksRequest {
-                            start: archive_query.start.clone(),
-                            length: archive_query.length,
-                        })?;
-
-                        // Query the archive without holding any lock
-                        let archive_response = agent
-                            .agent
-                            .query(
-                                &archive_query.callback.canister_id,
-                                &archive_query.callback.method,
-                            )
-                            .with_arg(arg)
-                            .call()
-                            .await?;
-
-                        let arch_blocks_result = Decode!(&archive_response, BlockRange)?;
-
                         // The archive guarantees that the first index of the blocks it returns is the same as requested.
-                        let first_index = archive_query.start.0.to_u64().with_context(|| {
-                            anyhow::Error::msg("Nat could not be converted to u64")
-                        })?;
+                        let first_index = archive_query
+                            .start
+                            .0
+                            .to_u64()
+                            .context("Could not convert Nat to u64")?;
+
+                        let arch_blocks_result =
+                            agent.get_blocks_from_archive(archive_query).await?;
 
                         // Iterate over the blocks returned from the archive and add them to the hashmap.
                         for (index, block) in arch_blocks_result.blocks.into_iter().enumerate() {
