@@ -6,6 +6,7 @@ pub mod common;
 use crate::common::{
     HttpEndpointBuilder, UpdateEndpoint, basic_state_manager_mock, create_conn_and_send_request,
     default_get_latest_state, default_read_certified_state, get_free_localhost_socket_addr,
+    query_endpoint,
 };
 use axum::body::{Body, to_bytes};
 use bytes::Bytes;
@@ -57,7 +58,10 @@ use ic_types::{
         },
     },
     ingress::WasmResult,
-    messages::{Blob, Certificate, CertificateDelegation},
+    messages::{
+        Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
+        HttpRequestEnvelope,
+    },
     signature::ThresholdSignature,
     time::current_time,
 };
@@ -175,8 +179,7 @@ fn test_healthy_behind() {
 // with different canister ids should be rejected.
 #[rstest]
 fn test_unauthorized_controller(
-    #[values(read_state::canister::Version::V2, read_state::canister::Version::V3)]
-    version: read_state::canister::Version,
+    #[values(read_state::Version::V2, read_state::Version::V3)] version: read_state::Version,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -272,7 +275,7 @@ fn test_unauthorized_query(
 
         assert_eq!(
             format!(
-                "Specified CanisterId {canister1} does not match effective canister id in URL {canister2}"
+                "Specified canister ID {canister1} does not match effective canister ID in URL {canister2}"
             ),
             response.text().await.unwrap()
         )
@@ -380,7 +383,7 @@ fn test_unauthorized_call(#[values(Call::V2, Call::V3, Call::V4)] endpoint: Call
 
         assert_eq!(
             format!(
-                "Specified CanisterId {canister1} does not match effective canister id in URL {canister2}"
+                "Specified canister ID {canister1} does not match effective canister ID in URL {canister2}"
             ),
             invalid_update_call.text().await.unwrap()
         );
@@ -413,7 +416,10 @@ async fn test_connection_read_timeout() {
 
 /// If the downstream service is stuck return 504.
 #[rstest]
-fn test_request_timeout(#[values(query::Version::V2, query::Version::V3)] version: query::Version) {
+fn test_request_timeout(
+    #[values(query::Version::V2, query::Version::V3, query::Version::SubnetV3)]
+    version: query::Version,
+) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let request_timeout_seconds = 2;
@@ -438,9 +444,7 @@ fn test_request_timeout(#[values(query::Version::V2, query::Version::V3)] versio
 
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
-        let response = Query::new(PrincipalId::default(), PrincipalId::default(), version)
-            .query(addr)
-            .await;
+        let response = query_endpoint(version, addr).await;
         assert_eq!(StatusCode::GATEWAY_TIMEOUT, response.status());
     });
 }
@@ -671,8 +675,7 @@ fn test_graceful_shutdown_of_the_endpoint() {
 /// If a requested path is too long, the endpoint should return early with 404 (NOT FOUND) status code.
 #[rstest]
 fn test_too_long_paths_are_rejected(
-    #[values(read_state::canister::Version::V2, read_state::canister::Version::V3)]
-    version: read_state::canister::Version,
+    #[values(read_state::Version::V2, read_state::Version::V3)] version: read_state::Version,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -707,7 +710,8 @@ fn test_too_long_paths_are_rejected(
 /// returns [QueryExecutionError::CertifiedStateUnavailable`].
 #[rstest]
 fn test_query_endpoint_returns_service_unavailable_on_missing_state(
-    #[values(query::Version::V2, query::Version::V3)] version: query::Version,
+    #[values(query::Version::V2, query::Version::V3, query::Version::SubnetV3)]
+    version: query::Version,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -729,9 +733,7 @@ fn test_query_endpoint_returns_service_unavailable_on_missing_state(
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
 
-        let response = Query::new(PrincipalId::default(), PrincipalId::default(), version)
-            .query(addr)
-            .await;
+        let response = query_endpoint(version, addr).await;
         let expected_status_code = StatusCode::SERVICE_UNAVAILABLE;
 
         assert_eq!(expected_status_code, response.status());
@@ -740,8 +742,7 @@ fn test_query_endpoint_returns_service_unavailable_on_missing_state(
 
 #[rstest]
 fn can_retrieve_subnet_metrics(
-    #[values(read_state::subnet::Version::V2, read_state::subnet::Version::V3)]
-    version: read_state::subnet::Version,
+    #[values(read_state::Version::V2, read_state::Version::V3)] version: read_state::Version,
 ) {
     use ic_crypto_tree_hash::MatchPatternPath;
 
@@ -883,8 +884,8 @@ fn can_retrieve_subnet_metrics(
             wait_for_status_healthy(&addr).await.unwrap();
             let client = Client::builder(TokioExecutor::new()).build_http();
             let version_str = match version {
-                read_state::subnet::Version::V2 => "v2",
-                read_state::subnet::Version::V3 => "v3",
+                read_state::Version::V2 => "v2",
+                read_state::Version::V3 => "v3",
             };
 
             let req = Request::builder()
@@ -900,7 +901,7 @@ fn can_retrieve_subnet_metrics(
         })
     };
 
-    let sender = Sender::from_principal_id(user_test_id(1).get());
+    let sender = Sender::from_principal_id(PrincipalId::new_anonymous());
     let body = prepare_read_state(
         &sender,
         &[Path::new(vec![
@@ -927,8 +928,7 @@ fn can_retrieve_subnet_metrics(
 
 #[rstest]
 fn subnet_metrics_not_supported_via_canister_read_state(
-    #[values(read_state::canister::Version::V2, read_state::canister::Version::V3)]
-    version: read_state::canister::Version,
+    #[values(read_state::Version::V2, read_state::Version::V3)] version: read_state::Version,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -947,8 +947,8 @@ fn subnet_metrics_not_supported_via_canister_read_state(
             wait_for_status_healthy(&addr).await.unwrap();
             let client = Client::builder(TokioExecutor::new()).build_http();
             let version_str = match version {
-                read_state::canister::Version::V2 => "v2",
-                read_state::canister::Version::V3 => "v3",
+                read_state::Version::V2 => "v2",
+                read_state::Version::V3 => "v3",
             };
 
             let req = Request::builder()
@@ -978,6 +978,69 @@ fn subnet_metrics_not_supported_via_canister_read_state(
 
     let response = request(body.as_ref().to_vec());
     assert_eq!(StatusCode::NOT_FOUND, response.status());
+}
+
+/// Regression test: all four read_state endpoints (canister/subnet × V2/V3) validate
+/// request signatures. A non-anonymous sender without a signature must be rejected.
+#[rstest]
+fn test_read_state_rejects_missing_signature(
+    #[values(read_state::Version::V2, read_state::Version::V3)] version: read_state::Version,
+    #[values(read_state::Target::Canister, read_state::Target::Subnet)] target: read_state::Target,
+) {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+
+    let ingress_expiry = (current_time() + Duration::from_secs(300)).as_nanos_since_unix_epoch();
+
+    let content = HttpReadStateContent::ReadState {
+        read_state: HttpReadState {
+            sender: Blob(user_test_id(1).get().into_vec()),
+            paths: vec![Path::new(vec![Label::from("time")])],
+            nonce: None,
+            ingress_expiry,
+        },
+    };
+
+    let envelope: HttpRequestEnvelope<HttpReadStateContent> = HttpRequestEnvelope {
+        content,
+        sender_pubkey: None,
+        sender_sig: None,
+        sender_delegation: None,
+    };
+
+    let body = serde_cbor::to_vec(&envelope).unwrap();
+
+    let target_segment = match target {
+        read_state::Target::Canister => "canister/223xb-saaaa-aaaaf-arlqa-cai".to_string(),
+        read_state::Target::Subnet => format!("subnet/{}", subnet_test_id(1)),
+    };
+    let version_str = match version {
+        read_state::Version::V2 => "v2",
+        read_state::Version::V3 => "v3",
+    };
+
+    rt.block_on(async move {
+        wait_for_status_healthy(&addr).await.unwrap();
+
+        let client = Client::builder(TokioExecutor::new()).build_http();
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(format!(
+                "http://{addr}/api/{version_str}/{target_segment}/read_state"
+            ))
+            .header("Content-Type", "application/cbor")
+            .body(Body::from(body))
+            .expect("request builder");
+
+        let response = client.request(req).await.unwrap();
+        assert_eq!(StatusCode::BAD_REQUEST, response.status());
+    });
 }
 
 /// Assert that the endpoint accepts HTTP/2 requests.
@@ -1821,7 +1884,7 @@ fn test_call_v4_subnet_wrong_subnet_id() {
         assert_eq!(StatusCode::BAD_REQUEST, response.status());
         assert_eq!(
             format!(
-                "Specified SubnetId {wrong_subnet_id} does not match the subnet id of this node {node_subnet_id}"
+                "Specified subnet ID {wrong_subnet_id} does not match the subnet ID of this node {node_subnet_id}"
             ),
             response.text().await.unwrap()
         );
@@ -1830,8 +1893,10 @@ fn test_call_v4_subnet_wrong_subnet_id() {
 
 /// Tests that /api/v4/subnet/../call accepts a request whose URL subnet ID matches
 /// the node's own subnet ID.
-#[test]
-fn test_call_v4_subnet_correct_subnet_id() {
+#[rstest]
+#[case::create_canister("create_canister")]
+#[case::provisional_create_canister_with_cycles("provisional_create_canister_with_cycles")]
+fn test_call_v4_subnet_correct_subnet_id(#[case] method_name: &str) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -1860,7 +1925,7 @@ fn test_call_v4_subnet_correct_subnet_id() {
                         ic_types::CanisterId::ic_00().get(),
                         ic_types::CanisterId::ic_00().get(),
                     )
-                    .with_method_name("create_canister".to_string()),
+                    .with_method_name(method_name.to_string()),
             )
             .await;
 
@@ -1873,8 +1938,116 @@ fn test_call_v4_subnet_correct_subnet_id() {
     });
 }
 
+/// Tests that /api/v3/subnet/../query rejects a request whose URL subnet ID does not match
+/// the node's own subnet ID.
+#[test]
+fn test_query_v3_subnet_wrong_subnet_id() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    // HttpEndpointBuilder configures the node with subnet_test_id(1).
+    let node_subnet_id = subnet_test_id(1).get();
+    let wrong_subnet_id = subnet_test_id(2).get();
+
+    let _handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+        let response = Query::new_subnet(wrong_subnet_id).query(addr).await;
+
+        assert_eq!(StatusCode::BAD_REQUEST, response.status());
+        assert_eq!(
+            format!(
+                "Specified subnet ID {wrong_subnet_id} does not match the subnet ID of this node {node_subnet_id}"
+            ),
+            response.text().await.unwrap()
+        );
+    });
+}
+
+/// Tests that /api/v3/subnet/../query accepts a valid list_canisters query to the management
+/// canister when the URL subnet ID matches the node's own subnet ID.
+#[test]
+fn test_query_v3_subnet_correct_subnet_id() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let subnet_id = subnet_test_id(1).get();
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.query_execution.next_request().await.unwrap();
+            resp.send_response(Ok((Ok(WasmResult::Reply(vec![])), current_time())))
+        }
+    });
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+        let response = Query::new_subnet(subnet_id).query(addr).await;
+
+        assert_eq!(
+            StatusCode::OK,
+            response.status(),
+            "{:?}",
+            response.text().await
+        );
+    });
+}
+
+/// Tests that /api/v3/subnet/../query rejects calls to non-management canisters (even with
+/// method "list_canisters") and calls to IC_00 methods other than "list_canisters".
+#[rstest]
+#[case::wrong_canister_id(canister_test_id(1).get(), "list_canisters")]
+#[case::wrong_method_name(CanisterId::ic_00().get(), "install_code")]
+fn test_query_v3_subnet_wrong_canister_or_method(
+    #[case] canister_id: PrincipalId,
+    #[case] method_name: &str,
+) {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let subnet_id = subnet_test_id(1).get();
+
+    let _handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+        let response = Query::new_subnet(subnet_id)
+            .with_canister_id(canister_id)
+            .with_method_name(method_name.to_string())
+            .query(addr)
+            .await;
+
+        assert_eq!(StatusCode::BAD_REQUEST, response.status());
+        let body = response.text().await.unwrap();
+        assert_eq!(
+            body,
+            format!(
+                "Subnet query endpoint only accepts queries to the management canister ({}) 'list_canisters' method, got canister_id={} method_name='{}'",
+                CanisterId::ic_00(),
+                CanisterId::unchecked_from_principal(canister_id),
+                method_name,
+            )
+        );
+    });
+}
+
 /// Tests that /api/v4/subnet/../call rejects calls to non-management canisters (even with
-/// method "create_canister") and calls to IC_00 methods other than "create_canister".
+/// method "create_canister") and calls to IC_00 methods other than "create_canister" or
+/// "provisional_create_canister_with_cycles".
 #[rstest]
 #[case::wrong_canister_id(canister_test_id(1).get(), "create_canister")]
 #[case::wrong_method_name(CanisterId::ic_00().get(), "install_code")]
@@ -1916,7 +2089,7 @@ fn test_call_v4_subnet_wrong_canister_or_method(
         assert_eq!(
             body,
             format!(
-                "Subnet call endpoint only accepts calls to the management canister ({}) 'create_canister' method, got canister_id={} method_name='{}'",
+                "Subnet call endpoint only accepts canister creation calls to the management canister ({}), got canister_id={} method_name='{}'",
                 CanisterId::ic_00(),
                 CanisterId::unchecked_from_principal(canister_id),
                 method_name,

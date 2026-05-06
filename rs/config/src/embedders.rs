@@ -57,6 +57,11 @@ pub(crate) const QUERY_EXECUTION_THREADS_PER_CANISTER: usize = 2;
 pub(crate) const DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION: NumInstructions =
     NumInstructions::new(6_000);
 
+/// Fixed base cost charged per `create_execution_state` call, independent of
+/// module size. Accounts for ~10ms of constant compilation overhead.
+pub const DEFAULT_CREATE_EXECUTION_STATE_BASE_COST: NumInstructions =
+    NumInstructions::new(20_000_000);
+
 /// The number of rayon threads used by wasmtime to compile wasm binaries
 const DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS: usize = 10;
 
@@ -185,6 +190,10 @@ pub struct Config {
     /// this many instructions.
     pub cost_to_compile_wasm_instruction: NumInstructions,
 
+    /// Fixed base cost charged per `create_execution_state` call, independent
+    /// of module size.
+    pub create_execution_state_base_cost: NumInstructions,
+
     /// The number of rayon threads used by wasmtime to compile wasm binaries
     pub num_rayon_compilation_threads: usize,
 
@@ -263,6 +272,7 @@ impl Config {
             max_number_exported_functions: MAX_NUMBER_EXPORTED_FUNCTIONS,
             max_sum_exported_function_name_lengths: MAX_SUM_EXPORTED_FUNCTION_NAME_LENGTHS,
             cost_to_compile_wasm_instruction: DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
+            create_execution_state_base_cost: DEFAULT_CREATE_EXECUTION_STATE_BASE_COST,
             num_rayon_compilation_threads: DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS,
             num_rayon_page_allocator_threads: DEFAULT_PAGE_ALLOCATOR_THREADS,
             feature_flags: FeatureFlags::const_default(),

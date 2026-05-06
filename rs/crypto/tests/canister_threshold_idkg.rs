@@ -420,7 +420,7 @@ mod create_transcript {
             let creator = env
                 .nodes
                 .random_filtered_by_receivers(params.receivers(), rng);
-            let result = creator.create_transcript(&params, &batch_signed_dealings);
+            let result = creator.create_transcript(&params, batch_signed_dealings);
 
             assert_matches!(result, Ok(transcript) if transcript.transcript_id == params.transcript_id())
         }
@@ -455,7 +455,7 @@ mod create_transcript {
                 .nodes
                 .random_filtered_by_receivers(params.receivers(), rng);
 
-            let result = creator.create_transcript(&params, &batch_signed_dealings);
+            let result = creator.create_transcript(&params, batch_signed_dealings);
 
             let err = result.unwrap_err();
             assert_matches!(
@@ -505,7 +505,7 @@ mod create_transcript {
                 .nodes
                 .random_filtered_by_receivers(params.receivers(), rng);
             let result =
-                creator.create_transcript(&params_with_removed_dealer, &batch_signed_dealings);
+                creator.create_transcript(&params_with_removed_dealer, batch_signed_dealings);
 
             assert_matches!(
                 result,
@@ -559,7 +559,7 @@ mod create_transcript {
             let creator = env
                 .nodes
                 .random_filtered_by_receivers(modified_params.receivers(), rng);
-            let result = creator.create_transcript(&modified_params, &batch_signed_dealings);
+            let result = creator.create_transcript(&modified_params, batch_signed_dealings);
             let err = result.unwrap_err();
             assert_matches!(
                 err,
@@ -601,7 +601,7 @@ mod create_transcript {
 
             let creator =
                 insufficient_supporters.random_filtered_by_receivers(params.receivers(), rng);
-            let result = creator.create_transcript(&params, &insufficient_batch_signed_dealings);
+            let result = creator.create_transcript(&params, insufficient_batch_signed_dealings);
             let err = result.unwrap_err();
             assert_matches!(
                 err,
@@ -632,7 +632,7 @@ mod create_transcript {
                 })
                 .collect();
 
-            let result = creator.create_transcript(&params, &corrupted_dealings);
+            let result = creator.create_transcript(&params, corrupted_dealings);
 
             assert_matches!(
                 result,
@@ -666,7 +666,7 @@ mod create_transcript {
                 corrupted_dealing
             });
 
-            let result = creator.create_transcript(&params, &batch_signed_dealings);
+            let result = creator.create_transcript(&params, batch_signed_dealings);
 
             assert_matches!(
                 result,
@@ -700,7 +700,7 @@ mod create_transcript {
                 corrupted_dealing
             });
 
-            let result = creator.create_transcript(&params, &batch_signed_dealings);
+            let result = creator.create_transcript(&params, batch_signed_dealings);
 
             assert_matches!(
                 result,
@@ -749,7 +749,7 @@ mod create_transcript {
                 .next()
                 .unwrap();
 
-            let result = creator.create_transcript(&invalid_unmasked_params, &multisigned_dealings);
+            let result = creator.create_transcript(&invalid_unmasked_params, multisigned_dealings);
 
             assert_matches!(
                 result,
@@ -3692,7 +3692,7 @@ mod reshare_key_transcript {
                     .collect();
                 nodes_involved_in_resharing
                     .random_filtered_by_receivers(&reshare_params, rng)
-                    .create_transcript_or_panic(&reshare_params, &dealings)
+                    .create_transcript_or_panic(&reshare_params, dealings)
             };
             let target_tecdsa_master_public_key =
                 get_master_public_key_from_transcript(&reshared_key_transcript)

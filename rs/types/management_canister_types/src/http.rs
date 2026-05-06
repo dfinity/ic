@@ -359,7 +359,7 @@ fn test_http_header_data_size() {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum HttpMethod {
     #[serde(rename = "get")]
     GET,
@@ -435,8 +435,8 @@ pub enum FlexibleHttpGlobalError {
     OutOfCycles(candid::Reserved),
     #[serde(rename = "responses_too_large")]
     ResponsesTooLarge(candid::Reserved),
-    #[serde(rename = "too_many_request_errors")]
-    TooManyRequestErrors(candid::Reserved),
+    #[serde(rename = "too_many_rejects")]
+    TooManyRejects(candid::Reserved),
 }
 
 /// Per-node detail in a flexible HTTP outcall error.
