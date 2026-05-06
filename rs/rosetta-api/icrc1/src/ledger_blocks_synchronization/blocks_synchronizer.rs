@@ -2,7 +2,7 @@
 use crate::common::storage::storage_client::StorageClient;
 use crate::common::storage::types::RosettaBlock;
 use anyhow::{Context, bail};
-use candid::{Decode, Encode, Nat};
+use candid::{Decode, Encode, Nat, Principal};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::{
@@ -617,33 +617,12 @@ async fn fetch_blocks_interval(
                     // Fetch all blocks that could not be returned by the ledger directly, from the
                     // archive.
                     for archived_blocks in blocks_result.archived_blocks {
-                        // Check if the provided archive canister id is in the list of trusted canister ids
-                        // (without holding lock across await points)
-                        let is_trusted = {
-                            let trusted_archive_canisters = archive_canister_ids.lock().await;
-                            trusted_archive_canisters.iter().any(|archive_info| {
-                                archive_info.canister_id == archived_blocks.callback.canister_id
-                            })
-                        };
-
-                        if !is_trusted {
-                            // Fetch updated archive info without holding the lock
-                            let new_archive_infos =
-                                fetch_archive_canister_infos(agent.clone()).await?;
-
-                            // Update the list and check again
-                            let mut trusted_archive_canisters = archive_canister_ids.lock().await;
-                            *trusted_archive_canisters = new_archive_infos;
-
-                            if !trusted_archive_canisters.iter().any(|archive_info| {
-                                archive_info.canister_id == archived_blocks.callback.canister_id
-                            }) {
-                                bail!(
-                                    "Archive canister id {} is not in the list of trusted canister ids",
-                                    archived_blocks.callback.canister_id
-                                );
-                            }
-                        }
+                        ensure_archive_trusted(
+                            agent.clone(),
+                            archive_canister_ids.clone(),
+                            archived_blocks.callback.canister_id,
+                        )
+                        .await?;
 
                         // Query the archive without holding any lock using ICRC-3 endpoint
                         let arch_blocks_result =
@@ -704,38 +683,17 @@ async fn fetch_blocks_interval(
                     // Fetch all blocks that could not be returned by the ledger directly, from the
                     // archive.
                     for archive_query in blocks_response.archived_blocks {
+                        ensure_archive_trusted(
+                            agent.clone(),
+                            archive_canister_ids.clone(),
+                            archive_query.callback.canister_id,
+                        )
+                        .await?;
+
                         let arg = Encode!(&GetBlocksRequest {
                             start: archive_query.start.clone(),
                             length: archive_query.length,
                         })?;
-
-                        // Check if the provided archive canister id is in the list of trusted canister ids
-                        // (without holding lock across await points)
-                        let is_trusted = {
-                            let trusted_archive_canisters = archive_canister_ids.lock().await;
-                            trusted_archive_canisters.iter().any(|archive_info| {
-                                archive_info.canister_id == archive_query.callback.canister_id
-                            })
-                        };
-
-                        if !is_trusted {
-                            // Fetch updated archive info without holding the lock
-                            let new_archive_infos =
-                                fetch_archive_canister_infos(agent.clone()).await?;
-
-                            // Update the list and check again
-                            let mut trusted_archive_canisters = archive_canister_ids.lock().await;
-                            *trusted_archive_canisters = new_archive_infos;
-
-                            if !trusted_archive_canisters.iter().any(|archive_info| {
-                                archive_info.canister_id == archive_query.callback.canister_id
-                            }) {
-                                bail!(
-                                    "Archive canister id {} is not in the list of trusted canister ids",
-                                    archive_query.callback.canister_id
-                                );
-                            }
-                        }
 
                         // Query the archive without holding any lock
                         let archive_response = agent
@@ -782,6 +740,42 @@ async fn fetch_blocks_interval(
     result.sort_by(|a, b| a.index.partial_cmp(&b.index).unwrap());
 
     Ok(result)
+}
+
+/// Ensures the archive canister id is trusted, refreshing the trust list from the ledger
+/// once if it is missing. Bails if the canister id is still not trusted after the refresh.
+async fn ensure_archive_trusted(
+    agent: Arc<Icrc1Agent>,
+    archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
+    canister_id: Principal,
+) -> anyhow::Result<()> {
+    // Check the current trust list without holding the lock across await points.
+    let is_trusted = {
+        let trusted_archive_canisters = archive_canister_ids.lock().await;
+        trusted_archive_canisters
+            .iter()
+            .any(|archive_info| archive_info.canister_id == canister_id)
+    };
+
+    if is_trusted {
+        return Ok(());
+    }
+
+    // Refresh the trust list from the ledger and check again.
+    let new_archive_infos = fetch_archive_canister_infos(agent).await?;
+    let mut trusted_archive_canisters = archive_canister_ids.lock().await;
+    *trusted_archive_canisters = new_archive_infos;
+
+    if !trusted_archive_canisters
+        .iter()
+        .any(|archive_info| archive_info.canister_id == canister_id)
+    {
+        bail!(
+            "Archive canister id {} is not in the list of trusted canister ids",
+            canister_id
+        );
+    }
+    Ok(())
 }
 
 pub async fn fetch_archive_canister_infos(
