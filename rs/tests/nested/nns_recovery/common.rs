@@ -257,7 +257,7 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
         let required_host_features = if cfg.use_mainnet_state {
             mainnet_node_required_host_features()
         } else {
-            vec![]
+            Default::default()
         };
         NestedNodes::new(&host_vm_names)
             .with_resource_overrides(vm_resource_overrides)
