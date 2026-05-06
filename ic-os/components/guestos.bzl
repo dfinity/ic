@@ -108,6 +108,8 @@ def component_files(mode):
         Label("monitoring/guestos/boot-logging/log-boot-success.service"): "/etc/systemd/system/log-boot-success.service",
         Label("monitoring/guestos/custom_metrics.service"): "/etc/systemd/system/custom_metrics.service",
         Label("monitoring/guestos/custom_metrics.timer"): "/etc/systemd/system/custom_metrics.timer",
+        Label("monitoring/guestos/setup-upgrade-log-forwarding.sh"): "/opt/ic/bin/setup-upgrade-log-forwarding.sh",
+        Label("monitoring/guestos/setup-upgrade-log-forwarding.service"): "/etc/systemd/system/setup-upgrade-log-forwarding.service",
         Label("monitoring/node_exporter/node_exporter.crt"): "/etc/node_exporter/node_exporter.crt",
         Label("monitoring/node_exporter/node_exporter.key"): "/etc/node_exporter/node_exporter.key",
         Label("monitoring/node_exporter/web.yml"): "/etc/node_exporter/web.yml",
