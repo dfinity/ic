@@ -568,13 +568,14 @@ impl SchedulerImpl {
                 "`subnet_available_callbacks` is a lower bound estimate for the number of available callbacks"
             );
 
-            if instructions_consumed == RoundInstructions::new(0) {
+            // Stop iterating if no work was done (no instructions consumed and no system
+            // generated reject responses produced).
+            if instructions_consumed.get() == 0 && low_cycle_balance_canisters.is_empty() {
                 break state;
-            } else {
-                self.metrics
-                    .inner_loop_consumed_non_zero_instructions_count
-                    .inc();
             }
+            self.metrics
+                .inner_loop_processed_non_zero_inputs_count
+                .inc();
 
             if total_heap_delta >= self.config.max_heap_delta_per_iteration {
                 break state;

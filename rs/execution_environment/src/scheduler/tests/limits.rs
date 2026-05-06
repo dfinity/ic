@@ -95,7 +95,7 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
     assert_eq!(metrics.inner_round_loop_consumed_max_instructions.get(), 1);
     assert_eq!(
         metrics
-            .inner_loop_consumed_non_zero_instructions_count
+            .inner_loop_processed_non_zero_inputs_count
             .get(),
         1
     );
@@ -620,7 +620,7 @@ fn finalization_overhead_per_canister_reduces_instruction_budget() {
         let metrics = &test.scheduler().metrics;
         assert_eq!(
             metrics
-                .inner_loop_consumed_non_zero_instructions_count
+                .inner_loop_processed_non_zero_inputs_count
                 .get(),
             expected_iterations,
         );
@@ -903,7 +903,7 @@ fn subnet_available_memory_is_refreshed_between_iterations() {
     let metrics = &test.scheduler().metrics;
     assert_eq!(
         metrics
-            .inner_loop_consumed_non_zero_instructions_count
+            .inner_loop_processed_non_zero_inputs_count
             .get(),
         2
     );

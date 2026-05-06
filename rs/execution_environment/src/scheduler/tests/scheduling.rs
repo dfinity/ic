@@ -91,12 +91,7 @@ fn inner_loop_stops_when_no_instructions_consumed() {
     let metrics = &test.scheduler().metrics;
     assert_eq!(metrics.execute_round_called.get(), 1);
     assert_eq!(metrics.inner_round_loop_consumed_max_instructions.get(), 0);
-    assert_eq!(
-        metrics
-            .inner_loop_consumed_non_zero_instructions_count
-            .get(),
-        1
-    );
+    assert_eq!(metrics.inner_loop_processed_non_zero_inputs_count.get(), 1);
 
     assert_eq!(
         test.state()
@@ -142,12 +137,7 @@ fn test_multiple_iterations_of_inner_loop() {
         3
     );
     assert_eq!(metrics.inner_round_loop_consumed_max_instructions.get(), 0);
-    assert_eq!(
-        metrics
-            .inner_loop_consumed_non_zero_instructions_count
-            .get(),
-        3
-    );
+    assert_eq!(metrics.inner_loop_processed_non_zero_inputs_count.get(), 3);
 
     assert_eq!(
         test.state()
@@ -157,6 +147,62 @@ fn test_multiple_iterations_of_inner_loop() {
         3
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 2);
+}
+
+/// Ensures that `inner_round()` continues with another iteration after the
+/// previous iteration only processed messages that got rejected (e.g. because
+/// the callee was low on cycles), with zero Wasm instructions executed.
+#[test]
+fn inner_loop_continues_after_zero_instructions_iteration() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig::application_subnet())
+        .build();
+
+    // Two canisters:
+    //   - canister A (well funded) makes a call to canister B;
+    //   - canister B (low on cycles) cannot execute the incoming request, which is
+    //     rejected without executing any Wasm.
+    let canister_a = test.create_canister();
+    let canister_b = test.create_canister_with(
+        // Too few cycles to execute the incoming request.
+        Cycles::new(1),
+        ComputeAllocation::zero(),
+        MemoryAllocation::default(),
+        None,
+        None,
+        None,
+    );
+    let message = ingress(50).call(other_side(canister_b, 50), on_response(50));
+    test.send_ingress(canister_a, message);
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Expecting the full call tree to complete within one round:
+    //   - Iteration 1: A executes an ingress message that produces a request for B.
+    //   - Iteration 2: B cannot pay for executing the request so the DSM produces a
+    //                  reject response with no Wasm execution (zero instructions).
+    //   - Iteration 3: A executes the reject response.
+    //
+    // One round, 3 iterations that processed at least one input each.
+    let metrics = &test.scheduler().metrics;
+    assert_eq!(metrics.execute_round_called.get(), 1);
+    assert_eq!(metrics.inner_loop_processed_non_zero_inputs_count.get(), 3);
+
+    // Only A actually executed messages (the ingress and the reject response).
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
+        2
+    );
+
+    // Neither canister should have any inputs or outputs.
+    for canister in [canister_a, canister_b] {
+        let queues = test.canister_state(canister).system_state.queues();
+        assert_eq!(queues.input_queues_message_count(), 0);
+        assert_eq!(queues.output_queues_message_count(), 0);
+    }
 }
 
 #[test]
