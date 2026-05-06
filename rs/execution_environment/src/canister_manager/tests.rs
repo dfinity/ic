@@ -99,7 +99,6 @@ use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
-use num_traits::SaturatingSub;
 use prometheus::IntCounter;
 use serde::Deserialize;
 use std::{
