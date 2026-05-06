@@ -1216,7 +1216,10 @@ impl RandomnessGenerator for SequentialMockRng {
     }
 
     fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
-        let result = self.byte_arrays[self.index];
+        let result = *self
+            .byte_arrays
+            .get(self.index)
+            .expect("SequentialMockRng exhausted predefined byte arrays");
         self.index += 1;
         Ok(result)
     }
