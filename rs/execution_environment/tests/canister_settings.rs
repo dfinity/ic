@@ -177,6 +177,14 @@ fn canister_settings_ranges() {
         Nat::from(invalid_freezing_threshold)
     );
 
+    let log_memory_limit_with_memory_allocation = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(4096)
+        .with_memory_allocation(1 << 20)
+        .build();
+    let expected_log_memory_limit_combined_err_code = ErrorCode::CanisterContractViolation;
+    let expected_log_memory_limit_combined_err =
+        "log_memory_limit cannot be set together with memory_allocation".to_string();
+
     for (invalid_settings, expected_err_code, expected_err) in [
         (
             invalid_compute_allocation_settings,
@@ -192,6 +200,11 @@ fn canister_settings_ranges() {
             invalid_freezing_threshold_settings,
             expected_invalid_freezing_threshold_err_code,
             expected_invalid_freezing_threshold_err,
+        ),
+        (
+            log_memory_limit_with_memory_allocation,
+            expected_log_memory_limit_combined_err_code,
+            expected_log_memory_limit_combined_err,
         ),
     ] {
         let err = via_update_settings(invalid_settings.clone()).unwrap_err();
