@@ -1346,20 +1346,21 @@ pub mod nns {
             key: impl AsRef<str>,
         ) -> T {
             let key = key.as_ref();
-            let response = get_value(pocket_ic, key, None)
-                .await
-                .expect(&format!("failed to fetch registry value for key `{key}`"));
+            let response = get_value(pocket_ic, key, None).await.unwrap_or_else(|err| {
+                panic!("failed to fetch registry value for key `{key}`: {err:?}")
+            });
             let bytes = match response
                 .content
-                .expect(&format!("registry response for key `{key}` had no content"))
+                .unwrap_or_else(|| panic!("registry response for key `{key}` had no content"))
             {
                 Content::Value(bytes) => bytes,
                 Content::LargeValueChunkKeys(_) => {
                     panic!("unexpected large value chunk keys for key `{key}`")
                 }
             };
-            T::decode(bytes.as_slice())
-                .expect(&format!("failed to decode registry value for key `{key}`"))
+            T::decode(bytes.as_slice()).unwrap_or_else(|err| {
+                panic!("failed to decode registry value for key `{key}`: {err}")
+            })
         }
     }
 
