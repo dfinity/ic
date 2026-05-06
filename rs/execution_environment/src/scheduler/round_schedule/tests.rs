@@ -367,13 +367,13 @@ impl RoundScheduleFixture {
         &mut self,
         executed_canisters: &BTreeSet<CanisterId>,
         canisters_with_completed_messages: &BTreeSet<CanisterId>,
-        low_cycle_balance_canisters: &BTreeSet<CanisterId>,
+        canisters_with_zero_instruction_executions: &BTreeSet<CanisterId>,
     ) {
         self.round_schedule.end_iteration(
             &mut self.state,
             executed_canisters,
             canisters_with_completed_messages,
-            low_cycle_balance_canisters,
+            canisters_with_zero_instruction_executions,
             self.current_round,
         );
     }
