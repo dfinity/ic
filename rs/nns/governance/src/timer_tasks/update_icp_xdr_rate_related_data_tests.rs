@@ -458,6 +458,49 @@ async fn test_execute_zero_rate_is_ignored() {
 }
 
 #[tokio::test]
+async fn test_execute_skips_when_already_updated_today() {
+    // Simulate an early timer fire: maturity modulation has already been computed for current_day,
+    // but the timer fires again before midnight has rolled over. The task should skip all work and
+    // reschedule until the next midnight.
+    let current_day = 20_500_u64;
+    let now = current_day * ONE_DAY_SECONDS + 86_399; // 23:59:59 UTC
+
+    thread_local! {
+        static GOV: RefCell<Governance> = RefCell::new(new_governance(20_500 * ONE_DAY_SECONDS + 86_399));
+    }
+
+    GOV.with_borrow_mut(|gov| {
+        gov.heap_data.icp_price_history = Some(IcpPriceHistory {
+            icp_xdr_rates: vec![SampledPrice {
+                timestamp_seconds: (current_day - 1) * ONE_DAY_SECONDS,
+                xdr_permyriad_per_icp: 50_000,
+            }],
+        });
+        gov.heap_data.maturity_modulation = Some(MaturityModulation {
+            current_value_permyriad: Some(42),
+            updated_at_days_since_epoch: Some(current_day),
+        });
+    });
+
+    // No XRC call expected.
+    let mock_client = MockXrcClient::new();
+    let task = UpdateIcpXdrRateRelatedData::new(&GOV, Arc::new(mock_client));
+    let (delay, _task) = task.execute().await;
+
+    assert_eq!(delay, duration_until_next_midnight_utc(now));
+    // State must be unchanged.
+    GOV.with_borrow(|gov| {
+        assert_eq!(
+            *gov.heap_data.maturity_modulation.as_ref().unwrap(),
+            MaturityModulation {
+                current_value_permyriad: Some(42),
+                updated_at_days_since_epoch: Some(current_day),
+            }
+        );
+    });
+}
+
+#[tokio::test]
 async fn test_execute_backfill_then_daily() {
     // Pre-populate 363 days of history, leaving 2 gaps: current_day-1 and current_day.
     // The last week (days current_day-6 through current_day-2) uses a higher price (55_000)

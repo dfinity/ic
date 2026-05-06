@@ -359,9 +359,22 @@ fn update_maturity_modulation(
 #[async_trait]
 impl RecurringAsyncTask for UpdateIcpXdrRateRelatedData {
     async fn execute(self) -> (Duration, Self) {
-        let current_day = self
-            .governance
-            .with_borrow(|gov| gov.env.now() / ONE_DAY_SECONDS);
+        let now = self.governance.with_borrow(|gov| gov.env.now());
+        let current_day = now / ONE_DAY_SECONDS;
+
+        // Guard against firing before midnight has actually rolled over: if maturity modulation
+        // has already been updated for `current_day`, the timer fired early. Reschedule for the
+        // next midnight without doing any work.
+        let already_updated_today = self.governance.with_borrow(|gov| {
+            gov.heap_data
+                .maturity_modulation
+                .as_ref()
+                .and_then(|mm| mm.updated_at_days_since_epoch)
+                == Some(current_day)
+        });
+        if already_updated_today {
+            return (duration_until_next_midnight_utc(now), self);
+        }
 
         // Determine which price to fetch.
         let Some(day_to_fetch) = self.get_day_to_fetch(current_day) else {
@@ -398,7 +411,6 @@ impl RecurringAsyncTask for UpdateIcpXdrRateRelatedData {
                 );
             });
 
-            let now = self.governance.with_borrow(|gov| gov.env.now());
             return (duration_until_next_midnight_utc(now), self);
         };
 
