@@ -514,7 +514,7 @@ impl SchedulerImpl {
                 canisters: active_canisters,
                 executed_canisters,
                 canisters_with_completed_messages,
-                low_cycle_balance_canisters,
+                canisters_with_zero_instruction_executions,
                 ingress_results: mut loop_ingress_execution_results,
                 heap_delta,
             } = self.execute_canisters_in_inner_round(
@@ -552,7 +552,7 @@ impl SchedulerImpl {
                 &mut state,
                 &executed_canisters,
                 &canisters_with_completed_messages,
-                &low_cycle_balance_canisters,
+                &canisters_with_zero_instruction_executions,
                 current_round,
             );
 
@@ -570,7 +570,9 @@ impl SchedulerImpl {
 
             // Stop iterating if no work was done (no instructions consumed and no system
             // generated reject responses produced).
-            if instructions_consumed.get() == 0 && low_cycle_balance_canisters.is_empty() {
+            if instructions_consumed.get() == 0
+                && canisters_with_zero_instruction_executions.is_empty()
+            {
                 break state;
             }
             self.metrics
@@ -652,7 +654,7 @@ impl SchedulerImpl {
                 canisters: canisters_by_thread.into_iter().flatten().collect(),
                 executed_canisters: BTreeSet::new(),
                 canisters_with_completed_messages: BTreeSet::new(),
-                low_cycle_balance_canisters: BTreeSet::new(),
+                canisters_with_zero_instruction_executions: BTreeSet::new(),
                 ingress_results: vec![],
                 heap_delta: NumBytes::new(0),
             };
@@ -707,7 +709,7 @@ impl SchedulerImpl {
         let mut canisters = Vec::new();
         let mut executed_canisters = BTreeSet::new();
         let mut canisters_with_completed_messages = BTreeSet::new();
-        let mut low_cycle_balance_canisters = BTreeSet::new();
+        let mut canisters_with_zero_instruction_executions = BTreeSet::new();
         let mut ingress_results = Vec::new();
         let mut max_instructions_executed_per_thread = NumInstructions::new(0);
         let mut heap_delta = NumBytes::new(0);
@@ -716,7 +718,8 @@ impl SchedulerImpl {
             canisters.append(&mut result.canisters);
             executed_canisters.extend(result.executed_canisters);
             canisters_with_completed_messages.extend(result.canisters_with_completed_messages);
-            low_cycle_balance_canisters.extend(result.low_cycle_balance_canisters);
+            canisters_with_zero_instruction_executions
+                .extend(result.canisters_with_zero_instruction_executions);
             ingress_results.append(&mut result.ingress_results);
             let instructions_executed = as_num_instructions(
                 round_limits_per_thread.instructions - result.round_limits.instructions,
@@ -761,7 +764,7 @@ impl SchedulerImpl {
             canisters,
             executed_canisters,
             canisters_with_completed_messages,
-            low_cycle_balance_canisters,
+            canisters_with_zero_instruction_executions,
             ingress_results,
             heap_delta,
         }
@@ -1616,9 +1619,9 @@ struct ExecutionThreadResult {
     /// Canisters that completed at least one message execution (advancing a long
     /// execution does not count).
     canisters_with_completed_messages: BTreeSet<CanisterId>,
-    /// Canisters that did not have enough cycles to be executed, but whose inputs
-    /// were all consumed regardless.
-    low_cycle_balance_canisters: BTreeSet<CanisterId>,
+    /// Canisters whose inputs did not result in a Wasm execution (e.g. due to low
+    /// cycle balances or missing Wasm module).
+    canisters_with_zero_instruction_executions: BTreeSet<CanisterId>,
     ingress_results: Vec<(MessageId, IngressStatus)>,
     slices_executed: NumSlices,
     messages_executed: NumMessages,
@@ -1634,8 +1637,9 @@ struct IterationResult {
     executed_canisters: BTreeSet<CanisterId>,
     /// Canisters that completed at least one message execution.
     canisters_with_completed_messages: BTreeSet<CanisterId>,
-    /// Canisters that could not be executed due to low cycle balances.
-    low_cycle_balance_canisters: BTreeSet<CanisterId>,
+    /// Canisters whose inputs did not result in a Wasm execution (e.g. due to low
+    /// cycle balances or missing Wasm module).
+    canisters_with_zero_instruction_executions: BTreeSet<CanisterId>,
     /// Ingress results.
     ingress_results: Vec<(MessageId, IngressStatus)>,
     /// Total heap delta produced by execution.
@@ -1673,7 +1677,7 @@ fn execute_canisters_on_thread(
     let mut canisters = vec![];
     let mut executed_canisters = BTreeSet::new();
     let mut canisters_with_completed_messages = BTreeSet::new();
-    let mut low_cycle_balance_canisters = BTreeSet::new();
+    let mut canisters_with_zero_instruction_executions = BTreeSet::new();
     let mut ingress_results = vec![];
     let mut total_slices_executed = NumSlices::new(0);
     let mut total_messages_executed = NumMessages::new(0);
@@ -1758,9 +1762,10 @@ fn execute_canisters_on_thread(
                         canisters_with_completed_messages.insert(new_canister.canister_id());
                         total_instructions_used += instructions;
                     } else {
-                        // Canister did not have enough cycles to be executed. Message was consumed
-                        // regardless.
-                        low_cycle_balance_canisters.insert(new_canister.canister_id());
+                        // No Wasm was executed (canister did not have enough cycles or had no Wasm
+                        // module). Message was consumed regardless.
+                        canisters_with_zero_instruction_executions
+                            .insert(new_canister.canister_id());
                     }
 
                     observe_instructions_consumed_per_message(
@@ -1834,7 +1839,7 @@ fn execute_canisters_on_thread(
         canisters,
         executed_canisters,
         canisters_with_completed_messages,
-        low_cycle_balance_canisters,
+        canisters_with_zero_instruction_executions,
         ingress_results,
         slices_executed: total_slices_executed,
         messages_executed: total_messages_executed,
