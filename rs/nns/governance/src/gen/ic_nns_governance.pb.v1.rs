@@ -3255,18 +3255,11 @@ pub struct Governance {
     /// Map of proposal IDs to their topics for those garbage collected.
     #[prost(map = "uint64, enumeration(Topic)", tag = "29")]
     pub topic_of_garbage_collected_proposals: ::std::collections::HashMap<u64, i32>,
-    /// Whether the eight year gang bonus base migration has run for all neurons.
-    /// This prevents the migration from running more than once.
-    #[prost(bool, tag = "31")]
-    pub eight_year_gang_bonus_migration_done: bool,
     /// Snapshot of each neuron's dissolve state taken while clamping to the Mission 70 maximum
     /// dissolve delay. Enables restoring original dissolve states if the maximum is reversed.
     #[prost(map = "uint64, message", tag = "32")]
     pub neuron_id_to_pre_clamp_dissolve_state:
         ::std::collections::HashMap<u64, NeuronDissolveStateSnapshot>,
-    /// Whether the relaxed eight year gang member induction is done.
-    #[prost(bool, tag = "33")]
-    pub relaxed_eight_year_gang_bonus_migration_done: bool,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
