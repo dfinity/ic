@@ -110,6 +110,38 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
     type Error = UpdateSettingsError;
 
     fn try_from(input: CanisterSettingsArgs) -> Result<Self, Self::Error> {
+        if input.log_memory_limit.is_some() {
+            let CanisterSettingsArgs {
+                controllers,
+                compute_allocation,
+                memory_allocation,
+                freezing_threshold,
+                reserved_cycles_limit,
+                log_visibility,
+                snapshot_visibility,
+                log_memory_limit: _,
+                wasm_memory_limit,
+                wasm_memory_threshold,
+                environment_variables,
+            } = &input;
+            if controllers.is_some()
+                || compute_allocation.is_some()
+                || memory_allocation.is_some()
+                || freezing_threshold.is_some()
+                || reserved_cycles_limit.is_some()
+                || log_visibility.is_some()
+                || snapshot_visibility.is_some()
+                || wasm_memory_limit.is_some()
+                || wasm_memory_threshold.is_some()
+                || environment_variables.is_some()
+            {
+                return Err(UpdateSettingsError::ForbiddenSettings {
+                    message: "log_memory_limit cannot be set together with other settings"
+                        .to_string(),
+                });
+            }
+        }
+
         let compute_allocation = match input.compute_allocation {
             Some(ca) => Some(ComputeAllocation::try_from(ca.0.to_u64().ok_or_else(
                 || UpdateSettingsError::ComputeAllocation(InvalidComputeAllocationError::new(ca)),
@@ -353,6 +385,7 @@ pub enum UpdateSettingsError {
     WasmMemoryThresholdOutOfRange { provided: candid::Nat },
     DuplicateEnvironmentVariables,
     LogMemoryLimitOutOfRange { provided: candid::Nat },
+    ForbiddenSettings { message: String },
 }
 
 impl From<UpdateSettingsError> for UserError {
@@ -405,6 +438,9 @@ impl From<UpdateSettingsError> for UserError {
                     "Log memory limit expected to be in the range of [0..2^64-1], got {provided}"
                 ),
             ),
+            UpdateSettingsError::ForbiddenSettings { message } => {
+                UserError::new(ErrorCode::CanisterContractViolation, message)
+            }
         }
     }
 }
