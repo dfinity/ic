@@ -173,6 +173,13 @@ impl SessionStore {
     pub fn len(&self) -> usize {
         self.inner.lock().unwrap().len()
     }
+
+    /// Whether the cache currently has no sessions. Paired with
+    /// [`SessionStore::len`] to satisfy `clippy::len_without_is_empty`.
+    #[allow(dead_code)]
+    pub fn is_empty(&self) -> bool {
+        self.inner.lock().unwrap().is_empty()
+    }
 }
 
 /// Read snapshot of a session. The transcript is owned (cloned out

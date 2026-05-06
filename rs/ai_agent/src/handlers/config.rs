@@ -25,12 +25,18 @@ pub async fn configure(
                 provider: provider.name().to_string(),
                 model: provider.model().to_string(),
             };
-            *state.provider.write().await = Some(provider);
-            // Drop all cached chat sessions: their Agents are bound
-            // to whichever GeminiClient (= API key) was active when
-            // they were built. After a re-config they would silently
-            // keep using the previous credentials, which is exactly
-            // the wrong behaviour after a key rotation.
+            // Sync RwLock; we don't `.await` while the guard is alive.
+            // A poisoned lock means a prior writer panicked — recover
+            // by overwriting the inner value, which is what the
+            // `into_inner()` recovery pattern would do anyway.
+            match state.provider.write() {
+                Ok(mut guard) => *guard = Some(provider),
+                Err(poisoned) => *poisoned.into_inner() = Some(provider),
+            }
+            // Drop all cached chat sessions: their cached transcripts
+            // were produced under the previous model/credential. Mixing
+            // them across a reconfiguration is more confusing than
+            // helpful, especially for key rotations.
             let cleared = state.sessions.clear();
             info!(
                 state.log,

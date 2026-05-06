@@ -17,13 +17,12 @@ pub struct RunRequest {
 /// The session_id is what makes this multi-turn: omit it on the first
 /// call to start a new session (the server returns the freshly-minted
 /// id), then echo the same id on every subsequent turn. The server
-/// caches one configured Agent per session id and only the new user
-/// prompt needs to be sent each time.
+/// caches the conversation transcript per session id; only the new
+/// user prompt needs to be sent each time.
 ///
-/// `preamble`, `tools`, and `max_turns` are honoured only at session-
-/// creation time. They are ignored on subsequent turns of an existing
-/// session — the cached Agent's configuration wins. To change them,
-/// start a new session.
+/// `preamble`, `tools`, and `max_turns` apply per-request — the agent
+/// is rebuilt each turn from the cached transcript, so changing them
+/// between turns simply changes how the next turn is run.
 #[derive(Debug, Deserialize)]
 pub struct ChatRequest {
     pub prompt: String,

@@ -11,14 +11,20 @@ use crate::{
     tools::node_directory::{NodeDirectory, NodeDirectoryError},
 };
 use slog::Logger;
-use std::sync::Arc;
-use tokio::sync::{OnceCell, RwLock};
+use std::sync::{Arc, RwLock};
+use tokio::sync::OnceCell;
 
 /// Mutable runtime state shared across handlers.
 pub struct AppState {
     pub config: AppConfig,
     pub log: Logger,
     /// `None` until `POST /v1/config` populates it.
+    ///
+    /// `std::sync::RwLock` (not the tokio variant): every call site
+    /// only holds the guard long enough to clone an `AiProvider` (a
+    /// cheap struct of `String` + `GeminiClient`) or to write a new
+    /// one in. None of them `.await` while the guard is alive, which
+    /// is the criterion for using a blocking lock under tokio.
     pub provider: RwLock<Option<AiProvider>>,
     /// Lazily constructed registry-backed node lookup. Built on first
     /// use because (a) it touches the filesystem and we want

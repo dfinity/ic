@@ -417,7 +417,7 @@ impl HasRaw for ic_protobuf::types::v1::CanisterId {
 /// Decode a little-endian byte sequence (up to 16 bytes) into a u128.
 /// `Cycles.raw_cycles` is the LE encoding of the underlying u128.
 fn u128_from_le_bytes(bytes: &[u8]) -> u128 {
-    let mut buf = [0u8; 16];
+    let mut buf = [0_u8; 16];
     let n = bytes.len().min(16);
     buf[..n].copy_from_slice(&bytes[..n]);
     u128::from_le_bytes(buf)

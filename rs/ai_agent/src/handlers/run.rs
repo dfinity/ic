@@ -42,18 +42,31 @@ pub async fn run(
             .into_response();
     }
 
-    let provider_guard = state.provider.read().await;
-    let provider = match provider_guard.as_ref() {
-        Some(p) => p.clone(),
-        None => {
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(ErrorBody::new(provider_not_configured().to_string())),
-            )
-                .into_response();
+    // `state.provider` is a sync RwLock; we never hold it across an
+    // `.await`. Clone the active provider out and drop the guard
+    // immediately by going out of scope at the end of this block.
+    let provider = {
+        let provider_guard = match state.provider.read() {
+            Ok(g) => g,
+            Err(_) => {
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(ErrorBody::new(provider_not_configured().to_string())),
+                )
+                    .into_response();
+            }
+        };
+        match provider_guard.as_ref() {
+            Some(p) => p.clone(),
+            None => {
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(ErrorBody::new(provider_not_configured().to_string())),
+                )
+                    .into_response();
+            }
         }
     };
-    drop(provider_guard);
 
     let preamble = req
         .preamble

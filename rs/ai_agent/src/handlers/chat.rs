@@ -47,9 +47,9 @@ pub async fn chat(
     }
 
     // Resolve the provider once for this request.
-    let provider = match read_provider(&state).await {
+    let provider = match read_provider(&state) {
         Ok(p) => p,
-        Err(resp) => return resp,
+        Err(resp) => return *resp,
     };
 
     // Pull the cached transcript (if any). The snapshot is owned —
@@ -152,15 +152,29 @@ pub async fn chat(
 }
 
 /// Read the active provider, returning a 503 response if `/v1/config`
-/// hasn't been called yet.
-async fn read_provider(state: &Arc<AppState>) -> Result<AiProvider, axum::response::Response> {
-    let guard = state.provider.read().await;
+/// hasn't been called yet (or the lock is poisoned, which would mean
+/// a previous `/v1/config` write panicked mid-update — best handled
+/// the same way as "not configured").
+///
+/// The error variant is boxed so the resulting `Result` stays small;
+/// `axum::response::Response` is ~128 bytes and `clippy::result_large_err`
+/// otherwise complains.
+fn read_provider(state: &Arc<AppState>) -> Result<AiProvider, Box<axum::response::Response>> {
+    let guard = match state.provider.read() {
+        Ok(g) => g,
+        Err(_) => return Err(Box::new(provider_unavailable())),
+    };
     match guard.as_ref() {
         Some(p) => Ok(p.clone()),
-        None => Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ErrorBody::new(provider_not_configured().to_string())),
-        )
-            .into_response()),
+        None => Err(Box::new(provider_unavailable())),
     }
+}
+
+/// Build the 503 "provider not configured" response.
+fn provider_unavailable() -> axum::response::Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ErrorBody::new(provider_not_configured().to_string())),
+    )
+        .into_response()
 }
