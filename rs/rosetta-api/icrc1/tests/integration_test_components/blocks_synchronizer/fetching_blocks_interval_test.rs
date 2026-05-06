@@ -742,24 +742,16 @@ fn test_icrc3_vs_legacy_callback_method_names() {
             );
         }
 
-        // Verify response structure differences:
-        // - Legacy response has `first_index` field
-        // - ICRC-3 response has `log_length` field and blocks contain `id` (BlockWithId)
-        assert!(
-            legacy_response.first_index >= 0_u64,
-            "Legacy response should have first_index"
-        );
-        assert!(
-            icrc3_response.log_length > 0_u64,
-            "ICRC-3 response should have log_length"
-        );
+        // The ICRC-3 response advertises a log length covering all blocks produced so far
+        // (genesis + transfers), regardless of how many were archived.
+        assert_eq!(icrc3_response.log_length, Nat::from(NUM_BLOCKS + 1));
 
-        // Verify ICRC-3 blocks have IDs
+        // Block ids in the ICRC-3 response increase monotonically starting from the
+        // first non-archived block.
+        let mut expected_id = legacy_response.first_index.clone();
         for block_with_id in &icrc3_response.blocks {
-            assert!(
-                block_with_id.id >= 0_u64,
-                "ICRC-3 blocks should have id field"
-            );
+            assert_eq!(block_with_id.id, expected_id);
+            expected_id += Nat::from(1_u64);
         }
     });
 }
