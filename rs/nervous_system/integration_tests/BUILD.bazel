@@ -48,7 +48,7 @@ BASE_DEPENDENCIES = [
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//packages/pocket-ic",
         "//rs/crypto/sha2",
         "//rs/nervous_system/common/test_keys",

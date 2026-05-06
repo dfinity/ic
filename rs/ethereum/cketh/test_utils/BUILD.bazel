@@ -19,7 +19,7 @@ rust_library(
         "//packages/ic-error-types",
         "//packages/ic-ethereum-types",
         "//packages/ic-http-types",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/ethereum/cketh/minter",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
         "//rs/ethereum/ledger-suite-orchestrator/test_utils",
