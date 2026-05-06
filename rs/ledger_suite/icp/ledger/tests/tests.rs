@@ -2928,4 +2928,20 @@ mod metrics {
             LedgerSuiteType::ICP,
         );
     }
+
+    #[test]
+    fn should_record_archiving_histogram_for_multi_chunk_run() {
+        ic_ledger_suite_state_machine_tests::metrics::assert_archiving_histogram_records_multi_chunk(
+            ledger_wasm(),
+            encode_init_args,
+        );
+    }
+
+    #[test]
+    fn should_record_archiving_histogram_on_failure() {
+        ic_ledger_suite_state_machine_tests::metrics::assert_archiving_histogram_records_failure(
+            ledger_wasm(),
+            encode_init_args,
+        );
+    }
 }
