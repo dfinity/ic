@@ -33,13 +33,13 @@
 //! system to read.
 
 pub mod args;
-mod binaries_upgrade;
+mod binaries_upgrader;
 mod boundary_node;
 mod catch_up_package_provider;
 mod dashboard;
 mod error;
 mod firewall;
-mod guestos_upgrade;
+mod guestos_upgrader;
 mod hostos_upgrade;
 mod ipv4_network;
 mod metrics;

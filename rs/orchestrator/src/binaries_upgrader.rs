@@ -11,7 +11,7 @@ use std::{
     sync::Arc,
 };
 
-pub(crate) struct BinariesUpgrade {
+pub(crate) struct BinariesUpgrader {
     prepared_upgrade_version: Option<ReplicaVersion>,
     download_path: PathBuf,
     restart_time_path: PathBuf,
@@ -21,7 +21,7 @@ pub(crate) struct BinariesUpgrade {
     registry: Arc<RegistryHelper>,
 }
 
-impl BinariesUpgrade {
+impl BinariesUpgrader {
     pub(crate) fn new(
         download_path: PathBuf,
         restart_time_path: PathBuf,
@@ -43,7 +43,7 @@ impl BinariesUpgrade {
 }
 
 #[async_trait]
-impl ImageUpgrader<ReplicaVersion> for BinariesUpgrade {
+impl ImageUpgrader<ReplicaVersion> for BinariesUpgrader {
     fn get_prepared_version(&self) -> Option<&ReplicaVersion> {
         self.prepared_upgrade_version.as_ref()
     }

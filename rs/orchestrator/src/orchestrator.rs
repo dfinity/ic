@@ -1,11 +1,11 @@
 use crate::{
     args::OrchestratorArgs,
-    binaries_upgrade::BinariesUpgrade,
+    binaries_upgrader::BinariesUpgrader,
     boundary_node::BoundaryNodeManager,
     catch_up_package_provider::{CatchUpPackageProvider, LocalCUPReader},
     dashboard::{Dashboard, OrchestratorDashboard},
     firewall::Firewall,
-    guestos_upgrade::{GuestosUpgrade, GuestosVersion},
+    guestos_upgrader::{GuestosUpgrader, GuestosVersion},
     hostos_upgrade::HostosUpgrader,
     ipv4_network::Ipv4Configurator,
     metrics::OrchestratorMetrics,
@@ -294,7 +294,7 @@ impl Orchestrator {
 
         let subnet_assignment: Arc<RwLock<SubnetAssignment>> = Default::default();
 
-        let guestos_upgrade = Box::new(GuestosUpgrade::new(
+        let guestos_upgrader = Box::new(GuestosUpgrader::new(
             args.replica_binary_dir.join("guestos").join("image.bin"),
             args.orchestrator_data_directory.join("reboot_time.txt"),
             logger.clone(),
@@ -303,7 +303,7 @@ impl Orchestrator {
             Arc::clone(&registry) as _,
             disk_encryption_key_exchange_agent,
         ));
-        let binaries_upgrade = Box::new(BinariesUpgrade::new(
+        let binaries_upgrader = Box::new(BinariesUpgrader::new(
             args.replica_binary_dir.join("replica").join("binaries.bin"),
             args.orchestrator_data_directory.join("reboot_time.txt"),
             logger.clone(),
@@ -320,8 +320,8 @@ impl Orchestrator {
                 Arc::clone(&subnet_assignment),
                 guestos_version.clone(),
                 replica_version.clone(),
-                guestos_upgrade,
-                binaries_upgrade,
+                guestos_upgrader,
+                binaries_upgrader,
                 args.replica_config_file.clone(),
                 node_id,
                 ic_binary_directory.clone(),

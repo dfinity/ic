@@ -1,6 +1,6 @@
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
-    guestos_upgrade::GuestosVersion,
+    guestos_upgrader::GuestosVersion,
     metrics::OrchestratorMetrics,
     process_manager::{Process, ProcessManager, ProcessManagerImpl},
     registry_helper::RegistryHelper,

@@ -1,7 +1,7 @@
 use crate::{
     catch_up_package_provider::CatchUpPackageProvider,
     error::{OrchestratorError, OrchestratorResult},
-    guestos_upgrade::GuestosVersion,
+    guestos_upgrader::GuestosVersion,
     metrics::OrchestratorMetrics,
     orchestrator::SubnetAssignment,
     process_manager::{Process, ProcessManager},
@@ -150,8 +150,8 @@ pub(crate) struct Upgrade {
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     guestos_version: GuestosVersion,
     replica_version: ReplicaVersion,
-    guestos_upgrade: Box<dyn ImageUpgrader<GuestosVersion>>,
-    binaries_upgrade: Box<dyn ImageUpgrader<ReplicaVersion>>,
+    guestos_upgrader: Box<dyn ImageUpgrader<GuestosVersion>>,
+    binaries_upgrader: Box<dyn ImageUpgrader<ReplicaVersion>>,
     replica_config_file: PathBuf,
     pub ic_binary_dir: PathBuf,
     registry_replicator: Arc<dyn RegistryReplicatorForUpgrade>,
@@ -171,8 +171,8 @@ impl Upgrade {
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         guestos_version: GuestosVersion,
         replica_version: ReplicaVersion,
-        guestos_upgrade: Box<dyn ImageUpgrader<GuestosVersion>>,
-        binaries_upgrade: Box<dyn ImageUpgrader<ReplicaVersion>>,
+        guestos_upgrader: Box<dyn ImageUpgrader<GuestosVersion>>,
+        binaries_upgrader: Box<dyn ImageUpgrader<ReplicaVersion>>,
         replica_config_file: PathBuf,
         node_id: NodeId,
         ic_binary_dir: PathBuf,
@@ -182,7 +182,7 @@ impl Upgrade {
     ) -> Self {
         let init_time = Instant::now();
 
-        match binaries_upgrade.get_time_since_last_reboot_trigger() {
+        match binaries_upgrader.get_time_since_last_reboot_trigger() {
             Ok(elapsed_time) => {
                 metrics.reboot_duration.set(elapsed_time.as_secs() as i64);
             }
@@ -197,8 +197,8 @@ impl Upgrade {
             );
         }
 
-        binaries_upgrade.confirm_boot().await;
-        guestos_upgrade.confirm_boot().await;
+        binaries_upgrader.confirm_boot().await;
+        guestos_upgrader.confirm_boot().await;
 
         Self {
             registry,
@@ -209,8 +209,8 @@ impl Upgrade {
             node_id,
             guestos_version,
             replica_version,
-            guestos_upgrade,
-            binaries_upgrade,
+            guestos_upgrader,
+            binaries_upgrader,
             replica_config_file,
             ic_binary_dir,
             registry_replicator,
@@ -608,7 +608,7 @@ impl Upgrade {
                         self.replica_version,
                         replica_version
                     );
-                    self.binaries_upgrade
+                    self.binaries_upgrader
                         .prepare_upgrade(&replica_version)
                         .await?
                 }
@@ -620,7 +620,7 @@ impl Upgrade {
                         self.replica_version,
                         guestos_version
                     );
-                    self.guestos_upgrade
+                    self.guestos_upgrader
                         .prepare_upgrade(&guestos_version)
                         .await?
                 }
@@ -656,7 +656,7 @@ impl Upgrade {
             guestos_version
         );
 
-        self.guestos_upgrade
+        self.guestos_upgrader
             .execute_upgrade(&guestos_version)
             .await
             .map_err(OrchestratorError::from)
@@ -807,7 +807,7 @@ impl Upgrade {
                     self.replica_version,
                     new_replica_version
                 );
-                self.binaries_upgrade
+                self.binaries_upgrader
                     .execute_upgrade(new_replica_version)
                     .await
                     .map_err(OrchestratorError::from)
@@ -822,7 +822,7 @@ impl Upgrade {
                     self.replica_version,
                     new_guestos_version
                 );
-                self.guestos_upgrade
+                self.guestos_upgrader
                     .execute_upgrade(new_guestos_version)
                     .await
                     .map_err(OrchestratorError::from)
@@ -836,7 +836,7 @@ impl Upgrade {
                     self.guestos_version,
                     new_guestos_version
                 );
-                self.guestos_upgrade
+                self.guestos_upgrader
                     .execute_upgrade(new_guestos_version)
                     .await
                     .map_err(OrchestratorError::from)
@@ -1361,7 +1361,7 @@ mod tests {
     // TODO: Assert on the executed args
     pub struct FakeManagebootRunner {
         executed_args: RefCell<Option<Vec<OsString>>>,
-    };
+    }
     impl FakeManagebootRunner {
         pub fn new() -> Self {
             Self {
@@ -1666,9 +1666,9 @@ mod tests {
         }
 
         let manageboot_guestos = Box::new(FakeManagebootRunner::new());
-        let guestos_upgrade = Box::new(FakeGuestosUpgrade);
+        let guestos_upgrader = Box::new(FakeGuestosUpgrader);
         let manageboot_binaries = Box::new(FakeManagebootRunner::new());
-        let binaries_upgrade = Box::new(FakeBinariesUpgrade);
+        let binaries_upgrader = Box::new(FakeBinariesUpgrader);
 
         let cup_dir = dir.join("cups");
         std::fs::create_dir_all(&cup_dir).unwrap();
@@ -1727,8 +1727,8 @@ mod tests {
             subnet_assignment,
             current_guestos_version,
             current_replica_version.clone(),
-            guestos_upgrade,
-            binaries_upgrade,
+            guestos_upgrader,
+            binaries_upgrader,
             replica_config_file,
             node_id,
             ic_binary_dir,

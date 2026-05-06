@@ -1,6 +1,6 @@
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
-    guestos_upgrade::GuestosVersion,
+    guestos_upgrader::GuestosVersion,
     upgrade::SubnetUpgrade,
 };
 use ic_consensus_cup_utils::make_registry_cup;

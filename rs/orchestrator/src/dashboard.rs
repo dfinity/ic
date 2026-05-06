@@ -1,5 +1,5 @@
 use crate::{
-    catch_up_package_provider::LocalCUPReader, guestos_upgrade::GuestosVersion,
+    catch_up_package_provider::LocalCUPReader, guestos_upgrader::GuestosVersion,
     orchestrator::SubnetAssignment, process_manager::ProcessManager,
     registry_helper::RegistryHelper, ssh_access_manager::SshAccessParameters,
     upgrade::ReplicaProcess,

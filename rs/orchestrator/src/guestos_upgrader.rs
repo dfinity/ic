@@ -29,7 +29,7 @@ impl AsRef<ReplicaVersion> for GuestosVersion {
 
 // TODO: docs
 // TODO: re-order fields naturally
-pub(crate) struct GuestosUpgrade {
+pub(crate) struct GuestosUpgrader {
     prepared_upgrade_version: Option<GuestosVersion>,
     image_path: PathBuf,
     reboot_time_path: PathBuf,
@@ -40,7 +40,7 @@ pub(crate) struct GuestosUpgrade {
     disk_encryption_key_exchange_agent: Option<DiskEncryptionKeyExchangeServerAgent>,
 }
 
-impl GuestosUpgrade {
+impl GuestosUpgrader {
     pub(crate) fn new(
         image_path: PathBuf,
         reboot_time_path: PathBuf,
@@ -64,7 +64,7 @@ impl GuestosUpgrade {
 }
 
 #[async_trait]
-impl ImageUpgrader<GuestosVersion> for GuestosUpgrade {
+impl ImageUpgrader<GuestosVersion> for GuestosUpgrader {
     fn get_prepared_version(&self) -> Option<&GuestosVersion> {
         self.prepared_upgrade_version.as_ref()
     }
