@@ -80,7 +80,6 @@ fn should_add_ckusdc_and_ckusdt_to_minter_via_orchestrator() {
             .ledger
             .unwrap();
 
-        ckerc20.env.tick();
         ckerc20 = ckerc20.check_events().assert_has_unique_events_in_order(&[
             EventPayload::AddedCkErc20Token {
                 chain_id: token.contract.chain_id,
