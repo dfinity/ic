@@ -3,7 +3,7 @@ use crate::common::local_replica::{self, icrc_ledger_wasm};
 use crate::common::local_replica::{
     create_and_install_custom_icrc_ledger, create_and_install_icrc_ledger, test_identity,
 };
-use candid::{Encode, Nat};
+use candid::{Encode, Nat, Principal};
 use ic_agent::Identity;
 use ic_base_types::PrincipalId;
 use ic_icrc_rosetta::common::storage::storage_client::StorageClient;
@@ -18,7 +18,7 @@ use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use lazy_static::lazy_static;
-use pocket_ic::PocketIcBuilder;
+use pocket_ic::{PocketIc, PocketIcBuilder};
 use proptest::prelude::*;
 use rusqlite::Connection;
 use std::sync::Arc;
@@ -476,54 +476,13 @@ fn run_gaps_handling_test(get_blocks_mode: GetBlocksMode) {
 /// Tests that fetching blocks from archives works correctly when using ICRC-3 mode.
 #[test]
 fn test_fetching_from_archive_icrc3_mode() {
-    let rt = Runtime::new().unwrap();
-    let mut pocket_ic = PocketIcBuilder::new()
-        .with_nns_subnet()
-        .with_sns_subnet()
-        .build();
-    let init_args = InitArgsBuilder::for_tests()
-        .with_minting_account(*TEST_ACCOUNT)
-        .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000_u64)
-        .with_transfer_fee(DEFAULT_TRANSFER_FEE)
-        .with_archive_options(ArchiveOptions {
-            trigger_threshold: 10,
-            num_blocks_to_archive: 5,
-            node_max_memory_size_bytes: None,
-            max_message_size_bytes: None,
-            controller_id: PrincipalId::new_user_test_id(100),
-            more_controller_ids: None,
-            cycles_for_archive_creation: None,
-            max_transactions_per_response: None,
-        })
-        .build();
-    let icrc_ledger_canister_id = create_and_install_icrc_ledger(&pocket_ic, init_args, None);
-    let endpoint = pocket_ic.make_live(None);
-    let port = endpoint.port().unwrap();
+    let (rt, _pocket_ic, icrc_ledger_canister_id, port) = setup_archived_ledger_test();
 
     rt.block_on(async {
-        let agent = Arc::new(Icrc1Agent {
-            agent: local_replica::get_testing_agent(port).await,
-            ledger_canister_id: icrc_ledger_canister_id,
-        });
+        let agent = make_agent(port, icrc_ledger_canister_id).await;
 
         const NUM_BLOCKS: u64 = 15;
-        for i in 0..NUM_BLOCKS {
-            agent
-                .transfer(TransferArg {
-                    from_subaccount: None,
-                    to: Account {
-                        owner: PrincipalId::new_user_test_id(i + 1).0,
-                        subaccount: None,
-                    },
-                    fee: None,
-                    created_at_time: None,
-                    memo: None,
-                    amount: Nat::from(1000_u64),
-                })
-                .await
-                .unwrap()
-                .unwrap();
-        }
+        run_initial_transfers(&agent, NUM_BLOCKS).await;
 
         let storage_client = Arc::new(StorageClient::new_in_memory().await.unwrap());
 
@@ -548,54 +507,13 @@ fn test_fetching_from_archive_icrc3_mode() {
 /// identical synchronized blockchain state.
 #[test]
 fn test_icrc3_vs_legacy_mode_produce_same_results() {
-    let rt = Runtime::new().unwrap();
-    let mut pocket_ic = PocketIcBuilder::new()
-        .with_nns_subnet()
-        .with_sns_subnet()
-        .build();
-    let init_args = InitArgsBuilder::for_tests()
-        .with_minting_account(*TEST_ACCOUNT)
-        .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000_u64)
-        .with_transfer_fee(DEFAULT_TRANSFER_FEE)
-        .with_archive_options(ArchiveOptions {
-            trigger_threshold: 10,
-            num_blocks_to_archive: 5,
-            node_max_memory_size_bytes: None,
-            max_message_size_bytes: None,
-            controller_id: PrincipalId::new_user_test_id(100),
-            more_controller_ids: None,
-            cycles_for_archive_creation: None,
-            max_transactions_per_response: None,
-        })
-        .build();
-    let icrc_ledger_canister_id = create_and_install_icrc_ledger(&pocket_ic, init_args, None);
-    let endpoint = pocket_ic.make_live(None);
-    let port = endpoint.port().unwrap();
+    let (rt, _pocket_ic, icrc_ledger_canister_id, port) = setup_archived_ledger_test();
 
     rt.block_on(async {
-        let agent = Arc::new(Icrc1Agent {
-            agent: local_replica::get_testing_agent(port).await,
-            ledger_canister_id: icrc_ledger_canister_id,
-        });
+        let agent = make_agent(port, icrc_ledger_canister_id).await;
 
         const NUM_BLOCKS: u64 = 15;
-        for i in 0..NUM_BLOCKS {
-            agent
-                .transfer(TransferArg {
-                    from_subaccount: None,
-                    to: Account {
-                        owner: PrincipalId::new_user_test_id(i + 1).0,
-                        subaccount: None,
-                    },
-                    fee: None,
-                    created_at_time: None,
-                    memo: None,
-                    amount: Nat::from(1000_u64),
-                })
-                .await
-                .unwrap()
-                .unwrap();
-        }
+        run_initial_transfers(&agent, NUM_BLOCKS).await;
 
         let storage_client_legacy = Arc::new(StorageClient::new_in_memory().await.unwrap());
         blocks_synchronizer::start_synching_blocks(
@@ -662,55 +580,13 @@ fn test_icrc3_vs_legacy_mode_produce_same_results() {
 fn test_icrc3_vs_legacy_callback_method_names() {
     use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResponse, GetBlocksResult};
 
-    let rt = Runtime::new().unwrap();
-    let mut pocket_ic = PocketIcBuilder::new()
-        .with_nns_subnet()
-        .with_sns_subnet()
-        .build();
-    let init_args = InitArgsBuilder::for_tests()
-        .with_minting_account(*TEST_ACCOUNT)
-        .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000_u64)
-        .with_transfer_fee(DEFAULT_TRANSFER_FEE)
-        .with_archive_options(ArchiveOptions {
-            trigger_threshold: 10,
-            num_blocks_to_archive: 5,
-            node_max_memory_size_bytes: None,
-            max_message_size_bytes: None,
-            controller_id: PrincipalId::new_user_test_id(100),
-            more_controller_ids: None,
-            cycles_for_archive_creation: None,
-            max_transactions_per_response: None,
-        })
-        .build();
-    let icrc_ledger_canister_id = create_and_install_icrc_ledger(&pocket_ic, init_args, None);
-    let endpoint = pocket_ic.make_live(None);
-    let port = endpoint.port().unwrap();
+    let (rt, _pocket_ic, icrc_ledger_canister_id, port) = setup_archived_ledger_test();
 
     rt.block_on(async {
-        // Create a testing agent
-        let agent = Arc::new(Icrc1Agent {
-            agent: local_replica::get_testing_agent(port).await,
-            ledger_canister_id: icrc_ledger_canister_id,
-        });
+        let agent = make_agent(port, icrc_ledger_canister_id).await;
 
         const NUM_BLOCKS: u64 = 15;
-        for i in 0..NUM_BLOCKS {
-            agent
-                .transfer(TransferArg {
-                    from_subaccount: None,
-                    to: Account {
-                        owner: PrincipalId::new_user_test_id(i + 1).0,
-                        subaccount: None,
-                    },
-                    fee: None,
-                    created_at_time: None,
-                    memo: None,
-                    amount: Nat::from(1000_u64),
-                })
-                .await
-                .unwrap()
-                .unwrap();
-        }
+        run_initial_transfers(&agent, NUM_BLOCKS).await;
 
         let legacy_response: GetBlocksResponse = agent
             .get_blocks(GetBlocksRequest {
@@ -764,4 +640,65 @@ fn test_icrc3_vs_legacy_callback_method_names() {
             expected_id += Nat::from(1_u64);
         }
     });
+}
+
+/// Builds a PocketIC environment with an ICRC-1 ledger configured to archive every 5
+/// blocks once 10 are produced. Returns the runtime, the live PocketIC instance
+/// (which the caller must keep alive for the duration of the test), the ledger
+/// canister id, and the local port to reach the replica on.
+fn setup_archived_ledger_test() -> (Runtime, PocketIc, Principal, u16) {
+    let rt = Runtime::new().unwrap();
+    let mut pocket_ic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .build();
+    let init_args = InitArgsBuilder::for_tests()
+        .with_minting_account(*TEST_ACCOUNT)
+        .with_initial_balance(*TEST_ACCOUNT, 1_000_000_000_000_u64)
+        .with_transfer_fee(DEFAULT_TRANSFER_FEE)
+        .with_archive_options(ArchiveOptions {
+            trigger_threshold: 10,
+            num_blocks_to_archive: 5,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: PrincipalId::new_user_test_id(100),
+            more_controller_ids: None,
+            cycles_for_archive_creation: None,
+            max_transactions_per_response: None,
+        })
+        .build();
+    let icrc_ledger_canister_id = create_and_install_icrc_ledger(&pocket_ic, init_args, None);
+    let endpoint = pocket_ic.make_live(None);
+    let port = endpoint.port().unwrap();
+    (rt, pocket_ic, icrc_ledger_canister_id, port)
+}
+
+async fn make_agent(port: u16, ledger_canister_id: Principal) -> Arc<Icrc1Agent> {
+    Arc::new(Icrc1Agent {
+        agent: local_replica::get_testing_agent(port).await,
+        ledger_canister_id,
+    })
+}
+
+/// Issues `num_blocks` 1000-token transfers from `*TEST_ACCOUNT` to fresh recipient
+/// accounts so that downstream synchronization has blocks (and, depending on archive
+/// thresholds, archived blocks) to fetch.
+async fn run_initial_transfers(agent: &Icrc1Agent, num_blocks: u64) {
+    for i in 0..num_blocks {
+        agent
+            .transfer(TransferArg {
+                from_subaccount: None,
+                to: Account {
+                    owner: PrincipalId::new_user_test_id(i + 1).0,
+                    subaccount: None,
+                },
+                fee: None,
+                created_at_time: None,
+                memo: None,
+                amount: Nat::from(1000_u64),
+            })
+            .await
+            .unwrap()
+            .unwrap();
+    }
 }
