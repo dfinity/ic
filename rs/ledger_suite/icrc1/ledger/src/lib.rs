@@ -507,11 +507,8 @@ pub enum LedgerArgument {
     Upgrade(Option<UpgradeArgs>),
 }
 
-/// Bucket boundaries for archiving histograms.
-pub const ARCHIVING_DURATION_BUCKETS: [f64; 8] = [0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0]; // seconds
-pub const ARCHIVING_CHUNKS_BUCKETS: [f64; 4] = [1.0, 2.0, 5.0, 10.0]; // chunk count
-
 pub use ic_ledger_canister_core::metrics::HistogramData;
+use ic_ledger_canister_core::metrics::{ARCHIVING_CHUNKS_BUCKETS, ARCHIVING_DURATION_BUCKETS};
 
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
@@ -853,25 +850,14 @@ impl LedgerData for Ledger {
     }
 
     fn record_archiving_stats(&mut self, stats: ArchivingStats) {
-        const NANOS_PER_SECOND: f64 = 1_000_000_000.0;
-
-        // Record total duration
-        ARCHIVING_DURATION_HISTOGRAM.with(|h| {
-            h.borrow_mut()
-                .observe(stats.duration_nanos as f64 / NANOS_PER_SECOND);
-        });
-
-        // Record per-chunk durations
-        ARCHIVING_CHUNK_DURATION_HISTOGRAM.with(|h| {
-            let mut h = h.borrow_mut();
-            for chunk_duration in &stats.chunk_durations_nanos {
-                h.observe(*chunk_duration as f64 / NANOS_PER_SECOND);
-            }
-        });
-
-        // Record number of chunks
-        ARCHIVING_CHUNKS_HISTOGRAM.with(|h| {
-            h.borrow_mut().observe(stats.num_chunks as f64);
+        ARCHIVING_DURATION_HISTOGRAM.with_borrow_mut(|total| {
+            ARCHIVING_CHUNK_DURATION_HISTOGRAM.with_borrow_mut(|per_chunk| {
+                ARCHIVING_CHUNKS_HISTOGRAM.with_borrow_mut(|num_chunks| {
+                    ic_ledger_canister_core::metrics::record_archiving_stats_into(
+                        &stats, total, per_chunk, num_chunks,
+                    );
+                });
+            });
         });
     }
 }

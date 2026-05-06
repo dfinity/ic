@@ -1,3 +1,14 @@
+use crate::archive::ArchivingStats;
+
+/// Bucket boundaries for the archiving duration histograms (seconds).
+/// Used for both total archiving duration and per-chunk duration.
+pub const ARCHIVING_DURATION_BUCKETS: [f64; 8] = [0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0];
+
+/// Bucket boundaries for the archiving chunks-per-operation histogram.
+pub const ARCHIVING_CHUNKS_BUCKETS: [f64; 4] = [1.0, 2.0, 5.0, 10.0];
+
+const NANOS_PER_SECOND: f64 = 1_000_000_000.0;
+
 /// A simple histogram for collecting metric observations into predefined buckets.
 #[derive(Debug, Clone)]
 pub struct HistogramData<const N: usize> {
@@ -13,6 +24,14 @@ pub struct HistogramData<const N: usize> {
 
 impl<const N: usize> HistogramData<N> {
     pub const fn new(bucket_upper_bounds: &'static [f64; N]) -> Self {
+        let mut i = 1;
+        while i < N {
+            assert!(
+                bucket_upper_bounds[i - 1] < bucket_upper_bounds[i],
+                "HistogramData bucket upper bounds must be strictly ascending"
+            );
+            i += 1;
+        }
         Self {
             bucket_upper_bounds,
             counts: [0; N],
@@ -63,5 +82,39 @@ impl<const N: usize> HistogramData<N> {
         let inf_bucket_count = self.count.saturating_sub(prev_cumulative);
         result.push((f64::INFINITY, inf_bucket_count as f64));
         result
+    }
+}
+
+/// Records an `ArchivingStats` observation into the three archiving histograms.
+/// Duration values are converted from nanoseconds to seconds.
+pub fn record_archiving_stats_into(
+    stats: &ArchivingStats,
+    total_duration: &mut HistogramData<8>,
+    per_chunk_duration: &mut HistogramData<8>,
+    num_chunks: &mut HistogramData<4>,
+) {
+    total_duration.observe(stats.duration_nanos as f64 / NANOS_PER_SECOND);
+    for chunk_duration in &stats.chunk_durations_nanos {
+        per_chunk_duration.observe(*chunk_duration as f64 / NANOS_PER_SECOND);
+    }
+    num_chunks.observe(stats.num_chunks as f64);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic(expected = "bucket upper bounds must be strictly ascending")]
+    fn unsorted_bucket_bounds_panic() {
+        static BAD: [f64; 3] = [1.0, 3.0, 2.0];
+        let _ = HistogramData::new(&BAD);
+    }
+
+    #[test]
+    #[should_panic(expected = "bucket upper bounds must be strictly ascending")]
+    fn duplicate_bucket_bounds_panic() {
+        static BAD: [f64; 3] = [1.0, 2.0, 2.0];
+        let _ = HistogramData::new(&BAD);
     }
 }
