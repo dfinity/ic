@@ -264,6 +264,16 @@ proptest! {
 #[test]
 #[should_panic(expected = "is larger than highest_block_idx.saturating_add(1)")]
 fn test_gaps_handling() {
+    run_gaps_handling_test(GetBlocksMode::Legacy);
+}
+
+#[test]
+#[should_panic(expected = "is larger than highest_block_idx.saturating_add(1)")]
+fn test_gaps_handling_icrc3_mode() {
+    run_gaps_handling_test(GetBlocksMode::Icrc3);
+}
+
+fn run_gaps_handling_test(get_blocks_mode: GetBlocksMode) {
     fn assert_block_count(connection: &Connection, block_count: u64) {
         let counter_value: Option<u64> = connection
             .query_row(
@@ -347,7 +357,7 @@ fn test_gaps_handling() {
             Arc::new(AsyncMutex::new(vec![])),
             RecurrencyMode::OneShot,
             Box::new(|| {}),
-            GetBlocksMode::Legacy,
+            get_blocks_mode,
         )
         .await
         .unwrap();
@@ -362,7 +372,7 @@ fn test_gaps_handling() {
             storage_client.clone(),
             2,
             Arc::new(AsyncMutex::new(vec![])),
-            GetBlocksMode::Legacy,
+            get_blocks_mode,
         )
         .await
         .unwrap();
@@ -400,7 +410,7 @@ fn test_gaps_handling() {
             Arc::new(AsyncMutex::new(vec![])),
             RecurrencyMode::OneShot,
             Box::new(|| {}),
-            GetBlocksMode::Legacy,
+            get_blocks_mode,
         )
         .await
         .unwrap();
@@ -428,7 +438,7 @@ fn test_gaps_handling() {
             Arc::new(AsyncMutex::new(vec![])),
             RecurrencyMode::OneShot,
             Box::new(|| {}),
-            GetBlocksMode::Legacy,
+            get_blocks_mode,
         )
         .await
         .unwrap();
@@ -456,7 +466,7 @@ fn test_gaps_handling() {
             Arc::new(AsyncMutex::new(vec![])),
             RecurrencyMode::OneShot,
             Box::new(|| {}),
-            GetBlocksMode::Legacy,
+            get_blocks_mode,
         )
         .await
         .unwrap();
