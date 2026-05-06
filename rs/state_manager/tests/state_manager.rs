@@ -1102,8 +1102,8 @@ fn returns_state_no_committed_for_future_states() {
 }
 
 #[test]
-#[should_panic(expected = "failed to wait for hashing thread: RecvError")]
-// The hash thread panics with "which is different from previously computed or delivered hash", but we can't relay this.
+#[should_panic]
+// We don't expect a specific panic message because it is not deterministic (could happen when sending `Wait` or when awaiting it).
 fn panics_on_forked_history() {
     state_manager_test(|_metrics, state_manager| {
         // Create a checkpoint at h which we can fetch later.
@@ -9711,8 +9711,12 @@ fn remove_states_below_protects_tip_height() {
 
         // height 2 should be retained
         sm.remove_states_below(Height(10));
-        assert!(sm.certifications().contains_key(&Height::new(2)));
-
+        assert!(
+            sm.list_state_heights(CERT_ANY).contains(&Height(2)),
+            "tip height @2 should be retained by remove_states_below, \
+             got heights: {:?}",
+            sm.list_state_heights(CERT_ANY),
+        );
         // This needs the hash @ prev_height = 2 to
         // still be available, which is only the case if the tip-height
         // protection kept the certification metadata at height 2 around.
