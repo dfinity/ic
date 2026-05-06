@@ -16,7 +16,7 @@ use ic_interfaces::{
     consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, debug, error, trace, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
@@ -72,7 +72,7 @@ pub(crate) struct BlockMaker {
     payload_builder: Arc<dyn PayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     idkg_pool: Arc<RwLock<dyn IDkgPool>>,
-    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     metrics: BlockMakerMetrics,
     idkg_payload_metrics: IDkgPayloadMetrics,
     log: ReplicaLogger,
@@ -94,7 +94,7 @@ impl BlockMaker {
         payload_builder: Arc<dyn PayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         idkg_pool: Arc<RwLock<dyn IDkgPool>>,
-        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         stable_registry_version_age: Duration,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
@@ -108,7 +108,7 @@ impl BlockMaker {
             payload_builder,
             dkg_pool,
             idkg_pool,
-            state_manager,
+            state_reader,
             log,
             metrics: BlockMakerMetrics::new(metrics_registry.clone()),
             idkg_payload_metrics: IDkgPayloadMetrics::new(metrics_registry),
@@ -184,7 +184,7 @@ impl BlockMaker {
         parent: HashedBlock,
     ) -> Option<BlockProposal> {
         let height = parent.height().increment();
-        let certified_height = self.state_manager.latest_certified_height();
+        let certified_height = self.state_reader.latest_certified_height();
 
         // Note that we will skip blockmaking if registry versions or replica_versions
         // are missing or temporarily not retrievable.
@@ -302,7 +302,7 @@ impl BlockMaker {
             pool,
             Arc::clone(&self.dkg_pool),
             parent.as_ref(),
-            &*self.state_manager,
+            &*self.state_reader,
             &context,
             self.log.clone(),
             max_dealings_per_block,
@@ -366,7 +366,7 @@ impl BlockMaker {
                                 &*self.registry_client,
                                 pool,
                                 self.idkg_pool.clone(),
-                                &*self.state_manager,
+                                &*self.state_reader,
                                 &context,
                                 parent.as_ref(),
                                 &self.idkg_payload_metrics,
@@ -630,7 +630,7 @@ mod tests {
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities_consensus::{IDkgStatsNoOp, fake::FromParent};
+    use ic_test_utilities_consensus::fake::FromParent;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
@@ -642,7 +642,7 @@ mod tests {
         *,
     };
     use rstest::rstest;
-    use std::sync::{Arc, RwLock};
+    use std::sync::Arc;
 
     #[test]
     fn test_block_maker() {
@@ -982,6 +982,8 @@ mod tests {
                 time_source,
                 replica_config,
                 state_manager,
+                dkg_pool,
+                idkg_pool,
                 ..
             } = dependencies_with_subnet_params(
                 pool_config.clone(),
@@ -1003,18 +1005,6 @@ mod tests {
                     ),
                 ],
             );
-            let dkg_pool = Arc::new(RwLock::new(ic_artifact_pool::dkg_pool::DkgPoolImpl::new(
-                MetricsRegistry::new(),
-                no_op_logger(),
-            )));
-
-            let idkg_pool = Arc::new(RwLock::new(ic_artifact_pool::idkg_pool::IDkgPoolImpl::new(
-                replica_config.node_id,
-                pool_config,
-                no_op_logger(),
-                MetricsRegistry::new(),
-                Box::new(IDkgStatsNoOp {}),
-            )));
 
             state_manager
                 .get_mut()

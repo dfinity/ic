@@ -67,7 +67,7 @@ use ic_types::batch::ChainKeyData;
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
-use ic_types::messages::SignedIngressContent;
+use ic_types::messages::{Blob, RawSignedSenderInfo, SignedIngressContent, SignedSenderInfo};
 use ic_types::{
     CanisterId, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
     batch::QueryStats,
@@ -76,7 +76,8 @@ use ic_types::{
     messages::{
         CallbackId, CanisterCall, CanisterMessage, CanisterTask, CertificateDelegationMetadata,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MessageId, Payload as ResponsePayload, Query,
-        QuerySource, RequestOrResponse, Response, SubnetMessage, extract_effective_canister_id,
+        QuerySource, RequestOrResponse, Response, SenderInfo, SubnetMessage,
+        extract_effective_canister_id,
     },
     time::UNIX_EPOCH,
 };
@@ -301,6 +302,7 @@ pub struct ExecutionTest {
     // Mutable parameters of execution.
     time: Time,
     user_id: UserId,
+    sender_info: Option<SenderInfo>,
     current_round: ExecutionRound,
 
     // Read-only fields.
@@ -351,6 +353,14 @@ impl ExecutionTest {
 
     pub fn set_user_id(&mut self, user_id: UserId) {
         self.user_id = user_id
+    }
+
+    pub fn set_sender_info(&mut self, sender_info: SenderInfo) {
+        self.sender_info = Some(sender_info);
+    }
+
+    pub fn clear_sender_info(&mut self) {
+        self.sender_info = None;
     }
 
     pub fn state(&self) -> &ReplicatedState {
@@ -868,7 +878,7 @@ impl ExecutionTest {
     pub fn process_stopping_canisters(&mut self) {
         let state = self
             .exec_env
-            .process_stopping_canisters(self.state.take().unwrap());
+            .process_stopping_canisters(self.state.take().unwrap(), ExecutionRound::from(0));
         self.state = Some(state);
     }
 
@@ -1194,13 +1204,16 @@ impl ExecutionTest {
     ) -> (MessageId, IngressStatus) {
         let mut state = self.state.take().unwrap();
         let ingress_id = self.next_message_id();
-        let ingress = IngressBuilder::new()
+        let mut ingress_builder = IngressBuilder::new()
             .message_id(ingress_id.clone())
             .source(self.user_id)
             .receiver(canister_id)
             .method_name(method_name)
-            .method_payload(method_payload)
-            .build();
+            .method_payload(method_payload);
+        if let Some(sender_info) = self.sender_info.clone() {
+            ingress_builder = ingress_builder.sender_info(sender_info);
+        }
+        let ingress = ingress_builder.build();
         state
             .canister_state_make_mut(&canister_id)
             .unwrap()
@@ -1214,6 +1227,7 @@ impl ExecutionTest {
                 time: self.time,
                 state: IngressState::Received,
             },
+            ExecutionRound::from(0),
         );
         self.state = Some(state);
         if !self.manual_execution {
@@ -1347,7 +1361,11 @@ impl ExecutionTest {
                 user_id: self.user_id,
                 ingress_expiry: 0,
                 nonce: None,
-                sender_info: None,
+                sender_info: self.sender_info.as_ref().map(|si| SignedSenderInfo {
+                    info: si.info.clone(),
+                    signer: si.signer,
+                    sig: vec![],
+                }),
             },
             receiver: canister_id,
             method_name: method_name.to_string(),
@@ -1495,6 +1513,7 @@ impl ExecutionTest {
                 time: self.time,
                 state: IngressState::Received,
             },
+            ExecutionRound::from(0),
         );
 
         self.state = Some(state);
@@ -1818,8 +1837,12 @@ impl ExecutionTest {
                 }
                 canister = result.canister;
                 if let Some(ir) = result.ingress_status {
-                    self.ingress_history_writer
-                        .set_status(&mut state, ir.0, ir.1);
+                    self.ingress_history_writer.set_status(
+                        &mut state,
+                        ir.0,
+                        ir.1,
+                        ExecutionRound::from(0),
+                    );
                 };
                 executed_any = true;
             }
@@ -1878,6 +1901,7 @@ impl ExecutionTest {
                         self.install_code_instruction_limits.clone(),
                         &mut round_limits,
                         self.subnet_size(),
+                        ExecutionRound::from(0),
                     );
                 let slice_instructions_used =
                     remaining_round_instructions_before - round_limits.instructions;
@@ -1960,8 +1984,12 @@ impl ExecutionTest {
                 }
                 canister = result.canister;
                 if let Some(ir) = result.ingress_status {
-                    self.ingress_history_writer
-                        .set_status(&mut state, ir.0, ir.1);
+                    self.ingress_history_writer.set_status(
+                        &mut state,
+                        ir.0,
+                        ir.1,
+                        ExecutionRound::from(0),
+                    );
                 };
                 canisters.insert(canister_id, canister);
                 state.put_canister_states(canisters);
@@ -2082,12 +2110,19 @@ impl ExecutionTest {
         method_name: S,
         method_payload: Vec<u8>,
     ) -> Result<(), UserError> {
-        let ingress = SignedIngressBuilder::new()
+        let mut builder = SignedIngressBuilder::new()
             .sender(self.user_id())
             .canister_id(canister_id)
             .method_name(method_name)
-            .method_payload(method_payload)
-            .build();
+            .method_payload(method_payload);
+        if let Some(si) = &self.sender_info {
+            builder = builder.sender_info(RawSignedSenderInfo {
+                info: Blob(si.info.clone()),
+                signer: Blob(si.signer.get().into_vec()),
+                sig: Blob(vec![]),
+            });
+        }
+        let ingress = builder.build();
         self.exec_env.should_accept_ingress_message(
             Arc::new(self.state().clone()),
             &ProvisionalWhitelist::new_empty(),
@@ -2332,6 +2367,9 @@ impl Default for ExecutionTestBuilder {
                 rate_limiting_of_instructions: FlagStatus::Disabled,
                 canister_sandboxing_flag: FlagStatus::Enabled,
                 composite_queries: FlagStatus::Enabled,
+                // Use a large time limit for composite queries in tests to
+                // avoid flakiness due to slow CI machines.
+                max_query_call_walltime: Duration::from_secs(60),
                 ..Config::default()
             },
             subnet_config,
@@ -2780,14 +2818,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_environment_variables_flag(
-        mut self,
-        environment_variables_flag: FlagStatus,
-    ) -> Self {
-        self.execution_config.environment_variables = environment_variables_flag;
-        self
-    }
-
     pub fn with_deterministic_memory_tracker_enabled(mut self, enabled: bool) -> Self {
         self.execution_config
             .embedders_config
@@ -3081,6 +3111,7 @@ impl ExecutionTestBuilder {
             initial_canister_cycles: self.initial_canister_cycles,
             registry_settings: self.registry_settings,
             user_id: user_test_id(1),
+            sender_info: None,
             caller_canister_id: self.caller_canister_id,
             exec_env: execution_services.execution_environment,
             query_handler: execution_services.query_execution_service,

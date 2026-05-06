@@ -60,6 +60,7 @@ on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
 serde = { workspace = true }
 strum = { workspace = true }
+strum_macros = { workspace = true }
 url = { workspace = true }
 canbench-rs = { workspace = true, optional = true }
 rand = { workspace = true }

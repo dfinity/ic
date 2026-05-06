@@ -1,3 +1,8 @@
+//! Direct boot bypasses the GuestOS VM's internal GRUB bootloader. Instead,
+//! HostOS extracts the kernel, initrd, and boot args from the GuestOS partition
+//! and passes them to QEMU directly. Required for SEV-SNP so that the kernel
+//! and root hash are included in the VM's launch measurement.
+
 use crate::GuestVMType;
 use crate::boot_args::read_boot_args;
 use crate::guest_vm_config::DirectBootConfig;

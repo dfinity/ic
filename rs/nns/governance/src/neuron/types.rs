@@ -1,6 +1,7 @@
 use crate::{
     DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
     governance::{LOG_PREFIX, MAX_NUM_HOT_KEYS_PER_NEURON, max_dissolve_delay_seconds},
+    is_mission_70_voting_rewards_enabled,
     neuron::{
         age_bonus_multiplier, combine_aged_stakes, dissolve_delay_bonus_multiplier,
         dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s,
@@ -348,6 +349,11 @@ impl Neuron {
     /// These bonuses are multiplied together, not added. So the maximum total
     /// bonus multiplier is 3.75x.
     ///
+    /// In addition, there is the "8 Year Gang bonus", which starts with 10% of
+    /// the staked amount (as of when Mission 70 began taking effect), applies
+    /// the two bonuses mentioned above (for dissolve delay and age), and adds
+    /// to the final (potential) voting power.
+    ///
     /// In production, it is usually (always?) the case that you also want
     /// deciding voting power. If you need both, use
     /// potential_and_deciding_voting_power instead to avoid re-calculating
@@ -367,9 +373,18 @@ impl Neuron {
         voting_power_economics: &VotingPowerEconomics,
         now_seconds: u64,
     ) -> (u64, u64) {
-        let potential_voting_power = Decimal::from(self.stake_e8s())
-            * dissolve_delay_bonus_multiplier(self.dissolve_delay_seconds(now_seconds))
+        let stake_e8s = self.stake_e8s();
+        let boost = dissolve_delay_bonus_multiplier(self.dissolve_delay_seconds(now_seconds))
             * age_bonus_multiplier(self.age_seconds(now_seconds));
+        let mut potential_voting_power = Decimal::from(stake_e8s) * boost;
+
+        // 8 Year Gang bonus. Cap the bonus base to the current stake because
+        // rejection fees can cause the bonus base to exceed stake_e8s.
+        if is_mission_70_voting_rewards_enabled() {
+            let eight_year_gang_bonus_base_e8s = self.eight_year_gang_bonus_base_e8s.min(stake_e8s);
+            potential_voting_power +=
+                Decimal::from(eight_year_gang_bonus_base_e8s) / Decimal::from(10) * boost;
+        }
 
         // For DECIDING voting power.
         let adjustment_factor: Decimal = {

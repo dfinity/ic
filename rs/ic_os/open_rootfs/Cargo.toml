@@ -18,6 +18,7 @@ pem = { workspace = true }
 rand = { workspace = true }
 sev = { workspace = true }
 serde_cbor = { workspace = true }
+tracing = { workspace = true }
 uuid = { workspace = true }
 
 attestation = { path = "../sev/attestation" }
@@ -25,11 +26,12 @@ command_runner = { path = "../command_runner" }
 config_tool = { path = "../config/tool" }
 config_types = { path = "../config/types" }
 ic_device = { path = "../device" }
+ic_os_logging = { path = "../logging" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
-sev_guest = { path = "../sev/guest" }
 linux_kernel_command_line = { path = "../linux_kernel_command_line" }
+sev_guest = { path = "../sev/guest" }
 
 [dev-dependencies]
 ic-certification-test-utils = { path = "../../certification/test-utils" }

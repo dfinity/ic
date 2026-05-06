@@ -13,6 +13,8 @@ pub struct CallContext {
     pub instructions_executed: u64,
     #[prost(message, optional, tag = "11")]
     pub metadata: ::core::option::Option<super::super::queues::v1::RequestMetadata>,
+    #[prost(message, optional, tag = "14")]
+    pub sender_info: ::core::option::Option<super::super::ingress::v1::SenderInfo>,
     #[prost(oneof = "call_context::CallOrigin", tags = "1, 2, 4, 7, 12")]
     pub call_origin: ::core::option::Option<call_context::CallOrigin>,
 }
@@ -107,6 +109,9 @@ pub struct Callback {
     /// To replace `prepayment_for_response_transmission`.
     #[prost(message, optional, tag = "12")]
     pub prepayment_for_response_transmission_compound:
+        ::core::option::Option<super::super::queues::v1::CompoundCycles>,
+    #[prost(message, optional, tag = "13")]
+    pub prepayment_for_call_transmission:
         ::core::option::Option<super::super::queues::v1::CompoundCycles>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -726,6 +731,9 @@ pub struct CanisterStateBits {
     /// Canister version.
     #[prost(uint64, tag = "34")]
     pub canister_version: u64,
+    /// Consumed cycles by use case presented as gauges. When prepayments happen
+    /// the respective amount is added to the consumed amount while when a refund
+    /// happens the refund amount is subtracted from consumed amount.
     #[prost(message, repeated, tag = "36")]
     pub consumed_cycles_by_use_cases: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
     #[prost(message, optional, tag = "37")]
