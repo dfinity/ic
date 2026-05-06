@@ -10,6 +10,7 @@ use ic_nns_common::types::NeuronId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
+use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResourceOverrides,
 };
@@ -44,6 +45,10 @@ pub const MAINNET_NODE_VM_RESOURCE_OVERRIDES: VmResourceOverrides = VmResourceOv
     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(192)),
     ..VmResourceOverrides::const_default()
 };
+// Request to be deployed in `zh1` by default to be physically closer to the backup pod.
+pub fn mainnet_node_required_host_features() -> Vec<HostFeature> {
+    vec![HostFeature::DC("zh1".to_string())]
+}
 
 // Default path to the mainnet NNS state tarball on the backup pod. Can be overridden through the
 // NNS_STATE_ON_BACKUP_POD environment variable.
@@ -148,6 +153,7 @@ async fn setup_async(env: TestEnv, dkg_interval: Option<u64>) {
     let env_clone = env.clone();
     let deploy_gateway_task = tokio::task::spawn_blocking(move || {
         IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+            .with_required_host_features(mainnet_node_required_host_features())
             .start(&env_clone)
             .expect("Failed to setup ic-gateway");
 
@@ -801,6 +807,7 @@ fn setup_ic(env: TestEnv) {
 
     InternetComputer::new()
         .with_resource_overrides(MAINNET_NODE_VM_RESOURCE_OVERRIDES)
+        .with_required_host_features(mainnet_node_required_host_features())
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .with_api_boundary_nodes(1)
         .with_unassigned_nodes(1)

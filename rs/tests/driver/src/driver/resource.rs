@@ -387,8 +387,11 @@ fn vm_spec_from_nested_node(
     node: &NestedNode,
     group_vm_resource_overrides: VmResourceOverrides,
 ) -> anyhow::Result<VmSpec> {
-    let node_vm_resource_overrides = match &node.node_spec {
-        NestedNodeSpec::Vm(overrides) => overrides,
+    let (node_vm_resource_overrides, required_host_features) = match &node.node_spec {
+        NestedNodeSpec::Vm {
+            vm_resource_overrides,
+            required_host_features,
+        } => (*vm_resource_overrides, required_host_features.clone()),
         NestedNodeSpec::BareMetal { .. } => {
             bail!("Bare metal nodes are not supported by get_resource_request_for_nested_nodes")
         }
@@ -406,7 +409,7 @@ fn vm_spec_from_nested_node(
         boot_image_minimal_size_gibibytes: resolved_vm_resources.boot_image_minimal_size_gibibytes,
         has_ipv4: false,
         vm_allocation: None,
-        required_host_features: Vec::new(),
+        required_host_features,
         alternate_template: None,
     })
 }
