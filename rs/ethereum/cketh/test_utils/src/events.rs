@@ -1,6 +1,7 @@
 use crate::CkEthSetup;
 use ic_cketh_minter::endpoints::events::{Event, EventPayload};
 use std::collections::BTreeMap;
+use std::fmt;
 
 pub struct MinterEventAssert<T> {
     setup: T,
@@ -18,8 +19,12 @@ impl<T: AsRef<CkEthSetup>> MinterEventAssert<T> {
         for attempt in 1..=MAX_ATTEMPTS {
             match check_unique_events_in_order(&self.events, expected_events) {
                 Ok(()) => return self.setup,
-                Err(msg) if attempt == MAX_ATTEMPTS => panic!("{msg}"),
-                Err(_) => {
+                Err(err) => {
+                    let retry =
+                        matches!(*err, CheckError::MissingEvent { .. }) && attempt < MAX_ATTEMPTS;
+                    if !retry {
+                        panic!("{err}");
+                    }
                     self.setup.as_ref().env.tick();
                     self.events = self.setup.as_ref().get_all_events();
                 }
@@ -50,10 +55,46 @@ impl<T> MinterEventAssert<T> {
     }
 }
 
+enum CheckError {
+    MissingEvent {
+        expected: EventPayload,
+        all_events: Vec<Event>,
+    },
+    DuplicateEvent {
+        event: EventPayload,
+    },
+    OutOfOrder {
+        all_events: Vec<Event>,
+    },
+}
+
+impl fmt::Display for CheckError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingEvent {
+                expected,
+                all_events,
+            } => write!(
+                f,
+                "Missing event {:?}. All events: {:?}",
+                expected, all_events
+            ),
+            Self::DuplicateEvent { event } => {
+                write!(f, "Event {event:?} occurs multiple times")
+            }
+            Self::OutOfOrder { all_events } => write!(
+                f,
+                "Events were found in unexpected order. All events: {:?}",
+                all_events
+            ),
+        }
+    }
+}
+
 fn check_unique_events_in_order(
     events: &[Event],
     expected_events: &[EventPayload],
-) -> Result<(), String> {
+) -> Result<(), Box<CheckError>> {
     let mut found_event_indexes = BTreeMap::new();
     for (index_expected_event, expected_event) in expected_events.iter().enumerate() {
         for (index_audit_event, audit_event) in events.iter().enumerate() {
@@ -62,14 +103,16 @@ fn check_unique_events_in_order(
                     .insert(index_expected_event, index_audit_event)
                     .is_some()
             {
-                return Err(format!("Event {expected_event:?} occurs multiple times"));
+                return Err(Box::new(CheckError::DuplicateEvent {
+                    event: expected_event.clone(),
+                }));
             }
         }
         if !found_event_indexes.contains_key(&index_expected_event) {
-            return Err(format!(
-                "Missing event {:?}. All events: {:?}",
-                expected_event, events
-            ));
+            return Err(Box::new(CheckError::MissingEvent {
+                expected: expected_event.clone(),
+                all_events: events.to_vec(),
+            }));
         }
     }
     let audit_event_indexes = found_event_indexes.into_values().collect::<Vec<_>>();
@@ -79,10 +122,9 @@ fn check_unique_events_in_order(
         indexes
     };
     if audit_event_indexes != sorted_audit_event_indexes {
-        return Err(format!(
-            "Events were found in unexpected order. All events: {:?}",
-            events
-        ));
+        return Err(Box::new(CheckError::OutOfOrder {
+            all_events: events.to_vec(),
+        }));
     }
     Ok(())
 }
