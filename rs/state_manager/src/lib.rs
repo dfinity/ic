@@ -3355,26 +3355,15 @@ impl StateManager for StateManagerImpl {
                     .expect("Failed to send `Wait` to hash channel");
                 recv.recv().expect("Failed to wait for hash channel");
                 // After awaiting the hashing thread, snapshot and certification_metadata
-                // must have an entry at prev_height, so we can unwrap.
+                // must have an entry at prev_height.
                 let states = self.states.read();
                 if let Some(cert_md) = states.certifications_metadata.get(&prev_height) {
                     cert_md.certified_state_hash.clone()
                 } else {
-                    error!(
+                    fatal!(
                         self.log,
                         "Previous state hash was not available after awaiting the hash thread. This is a bug."
                     );
-                    debug_assert!(false);
-                    let certification = StateManagerImpl::compute_certification_metadata(
-                        &state,
-                        prev_height,
-                        &self.metrics,
-                        &self.log,
-                    )
-                    .unwrap_or_else(|err| {
-                        fatal!(self.log, "Failed to compute hash tree: {:?}", err)
-                    });
-                    certification.certified_state_hash.clone()
                 }
             }
         };

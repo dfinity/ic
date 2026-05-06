@@ -9711,12 +9711,7 @@ fn remove_states_below_protects_tip_height() {
 
         // height 2 should be retained
         sm.remove_states_below(Height(10));
-        assert!(
-            sm.list_state_heights(CERT_ANY).contains(&Height(2)),
-            "tip height @2 should be retained by remove_states_below, \
-             got heights: {:?}",
-            sm.list_state_heights(CERT_ANY),
-        );
+        assert!(sm.certifications().contains_key(&Height::new(2)));
 
         // This needs the hash @ prev_height = 2 to
         // still be available, which is only the case if the tip-height
@@ -9732,11 +9727,7 @@ fn remove_states_below_protects_tip_height_with_optimization() {
         sm.commit_and_certify(state, CertificationScope::Full, None);
         let hash_at_1 = wait_for_checkpoint(&sm, Height(1));
 
-        let (_height, state) = sm.take_tip();
-        sm.commit_and_certify(state, CertificationScope::Metadata, None);
-        sm.flush_hash_channel();
-
-        sm.update_fast_forward_height(Height::new(5));
+        sm.update_fast_forward_height(Height::new(10));
         sm.deliver_state_certification(fake_certification_for_height_with_hash(
             Height::new(2),
             CryptoHash(
@@ -9744,6 +9735,10 @@ fn remove_states_below_protects_tip_height_with_optimization() {
                     .unwrap(),
             ),
         ));
+
+        let (_height, state) = sm.take_tip();
+        sm.commit_and_certify(state, CertificationScope::Metadata, None);
+        sm.flush_hash_channel();
 
         let (tip_height, state) = sm.take_tip();
         assert_eq!(tip_height, Height(2));
@@ -9757,12 +9752,9 @@ fn remove_states_below_protects_tip_height_with_optimization() {
 
         // height 2 should be retained
         sm.remove_states_below(Height(10));
-        assert!(
-            sm.list_state_heights(CERT_ANY).contains(&Height(2)),
-            "tip height @2 should be retained by remove_states_below, \
-             got heights: {:?}",
-            sm.list_state_heights(CERT_ANY),
-        );
+        assert!(sm.certifications().contains_key(&Height::new(2)));
+        // the state should _not_ be present (otherwise optimization did not trigger)
+        assert!(!sm.list_state_heights(CERT_ANY).contains(&Height(2)));
 
         // This needs the hash @ prev_height = 2 to
         // still be available, which is only the case if the tip-height
