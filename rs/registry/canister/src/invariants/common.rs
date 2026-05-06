@@ -8,12 +8,13 @@ use std::{
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord, crypto::v1::ChainKeyEnabledSubnetList,
-    hostos_version::v1::HostosVersionRecord, node::v1::NodeRecord, subnet::v1::SubnetListRecord,
+    hostos_version::v1::HostosVersionRecord, node::v1::NodeRecord,
+    replica_version::v1::ReplicaVersionRecord, subnet::v1::SubnetListRecord,
 };
 use ic_registry_keys::{
-    CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, HOSTOS_VERSION_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
-    get_api_boundary_node_record_node_id, get_node_record_node_id, make_node_record_key,
-    make_subnet_list_record_key,
+    CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, HOSTOS_VERSION_KEY_PREFIX,
+    REPLICA_VERSION_KEY_PREFIX, get_api_boundary_node_record_node_id, get_node_record_node_id,
+    make_node_record_key, make_subnet_list_record_key,
 };
 use prost::Message;
 use url::Url;
@@ -46,15 +47,34 @@ impl error::Error for InvariantCheckError {
 }
 
 /// Returns all node records in the snapshot.
-pub(crate) fn get_all_node_records(snapshot: &RegistrySnapshot) -> Vec<NodeRecord> {
-    let mut nodes: Vec<NodeRecord> = Vec::new();
+pub(crate) fn get_all_node_records(snapshot: &RegistrySnapshot) -> BTreeMap<NodeId, NodeRecord> {
+    let mut nodes = BTreeMap::new();
     for (k, v) in snapshot {
-        if k.starts_with(NODE_RECORD_KEY_PREFIX.as_bytes()) {
+        if let Some(id) = get_node_record_node_id(str::from_utf8(k).unwrap()) {
             let record = NodeRecord::decode(v.as_slice()).unwrap();
-            nodes.push(record);
+            nodes.insert(NodeId::from(id), record);
         }
     }
+
     nodes
+}
+
+/// Returns all replica version records in the snapshot.
+pub(crate) fn get_all_replica_version_records(
+    snapshot: &RegistrySnapshot,
+) -> Vec<(String, ReplicaVersionRecord)> {
+    let mut replica_versions = Vec::new();
+    for (k, v) in snapshot {
+        if let Some(key) = str::from_utf8(k)
+            .unwrap()
+            .strip_prefix(REPLICA_VERSION_KEY_PREFIX)
+        {
+            let record = ReplicaVersionRecord::decode(v.as_slice()).unwrap();
+            replica_versions.push((key.to_owned(), record));
+        }
+    }
+
+    replica_versions
 }
 
 pub(crate) fn get_value_from_snapshot<T: Message + Default>(
@@ -96,41 +116,13 @@ pub(crate) fn get_all_hostos_version_records(
     snapshot: &RegistrySnapshot,
 ) -> Vec<HostosVersionRecord> {
     let mut result = Vec::new();
-    for key in snapshot.keys() {
-        let hostos_version_key = String::from_utf8(key.clone()).unwrap();
-        if hostos_version_key.starts_with(HOSTOS_VERSION_KEY_PREFIX) {
-            let hostos_version_record = match snapshot.get(key) {
-                Some(hostos_version_record_bytes) => {
-                    HostosVersionRecord::decode(hostos_version_record_bytes.as_slice()).unwrap()
-                }
-                None => panic!("Cannot fetch HostosVersionRecord for an existing key"),
-            };
+    for (k, v) in snapshot {
+        if k.starts_with(HOSTOS_VERSION_KEY_PREFIX.as_bytes()) {
+            let hostos_version_record = HostosVersionRecord::decode(v.as_slice()).unwrap();
             result.push(hostos_version_record);
         }
     }
-    result
-}
 
-/// Returns all node records from the snapshot.
-pub(crate) fn get_node_records_from_snapshot(
-    snapshot: &RegistrySnapshot,
-) -> BTreeMap<NodeId, NodeRecord> {
-    let mut result = BTreeMap::<NodeId, NodeRecord>::new();
-    for key in snapshot.keys() {
-        if let Some(principal_id) =
-            get_node_record_node_id(String::from_utf8(key.clone()).unwrap().as_str())
-        {
-            // This is indeed a node record
-            let node_record = match snapshot.get(key) {
-                Some(node_record_bytes) => {
-                    NodeRecord::decode(node_record_bytes.as_slice()).unwrap()
-                }
-                None => panic!("Cannot fetch node record for an existing key"),
-            };
-            let node_id = NodeId::from(principal_id);
-            result.insert(node_id, node_record);
-        }
-    }
     result
 }
 
