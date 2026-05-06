@@ -21,7 +21,7 @@ use prost::Message;
 ///
 /// For each replica version that is either referred to in a SubnetRecord
 /// of a subnet listed in the subnet list, that is in use by an API boundary node,
-/// that is used by the unassigned nodes, the following is checked:
+/// or that is used by the unassigned nodes, the following is checked:
 ///
 /// * The corresponding ReplicaVersionRecord exists.
 /// * Each URL is well-formed.
