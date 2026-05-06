@@ -262,6 +262,24 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
     let start_time = Rt::time();
     let mut stats = ArchivingStats::default();
 
+    // Finalizes `stats` with the elapsed duration and number of archived blocks,
+    // and packages it into an `ArchivingError`. Consumes `stats` since every
+    // caller returns immediately afterwards.
+    let finalize_err = |error: String, mut stats: ArchivingStats, num_sent: usize| {
+        stats.duration_nanos = Rt::time().saturating_sub(start_time);
+        stats.blocks_archived = num_sent;
+        ArchivingError { error, stats }
+    };
+
+    // Records a single completed `append_blocks` call (success or failure) into
+    // `stats`. Returns the chunk's duration in nanoseconds.
+    let record_chunk = |stats: &mut ArchivingStats, chunk_start: u64| -> u64 {
+        let chunk_duration = Rt::time().saturating_sub(chunk_start);
+        stats.chunk_durations_nanos.push(chunk_duration);
+        stats.num_chunks += 1;
+        chunk_duration
+    };
+
     let max_chunk_size = inspect_archive(&archive, |archive| {
         archive
             .max_message_size_bytes
@@ -286,22 +304,13 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
         .await
         {
             Ok(result) => result,
-            Err(e) => {
-                stats.duration_nanos = Rt::time().saturating_sub(start_time);
-                stats.blocks_archived = num_sent_blocks;
-                return Err(ArchivingError { error: e.0, stats });
-            }
+            Err(e) => return Err(finalize_err(e.0, stats, num_sent_blocks)),
         };
 
         // Take as many blocks as can be sent and send those in
         let mut first_blocks: VecDeque<_> = take_prefix(&mut blocks, remaining_capacity).into();
         if first_blocks.is_empty() {
-            stats.duration_nanos = Rt::time().saturating_sub(start_time);
-            stats.blocks_archived = num_sent_blocks;
-            return Err(ArchivingError {
-                error: "empty chunk".into(),
-                stats,
-            });
+            return Err(finalize_err("empty chunk".into(), stats, num_sent_blocks));
         }
 
         log!(
@@ -317,12 +326,7 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
             let chunk = take_prefix(&mut first_blocks, max_chunk_size);
             let chunk_len = chunk.len() as u64;
             if chunk.is_empty() {
-                stats.duration_nanos = Rt::time().saturating_sub(start_time);
-                stats.blocks_archived = num_sent_blocks;
-                return Err(ArchivingError {
-                    error: "empty chunk".into(),
-                    stats,
-                });
+                return Err(finalize_err("empty chunk".into(), stats, num_sent_blocks));
             }
             log!(
                 log_sink,
@@ -333,9 +337,7 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
             let chunk_start_time = Rt::time();
             match Rt::call(node_canister_id, "append_blocks", 0, (chunk,)).await {
                 Ok(()) => {
-                    let chunk_duration = Rt::time().saturating_sub(chunk_start_time);
-                    stats.chunk_durations_nanos.push(chunk_duration);
-                    stats.num_chunks += 1;
+                    let chunk_duration = record_chunk(&mut stats, chunk_start_time);
                     num_sent_blocks += chunk_len as usize;
                     log!(
                         log_sink,
@@ -344,12 +346,8 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
                     );
                 }
                 Err((_, msg)) => {
-                    let chunk_duration = Rt::time().saturating_sub(chunk_start_time);
-                    stats.chunk_durations_nanos.push(chunk_duration);
-                    stats.num_chunks += 1;
-                    stats.duration_nanos = Rt::time().saturating_sub(start_time);
-                    stats.blocks_archived = num_sent_blocks;
-                    return Err(ArchivingError { error: msg, stats });
+                    record_chunk(&mut stats, chunk_start_time);
+                    return Err(finalize_err(msg, stats, num_sent_blocks));
                 }
             };
 
