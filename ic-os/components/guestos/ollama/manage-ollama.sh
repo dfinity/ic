@@ -18,16 +18,28 @@ ACTION="$1"
 # of this up.
 case "$ACTION" in
     start)
-        # Cert must exist before stunnel starts; service is `Type=oneshot`
-        # with `RemainAfterExit=yes`, so `start` is idempotent.
+        # Cert must exist before stunnel starts; cert services are
+        # `Type=oneshot` with `RemainAfterExit=yes`, so `start` is
+        # idempotent.
         /bin/systemctl start generate-ollama-tls-cert.service
         /bin/systemctl start ollama-tls.service
         /bin/systemctl start ollama.service
+
+        # The IC AI agent service runs alongside ollama on AI nodes,
+        # exposing an HTTP orchestration API on a separate TLS port
+        # (11500). It's started with the same lifecycle as ollama: any
+        # node that flips to AI mode brings both up, any node that flips
+        # away brings both down.
+        /bin/systemctl start generate-ic-ai-agent-tls-cert.service
+        /bin/systemctl start ic-ai-agent-tls.service
+        /bin/systemctl start ic-ai-agent.service
         ;;
     stop)
-        # Stop in reverse order. The cert generator is `RemainAfterExit=yes`
-        # and has nothing to tear down; leave it active so the cert remains
+        # Stop in reverse order. Cert generators are `RemainAfterExit=yes`
+        # and have nothing to tear down; leave them active so certs remain
         # valid for the next start.
+        /bin/systemctl stop ic-ai-agent.service
+        /bin/systemctl stop ic-ai-agent-tls.service
         /bin/systemctl stop ollama.service
         /bin/systemctl stop ollama-tls.service
         ;;

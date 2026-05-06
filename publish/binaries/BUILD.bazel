@@ -9,6 +9,7 @@ ALL_BINARIES = {
     # Keep sorted
     "canister_sandbox": "//rs/canister_sandbox",
     "compiler_sandbox": "//rs/canister_sandbox:compiler_sandbox",
+    "ic-ai-agent": "//rs/ai_agent:ic-ai-agent",
     "ic-btc-adapter": "//rs/bitcoin/adapter:ic-btc-adapter",
     "replica": "//rs/replica:replica",
     "rate-limiting-canister-client": "//rs/boundary_node/rate_limits/canister_client:rate-limiting-canister-client",

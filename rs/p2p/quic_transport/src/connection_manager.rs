@@ -553,6 +553,13 @@ impl ConnectionManager {
     fn handle_inbound_conn_attemp(&mut self, incoming: Incoming) {
         self.metrics.inbound_connection_total.inc();
         let node_id = self.node_id;
+        // AI-node peers always dial members, regardless of NodeId ordering
+        // (see `can_i_dial_to`). So when a member receives an inbound
+        // connection, the standard "lower id is dialer" rule must be
+        // bypassed if the connecting peer is an AI peer in our current
+        // topology. Snapshot the AI-peer set here so the validation
+        // future doesn't need to reach back into `&self.topology`.
+        let ai_peers = self.topology.get_ai_peers();
         let conn_fut = async move {
             let established =
                 incoming
@@ -578,8 +585,13 @@ impl ConnectionManager {
             let peer_id = node_id_from_certificate_der(rustls_cert.as_ref())
                 .map_err(|err| ConnectionEstablishError::AuthenticationFailed(err.to_string()))?;
 
-            // Lower ID is dialer. So we reject if this nodes id is higher.
-            if peer_id > node_id {
+            // Standard rule: lower NodeId is dialer, higher is acceptor.
+            // Exception: AI-node peers always dial regardless of ordering
+            // because they never accept inbound from us. Without this
+            // bypass an AI peer with a NodeId greater than ours would
+            // dial us, get rejected here as `InvalidIncomingPeerId`, and
+            // never make progress on state-sync.
+            if peer_id > node_id && !ai_peers.contains(&peer_id) {
                 return Err(ConnectionEstablishError::InvalidIncomingPeerId {
                     client: peer_id,
                     server: node_id,

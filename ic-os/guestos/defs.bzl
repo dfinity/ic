@@ -55,6 +55,7 @@ def image_deps(mode, malicious = False):
             "//rs/ic_os/release:custom_metrics": "/opt/ic/bin/custom_metrics:0755",  # Collects and reports custom metrics.
             "//rs/ic_os/remote_attestation/server": "/opt/ic/bin/remote_attestation_server:0755",  # Remote Attestation service
             "//rs/ic_os/guest_upgrade/client": "/opt/ic/bin/guest_upgrade_client:0755",  # Disk encryption key exchange client
+            "//rs/ai_agent:ic-ai-agent": "/opt/ic/bin/ic-ai-agent:0755",  # AI agent orchestration HTTP API (started on AI nodes)
 
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",  # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
