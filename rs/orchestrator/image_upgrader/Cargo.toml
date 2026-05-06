@@ -10,6 +10,7 @@ documentation.workspace = true
 async-trait = { workspace = true }
 ic-http-utils = { path = "../../http_utils" }
 ic-logger = { path = "../../monitoring/logger" }
+ic-types = { path = "../../types/types" }
 slog = { workspace = true }
 tokio = { workspace = true }
 

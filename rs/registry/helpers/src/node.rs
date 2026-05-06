@@ -1,12 +1,20 @@
 use crate::deserialize_registry_value;
 use crate::subnet::{SubnetListRegistry, SubnetRegistry};
-use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
+use ic_interfaces_registry::{
+    RegistryClient, RegistryClientResult, RegistryClientVersionedResult, RegistryVersionedRecord,
+};
 pub use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord};
 use ic_registry_keys::{NODE_RECORD_KEY_PREFIX, get_node_record_node_id, make_node_record_key};
 use ic_types::registry::RegistryClientError;
 pub use ic_types::{NodeId, RegistryVersion, SubnetId};
 
 pub trait NodeRegistry {
+    fn get_versioned_node_record(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> RegistryClientVersionedResult<NodeRecord>;
+
     fn get_node_record(
         &self,
         node_id: NodeId,
@@ -25,13 +33,29 @@ pub trait NodeRegistry {
 }
 
 impl<T: RegistryClient + ?Sized> NodeRegistry for T {
+    fn get_versioned_node_record(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> RegistryClientVersionedResult<NodeRecord> {
+        let record = self.get_versioned_value(&make_node_record_key(node_id), version)?;
+        let bytes = Ok(record.value);
+        let value = deserialize_registry_value::<NodeRecord>(bytes)?;
+
+        Ok(RegistryVersionedRecord {
+            key: record.key,
+            version: record.version,
+            value,
+        })
+    }
+
     fn get_node_record(
         &self,
         node_id: NodeId,
         version: RegistryVersion,
     ) -> RegistryClientResult<NodeRecord> {
-        let bytes = self.get_value(&make_node_record_key(node_id), version);
-        deserialize_registry_value::<NodeRecord>(bytes)
+        self.get_versioned_node_record(node_id, version)
+            .map(|vr| vr.value)
     }
 
     fn get_subnet_id_from_node_id(

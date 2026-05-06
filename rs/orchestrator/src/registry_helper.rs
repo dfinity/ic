@@ -1,4 +1,8 @@
-use crate::error::{OrchestratorError, OrchestratorResult};
+use crate::{
+    error::{OrchestratorError, OrchestratorResult},
+    guestos_upgrade::GuestosVersion,
+    upgrade::SubnetUpgrade,
+};
 use ic_consensus_cup_utils::make_registry_cup;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
@@ -32,6 +36,13 @@ pub(crate) struct RegistryHelper {
     node_id: NodeId,
     registry_client: Arc<dyn RegistryClient>,
     logger: ReplicaLogger,
+}
+
+/// A value derived from a registry record, along with the registry version at which that record was
+/// added.
+pub(crate) struct VersionedValue<T> {
+    pub(crate) record_version: RegistryVersion,
+    pub(crate) value: T,
 }
 
 /// Registry helper for the orchestrator
@@ -87,6 +98,38 @@ impl RegistryHelper {
             self.node_id,
             version,
         ))
+    }
+
+    /// Return the replica version and whether the subnet is a "fast" subnet for the given subnet
+    /// and registry version. It also includes the registry version at which the record was added to
+    /// the registry.
+    pub(crate) fn get_versioned_subnet_replica_version(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<VersionedValue<SubnetUpgrade>> {
+        let versioned_record = self
+            .registry_client
+            .get_versioned_subnet_record(subnet_id, version)?;
+
+        match versioned_record.value {
+            Some(record) => {
+                let replica_version = ReplicaVersion::try_from(record.replica_version_id)
+                    .map_err(OrchestratorError::ReplicaVersionParseError)?;
+
+                Ok(VersionedValue {
+                    record_version: versioned_record.version,
+                    // TODO:
+                    // value: if record.synchronous_binary_replacement {
+                    value: if false {
+                        SubnetUpgrade::Fast(replica_version)
+                    } else {
+                        SubnetUpgrade::Slow(GuestosVersion(replica_version))
+                    },
+                })
+            }
+            None => Err(OrchestratorError::SubnetMissingError(subnet_id, version)),
+        }
     }
 
     /// Return the `SubnetRecord` for the given subnet
@@ -220,10 +263,18 @@ impl RegistryHelper {
         &self,
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
-    ) -> OrchestratorResult<ReplicaVersion> {
+    ) -> OrchestratorResult<SubnetUpgrade> {
         let subnet_record = self.get_subnet_record(subnet_id, registry_version)?;
-        ReplicaVersion::try_from(subnet_record.replica_version_id.as_ref())
-            .map_err(OrchestratorError::ReplicaVersionParseError)
+        let replica_version = ReplicaVersion::try_from(subnet_record.replica_version_id.as_ref())
+            .map_err(OrchestratorError::ReplicaVersionParseError)?;
+
+        // TODO:
+        // if subnet_record.synchronous_binary_replacement {
+        if false {
+            Ok(SubnetUpgrade::Fast(replica_version))
+        } else {
+            Ok(SubnetUpgrade::Slow(GuestosVersion(replica_version)))
+        }
     }
 
     /// Get the recalled replica versions of the given subnet in the given registry
@@ -247,16 +298,16 @@ impl RegistryHelper {
     pub(crate) fn get_expected_replica_version(
         &self,
         subnet_id: SubnetId,
-    ) -> OrchestratorResult<(ReplicaVersion, RegistryVersion)> {
+    ) -> OrchestratorResult<(SubnetUpgrade, RegistryVersion)> {
         let registry_version = self.get_latest_version();
-        let new_replica_version = self.get_replica_version(subnet_id, registry_version)?;
-        Ok((new_replica_version, registry_version))
+        let new_version = self.get_replica_version(subnet_id, registry_version)?;
+        Ok((new_version, registry_version))
     }
 
-    pub(crate) fn get_unassigned_replica_version(
+    pub(crate) fn get_unassigned_nodes_version(
         &self,
         version: RegistryVersion,
-    ) -> OrchestratorResult<ReplicaVersion> {
+    ) -> OrchestratorResult<GuestosVersion> {
         match self.registry_client.get_unassigned_nodes_config(version) {
             Ok(Some(record)) => {
                 let replica_version = ReplicaVersion::try_from(record.replica_version.as_ref())
@@ -265,7 +316,7 @@ impl RegistryHelper {
                             "Couldn't parse the replica version: {err}"
                         ))
                     })?;
-                Ok(replica_version)
+                Ok(GuestosVersion(replica_version))
             }
             _ => Err(OrchestratorError::UpgradeError(
                 "No replica version for unassigned nodes found".to_string(),
@@ -273,14 +324,16 @@ impl RegistryHelper {
         }
     }
 
-    pub(crate) fn get_api_boundary_node_version(
+    pub(crate) fn get_api_boundary_nodes_version(
         &self,
         node_id: NodeId,
         version: RegistryVersion,
-    ) -> OrchestratorResult<ReplicaVersion> {
+    ) -> OrchestratorResult<GuestosVersion> {
         let api_boundary_node_record = self.get_api_boundary_node_record(node_id, version)?;
-        ReplicaVersion::try_from(api_boundary_node_record.version.as_ref())
-            .map_err(OrchestratorError::ReplicaVersionParseError)
+
+        let replica_version = ReplicaVersion::try_from(api_boundary_node_record.version.as_ref())
+            .map_err(OrchestratorError::ReplicaVersionParseError)?;
+        Ok(GuestosVersion(replica_version))
     }
 
     pub(crate) fn is_system_api_boundary_node(
@@ -291,6 +344,32 @@ impl RegistryHelper {
         self.registry_client
             .is_system_api_boundary_node(node_id, version)
             .map_err(OrchestratorError::RegistryClientError)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn get_versioned_node_guestos_version(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<VersionedValue<GuestosVersion>> {
+        let versioned_record = self
+            .registry_client
+            .get_versioned_node_record(node_id, version)?;
+
+        match versioned_record.value {
+            Some(_record) => {
+                // TODO:
+                // let replica_version = ReplicaVersion::try_from(record.guestos_version_id)
+                let replica_version = ReplicaVersion::try_from("")
+                    .map_err(OrchestratorError::ReplicaVersionParseError)?;
+
+                Ok(VersionedValue {
+                    record_version: versioned_record.version,
+                    value: GuestosVersion(replica_version),
+                })
+            }
+            None => Err(OrchestratorError::NodeMissingError(node_id, version)),
+        }
     }
 
     pub(crate) fn get_node_record(

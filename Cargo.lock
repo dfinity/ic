@@ -10710,6 +10710,7 @@ dependencies = [
  "async-trait",
  "ic-http-utils",
  "ic-logger",
+ "ic-types",
  "slog",
  "tokio",
 ]

@@ -19,6 +19,9 @@ pub(crate) enum OrchestratorError {
     /// The given node is not assigned to any Subnet
     NodeUnassignedError(NodeId, RegistryVersion),
 
+    /// The given node id does not map to a `NodeId` at the given version
+    NodeMissingError(NodeId, RegistryVersion),
+
     /// The given subnet ID does not map to a `SubnetRecord` at the given
     /// version
     SubnetMissingError(SubnetId, RegistryVersion),
@@ -135,6 +138,10 @@ impl fmt::Display for OrchestratorError {
                     "Failed to read or write threshold key changed metric: {msg}"
                 )
             }
+            OrchestratorError::NodeMissingError(node_id, registry_version) => write!(
+                f,
+                "Node ID {node_id} does not exist in the Registry at registry version {registry_version}"
+            ),
             OrchestratorError::SubnetMissingError(subnet_id, registry_version) => write!(
                 f,
                 "Subnet ID {subnet_id} does not exist in the Registry at registry version {registry_version}"

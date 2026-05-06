@@ -1,9 +1,11 @@
 use crate::{
     args::OrchestratorArgs,
+    binaries_upgrade::BinariesUpgrade,
     boundary_node::BoundaryNodeManager,
     catch_up_package_provider::{CatchUpPackageProvider, LocalCUPReader},
     dashboard::{Dashboard, OrchestratorDashboard},
     firewall::Firewall,
+    guestos_upgrade::{GuestosUpgrade, GuestosVersion},
     hostos_upgrade::HostosUpgrader,
     ipv4_network::Ipv4Configurator,
     metrics::OrchestratorMetrics,
@@ -24,7 +26,7 @@ use ic_config::{
 use ic_crypto::CryptoComponent;
 use ic_crypto_node_key_generation::{NodeKeyGenerationError, generate_node_keys_once};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
-use ic_image_upgrader::{ImageUpgrader, ManagebootRunnerImpl};
+use ic_image_upgrader::ManagebootRunnerImpl;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
@@ -131,14 +133,21 @@ impl Orchestrator {
         .unwrap()?;
 
         let metrics_registry = MetricsRegistry::global();
-        let replica_version = load_version_from_file(&logger, &args.version_file)
+        let guestos_version = GuestosVersion(
+            load_version_from_file(&logger, &args.replica_version_file)
+                .map_err(|()| OrchestratorInstantiationError::VersionFileError)?,
+        );
+        let replica_version = load_version_from_file(&logger, &args.guestos_version_file)
             .map_err(|()| OrchestratorInstantiationError::VersionFileError)?;
         info!(
             logger,
-            "Orchestrator started: version={}, config={:?}", replica_version, config
+            "Orchestrator started: guestos_version={}, replica_version={}, config={:?}",
+            guestos_version,
+            replica_version,
+            config
         );
         UtilityCommand::notify_host(
-            format!("node-id {node_id}: starting with version {replica_version}").as_str(),
+            format!("node-id {node_id}: starting with GuestOS version {guestos_version} and replica version {replica_version}").as_str(),
             1,
         );
 
@@ -147,7 +156,8 @@ impl Orchestrator {
             3,
         );
 
-        let version = replica_version.clone();
+        let guestos_version_clone = guestos_version.clone();
+        let replica_version_clone = replica_version.clone();
         thread::spawn(move || {
             loop {
                 // Sleep early because IPv4 takes several minutes to configure
@@ -157,7 +167,8 @@ impl Orchestrator {
                 let message = indoc::formatdoc!(
                     r#"
                     Node-id: {node_id}
-                    Replica version: {version}
+                    GuestOS version: {guestos_version_clone}
+                    Replica version: {replica_version_clone}
                     IPv6: {}
                     IPv4: {}
 
@@ -225,6 +236,7 @@ impl Orchestrator {
         .await
         .unwrap();
 
+        // TODO: maybe update me
         metrics
             .orchestrator_info
             .with_label_values(&[replica_version.as_ref()])
@@ -246,8 +258,13 @@ impl Orchestrator {
             .as_ref()
             .unwrap_or(&PathBuf::from("/tmp"))
             .clone();
-        let manageboot_runner = Box::new(ManagebootRunnerImpl::new(
+        let manageboot_guestos = Box::new(ManagebootRunnerImpl::new(
             ic_binary_directory.join("manageboot.sh"),
+            "guestos".to_string(),
+        ));
+        let manageboot_binaries = Box::new(ManagebootRunnerImpl::new(
+            ic_binary_directory.join("manageboot.sh"),
+            "binaries".to_string(),
         ));
 
         // Create a read-only CUP reader that can be shared among Dashboard and Firewall
@@ -277,23 +294,41 @@ impl Orchestrator {
 
         let subnet_assignment: Arc<RwLock<SubnetAssignment>> = Default::default();
 
+        let guestos_upgrade = Box::new(GuestosUpgrade::new(
+            args.replica_binary_dir.join("guestos").join("image.bin"),
+            args.orchestrator_data_directory.join("reboot_time.txt"),
+            logger.clone(),
+            node_id,
+            manageboot_guestos,
+            Arc::clone(&registry) as _,
+            disk_encryption_key_exchange_agent,
+        ));
+        let binaries_upgrade = Box::new(BinariesUpgrade::new(
+            args.replica_binary_dir.join("replica").join("binaries.bin"),
+            args.orchestrator_data_directory.join("reboot_time.txt"),
+            logger.clone(),
+            node_id,
+            manageboot_binaries,
+            Arc::clone(&registry) as _,
+        ));
         let upgrade = Some(
             Upgrade::new(
                 Arc::clone(&registry) as _,
                 Arc::clone(&metrics),
                 Arc::clone(&replica_process) as _,
-                manageboot_runner,
                 cup_provider,
                 Arc::clone(&subnet_assignment),
+                guestos_version.clone(),
                 replica_version.clone(),
+                guestos_upgrade,
+                binaries_upgrade,
                 args.replica_config_file.clone(),
                 node_id,
                 ic_binary_directory.clone(),
                 Arc::clone(&registry_replicator) as _,
-                args.replica_binary_dir.clone(),
                 logger.clone(),
-                args.orchestrator_data_directory.clone(),
-                disk_encryption_key_exchange_agent,
+                args.orchestrator_data_directory
+                    .join("key_changed_metric.cbor"),
             )
             .await,
         );
@@ -327,7 +362,7 @@ impl Orchestrator {
         let boundary_node = BoundaryNodeManager::new(
             Arc::clone(&registry),
             Arc::clone(&metrics),
-            replica_version.clone(),
+            guestos_version.clone(),
             node_id,
             ic_binary_directory.clone(),
             config.crypto.clone(),
@@ -367,8 +402,9 @@ impl Orchestrator {
             registry_replicator.get_latest_certified_time(),
             replica_process,
             Arc::clone(&subnet_assignment),
-            replica_version,
             hostos_version.ok(),
+            guestos_version,
+            replica_version,
             local_cup_reader,
             logger.clone(),
         ));

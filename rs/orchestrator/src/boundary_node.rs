@@ -1,12 +1,13 @@
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
+    guestos_upgrade::GuestosVersion,
     metrics::OrchestratorMetrics,
     process_manager::{Process, ProcessManager, ProcessManagerImpl},
     registry_helper::RegistryHelper,
 };
 use ic_config::crypto::CryptoConfig;
 use ic_logger::{ReplicaLogger, info, warn};
-use ic_types::{NodeId, ReplicaVersion};
+use ic_types::NodeId;
 use std::{
     collections::HashMap,
     ffi::OsString,
@@ -15,7 +16,7 @@ use std::{
 };
 
 struct BoundaryNodeProcess {
-    version: ReplicaVersion,
+    version: GuestosVersion,
     binary: PathBuf,
     args: Vec<OsString>,
     env: HashMap<OsString, OsString>,
@@ -24,7 +25,7 @@ struct BoundaryNodeProcess {
 impl Process for BoundaryNodeProcess {
     const NAME: &'static str = "Boundary Node";
 
-    type Version = ReplicaVersion;
+    type Version = GuestosVersion;
 
     fn get_version(&self) -> &Self::Version {
         &self.version
@@ -49,7 +50,7 @@ pub(crate) struct BoundaryNodeManager {
     process: Arc<Mutex<dyn ProcessManager<BoundaryNodeProcess>>>,
     ic_binary_dir: PathBuf,
     crypto_config: CryptoConfig,
-    version: ReplicaVersion,
+    version: GuestosVersion,
     logger: ReplicaLogger,
     node_id: NodeId,
     domain_name: Option<String>,
@@ -59,7 +60,7 @@ impl BoundaryNodeManager {
     pub(crate) fn new(
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
-        version: ReplicaVersion,
+        version: GuestosVersion,
         node_id: NodeId,
         ic_binary_dir: PathBuf,
         crypto_config: CryptoConfig,
@@ -83,14 +84,14 @@ impl BoundaryNodeManager {
 
         match self
             .registry
-            .get_api_boundary_node_version(self.node_id, registry_version)
+            .get_api_boundary_nodes_version(self.node_id, registry_version)
         {
-            Ok(replica_version) => {
+            Ok(guestos_version) => {
                 // BN manager is waiting for Upgrade to be performed
-                if replica_version != self.version {
+                if guestos_version != self.version {
                     warn!(
                         every_n_seconds => 60,
-                        self.logger, "Boundary node runs outdated version ({:?}), expecting upgrade to {:?}", self.version, replica_version
+                        self.logger, "Boundary node runs outdated version ({:?}), expecting upgrade to {:?}", self.version, guestos_version
                     );
                     // NOTE: We could also shutdown the boundary node here. However, it makes sense to continue
                     // serving requests while the orchestrator is downloading the new image in most cases.
@@ -146,7 +147,7 @@ impl BoundaryNodeManager {
     }
 
     /// Start the current boundary node process
-    fn ensure_boundary_node_running(&self, version: &ReplicaVersion) -> OrchestratorResult<()> {
+    fn ensure_boundary_node_running(&self, version: &GuestosVersion) -> OrchestratorResult<()> {
         let mut process = self.process.lock().unwrap();
 
         if process.is_running() {

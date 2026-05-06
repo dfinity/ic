@@ -43,9 +43,13 @@ pub struct OrchestratorArgs {
     #[clap(long)]
     pub(crate) enable_provisional_registration: bool,
 
-    /// The path to the version file.
+    /// The path to the GuestOS version file.
     #[clap(long)]
-    pub(crate) version_file: PathBuf,
+    pub(crate) guestos_version_file: PathBuf,
+
+    /// The path to the replica version file.
+    #[clap(long)]
+    pub(crate) replica_version_file: PathBuf,
 
     /// Print the replica's current node ID.
     #[clap(long)]

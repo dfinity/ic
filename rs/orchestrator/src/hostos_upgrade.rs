@@ -31,9 +31,7 @@ impl HostosUpgrader {
             logger,
         }
     }
-}
 
-impl HostosUpgrader {
     /// Calls `check_for_upgrade()`, timing out after `timeout`, and waiting
     /// for `interval` between attempts. Awaiting this function blocks until
     /// `exit_signal` is set to `true`.

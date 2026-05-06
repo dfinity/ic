@@ -53,6 +53,12 @@ pub struct IngressMessageSettings {
 /// A helper trait that wraps a [RegistryClient] and provides utility methods for
 /// querying subnet information.
 pub trait SubnetRegistry {
+    fn get_versioned_subnet_record(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientVersionedResult<SubnetRecord>;
+
     fn get_subnet_record(
         &self,
         subnet_id: SubnetId,
@@ -167,14 +173,6 @@ pub trait SubnetRegistry {
         version: RegistryVersion,
     ) -> RegistryClientResult<ReplicaVersionRecord>;
 
-    /// Return the [RegistryVersion] at which the [SubnetRecord] for the provided
-    /// [SubnetId] was last updated.
-    fn get_subnet_record_registry_version(
-        &self,
-        subnet_id: SubnetId,
-        version: RegistryVersion,
-    ) -> RegistryClientResult<RegistryVersion>;
-
     fn get_listed_subnet_for_node_id(
         &self,
         node_id: NodeId,
@@ -210,13 +208,29 @@ pub trait SubnetRegistry {
 }
 
 impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
+    fn get_versioned_subnet_record(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientVersionedResult<SubnetRecord> {
+        let record = self.get_versioned_value(&make_subnet_record_key(subnet_id), version)?;
+        let bytes = Ok(record.value);
+        let value = deserialize_registry_value::<SubnetRecord>(bytes)?;
+
+        Ok(RegistryVersionedRecord {
+            key: record.key,
+            version: record.version,
+            value,
+        })
+    }
+
     fn get_subnet_record(
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> RegistryClientResult<SubnetRecord> {
-        let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
-        deserialize_registry_value::<SubnetRecord>(bytes)
+        self.get_versioned_subnet_record(subnet_id, version)
+            .map(|vr| vr.value)
     }
 
     fn is_subnet_deleted(
@@ -412,20 +426,6 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
     ) -> RegistryClientResult<ReplicaVersionRecord> {
         let bytes = self.get_value(&make_replica_version_key(replica_version_id), version);
         deserialize_registry_value::<ReplicaVersionRecord>(bytes)
-    }
-
-    fn get_subnet_record_registry_version(
-        &self,
-        subnet_id: SubnetId,
-        version: RegistryVersion,
-    ) -> RegistryClientResult<RegistryVersion> {
-        let record = self.get_versioned_value(&make_subnet_record_key(subnet_id), version)?;
-        let result = if record.value.is_some() {
-            Some(record.version)
-        } else {
-            None
-        };
-        Ok(result)
     }
 
     /// Given a Node ID, this method returns a pair (subnet_id, subnet_record)

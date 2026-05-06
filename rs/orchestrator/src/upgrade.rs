@@ -1,18 +1,18 @@
 use crate::{
     catch_up_package_provider::CatchUpPackageProvider,
     error::{OrchestratorError, OrchestratorResult},
+    guestos_upgrade::GuestosVersion,
     metrics::OrchestratorMetrics,
     orchestrator::SubnetAssignment,
     process_manager::{Process, ProcessManager},
-    registry_helper::RegistryHelper,
+    registry_helper::{RegistryHelper, VersionedValue},
 };
 use async_trait::async_trait;
-use guest_upgrade_server::DiskEncryptionKeyExchangeServerAgent;
 use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::{
-    ImageUpgrader, ManagebootRunner, Rebooting,
+    ImageUpgrader, Restarting,
     error::{UpgradeError, UpgradeResult},
 };
 use ic_interfaces_registry::RegistryClient;
@@ -31,14 +31,13 @@ use ic_types::{
     },
 };
 use std::{
+    cmp::Ordering,
     collections::{BTreeMap, HashMap},
     ffi::OsString,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
 };
-
-const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 
 #[cfg(not(test))]
 const TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR: Duration = Duration::from_secs(1800); // 30 minutes
@@ -111,6 +110,34 @@ impl RegistryReplicatorForUpgrade for RegistryReplicator {
     }
 }
 
+pub(crate) enum SubnetUpgrade {
+    Fast(ReplicaVersion),
+    Slow(GuestosVersion),
+}
+
+impl AsRef<ReplicaVersion> for SubnetUpgrade {
+    fn as_ref(&self) -> &ReplicaVersion {
+        match self {
+            SubnetUpgrade::Fast(replica_version) => replica_version,
+            SubnetUpgrade::Slow(guestos_version) => guestos_version.as_ref(),
+        }
+    }
+}
+
+enum VersionUpgrade {
+    Subnet(SubnetUpgrade),
+    Node(GuestosVersion),
+}
+
+impl AsRef<ReplicaVersion> for VersionUpgrade {
+    fn as_ref(&self) -> &ReplicaVersion {
+        match self {
+            VersionUpgrade::Subnet(subnet_upgrade) => subnet_upgrade.as_ref(),
+            VersionUpgrade::Node(guestos_version) => guestos_version.as_ref(),
+        }
+    }
+}
+
 /// Provides function to continuously check the Registry to determine if this
 /// node should upgrade to a new release package, and if so, downloads and
 /// extracts this release package and exec's the orchestrator binary contained
@@ -119,21 +146,19 @@ pub(crate) struct Upgrade {
     pub registry: Arc<RegistryHelper>,
     pub metrics: Arc<OrchestratorMetrics>,
     replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
-    manageboot_runner: Box<dyn ManagebootRunner>,
     cup_provider: CatchUpPackageProvider,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
+    guestos_version: GuestosVersion,
     replica_version: ReplicaVersion,
+    guestos_upgrade: Box<dyn ImageUpgrader<GuestosVersion>>,
+    binaries_upgrade: Box<dyn ImageUpgrader<ReplicaVersion>>,
     replica_config_file: PathBuf,
     pub ic_binary_dir: PathBuf,
-    pub image_path: PathBuf,
     registry_replicator: Arc<dyn RegistryReplicatorForUpgrade>,
     init_time: Instant,
     pub logger: ReplicaLogger,
     node_id: NodeId,
-    disk_encryption_key_exchange_agent: Option<DiskEncryptionKeyExchangeServerAgent>,
-    /// The replica version that is prepared by 'prepare_upgrade' to upgrade to.
-    pub prepared_upgrade_version: Option<ReplicaVersion>,
-    pub orchestrator_data_directory: PathBuf,
+    key_changed_metric: PathBuf,
 }
 
 impl Upgrade {
@@ -142,62 +167,57 @@ impl Upgrade {
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
         replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
-        manageboot_runner: Box<dyn ManagebootRunner>,
         cup_provider: CatchUpPackageProvider,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
+        guestos_version: GuestosVersion,
         replica_version: ReplicaVersion,
+        guestos_upgrade: Box<dyn ImageUpgrader<GuestosVersion>>,
+        binaries_upgrade: Box<dyn ImageUpgrader<ReplicaVersion>>,
         replica_config_file: PathBuf,
         node_id: NodeId,
         ic_binary_dir: PathBuf,
         registry_replicator: Arc<dyn RegistryReplicatorForUpgrade>,
-        release_content_dir: PathBuf,
         logger: ReplicaLogger,
-        orchestrator_data_directory: PathBuf,
-        disk_encryption_key_exchange_agent: Option<DiskEncryptionKeyExchangeServerAgent>,
+        key_changed_metric: PathBuf,
     ) -> Self {
         let init_time = Instant::now();
 
-        let value = Self {
-            registry,
-            metrics,
-            replica_process,
-            manageboot_runner,
-            cup_provider,
-            subnet_assignment,
-            node_id,
-            replica_version,
-            replica_config_file,
-            ic_binary_dir,
-            image_path: release_content_dir.join("image.bin"),
-            registry_replicator,
-            init_time,
-            logger: logger.clone(),
-            prepared_upgrade_version: None,
-            orchestrator_data_directory,
-            disk_encryption_key_exchange_agent,
-        };
-        if let Err(e) = value.report_reboot_time() {
-            warn!(logger, "Cannot report the reboot time: {}", e);
+        match binaries_upgrade.get_time_since_last_reboot_trigger() {
+            Ok(elapsed_time) => {
+                metrics.reboot_duration.set(elapsed_time.as_secs() as i64);
+            }
+            Err(e) => {
+                warn!(logger, "Cannot report the reboot time: {}", e);
+            }
         }
-        if let Err(e) = report_master_public_key_changed_metric(
-            value.orchestrator_data_directory.join(KEY_CHANGES_FILENAME),
-            &value.metrics,
-        ) {
+        if let Err(e) = report_master_public_key_changed_metric(&key_changed_metric, &metrics) {
             warn!(
                 logger,
                 "Cannot report master public key changed metric: {}", e
             );
         }
-        value.confirm_boot().await;
-        value
-    }
 
-    fn report_reboot_time(&self) -> OrchestratorResult<()> {
-        let elapsed_time = self.get_time_since_last_reboot_trigger()?;
-        self.metrics
-            .reboot_duration
-            .set(elapsed_time.as_secs() as i64);
-        Ok(())
+        binaries_upgrade.confirm_boot().await;
+        guestos_upgrade.confirm_boot().await;
+
+        Self {
+            registry,
+            metrics,
+            replica_process,
+            cup_provider,
+            subnet_assignment,
+            node_id,
+            guestos_version,
+            replica_version,
+            guestos_upgrade,
+            binaries_upgrade,
+            replica_config_file,
+            ic_binary_dir,
+            registry_replicator,
+            init_time,
+            logger,
+            key_changed_metric,
+        }
     }
 
     /// This function is responsible for:
@@ -209,7 +229,7 @@ impl Upgrade {
     /// 3. Downloading and upgrading to a new replica version if necessary.
     /// 4. Launching the replica process if assigned to a subnet.
     /// 5. Stopping the replica process and removing the node state if leaving the subnet.
-    pub(crate) async fn check(&mut self) -> OrchestratorResult<OrchestratorControlFlow> {
+    async fn check(&mut self) -> OrchestratorResult<OrchestratorControlFlow> {
         let latest_registry_version = self.registry.get_latest_version();
 
         let maybe_local_cup_proto = self.cup_provider.get_local_cup_proto();
@@ -318,7 +338,7 @@ impl Upgrade {
                 &old_cup,
                 &latest_cup,
                 self.metrics.as_ref(),
-                self.orchestrator_data_directory.join(KEY_CHANGES_FILENAME),
+                &self.key_changed_metric,
                 &self.logger,
             );
         }
@@ -368,33 +388,101 @@ impl Upgrade {
         };
 
         // If we arrived here, we have the newest CUP and we're still assigned.
-        // Now we check if this CUP requires a new replica version.
+        // Now we check if the subnet is upgrading (i.e. the CUP's registry version points to a
+        // different replica version), or if our node is individually upgrading (i.e. our node
+        // record at the latest registry version contains a different replica version).
         let cup_registry_version = latest_cup.content.registry_version();
-        let new_replica_version = self
+        let cup_subnet_replica_version = self
             .registry
-            .get_replica_version(subnet_id, cup_registry_version)?;
-        if new_replica_version != self.replica_version {
-            self.ensure_upgrade_should_be_executed(
-                subnet_id,
-                latest_registry_version,
-                &new_replica_version,
-            )?;
+            .get_versioned_subnet_replica_version(subnet_id, cup_registry_version)?;
+        let latest_subnet_replica_version = self
+            .registry
+            .get_versioned_subnet_replica_version(subnet_id, latest_registry_version)?;
+        // TODO:
+        // let latest_node_guestos_version = self
+        //     .registry
+        //     .get_versioned_node_guestos_version(self.node_id, latest_registry_version)?;
+        let latest_node_guestos_version = VersionedValue {
+            record_version: latest_registry_version,
+            value: self.guestos_version.clone(),
+        };
+        let maybe_new_version = match (
+            latest_node_guestos_version.value != self.guestos_version,
+            cup_subnet_replica_version.value.as_ref() != &self.replica_version,
+        ) {
+            (false, false) => {
+                // No upgrade is scheduled
+                None
+            }
+            (false, true) => {
+                // We reached a CUP that has a different replica version and no change were made to
+                // our node record: execute the subnet upgrade.
+                Some(VersionUpgrade::Subnet(cup_subnet_replica_version.value))
+            }
+            (true, false) => {
+                // Our node record has a different GuestOS version at the latest registry version
+                // and the latest CUP still has the same replica version, so we should execute our
+                // individual upgrade.
+                // Though, we first ensure that there is no *scheduled* subnet upgrade that was
+                // started previously: thus the comparison of the two records' versions.
+                let new_guestos_version = latest_node_guestos_version.value;
 
-            info!(
-                self.logger,
-                "Starting version upgrade at CUP registry version {}: {} -> {}",
-                cup_registry_version,
-                self.replica_version,
-                new_replica_version
-            );
-            // Only downloads the new image if it doesn't already exists locally, i.e. it
-            // was previously downloaded by `prepare_upgrade_if_scheduled()`, see
-            // below.
+                let is_there_scheduled_upgrade = match latest_subnet_replica_version.value {
+                    SubnetUpgrade::Fast(version) => version != self.replica_version,
+                    SubnetUpgrade::Slow(version) => version != self.guestos_version,
+                };
+
+                if !is_there_scheduled_upgrade
+                    || latest_subnet_replica_version.record_version
+                        > latest_node_guestos_version.record_version
+                {
+                    Some(VersionUpgrade::Node(new_guestos_version))
+                } else {
+                    None
+                }
+            }
+            (true, true) => {
+                match Ord::cmp(
+                    &latest_node_guestos_version.record_version,
+                    &cup_subnet_replica_version.record_version,
+                ) {
+                    Ordering::Less => Some(VersionUpgrade::Node(latest_node_guestos_version.value)),
+                    Ordering::Greater => {
+                        Some(VersionUpgrade::Subnet(cup_subnet_replica_version.value))
+                    }
+                    Ordering::Equal => {
+                        let new_guestos_version = latest_node_guestos_version.value;
+
+                        let error_message = "Expected slow synchronized upgrade modifying both \
+                                             fields at the same time. Executing the node's just to \
+                                             be sure";
+                        if !matches!(cup_subnet_replica_version.value, SubnetUpgrade::Slow(version) if version == new_guestos_version)
+                        {
+                            error!(self.logger, "{}", error_message);
+                            #[cfg(debug_assertions)]
+                            panic!("{}", error_message);
+                        }
+
+                        // Even though we execute the NodeRecord's version, we pass
+                        // `VersionUpgrade::SubnetUpgrade` solely for logging purposes, as this case
+                        // is expected during a slow subnet upgrade.
+                        Some(VersionUpgrade::Subnet(SubnetUpgrade::Slow(
+                            new_guestos_version,
+                        )))
+                    }
+                }
+            }
+        };
+
+        if let Some(new_version) = &maybe_new_version {
             return self
-                .execute_upgrade(&new_replica_version)
-                .await
-                .map_err(OrchestratorError::from)
-                .map(|Rebooting| OrchestratorControlFlow::Stop);
+                .execute_upgrade(
+                    subnet_id,
+                    cup_registry_version,
+                    latest_registry_version,
+                    new_version,
+                )
+                .await;
         }
 
         // If we arrive here, we are on the newest replica version.
@@ -411,6 +499,10 @@ impl Upgrade {
             .await?;
 
         Ok(flow)
+    }
+
+    pub(crate) async fn check_for_upgrade(&mut self) -> UpgradeResult<OrchestratorControlFlow> {
+        self.check().await.map_err(UpgradeError::from)
     }
 
     pub fn node_id(&self) -> NodeId {
@@ -474,9 +566,9 @@ impl Upgrade {
         // Reset the key changed errors counter to not raise alerts in other subnets
         self.metrics.master_public_key_changed_errors.reset();
         remove_node_state(
-            self.replica_config_file.clone(),
-            self.cup_provider.get_cup_path(),
-            self.orchestrator_data_directory.clone(),
+            &self.replica_config_file,
+            &self.cup_provider.get_cup_path(),
+            &self.key_changed_metric,
         )
         .map_err(OrchestratorError::UpgradeError)?;
         info!(self.logger, "Subnet state removed");
@@ -503,19 +595,38 @@ impl Upgrade {
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
-        let expected_replica_version = self
+        let expected_version = self
             .registry
             .get_replica_version(subnet_id, registry_version)?;
-        if expected_replica_version != self.replica_version {
-            info!(
-                self.logger,
-                "Replica version upgrade detected at registry version {}: {} -> {}",
-                registry_version,
-                self.replica_version,
-                expected_replica_version
-            );
-            self.prepare_upgrade(&expected_replica_version).await?
+        if expected_version.as_ref() != &self.replica_version {
+            match expected_version {
+                SubnetUpgrade::Fast(replica_version) => {
+                    info!(
+                        self.logger,
+                        "Fast subnet upgrade detected at registry version {}: {} -> {}",
+                        registry_version,
+                        self.replica_version,
+                        replica_version
+                    );
+                    self.binaries_upgrade
+                        .prepare_upgrade(&replica_version)
+                        .await?
+                }
+                SubnetUpgrade::Slow(guestos_version) => {
+                    info!(
+                        self.logger,
+                        "Slow subnet upgrade detected at registry version {}: {} -> {}",
+                        registry_version,
+                        self.replica_version,
+                        guestos_version
+                    );
+                    self.guestos_upgrade
+                        .prepare_upgrade(&guestos_version)
+                        .await?
+                }
+            }
         }
+
         Ok(())
     }
 
@@ -524,31 +635,32 @@ impl Upgrade {
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<OrchestratorControlFlow> {
         // If the node is a boundary node, we upgrade to that version, otherwise we upgrade to the unassigned version
-        let replica_version = self
+        let guestos_version = self
             .registry
-            .get_api_boundary_node_version(self.node_id, registry_version)
+            .get_api_boundary_nodes_version(self.node_id, registry_version)
             .or_else(|err| match err {
-                OrchestratorError::ApiBoundaryNodeMissingError(_, _) => self
-                    .registry
-                    .get_unassigned_replica_version(registry_version),
+                OrchestratorError::ApiBoundaryNodeMissingError(_, _) => {
+                    self.registry.get_unassigned_nodes_version(registry_version)
+                }
                 err => Err(err),
             })?;
 
-        if self.replica_version == replica_version {
+        if self.guestos_version == guestos_version {
             return Ok(OrchestratorControlFlow::Unassigned);
         }
 
         info!(
             self.logger,
-            "Replica upgrade on unassigned node detected: old version {}, new version {}",
-            self.replica_version,
-            replica_version
+            "GuestOS upgrade on unassigned node detected: old version {}, new version {}",
+            self.guestos_version,
+            guestos_version
         );
 
-        self.execute_upgrade(&replica_version)
+        self.guestos_upgrade
+            .execute_upgrade(&guestos_version)
             .await
             .map_err(OrchestratorError::from)
-            .map(|Rebooting| OrchestratorControlFlow::Stop)
+            .map(|Restarting| OrchestratorControlFlow::Stop)
     }
 
     /// Stop the current replica process.
@@ -568,8 +680,9 @@ impl Upgrade {
         &self,
         subnet_id: SubnetId,
         latest_registry_version: RegistryVersion,
-        new_replica_version: &ReplicaVersion,
+        new_version: &VersionUpgrade,
     ) -> OrchestratorResult<()> {
+        let new_replica_version = new_version.as_ref();
         if subnet_id == self.registry.get_root_subnet_id(latest_registry_version)? {
             // Upgrades on the NNS subnet are never blocked or delayed.
             return Ok(());
@@ -675,70 +788,61 @@ impl Upgrade {
                 OrchestratorError::IoError("Error when attempting to start new replica".into(), e)
             })
     }
-}
 
-#[async_trait]
-impl ImageUpgrader<ReplicaVersion> for Upgrade {
-    type UpgradeType = OrchestratorControlFlow;
+    async fn execute_upgrade(
+        &mut self,
+        subnet_id: SubnetId,
+        cup_registry_version: RegistryVersion,
+        latest_registry_version: RegistryVersion,
+        new_version: &VersionUpgrade,
+    ) -> OrchestratorResult<OrchestratorControlFlow> {
+        self.ensure_upgrade_should_be_executed(subnet_id, latest_registry_version, new_version)?;
 
-    fn get_prepared_version(&self) -> Option<&ReplicaVersion> {
-        self.prepared_upgrade_version.as_ref()
-    }
-
-    fn set_prepared_version(&mut self, version: Option<ReplicaVersion>) {
-        self.prepared_upgrade_version = version
-    }
-
-    fn image_path(&self) -> &PathBuf {
-        &self.image_path
-    }
-
-    fn data_dir(&self) -> Option<&PathBuf> {
-        Some(&self.orchestrator_data_directory)
-    }
-
-    fn manageboot_runner(&self) -> &dyn ManagebootRunner {
-        self.manageboot_runner.as_ref()
-    }
-
-    fn get_release_package_urls_and_hash(
-        &self,
-        version: &ReplicaVersion,
-    ) -> UpgradeResult<(Vec<String>, Option<String>)> {
-        let record = self
-            .registry
-            .get_replica_version_record(version.clone(), self.registry.get_latest_version())
-            .map_err(UpgradeError::from)?;
-
-        Ok((
-            record.release_package_urls,
-            Some(record.release_package_sha256_hex),
-        ))
-    }
-
-    async fn maybe_exchange_disk_encryption_key(&mut self) -> UpgradeResult<()> {
-        if let Some(agent) = &self.disk_encryption_key_exchange_agent {
-            agent
-                .exchange_keys()
-                .await
-                .map_err(|e| UpgradeError::DiskEncryptionKeyExchangeError(e.to_string()))
-        } else {
-            Ok(())
+        match new_version {
+            VersionUpgrade::Subnet(SubnetUpgrade::Fast(new_replica_version)) => {
+                info!(
+                    self.logger,
+                    "Starting fast subnet upgrade at CUP registry version {}: {} -> {}",
+                    cup_registry_version,
+                    self.replica_version,
+                    new_replica_version
+                );
+                self.binaries_upgrade
+                    .execute_upgrade(new_replica_version)
+                    .await
+                    .map_err(OrchestratorError::from)
+                    .map(|Restarting| OrchestratorControlFlow::Stop)
+            }
+            VersionUpgrade::Subnet(SubnetUpgrade::Slow(new_guestos_version)) => {
+                info!(
+                    self.logger,
+                    "Starting slow subnet upgrade at CUP registry version {}: ({}, {}) -> {}",
+                    cup_registry_version,
+                    self.guestos_version,
+                    self.replica_version,
+                    new_guestos_version
+                );
+                self.guestos_upgrade
+                    .execute_upgrade(new_guestos_version)
+                    .await
+                    .map_err(OrchestratorError::from)
+                    .map(|Restarting| OrchestratorControlFlow::Stop)
+            }
+            VersionUpgrade::Node(new_guestos_version) => {
+                info!(
+                    self.logger,
+                    "Starting slow node upgrade at latest registry version {}: {} -> {}",
+                    latest_registry_version,
+                    self.guestos_version,
+                    new_guestos_version
+                );
+                self.guestos_upgrade
+                    .execute_upgrade(new_guestos_version)
+                    .await
+                    .map_err(OrchestratorError::from)
+                    .map(|Restarting| OrchestratorControlFlow::Stop)
+            }
         }
-    }
-
-    fn log(&self) -> &ReplicaLogger {
-        &self.logger
-    }
-
-    fn get_load_balance_number(&self) -> usize {
-        // XOR all the u8 in node_id:
-        let principal = self.node_id.get().0;
-        principal.as_slice().iter().fold(0, |acc, x| acc ^ x) as usize
-    }
-
-    async fn check_for_upgrade(&mut self) -> UpgradeResult<OrchestratorControlFlow> {
-        self.check().await.map_err(UpgradeError::from)
     }
 }
 
@@ -896,9 +1000,9 @@ async fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
 /// Deletes the subnet state consisting of the consensus pool, execution state,
 /// the local CUP and the persisted error metric of threshold key changes.
 fn remove_node_state(
-    replica_config_file: PathBuf,
-    cup_path: PathBuf,
-    orchestrator_data_directory: PathBuf,
+    replica_config_file: &Path,
+    cup_path: &Path,
+    key_changed_metric: &Path,
 ) -> Result<(), String> {
     use ic_config::{Config, ConfigSource};
     use std::fs::{remove_dir_all, remove_file};
@@ -907,7 +1011,7 @@ fn remove_node_state(
         .tempdir()
         .map_err(|err| format!("Couldn't create a temporary directory: {err:?}"))?;
     let config = Config::load_with_tmpdir(
-        ConfigSource::File(replica_config_file),
+        ConfigSource::File(replica_config_file.to_path_buf()),
         tmpdir.path().to_path_buf(),
     );
 
@@ -984,14 +1088,13 @@ fn remove_node_state(
         }
     }
 
-    remove_file(&cup_path)
+    remove_file(cup_path)
         .map_err(|err| format!("Couldn't delete the CUP at {cup_path:?}: {err:?}"))?;
 
-    let key_changed_metric = orchestrator_data_directory.join(KEY_CHANGES_FILENAME);
     if key_changed_metric.try_exists().map_err(|err| {
         format!("Failed to check if {key_changed_metric:?} exists, because {err:?}")
     })? {
-        remove_file(&key_changed_metric).map_err(|err| {
+        remove_file(key_changed_metric).map_err(|err| {
             format!("Couldn't delete the key changes metric at {key_changed_metric:?}: {err:?}")
         })?;
     }
@@ -1055,7 +1158,7 @@ fn compare_master_public_keys(
     old_cup: &CatchUpPackage,
     new_cup: &CatchUpPackage,
     metrics: &OrchestratorMetrics,
-    path: PathBuf,
+    path: &Path,
     log: &ReplicaLogger,
 ) {
     let old_public_keys = get_master_public_keys(old_cup, log);
@@ -1111,7 +1214,7 @@ fn compare_master_public_keys(
 
 /// Persist the given map of master public key changed metrics in `path`.
 fn persist_master_public_key_changed_metric(
-    path: PathBuf,
+    path: &Path,
     changes: BTreeMap<String, u64>,
 ) -> OrchestratorResult<()> {
     let file = std::fs::File::create(path).map_err(OrchestratorError::key_monitoring_error)?;
@@ -1120,7 +1223,7 @@ fn persist_master_public_key_changed_metric(
 
 /// Increment the `master_public_key_changed_errors` metric by the values persisted in the given file.
 fn report_master_public_key_changed_metric(
-    path: PathBuf,
+    path: &Path,
     metrics: &OrchestratorMetrics,
 ) -> OrchestratorResult<()> {
     // If the file doesn't exist then there is nothing to report.
@@ -1160,6 +1263,7 @@ mod tests {
         run_ni_dkg_and_create_single_transcript,
     };
     use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
+    use ic_image_upgrader::ManagebootRunner;
     use ic_interfaces_registry::{
         RegistryClientVersionedResult, RegistryDataProvider, RegistryVersionedRecord,
     };
@@ -1168,11 +1272,11 @@ mod tests {
     };
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::log::log_entry::v1::LogEntry;
-    use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
-    use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
-    use ic_protobuf::registry::{
-        replica_version::v1::ReplicaVersionRecord, subnet::v1::SubnetRecord,
+    use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
+    use ic_protobuf::registry::subnet::v1::{
+        CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetRecord,
     };
+    use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
     use ic_protobuf::types::v1 as pb;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::{
@@ -1210,6 +1314,7 @@ mod tests {
     use rand::RngCore;
     use rstest::rstest;
     use slog::Level;
+    use std::cell::RefCell;
     use std::{
         collections::{BTreeMap, BTreeSet},
         ffi::OsStr,
@@ -1253,12 +1358,31 @@ mod tests {
         }
     }
 
-    pub struct FakeManagebootRunner;
+    // TODO: Assert on the executed args
+    pub struct FakeManagebootRunner {
+        executed_args: RefCell<Option<Vec<OsString>>>,
+    };
+    impl FakeManagebootRunner {
+        pub fn new() -> Self {
+            Self {
+                executed_args: RefCell::new(None),
+            }
+        }
+    }
     #[async_trait]
     impl ManagebootRunner for FakeManagebootRunner {
-        async fn run(&self, _args: &[&OsStr]) -> std::io::Result<Output> {
+        async fn run(&self, args: &[&OsStr]) -> std::io::Result<Output> {
             // Mock implementation that simulates a successful execution of the manageboot command.
             use std::os::unix::process::ExitStatusExt;
+
+            let owned_args = args.iter().map(|s| s.to_os_string()).collect::<Vec<_>>();
+            if let Some(existing_args) = self.executed_args.borrow_mut().replace(owned_args) {
+                panic!(
+                    "ManagebootRunner was called more than once, which is unexpected. Previous args: {:?}, new args: {:?}",
+                    existing_args, args
+                );
+            }
+
             Ok(Output {
                 status: std::process::ExitStatus::from_raw(0),
                 stdout: vec![],
@@ -1507,6 +1631,7 @@ mod tests {
     ) -> Upgrade {
         let UpgradeTestScenario {
             node_id,
+            current_guestos_version,
             current_replica_version,
             has_local_cup,
             initial_subnet_assignment,
@@ -1540,7 +1665,10 @@ mod tests {
                 .unwrap();
         }
 
-        let manageboot_runner = Box::new(FakeManagebootRunner);
+        let manageboot_guestos = Box::new(FakeManagebootRunner::new());
+        let guestos_upgrade = Box::new(FakeGuestosUpgrade);
+        let manageboot_binaries = Box::new(FakeManagebootRunner::new());
+        let binaries_upgrade = Box::new(FakeBinariesUpgrade);
 
         let cup_dir = dir.join("cups");
         std::fs::create_dir_all(&cup_dir).unwrap();
@@ -1595,25 +1723,25 @@ mod tests {
             registry,
             metrics,
             replica_process,
-            manageboot_runner,
             cup_provider,
             subnet_assignment,
+            current_guestos_version,
             current_replica_version.clone(),
+            guestos_upgrade,
+            binaries_upgrade,
             replica_config_file,
             node_id,
             ic_binary_dir,
             Arc::new(registry_replicator),
-            release_content_dir,
             logger,
-            orchestrator_data_dir,
-            None,
+            orchestrator_data_dir.join("key_changed_metric.cbor"),
         )
         .await;
 
         // If the node is supposed to upgrade, manually create a fake image file
         // and set the prepared version to avoid actually downloading the image.
         if let Some(upgrade) = &test_scenario.upgrade_to {
-            std::fs::write(upgrade_loop.image_path(), b"fake image data").unwrap();
+            std::fs::write(upgrade_loop.download_location(), b"fake image data").unwrap();
             upgrade_loop.set_prepared_version(Some(upgrade.replica_version.clone()));
         }
 
@@ -1683,6 +1811,8 @@ mod tests {
     struct UpgradeTestScenario {
         // Node id of the node under test
         node_id: NodeId,
+        // Current GuestOS version of the running orchestrator
+        current_guestos_version: GuestosVersion,
         // Current replica version of the running orchestrator
         current_replica_version: ReplicaVersion,
         // Whether the node is assigned to a subnet (<=> presence of local CUP)
@@ -2127,14 +2257,14 @@ mod tests {
             };
             let assert_has_cleared_version_and_image = || {
                 assert_eq!(upgrade_loop.get_prepared_version(), None,);
-                assert!(!upgrade_loop.image_path().exists());
+                assert!(!upgrade_loop.download_location().exists());
             };
             let assert_has_not_cleared_version_and_image = |upgrade: &ReplicaUpgradeScenario| {
                 assert_eq!(
                     upgrade_loop.get_prepared_version(),
                     Some(&upgrade.replica_version)
                 );
-                assert!(upgrade_loop.image_path().exists());
+                assert!(upgrade_loop.download_location().exists());
             };
 
             match &self.has_local_cup {
@@ -3028,8 +3158,8 @@ mod tests {
             ))
         }
 
-        fn path(&self) -> PathBuf {
-            self.tmp.path().join(KEY_CHANGES_FILENAME)
+        fn path(&self) -> &Path {
+            self.tmp.path()
         }
     }
 
