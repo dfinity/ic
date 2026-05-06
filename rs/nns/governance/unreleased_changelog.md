@@ -9,6 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
+- Expose `staked_maturity_e8s_equivalent` on `NeuronInfo`, so external callers
+  can read both regular and staked maturity from `get_neuron_info` /
+  `list_neurons` responses.
+
 ## Changed
 
 ## Deprecated

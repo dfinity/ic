@@ -177,6 +177,7 @@ fn test_get_neuron_info() {
         .with_controller(controller)
         .with_cached_neuron_stake_e8s(10 * E8)
         .with_eight_year_gang_bonus_base_e8s(3 * E8)
+        .with_staked_maturity_e8s_equivalent(2 * E8)
         .with_recent_ballots(recent_ballots)
         .with_known_neuron_data(known_neuron_data.clone())
         .with_joined_community_fund_timestamp_seconds(Some(50_000_000))
@@ -218,6 +219,7 @@ fn test_get_neuron_info() {
             deciding_voting_power: Some(deciding_voting_power),
             potential_voting_power: Some(potential_voting_power),
             eight_year_gang_bonus_base_e8s: Some(3 * E8),
+            staked_maturity_e8s_equivalent: Some(2 * E8),
         },
     );
 }
