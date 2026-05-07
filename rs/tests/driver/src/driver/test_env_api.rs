@@ -1528,7 +1528,7 @@ impl HasGroupSetup for TestEnv {
                     };
                     info!(
                         log,
-                        "Creating group {} with required_host_features: {:?}",
+                        "Creating group {} with required_host_features: {:?} ...",
                         group_setup.infra_group_name,
                         required_host_features
                     );
@@ -1537,7 +1537,7 @@ impl HasGroupSetup for TestEnv {
                     let farm = Farm::new(farm_base_url.into(), self.logger());
                     let group_spec = GroupSpec {
                         vm_allocation: None,
-                        required_host_features: required_host_features,
+                        required_host_features,
                         preferred_network: None,
                         metadata: None,
                     };
