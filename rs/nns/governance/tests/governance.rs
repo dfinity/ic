@@ -55,7 +55,6 @@ use ic_nns_governance::{
         },
     },
     governance_proto_builder::GovernanceProtoBuilder,
-    is_mission_70_voting_rewards_enabled,
     pb::v1::{
         AddOrRemoveNodeProvider, Ballot, BallotInfo, CreateServiceNervousSystem, Empty,
         ExecuteNnsFunction, Followees, GovernanceError, IdealMatchedParticipationFunction,
@@ -2752,15 +2751,8 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
         });
     let expected_distributed_e8s_equivalent =
         (expected_available_e8s_equivalent as f64 * neuron_share) as u64;
-    // The value depends on the dissolve delay bonus:
-    // - With 2-year max (mission 70): 1 year → 50% bonus → higher voting power ratio → 16
-    // - With 8-year max (pre mission 70): 1 year → 12.5% bonus → lower voting power ratio → 15
-    let expected_value = if is_mission_70_voting_rewards_enabled() {
-        16
-    } else {
-        15
-    };
-    assert_eq!(expected_distributed_e8s_equivalent, expected_value);
+    // 2-year max dissolve delay: 1 year → 50% dissolve delay bonus → expected 16.
+    assert_eq!(expected_distributed_e8s_equivalent, 16);
     assert_eq!(
         *gov.latest_reward_event(),
         RewardEvent {
@@ -9482,15 +9474,7 @@ fn test_deciding_and_potential_voting_power() {
             neuron.potential_voting_power(START_TIMESTAMP_SECONDS)
         })
         .unwrap();
-    assert_eq!(
-        original_potential_voting_power,
-        cached_neuron_stake_e8s
-            * if is_mission_70_voting_rewards_enabled() {
-                3
-            } else {
-                2
-            },
-    );
+    assert_eq!(original_potential_voting_power, cached_neuron_stake_e8s * 3,);
 
     // Step 2: Call the code under test.
     let mut previous_timestamp_seconds = START_TIMESTAMP_SECONDS

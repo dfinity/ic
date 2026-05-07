@@ -14,8 +14,7 @@ use crate::{
         HeapGovernanceData, XdrConversionRate, initialize_governance, reassemble_governance_proto,
         split_governance_proto,
     },
-    is_comprehensive_neuron_list_enabled, is_mission_70_voting_rewards_enabled,
-    is_neuron_follow_restrictions_enabled,
+    is_comprehensive_neuron_list_enabled, is_neuron_follow_restrictions_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -305,15 +304,9 @@ pub const RELAXED_EIGHT_YEAR_GANG_MIN_DISSOLVE_DELAY_SECONDS: u64 =
 // its ICP must not be newly staked. This defines "sufficiently old staked ICP".
 pub const RELAXED_EIGHT_YEAR_GANG_MAX_AGING_SINCE_TIMESTAMP_SECONDS: u64 = 1_774_828_800;
 
-/// Returns the maximum dissolve delay allowed for a neuron. After the flag is enabled, we can
-/// replace `max_dissolve_delay_seconds()` with `MAX_DISSOLVE_DELAY_SECONDS` and set
-/// `MAX_DISSOLVE_DELAY_SECONDS` to `MAX_DISSOLVE_DELAY_SECONDS_POST_MISSION_70`.
+/// Returns the maximum dissolve delay allowed for a neuron.
 pub fn max_dissolve_delay_seconds() -> u64 {
-    if is_mission_70_voting_rewards_enabled() {
-        MAX_DISSOLVE_DELAY_SECONDS_POST_MISSION_70
-    } else {
-        MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70
-    }
+    MAX_DISSOLVE_DELAY_SECONDS_POST_MISSION_70
 }
 
 impl GovernanceError {
@@ -1368,11 +1361,10 @@ impl Governance {
         // Clamp all neuron dissolve delays to the Mission 70 maximum exactly once.
         // The snapshot serves as the idempotency guard: if it's already populated,
         // clamping has already run and we must not overwrite the pre-clamp record.
-        if is_mission_70_voting_rewards_enabled()
-            && governance
-                .heap_data
-                .neuron_id_to_pre_clamp_dissolve_state
-                .is_empty()
+        if governance
+            .heap_data
+            .neuron_id_to_pre_clamp_dissolve_state
+            .is_empty()
         {
             let now = governance.env.now();
             governance.heap_data.neuron_id_to_pre_clamp_dissolve_state = governance
@@ -4818,14 +4810,11 @@ impl Governance {
     }
 
     pub fn neuron_minimum_dissolve_delay_to_vote_seconds(&self) -> u64 {
-        let default = if is_mission_70_voting_rewards_enabled() {
-            VotingPowerEconomics::MISSION_70_DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS
-        } else {
-            VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS
-        };
         self.voting_power_economics()
             .neuron_minimum_dissolve_delay_to_vote_seconds
-            .unwrap_or(default)
+            .unwrap_or(
+                VotingPowerEconomics::MISSION_70_DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
+            )
     }
 
     /// Reduces `neuron_minimum_dissolve_delay_to_vote_seconds` to 2 weeks if it is currently
@@ -4834,10 +4823,6 @@ impl Governance {
     fn maybe_reduce_neuron_minimum_dissolve_delay_to_vote_seconds(
         heap_data: &mut HeapGovernanceData,
     ) {
-        if !is_mission_70_voting_rewards_enabled() {
-            return;
-        }
-
         let Some(voting_power_economics) = heap_data
             .economics
             .as_mut()

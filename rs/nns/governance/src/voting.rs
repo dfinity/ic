@@ -602,8 +602,6 @@ mod test {
             VotingPowerEconomics, WaitForQuietState, proposal::Action,
         },
         storage::with_voting_state_machines_mut,
-        temporarily_disable_mission_70_voting_rewards,
-        temporarily_enable_mission_70_voting_rewards,
         test_utils::{
             ExpectedCallCanisterMethodCallArguments, MockEnvironment, StubCMC, StubIcpLedger,
         },
@@ -785,17 +783,6 @@ mod test {
     ///         d. Neuron 7 does not have a ballot for proposal 1. All the other
     ///            neurons do have ballots.
     #[test]
-    fn test_cast_vote_and_cascade_works_pre_mission_70() {
-        let _restore_on_drop = temporarily_disable_mission_70_voting_rewards();
-        test_cast_vote_and_cascade_works();
-    }
-
-    #[test]
-    fn test_cast_vote_and_cascade_works_with_mission_70() {
-        let _restore_on_drop = temporarily_enable_mission_70_voting_rewards();
-        test_cast_vote_and_cascade_works();
-    }
-
     fn test_cast_vote_and_cascade_works() {
         // Step 1: Prepare the world.
 
@@ -1455,22 +1442,8 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine_pre_mission_70()
-     {
-        let _restore_on_drop = temporarily_disable_mission_70_voting_rewards();
-        test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(5474).await;
-    }
-
-    #[tokio::test]
-    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine_with_mission_70()
-     {
-        let _restore_on_drop = temporarily_enable_mission_70_voting_rewards();
-        test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(3464).await;
-    }
-
-    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine(
-        expected_neuron_1_maturity: u64,
-    ) {
+    async fn test_rewards_distribution_is_blocked_on_votes_not_cast_in_state_machine() {
+        let expected_neuron_1_maturity = 3464;
         let now = 1733433219;
         let topic = Topic::Governance;
         let environment = MockEnvironment::new(

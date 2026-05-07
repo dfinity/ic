@@ -1,7 +1,6 @@
 use super::*;
 use crate::{
     governance::max_dissolve_delay_seconds,
-    is_mission_70_voting_rewards_enabled,
     neuron::{DissolveStateAndAge, NeuronBuilder, dissolve_delay_bonus_multiplier},
     pb::v1::{KnownNeuronData, MaturityDisbursement, NeuronType},
 };
@@ -536,20 +535,10 @@ fn test_compute_neuron_metrics_non_self_authenticating() {
 
     // Step 3: Inspect results.
     //
-    // bucket_for_half_max: neuron_3 has a dissolve delay equal to max_dissolve_delay_seconds() / 2
-    //   (mapped to bucket 8 when the max is long, 2 when the max is short).
-    let bucket_for_half_max = if is_mission_70_voting_rewards_enabled() {
-        2
-    } else {
-        8
-    };
-    // bucket_for_max: neuron_1 has a dissolve delay equal to max_dissolve_delay_seconds()
-    //   (mapped to bucket 16 when the max is long, 4 when the max is short).
-    let bucket_for_max = if is_mission_70_voting_rewards_enabled() {
-        4
-    } else {
-        16
-    };
+    // bucket_for_half_max: neuron_3 has a dissolve delay equal to max_dissolve_delay_seconds() / 2.
+    let bucket_for_half_max = 2;
+    // bucket_for_max: neuron_1 has a dissolve delay equal to max_dissolve_delay_seconds().
+    let bucket_for_max = 4;
 
     assert_eq!(
         non_self_authenticating_controller_neuron_subset_metrics,
@@ -720,20 +709,10 @@ fn test_compute_neuron_metrics_public_neurons() {
 
     // Step 3: Inspect results.
     //
-    // bucket_for_half_max: neuron_3 has a dissolve delay equal to max_dissolve_delay_seconds() / 2
-    //   (mapped to bucket 8 when the max is long, 2 when the max is short).
-    let bucket_for_half_max = if is_mission_70_voting_rewards_enabled() {
-        2
-    } else {
-        8
-    };
-    // bucket_for_max: neuron_1 has a dissolve delay equal to max_dissolve_delay_seconds()
-    //   (mapped to bucket 16 when the max is long, 4 when the max is short).
-    let bucket_for_max = if is_mission_70_voting_rewards_enabled() {
-        4
-    } else {
-        16
-    };
+    // bucket_for_half_max: neuron_3 has a dissolve delay equal to max_dissolve_delay_seconds() / 2.
+    let bucket_for_half_max = 2;
+    // bucket_for_max: neuron_1 has a dissolve delay equal to max_dissolve_delay_seconds().
+    let bucket_for_max = 4;
 
     assert_eq!(
         public_neuron_subset_metrics,
@@ -895,15 +874,9 @@ fn test_compute_neuron_metrics_stale_and_expired_voting_power_neurons() {
 
     // Step 3: Inspect results.
     //
-    // All neurons are created with the maximum dissolve delay, and we bucket by
-    // that effective maximum:
-    // - Pre-mission-70: max dissolve delay is 8 years -> bucket 16
-    // - Post-mission-70: max dissolve delay is clamped to 2 years -> bucket 4
-    let bucket_for_max = if is_mission_70_voting_rewards_enabled() {
-        4
-    } else {
-        16
-    };
+    // All neurons are created with the maximum dissolve delay (2 years), which
+    // maps to bucket 4.
+    let bucket_for_max = 4;
 
     assert_eq!(
         declining_voting_power_neuron_subset_metrics,
