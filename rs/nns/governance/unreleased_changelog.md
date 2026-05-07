@@ -11,6 +11,8 @@ on the process that this file is part of, see
 
 * Daily timer task that fetches ICP/XDR rates from the Exchange Rate Canister, maintains a 365-day price history in Governance state, and computes Mission 70 maturity modulation locally. The computed value is not yet consumed by spawning or disbursement; that switchover will happen in a follow-up PR.
 
+* `get_maturity_modulation` query endpoint that returns the current Mission 70 maturity modulation value, including `current_value_permyriad` and `updated_at_timestamp_seconds`.
+
 ## Changed
 
 ## Deprecated
