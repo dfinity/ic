@@ -318,20 +318,8 @@ impl CanisterManager {
     /// Validates the new canister settings and, if all checks pass, applies
     /// them to the canister.
     ///
-    /// Validation covers memory/compute allocation (subnet capacity and cycle
-    /// balance), controller count, environment variables, reserved-cycles
-    /// limit, and log memory limit size/cost.  All validation is performed
-    /// before any mutation so that the canister is never left in a partially
-    /// updated state on failure.
-    ///
     /// `round_limits` is updated in-place for subnet memory and compute
     /// allocation after the settings are applied.
-    ///
-    /// If `metrics` is `Some`, a `log_memory_limit` resize that does real
-    /// work (see `LogMemoryStore::would_resize`) is timed and recorded into
-    /// `canister_log_resize_duration`. Pass `None` to skip observation on
-    /// paths where the resize isn't the user-facing operation (e.g. first
-    /// allocation during canister creation).
     #[allow(clippy::too_many_arguments)]
     fn validate_and_update_canister_settings(
         &self,
@@ -339,7 +327,7 @@ impl CanisterManager {
         canister: &mut CanisterState,
         sender: PrincipalId,
         round_limits: &mut RoundLimits,
-        subnet_memory_saturation: &ResourceSaturation,
+        subnet_memory_saturation: &mut ResourceSaturation,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Result<(), CanisterManagerError> {
@@ -530,6 +518,7 @@ impl CanisterManager {
                         }
                     }
                 })?;
+            *subnet_memory_saturation = subnet_memory_saturation.add(allocated_bytes.get());
         }
 
         // Controllers: validate count and apply (only at the end
@@ -560,10 +549,14 @@ impl CanisterManager {
     /// Validates the requested log memory limit and, if valid, charges cycles
     /// for a resize and applies the new limit to the canister.
     ///
-    /// This is kept separate from `validate_and_update_canister_settings` so
-    /// that `create_canister_helper` can invoke it only when `memory_allocation`
-    /// is not set (since a canister with `memory_allocation` uses memory
-    /// managed by the allocation, not by `log_memory_limit`).
+    /// This is kept separate from `validate_and_update_canister_settings`
+    /// to cleanly separate memory allocation/usage changes.
+    ///
+    /// If `metrics` is `Some`, a `log_memory_limit` resize that does real
+    /// work (see `LogMemoryStore::would_resize`) is timed and recorded into
+    /// `canister_log_resize_duration`. Pass `None` to skip observation on
+    /// paths where the resize isn't the user-facing operation (e.g. first
+    /// allocation during canister creation).
     #[allow(clippy::too_many_arguments)]
     fn apply_log_memory_limit(
         &self,
@@ -648,12 +641,13 @@ impl CanisterManager {
 
         validate_controller(canister, &sender)?;
 
+        let mut subnet_memory_saturation = subnet_memory_saturation;
         self.validate_and_update_canister_settings(
             &settings,
             canister,
             sender,
             round_limits,
-            &subnet_memory_saturation,
+            &mut subnet_memory_saturation,
             subnet_size,
             cost_schedule,
         )?;
@@ -1523,12 +1517,13 @@ impl CanisterManager {
         // skip observation.
         let round_limits_snapshot = round_limits.clone();
         let cost_schedule = state.get_own_cost_schedule();
+        let mut subnet_memory_saturation = subnet_memory_saturation;
         if let Err(err) = self.validate_and_update_canister_settings(
             &settings,
             &mut new_canister,
             sender,
             round_limits,
-            &subnet_memory_saturation,
+            &mut subnet_memory_saturation,
             subnet_size,
             cost_schedule,
         ) {
