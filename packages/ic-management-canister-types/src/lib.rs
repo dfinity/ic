@@ -1849,13 +1849,7 @@ pub struct CyclesConsumed {
 /// # Canister Metrics Args.
 ///
 /// Argument type of [`canister_metrics`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-canister_metrics).
-#[derive(
-    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
-)]
-pub struct CanisterMetricsArgs {
-    /// Canister ID.
-    pub canister_id: CanisterId,
-}
+pub type CanisterMetricsArgs = CanisterIdRecord;
 
 /// # Canister Metrics Result.
 ///
