@@ -878,7 +878,7 @@ pub struct ManageDappCanisterSettings {
     #[prost(message, repeated, tag = "1")]
     pub canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
     /// Below are fields under CanisterSettings defined at
-    /// <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.>
+    /// <https://docs.internetcomputer.org/references/management-canister/#candid.>
     #[prost(uint64, optional, tag = "2")]
     pub compute_allocation: ::core::option::Option<u64>,
     #[prost(uint64, optional, tag = "3")]

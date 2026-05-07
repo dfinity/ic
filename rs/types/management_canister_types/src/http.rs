@@ -42,17 +42,17 @@ const KIB: usize = 1_024;
 
 /// Maximum number of HTTP headers in the request.
 ///
-/// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
+/// Described in <https://docs.internetcomputer.org/references/management-canister/#http_request>.
 const HTTP_HEADERS_MAX_NUMBER: usize = 64;
 
 /// Maximum size of all the HTTP headers in the request.
 ///
-/// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
+/// Described in <https://docs.internetcomputer.org/references/management-canister/#http_request>.
 const HTTP_HEADERS_TOTAL_MAX_SIZE: usize = 48 * KIB;
 
 /// Maximum size of a single HTTP header in the request.
 ///
-/// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
+/// Described in <https://docs.internetcomputer.org/references/management-canister/#http_request>.
 const HTTP_HEADERS_ELEMENT_MAX_SIZE: usize = 16 * KIB; // name + value = 8KiB + 8KiB
 
 /// The numeric representation for the Legacy pricing version.
@@ -63,7 +63,7 @@ pub const PRICING_VERSION_PAY_AS_YOU_GO: u32 = 2;
 /// The default pricing version for HTTP outcalls.
 ///
 /// If the field is missing, this is the version that will be assumed by the replica.
-/// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
+/// Described in <https://docs.internetcomputer.org/references/management-canister/#http_request>.
 pub const DEFAULT_HTTP_OUTCALLS_PRICING_VERSION: u32 = PRICING_VERSION_LEGACY;
 
 /// A set of all allowed pricing versions for HTTP outcalls.

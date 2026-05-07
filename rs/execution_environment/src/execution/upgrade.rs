@@ -1,6 +1,6 @@
 //! This module defines how the `install_code` IC method in mode
 //! `upgrade` is executed.
-//! See https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-install_code
+//! See https://docs.internetcomputer.org/references/management-canister/#install_code
 //! and https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-upgrades
 
 use crate::as_round_instructions;
