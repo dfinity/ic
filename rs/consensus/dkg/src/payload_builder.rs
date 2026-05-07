@@ -105,6 +105,7 @@ pub fn create_payload(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_data_payload(
     this_subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,

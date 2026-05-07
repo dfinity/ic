@@ -111,7 +111,7 @@ impl From<&BlockPayload> for DkgPayloadStats {
                 for message in &data_payload.dkg.messages {
                     let dkg_id = &message.content.dkg_id;
                     dealings_included
-                        .entry((dkg_id.dkg_tag.clone(), dkg_id.target_subnet.clone()))
+                        .entry((dkg_id.dkg_tag.clone(), dkg_id.target_subnet))
                         .and_modify(|count| *count += 1)
                         .or_insert(1);
                 }
