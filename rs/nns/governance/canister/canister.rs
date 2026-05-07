@@ -584,7 +584,7 @@ fn get_maturity_modulation(
     _request: GetMaturityModulationRequest,
 ) -> GetMaturityModulationResponse {
     debug_log("get_maturity_modulation");
-    governance().get_maturity_modulation()
+    with_governance(|governance| governance.get_maturity_modulation())
 }
 
 #[query]
