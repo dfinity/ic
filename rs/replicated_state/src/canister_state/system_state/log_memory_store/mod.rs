@@ -262,11 +262,7 @@ impl LogMemoryStore {
     /// It is 'virtual' because it is not aligned to actual OS page size.
     pub fn total_virtual_memory_usage(&self) -> usize {
         self.get_header()
-            .map(|h| {
-                (HEADER_SIZE.get()
-                    + h.index_table_pages as u64 * VIRTUAL_PAGE_SIZE as u64
-                    + h.data_capacity.get()) as usize
-            })
+            .map(|h| Self::virtual_memory_for_data_capacity(h.data_capacity.get() as usize))
             .unwrap_or(0)
     }
 
@@ -280,10 +276,17 @@ impl LogMemoryStore {
         if self.feature_flag == FlagStatus::Disabled || limit == NumBytes::new(0) {
             return NumBytes::new(0);
         }
-        let overhead =
-            NumBytes::new(HEADER_SIZE.get() + INDEX_TABLE_PAGES as u64 * VIRTUAL_PAGE_SIZE as u64);
-        let data_capacity = limit.max(NumBytes::new(DATA_CAPACITY_MIN as u64));
-        overhead + data_capacity
+        // Mirror resize_impl's capacity clamping exactly.
+        let target_capacity = (limit.get() as usize).max(DATA_CAPACITY_MIN);
+        NumBytes::new(Self::virtual_memory_for_data_capacity(target_capacity) as u64)
+    }
+
+    /// Single source of truth for the ring-buffer memory layout formula.
+    ///
+    /// Returns the total virtual bytes consumed by a ring buffer whose data
+    /// region has the given capacity: header + index table + data.
+    fn virtual_memory_for_data_capacity(data_capacity: usize) -> usize {
+        HEADER_SIZE.get() as usize + INDEX_TABLE_PAGES * VIRTUAL_PAGE_SIZE + data_capacity
     }
 
     /// Returns the data capacity of the ring buffer.
