@@ -643,9 +643,9 @@ fn test_reserved_cycles_limit<F, G, H>(
             );
         }
         _ => assert_eq!(
-                err.code(),
-                ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
-            ),
+            err.code(),
+            ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
+        ),
     };
 }
 
