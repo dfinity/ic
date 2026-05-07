@@ -706,7 +706,9 @@ fn run_directive<'a>(
         | WastDirective::Wait { .. }
         | WastDirective::ModuleDefinition(_)
         | WastDirective::ModuleInstance { .. }
-        | WastDirective::AssertSuspension { .. } => todo!(),
+        | WastDirective::AssertSuspension { .. }
+        | WastDirective::AssertInvalidCustom { .. }
+        | WastDirective::AssertMalformedCustom { .. } => todo!(),
     }
 }
 

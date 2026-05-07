@@ -16,13 +16,14 @@ use candid::{CandidType, Decode, Encode};
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use ic_base_types::{EnvironmentVariables, NumSeconds, PrincipalId};
+use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
 use ic_config::{
     execution_environment::{
         CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, DEFAULT_WASM_MEMORY_LIMIT,
-        LOG_MEMORY_STORE_FEATURE_ENABLED, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
-        MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH, MAX_ENVIRONMENT_VARIABLES,
-        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
-        SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
+        LOG_MEMORY_STORE_FEATURE, LOG_MEMORY_STORE_FEATURE_ENABLED,
+        MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH, MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
+        MAX_ENVIRONMENT_VARIABLES, MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+        SUBNET_CALLBACK_SOFT_LIMIT, SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
     },
     flag_status::FlagStatus,
     subnet_config::{CANISTER_CREATION_FEE, SchedulerConfig},
@@ -39,9 +40,9 @@ use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
-    CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
+    CanisterInstallMode, CanisterInstallModeV2, CanisterMetricsResult, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
-    ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, EnvironmentVariable, IC_00,
+    ClearChunkStoreArgs, CreateCanisterArgs, CyclesConsumed, EmptyBlob, EnvironmentVariable, IC_00,
     InstallCodeArgsV2, Method, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse,
     OnLowWasmMemoryHookStatus, Payload, ProvisionalCreateCanisterWithCyclesArgs,
     RenameCanisterArgs, RenameToArgs, StoredChunksArgs, StoredChunksReply, SubnetInfoArgs,
@@ -91,7 +92,9 @@ use ic_types::{
     time::UNIX_EPOCH,
 };
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
+    BurnedCycles, CanisterCreation, CanisterCyclesCostSchedule, CompoundCycles, Cycles,
+    CyclesUseCase, HTTPOutcalls, IngressInduction, Instructions, Memory, NominalCycles,
+    NominalCyclesTesting, RequestAndResponseTransmission, Uninstall,
 };
 use ic_universal_canister::{CallArgs, PayloadBuilder};
 use ic_wasm_types::CanisterModule;
@@ -322,6 +325,7 @@ fn canister_manager_config(
         MAX_ENVIRONMENT_VARIABLES,
         MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
         MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
+        LOG_MEMORY_STORE_FEATURE,
     )
 }
 
@@ -2468,11 +2472,14 @@ fn failed_upgrade_hooks_consume_instructions() {
             &mut round_limits,
         );
         // Function + unreachable.
+        // `fails_before_compiling_upgrade_wasm indicates` whether the upgrade fails during the pre-upgrade hook
+        // (before the upgrade WASM is ever compiled), as opposed to failing during or after compilation of the upgrade WASM;
+        // hence no overhead applies in such a case
         let expected = NumInstructions::from(2)
             + if fails_before_compiling_upgrade_wasm {
                 NumInstructions::new(0)
             } else {
-                compilation_cost
+                DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + compilation_cost
             };
         assert_eq!(
             MAX_NUM_INSTRUCTIONS - instructions_left,
@@ -2590,12 +2597,12 @@ fn failed_install_hooks_consume_instructions() {
         assert_eq!(
             MAX_NUM_INSTRUCTIONS - instructions_left,
             // Func + unreachable.
-            NumInstructions::from(2) + compilation_cost,
+            DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + compilation_cost + NumInstructions::from(2),
             "initial instructions {} left {} diff {} expected {}",
             MAX_NUM_INSTRUCTIONS,
             instructions_left,
             MAX_NUM_INSTRUCTIONS - instructions_left,
-            NumInstructions::from(1) + compilation_cost,
+            DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + compilation_cost + NumInstructions::from(1),
         );
     }
 
@@ -2685,7 +2692,8 @@ fn install_code_respects_instruction_limit() {
     let compilation_cost = wat_compilation_cost(wasm);
     let wasm = wat::parse_str(wasm).unwrap();
 
-    let instructions_limit = NumInstructions::from(3) + compilation_cost;
+    let instructions_limit =
+        DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + NumInstructions::from(3) + compilation_cost;
 
     // Too few instructions result in failed installation.
     let mut round_limits = RoundLimits {
@@ -2720,7 +2728,9 @@ fn install_code_respects_instruction_limit() {
 
     // Enough instructions result in successful installation.
     let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(NumInstructions::from(6) + compilation_cost),
+        instructions: as_round_instructions(
+            DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + NumInstructions::from(6) + compilation_cost,
+        ),
         // Function is 1 instruction.
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
@@ -2778,7 +2788,9 @@ fn install_code_respects_instruction_limit() {
 
     // Enough instructions result in successful upgrade.
     let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(NumInstructions::from(10) + compilation_cost),
+        instructions: as_round_instructions(
+            DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + NumInstructions::from(10) + compilation_cost,
+        ),
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
@@ -2867,7 +2879,10 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     state.put_canister_state(canister.unwrap());
 
     // Installation is free, since there is no `(start)` or `canister_init` to run.
-    assert_eq!(instructions_left, MAX_NUM_INSTRUCTIONS - compilation_cost);
+    assert_eq!(
+        instructions_left,
+        MAX_NUM_INSTRUCTIONS - DEFAULT_CREATE_EXECUTION_STATE_BASE_COST - compilation_cost
+    );
 
     // No heap delta.
     assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
@@ -2911,7 +2926,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     // Installation is free, since there is no `(start)` or `canister_init` to run.
     assert_eq!(
         instructions_left,
-        instructions_before_reinstall - compilation_cost
+        instructions_before_reinstall - DEFAULT_CREATE_EXECUTION_STATE_BASE_COST - compilation_cost
     );
 
     // No heap delta.
@@ -2965,7 +2980,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     // Installation is free, since there is no `canister_pre/post_upgrade`
     assert_eq!(
         instructions_left,
-        instructions_before_upgrade - compilation_cost
+        instructions_before_upgrade - DEFAULT_CREATE_EXECUTION_STATE_BASE_COST - compilation_cost
     );
 
     // No heap delta.
@@ -3899,7 +3914,8 @@ fn cycles_correct_if_upgrade_succeeds() {
         test.canister_execution_cost(id).real(),
         test.cycles_account_manager()
             .execution_cost(
-                NumInstructions::from(5 * *DROP_MEMORY_GROW_CONST_COST)
+                DEFAULT_CREATE_EXECUTION_STATE_BASE_COST
+                    + NumInstructions::from(5 * *DROP_MEMORY_GROW_CONST_COST)
                     + wasm_compilation_cost(&wasm),
                 test.subnet_size(),
                 CanisterCyclesCostSchedule::Normal,
@@ -3923,7 +3939,8 @@ fn cycles_correct_if_upgrade_succeeds() {
         execution_cost.real(),
         test.cycles_account_manager()
             .execution_cost(
-                NumInstructions::from(11 * *DROP_MEMORY_GROW_CONST_COST)
+                DEFAULT_CREATE_EXECUTION_STATE_BASE_COST
+                    + NumInstructions::from(11 * *DROP_MEMORY_GROW_CONST_COST)
                     + wasm_compilation_cost(&wasm),
                 test.subnet_size(),
                 CanisterCyclesCostSchedule::Normal,
@@ -3966,7 +3983,7 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
     assert_eq!(
         test.canister_execution_cost(id),
         test.cycles_account_manager().execution_cost(
-            wasm_compilation_cost(&wasm),
+            DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + wasm_compilation_cost(&wasm),
             test.subnet_size(),
             CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
@@ -4049,7 +4066,8 @@ fn cycles_correct_if_upgrade_fails_at_start() {
         execution_cost.real(),
         test.cycles_account_manager()
             .execution_cost(
-                NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
+                DEFAULT_CREATE_EXECUTION_STATE_BASE_COST
+                    + NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                     + wasm_compilation_cost(&wasm2),
                 test.subnet_size(),
                 CanisterCyclesCostSchedule::Normal,
@@ -4093,7 +4111,7 @@ fn cycles_correct_if_upgrade_fails_at_pre_upgrade() {
     assert_eq!(
         test.canister_execution_cost(id),
         test.cycles_account_manager().execution_cost(
-            wasm_compilation_cost(&wasm),
+            DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + wasm_compilation_cost(&wasm),
             test.subnet_size(),
             CanisterCyclesCostSchedule::Normal,
             test.canister_wasm_execution_mode(id),
@@ -4169,7 +4187,8 @@ fn cycles_correct_if_upgrade_fails_at_post_upgrade() {
         execution_cost.real(),
         test.cycles_account_manager()
             .execution_cost(
-                NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
+                DEFAULT_CREATE_EXECUTION_STATE_BASE_COST
+                    + NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                     + wasm_compilation_cost(&wasm2),
                 test.subnet_size(),
                 CanisterCyclesCostSchedule::Normal,
@@ -4213,7 +4232,8 @@ fn cycles_correct_if_install_succeeds() {
         test.canister_execution_cost(id).real(),
         test.cycles_account_manager()
             .execution_cost(
-                NumInstructions::from(6 * *DROP_MEMORY_GROW_CONST_COST)
+                DEFAULT_CREATE_EXECUTION_STATE_BASE_COST
+                    + NumInstructions::from(6 * *DROP_MEMORY_GROW_CONST_COST)
                     + wasm_compilation_cost(&wasm),
                 test.subnet_size(),
                 CanisterCyclesCostSchedule::Normal,
@@ -4307,7 +4327,8 @@ fn cycles_correct_if_install_fails_at_start() {
         test.canister_execution_cost(id).real(),
         test.cycles_account_manager()
             .execution_cost(
-                NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST)
+                DEFAULT_CREATE_EXECUTION_STATE_BASE_COST
+                    + NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST)
                     + wasm_compilation_cost(&wasm),
                 test.subnet_size(),
                 CanisterCyclesCostSchedule::Normal,
@@ -4349,7 +4370,8 @@ fn cycles_correct_if_install_fails_at_init() {
         test.canister_execution_cost(id).real(),
         test.cycles_account_manager()
             .execution_cost(
-                NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
+                DEFAULT_CREATE_EXECUTION_STATE_BASE_COST
+                    + NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                     + wasm_compilation_cost(&wasm),
                 test.subnet_size(),
                 CanisterCyclesCostSchedule::Normal,
@@ -8151,6 +8173,9 @@ fn assert_subnet_admin_actions_can_be_performed(mut test: ExecutionTest, caniste
     let status = test.canister_status(canister_id).unwrap();
     assert_eq!(status.status(), CanisterStatusType::Running);
 
+    // ...canister metrics can be retrieved...
+    test.canister_metrics(canister_id).unwrap();
+
     // ...code can be uninstalled...
     test.uninstall_code(canister_id).unwrap();
     assert_eq!(test.canister_state(canister_id).execution_state, None);
@@ -8260,6 +8285,15 @@ fn non_controller_and_non_subnet_admin_cannot_perform_subnet_admin_actions_on_ca
     assert!(err.description().contains(&format!(
         "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
     )));
+    // ...or canister metrics cannot be retrieved...
+    let err = test.canister_metrics(canister_id).unwrap_err();
+    assert_eq!(
+        err.code(),
+        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+    );
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
+    )));
 
     // ...or code be uninstalled...
     let err = test.uninstall_code(canister_id).unwrap_err();
@@ -8333,4 +8367,129 @@ fn subnet_admin_cannot_install_code() {
         .upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
+}
+
+fn assert_canister_metrics_can_be_retrieved(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    cost_schedule: CanisterCyclesCostSchedule,
+) {
+    // Set dummy values for consumed cycles in the canister state.
+    let memory_cycles = CompoundCycles::<Memory>::new(Cycles::new(1), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(memory_cycles);
+
+    // `Instructions` follow the prepay/refund flow where metrics are updated
+    // only during the refund step.
+    let instructions_cycles = CompoundCycles::<Instructions>::new(Cycles::new(2), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(instructions_cycles);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .refund_cycles(
+            instructions_cycles,
+            CompoundCycles::<Instructions>::new(Cycles::new(0), cost_schedule),
+        );
+
+    let ingress_induction_cycles =
+        CompoundCycles::<IngressInduction>::new(Cycles::new(3), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(ingress_induction_cycles);
+
+    let compute_allocation_cycles =
+        CompoundCycles::<ic_types_cycles::ComputeAllocation>::new(Cycles::new(4), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(compute_allocation_cycles);
+
+    let canister_creation_cycles =
+        CompoundCycles::<CanisterCreation>::new(Cycles::new(5), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(canister_creation_cycles);
+
+    let uninstall_cycles = CompoundCycles::<Uninstall>::new(Cycles::new(6), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(uninstall_cycles);
+
+    // `RequestAndResponseTransmission` follow the prepay/refund flow where
+    // metrics are updated only during the refund step.
+    let request_and_response_transmission_cycles =
+        CompoundCycles::<RequestAndResponseTransmission>::new(Cycles::new(8), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(request_and_response_transmission_cycles);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .refund_cycles(
+            request_and_response_transmission_cycles,
+            CompoundCycles::<RequestAndResponseTransmission>::new(Cycles::new(0), cost_schedule),
+        );
+
+    let http_outcalls_cycles = CompoundCycles::<HTTPOutcalls>::new(Cycles::new(9), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .observe_consumed_cycles_for_https_outcall(http_outcalls_cycles.nominal());
+
+    let burned_cycles = CompoundCycles::<BurnedCycles>::new(Cycles::new(10), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(burned_cycles);
+
+    let expected_cycles_consumed = CyclesConsumed::new(
+        memory_cycles.nominal(),
+        compute_allocation_cycles.nominal(),
+        ingress_induction_cycles.nominal(),
+        // Instructions will include both the "fake" value set as well as the cost
+        // of executing `canister_metrics` for the canister.
+        instructions_cycles.nominal() + test.canister_execution_cost(canister_id).nominal(),
+        request_and_response_transmission_cycles.nominal(),
+        uninstall_cycles.nominal(),
+        canister_creation_cycles.nominal(),
+        http_outcalls_cycles.nominal(),
+        burned_cycles.nominal(),
+    );
+    let expected_metrics = CanisterMetricsResult::new(expected_cycles_consumed);
+
+    // The canister_metrics endpoint should return the correct values for consumed cycles.
+    let result = test.canister_metrics(canister_id).unwrap();
+    assert_eq!(result, expected_metrics);
+}
+
+#[test]
+fn can_retrieve_canister_metrics_for_canister_free_schedule() {
+    let cost_schedule = CanisterCyclesCostSchedule::Free;
+    let subnet_admin = user_test_id(42);
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(cost_schedule)
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+
+    // Switch user id so the request comes from the subnet admin
+    // who should not be a controller.
+    test.set_user_id(subnet_admin);
+    assert!(
+        !test
+            .canister_state(canister_id)
+            .controllers()
+            .contains(subnet_admin.get_ref())
+    );
+
+    assert_canister_metrics_can_be_retrieved(&mut test, canister_id, cost_schedule);
+}
+
+#[test]
+fn can_retrieve_canister_metrics_for_canister_normal_schedule() {
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(cost_schedule)
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+
+    assert_canister_metrics_can_be_retrieved(&mut test, canister_id, cost_schedule);
 }

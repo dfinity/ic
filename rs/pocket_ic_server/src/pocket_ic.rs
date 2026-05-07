@@ -1168,7 +1168,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
-                log_memory_limit: Some(4_096_u64.into()),
+                log_memory_limit: None, // 4_096 is the default
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1252,7 +1252,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
-                log_memory_limit: Some(4_096_u64.into()),
+                log_memory_limit: None, // 4_096 is the default
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1423,7 +1423,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
-                log_memory_limit: Some(4_096_u64.into()),
+                log_memory_limit: None, // 4_096 is the default
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1505,7 +1505,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
-                log_memory_limit: Some(4_096_u64.into()),
+                log_memory_limit: None, // 4_096 is the default
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1585,7 +1585,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
-                log_memory_limit: Some(4_096_u64.into()),
+                log_memory_limit: None, // 4_096 is the default
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1650,7 +1650,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
-                log_memory_limit: Some(4_096_u64.into()),
+                log_memory_limit: None, // 4_096 is the default
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1721,7 +1721,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
-                log_memory_limit: Some(4_096_u64.into()),
+                log_memory_limit: None, // 4_096 is the default
                 wasm_memory_limit: Some(4_294_967_296_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1799,7 +1799,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
-                log_memory_limit: Some(4_096_u64.into()),
+                log_memory_limit: None, // 4_096 is the default
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1867,7 +1867,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
-                log_memory_limit: Some(4_096_u64.into()),
+                log_memory_limit: None, // 4_096 is the default
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1966,7 +1966,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
-                log_memory_limit: Some(4_096_u64.into()),
+                log_memory_limit: None, // 4_096 is the default
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -2040,7 +2040,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
-                log_memory_limit: Some(4_096_u64.into()),
+                log_memory_limit: None, // 4_096 is the default
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -2173,13 +2173,13 @@ impl PocketIcSubnets {
                 related_origins: None,         // DIFFERENT FROM ICP MAINNET
                 new_flow_origins: None,        // DIFFERENT FROM ICP MAINNET
                 openid_configs: openid_google, // DIFFERENT FROM ICP MAINNET
-                oidc_configs: None,
-                analytics_config: None, // DIFFERENT FROM ICP MAINNET
+                analytics_config: None,        // DIFFERENT FROM ICP MAINNET
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
                 dummy_auth: Some(Some(dummy_auth_config)), // DIFFERENT FROM ICP MAINNET
                 backend_canister_id: Some(IDENTITY_CANISTER_ID.get().0),
                 backend_origin: None,
+                sso_discoverable_domains: None,
             });
             ii_subnet
                 .state_machine
@@ -2243,7 +2243,7 @@ impl PocketIcSubnets {
             freezing_threshold: Some(2_592_000_u64.into()),
             reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
             log_visibility: Some(LogVisibilityV2::Controllers),
-            log_memory_limit: Some(4_096_u64.into()),
+            log_memory_limit: None, // 4_096 is the default
             wasm_memory_limit: Some(3_221_225_472_u64.into()),
             wasm_memory_threshold: Some(0_u64.into()),
             environment_variables: None,
@@ -2321,7 +2321,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
-                log_memory_limit: Some(4_096_u64.into()),
+                log_memory_limit: None, // 4_096 is the default
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -2419,7 +2419,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
-                log_memory_limit: Some(4_096_u64.into()),
+                log_memory_limit: None, // 4_096 is the default
                 wasm_memory_limit: Some(2_000_000_000_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -2494,7 +2494,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
-                log_memory_limit: Some(4_096_u64.into()),
+                log_memory_limit: None, // 4_096 is the default
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -2561,7 +2561,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
-                log_memory_limit: Some(4_096_u64.into()),
+                log_memory_limit: None, // 4_096 is the default
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,

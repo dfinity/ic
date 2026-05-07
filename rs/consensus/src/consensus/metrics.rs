@@ -170,7 +170,6 @@ pub(crate) struct FinalizerMetrics {
     pub finalization_certified_state_difference: IntGauge,
     // idkg payload related metrics
     pub master_key_transcripts_created: IntCounterVec,
-    pub threshold_signature_agreements: IntCounter,
     pub idkg_available_pre_signatures: IntGaugeVec,
     pub idkg_pre_signatures_in_creation: IntGaugeVec,
     pub idkg_ongoing_xnet_reshares: IntGaugeVec,
@@ -236,10 +235,6 @@ impl FinalizerMetrics {
                 "consensus_master_key_transcripts_created",
                 "The number of times a master key transcript is created",
                 &[KEY_ID_LABEL],
-            ),
-            threshold_signature_agreements: metrics_registry.int_counter(
-                "consensus_threshold_signature_agreements",
-                "Total number of threshold signature agreements created",
             ),
             idkg_available_pre_signatures: metrics_registry.int_gauge_vec(
                 "consensus_idkg_available_pre_signatures",
@@ -356,8 +351,6 @@ impl FinalizerMetrics {
                 &self.master_key_transcripts_created,
                 &idkg.key_transcripts_created,
             );
-            self.threshold_signature_agreements
-                .inc_by(idkg.signature_agreements as u64);
             set(
                 &self.idkg_available_pre_signatures,
                 &idkg.available_pre_signatures,

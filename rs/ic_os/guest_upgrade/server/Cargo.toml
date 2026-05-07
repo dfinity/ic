@@ -8,6 +8,7 @@ attestation = { path = "../../sev/attestation" }
 config_tool = { path = "../../config/tool" }
 config_types = { path = "../../config/types" }
 der = { workspace = true }
+guest_disk = { path = "../../os_tools/guest_disk" }
 guest_upgrade_shared = { path = "../shared" }
 ic-interfaces-registry = { path = "../../../interfaces/registry" }
 ic-registry-client-helpers = { path = "../../../registry/helpers" }

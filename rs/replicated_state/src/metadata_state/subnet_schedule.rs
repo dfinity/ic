@@ -13,13 +13,15 @@ pub struct CanisterPriority {
     /// in the vector d that corresponds to this canister.
     pub accumulated_priority: AccumulatedPriority,
 
-    /// Number of DTS slices executed so far in the current long execution, if any.
-    /// (Also used transiently by `finish_round()` to charge for full executions.)
+    /// Number of rounds during which the current long execution, if any, has
+    /// executed at least one slice. (Also used transiently by `finish_round()` to
+    /// charge for full executions.)
     ///
-    /// During a long execution, this is incremented for each DTS slice executed.
-    /// In the meantime, the canister accumulates priority normally. It is only
-    /// charged for these slices when the long execution completes.
-    pub executed_slices: i64,
+    /// During a long execution, this is incremented for each round in which the
+    /// canister was executed. In the meantime, the canister accumulates priority
+    /// normally. It is only charged for these rounds when the long execution
+    /// completes.
+    pub executed_rounds: i64,
 
     /// The round when the current long execution started. `None` means the canister
     /// is not in a long execution.
@@ -36,7 +38,7 @@ impl CanisterPriority {
     /// subnet schedule.
     pub const DEFAULT: CanisterPriority = CanisterPriority {
         accumulated_priority: AccumulatedPriority::new(0),
-        executed_slices: 0,
+        executed_rounds: 0,
         long_execution_start_round: None,
         last_full_execution_round: ExecutionRound::new(0),
     };
@@ -52,6 +54,9 @@ impl Default for CanisterPriority {
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetSchedule {
     priorities: BTreeMap<CanisterId, CanisterPriority>,
+
+    #[cfg(debug_assertions)]
+    pub fully_executed_canisters: std::collections::BTreeSet<CanisterId>,
 }
 
 /// Two schedules are equal if they have the same canister priorities (modulo
@@ -77,7 +82,11 @@ impl ValidateEq for SubnetSchedule {
 
 impl SubnetSchedule {
     pub fn new(priorities: BTreeMap<CanisterId, CanisterPriority>) -> Self {
-        Self { priorities }
+        Self {
+            priorities,
+            #[cfg(debug_assertions)]
+            fully_executed_canisters: std::collections::BTreeSet::new(),
+        }
     }
 
     /// Returns the priority for the given canister, or the default priority if not
@@ -110,7 +119,7 @@ impl SubnetSchedule {
     }
 
     /// Retains only the priorities for which the predicate returns `true`.
-    pub(crate) fn retain(&mut self, f: impl FnMut(&CanisterId, &mut CanisterPriority) -> bool) {
+    pub fn retain(&mut self, f: impl FnMut(&CanisterId, &mut CanisterPriority) -> bool) {
         self.priorities.retain(f);
     }
 

@@ -806,12 +806,12 @@ mod non_interactive_distributed_key_generation {
         crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<C>>,
     ) -> BTreeMap<NodeId, NiDkgTranscript> {
         let dealings = create_dealings(ni_dkg_config, crypto_components);
-        create_receiver_transcripts(ni_dkg_config, &dealings, crypto_components)
+        create_receiver_transcripts(ni_dkg_config, dealings, crypto_components)
     }
 
     fn create_receiver_transcripts<C: CryptoComponentRng>(
         ni_dkg_config: &NiDkgConfig,
-        dealings: &BTreeMap<NodeId, NiDkgDealing>,
+        dealings: BTreeMap<NodeId, NiDkgDealing>,
         crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<C>>,
     ) -> BTreeMap<NodeId, NiDkgTranscript> {
         ni_dkg_config
@@ -820,7 +820,7 @@ mod non_interactive_distributed_key_generation {
             .iter()
             .map(|node| {
                 let transcript = crypto_for(*node, crypto_components)
-                    .create_transcript(ni_dkg_config, dealings)
+                    .create_transcript(ni_dkg_config, dealings.clone())
                     .unwrap_or_else(|error| {
                         panic!("failed to create transcript for {node:?}: {error:?}")
                     });
