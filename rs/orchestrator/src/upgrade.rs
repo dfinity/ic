@@ -1252,6 +1252,7 @@ fn report_master_public_key_changed_metric(
 
 #[cfg(test)]
 mod tests {
+    use crate::binaries_upgrader::BinariesUpgrader;
     use crate::catch_up_package_provider::LocalCUPReader;
     use crate::catch_up_package_provider::tests::mock_tls_config;
 
@@ -1317,10 +1318,10 @@ mod tests {
     use rand::RngCore;
     use rstest::rstest;
     use slog::Level;
-    use std::cell::RefCell;
     use std::{
         collections::{BTreeMap, BTreeSet},
         ffi::OsStr,
+        fmt::Debug,
         path::Path,
         process::Output,
     };
@@ -1330,9 +1331,25 @@ mod tests {
         pub fn subnet_assignment(&self) -> SubnetAssignment {
             *self.subnet_assignment.read().unwrap()
         }
+
+        pub fn guestos_upgrader(&self) -> &dyn ImageUpgrader<GuestosVersion> {
+            self.guestos_upgrader.as_ref()
+        }
+
+        pub fn guestos_upgrader_mut(&mut self) -> &mut dyn ImageUpgrader<GuestosVersion> {
+            self.guestos_upgrader.as_mut()
+        }
+
+        pub fn binaries_upgrader(&self) -> &dyn ImageUpgrader<ReplicaVersion> {
+            self.binaries_upgrader.as_ref()
+        }
+
+        pub fn binaries_upgrader_mut(&mut self) -> &mut dyn ImageUpgrader<ReplicaVersion> {
+            self.binaries_upgrader.as_mut()
+        }
     }
 
-    pub(crate) struct FakeProcessManager {
+    struct FakeProcessManager {
         running: bool,
     }
     impl FakeProcessManager {
@@ -1362,14 +1379,18 @@ mod tests {
     }
 
     // TODO: Assert on the executed args
-    pub struct FakeManagebootRunner {
-        executed_args: RefCell<Option<Vec<OsString>>>,
+    struct FakeManagebootRunner {
+        executed_args: RwLock<Vec<Vec<OsString>>>,
     }
     impl FakeManagebootRunner {
         pub fn new() -> Self {
             Self {
-                executed_args: RefCell::new(None),
+                executed_args: RwLock::new(Vec::new()),
             }
+        }
+
+        pub fn executed_args(&self) -> Vec<Vec<OsString>> {
+            self.executed_args.read().unwrap().clone()
         }
     }
     #[async_trait]
@@ -1379,12 +1400,7 @@ mod tests {
             use std::os::unix::process::ExitStatusExt;
 
             let owned_args = args.iter().map(|s| s.to_os_string()).collect::<Vec<_>>();
-            if let Some(existing_args) = self.executed_args.borrow_mut().replace(owned_args) {
-                panic!(
-                    "ManagebootRunner was called more than once, which is unexpected. Previous args: {:?}, new args: {:?}",
-                    existing_args, args
-                );
-            }
+            self.executed_args.write().unwrap().push(owned_args);
 
             Ok(Output {
                 status: std::process::ExitStatus::from_raw(0),
@@ -1392,6 +1408,111 @@ mod tests {
                 stderr: vec![],
             })
         }
+    }
+
+    struct FakeImageUpgrader<V> {
+        prepared_upgrade_version: Option<V>,
+        download_path: PathBuf,
+        restart_time_path: PathBuf,
+        logger: ReplicaLogger,
+        manageboot_runner: Box<dyn ManagebootRunner>,
+        number_exchanged_disk_encryption_keys: u32,
+        number_downloaded_release_packages: RwLock<u32>,
+    }
+    impl<V> FakeImageUpgrader<V> {
+        pub fn new(
+            download_path: PathBuf,
+            restart_time_path: PathBuf,
+            logger: ReplicaLogger,
+        ) -> Self {
+            Self {
+                prepared_upgrade_version: None,
+                download_path,
+                restart_time_path,
+                logger,
+                manageboot_runner: Box::new(FakeManagebootRunner::new()),
+                number_exchanged_disk_encryption_keys: 0,
+                number_downloaded_release_packages: RwLock::new(0),
+            }
+        }
+
+        pub fn number_exchanged_disk_encryption_keys(&self) -> u32 {
+            self.number_exchanged_disk_encryption_keys
+        }
+
+        pub fn number_downloaded_release_packages(&self) -> u32 {
+            *self.number_downloaded_release_packages.read().unwrap()
+        }
+    }
+    #[async_trait]
+    impl<V: Clone + Debug + PartialEq + Eq + Send + Sync> ImageUpgrader<V> for FakeImageUpgrader<V> {
+        fn get_prepared_version(&self) -> Option<&V> {
+            self.prepared_upgrade_version.as_ref()
+        }
+
+        fn set_prepared_version(&mut self, version: Option<V>) {
+            self.prepared_upgrade_version = version
+        }
+
+        fn download_path(&self) -> &Path {
+            &self.download_path
+        }
+
+        fn restart_time_path(&self) -> &Path {
+            &self.restart_time_path
+        }
+
+        fn log(&self) -> &ReplicaLogger {
+            &self.logger
+        }
+
+        fn node_id(&self) -> NodeId {
+            panic!("Should not be called because `download_release_package` is overridden")
+        }
+
+        fn manageboot_runner(&self) -> &dyn ManagebootRunner {
+            self.manageboot_runner.as_ref()
+        }
+
+        fn get_release_package_urls_and_hash(
+            &self,
+            _version: &V,
+        ) -> UpgradeResult<(Vec<String>, Option<String>)> {
+            Ok((vec![], None))
+        }
+
+        async fn maybe_exchange_disk_encryption_key(&mut self) -> UpgradeResult<()> {
+            self.number_exchanged_disk_encryption_keys += 1;
+            Ok(())
+        }
+
+        // async fn download_release_package(&self, _version: &V) -> UpgradeResult<()> {
+        //     *self.number_downloaded_release_packages.write().unwrap() += 1;
+        //     Ok(())
+        // }
+    }
+
+    #[tokio::test]
+    async fn test_binaries_upgrader_never_exchanges_disk_encryption_key() {
+        let logger = InMemoryReplicaLogger::new();
+        let node_id = NODE_1;
+        let mut binaries_upgrader = BinariesUpgrader::new(
+            PathBuf::from("/tmp/download"),
+            PathBuf::from("/tmp/restart_time"),
+            ReplicaLogger::from(&logger),
+            node_id,
+            Box::new(FakeManagebootRunner::new()),
+            Arc::new(RegistryHelper::new(
+                node_id,
+                Arc::new(FakeRegistryClient::new(Arc::new(
+                    ProtoRegistryDataProvider::new(),
+                ))),
+                ReplicaLogger::from(&logger),
+            )),
+        );
+
+        let result = binaries_upgrader.maybe_exchange_disk_encryption_key().await;
+        assert!(result.is_ok());
     }
 
     // Helper function to create a CUP with given height and summary payload.
@@ -1668,11 +1789,6 @@ mod tests {
                 .unwrap();
         }
 
-        let manageboot_guestos = Box::new(FakeManagebootRunner::new());
-        let guestos_upgrader = Box::new(FakeGuestosUpgrader);
-        let manageboot_binaries = Box::new(FakeManagebootRunner::new());
-        let binaries_upgrader = Box::new(FakeBinariesUpgrader);
-
         let cup_dir = dir.join("cups");
         std::fs::create_dir_all(&cup_dir).unwrap();
         if let Some(local_cup) = has_local_cup {
@@ -1717,10 +1833,22 @@ mod tests {
             );
 
         let release_content_dir = dir.join("images");
-        std::fs::create_dir_all(&release_content_dir).unwrap();
-
+        let guestos_release_content_dir = release_content_dir.join("guestos");
+        let binaries_release_content_dir = release_content_dir.join("binaries");
+        std::fs::create_dir_all(&guestos_release_content_dir).unwrap();
+        std::fs::create_dir_all(&binaries_release_content_dir).unwrap();
         let orchestrator_data_dir = dir.join("orchestrator");
         std::fs::create_dir_all(&orchestrator_data_dir).unwrap();
+        let guestos_upgrader = Box::new(FakeImageUpgrader::new(
+            guestos_release_content_dir.join("image.bin"),
+            orchestrator_data_dir.join("reboot_time.txt"),
+            logger.clone(),
+        ));
+        let binaries_upgrader = Box::new(FakeImageUpgrader::new(
+            binaries_release_content_dir.join("binaries.bin"),
+            orchestrator_data_dir.join("reboot_time.txt"),
+            logger.clone(),
+        ));
 
         let mut upgrade_loop = Upgrade::new(
             registry,
@@ -1737,15 +1865,23 @@ mod tests {
             ic_binary_dir,
             Arc::new(registry_replicator),
             logger,
-            orchestrator_data_dir.join("key_changed_metric.cbor"),
+            orchestrator_data_dir,
         )
         .await;
 
+        // TODO: Remove below, download is now mocked
+        //
         // If the node is supposed to upgrade, manually create a fake image file
         // and set the prepared version to avoid actually downloading the image.
         if let Some(upgrade) = &test_scenario.upgrade_to {
-            std::fs::write(upgrade_loop.download_location(), b"fake image data").unwrap();
-            upgrade_loop.set_prepared_version(Some(upgrade.replica_version.clone()));
+            std::fs::write(
+                upgrade_loop.guestos_upgrader().download_path(),
+                b"fake image data",
+            )
+            .unwrap();
+            upgrade_loop
+                .guestos_upgrader_mut()
+                .set_prepared_version(Some(GuestosVersion(upgrade.replica_version.clone())));
         }
 
         upgrade_loop
@@ -2245,7 +2381,7 @@ mod tests {
             upgrade_loop: &Upgrade,
         ) -> OrchestratorResult<OrchestratorControlFlow> {
             let needle_has_prepared_upgrade =
-                "Replica version upgrade detected at registry version";
+                "Slow subnet upgrade detected at registry version";
             let logs_assert = LogEntriesAssert::assert_that(logs);
             let assert_has_prepared_upgrade = || {
                 logs_assert
@@ -2259,15 +2395,15 @@ mod tests {
                 );
             };
             let assert_has_cleared_version_and_image = || {
-                assert_eq!(upgrade_loop.get_prepared_version(), None,);
-                assert!(!upgrade_loop.download_location().exists());
+                assert_eq!(upgrade_loop.guestos_upgrader().get_prepared_version(), None);
+                assert!(!upgrade_loop.guestos_upgrader().download_path().exists());
             };
             let assert_has_not_cleared_version_and_image = |upgrade: &ReplicaUpgradeScenario| {
                 assert_eq!(
-                    upgrade_loop.get_prepared_version(),
-                    Some(&upgrade.replica_version)
+                    upgrade_loop.guestos_upgrader().get_prepared_version(),
+                    Some(&GuestosVersion(upgrade.replica_version.clone()))
                 );
-                assert!(upgrade_loop.download_location().exists());
+                assert!(upgrade_loop.guestos_upgrader().download_path().exists());
             };
 
             match &self.has_local_cup {
@@ -2894,6 +3030,7 @@ mod tests {
 
         let test_scenario = UpgradeTestScenario {
             node_id,
+            current_guestos_version: GuestosVersion(current_replica_version.clone()),
             current_replica_version,
             has_local_cup,
             has_registry_cup,
@@ -2940,6 +3077,9 @@ mod tests {
     async fn test_ignore_recalled_versions_if_nns() {
         let test_scenario = UpgradeTestScenario {
             node_id: NODE_1,
+            current_guestos_version: GuestosVersion(
+                ReplicaVersion::try_from("replica_version_0.1").unwrap(),
+            ),
             current_replica_version: ReplicaVersion::try_from("replica_version_0.1").unwrap(),
             has_local_cup: Some(CUPScenario {
                 height: Height::from(100),
@@ -2982,6 +3122,9 @@ mod tests {
     async fn test_ignore_up_to_date_replicator_after_timeout() {
         let test_scenario = UpgradeTestScenario {
             node_id: NODE_1,
+            current_guestos_version: GuestosVersion(
+                ReplicaVersion::try_from("replica_version_0.1").unwrap(),
+            ),
             current_replica_version: ReplicaVersion::try_from("replica_version_0.1").unwrap(),
             has_local_cup: Some(CUPScenario {
                 height: Height::from(100),
