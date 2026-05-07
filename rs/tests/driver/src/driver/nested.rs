@@ -236,7 +236,7 @@ impl NestedNode {
             ..
         } = self.node_spec
         else {
-            panic!("`with_vm_resource_overrides` can only be used with VM nodes");
+            panic!("`with_resource_overrides` can only be used with VM nodes");
         };
 
         *overrides = vm_resource_overrides;
