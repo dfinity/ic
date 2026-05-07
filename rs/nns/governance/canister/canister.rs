@@ -2,6 +2,7 @@ use ic_base_types::PrincipalId;
 use ic_cdk::{heartbeat, init, post_upgrade, pre_upgrade, println, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::cmc::CMCCanister;
+use ic_nervous_system_clients::exchange_rate_canister_client::RealExchangeRateCanisterClient;
 use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
     serve_metrics,
@@ -13,6 +14,7 @@ use ic_nns_common::{
     pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto},
     types::{NeuronId, ProposalId},
 };
+use ic_nns_constants::EXCHANGE_RATE_CANISTER_ID;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     canister_state::{CanisterEnv, governance, governance_mut, governance_ref, set_governance},
@@ -73,7 +75,9 @@ pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 fn schedule_timers() {
     schedule_spawn_neurons();
     schedule_vote_processing();
-    schedule_tasks();
+    schedule_tasks(Some(Arc::new(RealExchangeRateCanisterClient::new(
+        EXCHANGE_RATE_CANISTER_ID,
+    ))));
 }
 
 const SPAWN_NEURONS_INTERVAL: Duration = Duration::from_secs(60);
