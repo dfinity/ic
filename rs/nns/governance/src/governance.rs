@@ -8030,7 +8030,6 @@ impl Governance {
             maturity_modulation: self
                 .heap_data
                 .maturity_modulation
-                .clone()
                 .map(ApiMaturityModulation::from),
         }
     }
