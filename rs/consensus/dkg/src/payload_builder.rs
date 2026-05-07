@@ -142,6 +142,19 @@ fn create_data_payload(
         max_dealings_per_block,
     );
 
+    if !new_validated_dealings.is_empty() {
+        info!(
+            logger,
+            "Including {} new validated dealings in data block payload at height {}, with dkg ids: {:?}",
+            new_validated_dealings.len(),
+            parent.height.increment(),
+            new_validated_dealings
+                .iter()
+                .map(|msg| msg.content.dkg_id.clone())
+                .collect::<Vec<_>>(),
+        );
+    }
+
     let remote_dkg_transcripts = create_early_remote_transcripts(
         pool_reader,
         crypto,

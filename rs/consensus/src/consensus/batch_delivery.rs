@@ -524,6 +524,15 @@ fn generate_dkg_response_payload(
         (Some(Err(err_str)), _) | (_, Some(Err(err_str))) => Some(Payload::Reject(
             RejectContext::new(RejectCode::CanisterReject, err_str),
         )),
+        (Some(Ok(transcript)), None) | (None, Some(Ok(transcript))) => {
+            Some(Payload::Reject(RejectContext::new(
+                RejectCode::CanisterReject,
+                format!(
+                    "Data payload contains only the {} transcript for SetupInitialDKG request",
+                    transcript.dkg_id.dkg_tag
+                ),
+            )))
+        }
         _ => None,
     }
 }
@@ -637,6 +646,28 @@ mod tests {
         let ReshareChainKeyResponse::NiDkg(_response) = response else {
             panic!("Expected a NiDkg response");
         };
+    }
+
+    #[test]
+    fn test_generate_setup_initial_dkg_response_rejects_if_only_one_transcript_present() {
+        let transcripts_for_remote_subnets = [(
+            ni_dkg_id(NiDkgTag::LowThreshold),
+            CallbackId::from(1),
+            Ok(dummy_transcript_for_tests()),
+        )];
+
+        let result =
+            generate_responses_to_remote_dkgs(&transcripts_for_remote_subnets[..], &no_op_logger());
+        assert_eq!(result.len(), 1);
+
+        let Payload::Reject(reject) = &result[0].payload else {
+            panic!("Expected reject payload when only one SetupInitialDKG transcript exists");
+        };
+        assert_eq!(reject.code(), RejectCode::CanisterReject);
+        assert_eq!(
+            reject.message(),
+            "Data payload contains only the LowThreshold transcript for SetupInitialDKG request"
+        );
     }
 
     #[test]

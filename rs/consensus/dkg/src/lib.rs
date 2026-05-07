@@ -143,6 +143,10 @@ impl DkgImpl {
         {
             return None;
         }
+        let id = config.dkg_id().clone();
+        if id.target_subnet != NiDkgTargetSubnet::Local {
+            info!(self.logger, "Creating dealing for remote dkg ID: {:?}", id);
+        }
 
         let content =
             match ic_interfaces::crypto::NiDkgAlgorithm::create_dealing(&*self.crypto, config) {
@@ -171,7 +175,12 @@ impl DkgImpl {
             .crypto
             .sign(&content, self.node_id, config.registry_version())
         {
-            Ok(signature) => Some(ChangeAction::AddToValidated(Signed { content, signature })),
+            Ok(signature) => {
+                if id.target_subnet != NiDkgTargetSubnet::Local {
+                    info!(self.logger, "Created dealing for remote dkg ID: {:?}", id);
+                }
+                Some(ChangeAction::AddToValidated(Signed { content, signature }))
+            }
             Err(err) => {
                 error!(self.logger, "Couldn't sign a DKG dealing: {:?}", err);
                 None
@@ -2156,9 +2165,22 @@ mod tests {
                     target_subnet: NiDkgTargetSubnet::Remote(target_id),
                 };
                 let remote_message = create_dealing(1, remote_dkg_id);
+                let other_target_id = NiDkgTargetId::new([10_u8; 32]);
+                let deferred_remote_dkg_id = NiDkgId {
+                    start_block_height: start_height,
+                    dealer_subnet: subnet_id,
+                    dkg_tag: NiDkgTag::LowThreshold,
+                    target_subnet: NiDkgTargetSubnet::Remote(other_target_id),
+                };
+                let deferred_remote_message = create_dealing(42, deferred_remote_dkg_id);
                 dkg_pool.insert(UnvalidatedArtifact {
                     message: remote_message.clone(),
                     peer_id: node_test_id(1),
+                    timestamp: ic_types::time::UNIX_EPOCH,
+                });
+                dkg_pool.insert(UnvalidatedArtifact {
+                    message: deferred_remote_message,
+                    peer_id: node_test_id(42),
                     timestamp: ic_types::time::UNIX_EPOCH,
                 });
 
@@ -2166,7 +2188,7 @@ mod tests {
                     receiver_dkg.on_state_change(&dkg_pool).is_empty(),
                     "dealing should be deferred while context is missing",
                 );
-                assert_eq!(dkg_pool.get_unvalidated().count(), 1);
+                assert_eq!(dkg_pool.get_unvalidated().count(), 2);
 
                 // Add context back: deferred dealing should now be validated.
                 deps.state_manager.get_mut().checkpoint();
@@ -2188,6 +2210,22 @@ mod tests {
                     }
                     val => panic!("Unexpected change set: {:?}", val),
                 }
+                dkg_pool.apply(change_set);
+                assert_eq!(dkg_pool.get_validated().count(), 1);
+                assert_eq!(dkg_pool.get_unvalidated().count(), 1);
+
+                // Once the summary/start height advances, deferred unvalidated and old validated
+                // dealings should be purged.
+                deps.pool
+                    .advance_round_normal_operation_n(dkg_interval_length + 1);
+                let change_set = receiver_dkg.on_state_change(&dkg_pool);
+                match &change_set.as_slice() {
+                    &[ChangeAction::Purge(purge_height)] if *purge_height > start_height => {}
+                    val => panic!("Expected purge after summary advance, got {:?}", val),
+                }
+                dkg_pool.apply(change_set);
+                assert_eq!(dkg_pool.get_unvalidated().count(), 0);
+                assert_eq!(dkg_pool.get_validated().count(), 0);
             });
         });
     }
