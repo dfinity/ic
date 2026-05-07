@@ -1650,10 +1650,10 @@ pub fn read_var_from_volatile_status_file(var_name: &str) -> Option<String> {
         panic!("Couldn't read content of the {volatile_status_path:?} file: {e:?}")
     });
     for line in content.lines() {
-        if let Some((name, value)) = line.split_once(' ') {
-            if name.trim() == var_name {
-                return Some(value.trim().to_string());
-            }
+        if let Some((name, value)) = line.split_once(' ')
+            && name.trim() == var_name
+        {
+            return Some(value.trim().to_string());
         }
     }
     None
