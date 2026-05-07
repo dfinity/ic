@@ -39,8 +39,8 @@ use ic_system_test_driver::{
     util::{MESSAGE_CANISTER_WASM, MessageCanister, assert_create_agent, block_on},
 };
 use ic_testnet_mainnet_nns::{
-    MAINNET_NODE_VM_RESOURCE_OVERRIDES, proposals::ProposalWithMainnetState,
-    setup as setup_with_mainnet_state,
+    MAINNET_NODE_VM_RESOURCE_OVERRIDES, mainnet_node_required_host_features,
+    proposals::ProposalWithMainnetState, setup as setup_with_mainnet_state,
 };
 use ic_types::ReplicaVersion;
 use manual_guestos_recovery::recovery_utils::build_recovery_upgrader_run_command;
@@ -254,7 +254,14 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
             cfg.nested_nodes_vm_resource_overrides
                 .layer(&NNS_RECOVERY_VM_RESOURCE_OVERRIDES)
         };
-        NestedNodes::new_with_resource_overrides(&host_vm_names, vm_resource_overrides)
+        let required_host_features = if cfg.use_mainnet_state {
+            mainnet_node_required_host_features()
+        } else {
+            Default::default()
+        };
+        NestedNodes::new(&host_vm_names)
+            .with_resource_overrides(vm_resource_overrides)
+            .with_required_host_features(required_host_features)
             .setup_and_start(&env)
             .unwrap();
 

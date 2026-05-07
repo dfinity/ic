@@ -2790,6 +2790,7 @@ impl From<pb::FulfillSubnetRentalRequest> for api::FulfillSubnetRentalRequest {
             user: item.user,
             node_ids: Some(item.node_ids),
             replica_version_id: Some(item.replica_version_id),
+            initial_dkg_subnet_id: item.initial_dkg_subnet_id,
         }
     }
 }
@@ -2800,6 +2801,7 @@ impl From<api::FulfillSubnetRentalRequest> for pb::FulfillSubnetRentalRequest {
             user: item.user,
             node_ids: item.node_ids.unwrap_or_default(),
             replica_version_id: item.replica_version_id.unwrap_or_default(),
+            initial_dkg_subnet_id: item.initial_dkg_subnet_id,
         }
     }
 }

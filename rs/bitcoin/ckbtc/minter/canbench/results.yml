@@ -2,13 +2,13 @@ benches:
   build_estimate_retrieve_btc_fee_1_50k_sats:
     total:
       calls: 1
-      instructions: 419639
+      instructions: 419644
       heap_increase: 0
       stable_memory_increase: 0
     scopes:
       build_unsigned_transaction_from_inputs:
         calls: 1
-        instructions: 3441
+        instructions: 3446
         heap_increase: 0
         stable_memory_increase: 0
       greedy:
@@ -24,18 +24,18 @@ benches:
   build_unsigned_transaction_1_50k_sats:
     total:
       calls: 1
-      instructions: 421753
+      instructions: 421760
       heap_increase: 0
       stable_memory_increase: 0
     scopes:
       build_unsigned_transaction:
         calls: 1
-        instructions: 419172
+        instructions: 419177
         heap_increase: 0
         stable_memory_increase: 0
       build_unsigned_transaction_from_inputs:
         calls: 1
-        instructions: 3441
+        instructions: 3446
         heap_increase: 0
         stable_memory_increase: 0
       greedy:
@@ -51,18 +51,18 @@ benches:
   build_unsigned_transaction_2_100k_sats:
     total:
       calls: 1
-      instructions: 421799
+      instructions: 421806
       heap_increase: 0
       stable_memory_increase: 0
     scopes:
       build_unsigned_transaction:
         calls: 1
-        instructions: 419218
+        instructions: 419223
         heap_increase: 0
         stable_memory_increase: 0
       build_unsigned_transaction_from_inputs:
         calls: 1
-        instructions: 3441
+        instructions: 3446
         heap_increase: 0
         stable_memory_increase: 0
       greedy:
@@ -78,18 +78,18 @@ benches:
   build_unsigned_transaction_3_1m_sats:
     total:
       calls: 1
-      instructions: 421702
+      instructions: 421709
       heap_increase: 0
       stable_memory_increase: 0
     scopes:
       build_unsigned_transaction:
         calls: 1
-        instructions: 419121
+        instructions: 419126
         heap_increase: 0
         stable_memory_increase: 0
       build_unsigned_transaction_from_inputs:
         calls: 1
-        instructions: 3441
+        instructions: 3446
         heap_increase: 0
         stable_memory_increase: 0
       greedy:
@@ -105,18 +105,18 @@ benches:
   build_unsigned_transaction_4_10m_sats:
     total:
       calls: 1
-      instructions: 422877
+      instructions: 422884
       heap_increase: 0
       stable_memory_increase: 0
     scopes:
       build_unsigned_transaction:
         calls: 1
-        instructions: 420296
+        instructions: 420301
         heap_increase: 0
         stable_memory_increase: 0
       build_unsigned_transaction_from_inputs:
         calls: 1
-        instructions: 3441
+        instructions: 3446
         heap_increase: 0
         stable_memory_increase: 0
       greedy:
@@ -132,18 +132,18 @@ benches:
   build_unsigned_transaction_5_1_btc:
     total:
       calls: 1
-      instructions: 422877
+      instructions: 422884
       heap_increase: 0
       stable_memory_increase: 0
     scopes:
       build_unsigned_transaction:
         calls: 1
-        instructions: 420296
+        instructions: 420301
         heap_increase: 0
         stable_memory_increase: 0
       build_unsigned_transaction_from_inputs:
         calls: 1
-        instructions: 3441
+        instructions: 3446
         heap_increase: 0
         stable_memory_increase: 0
       greedy:
@@ -159,18 +159,18 @@ benches:
   build_unsigned_transaction_6_10_btc:
     total:
       calls: 1
-      instructions: 429549
+      instructions: 429556
       heap_increase: 0
       stable_memory_increase: 0
     scopes:
       build_unsigned_transaction:
         calls: 1
-        instructions: 426968
+        instructions: 426973
         heap_increase: 0
         stable_memory_increase: 0
       build_unsigned_transaction_from_inputs:
         calls: 1
-        instructions: 3908
+        instructions: 3913
         heap_increase: 0
         stable_memory_increase: 0
       greedy:

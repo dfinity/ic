@@ -8,8 +8,7 @@ import "types/v1/signature.proto";
 import "types/v1/types.proto";
 
 message IDkgPayload {
-  reserved 2, 3, 4, 9, 11, 12, 16;
-  repeated CompletedSignature signature_agreements = 1;
+  reserved 1, 2, 3, 4, 9, 11, 12, 16;
   registry.subnet.v1.IDkgTranscriptId next_unused_transcript_id = 5;
   repeated registry.subnet.v1.IDkgTranscript idkg_transcripts = 6;
   repeated OngoingXnetReshare ongoing_xnet_reshares = 7;
@@ -18,6 +17,7 @@ message IDkgPayload {
   repeated MasterKeyTranscript key_transcripts = 13;
   repeated AvailablePreSignature available_pre_signatures = 14;
   repeated PreSignatureInProgress pre_signatures_in_creation = 15;
+  bool empty_signature_agreements_flag = 17;
 }
 
 message ConsensusResponse {
@@ -207,13 +207,6 @@ message PreSignatureTranscriptRef {
   types.v1.SchnorrKeyId key_id = 1;
   UnmaskedTranscript blinder_unmasked_ref = 2;
   UnmaskedTranscript key_unmasked_ref = 3;
-}
-
-message CompletedSignature {
-  reserved 1;
-  reserved 2;
-  ConsensusResponse unreported = 3;
-  bytes pseudo_random_id = 4;
 }
 
 message IDkgReshareRequest {
