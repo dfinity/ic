@@ -316,11 +316,11 @@ impl CanisterManager {
         Ok(())
     }
 
-    /// Validates the new canister settings and, if all checks pass, applies
-    /// them to the canister.
+    /// Validates the new canister settings and applies them to the canister.
     ///
-    /// `round_limits` is updated in-place for subnet memory and compute
-    /// allocation after the settings are applied.
+    /// `canister: &mut CanisterState` and `round_limits: &mut RoundLimits`
+    /// are updated in-place and changes must be reverted by the caller
+    /// of this function in case of `Err`.
     ///
     /// If `metrics` is `Some`, a `log_memory_limit` resize that does real
     /// work (see `LogMemoryStore::would_resize`) is timed and recorded into
