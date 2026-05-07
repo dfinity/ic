@@ -223,7 +223,7 @@ impl DkgImpl {
         }
 
         // If the dealing refers a config which is not among the ongoing DKGs,
-        // we reject it, unless it is a remote DKG, in which case we defer it,
+        // we reject it, unless it is a remote DKG, in which case we defer it
         // until the request appears in the state, or the dealing is purged.
         let config = match configs.get(message_dkg_id) {
             Some(config) => config,

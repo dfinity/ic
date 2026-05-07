@@ -528,7 +528,7 @@ fn generate_dkg_response_payload(
             Some(Payload::Reject(RejectContext::new(
                 RejectCode::CanisterReject,
                 format!(
-                    "Data payload contains only the {} transcript for SetupInitialDKG request",
+                    "Data payload contains only the {:?} transcript for SetupInitialDKG request",
                     transcript.dkg_id.dkg_tag
                 ),
             )))
