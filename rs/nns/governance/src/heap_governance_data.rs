@@ -37,8 +37,14 @@ pub struct HeapGovernanceData {
     pub xdr_conversion_rate: XdrConversionRate,
     pub restore_aging_summary: Option<RestoreAgingSummary>,
     pub topic_of_garbage_collected_proposals: HashMap<u64, Topic>,
+    /// Persisted-true sentinel: the one-time eight year gang bonus base migration ran on
+    /// mainnet. Kept as a rollback guard so a previous release that sees this `true` skips
+    /// the migration (re-running it would zero out the bonus bases on dissolve-delay-clamped
+    /// neurons).
     pub eight_year_gang_bonus_migration_done: bool,
     pub neuron_id_to_pre_clamp_dissolve_state: HashMap<u64, NeuronDissolveStateSnapshot>,
+    /// Persisted-true sentinel for the relaxed eight year gang induction. See
+    /// `eight_year_gang_bonus_migration_done` for details.
     pub relaxed_eight_year_gang_bonus_migration_done: bool,
     pub icp_price_history: Option<IcpPriceHistory>,
     pub maturity_modulation: Option<MaturityModulation>,
