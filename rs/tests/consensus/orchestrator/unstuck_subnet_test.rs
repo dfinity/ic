@@ -122,8 +122,8 @@ fn test(test_env: TestEnv) {
     let guestos_update_img_url = get_guestos_update_img_url();
     let command = format!(
         r#"set -e
-        sudo chmod 777 /var/lib/ic/data/images
-        cd /var/lib/ic/data/images/
+        sudo chmod 777 /var/lib/ic/data/images/guestos
+        cd /var/lib/ic/data/images/guestos/
         sudo curl {guestos_update_img_url} -o image.bin --retry 10 --retry-connrefused --retry-delay 10 --retry-max-time 500 --fail
         SHA256SUM="$(sudo sha256sum image.bin | cut -d' ' -f1)"
         if [ "$SHA256SUM" != "{expected_sha256}" ]; then

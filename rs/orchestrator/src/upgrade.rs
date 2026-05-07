@@ -39,6 +39,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
+
 #[cfg(not(test))]
 const TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR: Duration = Duration::from_secs(1800); // 30 minutes
 // For ease of testing, we reduce this timeout in tests.
@@ -178,7 +180,7 @@ impl Upgrade {
         ic_binary_dir: PathBuf,
         registry_replicator: Arc<dyn RegistryReplicatorForUpgrade>,
         logger: ReplicaLogger,
-        key_changed_metric: PathBuf,
+        orchestrator_data_directory: PathBuf,
     ) -> Self {
         let init_time = Instant::now();
 
@@ -190,6 +192,7 @@ impl Upgrade {
                 warn!(logger, "Cannot report the reboot time: {}", e);
             }
         }
+        let key_changed_metric = orchestrator_data_directory.join(KEY_CHANGES_FILENAME);
         if let Err(e) = report_master_public_key_changed_metric(&key_changed_metric, &metrics) {
             warn!(
                 logger,
@@ -3158,8 +3161,8 @@ mod tests {
             ))
         }
 
-        fn path(&self) -> &Path {
-            self.tmp.path()
+        fn path(&self) -> PathBuf {
+            self.tmp.path().join(KEY_CHANGES_FILENAME)
         }
     }
 
@@ -3181,13 +3184,13 @@ mod tests {
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
             let before = get_master_key_changed_metric(&key_id, &metrics);
-            compare_master_public_keys(&c1, &c2, &metrics, setup.path(), &log);
+            compare_master_public_keys(&c1, &c2, &metrics, &setup.path(), &log);
             let after = get_master_key_changed_metric(&key_id, &metrics);
 
             assert_eq!(before + 1, after);
 
             let metrics_new = OrchestratorMetrics::new(&MetricsRegistry::new());
-            report_master_public_key_changed_metric(setup.path(), &metrics_new).unwrap();
+            report_master_public_key_changed_metric(&setup.path(), &metrics_new).unwrap();
             let after_restart = get_master_key_changed_metric(&key_id, &metrics_new);
 
             assert_eq!(after_restart, after);
@@ -3195,7 +3198,7 @@ mod tests {
             // If there are no persisted metrics we should not report anything
             let metrics_new = OrchestratorMetrics::new(&MetricsRegistry::new());
             let path = setup.path().parent().unwrap().join("test");
-            report_master_public_key_changed_metric(path, &metrics_new).unwrap();
+            report_master_public_key_changed_metric(&path, &metrics_new).unwrap();
             let non_existent = get_master_key_changed_metric(&key_id, &metrics_new);
 
             assert_eq!(non_existent, 0);
@@ -3221,7 +3224,7 @@ mod tests {
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
             let before = get_master_key_changed_metric(&key_id, &metrics);
-            compare_master_public_keys(&c1, &c2, &metrics, setup.path(), &log);
+            compare_master_public_keys(&c1, &c2, &metrics, &setup.path(), &log);
             let after = get_master_key_changed_metric(&key_id, &metrics);
 
             assert_eq!(before + 1, after);
@@ -3246,7 +3249,7 @@ mod tests {
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
             let before = get_master_key_changed_metric(&key_id, &metrics);
-            compare_master_public_keys(&c1, &c2, &metrics, setup.path(), &log);
+            compare_master_public_keys(&c1, &c2, &metrics, &setup.path(), &log);
             let after = get_master_key_changed_metric(&key_id, &metrics);
 
             assert_eq!(before, after);
@@ -3284,7 +3287,7 @@ mod tests {
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
             let before = get_master_key_changed_metric(&key_id1, &metrics);
-            compare_master_public_keys(&c1, &c2, &metrics, setup.path(), &log);
+            compare_master_public_keys(&c1, &c2, &metrics, &setup.path(), &log);
             let after = get_master_key_changed_metric(&key_id1, &metrics);
 
             assert_eq!(before + 1, after);
@@ -3309,7 +3312,7 @@ mod tests {
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
             let before = get_master_key_changed_metric(&key_id, &metrics);
-            compare_master_public_keys(&c1, &c2, &metrics, setup.path(), &log);
+            compare_master_public_keys(&c1, &c2, &metrics, &setup.path(), &log);
             let after = get_master_key_changed_metric(&key_id, &metrics);
 
             assert_eq!(before, after);
@@ -3328,7 +3331,7 @@ mod tests {
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
             let before = get_master_key_changed_metric(&key_id, &metrics);
-            compare_master_public_keys(&c1, &c2, &metrics, setup.path(), &log);
+            compare_master_public_keys(&c1, &c2, &metrics, &setup.path(), &log);
             let after = get_master_key_changed_metric(&key_id, &metrics);
 
             assert_eq!(before, after);

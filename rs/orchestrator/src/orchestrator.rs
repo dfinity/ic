@@ -295,7 +295,7 @@ impl Orchestrator {
         let subnet_assignment: Arc<RwLock<SubnetAssignment>> = Default::default();
 
         let guestos_upgrader = Box::new(GuestosUpgrader::new(
-            args.replica_binary_dir.join("guestos").join("image.bin"),
+            args.guestos_binary_dir.join("image.bin"),
             args.orchestrator_data_directory.join("reboot_time.txt"),
             logger.clone(),
             node_id,
@@ -304,7 +304,7 @@ impl Orchestrator {
             disk_encryption_key_exchange_agent,
         ));
         let binaries_upgrader = Box::new(BinariesUpgrader::new(
-            args.replica_binary_dir.join("replica").join("binaries.bin"),
+            args.replica_binary_dir.join("binaries.bin"),
             args.orchestrator_data_directory.join("reboot_time.txt"),
             logger.clone(),
             node_id,
@@ -327,8 +327,7 @@ impl Orchestrator {
                 ic_binary_directory.clone(),
                 Arc::clone(&registry_replicator) as _,
                 logger.clone(),
-                args.orchestrator_data_directory
-                    .join("key_changed_metric.cbor"),
+                args.orchestrator_data_directory,
             )
             .await,
         );

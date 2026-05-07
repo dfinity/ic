@@ -15,7 +15,11 @@ use std::{
 )]
 /// Arguments for the orchestrator binary.
 pub struct OrchestratorArgs {
-    /// The directory where Orchestrator will store Replica binaries
+    /// The directory where Orchestrator will store downloaded GuestOS images
+    #[clap(long)]
+    pub(crate) guestos_binary_dir: PathBuf,
+
+    /// The directory where Orchestrator will store downloaded binaries for fast upgrades
     #[clap(long)]
     pub(crate) replica_binary_dir: PathBuf,
 
@@ -69,6 +73,16 @@ impl OrchestratorArgs {
     /// Create replica binary and CUP directories associated with this object if
     /// they don't already exist
     pub(crate) fn create_dirs(&self) {
+        if !&self.guestos_binary_dir.exists() {
+            fs::create_dir(&self.guestos_binary_dir).unwrap_or_else(|err| {
+                panic!(
+                    "Failed to create dir {}: {}",
+                    self.guestos_binary_dir.display(),
+                    err,
+                )
+            });
+        }
+
         if !&self.replica_binary_dir.exists() {
             fs::create_dir(&self.replica_binary_dir).unwrap_or_else(|err| {
                 panic!(
