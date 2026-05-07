@@ -13,6 +13,7 @@ rust_library(
         "//rs/ic_os/config/tool:config_lib",
         "//rs/ic_os/config/types:config_types",
         "//rs/ic_os/guest_upgrade/shared",
+        "//rs/ic_os/os_tools/guest_disk:guest_disk_lib",
         "//rs/ic_os/sev/attestation",
         "//rs/ic_os/sev/guest",
         "//rs/ic_os/vsock/vsock_lib",

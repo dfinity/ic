@@ -13,6 +13,7 @@ on the process that this file is part of, see
   material of the split or rented subnet.
 
 ## Changed
+* Updated the response text of some failed registry mutations. "Blessed" -> "Elected".
 
 ## Deprecated
 
