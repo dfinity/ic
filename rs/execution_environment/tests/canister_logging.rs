@@ -1718,13 +1718,11 @@ fn test_metric_canister_log_memory_usage_bytes_from_canister_log() {
     );
 
     // Nothing logged yet — sum is zero.
-    env.flush_replicated_state_metrics();
     let stats = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
     assert_eq!(stats.sum, 0.0);
 
     // One debug_print — sum reflects the payload plus small record metadata.
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    env.flush_replicated_state_metrics();
     let stats = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
     assert_le!(METRIC_PAYLOAD_SIZE as f64, stats.sum);
     assert_le!(
@@ -1753,7 +1751,6 @@ fn test_metric_canister_log_memory_usage_bytes_from_log_memory_store() {
     );
 
     // Every per-round observation equals the default allocated store size.
-    env.flush_replicated_state_metrics();
     let before = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
     assert_eq!(
         before.sum as u64 / before.count,
@@ -1763,7 +1760,6 @@ fn test_metric_canister_log_memory_usage_bytes_from_log_memory_store() {
     // After a debug_print: allocation unchanged; new observations carry the
     // same value, so the per-observation average remains the default.
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    env.flush_replicated_state_metrics();
     let after = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
     assert_gt!(after.count, before.count);
     assert_eq!(
@@ -1820,13 +1816,11 @@ fn test_metric_canister_log_retention_seconds() {
     // Seed the buffer with a first record so retention is non-zero on the
     // second observation.
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    env.flush_replicated_state_metrics();
     let before = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
 
     // Advance simulated time and append another record.
     env.advance_time(TIME_ADVANCE);
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-    env.flush_replicated_state_metrics();
     let after = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
 
     assert_eq!(after.count, before.count + 1);

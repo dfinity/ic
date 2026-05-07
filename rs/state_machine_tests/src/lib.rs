@@ -2567,12 +2567,6 @@ impl StateMachine {
         )
     }
 
-    /// Wait until all enqueued `ReplicatedStateMetrics::observe()` calls have been
-    /// processed by the background metrics thread.
-    pub fn flush_replicated_state_metrics(&self) {
-        self.state_manager.flush_metrics_channel();
-    }
-
     /// Generates a Xnet payload to a remote subnet.
     pub fn generate_xnet_payload(
         &self,
@@ -3085,6 +3079,9 @@ impl StateMachine {
         }
         assert_eq!(self.state_manager.latest_state_height(), batch_number);
 
+        // Wait until the enqueued `ReplicatedStateMetrics::observe()` call has been
+        // processed by the background metrics thread.
+        self.state_manager.flush_metrics_channel();
         self.check_critical_errors();
 
         self.set_time(time_of_next_round.into());
