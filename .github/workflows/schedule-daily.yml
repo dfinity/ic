@@ -58,7 +58,7 @@ jobs:
       group: zh1
       labels: dind-large
     container: *container-setup
-    timeout-minutes: 180
+    timeout-minutes: 120
     environment: Nightly Tests
     steps:
       - *checkout
