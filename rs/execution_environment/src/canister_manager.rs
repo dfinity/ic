@@ -320,6 +320,12 @@ impl CanisterManager {
     ///
     /// `round_limits` is updated in-place for subnet memory and compute
     /// allocation after the settings are applied.
+    ///
+    /// If `metrics` is `Some`, a `log_memory_limit` resize that does real
+    /// work (see `LogMemoryStore::would_resize`) is timed and recorded into
+    /// `canister_log_resize_duration`. Pass `None` to skip observation on
+    /// paths where the resize isn't the user-facing operation (e.g. first
+    /// allocation during canister creation).
     #[allow(clippy::too_many_arguments)]
     fn validate_and_update_canister_settings(
         &self,
@@ -327,9 +333,10 @@ impl CanisterManager {
         canister: &mut CanisterState,
         sender: PrincipalId,
         round_limits: &mut RoundLimits,
-        subnet_memory_saturation: &mut ResourceSaturation,
+        mut subnet_memory_saturation: ResourceSaturation,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
+        metrics: Option<&ExecutionEnvironmentMetrics>,
     ) -> Result<(), CanisterManagerError> {
         // Freezing threshold: apply.
         if let Some(freezing_threshold) = settings.freezing_threshold() {
@@ -493,7 +500,7 @@ impl CanisterManager {
                 .cycles_account_manager
                 .storage_reservation_cycles(
                     allocated_bytes,
-                    subnet_memory_saturation,
+                    &subnet_memory_saturation,
                     subnet_size,
                     cost_schedule,
                 )
@@ -518,7 +525,61 @@ impl CanisterManager {
                         }
                     }
                 })?;
-            *subnet_memory_saturation = subnet_memory_saturation.add(allocated_bytes.get());
+            subnet_memory_saturation = subnet_memory_saturation.add(allocated_bytes.get());
+        }
+
+        // Log memory limit: validate, charge cycles for resize, and apply.
+        if let Some(requested_limit) = settings.log_memory_limit() {
+            let max_limit = NumBytes::new(MAX_AGGREGATE_LOG_MEMORY_LIMIT as u64);
+            if requested_limit > max_limit {
+                return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooHigh {
+                    bytes: requested_limit,
+                    limit: max_limit,
+                });
+            }
+            // Resizing reads all stored log records from the old ring buffer and
+            // rewrites them into a new one. Cost is proportional to bytes_used
+            // (actual stored data), not allocated capacity.
+            // Skip the charge when resize would be a no-op (e.g., capacity
+            // unchanged or limit set to 0 with an already-empty store).
+            let log_resize_needed = canister
+                .system_state
+                .log_memory_store
+                .would_resize(requested_limit.get() as usize);
+            let log_resize_instructions = if log_resize_needed {
+                let log_bytes_used =
+                    NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64);
+                NumInstructions::new(log_bytes_used.get() * LOG_RESIZE_COST_PER_BYTE)
+            } else {
+                NumInstructions::new(0)
+            };
+            let new_log_store_memory_usage = canister
+                .system_state
+                .log_memory_store
+                .memory_usage_for_limit(requested_limit);
+            let new_canister_memory_usage = canister.memory_usage()
+                - canister.log_memory_store_memory_usage()
+                + new_log_store_memory_usage;
+            self.cycles_and_memory_usage_checks_and_updates(
+                subnet_size,
+                cost_schedule,
+                canister,
+                sender,
+                log_resize_instructions,
+                round_limits,
+                new_canister_memory_usage,
+                canister.memory_usage(),
+                &subnet_memory_saturation,
+            )?;
+            round_limits.instructions -= as_round_instructions(log_resize_instructions);
+            let limit = requested_limit.get() as usize;
+            let log_memory_store = &mut canister.system_state.log_memory_store;
+            {
+                let _maybe_timer = metrics
+                    .filter(|_| log_memory_store.would_resize(limit))
+                    .map(|m| m.canister_log_resize_duration.start_timer());
+                log_memory_store.resize(limit, self.fd_factory.clone());
+            }
         }
 
         // Controllers: validate count and apply (only at the end
@@ -546,82 +607,6 @@ impl CanisterManager {
         Ok(())
     }
 
-    /// Validates the requested log memory limit and, if valid, charges cycles
-    /// for a resize and applies the new limit to the canister.
-    ///
-    /// This is kept separate from `validate_and_update_canister_settings`
-    /// to cleanly separate memory allocation/usage changes.
-    ///
-    /// If `metrics` is `Some`, a `log_memory_limit` resize that does real
-    /// work (see `LogMemoryStore::would_resize`) is timed and recorded into
-    /// `canister_log_resize_duration`. Pass `None` to skip observation on
-    /// paths where the resize isn't the user-facing operation (e.g. first
-    /// allocation during canister creation).
-    #[allow(clippy::too_many_arguments)]
-    fn apply_log_memory_limit(
-        &self,
-        requested_limit: NumBytes,
-        canister: &mut CanisterState,
-        sender: PrincipalId,
-        round_limits: &mut RoundLimits,
-        subnet_memory_saturation: &ResourceSaturation,
-        subnet_size: usize,
-        cost_schedule: CanisterCyclesCostSchedule,
-        metrics: Option<&ExecutionEnvironmentMetrics>,
-    ) -> Result<(), CanisterManagerError> {
-        let max_limit = NumBytes::new(MAX_AGGREGATE_LOG_MEMORY_LIMIT as u64);
-        if requested_limit > max_limit {
-            return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooHigh {
-                bytes: requested_limit,
-                limit: max_limit,
-            });
-        }
-        // Resizing reads all stored log records from the old ring buffer and
-        // rewrites them into a new one. Cost is proportional to bytes_used
-        // (actual stored data), not allocated capacity.
-        // Skip the charge when resize would be a no-op (e.g., capacity
-        // unchanged or limit set to 0 with an already-empty store).
-        let log_resize_needed = canister
-            .system_state
-            .log_memory_store
-            .would_resize(requested_limit.get() as usize);
-        let log_resize_instructions = if log_resize_needed {
-            let log_bytes_used =
-                NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64);
-            NumInstructions::new(log_bytes_used.get() * LOG_RESIZE_COST_PER_BYTE)
-        } else {
-            NumInstructions::new(0)
-        };
-        let new_log_store_memory_usage = canister
-            .system_state
-            .log_memory_store
-            .memory_usage_for_limit(requested_limit);
-        let new_canister_memory_usage = canister.memory_usage()
-            - canister.log_memory_store_memory_usage()
-            + new_log_store_memory_usage;
-        self.cycles_and_memory_usage_checks_and_updates(
-            subnet_size,
-            cost_schedule,
-            canister,
-            sender,
-            log_resize_instructions,
-            round_limits,
-            new_canister_memory_usage,
-            canister.memory_usage(),
-            subnet_memory_saturation,
-        )?;
-        round_limits.instructions -= as_round_instructions(log_resize_instructions);
-        let limit = requested_limit.get() as usize;
-        let log_memory_store = &mut canister.system_state.log_memory_store;
-        {
-            let _maybe_timer = metrics
-                .filter(|_| log_memory_store.would_resize(limit))
-                .map(|m| m.canister_log_resize_duration.start_timer());
-            log_memory_store.resize(limit, self.fd_factory.clone());
-        }
-        Ok(())
-    }
-
     /// Tries to apply the requested settings on the canister identified by
     /// `canister_id`.
     #[allow(clippy::too_many_arguments)]
@@ -641,29 +626,16 @@ impl CanisterManager {
 
         validate_controller(canister, &sender)?;
 
-        let mut subnet_memory_saturation = subnet_memory_saturation;
         self.validate_and_update_canister_settings(
             &settings,
             canister,
             sender,
             round_limits,
-            &mut subnet_memory_saturation,
+            subnet_memory_saturation,
             subnet_size,
             cost_schedule,
+            Some(metrics),
         )?;
-
-        if let Some(requested_limit) = settings.log_memory_limit() {
-            self.apply_log_memory_limit(
-                requested_limit,
-                canister,
-                sender,
-                round_limits,
-                &subnet_memory_saturation,
-                subnet_size,
-                cost_schedule,
-                Some(metrics),
-            )?;
-        }
 
         canister.system_state.bump_canister_version();
         let new_controllers = match settings.controllers() {
@@ -1512,36 +1484,21 @@ impl CanisterManager {
 
         // If validation fails the canister is not inserted into state, but
         // round_limits may have been partially updated, so restore on error.
+        let round_limits_snapshot = round_limits.clone();
+        let cost_schedule = state.get_own_cost_schedule();
         // Canister creation's first-time log memory limit allocation is a
         // different event class from user-triggered resize — pass `None` to
         // skip observation.
-        let round_limits_snapshot = round_limits.clone();
-        let cost_schedule = state.get_own_cost_schedule();
-        let mut subnet_memory_saturation = subnet_memory_saturation;
         if let Err(err) = self.validate_and_update_canister_settings(
             &settings,
             &mut new_canister,
             sender,
             round_limits,
-            &mut subnet_memory_saturation,
+            subnet_memory_saturation,
             subnet_size,
             cost_schedule,
+            None,
         ) {
-            *round_limits = round_limits_snapshot;
-            return Err(err);
-        }
-        if let Some(requested_limit) = settings.log_memory_limit()
-            && let Err(err) = self.apply_log_memory_limit(
-                requested_limit,
-                &mut new_canister,
-                sender,
-                round_limits,
-                &subnet_memory_saturation,
-                subnet_size,
-                cost_schedule,
-                None,
-            )
-        {
             *round_limits = round_limits_snapshot;
             return Err(err);
         }
