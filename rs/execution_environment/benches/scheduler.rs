@@ -16,10 +16,17 @@ use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
 use ic_types::{ExecutionRound, NumBytes, NumInstructions};
 use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
+use pprof::ProfilerGuard;
+use pprof::protos::Message;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs::File;
+use std::io::Write;
 use std::sync::Arc;
 
 fn main() {
+    println!("Current working directory: {:?}", std::env::current_dir());
+    let guard = pprof::ProfilerGuard::new(100).unwrap();
+
     // 100k canisters, 5k active, 1k executed every round.
     let mut canisters = BTreeMap::new();
     let mut executed_canisters = BTreeSet::new();
@@ -115,4 +122,20 @@ fn main() {
             round_schedule.finish_round(&mut state, ExecutionRound::from(0), &metrics);
         });
     });
+
+    finalize_report(&guard);
+}
+
+fn finalize_report(guard: &ProfilerGuard) {
+    if let Ok(report) = guard.report().build() {
+        let file = File::create("flamegraph.svg").unwrap();
+        report.flamegraph(file).unwrap();
+
+        let mut file = File::create("profile.pb").unwrap();
+        let profile = report.pprof().unwrap();
+
+        let mut content = Vec::new();
+        profile.encode(&mut content).unwrap();
+        file.write_all(&content).unwrap();
+    };
 }

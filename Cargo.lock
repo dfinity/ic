@@ -9807,6 +9807,7 @@ dependencies = [
  "more-asserts",
  "num-traits",
  "phantom_newtype",
+ "pprof",
  "prometheus",
  "proptest",
  "rand 0.8.5",

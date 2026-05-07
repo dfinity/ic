@@ -84,6 +84,7 @@ lazy_static = { workspace = true }
 libflate = { workspace = true }
 maplit = "1.0.2"
 proptest = { workspace = true }
+pprof = { workspace = true }
 regex-lite = { workspace = true }
 rstest = { workspace = true }
 serde_bytes = { workspace = true }

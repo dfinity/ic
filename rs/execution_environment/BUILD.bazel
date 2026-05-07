@@ -401,6 +401,7 @@ rust_ic_bench(
         "//rs/types/types",
         "//rs/types/types_test_utils",
         "@crate_index//:criterion",
+        "@crate_index//:pprof",
     ],
 )
 
@@ -437,11 +438,13 @@ rust_ic_bench(
         # Keep sorted.
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
+        "//rs/test_utilities/metrics",
         "//rs/types/base_types",
         "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:criterion",
         "@crate_index//:lazy_static",
+        "@crate_index//:pprof",
     ],
 )
 
