@@ -635,11 +635,6 @@ fn test_reserved_cycles_limit<F, G, H>(
             err.code(),
             ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
         ),
-        Scenario::IncreaseLogAndMemoryAllocation => assert!(matches!(
-            err.code(),
-            ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
-                | ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
-        )),
         Scenario::CanisterCleanupCallback(_) => {
             assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
             assert!(
@@ -688,12 +683,6 @@ fn test_freezing_threshold<F, G, H>(
             Scenario::IncreaseMemoryAllocation => {
                 assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryAllocation)
             }
-            Scenario::IncreaseLogAndMemoryAllocation => {
-                assert!(
-                    err.code() == ErrorCode::InsufficientCyclesInMemoryGrow
-                        || err.code() == ErrorCode::InsufficientCyclesInMemoryAllocation
-                );
-            }
             Scenario::OtherManagement => {
                 assert!(
                     err.code() == ErrorCode::CanisterOutOfCycles
@@ -737,16 +726,6 @@ fn test_minimum_cycles_balance<F, G, H>(
     match scenario_params.scenario {
         Scenario::IncreaseMemoryAllocation => {
             assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryAllocation)
-        }
-        Scenario::IncreaseLogAndMemoryAllocation
-            if matches!(
-                default_run_params.memory_allocation,
-                MemoryAllocation::Large
-            ) =>
-        {
-            assert!(
-                err.code() == ErrorCode::InsufficientCyclesInMemoryGrow
-            );
         }
         Scenario::CanisterCleanupCallback(_) => {
             assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
