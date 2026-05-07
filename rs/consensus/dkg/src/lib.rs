@@ -12,10 +12,7 @@ use ic_interfaces::{
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, error, info};
-use ic_metrics::{
-    MetricsRegistry,
-    buckets::{decimal_buckets, linear_buckets},
-};
+use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     Height, NodeId, ReplicaVersion, SubnetId,
@@ -25,7 +22,6 @@ use ic_types::{
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet, config::NiDkgConfig},
     },
 };
-use prometheus::Histogram;
 use rayon::prelude::*;
 use std::{
     collections::BTreeMap,
@@ -33,12 +29,14 @@ use std::{
 };
 
 pub mod dkg_key_manager;
+pub mod metrics;
 pub mod payload_builder;
 pub mod payload_validator;
 pub(crate) mod remote;
 
 use crate::remote::{build_callback_id_config_map, merge_configs};
 pub use crate::utils::get_vetkey_public_keys;
+use metrics::DkgClientMetrics;
 
 #[cfg(test)]
 mod test_utils;
@@ -61,11 +59,6 @@ const MAX_REMOTE_DKG_ATTEMPTS: u32 = 5;
 /// Generic error string for failed remote DKG requests.
 const REMOTE_DKG_REPEATED_FAILURE_ERROR: &str = "Attempts to run this DKG repeatedly failed";
 
-struct Metrics {
-    on_state_change_duration: Histogram,
-    on_state_change_processed: Histogram,
-}
-
 /// `DkgImpl` is responsible for holding DKG dependencies and for responding to
 /// changes in the consensus and DKG pool.
 pub struct DkgImpl {
@@ -77,7 +70,7 @@ pub struct DkgImpl {
     consensus_cache: Arc<dyn ConsensusPoolCache>,
     dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
     logger: ReplicaLogger,
-    metrics: Metrics,
+    metrics: DkgClientMetrics,
 }
 
 impl DkgImpl {
@@ -102,21 +95,7 @@ impl DkgImpl {
             consensus_cache,
             dkg_key_manager,
             logger,
-            metrics: Metrics {
-                on_state_change_duration: metrics_registry.histogram(
-                    "consensus_dkg_on_state_change_duration_seconds",
-                    "The time it took to execute on_state_change(), in seconds",
-                    // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
-                    // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
-                    decimal_buckets(-4, 2),
-                ),
-                on_state_change_processed: metrics_registry.histogram(
-                    "consensus_dkg_on_state_change_processed",
-                    "Number of entries processed by on_state_change()",
-                    // 0 - 100
-                    linear_buckets(0.0, 1.0, 100),
-                ),
-            },
+            metrics: DkgClientMetrics::new(metrics_registry),
         }
     }
 
@@ -2040,6 +2019,7 @@ mod tests {
                     &parent,
                     callback_id_map,
                     &no_op_logger(),
+                    None,
                 )
                 .unwrap();
 

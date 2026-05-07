@@ -1,5 +1,6 @@
 use crate::{
     MAX_EARLY_REMOTE_TRANSCRIPTS, MAX_REMOTE_DKGS_PER_INTERVAL,
+    metrics::{DkgPayloadMetrics, DkgPayloadMetricsOptionExt},
     remote::{
         ConfigResult, build_callback_id_config_map, get_updated_remote_dkg_attempts, merge_configs,
     },
@@ -56,6 +57,7 @@ pub fn create_payload(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
     max_dealings_per_block: usize,
+    dkg_payload_metrics: Option<&DkgPayloadMetrics>,
 ) -> Result<DkgPayload, DkgPayloadCreationError> {
     let height = parent.height.increment();
     // Get the last summary from the chain.
@@ -78,6 +80,7 @@ pub fn create_payload(
             state_reader,
             validation_context,
             logger,
+            dkg_payload_metrics,
         )
         .map(DkgPayload::Summary)
     } else {
@@ -96,6 +99,7 @@ pub fn create_payload(
             state_reader,
             validation_context,
             logger,
+            dkg_payload_metrics,
         )
         .map(DkgPayload::Data)
     }
@@ -114,7 +118,10 @@ fn create_data_payload(
     state_reader: &dyn StateReader<State = ReplicatedState>,
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
+    dkg_payload_metrics: Option<&DkgPayloadMetrics>,
 ) -> Result<DkgDataPayload, DkgPayloadCreationError> {
+    let _timer = dkg_payload_metrics.payload_creation_timer("data");
+
     // Get all existing dealer ids from the chain.
     let dealers_from_chain = utils::get_dealers_from_chain(pool_reader, parent);
 
@@ -148,6 +155,7 @@ fn create_data_payload(
         parent,
         remote_config_results,
         &logger,
+        dkg_payload_metrics,
     )?;
 
     if !remote_dkg_transcripts.is_empty() {
@@ -174,6 +182,7 @@ pub(crate) fn create_early_remote_transcripts(
     parent: &Block,
     callback_id_map: BTreeMap<CallbackId, ConfigResult>,
     logger: &ReplicaLogger,
+    dkg_payload_metrics: Option<&DkgPayloadMetrics>,
 ) -> Result<Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>, DkgPayloadCreationError> {
     //  Since this function is relatively expensive, we simply return if there are no outstanding DKG contexts
     if callback_id_map.is_empty() {
@@ -194,6 +203,7 @@ pub(crate) fn create_early_remote_transcripts(
                 for (dkg_id, err) in errs {
                     // Skip requests for which we already have a transcript on chain.
                     if !completed_dkgs.contains(&dkg_id) {
+                        dkg_payload_metrics.payload_errors_inc("remote_config_creation_failed");
                         error!(
                             logger,
                             "Failed to create remote transcript config for dkg id {:?} at height {}: {}",
@@ -230,6 +240,8 @@ pub(crate) fn create_early_remote_transcripts(
         // For each config, try to build the necessary (dkg_id, callback_id, transcript_result) triple
         for config in configs.iter() {
             let dealings = all_dealings.remove(config.dkg_id()).unwrap_or_else(|| {
+                dkg_payload_metrics
+                    .payload_errors_inc("remote_dealings_missing_after_capacity_check");
                 error!(
                     logger,
                     "We checked that all configs have enough dealings above. This is a bug."
@@ -248,6 +260,7 @@ pub(crate) fn create_early_remote_transcripts(
                 // Note that we handled the reproducible error case of not having enough dealings
                 // already beforehand.
                 Err(err) if err.is_reproducible() => {
+                    dkg_payload_metrics.payload_errors_inc("remote_transcript_reproducible_error");
                     // Including the error in the payload will cause the context to receive
                     // a reject response.
                     let error_message = format!(
@@ -260,6 +273,7 @@ pub(crate) fn create_early_remote_transcripts(
                     Err(error_message)
                 }
                 Err(err) => {
+                    dkg_payload_metrics.payload_errors_inc("remote_transcript_transient_error");
                     // Return on transient crypto errors
                     return Err(DkgPayloadCreationError::DkgCreateTranscriptError(err));
                 }
@@ -408,7 +422,10 @@ pub(super) fn create_summary_payload(
     state_reader: &dyn StateReader<State = ReplicatedState>,
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
+    dkg_payload_metrics: Option<&DkgPayloadMetrics>,
 ) -> Result<DkgSummary, DkgPayloadCreationError> {
+    let _timer = dkg_payload_metrics.payload_creation_timer("summary");
+
     let (mut all_dealings, completed_dkgs) = utils::get_dkg_dealings(pool_reader, parent);
     let mut next_transcripts = BTreeMap::new();
     // Try to create transcripts from the last round.
@@ -431,12 +448,14 @@ pub(super) fn create_summary_payload(
                 }
             }
             Err(err) if err.is_reproducible() => {
+                dkg_payload_metrics.payload_errors_inc("summary_transcript_reproducible_error");
                 warn!(
                     logger,
                     "Failed to create transcript for dkg id {:?}: {:?}", dkg_id, err
                 );
             }
             Err(err) => {
+                dkg_payload_metrics.payload_errors_inc("summary_transcript_transient_error");
                 return Err(DkgPayloadCreationError::DkgCreateTranscriptError(err));
             }
         };
@@ -1263,6 +1282,7 @@ mod tests {
                         time: UNIX_EPOCH,
                     },
                     no_op_logger(),
+                    None,
                 )
                 .unwrap()
             };
