@@ -1352,6 +1352,30 @@ pub struct SubnetInfoResult {
     pub registry_version: u64,
 }
 
+/// # Canister ID Range.
+///
+/// A closed range of canister IDs, both endpoints inclusive.
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
+)]
+pub struct CanisterIdRange {
+    /// Start of the range (inclusive).
+    pub start: CanisterId,
+    /// End of the range (inclusive).
+    pub end: CanisterId,
+}
+
+/// # List Canisters Result.
+///
+/// Result type of [`list_canisters`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-list_canisters).
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
+)]
+pub struct ListCanistersResult {
+    /// Canister IDs of existing canisters on the subnet, encoded as a list of closed ranges.
+    pub canisters: Vec<CanisterIdRange>,
+}
+
 /// # Provisional Create Canister With Cycles Args.
 ///
 /// Argument type of [`provisional_create_canister_with_cycles`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-provisional_create_canister_with_cycles).
@@ -1743,4 +1767,55 @@ pub struct CanisterLogRecord {
 pub struct FetchCanisterLogsResult {
     /// The logs of the canister.
     pub canister_log_records: Vec<CanisterLogRecord>,
+}
+
+/// # Cycles Consumed.
+///
+/// Breakdown of cycles consumed by a canister.
+///
+/// See [`CanisterMetricsResult::cycles_consumed`].
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
+)]
+pub struct CyclesConsumed {
+    /// Cycles consumed for memory storage.
+    pub memory: Nat,
+    /// Cycles consumed for compute allocation.
+    pub compute_allocation: Nat,
+    /// Cycles consumed for ingress induction.
+    pub ingress_induction: Nat,
+    /// Cycles consumed for instruction execution.
+    pub instructions: Nat,
+    /// Cycles consumed for request and response transmission.
+    pub request_and_response_transmission: Nat,
+    /// Cycles consumed for canister uninstallation.
+    pub uninstall: Nat,
+    /// Cycles consumed for canister creation.
+    pub canister_creation: Nat,
+    /// Cycles consumed for HTTP outcalls.
+    pub http_outcalls: Nat,
+    /// Cycles burned (i.e. not returned to the canister).
+    pub burned_cycles: Nat,
+}
+
+/// # Canister Metrics Args.
+///
+/// Argument type of [`canister_metrics`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-canister_metrics).
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
+)]
+pub struct CanisterMetricsArgs {
+    /// Canister ID.
+    pub canister_id: CanisterId,
+}
+
+/// # Canister Metrics Result.
+///
+/// Result type of [`canister_metrics`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-canister_metrics).
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
+)]
+pub struct CanisterMetricsResult {
+    /// Cycles consumed by the canister.
+    pub cycles_consumed: CyclesConsumed,
 }

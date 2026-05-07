@@ -446,6 +446,15 @@ type subnet_info_result = record {
     registry_version : nat64;
 };
 
+type canister_id_range = record {
+    start : canister_id;
+    end : canister_id;
+};
+
+type list_canisters_result = record {
+    canisters : vec canister_id_range;
+};
+
 type provisional_create_canister_with_cycles_args = record {
     amount : opt nat;
     settings : opt canister_settings;
@@ -516,6 +525,26 @@ type canister_log_record = record {
 
 type fetch_canister_logs_result = record {
     canister_log_records : vec canister_log_record;
+};
+
+type cycles_consumed = record {
+    memory : nat;
+    compute_allocation : nat;
+    ingress_induction : nat;
+    instructions : nat;
+    request_and_response_transmission : nat;
+    uninstall : nat;
+    canister_creation : nat;
+    http_outcalls : nat;
+    burned_cycles : nat;
+};
+
+type canister_metrics_args = record {
+    canister_id : canister_id;
+};
+
+type canister_metrics_result = record {
+    cycles_consumed : cycles_consumed;
 };
 
 type read_canister_snapshot_metadata_args = record {
@@ -673,6 +702,7 @@ service ic : {
 
     // subnet info
     subnet_info : (subnet_info_args) -> (subnet_info_result);
+    list_canisters : () -> (list_canisters_result) query;
 
     // provisional interfaces for the pre-ledger world
     provisional_create_canister_with_cycles : (provisional_create_canister_with_cycles_args) -> (provisional_create_canister_with_cycles_result);
@@ -690,4 +720,7 @@ service ic : {
 
     // canister logging
     fetch_canister_logs : (fetch_canister_logs_args) -> (fetch_canister_logs_result) query;
+
+    // canister metrics
+    canister_metrics : (canister_metrics_args) -> (canister_metrics_result) query;
 };
