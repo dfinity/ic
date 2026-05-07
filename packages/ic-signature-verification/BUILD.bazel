@@ -6,10 +6,10 @@ rust_library(
     name = "ic-signature-verification",
     srcs = glob(["src/**/*.rs"]),
     deps = [
-        "@crate_index//:ic_principal",
         "@crate_index//:ic-canister-sig-creation",
         "@crate_index//:ic-certification",
         "@crate_index//:ic-verify-bls-signature",
+        "@crate_index//:ic_principal",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_cbor",
