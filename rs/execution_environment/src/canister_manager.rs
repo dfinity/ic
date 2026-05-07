@@ -15,6 +15,7 @@ use crate::hypervisor::Hypervisor;
 use crate::types::{IngressResponse, Response};
 use crate::util::{GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID};
 
+use ic_base_types::EnvironmentVariables;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
@@ -288,9 +289,9 @@ impl CanisterManager {
     /// - the key and value of each environment variable cannot exceed the given maximum length.
     fn validate_environment_variables(
         &self,
-        settings: &CanisterSettings,
+        environment_variables: Option<&EnvironmentVariables>,
     ) -> Result<(), CanisterManagerError> {
-        if let Some(environment_variables) = settings.environment_variables() {
+        if let Some(environment_variables) = environment_variables {
             if environment_variables.len() > self.config.max_environment_variables {
                 return Err(CanisterManagerError::EnvironmentVariablesTooMany {
                     max: self.config.max_environment_variables,
@@ -364,7 +365,7 @@ impl CanisterManager {
         }
 
         // Environment variables: validate and apply.
-        self.validate_environment_variables(settings)?;
+        self.validate_environment_variables(settings.environment_variables())?;
         if let Some(environment_variables) = settings.environment_variables() {
             canister.system_state.environment_variables = environment_variables.clone();
         }
@@ -412,22 +413,24 @@ impl CanisterManager {
                 // if the subnet was not already oversubscribed.
                 .saturating_sub(1)
                 .saturating_add(old_compute_allocation.as_percent());
-            let old_ca = old_compute_allocation.as_percent();
-            let new_ca = new_compute_allocation.as_percent();
-            if new_ca > available_compute_allocation {
+            let old_compute_allocation_percent = old_compute_allocation.as_percent();
+            let new_compute_allocation_percent = new_compute_allocation.as_percent();
+            if new_compute_allocation_percent > available_compute_allocation {
                 return Err(CanisterManagerError::SubnetComputeCapacityOverSubscribed {
                     requested: new_compute_allocation,
                     available: available_compute_allocation,
                 });
             }
-            if old_ca < new_ca {
-                round_limits.compute_allocation_used = round_limits
-                    .compute_allocation_used
-                    .saturating_add(new_ca - old_ca);
+            if old_compute_allocation_percent < new_compute_allocation_percent {
+                round_limits.compute_allocation_used =
+                    round_limits.compute_allocation_used.saturating_add(
+                        new_compute_allocation_percent - old_compute_allocation_percent,
+                    );
             } else {
-                round_limits.compute_allocation_used = round_limits
-                    .compute_allocation_used
-                    .saturating_sub(old_ca - new_ca);
+                round_limits.compute_allocation_used =
+                    round_limits.compute_allocation_used.saturating_sub(
+                        old_compute_allocation_percent - new_compute_allocation_percent,
+                    );
             }
         }
 
@@ -469,23 +472,27 @@ impl CanisterManager {
         if settings.memory_allocation.is_some() {
             // Memory allocation: validate subnet capacity and reserve cycles.
             let canister_memory_usage = canister.memory_usage();
-            let old_memory_bytes = old_memory_allocation.allocated_bytes(canister_memory_usage);
-            let new_memory_bytes = new_memory_allocation.allocated_bytes(canister_memory_usage);
-            let allocated_bytes = new_memory_bytes.saturating_sub(&old_memory_bytes);
-            let deallocated_bytes = old_memory_bytes.saturating_sub(&new_memory_bytes);
-            if new_memory_bytes >= old_memory_bytes {
+            let old_memory_allocation_bytes =
+                old_memory_allocation.allocated_bytes(canister_memory_usage);
+            let new_memory_allocation_bytes =
+                new_memory_allocation.allocated_bytes(canister_memory_usage);
+            let allocated_bytes =
+                new_memory_allocation_bytes.saturating_sub(&old_memory_allocation_bytes);
+            let deallocated_bytes =
+                old_memory_allocation_bytes.saturating_sub(&new_memory_allocation_bytes);
+            if new_memory_allocation_bytes >= old_memory_allocation_bytes {
                 let available_execution_memory = round_limits
                     .subnet_available_memory
                     .get_execution_memory()
                     .max(0) as u64;
                 let available_execution_memory_to_canister =
-                    available_execution_memory.saturating_add(old_memory_bytes.get());
+                    available_execution_memory.saturating_add(old_memory_allocation_bytes.get());
                 round_limits
                     .subnet_available_memory
                     .try_decrement(allocated_bytes, NumBytes::from(0), NumBytes::from(0))
                     .map_err(
                         |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                            requested: new_memory_bytes,
+                            requested: new_memory_allocation_bytes,
                             available: NumBytes::from(available_execution_memory_to_canister),
                         },
                     )?;
