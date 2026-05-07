@@ -410,11 +410,10 @@ where
         if newly_allocated_bytes.get() > 0 {
             // The freezing threshold has the property that either
             // freezing limit in cycles or reserved cycles dominate.
-            // Exception: IncreaseLogAndMemoryAllocation with Large memory allocation
-            // reserves cycles only for 128 KiB while the freezing limit is based on
-            // the pre-existing 80 GiB allocation, so the invariant may not hold.
-            // The minimum_initial_cycles formula is still correct in that case
-            // because the reserved_balance offsets the effective freeze threshold.
+            // Exception: `IncreaseLogAndMemoryAllocation` with `MemoryAllocation::Large`
+            // reserves cycles only for 128 KiB (memory allocation increase)
+            // while the freezing limit is based on the pre-existing 80 GiB allocation,
+            // so the invariant may not hold.
             let skip_short_invariant =
                 matches!(
                     scenario_params.scenario,
@@ -424,17 +423,17 @@ where
                 FreezingThreshold::Long => {
                     assert_gt!(freezing_limit_cycles, newly_reserved_cycles);
                 }
-                FreezingThreshold::Short => {
-                    if !skip_short_invariant {
-                        assert_gt!(newly_reserved_cycles, freezing_limit_cycles);
-                    }
+                FreezingThreshold::Short if !skip_short_invariant => {
+                    assert_gt!(newly_reserved_cycles, freezing_limit_cycles);
                 }
+                FreezingThreshold::Short => (),
             };
         }
         match scenario_params.memory_usage_change {
             MemoryUsageChange::Increase => {
                 assert_le!(initial_allocated_bytes, final_allocated_bytes);
                 match scenario_params.scenario {
+                    // New bytes are always allocated because memory allocation increases.
                     Scenario::IncreaseLogAndMemoryAllocation => {
                         assert_lt!(initial_allocated_bytes, final_allocated_bytes)
                     }
@@ -636,6 +635,11 @@ fn test_reserved_cycles_limit<F, G, H>(
             err.code(),
             ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
         ),
+        Scenario::IncreaseLogAndMemoryAllocation => assert!(matches!(
+            err.code(),
+            ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
+                | ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
+        )),
         Scenario::CanisterCleanupCallback(_) => {
             assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
             assert!(
@@ -644,14 +648,9 @@ fn test_reserved_cycles_limit<F, G, H>(
             );
         }
         _ => {
-            assert!(
-                matches!(
-                    err.code(),
-                    ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
-                ) || matches!(
-                    err.code(),
-                    ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
-                )
+            assert_eq!(
+                err.code(),
+                ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
             );
         }
     };
@@ -693,8 +692,8 @@ fn test_freezing_threshold<F, G, H>(
             }
             Scenario::IncreaseLogAndMemoryAllocation => {
                 assert!(
-                    err.code() == ErrorCode::InsufficientCyclesInMemoryAllocation
-                        || err.code() == ErrorCode::InsufficientCyclesInMemoryGrow
+                    err.code() == ErrorCode::InsufficientCyclesInMemoryGrow
+                        || err.code() == ErrorCode::InsufficientCyclesInMemoryAllocation
                 );
             }
             Scenario::OtherManagement => {
@@ -748,8 +747,8 @@ fn test_minimum_cycles_balance<F, G, H>(
             ) =>
         {
             assert!(
-                err.code() == ErrorCode::InsufficientCyclesInMemoryAllocation
-                    || err.code() == ErrorCode::InsufficientCyclesInMemoryGrow
+                err.code() == ErrorCode::InsufficientCyclesInMemoryGrow
+                    || err.code() == ErrorCode::InsufficientCyclesInMemoryAllocation
             );
         }
         Scenario::CanisterCleanupCallback(_) => {
@@ -1666,7 +1665,7 @@ fn test_memory_suite_increase_log_memory_limit() {
 }
 
 #[test]
-fn test_memory_suite_increase_memory_allocation_and_log_memory_limit() {
+fn test_memory_suite_increase_log_memory_limit_and_memory_allocation() {
     if !LOG_MEMORY_STORE_FEATURE_ENABLED {
         return;
     }

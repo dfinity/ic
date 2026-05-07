@@ -1489,13 +1489,12 @@ impl CanisterManager {
             CanisterSnapshots::default(),
         );
 
-        // If validation fails the canister is not inserted into state, but
-        // round_limits may have been partially updated, so restore on error.
+        // If validation fails, the canister is not inserted into state, but
+        // `round_limits` may have been partially updated, so restore on error.
         let round_limits_snapshot = round_limits.clone();
-        let cost_schedule = state.get_own_cost_schedule();
-        // Canister creation's first-time log memory limit allocation is a
+        // Canister creation's first-time log memory buffer allocation is a
         // different event class from user-triggered resize — pass `None` to
-        // skip observation.
+        // skip observation of metrics.
         if let Err(err) = self.validate_and_update_canister_settings(
             &settings,
             &mut new_canister,
@@ -1503,7 +1502,7 @@ impl CanisterManager {
             round_limits,
             subnet_memory_saturation,
             subnet_size,
-            cost_schedule,
+            state.get_own_cost_schedule(),
             None,
         ) {
             *round_limits = round_limits_snapshot;
