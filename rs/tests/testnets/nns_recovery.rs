@@ -3,9 +3,8 @@
 // The testnet will consist of a single system subnet with a single node running the NNS.
 //
 // The bazel target `mainnet_nns_recovery` also uses this testnet by setting the
-// `USE_MAINNET_STATE` environment variable to true, which makes the testnet use mainnet state. In
-// that case, it is recommended to also pass `--set-required-host-features=dc=zh1` to be physically
-// closer to the backup pod where the state is downloaded from.
+// `USE_MAINNET_STATE` environment variable to true, which makes the testnet use mainnet state.
+//
 // You can pass `--set-required-host-features=dmz` to make the testnet open to the Internet.
 //
 // Then SUBNET_SIZE VMs are deployed and started booting SetupOS which will install HostOS to their virtual disks
