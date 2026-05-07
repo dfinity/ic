@@ -368,6 +368,16 @@ write_info_file_var = rule(
     },
 )
 
+def _volatile_status_impl(ctx):
+    return [DefaultInfo(
+        files = depset([ctx.version_file]),
+        runfiles = ctx.runfiles(files = [ctx.version_file]),
+    )]
+
+volatile_status = rule(
+    implementation = _volatile_status_impl,
+)
+
 def file_size_check(
         name,
         file,

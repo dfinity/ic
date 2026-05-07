@@ -27,3 +27,6 @@ if [ -n "${CI_JOB_NAME:-}" ]; then
     STABLE_FARM_METADATA="$STABLE_FARM_METADATA;JOB_NAME=$CI_JOB_NAME"
 fi
 echo "STABLE_FARM_METADATA $STABLE_FARM_METADATA"
+
+# Used for allocating a Farm testnet to the local DC in CI (Search for allocate_testnet_to_local_dc)
+echo "NODE_NAME ${NODE_NAME:-}"

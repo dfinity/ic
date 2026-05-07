@@ -134,7 +134,7 @@
 use super::{
     config::NODES_INFO,
     driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR,
-    farm::{DnsRecord, PlaynetCertificate},
+    farm::{DnsRecord, HostFeature, PlaynetCertificate},
     test_setup::{GroupSetup, InfraProvider},
 };
 use crate::{
@@ -1482,11 +1482,21 @@ pub fn get_build_setupos_config_image_tool() -> PathBuf {
 }
 
 pub trait HasGroupSetup {
-    fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool);
+    fn create_group_setup(
+        &self,
+        group_base_name: String,
+        allocate_testnet_to_local_dc: bool,
+        no_group_ttl: bool,
+    );
 }
 
 impl HasGroupSetup for TestEnv {
-    fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool) {
+    fn create_group_setup(
+        &self,
+        group_base_name: String,
+        allocate_testnet_to_local_dc: bool,
+        no_group_ttl: bool,
+    ) {
         let log = self.logger();
         if GroupSetup::attribute_exists(self) {
             let group_setup = GroupSetup::read_attribute(self);
@@ -1501,11 +1511,33 @@ impl HasGroupSetup for TestEnv {
             let group_setup = GroupSetup::new(group_base_name.clone(), timeout);
             match InfraProvider::read_attribute(self) {
                 InfraProvider::Farm => {
+                    let required_host_features = if allocate_testnet_to_local_dc {
+                        let node_name = read_var_from_volatile_status_file("NODE_NAME");
+                        if let Some(name) = node_name {
+                            let dc = name
+                                .split_once('-')
+                                .expect("NODE_NAME doesn't contain '-'")
+                                .0
+                                .to_string();
+                            vec![HostFeature::DC(dc.clone())]
+                        } else {
+                            vec![]
+                        }
+                    } else {
+                        vec![]
+                    };
+                    info!(
+                        log,
+                        "Creating group {} with required_host_features: {:?}",
+                        group_setup.infra_group_name,
+                        required_host_features
+                    );
+
                     let farm_base_url = FarmBaseUrl::read_attribute(self);
                     let farm = Farm::new(farm_base_url.into(), self.logger());
                     let group_spec = GroupSpec {
                         vm_allocation: None,
-                        required_host_features: vec![],
+                        required_host_features: required_host_features,
                         preferred_network: None,
                         metadata: None,
                     };
@@ -1610,6 +1642,21 @@ pub fn read_dependency_from_env_to_string(v: &str) -> Result<String> {
     let path_from_env =
         std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {v} not set"));
     read_dependency_to_string(path_from_env)
+}
+
+pub fn read_var_from_volatile_status_file(var_name: &str) -> Option<String> {
+    let volatile_status_path = get_dependency_path_from_env("VOLATILE_STATUS_FILE");
+    let content = fs::read_to_string(&volatile_status_path).unwrap_or_else(|e| {
+        panic!("Couldn't read content of the {volatile_status_path:?} file: {e:?}")
+    });
+    for line in content.lines() {
+        if let Some((name, value)) = line.split_once(' ') {
+            if name.trim() == var_name {
+                return Some(value.trim().to_string());
+            }
+        }
+    }
+    None
 }
 
 pub fn load_wasm<P: AsRef<Path>>(p: P) -> Vec<u8> {
