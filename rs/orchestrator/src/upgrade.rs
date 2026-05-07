@@ -478,13 +478,14 @@ impl Upgrade {
         };
 
         if let Some(new_version) = &maybe_new_version {
+            self.ensure_upgrade_should_be_executed(
+                subnet_id,
+                latest_registry_version,
+                new_version,
+            )?;
+
             return self
-                .execute_upgrade(
-                    subnet_id,
-                    cup_registry_version,
-                    latest_registry_version,
-                    new_version,
-                )
+                .execute_upgrade(cup_registry_version, latest_registry_version, new_version)
                 .await;
         }
 
@@ -794,13 +795,10 @@ impl Upgrade {
 
     async fn execute_upgrade(
         &mut self,
-        subnet_id: SubnetId,
         cup_registry_version: RegistryVersion,
         latest_registry_version: RegistryVersion,
         new_version: &VersionUpgrade,
     ) -> OrchestratorResult<OrchestratorControlFlow> {
-        self.ensure_upgrade_should_be_executed(subnet_id, latest_registry_version, new_version)?;
-
         match new_version {
             VersionUpgrade::Subnet(SubnetUpgrade::Fast(new_replica_version)) => {
                 info!(
@@ -2380,8 +2378,7 @@ mod tests {
             logs: Vec<LogEntry>,
             upgrade_loop: &Upgrade,
         ) -> OrchestratorResult<OrchestratorControlFlow> {
-            let needle_has_prepared_upgrade =
-                "Slow subnet upgrade detected at registry version";
+            let needle_has_prepared_upgrade = "Slow subnet upgrade detected at registry version";
             let logs_assert = LogEntriesAssert::assert_that(logs);
             let assert_has_prepared_upgrade = || {
                 logs_assert
