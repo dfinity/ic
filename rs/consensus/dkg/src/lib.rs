@@ -143,10 +143,6 @@ impl DkgImpl {
         {
             return None;
         }
-        let id = config.dkg_id().clone();
-        if id.target_subnet != NiDkgTargetSubnet::Local {
-            info!(self.logger, "Creating dealing for remote dkg ID: {:?}", id);
-        }
 
         let content =
             match ic_interfaces::crypto::NiDkgAlgorithm::create_dealing(&*self.crypto, config) {
@@ -175,12 +171,7 @@ impl DkgImpl {
             .crypto
             .sign(&content, self.node_id, config.registry_version())
         {
-            Ok(signature) => {
-                if id.target_subnet != NiDkgTargetSubnet::Local {
-                    info!(self.logger, "Created dealing for remote dkg ID: {:?}", id);
-                }
-                Some(ChangeAction::AddToValidated(Signed { content, signature }))
-            }
+            Ok(signature) => Some(ChangeAction::AddToValidated(Signed { content, signature })),
             Err(err) => {
                 error!(self.logger, "Couldn't sign a DKG dealing: {:?}", err);
                 None
