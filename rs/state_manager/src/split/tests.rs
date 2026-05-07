@@ -16,7 +16,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CheckpointLoadingMetrics, ReplicatedState, SubnetSchedule, SystemMetadata,
+    CheckpointLoadingMetrics, ReplicatedState, SystemMetadata,
     canister_state::canister_snapshots::CanisterSnapshot,
     page_map::TestPageAllocatorFileDescriptorImpl, testing::ReplicatedStateTesting,
 };
@@ -604,7 +604,6 @@ fn deserialize_system_metadata(root: &Path, height: Height, log: &ReplicaLogger)
         .into();
     (
         system_metadata.deserialize().unwrap(),
-        SubnetSchedule::default(),
         &CheckpointMetrics::new(&MetricsRegistry::new(), log.clone())
             as &dyn CheckpointLoadingMetrics,
     )

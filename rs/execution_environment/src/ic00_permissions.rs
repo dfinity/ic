@@ -49,7 +49,8 @@ impl Ic00MethodPermissions {
             | Ic00Method::ProvisionalCreateCanisterWithCycles
             | Ic00Method::ProvisionalTopUpCanister
             | Ic00Method::StoredChunks
-            | Ic00Method::ListCanisterSnapshots => Self {
+            | Ic00Method::ListCanisterSnapshots
+            | Ic00Method::CanisterMetrics => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,

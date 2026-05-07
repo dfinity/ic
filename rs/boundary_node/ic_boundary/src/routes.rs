@@ -790,7 +790,6 @@ pub(crate) mod test {
         };
 
         let body = serde_cbor::to_vec(&envelope).unwrap();
-
         let subnet_id: SubnetId = PrincipalId(subnets[0].id).into();
 
         let request = Request::builder()
@@ -803,6 +802,108 @@ pub(crate) mod test {
 
         let resp = app.call(request).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+
+        let (parts, body) = resp.into_parts();
+
+        // Check response headers
+        let headers = parts.headers;
+        // Make sure that the subnet_id is there even if the CBOR does not have it
+        assert_header(&headers, X_IC_SUBNET_ID, &subnet_id.to_string());
+        assert_header(&headers, CONTENT_TYPE, "application/cbor");
+        assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
+        assert_header(&headers, X_FRAME_OPTIONS, "DENY");
+        let body = axum::body::to_bytes(body, usize::MAX)
+            .await
+            .unwrap()
+            .to_vec();
+        let body = String::from_utf8_lossy(&body);
+        assert_eq!(body, "a".repeat(1024));
+
+        // Test subnet query
+
+        // Not sure how the actual subnet query request should look like, but for now just use canister query.
+        // We don't have ready types for subnet query it seems.
+        let content = HttpQueryContent::Query {
+            query: HttpUserQuery {
+                canister_id: Blob(canister_id.get().as_slice().to_vec()),
+                method_name: "foobar".to_string(),
+                arg: Blob(vec![]),
+                sender: Blob(sender.as_slice().to_vec()),
+                nonce: None,
+                ingress_expiry: 1234,
+                sender_info: None,
+            },
+        };
+
+        let envelope = HttpRequestEnvelope::<HttpQueryContent> {
+            content,
+            sender_delegation: None,
+            sender_pubkey: None,
+            sender_sig: None,
+        };
+
+        let body = serde_cbor::to_vec(&envelope).unwrap();
+        let subnet_id: SubnetId = PrincipalId(subnets[0].id).into();
+
+        let request = Request::builder()
+            .method("POST")
+            .uri(format!("http://localhost/api/v3/subnet/{subnet_id}/query"))
+            .body(Body::from(body))
+            .unwrap();
+
+        let resp = app.call(request).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let (parts, body) = resp.into_parts();
+
+        // Check response headers
+        let headers = parts.headers;
+        // Make sure that the subnet_id is there even if the CBOR does not have it
+        assert_header(&headers, X_IC_SUBNET_ID, &subnet_id.to_string());
+        assert_header(&headers, CONTENT_TYPE, "application/cbor");
+        assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
+        assert_header(&headers, X_FRAME_OPTIONS, "DENY");
+        let body = axum::body::to_bytes(body, usize::MAX)
+            .await
+            .unwrap()
+            .to_vec();
+        let body = String::from_utf8_lossy(&body);
+        assert_eq!(body, "a".repeat(1024));
+
+        // Test subnet call
+
+        // Not sure how the actual subnet call request should look like, but for now just use canister call.
+        // We don't have ready types for subnet call it seems.
+        let content = HttpCallContent::Call {
+            update: HttpCanisterUpdate {
+                canister_id: Blob(canister_id.get().as_slice().to_vec()),
+                method_name: "foobar".to_string(),
+                arg: Blob(vec![]),
+                sender: Blob(sender.as_slice().to_vec()),
+                nonce: None,
+                ingress_expiry: 1234,
+                sender_info: None,
+            },
+        };
+
+        let envelope = HttpRequestEnvelope::<HttpCallContent> {
+            content,
+            sender_delegation: None,
+            sender_pubkey: None,
+            sender_sig: None,
+        };
+
+        let body = serde_cbor::to_vec(&envelope).unwrap();
+        let subnet_id: SubnetId = PrincipalId(subnets[0].id).into();
+
+        let request = Request::builder()
+            .method("POST")
+            .uri(format!("http://localhost/api/v4/subnet/{subnet_id}/call"))
+            .body(Body::from(body))
+            .unwrap();
+
+        let resp = app.call(request).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::ACCEPTED);
 
         let (parts, body) = resp.into_parts();
 

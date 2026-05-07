@@ -505,6 +505,7 @@ pub async fn execute_fulfill_subnet_rental_request(
     user: PrincipalId,
     node_ids: Vec<PrincipalId>,
     replica_version_id: String,
+    initial_dkg_subnet_id: Option<SubnetId>,
 ) -> ProposalId {
     // Gather the various pieces needed to assemble a request to
     // make/create/submit the new proposal.
@@ -530,6 +531,7 @@ pub async fn execute_fulfill_subnet_rental_request(
                 user,
                 node_ids,
                 replica_version_id,
+                initial_dkg_subnet_id: initial_dkg_subnet_id.map(|id| id.get()),
             },
         )),
     };

@@ -6,7 +6,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
     "//rs/crypto/sha2",
     "//rs/ledger_suite/common/ledger_canister_core",
     "//rs/ledger_suite/common/ledger_core",
@@ -28,7 +28,7 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
     "//rs/ledger_suite/common/ledger_canister_core",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icrc1/test_utils",
@@ -158,7 +158,7 @@ rust_test(
         deps = [
             # Keep sorted.
             ":icrc1",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/icrc1/index-ng",
             "//rs/ledger_suite/icrc1/ledger",
             "//rs/ledger_suite/test_utils/in_memory_ledger:ic-ledger-suite-in-memory-ledger" + name_suffix,
@@ -217,7 +217,7 @@ rust_test(
         deps = [
             # Keep sorted.
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
