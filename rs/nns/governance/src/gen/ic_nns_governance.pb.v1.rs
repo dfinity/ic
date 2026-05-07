@@ -3140,6 +3140,68 @@ pub mod neuron_dissolve_state_snapshot {
         WhenDissolvedTimestampSeconds(u64),
     }
 }
+/// A sampled price consisting of a timestamp and a permyriad rate.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SampledPrice {
+    /// Timestamp in seconds since Unix epoch. Each entry represents one calendar day; there is at most
+    /// one entry per day.
+    #[prost(uint64, tag = "1")]
+    pub timestamp_seconds: u64,
+    /// The ICP/XDR rate in permyriad. For example, 80000 means 1 ICP = 8 XDR.
+    #[prost(uint64, tag = "2")]
+    pub xdr_permyriad_per_icp: u64,
+}
+/// ICP price history from the Exchange Rate Canister (XRC).
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct IcpPriceHistory {
+    /// Daily ICP/XDR rates (up to 365 entries), sorted by timestamp_seconds (ascending).
+    #[prost(message, repeated, tag = "1")]
+    pub icp_xdr_rates: ::prost::alloc::vec::Vec<SampledPrice>,
+}
+/// The maturity modulation factor is applied when disbursing (unstaked) maturity to ICP.
+///
+/// When a neuron owner disburses maturity, the amount of ICP received is:
+///    maturity * (1 + current_value_permyriad / 10_000)
+///
+/// This factor stabilizes ICP price: it is positive when ICP is above its long-term average
+/// (encouraging selling pressure), and negative when below (discouraging selling).
+///
+/// This might be unpopulated, which indicates that no value is currently available.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct MaturityModulation {
+    /// Current maturity modulation in permyriad (0.01% per unit).
+    #[prost(int32, optional, tag = "1")]
+    pub current_value_permyriad: ::core::option::Option<i32>,
+    /// Day (days_since_epoch) when current_value_permyriad was last computed.
+    #[prost(uint64, optional, tag = "2")]
+    pub updated_at_days_since_epoch: ::core::option::Option<u64>,
+}
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
 /// across upgrades of the NNS governance system.
@@ -3271,6 +3333,12 @@ pub struct Governance {
     /// Whether the relaxed eight year gang member induction is done.
     #[prost(bool, tag = "33")]
     pub relaxed_eight_year_gang_bonus_migration_done: bool,
+    /// ICP price history from the Exchange Rate Canister (XRC), used for maturity modulation.
+    #[prost(message, optional, tag = "34")]
+    pub icp_price_history: ::core::option::Option<IcpPriceHistory>,
+    /// Maturity modulation state, updated daily from icp_price_history.
+    #[prost(message, optional, tag = "35")]
+    pub maturity_modulation: ::core::option::Option<MaturityModulation>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
