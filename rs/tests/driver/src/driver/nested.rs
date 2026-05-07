@@ -54,8 +54,6 @@ impl NestedNodes {
     }
 
     /// Allow specifying resource overrides to use for the nested VMs.
-    ///
-    /// NOTE: The number of VCPUs must be divisible by 4.
     pub fn with_resource_overrides(self, vm_resource_overrides: VmResourceOverrides) -> Self {
         NestedNodes {
             nodes: self
@@ -229,8 +227,17 @@ impl NestedNode {
 
     /// Allow specifying resource overrides to use for the nested VM.
     ///
-    /// NOTE: The number of VCPUs must be divisible by 4.
+    /// Panics if used on a bare metal node or if the number of VCPUs is not divisible by 4.
     pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        if let Some(vcpus) = vm_resource_overrides.vcpus
+            && vcpus.get() % 4 != 0
+        {
+            panic!(
+                "The number of VCPUs must be divisible by 4, but got {}",
+                vcpus.get()
+            );
+        }
+
         let NestedNodeSpec::Vm {
             vm_resource_overrides: ref mut overrides,
             ..
@@ -244,6 +251,8 @@ impl NestedNode {
     }
 
     /// Allow specifying required host features for the nested VM.
+    ///
+    /// Panics if used on a bare metal node.
     pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
         let NestedNodeSpec::Vm {
             required_host_features: ref mut features,
