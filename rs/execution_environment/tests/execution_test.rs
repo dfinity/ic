@@ -2899,6 +2899,7 @@ fn maximum_state_size() {
             .with_log_memory_limit(0)
             .build(),
     ));
+    env.add_cycles(canister_id, 1_000_000_000_000_000_000);
 
     // the maximum state size is across all execution threads
     // and thus setting the memory allocation to the maximum state size

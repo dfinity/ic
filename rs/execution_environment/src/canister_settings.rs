@@ -131,7 +131,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             } = &input;
             if memory_allocation.is_some() {
                 return Err(UpdateSettingsError::ForbiddenSettings {
-                    message: "log_memory_limit cannot be set together with memory_allocation"
+                    message: "log_memory_limit cannot be set together with memory_allocation in the same message"
                         .to_string(),
                 });
             }
