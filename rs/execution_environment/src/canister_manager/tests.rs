@@ -7864,12 +7864,15 @@ fn create_canister_reserves_cycles_for_memory_allocation() {
 
 #[test]
 fn create_canister_reverts_subnet_available_memory_on_failure() {
-    // subnet_available_memory is decremented by the memory allocation step in
-    // validate_and_update_canister_settings before the cycles check runs.
-    // A huge freezing threshold makes the required cycles exceed the balance,
-    // so the cycles check fails after subnet_available_memory was already changed.
+    // In validate_and_update_canister_settings, subnet_available_memory is
+    // decremented by try_decrement before reserve_cycles is called.
+    // Setting reserved_cycles_limit=0 ensures reserve_cycles fails
+    // (ReservedCyclesLimitExceededInMemoryAllocation) after
+    // subnet_available_memory was already decremented.
     // The caller must revert subnet_available_memory from the round_limits snapshot.
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_memory_threshold(0)
+        .build();
 
     let initial_subnet_available_memory = test.subnet_available_memory().get_execution_memory();
 
@@ -7878,12 +7881,15 @@ fn create_canister_reverts_subnet_available_memory_on_failure() {
             Cycles::new(1_000_000_000_000),
             CanisterSettingsArgsBuilder::new()
                 .with_memory_allocation(MIB)
-                .with_freezing_threshold(u64::MAX)
+                .with_reserved_cycles_limit(0)
                 .build(),
         )
         .unwrap_err();
 
-    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryAllocation);
+    assert_eq!(
+        err.code(),
+        ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
+    );
     assert_eq!(
         test.subnet_available_memory().get_execution_memory(),
         initial_subnet_available_memory,
