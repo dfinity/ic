@@ -3,9 +3,7 @@ use candid::{CandidType, Encode, Nat};
 use core::cmp::Ordering;
 use cycles_minting_canister::*;
 use environment::Environment;
-use exchange_rate_canister::{
-    RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
-};
+use exchange_rate_canister::{UpdateExchangeRateError, UpdateExchangeRateState};
 use ic_cdk::{
     api::call::{CallResult, ManualReply},
     heartbeat, init, post_upgrade, pre_upgrade, println, query, update,
@@ -17,6 +15,7 @@ use ic_crypto_tree_hash::{
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ledger_core::{block::BlockType, tokens::CheckedSub};
 use ic_management_canister_types::{CanisterIdRecord, CanisterSettings, CreateCanisterArgs};
+use ic_nervous_system_clients::exchange_rate_canister_client::RealExchangeRateCanisterClient;
 use ic_nervous_system_common::{
     NNS_DAPP_BACKEND_CANISTER_ID, ONE_HOUR_SECONDS, ONE_MONTH_SECONDS, serve_metrics,
 };

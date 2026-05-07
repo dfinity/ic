@@ -416,6 +416,12 @@ impl RoundSchedule {
                 .for_each(|canister| {
                     observe_scheduled_as_first(canister);
                 });
+
+            #[cfg(debug_assertions)]
+            {
+                // Clear the debug-only fully executed canisters set.
+                subnet_schedule.fully_executed_canisters = BTreeSet::new();
+            }
         }
 
         IterationSchedule {
@@ -427,13 +433,20 @@ impl RoundSchedule {
     }
 
     /// Updates round state (executed, fully executed, completed message canisters)
-    /// after an iteration.
+    /// and canisters' `long_execution_start_round` after completing an iteration.
+    ///
+    /// We distinguish `canisters_with_zero_instruction_executions` from executed
+    /// and completed message canisters because on the one hand the updates above
+    /// must also be applied to canisters that completed a message execution through
+    /// a system generated reject response, but on the other hand, since no Wasm
+    /// instructions were executed, such executions should not affect the "executed"
+    /// or "completed message" canister counts.
     pub fn end_iteration(
         &mut self,
         state: &mut ReplicatedState,
         executed_canisters: &BTreeSet<CanisterId>,
         canisters_with_completed_messages: &BTreeSet<CanisterId>,
-        low_cycle_balance_canisters: &BTreeSet<CanisterId>,
+        canisters_with_zero_instruction_executions: &BTreeSet<CanisterId>,
         current_round: ExecutionRound,
     ) {
         self.executed_canisters.extend(executed_canisters);
@@ -443,14 +456,16 @@ impl RoundSchedule {
         // If a canister has completed a long execution, clear its start round.
         //
         // A canister may run out of cycles while in a long execution (e.g. if making
-        // calls). Also include low cycle balance canisters.
-        for canister_id in canisters_with_completed_messages.union(low_cycle_balance_canisters) {
+        // calls). Also include zero instruction execution canisters.
+        for canister_id in
+            canisters_with_completed_messages.union(canisters_with_zero_instruction_executions)
+        {
             state
                 .canister_priority_mut(*canister_id)
                 .long_execution_start_round = None;
         }
 
-        for canister_id in executed_canisters.union(low_cycle_balance_canisters) {
+        for canister_id in executed_canisters.union(canisters_with_zero_instruction_executions) {
             match state
                 .canister_state(canister_id)
                 .map(|canister| canister.next_execution())
@@ -501,6 +516,11 @@ impl RoundSchedule {
             let canister_priority = subnet_schedule.get_mut(*canister_id);
             canister_priority.executed_rounds += 1;
             canister_priority.last_full_execution_round = current_round;
+
+            #[cfg(debug_assertions)]
+            subnet_schedule
+                .fully_executed_canisters
+                .insert(*canister_id);
         }
 
         // Add all canisters to the subnet schedule; and charge any immediate or

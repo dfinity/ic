@@ -166,7 +166,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
             ),
             (
                 bless_version_payload(""),
-                Some("Blessed an empty version ID"),
+                Some("Elected an empty version ID"),
             ),
             (
                 update_versions_payload(

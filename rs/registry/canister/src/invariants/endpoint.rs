@@ -1,6 +1,4 @@
-use crate::invariants::common::{
-    InvariantCheckError, RegistrySnapshot, get_node_records_from_snapshot,
-};
+use crate::invariants::common::{InvariantCheckError, RegistrySnapshot, get_all_node_records};
 
 use std::{
     convert::TryFrom,
@@ -31,7 +29,7 @@ pub(crate) fn check_endpoint_invariants(
     strict: bool,
 ) -> Result<(), InvariantCheckError> {
     let mut valid_endpoints = BTreeSet::<(IpAddr, u16)>::new();
-    let node_records = get_node_records_from_snapshot(snapshot);
+    let node_records = get_all_node_records(snapshot);
     let common_error_prefix = format!(
         "Invariant violation detected among {} node records",
         node_records.len()

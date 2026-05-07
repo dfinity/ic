@@ -5,19 +5,16 @@ use attestation::attestation_package::{
 };
 use config_types::TrustedExecutionEnvironmentConfig;
 use der::asn1::OctetStringRef;
-use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
-use guest_upgrade_shared::{
-    STORE_DEVICE,
-    api::{
-        GetDiskEncryptionKeyRequest, GetDiskEncryptionKeyResponse, SignalStatusRequest,
-        SignalStatusResponse,
-        disk_encryption_key_exchange_service_server::DiskEncryptionKeyExchangeService,
-    },
+use guest_upgrade_shared::api::{
+    GetDiskEncryptionKeyRequest, GetDiskEncryptionKeyResponse, SignalStatusRequest,
+    SignalStatusResponse,
+    disk_encryption_key_exchange_service_server::DiskEncryptionKeyExchangeService,
 };
+use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use std::ops::Deref;
-use std::path::Path;
+use std::path::PathBuf;
 use tokio::sync::watch::Sender;
 use tonic::{Request, Response, Status, async_trait};
 use x509_parser::nom::AsBytes;
@@ -30,6 +27,12 @@ pub struct DiskEncryptionKeyExchangeServiceImpl {
     status_sender: Sender<Result<(), String>>,
     blessed_measurements: Vec<Vec<u8>>,
     sev_root_certificate_verification: SevRootCertificateVerification,
+    store_device_path: PathBuf,
+    store_luks_header_path: PathBuf,
+    /// If true, the server will send the Store LUKS header to the client.
+    /// Only false in unit tests testing backwards compatibility.
+    // TODO: Remove when all deployed GuestOS versions support sending the Store LUKS header.
+    send_luks_header: bool,
 }
 
 impl DiskEncryptionKeyExchangeServiceImpl {
@@ -38,6 +41,9 @@ impl DiskEncryptionKeyExchangeServiceImpl {
         sev_root_certificate_verification: SevRootCertificateVerification,
         my_public_key: Vec<u8>,
         trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
+        store_device_path: PathBuf,
+        store_luks_header_path: PathBuf,
+        send_luks_header: bool,
         status_sender: Sender<Result<(), String>>,
         blessed_measurements: Vec<Vec<u8>>,
     ) -> Self {
@@ -48,6 +54,9 @@ impl DiskEncryptionKeyExchangeServiceImpl {
             status_sender,
             blessed_measurements,
             sev_root_certificate_verification,
+            store_device_path,
+            store_luks_header_path,
+            send_luks_header,
         }
     }
 
@@ -144,18 +153,31 @@ impl DiskEncryptionKeyExchangeServiceImpl {
         let mut sev_firmware = self.sev_firmware_factory.deref()()
             .map_err(|e| Status::internal(format!("Failed to create SEV firmware: {e:?}")))?;
 
+        let luks_header = if self.send_luks_header {
+            Some(
+                tokio::fs::read(&self.store_luks_header_path)
+                    .await
+                    .map_err(|e| {
+                        Status::internal(format!("Failed to read Store LUKS header: {e:#}"))
+                    })?,
+            )
+        } else {
+            None
+        };
+
         Ok(Response::new(GetDiskEncryptionKeyResponse {
             key: Some(
                 derive_key_from_sev_measurement(
                     sev_firmware.as_mut(),
                     Key::DiskEncryptionKey {
-                        device_path: Path::new(STORE_DEVICE),
+                        device_path: &self.store_device_path,
                     },
                 )
                 .map_err(|e| Status::internal(format!("Failed to get disk encryption key: {e:?}")))?
                 .into_bytes(),
             ),
             sev_attestation_package: Some(my_attestation_package.into()),
+            luks_header,
         }))
     }
 

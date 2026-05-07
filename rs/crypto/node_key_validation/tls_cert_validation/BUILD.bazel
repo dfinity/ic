@@ -6,45 +6,37 @@ package(default_visibility = ["//visibility:public"])
 # Because this crate is used in a canister, we can only
 # use dependencies that can be compiled to WebAssembly.
 ########################################################
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-ed25519",
-    "//rs/protobuf",
-    "//rs/types/types",
-    "@crate_index//:hex",
-    "@crate_index//:serde",
-    "@crate_index//:x509-parser",
-]
-
-MACRO_DEPENDENCIES = []
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/test_utils/keys",
-    "//rs/crypto/test_utils/reproducible_rng",
-    "//rs/crypto/test_utils/tls",
-    "@crate_index//:assert_matches",
-    "@crate_index//:curve25519-dalek",
-]
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_library(
     name = "tls_cert_validation",
     srcs = glob(["src/**"]),
-    aliases = ALIASES,
     crate_name = "ic_crypto_tls_cert_validation",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-ed25519",
+        "//rs/protobuf",
+        "//rs/types/types",
+        "@crate_index//:hex",
+        "@crate_index//:serde",
+        "@crate_index//:x509-parser",
+    ],
 )
 
 rust_test(
     name = "tls_cert_validation_test",
-    aliases = ALIASES,
     crate = ":tls_cert_validation",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-ed25519",
+        "//rs/crypto/test_utils/keys",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/crypto/test_utils/tls",
+        "//rs/protobuf",
+        "//rs/types/types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:curve25519-dalek",
+        "@crate_index//:hex",
+        "@crate_index//:serde",
+        "@crate_index//:x509-parser",
+    ],
 )

@@ -54,9 +54,11 @@ jobs:
 
   nns-recovery-mainnet-state:
     name: Bazel Test NNS Recovery with Mainnet State
-    runs-on: *dind-large-setup
+    runs-on:
+      group: zh1
+      labels: dind-large
     container: *container-setup
-    timeout-minutes: 180
+    timeout-minutes: 120
     environment: Nightly Tests
     steps:
       - *checkout
@@ -69,25 +71,8 @@ jobs:
             bazel test \
               --config=flaky_retry \
               --config=stamped \
-              //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state \
-              --test_arg=--set-required-host-features=dc=zh1 \
+              //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state_colocate \
               --keep_going --test_timeout=7200
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-
-# the main purpose of bazel-build-all-no-cache is to detect dead URLS of external dependencies, the actual build of the ic is tested in build-ic
-# we've moved it to schedule-daily because the ubuntu servers frequently return 503 errors and we don't want this job blocking releases
-  bazel-build-all-no-cache:
-    name: Bazel Build All No Cache
-    runs-on: *dind-large-setup
-    container: *container-setup
-    timeout-minutes: 90
-    steps:
-      - *checkout
-      - uses: ./.github/actions/netrc
-      - name: Run Bazel Build All No Cache
-        uses: ./.github/actions/bazel
-        with:
-          run: bazel build --config=stamped --config=local //...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   bazel-test-bare-metal:
