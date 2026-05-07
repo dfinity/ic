@@ -647,12 +647,10 @@ fn test_reserved_cycles_limit<F, G, H>(
                     .contains("due to its reserved cycles limit")
             );
         }
-        _ => {
-            assert_eq!(
+        _ => assert_eq!(
                 err.code(),
                 ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
-            );
-        }
+            ),
     };
 }
 
@@ -748,7 +746,6 @@ fn test_minimum_cycles_balance<F, G, H>(
         {
             assert!(
                 err.code() == ErrorCode::InsufficientCyclesInMemoryGrow
-                    || err.code() == ErrorCode::InsufficientCyclesInMemoryAllocation
             );
         }
         Scenario::CanisterCleanupCallback(_) => {
