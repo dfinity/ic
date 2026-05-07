@@ -1681,7 +1681,7 @@ mod tests {
         let (mut registry, subnet_id) = make_registry_with_rented_subnet();
 
         // 11 admins exceeds MAX_SUBNET_ADMINS (10).
-        let admins = (0..11u64)
+        let admins = (0..11_u64)
             .map(|i| PrincipalId::new_user_test_id(2000 + i))
             .collect::<Vec<_>>();
 
