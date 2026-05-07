@@ -27,10 +27,10 @@ type canister_settings = record {
     reserved_cycles_limit : opt nat;
     log_visibility : opt log_visibility;
     log_memory_limit : opt nat;
+    snapshot_visibility : opt snapshot_visibility;
     wasm_memory_limit : opt nat;
     wasm_memory_threshold : opt nat;
     environment_variables : opt vec environment_variable;
-    snapshot_visibility : opt snapshot_visibility;
 };
 
 type definite_canister_settings = record {
@@ -41,10 +41,10 @@ type definite_canister_settings = record {
     reserved_cycles_limit : nat;
     log_visibility : log_visibility;
     log_memory_limit : nat;
+    snapshot_visibility : snapshot_visibility;
     wasm_memory_limit : nat;
     wasm_memory_threshold : nat;
     environment_variables : vec environment_variable;
-    snapshot_visibility : snapshot_visibility;
 };
 
 type change_origin = variant {
@@ -347,7 +347,7 @@ type deposit_cycles_args = record {
 type http_request_args = record {
     url : text;
     max_response_bytes : opt nat64;
-    method : variant { get; head; post };
+    method : variant { get; head; post; put; delete };
     headers : vec http_header;
     body : opt blob;
     transform : opt record {
