@@ -4,12 +4,11 @@ use crate::governance::{
 };
 use crate::pb::v1::MaturityModulation;
 use crate::test_utils::MockRandomness;
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_governance_api::{
     GetMaturityModulationResponse, MaturityModulation as ApiMaturityModulation,
 };
 use std::sync::Arc;
-
-const SECONDS_PER_DAY: u64 = 86_400;
 
 fn make_governance() -> Governance {
     Governance::new(
@@ -50,7 +49,28 @@ fn converts_days_since_epoch_to_seconds() {
         GetMaturityModulationResponse {
             maturity_modulation: Some(ApiMaturityModulation {
                 current_value_permyriad: Some(123),
-                updated_at_timestamp_seconds: Some(20_000 * SECONDS_PER_DAY),
+                updated_at_timestamp_seconds: Some(20_000 * ONE_DAY_SECONDS),
+            }),
+        }
+    );
+}
+
+#[test]
+fn updated_at_returns_none_when_days_overflow() {
+    let mut governance = make_governance();
+    governance.heap_data.maturity_modulation = Some(MaturityModulation {
+        current_value_permyriad: Some(123),
+        updated_at_days_since_epoch: Some(u64::MAX),
+    });
+
+    let response = governance.get_maturity_modulation();
+
+    assert_eq!(
+        response,
+        GetMaturityModulationResponse {
+            maturity_modulation: Some(ApiMaturityModulation {
+                current_value_permyriad: Some(123),
+                updated_at_timestamp_seconds: None,
             }),
         }
     );
