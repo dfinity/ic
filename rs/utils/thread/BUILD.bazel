@@ -5,6 +5,11 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:crossbeam-channel",
+    "@crate_index//:prometheus",
+]
+
+TEST_DEPENDENCIES = [
+    "//rs/monitoring/metrics",
 ]
 
 rust_library(
@@ -18,5 +23,5 @@ rust_library(
 rust_test(
     name = "thread_test",
     crate = ":thread",
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + TEST_DEPENDENCIES,
 )

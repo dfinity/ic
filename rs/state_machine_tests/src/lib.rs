@@ -127,6 +127,7 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
+use ic_state_manager::testing::StateManagerTesting;
 use ic_test_utilities_consensus::{FakeConsensusPoolCache, batch::MockBatchPayloadBuilder};
 use ic_test_utilities_metrics::{
     Labels, fetch_counter_vec, fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_counter,
@@ -2564,6 +2565,12 @@ impl StateMachine {
             msg_limit,
             byte_limit,
         )
+    }
+
+    /// Wait until all enqueued `ReplicatedStateMetrics::observe()` calls have been
+    /// processed by the background metrics thread.
+    pub fn flush_replicated_state_metrics(&self) {
+        self.state_manager.flush_metrics_channel();
     }
 
     /// Generates a Xnet payload to a remote subnet.
