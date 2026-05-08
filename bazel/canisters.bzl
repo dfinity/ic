@@ -220,11 +220,11 @@ def finalize_wasm(*, name, src_wasm, service_file = None, version_file, testonly
         tools = ["@crate_index//:ic-wasm__ic-wasm", "@pigz"],
         cmd_bash = " && ".join(steps)
             .format(
-                input_wasm = "$(location {})".format(src_wasm),
-                ic_wasm = "$(location @crate_index//:ic-wasm__ic-wasm)",
-                version_file = "$(location {})".format(version_file),
-                pigz = "$(location @pigz)",
-                keep_name_section = "--keep-name-section" if keep_name_section else "",
-                hidden_endpoints = hidden_endpoints if hidden_endpoints != None else "",
-            ),
+            input_wasm = "$(location {})".format(src_wasm),
+            ic_wasm = "$(location @crate_index//:ic-wasm__ic-wasm)",
+            version_file = "$(location {})".format(version_file),
+            pigz = "$(location @pigz)",
+            keep_name_section = "--keep-name-section" if keep_name_section else "",
+            hidden_endpoints = hidden_endpoints if hidden_endpoints != None else "",
+        ),
     )
