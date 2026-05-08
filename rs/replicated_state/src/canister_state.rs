@@ -275,6 +275,20 @@ impl CanisterState {
         self.system_state.queues().has_output()
     }
 
+    /// Returns true if the canister must be present in the `SubnetSchedule`,
+    /// regardless of new inputs or accumulated priority.
+    ///
+    /// This is different from "should be scheduled in an iteration", which also
+    /// considers whether the canister has inputs / tasks or non-zero AP / priority
+    /// credit. It is strictly about ensuring that canisters are retained in the
+    /// subnet schedule for as long as they have long-running executions or heap
+    /// delta or install code debits.
+    pub fn must_be_in_schedule(&self) -> bool {
+        self.scheduler_state.heap_delta_debit.get() > 0
+            || self.scheduler_state.install_code_debit.get() > 0
+            || self.has_long_execution_or_install_code()
+    }
+
     /// See `SystemState::push_output_request` for documentation.
     pub fn push_output_request(
         &mut self,
