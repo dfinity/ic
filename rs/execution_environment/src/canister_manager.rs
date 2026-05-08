@@ -384,7 +384,8 @@ impl CanisterManager {
         let new_memory_allocation = canister.system_state.memory_allocation;
 
         // Reserved cycles limit: validate and apply before reserving cycles
-        // since the error produced refers to the current reserved cycles balance.
+        // since the error produced here refers to the current reserved cycles balance
+        // before reserving additional cycles.
         if let Some(limit) = settings.reserved_cycles_limit() {
             let canister_reserved_balance = canister.system_state.reserved_balance();
             if canister_reserved_balance > limit {
@@ -589,7 +590,7 @@ impl CanisterManager {
 
         // Controllers: validate count and apply (only at the end
         // so that cycles balance errors use the original controllers
-        // to determine their verbosity: the sender should see verbose
+        // to determine their verbosity: the sender should still see verbose
         // errors if the sender is no longer a controller after applying
         // the settings).
         if let Some(controllers) = settings.controllers()
