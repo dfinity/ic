@@ -234,6 +234,9 @@ impl StateMachine for StateMachineImpl {
 
         self.observe_phase_duration(PHASE_INDUCTION, &since);
 
+        // Discard streams to subnets no longer present in the network topology.
+        state_with_messages.discard_streams_for_deleted_subnets();
+
         let execution_round_type = if requires_full_state_hash {
             ExecutionRoundType::CheckpointRound
         } else {

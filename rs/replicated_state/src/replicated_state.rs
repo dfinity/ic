@@ -855,6 +855,25 @@ impl ReplicatedState {
         self.metadata.streams.get(destination_subnet_id)
     }
 
+    /// Discards streams to subnets no longer present in the network topology.
+    ///
+    /// Called after the induction phase of each round, once the new
+    /// `NetworkTopology` (reflecting any registry deletions) has been applied.
+    /// Safe to call because by the time the registry deletion takes effect, all
+    /// certified stream slices from the deleted subnet have already been inducted
+    /// in the same round, and no new certified slices can be produced once the
+    /// subnet's key is removed from the registry.
+    pub fn discard_streams_for_deleted_subnets(&mut self) {
+        let mut streams = self.take_streams();
+        streams.retain(|subnet_id, _| {
+            self.metadata
+                .network_topology
+                .subnets()
+                .contains_key(subnet_id)
+        });
+        self.put_streams(streams);
+    }
+
     /// Returns the sum of reserved compute allocations of all currently
     /// available canisters.
     pub fn total_compute_allocation(&self) -> u64 {

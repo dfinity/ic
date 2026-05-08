@@ -10,6 +10,7 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     ReplicatedState, SubnetTopology, metadata_state::testing::NetworkTopologyTesting,
+    testing::ReplicatedStateTesting,
 };
 use ic_test_utilities_execution_environment::test_registry_settings;
 use ic_test_utilities_logger::with_test_replica_logger;
@@ -247,6 +248,43 @@ fn test_delivered_batch_interface() {
     for i in 0..2 {
         param_batch_test(Height::from(27), i);
     }
+}
+
+#[test]
+fn state_machine_discards_stream_for_deleted_subnet() {
+    let provided_batch = BatchBuilder::new().batch_number(Height::new(1)).build();
+    let fixture = test_fixture(&provided_batch);
+
+    // Add a stream to SUBNET_2, which is not present in the fixture's network topology.
+    let mut initial_state = fixture.initial_state;
+    initial_state.modify_streams(|streams| {
+        streams.insert(SUBNET_2, Default::default());
+    });
+    assert!(initial_state.get_stream(&SUBNET_2).is_some());
+
+    with_test_replica_logger(|log| {
+        let state_machine = Box::new(StateMachineImpl::new(
+            fixture.scheduler,
+            fixture.demux,
+            fixture.stream_builder,
+            Default::default(),
+            log,
+            fixture.metrics,
+        ));
+
+        let state = state_machine.execute_round(
+            initial_state,
+            fixture.network_topology.clone(),
+            provided_batch,
+            Default::default(),
+            Default::default(),
+            &test_registry_settings(),
+            Default::default(),
+            Default::default(),
+        );
+
+        assert!(state.get_stream(&SUBNET_2).is_none());
+    });
 }
 
 const NNS_SUBNET_ID: SubnetId = SUBNET_0;
