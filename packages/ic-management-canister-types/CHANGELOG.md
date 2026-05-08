@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for canister snapshot visibility settings:
   - Added `snapshot_visibility` field to `CanisterSettings` and `DefiniteCanisterSettings`.
   - Added the type `SnapshotVisibility`.
+- Types for `list_canisters`:
+  - Added the types `CanisterIdRange` and `ListCanistersResult`.
+- Types for `canister_metrics`:
+  - Added the types `CyclesConsumed`, `CanisterMetricsArgs`, and `CanisterMetricsResult`.
+- Added `PUT` and `DELETE` variants to `HttpMethod`.
 
 ## [0.7.1] - 2026-03-03
 
