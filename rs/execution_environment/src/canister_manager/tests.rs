@@ -7863,35 +7863,66 @@ fn create_canister_reserves_cycles_for_memory_allocation() {
 }
 
 #[test]
-fn create_canister_reverts_subnet_available_memory_on_failure() {
-    // In validate_and_update_canister_settings, subnet_available_memory is
-    // decremented by try_decrement before reserve_cycles is called.
-    // Setting reserved_cycles_limit=0 ensures reserve_cycles fails
-    // (ReservedCyclesLimitExceededInMemoryAllocation) after
-    // subnet_available_memory was already decremented.
-    // The caller must revert subnet_available_memory from the round_limits snapshot.
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_memory_threshold(0)
+fn create_canister_reverts_round_limits_on_failure() {
+    // In validate_and_update_canister_settings, compute_allocation_used is
+    // incremented and subnet_available_memory is decremented before
+    // reserve_cycles is called for memory allocation.
+    // Setting reserved_cycles_limit=0 with non-zero memory_allocation ensures
+    // reserve_cycles fails (ReservedCyclesLimitExceededInMemoryAllocation) after
+    // both round_limits fields were already updated.
+    // The caller must revert both from the round_limits snapshot.
+    let subnet_id = subnet_test_id(1);
+    let canister_manager = CanisterManagerBuilder::default()
+        .with_subnet_id(subnet_id)
         .build();
+    let mut state = initial_state(subnet_id, false);
+    // Use zero threshold so that storage_reservation_cycles is non-zero for
+    // any memory allocation, causing reserve_cycles to fail when
+    // reserved_cycles_limit is 0.
+    let subnet_memory_saturation = ResourceSaturation::new(0, 0, 100_000_000_000);
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
+        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
+    };
 
-    let initial_subnet_available_memory = test.subnet_available_memory().get_execution_memory();
+    let initial_compute_allocation_used = round_limits.compute_allocation_used;
+    let initial_subnet_available_memory =
+        round_limits.subnet_available_memory.get_execution_memory();
 
-    let err = test
-        .create_canister_with_settings(
-            Cycles::new(1_000_000_000_000),
-            CanisterSettingsArgsBuilder::new()
-                .with_memory_allocation(MIB)
-                .with_reserved_cycles_limit(0)
+    let sender = canister_test_id(1).get();
+    let err = canister_manager
+        .create_canister_with_cycles(
+            canister_change_origin_from_principal(&sender),
+            Some(1_000_000_000_000),
+            CanisterSettingsBuilder::new()
+                .with_compute_allocation(ComputeAllocation::try_from(50u64).unwrap())
+                .with_memory_allocation(MemoryAllocation::from(NumBytes::new(MIB)))
+                .with_reserved_cycles_limit(Cycles::zero())
                 .build(),
+            None,
+            &mut state,
+            &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
+            MAX_NUMBER_OF_CANISTERS,
+            &mut round_limits,
+            subnet_memory_saturation,
+            SMALL_APP_SUBNET_MAX_SIZE,
+            &no_op_counter(),
         )
         .unwrap_err();
 
-    assert_eq!(
-        err.code(),
-        ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
+    assert_matches!(
+        err,
+        CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation { .. }
     );
     assert_eq!(
-        test.subnet_available_memory().get_execution_memory(),
+        round_limits.compute_allocation_used,
+        initial_compute_allocation_used,
+    );
+    assert_eq!(
+        round_limits.subnet_available_memory.get_execution_memory(),
         initial_subnet_available_memory,
     );
 }
