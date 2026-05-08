@@ -2051,14 +2051,7 @@ mod tests {
             matches!(
                 self.initial_subnet_assignment,
                 SubnetAssignment::Assigned(_)
-            )
-            && self.has_local_cup.is_some()
-            // TODO(CON-1630): After mocking the process management, we can remove the condition below.
-            // For now, we should not start the replica if a recovery CUP exists (with higher height)
-            // since that would try to stop the replica process, which fails in the test
-            // environment.
-            && self.has_registry_cup.as_ref().map(|(cup, _)| cup.height)
-                <= self.has_local_cup.as_ref().map(|cup| cup.height)
+            ) && self.has_local_cup.is_some()
         }
 
         // Returns whether the upgrade loop should call
