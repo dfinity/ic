@@ -1,5 +1,5 @@
-pub use self::round_schedule::RoundSchedule;
 use self::round_schedule::*;
+pub use self::round_schedule::{IterationSchedule, RoundSchedule};
 pub use self::scheduler_metrics::SchedulerMetrics;
 use self::scheduler_metrics::*;
 use self::threshold_signatures::*;
@@ -422,6 +422,7 @@ impl SchedulerImpl {
         canister_ingress_latencies: &mut CanisterIngressQueueLatencies,
         scheduler_round_limits: &mut SchedulerRoundLimits,
         root_measurement_scope: &MeasurementScope<'a>,
+        round_log: &ReplicaLogger,
     ) -> ReplicatedState {
         let cost_schedule = state.get_own_cost_schedule();
         let measurement_scope =
@@ -486,10 +487,12 @@ impl SchedulerImpl {
 
             // Scheduling.
             let scheduling_timer = self.metrics.round_inner_iteration_scheduling.start_timer();
-            round_schedule.charge_idle_canisters(state.canisters_and_schedule_mut().0);
-
-            // Obtain the active canisters for this iteration.
-            let iteration_schedule = round_schedule.start_iteration(&mut state, is_first_iteration);
+            let iteration_schedule = round_schedule.start_iteration(
+                &mut state,
+                is_first_iteration,
+                &self.metrics,
+                round_log,
+            );
             if iteration_schedule.is_empty() {
                 break state;
             }
@@ -596,6 +599,7 @@ impl SchedulerImpl {
                 .metrics
                 .round_inner_heartbeat_overhead_duration
                 .start_timer();
+
             // Remove all remaining `Heartbeat` and `GlobalTimer` tasks
             // because they will be added again in the next round.
             for canister_id in &heartbeat_and_timer_canisters {
@@ -727,7 +731,7 @@ impl SchedulerImpl {
             max_instructions_executed_per_thread =
                 max_instructions_executed_per_thread.max(instructions_executed);
 
-            let divisor = round_limits_per_thread.instructions.get();
+            let divisor = self.config.max_instructions_per_slice.get();
             debug_assert_ne!(divisor, 0, "prevent divide by zero panic");
             if divisor > 0 {
                 let value = instructions_executed.get() as f64 / divisor as f64;
@@ -1069,6 +1073,9 @@ impl SchedulerImpl {
     ///
     /// NOTE: This is also called by `checkpoint_round_with_no_execution()`, so it
     /// must be safe to call even when no execution has taken place.
+    //
+    // TODO(DSM-103): Consider only aborting / checking DTS invariants for actually
+    // scheduled canisters.
     fn finish_round(
         &self,
         state: &mut ReplicatedState,
@@ -1437,25 +1444,16 @@ impl Scheduler for SchedulerImpl {
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
         }
 
-        // Scheduling.
-        let mut round_schedule = {
-            let _timer = self.metrics.round_scheduling_duration.start_timer();
-
-            RoundSchedule::apply_scheduling_strategy(
-                &mut state,
-                self.config.scheduler_cores,
-                self.config.heap_delta_rate_limit,
-                self.rate_limiting_of_heap_delta,
-                self.config.install_code_rate_limit,
-                self.rate_limiting_of_instructions,
-                current_round,
-                self.config.accumulated_priority_reset_interval,
-                &self.metrics,
-                &round_log,
-            )
-        };
+        // TODO(DSM-103): Consider routing messages from subnet output queues to local canisters.
 
         // Inner round.
+        let mut round_schedule = RoundSchedule::new(
+            self.config.scheduler_cores,
+            self.config.heap_delta_rate_limit,
+            self.rate_limiting_of_heap_delta,
+            self.config.install_code_rate_limit,
+            self.rate_limiting_of_instructions,
+        );
         let mut state = self.inner_round(
             state,
             current_round,
@@ -1467,6 +1465,7 @@ impl Scheduler for SchedulerImpl {
             &mut canister_ingress_latencies,
             &mut scheduler_round_limits,
             &root_measurement_scope,
+            &round_log,
         );
 
         // Update [`SignWithThresholdContext`]s by assigning randomness and matching pre-signatures.
