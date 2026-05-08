@@ -246,7 +246,7 @@ pub fn test(env: TestEnv) {
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || {
-            if requests.load(Ordering::SeqCst) >= current_requests_num + 1 {
+            if requests.load(Ordering::SeqCst) > current_requests_num {
                 Ok(())
             } else {
                 bail!("Waiting for one additional background HTTP request.")
