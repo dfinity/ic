@@ -228,7 +228,7 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
 
     set_governance_for_tests(governance);
     let governance = governance_mut();
-    schedule_tasks();
+    schedule_tasks(None);
 
     // Step 2: Call code under test.
     run_pending_timers_every_interval_for_count(

@@ -25,11 +25,11 @@ use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_logger::{ReplicaLogger, error, fatal, info};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterMetadataResponse,
-    CanisterSnapshotDataKind, CanisterSnapshotDataOffset, CanisterSnapshotResponse,
-    CanisterStatusResultV2, CanisterStatusType, ChunkHash, EmptyBlob, Global, GlobalTimer,
-    Method as Ic00Method, Payload as _, ReadCanisterSnapshotDataResponse,
-    ReadCanisterSnapshotMetadataResponse, SnapshotSource, StoredChunksReply,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    CanisterMetricsResult, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
+    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, ChunkHash,
+    CyclesConsumed, EmptyBlob, Global, GlobalTimer, Method as Ic00Method, Payload as _,
+    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
+    StoredChunksReply, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
     UploadCanisterSnapshotMetadataResponse, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -62,7 +62,7 @@ use ic_types::{
 };
 use ic_types_cycles::{
     CanisterCreation, CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase,
-    Instructions,
+    Instructions, NominalCycles,
 };
 use ic_wasm_types::WasmHash;
 use more_asserts::{debug_assert_ge, debug_assert_le};
@@ -186,7 +186,8 @@ impl CanisterManager {
             | Ok(Ic00Method::StartCanister)
             | Ok(Ic00Method::UninstallCode)
             | Ok(Ic00Method::StopCanister)
-            | Ok(Ic00Method::DeleteCanister) => {
+            | Ok(Ic00Method::DeleteCanister)
+            | Ok(Ic00Method::CanisterMetrics) => {
                 match effective_canister_id {
                     Some(canister_id) => {
                         let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
@@ -1246,6 +1247,61 @@ impl CanisterManager {
                 section_name: section_name.to_string(),
             })
         }
+    }
+
+    pub(crate) fn get_canister_metrics(
+        &self,
+        sender: PrincipalId,
+        canister: &CanisterState,
+        subnet_admins: Option<BTreeSet<PrincipalId>>,
+    ) -> Result<CanisterMetricsResult, CanisterManagerError> {
+        validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?;
+
+        let consumed_cycles_by_use_case = canister
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_as_counters();
+        let memory = *consumed_cycles_by_use_case
+            .get(&CyclesUseCase::Memory)
+            .unwrap_or(&NominalCycles::zero());
+        let compute_allocation = *consumed_cycles_by_use_case
+            .get(&CyclesUseCase::ComputeAllocation)
+            .unwrap_or(&NominalCycles::zero());
+        let ingress_induction = *consumed_cycles_by_use_case
+            .get(&CyclesUseCase::IngressInduction)
+            .unwrap_or(&NominalCycles::zero());
+        let instructions = *consumed_cycles_by_use_case
+            .get(&CyclesUseCase::Instructions)
+            .unwrap_or(&NominalCycles::zero());
+        let request_and_response_transmission = *consumed_cycles_by_use_case
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .unwrap_or(&NominalCycles::zero());
+        let uninstall = *consumed_cycles_by_use_case
+            .get(&CyclesUseCase::Uninstall)
+            .unwrap_or(&NominalCycles::zero());
+        let canister_creation = *consumed_cycles_by_use_case
+            .get(&CyclesUseCase::CanisterCreation)
+            .unwrap_or(&NominalCycles::zero());
+        let http_outcalls = *consumed_cycles_by_use_case
+            .get(&CyclesUseCase::HTTPOutcalls)
+            .unwrap_or(&NominalCycles::zero());
+        let burned_cycles = *consumed_cycles_by_use_case
+            .get(&CyclesUseCase::BurnedCycles)
+            .unwrap_or(&NominalCycles::zero());
+        let cycles_consumed = CyclesConsumed::new(
+            memory,
+            compute_allocation,
+            ingress_induction,
+            instructions,
+            request_and_response_transmission,
+            uninstall,
+            canister_creation,
+            http_outcalls,
+            burned_cycles,
+        );
+
+        let result = CanisterMetricsResult::new(cycles_consumed);
+        Ok(result)
     }
 
     /// Permanently deletes a canister from `ReplicatedState`.

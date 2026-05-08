@@ -40,9 +40,9 @@ use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
-    CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
+    CanisterInstallMode, CanisterInstallModeV2, CanisterMetricsResult, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
-    ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, EnvironmentVariable, IC_00,
+    ClearChunkStoreArgs, CreateCanisterArgs, CyclesConsumed, EmptyBlob, EnvironmentVariable, IC_00,
     InstallCodeArgsV2, Method, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse,
     OnLowWasmMemoryHookStatus, Payload, ProvisionalCreateCanisterWithCyclesArgs,
     RenameCanisterArgs, RenameToArgs, StoredChunksArgs, StoredChunksReply, SubnetInfoArgs,
@@ -92,7 +92,9 @@ use ic_types::{
     time::UNIX_EPOCH,
 };
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
+    BurnedCycles, CanisterCreation, CanisterCyclesCostSchedule, CompoundCycles, Cycles,
+    CyclesUseCase, HTTPOutcalls, IngressInduction, Instructions, Memory, NominalCycles,
+    NominalCyclesTesting, RequestAndResponseTransmission, Uninstall,
 };
 use ic_universal_canister::{CallArgs, PayloadBuilder};
 use ic_wasm_types::CanisterModule;
@@ -8171,6 +8173,9 @@ fn assert_subnet_admin_actions_can_be_performed(mut test: ExecutionTest, caniste
     let status = test.canister_status(canister_id).unwrap();
     assert_eq!(status.status(), CanisterStatusType::Running);
 
+    // ...canister metrics can be retrieved...
+    test.canister_metrics(canister_id).unwrap();
+
     // ...code can be uninstalled...
     test.uninstall_code(canister_id).unwrap();
     assert_eq!(test.canister_state(canister_id).execution_state, None);
@@ -8280,6 +8285,15 @@ fn non_controller_and_non_subnet_admin_cannot_perform_subnet_admin_actions_on_ca
     assert!(err.description().contains(&format!(
         "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
     )));
+    // ...or canister metrics cannot be retrieved...
+    let err = test.canister_metrics(canister_id).unwrap_err();
+    assert_eq!(
+        err.code(),
+        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+    );
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
+    )));
 
     // ...or code be uninstalled...
     let err = test.uninstall_code(canister_id).unwrap_err();
@@ -8353,4 +8367,129 @@ fn subnet_admin_cannot_install_code() {
         .upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
+}
+
+fn assert_canister_metrics_can_be_retrieved(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    cost_schedule: CanisterCyclesCostSchedule,
+) {
+    // Set dummy values for consumed cycles in the canister state.
+    let memory_cycles = CompoundCycles::<Memory>::new(Cycles::new(1), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(memory_cycles);
+
+    // `Instructions` follow the prepay/refund flow where metrics are updated
+    // only during the refund step.
+    let instructions_cycles = CompoundCycles::<Instructions>::new(Cycles::new(2), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(instructions_cycles);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .refund_cycles(
+            instructions_cycles,
+            CompoundCycles::<Instructions>::new(Cycles::new(0), cost_schedule),
+        );
+
+    let ingress_induction_cycles =
+        CompoundCycles::<IngressInduction>::new(Cycles::new(3), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(ingress_induction_cycles);
+
+    let compute_allocation_cycles =
+        CompoundCycles::<ic_types_cycles::ComputeAllocation>::new(Cycles::new(4), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(compute_allocation_cycles);
+
+    let canister_creation_cycles =
+        CompoundCycles::<CanisterCreation>::new(Cycles::new(5), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(canister_creation_cycles);
+
+    let uninstall_cycles = CompoundCycles::<Uninstall>::new(Cycles::new(6), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(uninstall_cycles);
+
+    // `RequestAndResponseTransmission` follow the prepay/refund flow where
+    // metrics are updated only during the refund step.
+    let request_and_response_transmission_cycles =
+        CompoundCycles::<RequestAndResponseTransmission>::new(Cycles::new(8), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(request_and_response_transmission_cycles);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .refund_cycles(
+            request_and_response_transmission_cycles,
+            CompoundCycles::<RequestAndResponseTransmission>::new(Cycles::new(0), cost_schedule),
+        );
+
+    let http_outcalls_cycles = CompoundCycles::<HTTPOutcalls>::new(Cycles::new(9), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .observe_consumed_cycles_for_https_outcall(http_outcalls_cycles.nominal());
+
+    let burned_cycles = CompoundCycles::<BurnedCycles>::new(Cycles::new(10), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(burned_cycles);
+
+    let expected_cycles_consumed = CyclesConsumed::new(
+        memory_cycles.nominal(),
+        compute_allocation_cycles.nominal(),
+        ingress_induction_cycles.nominal(),
+        // Instructions will include both the "fake" value set as well as the cost
+        // of executing `canister_metrics` for the canister.
+        instructions_cycles.nominal() + test.canister_execution_cost(canister_id).nominal(),
+        request_and_response_transmission_cycles.nominal(),
+        uninstall_cycles.nominal(),
+        canister_creation_cycles.nominal(),
+        http_outcalls_cycles.nominal(),
+        burned_cycles.nominal(),
+    );
+    let expected_metrics = CanisterMetricsResult::new(expected_cycles_consumed);
+
+    // The canister_metrics endpoint should return the correct values for consumed cycles.
+    let result = test.canister_metrics(canister_id).unwrap();
+    assert_eq!(result, expected_metrics);
+}
+
+#[test]
+fn can_retrieve_canister_metrics_for_canister_free_schedule() {
+    let cost_schedule = CanisterCyclesCostSchedule::Free;
+    let subnet_admin = user_test_id(42);
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(cost_schedule)
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+
+    // Switch user id so the request comes from the subnet admin
+    // who should not be a controller.
+    test.set_user_id(subnet_admin);
+    assert!(
+        !test
+            .canister_state(canister_id)
+            .controllers()
+            .contains(subnet_admin.get_ref())
+    );
+
+    assert_canister_metrics_can_be_retrieved(&mut test, canister_id, cost_schedule);
+}
+
+#[test]
+fn can_retrieve_canister_metrics_for_canister_normal_schedule() {
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(cost_schedule)
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+
+    assert_canister_metrics_can_be_retrieved(&mut test, canister_id, cost_schedule);
 }
