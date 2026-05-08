@@ -1,12 +1,15 @@
 // Set up a testnet containing:
-//   one 1-node System/NNS subnet, by default 60 unassigned nodes distributed
-//   round-robin across 10 AWS datacenters (so each DC gets 6 nodes),
+//   one 1-node System/NNS subnet, by default 20 unassigned nodes distributed
+//   round-robin across 20 datacenters spread across 4 cloud providers (5 DCs
+//   each in AWS, Azure, GCP, and Hetzner), so by default each DC gets 1 node,
 //   one API boundary node, one ic-gateway, and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 6 vCPUs, 24GiB of RAM, and 50 GiB disk.
 //
 // The number of unassigned nodes can be overridden via the NUM_UNASSIGNED_NODES
-// env var (e.g. NUM_UNASSIGNED_NODES=30 will spin up 30 unassigned nodes,
-// distributed round-robin across the 10 DCs, yielding 3 nodes per DC).
+// env var (e.g. NUM_UNASSIGNED_NODES=60 will spin up 60 unassigned nodes,
+// distributed round-robin across the 20 DCs, yielding 3 nodes per DC). When
+// the count is not a multiple of the number of DCs, the leading DCs receive
+// one extra node each.
 //
 // You can setup this testnet by executing the following commands:
 //
@@ -103,12 +106,14 @@ struct DcConfig {
     node_provider: NodeProvider,
 }
 
-/// 10 AWS regions distributed across the globe. Each entry corresponds to an
-/// AWS region; the `id` is the AWS region code, and lat/long are taken from
-/// the public location of the region.
+/// 20 datacenter regions distributed across 4 cloud providers (AWS, Azure,
+/// GCP, Hetzner) with 5 regions each, spread across the globe. The `id` is
+/// the cloud provider's region code, and lat/long are taken from the public
+/// location of the region (or the city the region is named after).
 const DATA_CENTERS: &[DcConfig] = &[
+    // -------- AWS (5) --------
     DcConfig {
-        id: "us-east-1",
+        id: "aws-us-east-1",
         region: "North America,US,Virginia",
         owner: "Amazon Web Services",
         latitude: 38.945,
@@ -116,7 +121,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "us-west-2",
+        id: "aws-us-west-2",
         region: "North America,US,Oregon",
         owner: "Amazon Web Services",
         latitude: 45.871,
@@ -124,7 +129,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "sa-east-1",
+        id: "aws-sa-east-1",
         region: "South America,BR,Sao Paulo",
         owner: "Amazon Web Services",
         latitude: -23.550,
@@ -132,7 +137,7 @@ const DATA_CENTERS: &[DcConfig] = &[
         node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "eu-west-1",
+        id: "aws-eu-west-1",
         region: "Europe,IE,Dublin",
         owner: "Amazon Web Services",
         latitude: 53.350,
@@ -140,51 +145,134 @@ const DATA_CENTERS: &[DcConfig] = &[
         node_provider: NodeProvider::DFINITY,
     },
     DcConfig {
-        id: "eu-central-1",
-        region: "Europe,DE,Hessen",
-        owner: "Amazon Web Services",
-        latitude: 50.110,
-        longitude: 8.682,
-        node_provider: NodeProvider::DFINITY,
-    },
-    DcConfig {
-        id: "eu-north-1",
-        region: "Europe,SE,Stockholm",
-        owner: "Amazon Web Services",
-        latitude: 59.330,
-        longitude: 18.069,
-        node_provider: NodeProvider::DFINITY,
-    },
-    DcConfig {
-        id: "af-south-1",
-        region: "Africa,ZA,Western Cape",
-        owner: "Amazon Web Services",
-        latitude: -33.925,
-        longitude: 18.424,
-        node_provider: NodeProvider::DFINITY,
-    },
-    DcConfig {
-        id: "ap-south-1",
-        region: "Asia,IN,Maharashtra",
-        owner: "Amazon Web Services",
-        latitude: 19.076,
-        longitude: 72.878,
-        node_provider: NodeProvider::DFINITY,
-    },
-    DcConfig {
-        id: "ap-northeast-1",
+        id: "aws-ap-northeast-1",
         region: "Asia,JP,Tokyo",
         owner: "Amazon Web Services",
         latitude: 35.682,
         longitude: 139.692,
         node_provider: NodeProvider::DFINITY,
     },
+    // -------- Azure (5) --------
     DcConfig {
-        id: "ap-southeast-2",
+        id: "azure-eastus",
+        region: "North America,US,Virginia",
+        owner: "Microsoft Azure",
+        latitude: 37.371,
+        longitude: -79.819,
+        node_provider: NodeProvider::DFINITY,
+    },
+    DcConfig {
+        id: "azure-westus2",
+        region: "North America,US,Washington",
+        owner: "Microsoft Azure",
+        latitude: 47.233,
+        longitude: -119.852,
+        node_provider: NodeProvider::DFINITY,
+    },
+    DcConfig {
+        id: "azure-westeurope",
+        region: "Europe,NL,Noord-Holland",
+        owner: "Microsoft Azure",
+        latitude: 52.374,
+        longitude: 4.890,
+        node_provider: NodeProvider::DFINITY,
+    },
+    DcConfig {
+        id: "azure-southeastasia",
+        region: "Asia,SG,Singapore",
+        owner: "Microsoft Azure",
+        latitude: 1.352,
+        longitude: 103.820,
+        node_provider: NodeProvider::DFINITY,
+    },
+    DcConfig {
+        id: "azure-australiaeast",
         region: "Oceania,AU,New South Wales",
-        owner: "Amazon Web Services",
+        owner: "Microsoft Azure",
         latitude: -33.868,
         longitude: 151.207,
+        node_provider: NodeProvider::DFINITY,
+    },
+    // -------- GCP (5) --------
+    DcConfig {
+        id: "gcp-us-central1",
+        region: "North America,US,Iowa",
+        owner: "Google Cloud Platform",
+        latitude: 41.260,
+        longitude: -95.860,
+        node_provider: NodeProvider::DFINITY,
+    },
+    DcConfig {
+        id: "gcp-us-east4",
+        region: "North America,US,Virginia",
+        owner: "Google Cloud Platform",
+        latitude: 39.029,
+        longitude: -77.490,
+        node_provider: NodeProvider::DFINITY,
+    },
+    DcConfig {
+        id: "gcp-europe-west3",
+        region: "Europe,DE,Hessen",
+        owner: "Google Cloud Platform",
+        latitude: 50.110,
+        longitude: 8.682,
+        node_provider: NodeProvider::DFINITY,
+    },
+    DcConfig {
+        id: "gcp-asia-southeast1",
+        region: "Asia,SG,Singapore",
+        owner: "Google Cloud Platform",
+        latitude: 1.352,
+        longitude: 103.820,
+        node_provider: NodeProvider::DFINITY,
+    },
+    DcConfig {
+        id: "gcp-southamerica-east1",
+        region: "South America,BR,Sao Paulo",
+        owner: "Google Cloud Platform",
+        latitude: -23.550,
+        longitude: -46.633,
+        node_provider: NodeProvider::DFINITY,
+    },
+    // -------- Hetzner (5) --------
+    DcConfig {
+        id: "hetzner-fsn1",
+        region: "Europe,DE,Hessen",
+        owner: "Hetzner Online",
+        latitude: 50.554,
+        longitude: 9.681,
+        node_provider: NodeProvider::DFINITY,
+    },
+    DcConfig {
+        id: "hetzner-nbg1",
+        region: "Europe,DE,Bayern",
+        owner: "Hetzner Online",
+        latitude: 49.452,
+        longitude: 11.077,
+        node_provider: NodeProvider::DFINITY,
+    },
+    DcConfig {
+        id: "hetzner-hel1",
+        region: "Europe,FI,Uusimaa",
+        owner: "Hetzner Online",
+        latitude: 60.169,
+        longitude: 24.938,
+        node_provider: NodeProvider::DFINITY,
+    },
+    DcConfig {
+        id: "hetzner-ash",
+        region: "North America,US,Virginia",
+        owner: "Hetzner Online",
+        latitude: 39.044,
+        longitude: -77.487,
+        node_provider: NodeProvider::DFINITY,
+    },
+    DcConfig {
+        id: "hetzner-hil",
+        region: "North America,US,Oregon",
+        owner: "Hetzner Online",
+        latitude: 45.523,
+        longitude: -122.989,
         node_provider: NodeProvider::DFINITY,
     },
 ];
@@ -208,12 +296,15 @@ pub fn setup(env: TestEnv) {
                 .with_dkg_interval_length(Height::from(10)),
         );
 
-    // Build unassigned nodes distributed across the 10 AWS datacenters.
-    // Each datacenter gets its own node operator. The total number of unassigned
-    // nodes defaults to 60 and can be overridden via the NUM_UNASSIGNED_NODES
-    // env var. Nodes are distributed round-robin across DATA_CENTERS in order:
-    // node index i is placed in DC (i % NUM_DCS). This means with the default
-    // of 60 nodes each of the 10 DCs gets 6 nodes.
+    // Build unassigned nodes distributed across the 20 datacenters (5 each in
+    // AWS, Azure, GCP and Hetzner). Each datacenter gets its own node operator.
+    // The total number of unassigned nodes defaults to 20 and can be overridden
+    // via the NUM_UNASSIGNED_NODES env var. Nodes are distributed round-robin
+    // across DATA_CENTERS in order: node index i is placed in DC
+    // (i % NUM_DCS). With the default of 20 nodes each of the 20 DCs gets
+    // exactly one node; with 60 nodes each DC would get 3 nodes; if the
+    // count is not a multiple of NUM_DCS the leading DCs receive one extra
+    // node each.
     //
     // Reward types are assigned in a circular rotation across all nodes globally:
     // node index 0 -> type4.1, 1 -> type4.2, 2 -> type4.3, 3 -> type4.1, ...
@@ -224,7 +315,7 @@ pub fn setup(env: TestEnv) {
         (NodeRewardType::Type4dot2, "type4.2"),
         (NodeRewardType::Type4dot3, "type4.3"),
     ];
-    const DEFAULT_NUM_UNASSIGNED_NODES: usize = 60;
+    const DEFAULT_NUM_UNASSIGNED_NODES: usize = 20;
 
     let num_unassigned_nodes: usize = match std::env::var("NUM_UNASSIGNED_NODES") {
         Ok(v) => v
