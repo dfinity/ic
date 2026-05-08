@@ -37,6 +37,10 @@ pub struct ReplicatedStateMetrics {
     canister_stable_memory_usage: Histogram,
     canister_memory_allocation: Histogram,
     canister_compute_allocation: Histogram,
+    canisters_memory_usage_bytes: IntGauge,
+    wasm_custom_sections_memory_usage_bytes: IntGauge,
+    canister_history_memory_usage_bytes: IntGauge,
+    canister_history_total_num_changes: Histogram,
     ingress_history_length: IntGauge,
     registered_canisters: IntGaugeVec,
     available_canister_ids: IntGauge,
@@ -106,6 +110,24 @@ impl ReplicatedStateMetrics {
                 "canister_compute_allocation_ratio",
                 "Canisters compute allocation distribution ratio (0-1).",
                 linear_buckets(0.0, 0.1, 11),
+            ),
+            canisters_memory_usage_bytes: metrics_registry.int_gauge(
+                "canister_memory_usage_bytes",
+                "Total memory footprint of all canisters.",
+            ),
+            wasm_custom_sections_memory_usage_bytes: metrics_registry.int_gauge(
+                "mr_wasm_custom_sections_memory_usage_bytes",
+                "Total memory footprint of all canisters' Wasm custom sections.",
+            ),
+            canister_history_memory_usage_bytes: metrics_registry.int_gauge(
+                "mr_canister_history_memory_usage_bytes",
+                "Total memory footprint of all canisters' canister history.",
+            ),
+            canister_history_total_num_changes: metrics_registry.histogram(
+                "mr_canister_history_total_num_changes",
+                "Total number of changes in canister history per canister.",
+                // 0, 1, 2, 5, …, 1000, 2000, 5000
+                decimal_buckets_with_zero(0, 3),
             ),
             ingress_history_length: metrics_registry.int_gauge(
                 "replicated_state_ingress_history_length",
@@ -350,6 +372,9 @@ impl ReplicatedStateMetrics {
         let mut in_flight_signature_request_contexts_by_key_id =
             BTreeMap::<MasterPublicKeyId, u32>::new();
 
+        let mut wasm_custom_sections_memory_usage = NumBytes::new(0);
+        let mut canister_history_memory_usage = NumBytes::new(0);
+
         let mut total_canister_balance = Cycles::zero();
         let mut total_canister_reserved_balance = Cycles::zero();
 
@@ -357,7 +382,7 @@ impl ReplicatedStateMetrics {
         let mut total_canister_snapshots_count = 0;
 
         let canister_id_ranges = state.routing_table().ranges(own_subnet_id);
-        state.canisters_iter().for_each(|canister| {
+        for canister in state.canisters_iter() {
             match canister.system_state.get_status() {
                 CanisterStatus::Running { .. } => num_running_canisters += 1,
                 CanisterStatus::Stopping { stop_contexts, .. } => {
@@ -424,6 +449,13 @@ impl ReplicatedStateMetrics {
                 canisters_not_in_routing_table += 1;
             }
 
+            wasm_custom_sections_memory_usage += canister
+                .execution_state
+                .as_ref()
+                .map(|es| es.metadata.memory_usage())
+                .unwrap_or_default();
+            canister_history_memory_usage += canister.canister_history_memory_usage();
+
             total_canister_balance += canister.system_state.balance();
             total_canister_reserved_balance += canister.system_state.reserved_balance();
 
@@ -452,7 +484,7 @@ impl ReplicatedStateMetrics {
 
             total_canister_snapshots_memory_taken += canister.canister_snapshots.memory_taken();
             total_canister_snapshots_count += canister.canister_snapshots.len();
-        });
+        }
 
         self.old_open_call_contexts
             .with_label_values(&[OLD_CALL_CONTEXT_LABEL_ONE_DAY])
@@ -568,6 +600,13 @@ impl ReplicatedStateMetrics {
         self.stop_canister_calls_without_call_id
             .set(num_stop_canister_calls_without_call_id as i64);
 
+        self.canisters_memory_usage_bytes
+            .set(Self::total_canister_memory_usage(state).get() as i64);
+        self.wasm_custom_sections_memory_usage_bytes
+            .set(wasm_custom_sections_memory_usage.get() as i64);
+        self.canister_history_memory_usage_bytes
+            .set(canister_history_memory_usage.get() as i64);
+
         self.total_canister_balance
             .set(total_canister_balance.get() as f64);
 
@@ -619,6 +658,23 @@ impl ReplicatedStateMetrics {
         if let Some(retention) = retention {
             self.canister_log_retention.observe(retention.as_secs_f64());
         }
+
+        self.canister_history_total_num_changes.observe(
+            canister
+                .system_state
+                .get_canister_history()
+                .get_total_num_changes() as f64,
+        );
+    }
+
+    /// Returns the total memory usage of all canisters. Execution and wasm custom section
+    /// memory are included in `memory_usage()`, message memory is added separately.
+    pub fn total_canister_memory_usage(state: &ReplicatedState) -> NumBytes {
+        let mut total_memory_usage = NumBytes::new(0);
+        for canister in state.canisters_iter() {
+            total_memory_usage += canister.memory_usage() + canister.message_memory_usage().total();
+        }
+        total_memory_usage
     }
 }
 
