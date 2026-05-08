@@ -420,10 +420,10 @@ pub(super) fn create_summary_payload(
         let dealings = all_dealings.remove(dkg_id).unwrap_or_default();
         match NiDkgAlgorithm::create_transcript(crypto, config, dealings) {
             Ok(transcript) => {
-                let previous_value_found = next_transcripts
+                if next_transcripts
                     .insert(dkg_id.dkg_tag.clone(), transcript)
-                    .is_some();
-                if previous_value_found {
+                    .is_some()
+                {
                     unreachable!(
                         "last summary has multiple configs for tag {:?}",
                         dkg_id.dkg_tag
