@@ -1,4 +1,6 @@
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{
+    common::LOG_PREFIX, mutations::common::get_elected_replica_version_ids, registry::Registry,
+};
 use attestation::attestation_package::{
     AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
@@ -263,7 +265,7 @@ impl Registry {
         let parsed =
             ParsedSevAttestationPackage::parse(attestation_package.clone(), root_cert_verification)
                 .verify_custom_data(&expected_custom_data)
-                .verify_measurement(&self.get_all_blessed_guest_launch_measurements())
+                .verify_measurement(&self.get_all_elected_guest_launch_measurements())
                 .map_err(|e| {
                     format!("{LOG_PREFIX}do_add_node: Attestation verification failed: {e}")
                 })?;
@@ -278,9 +280,9 @@ impl Registry {
         Ok(Some(chip_id))
     }
 
-    pub fn get_all_blessed_guest_launch_measurements(&self) -> Vec<Vec<u8>> {
+    pub fn get_all_elected_guest_launch_measurements(&self) -> Vec<Vec<u8>> {
         let version = self.latest_version();
-        self.get_blessed_replica_version_ids()
+        get_elected_replica_version_ids(self)
             .iter()
             .filter_map(|version_id| {
                 self.get(make_replica_version_key(version_id).as_bytes(), version)
@@ -1398,7 +1400,7 @@ mod tests {
             .into()
     }
 
-    fn add_blessed_measurement_to_registry(registry: &mut Registry, measurement: &[u8]) {
+    fn add_elected_measurement_to_registry(registry: &mut Registry, measurement: &[u8]) {
         let replica_version_id = ReplicaVersion::default().to_string();
         let replica_version = ReplicaVersionRecord {
             release_package_sha256_hex: "".to_string(),
@@ -1422,7 +1424,7 @@ mod tests {
     fn should_succeed_for_adding_node_with_valid_sev_attestation() {
         // Arrange
         let mut registry = invariant_compliant_registry(0);
-        add_blessed_measurement_to_registry(&mut registry, &SEV_TEST_MEASUREMENT);
+        add_elected_measurement_to_registry(&mut registry, &SEV_TEST_MEASUREMENT);
 
         let node_operator_record = NodeOperatorRecord {
             max_rewardable_nodes: btreemap! { "type1".to_string() => 1 },
@@ -1456,12 +1458,12 @@ mod tests {
     }
 
     #[test]
-    fn should_fail_for_sev_attestation_with_unblessed_measurement() {
+    fn should_fail_for_sev_attestation_with_unelected_measurement() {
         // Arrange
         let mut registry = invariant_compliant_registry(0);
-        // Add a blessed measurement that does NOT match what we'll put in the attestation
+        // Add a elected measurement that does NOT match what we'll put in the attestation
         let different_measurement: [u8; 48] = [99; 48];
-        add_blessed_measurement_to_registry(&mut registry, &different_measurement);
+        add_elected_measurement_to_registry(&mut registry, &different_measurement);
 
         let node_operator_record = NodeOperatorRecord {
             max_rewardable_nodes: btreemap! { "type1".to_string() => 1 },
@@ -1476,7 +1478,7 @@ mod tests {
         let (mut payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
         payload.node_registration_attestation = Some(create_mock_sev_attestation_package(
             &payload.node_signing_pk,
-            SEV_TEST_MEASUREMENT, // This won't match the blessed measurement
+            SEV_TEST_MEASUREMENT, // This won't match the elected measurement
             SEV_TEST_CHIP_ID,
         ));
 
@@ -1484,7 +1486,7 @@ mod tests {
         let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
 
         // Assert
-        let err = result.expect_err("should fail with unblessed measurement");
+        let err = result.expect_err("should fail with unelected measurement");
         assert!(
             err.contains("Attestation verification failed"),
             "Expected attestation verification error, got: {err}"
@@ -1495,7 +1497,7 @@ mod tests {
     fn should_fail_for_sev_attestation_with_wrong_custom_data() {
         // Arrange
         let mut registry = invariant_compliant_registry(0);
-        add_blessed_measurement_to_registry(&mut registry, &SEV_TEST_MEASUREMENT);
+        add_elected_measurement_to_registry(&mut registry, &SEV_TEST_MEASUREMENT);
 
         let node_operator_record = NodeOperatorRecord {
             max_rewardable_nodes: btreemap! { "type1".to_string() => 1 },
