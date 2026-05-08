@@ -139,7 +139,7 @@ if [ "$DEVENV" = true ]; then
     # We only issue a warning so that the user can GC when it's most convenient.
     MAX_GB=20
     images_rawsize=$(${CONTAINER_CMD[@]} system df --format json | jq -cMr '.[]|select(.Type == "Images")|.RawSize')
-    if (( $images_rawsize > $MAX_GB * 10**9 )); then
+    if (($images_rawsize > $MAX_GB * 10 ** 9)); then
         tput -T xterm setaf 3
         tput -T xterm bold
         eprintln "Container images take up more than ${MAX_GB}GB. You can reclaim space by clearing the container image cache (will cause a rebuild):"
