@@ -929,13 +929,13 @@ mod tests {
                 let change_set = dkg.on_state_change(&*dkg_pool.read().unwrap());
                 let remote_dealings = change_set
                     .iter()
-                    .filter(|change| match change {
-                        ChangeAction::AddToValidated(message) => {
-                            message.content.dkg_id.target_subnet
-                                == NiDkgTargetSubnet::Remote(target_id)
-                        }
-                        _ => false,
-                    })
+                    .filter(|change|
+                        matches!(
+                            change,
+                            ChangeAction::AddToValidated(message)
+                            if message.content.dkg_id.target_subnet == NiDkgTargetSubnet::Remote(target_id)
+                        )
+                    )
                     .count();
                 assert_eq!(
                     remote_dealings, 0,
