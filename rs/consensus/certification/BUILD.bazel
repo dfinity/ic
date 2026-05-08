@@ -34,8 +34,6 @@ rust_doc(
 rust_test(
     name = "consensus_certification_test",
     crate = ":certification",
-
-    
     deps = [
         # Keep sorted.
         "//rs/artifact_pool",
