@@ -921,6 +921,8 @@ type NeuronInfo = record {
   potential_voting_power : opt nat64;
   // See analogous field in Neuron.
   eight_year_gang_bonus_base_e8s : opt nat64;
+  // See analogous field in Neuron.
+  staked_maturity_e8s_equivalent : opt nat64;
 };
 
 type NeuronStakeTransfer = record {

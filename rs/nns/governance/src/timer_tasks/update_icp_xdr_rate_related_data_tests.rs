@@ -197,9 +197,35 @@ fn test_update_rates_buffer_caps_at_max() {
 }
 
 #[test]
-fn test_compute_maturity_modulation_no_data() {
-    let result = compute_maturity_modulation_permyriad(&[], 100, 50, 99);
-    assert_eq!(result, 50);
+fn test_compute_maturity_modulation_no_data_with_previous() {
+    let result = compute_maturity_modulation_permyriad(&[], 100, Some((50, 99)));
+    assert_eq!(
+        result,
+        Err("insufficient recent price data despite full history".to_string())
+    );
+}
+
+#[test]
+fn test_compute_maturity_modulation_no_data_no_previous() {
+    let result = compute_maturity_modulation_permyriad(&[], 100, None);
+    assert_eq!(
+        result,
+        Err("insufficient recent price data despite full history".to_string())
+    );
+}
+
+#[test]
+fn test_compute_maturity_modulation_zero_reference_price_returns_error() {
+    // 365 days of zero rates: 7-day and 365-day averages are both zero, hitting the
+    // reference-price-zero branch.
+    let rates: Vec<SampledPrice> = (1..=365)
+        .map(|d| SampledPrice {
+            timestamp_seconds: d * ONE_DAY_SECONDS,
+            xdr_permyriad_per_icp: 0,
+        })
+        .collect();
+    let result = compute_maturity_modulation_permyriad(&rates, 365, Some((10, 364)));
+    assert_eq!(result, Err("reference price averaged to zero".to_string()));
 }
 
 #[test]
@@ -214,8 +240,8 @@ fn test_compute_maturity_modulation_stable_price() {
             xdr_permyriad_per_icp: 50_000,
         })
         .collect();
-    let result = compute_maturity_modulation_permyriad(&rates, 365, 42, 364);
-    assert_eq!(result, 12);
+    let result = compute_maturity_modulation_permyriad(&rates, 365, Some((42, 364)));
+    assert_eq!(result, Ok(12));
 }
 
 #[test]
@@ -237,8 +263,8 @@ fn test_compute_maturity_modulation_price_increase() {
             xdr_permyriad_per_icp: 60_000,
         });
     }
-    let result = compute_maturity_modulation_permyriad(&rates, 365, 0, 364);
-    assert_eq!(result, MATURITY_MODULATION_DAILY_SPEED_LIMIT_PERMYRIAD);
+    let result = compute_maturity_modulation_permyriad(&rates, 365, Some((0, 364)));
+    assert_eq!(result, Ok(MATURITY_MODULATION_DAILY_SPEED_LIMIT_PERMYRIAD));
 }
 
 #[test]
@@ -259,8 +285,34 @@ fn test_compute_maturity_modulation_price_decrease() {
             xdr_permyriad_per_icp: 40_000,
         });
     }
-    let result = compute_maturity_modulation_permyriad(&rates, 365, 0, 364);
-    assert_eq!(result, -MATURITY_MODULATION_DAILY_SPEED_LIMIT_PERMYRIAD);
+    let result = compute_maturity_modulation_permyriad(&rates, 365, Some((0, 364)));
+    assert_eq!(result, Ok(-MATURITY_MODULATION_DAILY_SPEED_LIMIT_PERMYRIAD));
+}
+
+#[test]
+fn test_compute_maturity_modulation_first_calculation_skips_speed_limit() {
+    // Same prices as test_compute_maturity_modulation_price_decrease (target ≈ -492 permyriad),
+    // but with no previous value: the speed limit must not apply, so the result should reflect
+    // the full target (subject to global bounds).
+    let mut rates: Vec<SampledPrice> = (1..=358)
+        .map(|d| SampledPrice {
+            timestamp_seconds: d * ONE_DAY_SECONDS,
+            xdr_permyriad_per_icp: 50_000,
+        })
+        .collect();
+    for d in 359..=365 {
+        rates.push(SampledPrice {
+            timestamp_seconds: d * ONE_DAY_SECONDS,
+            xdr_permyriad_per_icp: 40_000,
+        });
+    }
+    let result = compute_maturity_modulation_permyriad(&rates, 365, None)
+        .expect("complete history should yield Ok");
+    // Target is well within global bounds, so we should see roughly -492.
+    assert!(
+        (-500..=-450).contains(&result),
+        "expected target near -492, got {result}"
+    );
 }
 
 #[test]
@@ -269,7 +321,7 @@ fn test_compute_maturity_modulation_respects_global_bounds() {
     // 7-day average: 30_000.
     // 365-day average: (358*10_000 + 7*30_000) / 365 = 10_383.
     // target = 2_500 * (30_000 - 10_383) / 10_383 ≈ 4_720 permyriad >> MAX (200).
-    // With 1_000 days elapsed the speed limit is not binding, so global clamping takes over.
+    // First calculation: speed limit is skipped, so global clamping takes over directly.
     // Expected: result == MATURITY_MODULATION_MAX_PERMYRIAD_MISSION_70.
     let mut rates: Vec<SampledPrice> = (1..=358)
         .map(|d| SampledPrice {
@@ -283,8 +335,8 @@ fn test_compute_maturity_modulation_respects_global_bounds() {
             xdr_permyriad_per_icp: 30_000,
         });
     }
-    let result = compute_maturity_modulation_permyriad(&rates, 365, 0, 0);
-    assert_eq!(result, MATURITY_MODULATION_MAX_PERMYRIAD_MISSION_70);
+    let result = compute_maturity_modulation_permyriad(&rates, 365, None);
+    assert_eq!(result, Ok(MATURITY_MODULATION_MAX_PERMYRIAD_MISSION_70));
 }
 
 #[test]
