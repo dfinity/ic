@@ -4358,6 +4358,23 @@ pub mod testing {
             batch_summary: Option<BatchSummary>,
         );
 
+        /// Testing only: Like `commit_and_certify_at_height`, but waits for hashing/certification metadata.
+        fn commit_and_certify_at_height_sync(
+            &self,
+            state: ReplicatedState,
+            height: Height,
+            scope: CertificationScope,
+            batch_summary: Option<BatchSummary>,
+        );
+
+        /// Testing only: Commits, then waits for hashing/certification metadata to be populated.
+        fn commit_and_certify_sync(
+            &self,
+            state: ReplicatedState,
+            scope: CertificationScope,
+            batch_summary: Option<BatchSummary>,
+        );
+
         /// Testing only: Purges the `manifest` at `height` in `states.states_metadata`.
         fn purge_manifest(&mut self, height: Height) -> bool;
 
@@ -4390,6 +4407,14 @@ pub mod testing {
 
         /// Testing only: Push state
         fn push_state_and_cert_metadata(&self, height: Height, state: ReplicatedState);
+
+        /// Testing only: Like `fetch_state`, but waits for hashing/certification metadata.
+        fn fetch_state_sync(
+            &self,
+            height: Height,
+            root_hash: CryptoHashOfState,
+            cup_interval_length: Height,
+        );
     }
 
     impl StateManagerTesting for StateManagerImpl {
@@ -4411,6 +4436,27 @@ pub mod testing {
             );
 
             self.commit_and_certify(state, scope, batch_summary);
+        }
+
+        fn commit_and_certify_at_height_sync(
+            &self,
+            state: ReplicatedState,
+            height: Height,
+            scope: CertificationScope,
+            batch_summary: Option<BatchSummary>,
+        ) {
+            self.commit_and_certify_at_height(state, height, scope, batch_summary);
+            self.flush_hash_channel();
+        }
+
+        fn commit_and_certify_sync(
+            &self,
+            state: ReplicatedState,
+            scope: CertificationScope,
+            batch_summary: Option<BatchSummary>,
+        ) {
+            self.commit_and_certify(state, scope, batch_summary);
+            self.flush_hash_channel();
         }
 
         fn purge_manifest(&mut self, height: Height) -> bool {
@@ -4507,6 +4553,16 @@ pub mod testing {
                 state,
                 &mut states,
             );
+        }
+
+        fn fetch_state_sync(
+            &self,
+            height: Height,
+            root_hash: CryptoHashOfState,
+            cup_interval_length: Height,
+        ) {
+            self.fetch_state(height, root_hash, cup_interval_length);
+            self.flush_hash_channel();
         }
     }
 }
