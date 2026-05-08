@@ -2195,7 +2195,9 @@ crate.from_specs(
             "x86_64-unknown-linux-gnu",
         ],
 )
+
 inject_repo(crate, "openssl", "lmdb", "jemalloc", "protobuf")
+
 use_repo(crate, "crate_index")
 
 ####
