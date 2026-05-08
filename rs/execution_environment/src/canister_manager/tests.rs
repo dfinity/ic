@@ -7864,27 +7864,22 @@ fn create_canister_reserves_cycles_for_memory_allocation() {
 
 #[test]
 fn create_canister_reverts_subnet_available_memory_on_failure() {
-    // In validate_and_update_canister_settings, compute_allocation_used is
-    // incremented and subnet_available_memory is decremented by try_decrement
-    // before reserve_cycles is called.
+    // In validate_and_update_canister_settings, subnet_available_memory is
+    // decremented by try_decrement before reserve_cycles is called.
     // Setting reserved_cycles_limit=0 ensures reserve_cycles fails
-    // (ReservedCyclesLimitExceededInMemoryAllocation) after both
-    // compute_allocation_used and subnet_available_memory were already updated.
-    // The caller must revert both from the round_limits snapshot.
-    // Cycles are set high enough to pass the compute allocation freezing
-    // threshold check (1% * 30 days * 10M cycles/percent/second ~ 26T cycles).
+    // (ReservedCyclesLimitExceededInMemoryAllocation) after
+    // subnet_available_memory was already decremented.
+    // The caller must revert subnet_available_memory from the round_limits snapshot.
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_memory_threshold(0)
         .build();
 
     let initial_subnet_available_memory = test.subnet_available_memory().get_execution_memory();
-    let initial_compute_allocation_used = test.state().total_compute_allocation();
 
     let err = test
         .create_canister_with_settings(
-            Cycles::new(1_000_000_000_000_000),
+            Cycles::new(1_000_000_000_000),
             CanisterSettingsArgsBuilder::new()
-                .with_compute_allocation(1)
                 .with_memory_allocation(MIB)
                 .with_reserved_cycles_limit(0)
                 .build(),
@@ -7898,10 +7893,6 @@ fn create_canister_reverts_subnet_available_memory_on_failure() {
     assert_eq!(
         test.subnet_available_memory().get_execution_memory(),
         initial_subnet_available_memory,
-    );
-    assert_eq!(
-        test.state().total_compute_allocation(),
-        initial_compute_allocation_used,
     );
 }
 
