@@ -10,7 +10,9 @@ const NUM_CANISTERS_PER_CREATOR_CANISTER: usize = 10_000;
 lazy_static::lazy_static! {
     static ref STATE_MACHINE: Arc<Mutex<StateMachine>> = {
         let mut env = StateMachine::new();
+        // Don't wait for the Replicated State metrics thread every round.
         env.flush_replicated_state_metrics = false;
+
         let features = [];
         let wasm =
             canister_test::Project::cargo_bin_maybe_from_env("canister_creator_canister", &features);
