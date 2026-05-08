@@ -129,6 +129,9 @@ pub struct NeuronInfo {
     /// net of fees (including staked maturity) captured at the time of migration.
     /// For all other neurons, this is 0.
     pub eight_year_gang_bonus_base_e8s: Option<u64>,
+
+    /// See analogous field in Neuron.
+    pub staked_maturity_e8s_equivalent: Option<u64>,
 }
 
 impl NeuronInfo {
