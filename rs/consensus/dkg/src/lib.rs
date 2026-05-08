@@ -993,6 +993,7 @@ mod tests {
                 assert_eq!(data.dkg.transcripts_for_remote_subnets.len(), 2);
                 let mut tags = BTreeSet::new();
                 for dkg in data.dkg.transcripts_for_remote_subnets.iter() {
+                    assert_eq!(dkg.0.target_subnet, NiDkgTargetSubnet::Remote(target_id));
                     assert!(dkg.2.is_err());
                     assert!(tags.insert(dkg.0.dkg_tag.clone()));
                 }
@@ -2462,6 +2463,12 @@ mod tests {
                             "[{desc}] transcript should be for ReshareChainKey target id"
                         );
                         assert!(result.is_ok(), "[{desc}]");
+                        assert_eq!(
+                            dkg_id.dkg_tag,
+                            NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(
+                                key_id.clone()
+                            ))
+                        );
                     }
                 };
 
