@@ -9704,8 +9704,6 @@ fn remove_states_below_protects_tip_height() {
         // This clones the verified checkpoint @1 to @10 and advances
         // `latest_state_height` to 10, but does not touch `tip_height`.
         sm.fetch_state(Height(10), hash_at_1.clone(), Height::new(999));
-        // let hash_at_10 = wait_for_checkpoint(&state_manager, Height(10));
-        // assert_eq!(hash_at_1, hash_at_10);
         sm.flush_hash_channel();
         assert_eq!(sm.latest_state_height(), Height(10));
 
