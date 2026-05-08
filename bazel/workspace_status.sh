@@ -29,4 +29,5 @@ fi
 echo "STABLE_FARM_METADATA $STABLE_FARM_METADATA"
 
 # Used for allocating a Farm testnet to the local DC in CI (Search for allocate_testnet_to_local_dc)
+NODE_NAME="${NODE_NAME:-}"
 echo "DC ${NODE_NAME%%-*}"
