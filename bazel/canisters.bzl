@@ -87,6 +87,9 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
     # The option to keep the name section is only required for wasm finalization.
     keep_name_section = kwargs.pop("keep_name_section", False)
 
+    # Optional path to a hidden_endpoints.conf for `ic-wasm check-endpoints`.
+    hidden_endpoints = kwargs.pop("hidden_endpoints", None)
+
     # Sanity checking (no '.' in name)
     if name.count(".") > 0:
         fail("name '{}' should not include dots".format(name))
@@ -126,6 +129,7 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
         visibility = visibility,
         testonly = testonly,
         keep_name_section = keep_name_section,
+        hidden_endpoints = hidden_endpoints,
     )
 
     native.alias(
@@ -181,27 +185,46 @@ def motoko_canister(name, entry, deps, **kwargs):
         actual = final_name,
     )
 
-def finalize_wasm(*, name, src_wasm, service_file = None, version_file, testonly, visibility = ["//visibility:public"], keep_name_section = False):
+def finalize_wasm(*, name, src_wasm, service_file = None, version_file, testonly, visibility = ["//visibility:public"], keep_name_section = False, hidden_endpoints = None):
     """Generates an output file name `name + '.wasm.gz'`.
 
     The input file is shrunk, annotated with metadata, and gzipped. The canister
     metadata consists of:
         'icp:public git_commit_id': version used in the build
         'icp:public candid:service': the canister's candid service description
+
+    When `hidden_endpoints` is provided (a label pointing at a `hidden_endpoints.conf`
+    file), `ic-wasm check-endpoints --hidden <conf>` is also run on the finalized
+    wasm before gzip, failing the build if the wasm exports a method that is
+    neither in the candid `service` nor allowlisted in the conf.
     """
+
+    steps = [
+        "{ic_wasm} {input_wasm} -o $@.shrunk shrink {keep_name_section}",
+        "{ic_wasm} $@.shrunk -o $@.meta metadata candid:service {keep_name_section} --visibility public --file " + "$(location {})".format(service_file) if not (service_file == None) else "cp $@.shrunk $@.meta",  # if service_file is None, don't include a service file
+        "{ic_wasm} $@.meta -o $@.ver metadata git_commit_id {keep_name_section} --visibility public --file {version_file}",
+    ]
+    if hidden_endpoints != None:
+        steps.append("{ic_wasm} $@.ver check-endpoints --hidden $(location {hidden_endpoints})")
+    steps.append("{pigz} --processes 16 --no-name $@.ver --stdout > $@")
+
     native.genrule(
         name = "_" + name + "_finalize",
-        srcs = [src_wasm, version_file] + ([service_file] if not (service_file == None) else []),
+        srcs = [src_wasm, version_file] +
+               ([service_file] if not (service_file == None) else []) +
+               ([hidden_endpoints] if hidden_endpoints != None else []),
         outs = [name],
         visibility = visibility,
         testonly = testonly,
         message = "Finalizing canister " + name,
         tools = ["@crate_index//:ic-wasm__ic-wasm", "@pigz"],
-        cmd_bash = " && ".join([
-            "{ic_wasm} {input_wasm} -o $@.shrunk shrink {keep_name_section}",
-            "{ic_wasm} $@.shrunk -o $@.meta metadata candid:service {keep_name_section} --visibility public --file " + "$(location {})".format(service_file) if not (service_file == None) else "cp $@.shrunk $@.meta",  # if service_file is None, don't include a service file
-            "{ic_wasm} $@.meta -o $@.ver metadata git_commit_id {keep_name_section} --visibility public --file {version_file}",
-            "{pigz} --processes 16 --no-name $@.ver --stdout > $@",
-        ])
-            .format(input_wasm = "$(location {})".format(src_wasm), ic_wasm = "$(location @crate_index//:ic-wasm__ic-wasm)", version_file = "$(location {})".format(version_file), pigz = "$(location @pigz)", keep_name_section = "--keep-name-section" if keep_name_section else ""),
+        cmd_bash = " && ".join(steps)
+            .format(
+                input_wasm = "$(location {})".format(src_wasm),
+                ic_wasm = "$(location @crate_index//:ic-wasm__ic-wasm)",
+                version_file = "$(location {})".format(version_file),
+                pigz = "$(location @pigz)",
+                keep_name_section = "--keep-name-section" if keep_name_section else "",
+                hidden_endpoints = hidden_endpoints if hidden_endpoints != None else "",
+            ),
     )
