@@ -1512,17 +1512,8 @@ impl HasGroupSetup for TestEnv {
             match InfraProvider::read_attribute(self) {
                 InfraProvider::Farm => {
                     let required_host_features = if allocate_testnet_to_local_dc {
-                        let node_name = read_var_from_volatile_status_file("NODE_NAME");
-                        if let Some(name) = node_name {
-                            let dc = name
-                                .split_once('-')
-                                .expect("NODE_NAME doesn't contain '-'")
-                                .0
-                                .to_string();
-                            vec![HostFeature::DC(dc.clone())]
-                        } else {
-                            vec![]
-                        }
+                        read_var_from_volatile_status_file("DC")
+                            .map_or_else(Vec::new, |dc| vec![HostFeature::DC(dc.clone())])
                     } else {
                         vec![]
                     };
