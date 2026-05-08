@@ -1115,6 +1115,10 @@ type FulfillSubnetRentalRequest = record {
   //
   //     https://github.com/dfinity/ic/releases/latest
   replica_version_id : opt text;
+
+  // Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+  // If not set, handling defaults to the NNS subnet.
+  initial_dkg_subnet_id : opt principal;
 };
 
 // Declares an approved set of alternative replica virtual machine software for

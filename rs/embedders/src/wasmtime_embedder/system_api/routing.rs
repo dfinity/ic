@@ -8,10 +8,10 @@ use ic_logger::{ReplicaLogger, info};
 use ic_management_canister_types_private::{
     BitcoinGetBalanceArgs, BitcoinGetBlockHeadersArgs, BitcoinGetCurrentFeePercentilesArgs,
     BitcoinGetUtxosArgs, BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterMetadataRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs,
-    FetchCanisterLogsRequest, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
-    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
-    Payload, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
+    CanisterMetadataRequest, CanisterMetricsArgs, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
+    ECDSAPublicKeyArgs, FetchCanisterLogsRequest, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method,
+    NodeMetricsHistoryArgs, Payload, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
     ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs, ReshareChainKeyArgs,
     SchnorrPublicKeyArgs, SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs,
     StoredChunksArgs, SubnetInfoArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
@@ -366,6 +366,11 @@ pub(super) fn resolve_destination(
             let args = RenameCanisterArgs::decode(payload)?;
             let canister_id = args.get_canister_id();
             route_canister_id(canister_id, Ic00Method::RenameCanister, network_topology)
+        }
+        Ok(Ic00Method::CanisterMetrics) => {
+            let args = CanisterMetricsArgs::decode(payload)?;
+            let canister_id = args.get_canister_id();
+            route_canister_id(canister_id, Ic00Method::CanisterMetrics, network_topology)
         }
         Err(_) => Err(ResolveDestinationError::MethodNotFound(
             method_name.to_string(),

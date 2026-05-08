@@ -72,7 +72,7 @@ function update_tee_metrics() {
         "guestos_tee_active" \
         "Indicates whether the virtual machine is running in a Trusted Execution Environment (1 = TEE enabled, 0 = not in TEE)" \
         "gauge"
-    append_metric "$metric_family" "guestos_tee_active" "" "$SEV_ACTIVE"
+    append_metric "$metric_family" "guestos_tee_active" "" "$TEE_ENABLED"
 }
 
 function main() {

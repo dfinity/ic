@@ -396,6 +396,7 @@ pub struct SubnetMetrics {
     consumed_cycles_http_outcalls: NominalCycles,
     consumed_cycles_ecdsa_outcalls: NominalCycles,
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, NominalCycles>,
+    consumed_cycles_by_use_case_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,
     pub threshold_signature_agreements: BTreeMap<MasterPublicKeyId, u64>,
     /// The number of canisters that exist on this subnet.
     pub num_canisters: u64,
@@ -418,6 +419,10 @@ impl SubnetMetrics {
         }
         *self
             .consumed_cycles_by_use_case
+            .entry(use_case)
+            .or_insert_with(NominalCycles::zero) += cycles;
+        *self
+            .consumed_cycles_by_use_case_as_counters
             .entry(use_case)
             .or_insert_with(NominalCycles::zero) += cycles;
     }
@@ -448,6 +453,12 @@ impl SubnetMetrics {
 
     pub fn get_consumed_cycles_by_use_case(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
         &self.consumed_cycles_by_use_case
+    }
+
+    pub fn get_consumed_cycles_by_use_case_as_counters(
+        &self,
+    ) -> &BTreeMap<CyclesUseCase, NominalCycles> {
+        &self.consumed_cycles_by_use_case_as_counters
     }
 
     pub fn consumed_cycles_total(&self) -> NominalCycles {

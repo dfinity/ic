@@ -14,6 +14,7 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:itertools",
     "@crate_index//:libcryptsetup-rs",
+    "@crate_index//:mockall",
     "@crate_index//:nix",
     "@crate_index//:prometheus",
     "@crate_index//:rand",

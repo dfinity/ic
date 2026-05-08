@@ -357,7 +357,8 @@ impl SystemStateModifications {
             | Ok(Ic00Method::ReadCanisterSnapshotMetadata)
             | Ok(Ic00Method::ReadCanisterSnapshotData)
             | Ok(Ic00Method::UploadCanisterSnapshotMetadata)
-            | Ok(Ic00Method::UploadCanisterSnapshotData) => Ok(None),
+            | Ok(Ic00Method::UploadCanisterSnapshotData)
+            | Ok(Ic00Method::CanisterMetrics) => Ok(None),
             Err(_) => Err(UserError::new(
                 ErrorCode::CanisterMethodNotFound,
                 format!("Management canister has no method '{}'", msg.method_name),

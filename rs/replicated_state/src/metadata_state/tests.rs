@@ -400,11 +400,7 @@ fn system_metadata_roundtrip_encoding() {
         let proto = pb::SystemMetadata::from(system_metadata);
         assert_eq!(
             *system_metadata,
-            (
-                proto,
-                SubnetSchedule::default(),
-                &DummyMetrics as &dyn CheckpointLoadingMetrics
-            )
+            (proto, &DummyMetrics as &dyn CheckpointLoadingMetrics)
                 .try_into()
                 .unwrap()
         );
@@ -424,36 +420,6 @@ fn system_metadata_roundtrip_encoding() {
     // Set `last_generated_canister_id` to valid, but migrated canister ID.
     system_metadata.last_generated_canister_id = Some(15.into());
     validate_roundtrip_encoding(&system_metadata);
-}
-
-#[test]
-fn subnet_schedule_backward_compatibility() {
-    // Old encoding: `SystemMetadata` without `subnet_schedule`, plus a
-    // `SubnetSchedule` aggregated from canister states.
-    let system_metadata = SystemMetadata::new(SUBNET_0, SubnetType::Application);
-    let mut subnet_schedule = SubnetSchedule::default();
-    *subnet_schedule.get_mut(CanisterId::from_u64(1)) = CanisterPriority {
-        accumulated_priority: 100.into(),
-        executed_rounds: 2,
-        long_execution_start_round: Some(3.into()),
-        last_full_execution_round: 4.into(),
-    };
-
-    // Expected decoded `SystemMetadata` has populated `subnet_schedule`.
-    let mut expected = system_metadata.clone();
-    expected.subnet_schedule = subnet_schedule.clone();
-
-    let proto = pb_metadata::SystemMetadata::from(&system_metadata);
-    assert_eq!(
-        expected,
-        (
-            proto,
-            subnet_schedule,
-            &DummyMetrics as &dyn CheckpointLoadingMetrics
-        )
-            .try_into()
-            .unwrap()
-    );
 }
 
 #[test]
