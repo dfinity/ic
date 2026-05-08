@@ -8,6 +8,7 @@ use crate::{
     registry_helper::{RegistryHelper, VersionedValue},
 };
 use async_trait::async_trait;
+use ic_config::{Config, ConfigSource};
 use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
@@ -34,6 +35,7 @@ use std::{
     cmp::Ordering,
     collections::{BTreeMap, HashMap},
     ffi::OsString,
+    fs::{remove_dir_all, remove_file},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
@@ -112,6 +114,161 @@ impl RegistryReplicatorForUpgrade for RegistryReplicator {
     }
 }
 
+/// Trait abstracting the side effects of removing a node's state, so they can be
+/// mocked in tests.
+#[async_trait]
+#[cfg_attr(test, mockall::automock)]
+pub trait StateRemover: Send + Sync {
+    /// Deletes the subnet state consisting of the consensus pool, execution state,
+    /// the local CUP and the persisted error metric of threshold key changes.
+    fn remove_node_state(
+        &self,
+        replica_config_file: &Path,
+        cup_path: &Path,
+        key_changed_metric: &Path,
+    ) -> Result<(), String>;
+
+    /// Call `sync` and `fstrim` on the data partition
+    async fn sync_and_trim_fs(
+        &self,
+        ic_binary_dir: &Path,
+        logger: &ReplicaLogger,
+    ) -> Result<(), String>;
+}
+
+/// Production `StateRemover` that performs the actual file system and `fstrim` operations.
+pub(crate) struct StateRemoverImpl;
+
+#[async_trait]
+impl StateRemover for StateRemoverImpl {
+    fn remove_node_state(
+        &self,
+        replica_config_file: &Path,
+        cup_path: &Path,
+        key_changed_metric: &Path,
+    ) -> Result<(), String> {
+        let tmpdir = tempfile::Builder::new()
+            .prefix("ic_config")
+            .tempdir()
+            .map_err(|err| format!("Couldn't create a temporary directory: {err:?}"))?;
+        let config = Config::load_with_tmpdir(
+            ConfigSource::File(replica_config_file.to_path_buf()),
+            tmpdir.path().to_path_buf(),
+        );
+
+        let consensus_pool_path = config.artifact_pool.consensus_pool_path;
+        remove_dir_all(&consensus_pool_path).map_err(|err| {
+            format!("Couldn't delete the consensus pool at {consensus_pool_path:?}: {err:?}")
+        })?;
+
+        let state_path = config.state_manager.state_root();
+
+        // We have to explicitly delete child sub-directories and files from the state_root,
+        // instead of calling remove_dir_all(state_path) because
+        // deleting the "page_deltas" directory results in a SELinux issue: upon deletion of
+        // a directory/file, its SELinux class is not persisted if it's recreated. Upon
+        // re-creation, the SELinux rights of the creator are applied, not the "old" ones.
+        // Deleting the page_deltas directory would thus remove the sandbox capacity to
+        // do IO in the page delta files.
+        for entry in std::fs::read_dir(state_path.as_path()).map_err(|err| {
+            format!(
+                "Error iterating through dir {:?}, because {:?}",
+                state_path.as_path(),
+                err
+            )
+        })? {
+            let en = entry
+                .as_ref()
+                .expect("Getting reference of dir entry failed.");
+            // If this isn't the page deltas directory, it's safe to delete.
+            if en
+                .file_name()
+                .into_string()
+                .expect("Converting file name to string failed.")
+                != config.state_manager.page_deltas_dirname()
+            {
+                if en
+                    .file_type()
+                    .expect("IO error fetching file type.")
+                    .is_dir()
+                {
+                    remove_dir_all(en.path())
+                } else {
+                    std::fs::remove_file(en.path())
+                }
+                .map_err(|err| {
+                    format!(
+                        "Couldn't delete the path {:?}, because {:?}",
+                        en.path(),
+                        err
+                    )
+                })?;
+            } else {
+                // Look into the page_deltas/ directory and delete any possible leftover files.
+                for entry in std::fs::read_dir(
+                    state_path
+                        .as_path()
+                        .join(config.state_manager.page_deltas_dirname()),
+                )
+                .map_err(|err| {
+                    format!(
+                        "Error iterating through dir {:?}, because {:?}",
+                        state_path.as_path(),
+                        err
+                    )
+                })? {
+                    std::fs::remove_file(
+                        entry.expect("Error getting file under page_delta/.").path(),
+                    )
+                    .map_err(|err| {
+                        format!(
+                            "Couldn't delete the file {:?}, because {:?}",
+                            en.path(),
+                            err
+                        )
+                    })?;
+                }
+            }
+        }
+
+        remove_file(cup_path)
+            .map_err(|err| format!("Couldn't delete the CUP at {cup_path:?}: {err:?}"))?;
+
+        if key_changed_metric.try_exists().map_err(|err| {
+            format!("Failed to check if {key_changed_metric:?} exists, because {err:?}")
+        })? {
+            remove_file(key_changed_metric).map_err(|err| {
+                format!("Couldn't delete the key changes metric at {key_changed_metric:?}: {err:?}")
+            })?;
+        }
+
+        Ok(())
+    }
+
+    async fn sync_and_trim_fs(
+        &self,
+        ic_binary_dir: &Path,
+        logger: &ReplicaLogger,
+    ) -> Result<(), String> {
+        let mut fstrim_script = tokio::process::Command::new(ic_binary_dir.join("sync_fstrim.sh"));
+        info!(logger, "Running command '{:?}'...", fstrim_script);
+        match fstrim_script.status().await {
+            Ok(status) => {
+                if status.success() {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "Failed to run command '{fstrim_script:?}', return value: {status}"
+                    ))
+                }
+            }
+            Err(err) => Err(format!(
+                "Failed to run command '{fstrim_script:?}', error: {err}"
+            )),
+        }
+    }
+}
+
 pub(crate) enum SubnetUpgrade {
     Fast(ReplicaVersion),
     Slow(GuestosVersion),
@@ -157,6 +314,7 @@ pub(crate) struct Upgrade {
     replica_config_file: PathBuf,
     pub ic_binary_dir: PathBuf,
     registry_replicator: Arc<dyn RegistryReplicatorForUpgrade>,
+    state_remover: Box<dyn StateRemover>,
     init_time: Instant,
     pub logger: ReplicaLogger,
     node_id: NodeId,
@@ -179,6 +337,7 @@ impl Upgrade {
         node_id: NodeId,
         ic_binary_dir: PathBuf,
         registry_replicator: Arc<dyn RegistryReplicatorForUpgrade>,
+        state_remover: Box<dyn StateRemover>,
         logger: ReplicaLogger,
         orchestrator_data_directory: PathBuf,
     ) -> Self {
@@ -217,6 +376,7 @@ impl Upgrade {
             replica_config_file,
             ic_binary_dir,
             registry_replicator,
+            state_remover,
             init_time,
             logger,
             key_changed_metric,
@@ -569,16 +729,18 @@ impl Upgrade {
     async fn remove_state(&self) -> OrchestratorResult<()> {
         // Reset the key changed errors counter to not raise alerts in other subnets
         self.metrics.master_public_key_changed_errors.reset();
-        remove_node_state(
-            &self.replica_config_file,
-            &self.cup_provider.get_cup_path(),
-            &self.key_changed_metric,
-        )
-        .map_err(OrchestratorError::UpgradeError)?;
+        self.state_remover
+            .remove_node_state(
+                &self.replica_config_file,
+                &self.cup_provider.get_cup_path(),
+                &self.key_changed_metric,
+            )
+            .map_err(OrchestratorError::UpgradeError)?;
         info!(self.logger, "Subnet state removed");
 
         let instant = Instant::now();
-        sync_and_trim_fs(&self.logger)
+        self.state_remover
+            .sync_and_trim_fs(&self.ic_binary_dir, &self.logger)
             .await
             .map_err(OrchestratorError::UpgradeError)?;
         let elapsed = instant.elapsed().as_millis();
@@ -976,131 +1138,6 @@ fn node_is_in_subnet_at_version(
                 .unwrap_or(true)
         })
         .unwrap_or(true)
-}
-
-/// Call `sync` and `fstrim` on the data partition
-async fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
-    let mut fstrim_script = tokio::process::Command::new("/opt/ic/bin/sync_fstrim.sh");
-    info!(logger, "Running command '{:?}'...", fstrim_script);
-    match fstrim_script.status().await {
-        Ok(status) => {
-            if status.success() {
-                Ok(())
-            } else {
-                Err(format!(
-                    "Failed to run command '{fstrim_script:?}', return value: {status}"
-                ))
-            }
-        }
-        Err(err) => Err(format!(
-            "Failed to run command '{fstrim_script:?}', error: {err}"
-        )),
-    }
-}
-
-/// Deletes the subnet state consisting of the consensus pool, execution state,
-/// the local CUP and the persisted error metric of threshold key changes.
-fn remove_node_state(
-    replica_config_file: &Path,
-    cup_path: &Path,
-    key_changed_metric: &Path,
-) -> Result<(), String> {
-    use ic_config::{Config, ConfigSource};
-    use std::fs::{remove_dir_all, remove_file};
-    let tmpdir = tempfile::Builder::new()
-        .prefix("ic_config")
-        .tempdir()
-        .map_err(|err| format!("Couldn't create a temporary directory: {err:?}"))?;
-    let config = Config::load_with_tmpdir(
-        ConfigSource::File(replica_config_file.to_path_buf()),
-        tmpdir.path().to_path_buf(),
-    );
-
-    let consensus_pool_path = config.artifact_pool.consensus_pool_path;
-    remove_dir_all(&consensus_pool_path).map_err(|err| {
-        format!("Couldn't delete the consensus pool at {consensus_pool_path:?}: {err:?}")
-    })?;
-
-    let state_path = config.state_manager.state_root();
-
-    // We have to explicitly delete child sub-directories and files from the state_root,
-    // instead of calling remove_dir_all(state_path) because
-    // deleting the "page_deltas" directory results in a SELinux issue: upon deletion of
-    // a directory/file, its SELinux class is not persisted if it's recreated. Upon
-    // re-creation, the SELinux rights of the creator are applied, not the "old" ones.
-    // Deleting the page_deltas directory would thus remove the sandbox capacity to
-    // do IO in the page delta files.
-    for entry in std::fs::read_dir(state_path.as_path()).map_err(|err| {
-        format!(
-            "Error iterating through dir {:?}, because {:?}",
-            state_path.as_path(),
-            err
-        )
-    })? {
-        let en = entry
-            .as_ref()
-            .expect("Getting reference of dir entry failed.");
-        // If this isn't the page deltas directory, it's safe to delete.
-        if en
-            .file_name()
-            .into_string()
-            .expect("Converting file name to string failed.")
-            != config.state_manager.page_deltas_dirname()
-        {
-            if en
-                .file_type()
-                .expect("IO error fetching file type.")
-                .is_dir()
-            {
-                remove_dir_all(en.path())
-            } else {
-                std::fs::remove_file(en.path())
-            }
-            .map_err(|err| {
-                format!(
-                    "Couldn't delete the path {:?}, because {:?}",
-                    en.path(),
-                    err
-                )
-            })?;
-        } else {
-            // Look into the page_deltas/ directory and delete any possible leftover files.
-            for entry in std::fs::read_dir(
-                state_path
-                    .as_path()
-                    .join(config.state_manager.page_deltas_dirname()),
-            )
-            .map_err(|err| {
-                format!(
-                    "Error iterating through dir {:?}, because {:?}",
-                    state_path.as_path(),
-                    err
-                )
-            })? {
-                std::fs::remove_file(entry.expect("Error getting file under page_delta/.").path())
-                    .map_err(|err| {
-                        format!(
-                            "Couldn't delete the file {:?}, because {:?}",
-                            en.path(),
-                            err
-                        )
-                    })?;
-            }
-        }
-    }
-
-    remove_file(cup_path)
-        .map_err(|err| format!("Couldn't delete the CUP at {cup_path:?}: {err:?}"))?;
-
-    if key_changed_metric.try_exists().map_err(|err| {
-        format!("Failed to check if {key_changed_metric:?} exists, because {err:?}")
-    })? {
-        remove_file(key_changed_metric).map_err(|err| {
-            format!("Couldn't delete the key changes metric at {key_changed_metric:?}: {err:?}")
-        })?;
-    }
-
-    Ok(())
 }
 
 /// Re-execute the current process, exactly as it was originally called.
@@ -1887,6 +1924,25 @@ mod tests {
                     .unwrap_or(false),
             );
 
+        let expected_state_removal_calls = if test_scenario.should_remove_state() {
+            1
+        } else {
+            0
+        };
+        let mut state_remover = MockStateRemover::new();
+        let cup_path = cup_provider.get_cup_path();
+        state_remover
+            .expect_remove_node_state()
+            .times(expected_state_removal_calls)
+            .returning(move |_, _, _| {
+                std::fs::remove_file(&cup_path).unwrap();
+                Ok(())
+            });
+        state_remover
+            .expect_sync_and_trim_fs()
+            .times(expected_state_removal_calls)
+            .returning(|_, _| Box::pin(async { Ok(()) }));
+
         let release_content_dir = dir.join("images");
         let guestos_release_content_dir = release_content_dir.join("guestos");
         let binaries_release_content_dir = release_content_dir.join("binaries");
@@ -1929,6 +1985,7 @@ mod tests {
             node_id,
             ic_binary_dir,
             Arc::new(registry_replicator),
+            Box::new(state_remover),
             logger,
             orchestrator_data_dir,
         )
@@ -2052,6 +2109,29 @@ mod tests {
                 self.initial_subnet_assignment,
                 SubnetAssignment::Assigned(_)
             ) && self.has_local_cup.is_some()
+        }
+
+        // Returns whether the upgrade loop should remove the local CUP and state based on the test
+        // scenario based on the test scenario
+        fn should_remove_state(&self) -> bool {
+            let Some(highest_cup) = self.highest_cup() else {
+                // There is no CUP at all, so we are unassigned and the state is not actively
+                // removed
+                return false;
+            };
+
+            // The state should be removed only when leaving
+            let Some(leaving_registry_version) = &self.is_leaving else {
+                return false;
+            };
+
+            if &highest_cup.registry_version < leaving_registry_version {
+                // The node is leaving later, so the state should not be removed now
+                return false;
+            }
+
+            // The node is leaving now, so the state should be removed
+            return true;
         }
 
         // Returns whether the upgrade loop should call
@@ -2774,44 +2854,6 @@ mod tests {
             }
         }
 
-        // Asserts whether the orchestrator has removed the local CUP and state if necessary.
-        fn assert_removed_state_if_necessary(&self, logs: Vec<LogEntry>) {
-            let needle_has_removed_state = "Subnet state removed";
-            let logs_assert = LogEntriesAssert::assert_that(logs);
-            let assert_has_removed_state = || {
-                logs_assert.has_only_one_message_containing(&Level::Info, needle_has_removed_state);
-            };
-            let assert_has_not_removed_state = || {
-                logs_assert.has_exactly_n_messages_containing(
-                    0,
-                    &Level::Info,
-                    needle_has_removed_state,
-                );
-            };
-
-            let Some(highest_cup) = self.highest_cup() else {
-                // There is no CUP at all, so we are unassigned and the state is not actively
-                // removed
-                assert_has_not_removed_state();
-                return;
-            };
-
-            // The state should be removed only when leaving
-            let Some(leaving_registry_version) = &self.is_leaving else {
-                assert_has_not_removed_state();
-                return;
-            };
-
-            if &highest_cup.registry_version < leaving_registry_version {
-                // The node is leaving later, so the state should not be removed now
-                assert_has_not_removed_state();
-                return;
-            }
-
-            // The node is leaving now, so the state should be removed
-            assert_has_removed_state();
-        }
-
         // Returns whether the replica process should be running after the upgrade loop.
         // Additionally asserts whether the orchestrator has started a *new* replica process
         fn should_replica_process_be_running(&self, logs: Vec<LogEntry>) -> bool {
@@ -3054,9 +3096,6 @@ mod tests {
             test_scenario.expected_local_cup_height(logs.clone())
         );
 
-        // Check that the state was removed if necessary
-        test_scenario.assert_removed_state_if_necessary(logs.clone());
-
         // Check whether the replica process is running or not
         assert_eq!(
             upgrade_loop.replica_process.lock().unwrap().is_running(),
@@ -3253,15 +3292,6 @@ mod tests {
             // Untested scenario: being unassigned, seeing a genesis CUP but
             // instantly having to leave (unlikely in practice and complex to
             // test)
-            return;
-        }
-
-        if let Some(highest_cup) = test_scenario.highest_cup()
-            && let Some(leaving_registry_version) = test_scenario.is_leaving
-            && highest_cup.registry_version >= leaving_registry_version
-        {
-            // TODO(CON-1630): leaving scenario is untested for now as it involves
-            // mocking state removal and process (replica) management
             return;
         }
 

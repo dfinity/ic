@@ -13,7 +13,7 @@ use crate::{
     registration::NodeRegistration,
     registry_helper::RegistryHelper,
     ssh_access_manager::SshAccessManager,
-    upgrade::{OrchestratorControlFlow, Upgrade},
+    upgrade::{OrchestratorControlFlow, StateRemoverImpl, Upgrade},
 };
 use anyhow::Context;
 use backoff::ExponentialBackoffBuilder;
@@ -311,6 +311,7 @@ impl Orchestrator {
             manageboot_binaries,
             Arc::clone(&registry) as _,
         ));
+        let state_remover = Box::new(StateRemoverImpl);
         let upgrade = Some(
             Upgrade::new(
                 Arc::clone(&registry) as _,
@@ -326,6 +327,7 @@ impl Orchestrator {
                 node_id,
                 ic_binary_directory.clone(),
                 Arc::clone(&registry_replicator) as _,
+                state_remover,
                 logger.clone(),
                 args.orchestrator_data_directory,
             )
