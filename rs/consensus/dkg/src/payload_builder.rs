@@ -424,7 +424,7 @@ pub(super) fn create_summary_payload(
                     .insert(dkg_id.dkg_tag.clone(), transcript)
                     .is_some()
                 {
-                    unreachable!(
+                    panic!(
                         "last summary has multiple configs for tag {:?}",
                         dkg_id.dkg_tag
                     );
