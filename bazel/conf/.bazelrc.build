@@ -5,6 +5,10 @@
 # lockfile for MODULE.bazel
 common --lockfile_mode=off
 
+# Use prebuilt protoc binary via toolchain resolution instead of compiling from C++ source.
+# See https://github.com/protocolbuffers/protobuf/issues/19558
+common --incompatible_enable_proto_toolchain_resolution
+
 # Use hermetic JDK
 # See https://bazel.build/docs/bazel-and-java#hermetic-testing
 build --java_runtime_version=remotejdk_17

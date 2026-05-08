@@ -59251,7 +59251,7 @@
         ],
         "data": {
           "common": [
-            "@protobuf//:protoc"
+            "@@//bazel:protoc"
           ],
           "selects": {}
         },
@@ -59273,7 +59273,7 @@
         },
         "build_script_env": {
           "common": {
-            "PROTOC": "$(execpath @protobuf//:protoc)"
+            "PROTOC": "$(execpath @@//bazel:protoc)"
           },
           "selects": {}
         }
