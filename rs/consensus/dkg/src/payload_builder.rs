@@ -134,7 +134,7 @@ fn create_data_payload(
 
     // Select new dealings for the payload.
     let new_validated_dealings = select_dealings_for_payload(
-        configs,
+        &configs,
         &dealers_from_chain,
         &*dkg_pool
             .read()
@@ -285,7 +285,7 @@ pub(crate) fn create_early_remote_transcripts(
 /// 2. Among remote targets, prioritize dealings for targets that are closer to their threshold.
 /// 3. Use `target_subnet` as a tie-breaker between dealings for targets with the same remaining capacity.
 fn select_dealings_for_payload(
-    configs: BTreeMap<&NiDkgId, &NiDkgConfig>,
+    configs: &BTreeMap<&NiDkgId, &NiDkgConfig>,
     dealers_from_chain: &HashSet<(NiDkgId, NodeId)>,
     dkg_pool: &dyn DkgPool,
     max_dealings_per_block: usize,
@@ -1842,8 +1842,8 @@ mod tests {
             messages: (0..4).map(|i| create_dealing(i, id.clone())).collect(),
         };
 
-        let selected =
-            select_dealings_for_payload(configs.iter().collect(), &HashSet::new(), &pool, 10);
+        let configs: BTreeMap<&NiDkgId, &NiDkgConfig> = configs.iter().collect();
+        let selected = select_dealings_for_payload(&configs, &HashSet::new(), &pool, 10);
 
         // Only collection_threshold (2) dealings should be included.
         assert_eq!(selected.len(), 2);
@@ -1867,7 +1867,7 @@ mod tests {
             messages: (0..4).map(|i| create_dealing(i, id.clone())).collect(),
         };
 
-        let selected = select_dealings_for_payload(configs, &dealers_from_chain, &pool, 10);
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
 
         // Dealer 0's dealing should be filtered out, only dealer 1's remains.
         assert_eq!(selected.len(), 1);
@@ -1895,7 +1895,7 @@ mod tests {
                 .collect(),
         };
 
-        let selected = select_dealings_for_payload(configs, &HashSet::new(), &pool, 3);
+        let selected = select_dealings_for_payload(&configs, &HashSet::new(), &pool, 3);
 
         assert_eq!(selected.len(), 3);
         // All 3 should be remote (prioritized), since remote has 4 available.
@@ -1921,7 +1921,7 @@ mod tests {
             ],
         };
 
-        let selected = select_dealings_for_payload(configs, &HashSet::new(), &pool, 10);
+        let selected = select_dealings_for_payload(&configs, &HashSet::new(), &pool, 10);
 
         assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].content.dkg_id, known_id);
@@ -1949,7 +1949,7 @@ mod tests {
                 .collect(),
         };
 
-        let selected = select_dealings_for_payload(configs.clone(), &HashSet::new(), &pool, 2);
+        let selected = select_dealings_for_payload(&configs, &HashSet::new(), &pool, 2);
         assert_eq!(selected.len(), 2);
         assert!(selected.iter().all(|msg| msg.content.dkg_id == remote_id));
         assert_eq!(
@@ -1957,7 +1957,7 @@ mod tests {
             BTreeSet::from_iter((3..5).map(node_test_id))
         );
 
-        let selected = select_dealings_for_payload(configs, &HashSet::new(), &pool, 10);
+        let selected = select_dealings_for_payload(&configs, &HashSet::new(), &pool, 10);
 
         // 2 remote + 2 local (both capped at collection_threshold)
         assert_eq!(selected.len(), 4);
@@ -2013,11 +2013,11 @@ mod tests {
             ],
         };
 
-        let selected = select_dealings_for_payload(configs.clone(), &dealers_from_chain, &pool, 1);
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 1);
         assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].content.dkg_id, remote_low_remaining_id);
 
-        let selected = select_dealings_for_payload(configs, &dealers_from_chain, &pool, 10);
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
         assert_eq!(selected.len(), 2);
         assert_eq!(
             BTreeSet::from_iter(selected.iter().map(|msg| msg.content.dkg_id.clone())),
@@ -2065,13 +2065,13 @@ mod tests {
         };
 
         // With max_dealings_per_block = 1, we should prioritize local.
-        let selected = select_dealings_for_payload(configs.clone(), &dealers_from_chain, &pool, 1);
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 1);
         assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].content.dkg_id, local_id);
 
         // With max_dealings_per_block = 10, we should prioritize local (although it has higher remaining capacity).
         // We should also include remote, once local is capped at collection_threshold.
-        let selected = select_dealings_for_payload(configs, &dealers_from_chain, &pool, 10);
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
         assert_eq!(selected.len(), 3);
         assert_eq!(
             selected
@@ -2115,7 +2115,7 @@ mod tests {
             ],
         };
 
-        let selected = select_dealings_for_payload(configs, &HashSet::new(), &pool, 1);
+        let selected = select_dealings_for_payload(&configs, &HashSet::new(), &pool, 1);
 
         assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].content.dkg_id, remote_target_0);
@@ -2164,11 +2164,11 @@ mod tests {
 
         // With MAX_REMOTE_DKGS_PER_INTERVAL = 1 and no completed remote target IDs,
         // remote dealings should still be prioritized.
-        let selected = select_dealings_for_payload(configs.clone(), &dealers_from_chain, &pool, 1);
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 1);
         assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].content.dkg_id, remote_high_id);
 
-        let selected = select_dealings_for_payload(configs, &dealers_from_chain, &pool, 10);
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
         assert_eq!(selected.len(), 2);
         assert_eq!(
             BTreeSet::from_iter(selected.iter().map(|msg| msg.content.dkg_id.clone())),
@@ -2200,7 +2200,7 @@ mod tests {
             ],
         };
 
-        let selected = select_dealings_for_payload(configs, &dealers_from_chain, &pool, 10);
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
         assert!(selected.is_empty());
     }
 }
