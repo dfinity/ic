@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "state_machine_tests",
-    testonly = True,
     srcs = [
         "src/lib.rs",
         "src/tests.rs",
@@ -84,7 +83,6 @@ rust_library(
 
 rust_binary(
     name = "ic-test-state-machine",
-    testonly = True,
     srcs = ["src/main.rs"],
     deps = [
         # Keep sorted.
