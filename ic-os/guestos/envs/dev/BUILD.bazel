@@ -21,19 +21,26 @@ icos_images = icos_build(
 file_size_check(
     name = "disk_img_size_check",
     file = icos_images.disk_image,
-    max_file_size = 600 * 1000 * 1000,  # 580 MB on 2025-06-26
+    # Raised from 600 MB to 650 MB to accommodate the AI extras bundled on this
+    # branch (ollama binary, baked-in Gemma model under /opt/ollama-models, and
+    # the AI agent). 580 MB on 2025-06-26; ~602 MB after AI extras.
+    max_file_size = 650 * 1000 * 1000,
 )
 
 file_size_check(
     name = "update_img_size_check",
     file = icos_images.update_image,
-    max_file_size = 600 * 1000 * 1000,  # 578 MB on 2025-06-26
+    # See disk_img_size_check above for the rationale of the bump.
+    # 578 MB on 2025-06-26; ~600 MB after AI extras.
+    max_file_size = 650 * 1000 * 1000,
 )
 
 file_size_check(
     name = "update_img_test_size_check",
     file = icos_images.update_image_test,
-    max_file_size = 600 * 1000 * 1000,  # 578 MB on 2025-06-26
+    # See disk_img_size_check above for the rationale of the bump.
+    # 578 MB on 2025-06-26; ~600 MB after AI extras.
+    max_file_size = 650 * 1000 * 1000,
 )
 
 # Export checksums & build artifacts for update images

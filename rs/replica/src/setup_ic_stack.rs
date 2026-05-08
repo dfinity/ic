@@ -470,6 +470,11 @@ pub fn construct_state_sync_only_stack(
 
     // ---------- STATE MANAGER --------------------------------------------
     let verifier = Arc::new(VerifierImpl::new(crypto.clone()));
+    // This setup path (state-sync-only / receive-only P2P) doesn't expose a
+    // consumer of max-certified-height updates, but `StateManagerImpl::new`
+    // requires a `watch::Sender<Height>`. Create a local channel and drop the
+    // receiver; the sender is kept alive by being moved into the state manager.
+    let (max_certified_height_tx, _max_certified_height_rx) = watch::channel(Height::from(0));
     let state_manager = Arc::new(StateManagerImpl::new(
         verifier,
         subnet_id,
@@ -479,6 +484,7 @@ pub fn construct_state_sync_only_stack(
         &config.state_manager,
         Some(consensus_pool_cache.starting_height()),
         config.malicious_behavior.malicious_flags.clone(),
+        max_certified_height_tx,
     ));
 
     // ---------- STATE SYNC + P2P (receive-only) --------------------------
