@@ -1199,6 +1199,22 @@ mod tests {
                 );
                 let callback_map = build_callback_map(dkg_summary);
                 assert!(callback_map.is_empty(), "{callback_map:?}");
+
+                // Remove remote DKG requests from the state.
+                deps.state_manager.get_mut().checkpoint();
+                complement_state_manager_with_dkg_contexts(
+                    deps.state_manager.clone(),
+                    vec![],
+                    None,
+                );
+
+                // It should no longer appear in `initial_dkg_attempts` of the next summary.
+                deps.pool
+                    .advance_round_normal_operation_n(dkg_interval_length + 1);
+                let summary_block =
+                    PoolReader::new(&deps.pool).get_highest_finalized_summary_block();
+                let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
+                assert!(dkg_summary.initial_dkg_attempts.is_empty());
             });
         });
     }
