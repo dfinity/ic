@@ -72,6 +72,7 @@ system_test_nns(
 # should be running and have permission to fetch mainnet test data.
 system_test_nns(
     name = "nr_large_with_mainnet_state",
+    colocated_test_driver_vm_forward_ssh_agent = True,
     colocated_test_driver_vm_required_host_features = ["dc=zh1"],
     colocated_test_driver_vm_resources = {
         "vcpus": None,
