@@ -1372,7 +1372,7 @@ pub struct CanisterIdRange {
 
 /// # List Canisters Result.
 ///
-/// Result type of [`list_canisters`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-list_canisters).
+/// Result type of [`list_canisters`](https://docs.internetcomputer.org/references/management-canister/#list_canisters).
 #[derive(
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
 )]
@@ -1500,7 +1500,7 @@ pub struct DeleteCanisterSnapshotArgs {
 
 /// # Read Canister Snapshot Metadata Args.
 ///
-/// Argument type of [`read_canister_snapshot_metadata`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-read_canister_snapshot_metadata).
+/// Argument type of [`read_canister_snapshot_metadata`](https://docs.internetcomputer.org/references/management-canister/#read_canister_snapshot_metadata).
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct ReadCanisterSnapshotMetadataArgs {
     /// Canister ID.
@@ -1511,7 +1511,7 @@ pub struct ReadCanisterSnapshotMetadataArgs {
 
 /// # Read Canister Snapshot Metadata Result.
 ///
-/// Result type of [`read_canister_snapshot_metadata`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-read_canister_snapshot_metadata).
+/// Result type of [`read_canister_snapshot_metadata`](https://docs.internetcomputer.org/references/management-canister/#read_canister_snapshot_metadata).
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct ReadCanisterSnapshotMetadataResult {
     /// How the snapshot was created.
@@ -1615,7 +1615,7 @@ pub enum OnLowWasmMemoryHookStatus {
 
 /// # Read Canister Snapshot Data Args.
 ///
-/// Argument type of [`read_canister_snapshot_data`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-read_canister_snapshot_data).
+/// Argument type of [`read_canister_snapshot_data`](https://docs.internetcomputer.org/references/management-canister/#read_canister_snapshot_data).
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct ReadCanisterSnapshotDataArgs {
     /// Canister ID.
@@ -1668,7 +1668,7 @@ pub enum SnapshotDataKind {
 
 /// # Read Canister Snapshot Data Result.
 ///
-/// Result type of [`read_canister_snapshot_data`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-read_canister_snapshot_data).
+/// Result type of [`read_canister_snapshot_data`](https://docs.internetcomputer.org/references/management-canister/#read_canister_snapshot_data).
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct ReadCanisterSnapshotDataResult {
     /// The requested chunk of snapshot data.
@@ -1678,7 +1678,7 @@ pub struct ReadCanisterSnapshotDataResult {
 
 /// # Upload Canister Snapshot Metadata Args.
 ///
-/// Argument type of [`upload_canister_snapshot_metadata`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-upload_canister_snapshot_metadata).
+/// Argument type of [`upload_canister_snapshot_metadata`](https://docs.internetcomputer.org/references/management-canister/#upload_canister_snapshot_metadata).
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct UploadCanisterSnapshotMetadataArgs {
     /// Canister ID.
@@ -1705,7 +1705,7 @@ pub struct UploadCanisterSnapshotMetadataArgs {
 
 /// # Upload Canister Snapshot Metadata Result.
 ///
-/// Result type of [`upload_canister_snapshot_metadata`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-upload_canister_snapshot_metadata).
+/// Result type of [`upload_canister_snapshot_metadata`](https://docs.internetcomputer.org/references/management-canister/#upload_canister_snapshot_metadata).
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct UploadCanisterSnapshotMetadataResult {
     /// The ID of the snapshot.
@@ -1714,7 +1714,7 @@ pub struct UploadCanisterSnapshotMetadataResult {
 
 /// # Upload Canister Snapshot Data Args.
 ///
-/// Argument type of [`upload_canister_snapshot_data`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-upload_canister_snapshot_data).
+/// Argument type of [`upload_canister_snapshot_data`](https://docs.internetcomputer.org/references/management-canister/#upload_canister_snapshot_data).
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct UploadCanisterSnapshotDataArgs {
     /// Canister ID.
@@ -1834,7 +1834,7 @@ pub struct CyclesConsumed {
     /// Cycles consumed when the canister was uninstalled by the system due to running out of cycles.
     ///
     /// This is only updated on system-triggered uninstallation (i.e. the canister ran out of
-    /// cycles). Explicit calls to [`uninstall_code`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-uninstall_code)
+    /// cycles). Explicit calls to [`uninstall_code`](https://docs.internetcomputer.org/references/management-canister/#uninstall_code)
     /// do not update this metric; in that case other metrics (e.g. [`ingress_induction`](Self::ingress_induction))
     /// may be updated instead.
     pub uninstall: Nat,
@@ -1848,12 +1848,12 @@ pub struct CyclesConsumed {
 
 /// # Canister Metrics Args.
 ///
-/// Argument type of [`canister_metrics`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-canister_metrics).
+/// Argument type of [`canister_metrics`](https://docs.internetcomputer.org/references/management-canister/#canister_metrics).
 pub type CanisterMetricsArgs = CanisterIdRecord;
 
 /// # Canister Metrics Result.
 ///
-/// Result type of [`canister_metrics`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-canister_metrics).
+/// Result type of [`canister_metrics`](https://docs.internetcomputer.org/references/management-canister/#canister_metrics).
 #[derive(
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
 )]
