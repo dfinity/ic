@@ -3047,17 +3047,20 @@ mod tests {
         );
         // Clear the executed args to prepare for the assertions after running the upgrade loop,
         // which are more relevant to the test scenario than the initial boot.
-        upgrade_loop.fake_guestos_upgrader().fake_manageboot_runner().clear_executed_args();
-        upgrade_loop.fake_binaries_upgrader().fake_manageboot_runner().clear_executed_args();
+        upgrade_loop
+            .fake_guestos_upgrader()
+            .fake_manageboot_runner()
+            .clear_executed_args();
+        upgrade_loop
+            .fake_binaries_upgrader()
+            .fake_manageboot_runner()
+            .clear_executed_args();
 
         let flow_result = upgrade_loop.check().await;
         let logs = logger.drain_logs();
 
         // Check orchestrator control flow
-        match (
-            &flow_result,
-            &test_scenario.expected_flow(&upgrade_loop),
-        ) {
+        match (&flow_result, &test_scenario.expected_flow(&upgrade_loop)) {
             (Ok(actual_flow), Ok(expected_flow)) => {
                 assert_eq!(actual_flow, expected_flow);
             }
