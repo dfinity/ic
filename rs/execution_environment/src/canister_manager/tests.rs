@@ -7896,7 +7896,7 @@ fn create_canister_reverts_round_limits_on_failure() {
     let err = canister_manager
         .create_canister_with_cycles(
             canister_change_origin_from_principal(&sender),
-            Some(1_000_000_000_000),
+            Some(100_000_000_000_000),
             CanisterSettingsBuilder::new()
                 .with_compute_allocation(ComputeAllocation::try_from(50u64).unwrap())
                 .with_memory_allocation(MemoryAllocation::from(NumBytes::new(MIB)))
