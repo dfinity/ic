@@ -89,6 +89,7 @@ fn should_fail_withdrawal() {
 /// * Unsupported methods return `Icrc21Error::UnsupportedCanisterCall`.
 #[test]
 fn test_icrc21_endpoints_smoke() {
+    use candid::Encode;
     use ic_ckdoge_minter::candid_api::RetrieveDogeWithApprovalArgs;
     use ic_ckdoge_minter::lifecycle::init::Network;
     use ic_ckdoge_minter_test_utils::{Setup, USER_PRINCIPAL};
@@ -151,7 +152,7 @@ fn test_icrc21_endpoints_smoke() {
             USER_PRINCIPAL,
             &make_request(
                 "retrieve_doge_with_approval",
-                candid::Encode!(&args).unwrap(),
+                Encode!(&args).unwrap(),
                 Some(DisplayMessageType::GenericDisplay),
             ),
         )
@@ -179,7 +180,7 @@ fn test_icrc21_endpoints_smoke() {
             USER_PRINCIPAL,
             &make_request(
                 "retrieve_doge_with_approval",
-                candid::Encode!(&args).unwrap(),
+                Encode!(&args).unwrap(),
                 Some(DisplayMessageType::FieldsDisplay),
             ),
         )
