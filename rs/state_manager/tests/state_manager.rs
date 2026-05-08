@@ -9112,7 +9112,12 @@ fn commit_and_certify_optimization_semantics() {
         state.metadata.batch_time += Duration::from_secs(1);
         let batch_time_no_opt = state.metadata.batch_time;
         let no_opt_height = Height::new(10);
-        sm.commit_and_certify_at_height_sync(state, no_opt_height, CertificationScope::Metadata, None);
+        sm.commit_and_certify_at_height_sync(
+            state,
+            no_opt_height,
+            CertificationScope::Metadata,
+            None,
+        );
         assert_eq!(no_state_clone_count(metrics), expected_no_state_clone_count);
 
         assert_eq!(
@@ -9341,7 +9346,12 @@ fn remove_inmemory_states_below_prunes_certification() {
 
         // we commit a strictly larger height 2 without optimization
         let state = sm.take_tip().1;
-        sm.commit_and_certify_at_height_sync(state, Height::new(2), CertificationScope::Metadata, None);
+        sm.commit_and_certify_at_height_sync(
+            state,
+            Height::new(2),
+            CertificationScope::Metadata,
+            None,
+        );
         // also move `latest_certified_height`, because that is protected from pruning.
         sm.deliver_state_certification(fake_certification_for_height_with_hash(
             Height::new(2),
@@ -9566,7 +9576,12 @@ fn commit_and_certify_reuses_certification() {
 
         // optimization does not trigger
         let state = sm.take_tip().1;
-        sm.commit_and_certify_at_height_sync(state, no_opt_height, CertificationScope::Metadata, None);
+        sm.commit_and_certify_at_height_sync(
+            state,
+            no_opt_height,
+            CertificationScope::Metadata,
+            None,
+        );
         assert_eq!(no_state_clone_count(metrics), 0);
         // `commit_and_certify` reused certification from `states.certifications`
         assert!(
