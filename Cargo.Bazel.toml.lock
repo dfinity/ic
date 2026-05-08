@@ -15090,22 +15090,22 @@ dependencies = [
 
 [[package]]
 name = "wasm-encoder"
-version = "0.239.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5be00faa2b4950c76fe618c409d2c3ea5a3c9422013e079482d78544bb2d184c"
-dependencies = [
- "leb128fmt",
- "wasmparser 0.239.0",
-]
-
-[[package]]
-name = "wasm-encoder"
 version = "0.246.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61fb705ce81adde29d2a8e99d87995e39a6e927358c91398f374474746070ef7"
 dependencies = [
  "leb128fmt",
  "wasmparser 0.246.2",
+]
+
+[[package]]
+name = "wasm-encoder"
+version = "0.247.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30b6733b8b91d010a6ac5b0fb237dc46a19650bc4c67db66857e2e787d437204"
+dependencies = [
+ "leb128fmt",
+ "wasmparser 0.247.0",
 ]
 
 [[package]]
@@ -15187,12 +15187,12 @@ dependencies = [
 
 [[package]]
 name = "wasmparser"
-version = "0.239.0"
+version = "0.246.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c9d90bb93e764f6beabf1d02028c70a2156a6583e63ac4218dd07ef733368b0"
+checksum = "71cde4757396defafd25417cfb36aa3161027d06d865b0c24baaae229aac005d"
 dependencies = [
  "bitflags 2.10.0",
- "hashbrown 0.15.2",
+ "hashbrown 0.16.1",
  "indexmap 2.14.0",
  "semver",
  "serde",
@@ -15200,12 +15200,12 @@ dependencies = [
 
 [[package]]
 name = "wasmparser"
-version = "0.246.2"
+version = "0.247.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71cde4757396defafd25417cfb36aa3161027d06d865b0c24baaae229aac005d"
+checksum = "8e6fb4c2bee46c5ea4d40f8cdb5c131725cd976718ec56f1c8e82fbde5fa2a80"
 dependencies = [
  "bitflags 2.10.0",
- "hashbrown 0.16.1",
+ "hashbrown 0.17.0",
  "indexmap 2.14.0",
  "semver",
  "serde",
@@ -16044,16 +16044,15 @@ dependencies = [
 
 [[package]]
 name = "wirm"
-version = "2.1.0"
+version = "4.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14732cb9a0eaf9ec52ecd36b9394ade5c16eea5405d160d8829f0199d97d507d"
+checksum = "4b545057c2fa3f2a83aa2d23f9010e372b880aa6973f04c0cb8400a2e813e8f0"
 dependencies = [
  "log",
+ "paste",
  "rayon",
- "serde_json",
- "tempfile",
- "wasm-encoder 0.239.0",
- "wasmparser 0.239.0",
+ "wasm-encoder 0.247.0",
+ "wasmparser 0.247.0",
 ]
 
 [[package]]
