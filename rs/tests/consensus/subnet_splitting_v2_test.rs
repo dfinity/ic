@@ -47,7 +47,6 @@ use ic_system_test_driver::{
     },
     util::runtime_from_url,
 };
-use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetSubnet;
 use ic_types::{CanisterId, Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use registry_canister::mutations::do_split_subnet::SplitSubnetPayload;
 use slog::info;
