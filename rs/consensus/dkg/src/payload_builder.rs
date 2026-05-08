@@ -413,7 +413,7 @@ pub(super) fn create_summary_payload(
     let mut next_transcripts = BTreeMap::new();
     // Try to create transcripts from the last round.
     for (dkg_id, config) in last_summary.configs.iter() {
-        if dkg_id.target_subnet != NiDkgTargetSubnet::Local {
+        if dkg_id.target_subnet.is_remote() {
             // Skip remote DKGs
             continue;
         }

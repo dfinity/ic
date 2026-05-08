@@ -227,7 +227,7 @@ impl DkgImpl {
         // until the request appears in the state, or the dealing is purged.
         let config = match configs.get(message_dkg_id) {
             Some(config) => config,
-            None if message_dkg_id.target_subnet != NiDkgTargetSubnet::Local => {
+            None if message_dkg_id.target_subnet.is_remote() => {
                 return Mutations::new();
             }
             None => {
@@ -865,8 +865,7 @@ mod tests {
                         assert_eq!(
                             [a, b, c, d]
                                 .iter()
-                                .filter(|msg| msg.content.dkg_id.target_subnet
-                                    == NiDkgTargetSubnet::Local)
+                                .filter(|msg| msg.content.dkg_id.target_subnet.is_local())
                                 .count(),
                             2
                         );
@@ -1667,8 +1666,7 @@ mod tests {
                             assert_eq!(
                                 [a, b, c, d]
                                     .iter()
-                                    .filter(|msg| msg.content.dkg_id.target_subnet
-                                        == NiDkgTargetSubnet::Local)
+                                    .filter(|msg| msg.content.dkg_id.target_subnet.is_local())
                                     .count(),
                                 2
                             );
@@ -1711,8 +1709,7 @@ mod tests {
                             assert_eq!(
                                 [a, b, c, d]
                                     .iter()
-                                    .filter(|msg| msg.content.dkg_id.target_subnet
-                                        == NiDkgTargetSubnet::Local)
+                                    .filter(|msg| msg.content.dkg_id.target_subnet.is_local())
                                     .count(),
                                 2
                             );
@@ -2266,7 +2263,7 @@ mod tests {
                 summary
                     .configs
                     .keys()
-                    .filter(|id| id.target_subnet != NiDkgTargetSubnet::Local)
+                    .filter(|id| id.target_subnet.is_remote())
                     .count(),
                 0
             );
@@ -2397,7 +2394,7 @@ mod tests {
                 let remote_dkg_ids_count = summary
                     .configs
                     .keys()
-                    .filter(|id| id.target_subnet != NiDkgTargetSubnet::Local)
+                    .filter(|id| id.target_subnet.is_remote())
                     .count();
                 assert_eq!(remote_dkg_ids_count, 0);
 

@@ -837,7 +837,7 @@ async fn wait_for_cup_with_subnet_id(
                     )
                 }
                 Ok(cup)
-                    if cup.signature.signer.target_subnet == NiDkgTargetSubnet::Local
+                    if cup.signature.signer.target_subnet.is_local()
                         && cup.signature.signer.dealer_subnet == subnet_id =>
                 {
                     Ok(())
