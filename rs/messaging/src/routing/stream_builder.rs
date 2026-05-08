@@ -575,15 +575,24 @@ impl StreamBuilderImpl {
                         }
                         RequestOrResponse::Response(rep) => {
                             // A Response: discard it.
-                            error!(
-                                self.log,
-                                "{}: Discarding response, destination not found: {:?}",
-                                CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND,
-                                rep
-                            );
-                            self.metrics
-                                .critical_error_response_destination_not_found
-                                .inc();
+                            if rep.is_best_effort() {
+                                // Expected when the destination subnet has been deleted.
+                                warn!(
+                                    self.log,
+                                    "Discarding best-effort response, destination not found: {:?}",
+                                    rep
+                                );
+                            } else {
+                                error!(
+                                    self.log,
+                                    "{}: Discarding response, destination not found: {:?}",
+                                    CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND,
+                                    rep
+                                );
+                                self.metrics
+                                    .critical_error_response_destination_not_found
+                                    .inc();
+                            }
                         }
                     }
                 }
