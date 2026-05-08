@@ -1146,6 +1146,9 @@ pub struct StateMachine {
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     pub registry_client: Arc<FakeRegistryClient>,
     pub state_manager: Arc<StateMachineStateManager>,
+    /// Whether to flush the replicated state metrics channel after each round.
+    /// Defaults to `true` but can be overridden, e.g. for benchmarks.
+    pub flush_replicated_state_metrics: bool,
     consensus_time: Arc<PocketConsensusTime>,
     ingress_pool: Arc<RwLock<PocketIngressPool>>,
     ingress_manager: Arc<IngressManager>,
@@ -2337,6 +2340,7 @@ impl StateMachine {
             registry_data_provider,
             registry_client: registry_client.clone(),
             state_manager,
+            flush_replicated_state_metrics: true,
             consensus_time,
             ingress_pool,
             ingress_manager: ingress_manager.clone(),
@@ -3081,7 +3085,9 @@ impl StateMachine {
 
         // Wait until the enqueued `ReplicatedStateMetrics::observe()` call has been
         // processed by the background metrics thread.
-        self.state_manager.flush_metrics_channel();
+        if self.flush_replicated_state_metrics {
+            self.state_manager.flush_metrics_channel();
+        }
         self.check_critical_errors();
 
         self.set_time(time_of_next_round.into());
