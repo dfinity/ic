@@ -6,7 +6,7 @@ use ic_nervous_system_runtime::Runtime;
 use serde::Deserialize;
 
 /// The UpdateSettings struct as defined in the ic-interface-spec
-/// https://docs.internetcomputer.org/references/management-canister/#candids
+/// https://docs.internetcomputer.org/references/management-canister/#update_settings
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct UpdateSettings {
     pub canister_id: PrincipalId,
@@ -33,7 +33,7 @@ pub enum SnapshotVisibility {
 }
 
 /// The CanisterSettings struct as defined in the ic-interface-spec
-/// https://docs.internetcomputer.org/references/management-canister/#candid
+/// https://docs.internetcomputer.org/references/management-canister/#canister-settings
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Default, CandidType, Deserialize)]
 pub struct CanisterSettings {
     pub controllers: Option<Vec<PrincipalId>>,

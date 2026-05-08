@@ -583,7 +583,7 @@ pub struct ManageDappCanisterSettings {
     /// The canister IDs of the dapp canisters to be modified.
     pub canister_ids: Vec<PrincipalId>,
     /// Below are fields under CanisterSettings defined at
-    /// <https://docs.internetcomputer.org/references/management-canister/#candid.>
+    /// <https://docs.internetcomputer.org/references/management-canister/#canister-settings>.
     pub compute_allocation: Option<u64>,
     pub memory_allocation: Option<u64>,
     pub freezing_threshold: Option<u64>,

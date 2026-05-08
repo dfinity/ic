@@ -26,7 +26,7 @@ use std::{
 };
 
 /// The management (virtual) canister trait, also known as IC_00.
-/// Reference: https://docs.internetcomputer.org/references/management-canister/#management-canister
+/// Reference: https://docs.internetcomputer.org/references/management-canister/
 ///
 /// This trait allows for injection of clients to canister for easier unit testing.
 #[async_trait]
