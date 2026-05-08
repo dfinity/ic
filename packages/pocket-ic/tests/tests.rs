@@ -10,6 +10,7 @@ use ic_management_canister_types::{
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
 use ic_utils::interfaces::ManagementCanister;
+use pocket_ic::SubnetMetrics;
 use pocket_ic::{
     DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult, PocketIc, PocketIcBuilder,
     PocketIcState, RejectCode, StartServerParams, Time,
@@ -1649,26 +1650,36 @@ fn subnet_metrics() {
 
     deploy_counter_canister(&pic);
 
-    let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
+    fn get_subnet_metrics(pic: &PocketIc, subnet_id: Principal) -> SubnetMetrics {
+        // Advance 10 rounds, to ensure that `canister_state_bytes` (only recomputed
+        // every 10 rounds) is updated.
+        for _ in 0..10 {
+            pic.tick();
+        }
+        pic.get_subnet_metrics(subnet_id).unwrap()
+    }
+
+    pic.tick();
+    let metrics = get_subnet_metrics(&pic, app_subnet);
     assert_eq!(metrics.num_canisters, 1);
     assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
 
     let canister_id = deploy_counter_canister(&pic);
 
-    let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
+    let metrics = get_subnet_metrics(&pic, app_subnet);
     assert_eq!(metrics.num_canisters, 2);
     assert!((1 << 17) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 18));
 
     pic.uninstall_canister(canister_id, None).unwrap();
     pic.stop_canister(canister_id, None).unwrap();
 
-    let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
+    let metrics = get_subnet_metrics(&pic, app_subnet);
     assert_eq!(metrics.num_canisters, 2);
     assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
 
     pic.delete_canister(canister_id, None).unwrap();
 
-    let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
+    let metrics = get_subnet_metrics(&pic, app_subnet);
     assert_eq!(metrics.num_canisters, 1);
     assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
 }
