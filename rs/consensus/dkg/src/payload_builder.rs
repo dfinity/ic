@@ -102,7 +102,7 @@ pub fn create_payload(
 }
 
 fn create_data_payload(
-    this_subnet_id: SubnetId,
+    subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     pool_reader: &PoolReader<'_>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
@@ -123,7 +123,7 @@ fn create_data_payload(
         .get_state_at(validation_context.certified_height)
         .map_err(DkgPayloadCreationError::StateManagerError)?;
     let remote_config_results = build_callback_id_config_map(
-        this_subnet_id,
+        subnet_id,
         registry_client,
         state.get_ref(),
         validation_context.registry_version,
