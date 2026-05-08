@@ -1512,7 +1512,7 @@ impl HasGroupSetup for TestEnv {
             match InfraProvider::read_attribute(self) {
                 InfraProvider::Farm => {
                     let required_host_features = if allocate_testnet_to_local_dc {
-                        let dc = std::env::var("DC").expect("Expected env var to DC be set");
+                        let dc = std::env::var("DC").expect("Expected env var 'DC' to be set");
                         if dc.is_empty() {
                             vec![]
                         } else {
