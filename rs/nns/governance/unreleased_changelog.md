@@ -13,6 +13,10 @@ on the process that this file is part of, see
 
 ## Changed
 
+* The first Mission 70 maturity modulation calculation skips the daily speed limit, so the initial
+  value reflects the target directly (subject to global bounds) instead of being clamped to a tiny
+  step away from zero.
+
 ## Deprecated
 
 ## Removed

@@ -94,43 +94,34 @@ pub(crate) fn compute_average_icp_xdr_rate(
 ///
 ///   `target = sensitivity * (current_price - reference_price) / reference_price`
 ///
-/// Then applies a daily speed limit (smoothing), followed by global bounds which have final say.
+/// On the first calculation (`previous` is `None`), the target is returned subject only to global
+/// bounds — the speed limit needs a baseline to be meaningful. On subsequent calculations a daily
+/// speed limit smooths day-to-day change, and global bounds have final say.
+///
+/// Returns `Err` with a reason if the inputs make the calculation impossible (e.g. price history
+/// is incomplete or the reference price is zero). Callers that hit `Err` should leave the prior
+/// modulation value untouched and log the reason.
 fn compute_maturity_modulation_permyriad(
     rates: &[SampledPrice],
     current_day: u64,
-    previous_permyriad: i64,
-    previous_day: u64,
-) -> i64 {
-    let Some(recent_icp_price) = compute_average_icp_xdr_rate(
+    previous: Option<(i64, u64)>,
+) -> Result<i64, String> {
+    let recent_icp_price = compute_average_icp_xdr_rate(
         rates,
         current_day,
         MATURITY_MODULATION_CURRENT_ICP_PRICE_WINDOW_DAYS,
-    ) else {
-        println!(
-            "{}compute_maturity_modulation_permyriad: insufficient recent price data; keeping previous value {}",
-            LOG_PREFIX, previous_permyriad
-        );
-        return previous_permyriad;
-    };
+    )
+    .ok_or_else(|| "insufficient recent price data despite full history".to_string())?;
 
-    let Some(reference_icp_price) = compute_average_icp_xdr_rate(
+    let reference_icp_price = compute_average_icp_xdr_rate(
         rates,
         current_day,
         MATURITY_MODULATION_REFERENCE_ICP_PRICE_WINDOW_DAYS,
-    ) else {
-        println!(
-            "{}compute_maturity_modulation_permyriad: insufficient reference price data; keeping previous value {}",
-            LOG_PREFIX, previous_permyriad
-        );
-        return previous_permyriad;
-    };
+    )
+    .ok_or_else(|| "insufficient reference price data despite full history".to_string())?;
 
     if reference_icp_price == 0 {
-        println!(
-            "{}compute_maturity_modulation_permyriad: reference price is zero; keeping previous value {}",
-            LOG_PREFIX, previous_permyriad
-        );
-        return previous_permyriad;
+        return Err("reference price averaged to zero".to_string());
     }
 
     let target_modulation = {
@@ -140,37 +131,43 @@ fn compute_maturity_modulation_permyriad(
         sensitivity * (recent - reference) / reference
     };
 
-    // Limit day-to-day change.
-    let days_elapsed = current_day.saturating_sub(previous_day);
-    let max_change = if days_elapsed > 1 {
-        // The timer missed one or more days — allow proportionally more change.
-        println!(
-            "{}compute_maturity_modulation_permyriad: {} days elapsed since last update (current_day={}, previous_day={})",
-            LOG_PREFIX, days_elapsed, current_day, previous_day
-        );
-        MATURITY_MODULATION_DAILY_SPEED_LIMIT_PERMYRIAD.saturating_mul(days_elapsed as i64)
-    } else if days_elapsed == 1 {
-        MATURITY_MODULATION_DAILY_SPEED_LIMIT_PERMYRIAD
-    } else {
-        // days_elapsed == 0: either same day or current_day < previous_day (should not happen).
-        // Allow at least one day of movement.
-        println!(
-            "{}compute_maturity_modulation_permyriad: days_elapsed=0 (current_day={}, previous_day={}); treating as 1 day",
-            LOG_PREFIX, current_day, previous_day
-        );
-        MATURITY_MODULATION_DAILY_SPEED_LIMIT_PERMYRIAD
+    let speed_limited = match previous {
+        // First calculation: no baseline to smooth from, so jump straight to target.
+        None => target_modulation,
+        Some((previous_permyriad, previous_day)) => {
+            // Limit day-to-day change.
+            let days_elapsed = current_day.saturating_sub(previous_day);
+            let max_change = if days_elapsed > 1 {
+                // The timer missed one or more days — allow proportionally more change.
+                println!(
+                    "{}compute_maturity_modulation_permyriad: {} days elapsed since last update (current_day={}, previous_day={})",
+                    LOG_PREFIX, days_elapsed, current_day, previous_day
+                );
+                MATURITY_MODULATION_DAILY_SPEED_LIMIT_PERMYRIAD.saturating_mul(days_elapsed as i64)
+            } else if days_elapsed == 1 {
+                MATURITY_MODULATION_DAILY_SPEED_LIMIT_PERMYRIAD
+            } else {
+                // days_elapsed == 0: either same day or current_day < previous_day (should not happen).
+                // Allow at least one day of movement.
+                println!(
+                    "{}compute_maturity_modulation_permyriad: days_elapsed=0 (current_day={}, previous_day={}); treating as 1 day",
+                    LOG_PREFIX, current_day, previous_day
+                );
+                MATURITY_MODULATION_DAILY_SPEED_LIMIT_PERMYRIAD
+            };
+            target_modulation.clamp(
+                previous_permyriad.saturating_sub(max_change) as i128,
+                previous_permyriad.saturating_add(max_change) as i128,
+            )
+        }
     };
-    let speed_limited = target_modulation.clamp(
-        previous_permyriad.saturating_sub(max_change) as i128,
-        previous_permyriad.saturating_add(max_change) as i128,
-    );
 
     // Global bounds have final say. The result is within [MIN, MAX] which fit in i64, so the
     // cast is safe.
-    speed_limited.clamp(
+    Ok(speed_limited.clamp(
         MATURITY_MODULATION_MIN_PERMYRIAD_MISSION_70 as i128,
         MATURITY_MODULATION_MAX_PERMYRIAD_MISSION_70 as i128,
-    ) as i64
+    ) as i64)
 }
 
 pub(super) struct UpdateIcpXdrRateRelatedData {
@@ -342,18 +339,32 @@ fn update_maturity_modulation(
         return;
     }
 
-    let previous_permyriad = maturity_modulation.current_value_permyriad.unwrap_or(0) as i64;
-    let previous_day = maturity_modulation.updated_at_days_since_epoch.unwrap_or(0);
+    let previous = match (
+        maturity_modulation.current_value_permyriad,
+        maturity_modulation.updated_at_days_since_epoch,
+    ) {
+        (Some(p), Some(d)) => Some((p as i64, d)),
+        _ => None,
+    };
 
-    let new_permyriad = compute_maturity_modulation_permyriad(
+    match compute_maturity_modulation_permyriad(
         &icp_price_history.icp_xdr_rates,
         current_day,
-        previous_permyriad,
-        previous_day,
-    );
-
-    maturity_modulation.current_value_permyriad = Some(new_permyriad as i32);
-    maturity_modulation.updated_at_days_since_epoch = Some(current_day);
+        previous,
+    ) {
+        Ok(new_permyriad) => {
+            maturity_modulation.current_value_permyriad = Some(new_permyriad as i32);
+            maturity_modulation.updated_at_days_since_epoch = Some(current_day);
+        }
+        Err(reason) => {
+            // None of these conditions should hit in practice (the buffer must be full before we
+            // call this, and XRC rejects zero rates). Log loudly and leave prior state untouched.
+            println!(
+                "{}update_maturity_modulation: BUG: {}; leaving prior modulation unchanged",
+                LOG_PREFIX, reason
+            );
+        }
+    }
 }
 
 #[async_trait]
