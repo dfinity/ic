@@ -289,28 +289,26 @@ impl CanisterManager {
     /// - the key and value of each environment variable cannot exceed the given maximum length.
     fn validate_environment_variables(
         &self,
-        environment_variables: Option<&EnvironmentVariables>,
+        environment_variables: &EnvironmentVariables,
     ) -> Result<(), CanisterManagerError> {
-        if let Some(environment_variables) = environment_variables {
-            if environment_variables.len() > self.config.max_environment_variables {
-                return Err(CanisterManagerError::EnvironmentVariablesTooMany {
-                    max: self.config.max_environment_variables,
-                    count: environment_variables.len(),
+        if environment_variables.len() > self.config.max_environment_variables {
+            return Err(CanisterManagerError::EnvironmentVariablesTooMany {
+                max: self.config.max_environment_variables,
+                count: environment_variables.len(),
+            });
+        }
+        for (name, value) in environment_variables.iter() {
+            if name.len() > self.config.max_environment_variable_name_length {
+                return Err(CanisterManagerError::EnvironmentVariablesNameTooLong {
+                    name: name.clone(),
+                    max_name_length: self.config.max_environment_variable_name_length,
                 });
             }
-            for (name, value) in environment_variables.iter() {
-                if name.len() > self.config.max_environment_variable_name_length {
-                    return Err(CanisterManagerError::EnvironmentVariablesNameTooLong {
-                        name: name.clone(),
-                        max_name_length: self.config.max_environment_variable_name_length,
-                    });
-                }
-                if value.len() > self.config.max_environment_variable_value_length {
-                    return Err(CanisterManagerError::EnvironmentVariablesValueTooLong {
-                        value: value.clone(),
-                        max_value_length: self.config.max_environment_variable_value_length,
-                    });
-                }
+            if value.len() > self.config.max_environment_variable_value_length {
+                return Err(CanisterManagerError::EnvironmentVariablesValueTooLong {
+                    value: value.clone(),
+                    max_value_length: self.config.max_environment_variable_value_length,
+                });
             }
         }
         Ok(())
@@ -365,8 +363,8 @@ impl CanisterManager {
         }
 
         // Environment variables: validate and apply.
-        self.validate_environment_variables(settings.environment_variables())?;
         if let Some(environment_variables) = settings.environment_variables() {
+            self.validate_environment_variables(environment_variables)?;
             canister.system_state.environment_variables = environment_variables.clone();
         }
 
