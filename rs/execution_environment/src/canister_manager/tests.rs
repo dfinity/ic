@@ -7577,7 +7577,7 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
         .system_state
         .set_balance(Cycles::new(2_000_000_000_000_000));
 
-    // Create a canister with default settings.
+    // Create a canister with no compute allocation.
     let args = CreateCanisterArgs {
         settings: Some(
             CanisterSettingsArgsBuilder::new()
