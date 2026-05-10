@@ -2,7 +2,7 @@ name: External Contributor Branch Policy
 
 on:
   pull_request_target:
-    types: [opened, reopened]
+    types: [opened, reopened, edited]
 
 permissions:
   contents: read
