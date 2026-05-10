@@ -328,10 +328,10 @@ impl CanisterManager {
     #[allow(clippy::too_many_arguments)]
     fn validate_and_update_canister_settings(
         &self,
-        settings: &CanisterSettings,
         canister: &mut CanisterState,
-        sender: PrincipalId,
         round_limits: &mut RoundLimits,
+        settings: &CanisterSettings,
+        sender: PrincipalId,
         mut subnet_memory_saturation: ResourceSaturation,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
@@ -633,10 +633,10 @@ impl CanisterManager {
         validate_controller(canister, &sender)?;
 
         self.validate_and_update_canister_settings(
-            &settings,
             canister,
-            sender,
             round_limits,
+            &settings,
+            sender,
             subnet_memory_saturation,
             subnet_size,
             cost_schedule,
@@ -1495,10 +1495,10 @@ impl CanisterManager {
         // different event class from user-triggered resize — pass `None` to
         // skip observation of metrics.
         if let Err(err) = self.validate_and_update_canister_settings(
-            &settings,
             &mut new_canister,
-            sender,
             round_limits,
+            &settings,
+            sender,
             subnet_memory_saturation,
             subnet_size,
             state.get_own_cost_schedule(),
