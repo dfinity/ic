@@ -700,6 +700,7 @@ ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "f33afac2aa4
 ic-http-certification = "3.0.3"
 ic-identity-hsm = "0.45.0"
 ic-management-canister-types = "0.7.1"
+ic-management-canister-types-0_5 = { package = "ic-management-canister-types", version = "0.5" }
 ic-response-verification = "3.1.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
