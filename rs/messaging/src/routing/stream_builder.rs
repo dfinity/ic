@@ -2,7 +2,7 @@ use crate::message_routing::{
     CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, LatencyMetrics, MessageRoutingMetrics,
 };
 use ic_error_types::RejectCode;
-use ic_logger::{ReplicaLogger, error, warn};
+use ic_logger::{ReplicaLogger, debug, error, warn};
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::replicated_state::{
@@ -578,7 +578,7 @@ impl StreamBuilderImpl {
                             if rep.is_best_effort() && rep.refund.is_zero() {
                                 // Expected when the destination subnet has been deleted: best-effort
                                 // responses with no cycles refund can be safely discarded.
-                                warn!(
+                                debug!(
                                     self.log,
                                     "Discarding best-effort response, destination not found: {:?}",
                                     rep
