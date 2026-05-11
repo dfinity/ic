@@ -34,7 +34,6 @@ use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::ApiBoundaryNodeEntry;
-use ic_replicated_state::metrics::ReplicatedStateMetrics;
 use ic_replicated_state::{
     DroppedMessageMetrics, FullTopology, NetworkTopology, ReplicatedState, SubnetTopology,
 };
@@ -1432,8 +1431,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         // Calculating the total memory usage across all canisters is expensive and
         // we do not need it to be perfectly accurate. Only do it every 10 rounds.
         if batch_number.get().is_multiple_of(10) {
-            let total_memory_usage =
-                ReplicatedStateMetrics::total_canister_memory_usage(&state_after_round);
+            let total_memory_usage = state_after_round.total_canister_memory_usage();
             state_after_round
                 .metadata
                 .subnet_metrics

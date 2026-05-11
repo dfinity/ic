@@ -601,7 +601,7 @@ impl ReplicatedStateMetrics {
             .set(num_stop_canister_calls_without_call_id as i64);
 
         self.canisters_memory_usage_bytes
-            .set(Self::total_canister_memory_usage(state).get() as i64);
+            .set(state.total_canister_memory_usage().get() as i64);
         self.wasm_custom_sections_memory_usage_bytes
             .set(wasm_custom_sections_memory_usage.get() as i64);
         self.canister_history_memory_usage_bytes
@@ -665,16 +665,6 @@ impl ReplicatedStateMetrics {
                 .get_canister_history()
                 .get_total_num_changes() as f64,
         );
-    }
-
-    /// Returns the total memory usage of all canisters. Execution and wasm custom section
-    /// memory are included in `memory_usage()`, message memory is added separately.
-    pub fn total_canister_memory_usage(state: &ReplicatedState) -> NumBytes {
-        let mut total_memory_usage = NumBytes::new(0);
-        for canister in state.canisters_iter() {
-            total_memory_usage += canister.memory_usage() + canister.message_memory_usage().total();
-        }
-        total_memory_usage
     }
 }
 
