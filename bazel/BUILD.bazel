@@ -72,6 +72,42 @@ write_info_file_var(
     visibility = ["//visibility:public"],
 )
 
+# This is the contents of the ctx.version_file, i.e. all non-STABLE_,
+# volatile key value pairs outputted from ./workspace_status.sh.
+#
+# A note on the cache semantics:
+# Say we have the following target that just saves the output of
+# :volatile-status.txt to its output file:
+#
+#   genrule(
+#       name = "what-is-volatile-status",
+#       outs = ["what-is-volatile-status.txt"],
+#       cmd = "cat $(location :volatile-status.txt) > $@",
+#       tools = [":volatile-status.txt"],
+#   )
+#
+# Building this in a fresh container yields:
+# ./ci/container/container-run.sh bash -c \
+#   'NODE_NAME=dm1-dll01 bazel build //bazel:what-is-volatile-status && cat bazel-bin/bazel/what-is-volatile-status.txt'
+# BUILD_TIMESTAMP 1778503046
+# DC dm1
+# FORMATTED_DATE 2026 May 11 12 37 26 Mon
+#
+# The //bazel:what-is-volatile-status target should now be cached so changing the volatile keys
+# should not change the output when we build it again (note we changed NODE_NAME to zh1):
+# ./ci/container/container-run.sh bash -c \
+#   'NODE_NAME=zh1-dll01 bazel build //bazel:what-is-volatile-status && cat bazel-bin/bazel/what-is-volatile-status.txt'
+# BUILD_TIMESTAMP 1778503046
+# DC dm1
+# FORMATTED_DATE 2026 May 11 12 37 26 Mon
+#
+# However, let's say we change the what-is-volatile-status target such that it has to run again
+# and use the new volatile keys. Then we would expect the output to change:
+# ./ci/container/container-run.sh bash -c \
+#   'NODE_NAME=zh1-dll01 bazel build //bazel:what-is-volatile-status && cat bazel-bin/bazel/what-is-volatile-status.txt'
+# BUILD_TIMESTAMP 1778503130
+# DC zh1
+# FORMATTED_DATE 2026 May 11 12 38 50 Mon
 volatile_status(
     name = "volatile-status.txt",
     visibility = ["//visibility:public"],
