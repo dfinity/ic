@@ -1511,12 +1511,13 @@ impl HasGroupSetup for TestEnv {
             let group_setup = GroupSetup::new(group_base_name.clone(), timeout);
             match InfraProvider::read_attribute(self) {
                 InfraProvider::Farm => {
-                    let required_host_features = if allocate_testnet_to_local_dc {
-                        read_var_from_volatile_status_file("DC")
-                            .map_or_else(Vec::new, |dc| vec![HostFeature::DC(dc.clone())])
-                    } else {
-                        vec![]
-                    };
+                    let required_host_features = allocate_testnet_to_local_dc
+                        .then(|| {
+                            read_var_from_volatile_status_file("DC").filter(|dc| dc != "unknown")
+                        })
+                        .flatten()
+                        .map(|dc| vec![HostFeature::DC(dc)])
+                        .unwrap_or_default();
                     info!(
                         log,
                         "Creating group {} with required_host_features: {:?} ...",
