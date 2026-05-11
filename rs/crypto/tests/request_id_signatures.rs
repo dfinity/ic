@@ -206,7 +206,10 @@ fn should_correctly_parse_cose_encoded_der_wrapped_ed25519_pk() {
     let pk_cose_der = hex::decode(ED25519_PK_COSE_DER_WRAPPED_HEX).unwrap();
     let (pk, bytes_type) = user_public_key_from_bytes(&pk_cose_der).unwrap();
     assert_eq!(pk.algorithm_id, AlgorithmId::Ed25519);
-    assert_eq!(bytes_type, KeyBytesContentType::Ed25519PublicKeyDerWrappedCose);
+    assert_eq!(
+        bytes_type,
+        KeyBytesContentType::Ed25519PublicKeyDerWrappedCose
+    );
 }
 
 #[test]
