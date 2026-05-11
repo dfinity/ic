@@ -282,8 +282,8 @@ fn state_machine_handles_messages_to_deleted_subnet() {
 
     // Add a canister with a bounded-wait output request, a best-effort output response, and a
     // bounded-wait subnet message (callee = the deleted subnet's ID), all destined for the
-    // deleted subnet. Also add a bounded-wait subnet output response (remote canister →
-    // local subnet) to the subnet queues.
+    // deleted subnet. Also add a bounded-wait subnet output response (local subnet →
+    // remote canister) to the subnet queues.
     let local_canister_id = CANISTER_RANGE_A.start;
     // Use a canister ID outside the routing table range so it has no route,
     // causing the stream builder to generate a reject for the output request.
