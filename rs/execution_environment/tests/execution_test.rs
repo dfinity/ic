@@ -1418,6 +1418,7 @@ fn test_update_settings_with_different_controllers_amount() {
     let canister_b = env.create_canister(Some(
         CanisterSettingsArgsBuilder::new()
             .with_controllers(vec![canister_a.into()])
+            .with_log_memory_limit(0)
             .build(),
     ));
 
@@ -2893,7 +2894,12 @@ fn maximum_state_size() {
         .with_resource_limits(resource_limits)
         .build();
 
-    let canister_id = env.create_canister(None);
+    let canister_id = env.create_canister(Some(
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(0)
+            .build(),
+    ));
+    env.add_cycles(canister_id, 1_000_000_000_000_000_000);
 
     // the maximum state size is across all execution threads
     // and thus setting the memory allocation to the maximum state size

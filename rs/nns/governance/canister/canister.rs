@@ -29,14 +29,15 @@ use ic_nns_governance::{
 use ic_nns_governance_api::test_api::TimeWarp;
 use ic_nns_governance_api::{
     ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse, CreateNeuronRequest,
-    CreateNeuronResponse, GetNeuronIndexRequest, GetNeuronsFundAuditInfoRequest,
-    GetNeuronsFundAuditInfoResponse, GetPendingProposalsRequest, Governance as ApiGovernanceProto,
-    GovernanceError, ListKnownNeuronsResponse, ListNeuronVotesRequest, ListNeuronVotesResponse,
-    ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
-    ListNodeProviderRewardsResponse, ListNodeProvidersResponse, ListProposalInfoRequest,
-    ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronIndexData,
-    NeuronInfo, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
+    CreateNeuronResponse, GetMaturityModulationRequest, GetMaturityModulationResponse,
+    GetNeuronIndexRequest, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+    GetPendingProposalsRequest, Governance as ApiGovernanceProto, GovernanceError,
+    ListKnownNeuronsResponse, ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons,
+    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
+    ListNodeProvidersResponse, ListProposalInfoRequest, ListProposalInfoResponse,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
+    MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronIndexData, NeuronInfo,
+    NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
     SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
     SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
@@ -575,6 +576,15 @@ fn get_neuron_data_validation_summary() -> NeuronDataValidationSummary {
 fn get_restore_aging_summary() -> RestoreAgingSummary {
     let response = governance().get_restore_aging_summary().unwrap_or_default();
     RestoreAgingSummary::from(response)
+}
+
+/// Returns the current maturity modulation, as defined by Mission 70.
+#[query]
+fn get_maturity_modulation(
+    _request: GetMaturityModulationRequest,
+) -> GetMaturityModulationResponse {
+    debug_log("get_maturity_modulation");
+    with_governance(|governance| governance.get_maturity_modulation())
 }
 
 #[query]

@@ -43,6 +43,7 @@ impl TestEnvironment {
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
+            tokio::sync::watch::channel(ic_types::Height::from(0)).0,
         ));
 
         let state_layout = state_manager.state_layout.clone();

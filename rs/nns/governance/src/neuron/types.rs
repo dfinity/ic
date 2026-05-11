@@ -959,6 +959,7 @@ impl Neuron {
             potential_voting_power: Some(potential_voting_power),
             voting_power: potential_voting_power,
             eight_year_gang_bonus_base_e8s: Some(self.eight_year_gang_bonus_base_e8s),
+            staked_maturity_e8s_equivalent: self.staked_maturity_e8s_equivalent,
         }
     }
 
