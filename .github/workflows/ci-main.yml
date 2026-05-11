@@ -42,7 +42,7 @@ jobs:
         name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+          fetch-depth: ${{ case(github.event_name == 'pull_request', 256, 0) }}
           ref: ${{ inputs.commit-sha }}
       - name: Filter fuzzer related files
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
@@ -207,7 +207,7 @@ jobs:
       # It also requires the AWS and CF secrets which are only available in the `upload-artifacts` environment.
       # This environment is also only active on protected branches. That's why we require the `upload-artifacts` environment
       # when `release-build == 'true'` but not otherwise.
-      name: ${{ needs.config.outputs.release-build == 'true' && 'upload-artifacts' || ''}}
+      name: ${{ case(needs.config.outputs.release-build == 'true', 'upload-artifacts', '') }}
     runs-on: *dind-large-setup
     container: *container-setup
     timeout-minutes: 150
