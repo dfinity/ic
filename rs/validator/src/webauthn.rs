@@ -400,7 +400,7 @@ mod tests {
             let bad_sig = WebAuthnSignature::new(
                 Blob(sig.authenticator_data().0),
                 Blob(sig.client_data_json().0),
-                Blob(vec![0u8; 64]),
+                Blob(vec![0_u8; 64]),
             );
 
             let challenge = hex::decode(CHALLENGE_HEX).unwrap();
