@@ -2384,7 +2384,6 @@ fn consumed_cycles_total_calculates_the_right_amount() {
     consumed_cycles_by_use_case.insert(CyclesUseCase::Instructions, NominalCycles::new(100));
     consumed_cycles_by_use_case.insert(CyclesUseCase::Memory, NominalCycles::new(50));
     consumed_cycles_by_use_case.insert(CyclesUseCase::CanisterCreation, NominalCycles::new(40));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::NonConsumed, NominalCycles::new(10));
 
     let subnet_metrics = SubnetMetrics {
         consumed_cycles_by_deleted_canisters: NominalCycles::new(10),
@@ -2840,7 +2839,7 @@ fn compatibility_for_cycles_use_case() {
         CyclesUseCase::iter()
             .map(|x| x as i32)
             .collect::<Vec<i32>>(),
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15]
     );
 }
 

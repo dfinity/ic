@@ -1897,7 +1897,6 @@ impl SystemState {
             | CyclesUseCase::VetKd
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
-            | CyclesUseCase::NonConsumed
             | CyclesUseCase::BurnedCycles
             | CyclesUseCase::DroppedMessages => requested_real,
         };
@@ -1983,13 +1982,6 @@ impl SystemState {
         debug_assert_ne!(use_case, CyclesUseCase::DeletedCanisters);
         debug_assert_ne!(use_case, CyclesUseCase::DroppedMessages);
 
-        // CyclesUseCase::NonConsumed should never be sent to this function.
-        debug_assert_ne!(
-            use_case,
-            CyclesUseCase::NonConsumed,
-            "Non-consumed cycles should not be tracked in the canister metrics."
-        );
-
         // `prepayment` must be greater or equal to `refund`.
         // `refund` must be 0 when we are handling a prepayment.
         debug_assert!(
@@ -2040,8 +2032,7 @@ impl SystemState {
                     | CyclesUseCase::VetKd
                     | CyclesUseCase::HTTPOutcalls
                     | CyclesUseCase::DeletedCanisters
-                    | CyclesUseCase::DroppedMessages
-                    | CyclesUseCase::NonConsumed => {
+                    | CyclesUseCase::DroppedMessages => {
                         // These use cases should not be tracked on the canister level.
                     }
                 }
