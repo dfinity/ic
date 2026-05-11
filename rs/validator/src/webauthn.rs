@@ -360,6 +360,66 @@ mod tests {
         }
 
         #[test]
+        fn should_return_error_on_incorrect_public_key() {
+            // A different valid Ed25519 COSE-DER-wrapped key (RFC 8032 TEST 2
+            // public key). The signature does not verify under it.
+            const WRONG_ED25519_PK_COSE_DER_WRAPPED_HEX: &str = "303b300c060a2b0601040183b8430101032b00a40101032720062158203d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c";
+            let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
+            let (wrong_pk, sig) = load_pk_and_sig(
+                WRONG_ED25519_PK_COSE_DER_WRAPPED_HEX.as_ref(),
+                ED25519_WEBAUTHN_SIG_HEX.as_bytes(),
+            );
+            assert_eq!(wrong_pk.algorithm_id, AlgorithmId::Ed25519);
+
+            let challenge = hex::decode(CHALLENGE_HEX).unwrap();
+            let message = SignableMock {
+                domain: vec![],
+                signed_bytes_without_domain: challenge,
+            };
+
+            let result = validate_webauthn_sig(&verifier, &sig, &message, &wrong_pk);
+            assert!(
+                result
+                    .as_ref()
+                    .err()
+                    .is_some_and(|e| e.contains("Verifying signature failed.")),
+                "expected verification failure, got: {result:?}"
+            );
+        }
+
+        #[test]
+        fn should_return_error_on_correct_length_but_invalid_ed25519_signature() {
+            let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
+            let (pk, sig) = load_pk_and_sig(
+                ED25519_PK_COSE_DER_WRAPPED_HEX.as_ref(),
+                ED25519_WEBAUTHN_SIG_HEX.as_bytes(),
+            );
+            // Replace the 64-byte signature with 64 zero bytes: the length
+            // check in basic_sig_from_webauthn_sig passes, but the underlying
+            // Ed25519 verification rejects it.
+            let bad_sig = WebAuthnSignature::new(
+                Blob(sig.authenticator_data().0),
+                Blob(sig.client_data_json().0),
+                Blob(vec![0u8; 64]),
+            );
+
+            let challenge = hex::decode(CHALLENGE_HEX).unwrap();
+            let message = SignableMock {
+                domain: vec![],
+                signed_bytes_without_domain: challenge,
+            };
+
+            let result = validate_webauthn_sig(&verifier, &bad_sig, &message, &pk);
+            assert!(
+                result
+                    .as_ref()
+                    .err()
+                    .is_some_and(|e| e.contains("Verifying signature failed.")),
+                "expected verification failure, got: {result:?}"
+            );
+        }
+
+        #[test]
         fn should_return_error_on_malformed_ed25519_signature() {
             let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
             let (pk, sig) = load_pk_and_sig(
