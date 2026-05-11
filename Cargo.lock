@@ -5778,6 +5778,7 @@ dependencies = [
  "allocator-api2",
  "equivalent",
  "foldhash 0.1.5",
+ "serde",
 ]
 
 [[package]]
@@ -5878,15 +5879,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54b4a22553d4242c49fddb9ba998a99962b5cc6f22cb5a3482bec22522403ce4"
 dependencies = [
  "http 1.4.0",
-]
-
-[[package]]
-name = "heck"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d621efb26863f0e9924c6ac577e8275e5e6b77455db64ffa6c65c904e9e132c"
-dependencies = [
- "unicode-segmentation",
 ]
 
 [[package]]
@@ -15734,9 +15726,9 @@ dependencies = [
 
 [[package]]
 name = "ic-wasm"
-version = "0.8.6"
+version = "0.9.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19fabaeecfe37f24b433c62489242fc54503d98d4cc8d0f9ef7544dfdfc0ddcb"
+checksum = "04a4c6c1f1f7a2126be36fe51cdbc1c8991214f231811dca7ec1971d15cb6f91"
 dependencies = [
  "anyhow",
  "candid",
@@ -15744,9 +15736,9 @@ dependencies = [
  "libflate",
  "rustc-demangle",
  "serde",
- "serde_json",
  "thiserror 1.0.69",
- "walrus 0.21.3",
+ "walrus 0.22.0",
+ "wasmparser 0.223.1",
 ]
 
 [[package]]
@@ -25488,16 +25480,16 @@ dependencies = [
 
 [[package]]
 name = "walrus"
-version = "0.21.3"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "501ace8ec3492754a9b3c4b59eac7159ceff8414f9e43a05029fe8ef43b9218f"
+checksum = "d68aa3c7b80be75c8458fc087453e5a31a226cfffede2e9b932393b2ea1c624a"
 dependencies = [
  "anyhow",
  "gimli 0.26.2",
  "id-arena",
  "leb128",
  "log",
- "walrus-macro 0.19.0",
+ "walrus-macro",
  "wasm-encoder 0.212.0",
  "wasmparser 0.212.0",
 ]
@@ -25513,21 +25505,9 @@ dependencies = [
  "id-arena",
  "leb128",
  "log",
- "walrus-macro 0.22.0",
+ "walrus-macro",
  "wasm-encoder 0.214.0",
  "wasmparser 0.214.0",
-]
-
-[[package]]
-name = "walrus-macro"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a6e5bd22c71e77d60140b0bd5be56155a37e5bd14e24f5f87298040d0cc40d7"
-dependencies = [
- "heck 0.3.3",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -25863,6 +25843,19 @@ dependencies = [
  "ahash 0.8.12",
  "bitflags 2.11.0",
  "hashbrown 0.14.5",
+ "indexmap 2.14.0",
+ "semver",
+ "serde",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.223.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "664b980991ed9a8c834eb528a8979ab1109edcf52dc05dd5751e2cc3fb31035d"
+dependencies = [
+ "bitflags 2.11.0",
+ "hashbrown 0.15.5",
  "indexmap 2.14.0",
  "semver",
  "serde",
