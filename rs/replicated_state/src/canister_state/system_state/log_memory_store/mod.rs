@@ -9,12 +9,14 @@ use crate::canister_state::system_state::log_memory_store::{
     header::Header,
     log_record::LogRecord,
     memory::MemorySize,
-    ring_buffer::{DATA_CAPACITY_MIN, HEADER_SIZE, RingBuffer, VIRTUAL_PAGE_SIZE},
+    ring_buffer::{
+        DATA_CAPACITY_MIN, HEADER_SIZE, INDEX_TABLE_PAGES, RingBuffer, VIRTUAL_PAGE_SIZE,
+    },
 };
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_config::flag_status::FlagStatus;
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
-use ic_types::CanisterLog;
+use ic_types::{CanisterLog, NumBytes};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::sync::Arc;
@@ -260,12 +262,35 @@ impl LogMemoryStore {
     /// It is 'virtual' because it is not aligned to actual OS page size.
     pub fn total_virtual_memory_usage(&self) -> usize {
         self.get_header()
-            .map(|h| {
-                (HEADER_SIZE.get()
-                    + h.index_table_pages as u64 * VIRTUAL_PAGE_SIZE as u64
-                    + h.data_capacity.get()) as usize
-            })
+            .map(|h| self.virtual_memory_for_data_capacity(h.data_capacity.get() as usize))
             .unwrap_or(0)
+    }
+
+    /// Returns the projected memory usage after `resize(limit)` would complete,
+    /// without mutating any state.
+    ///
+    /// Uses the canister's per-store `feature_flag` so that the projection
+    /// matches what `resize` will actually do, regardless of the current
+    /// global config value.
+    pub fn memory_usage_for_limit(&self, limit: NumBytes) -> NumBytes {
+        if self.feature_flag == FlagStatus::Disabled || limit == NumBytes::new(0) {
+            return NumBytes::new(0);
+        }
+        // Mirror resize_impl's capacity clamping exactly.
+        let target_capacity = (limit.get() as usize).max(DATA_CAPACITY_MIN);
+        NumBytes::new(self.virtual_memory_for_data_capacity(target_capacity) as u64)
+    }
+
+    /// Single source of truth for the ring-buffer memory layout formula.
+    ///
+    /// Returns the total virtual bytes consumed by a ring buffer whose data
+    /// region has the given capacity: header + index table + data.
+    fn virtual_memory_for_data_capacity(&self, data_capacity: usize) -> usize {
+        let index_table_pages = self
+            .get_header()
+            .map(|h| h.index_table_pages as usize)
+            .unwrap_or(INDEX_TABLE_PAGES);
+        HEADER_SIZE.get() as usize + index_table_pages * VIRTUAL_PAGE_SIZE + data_capacity
     }
 
     /// Returns the data capacity of the ring buffer.
