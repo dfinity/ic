@@ -16,7 +16,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CheckpointLoadingMetrics, ReplicatedState, SubnetSchedule, SystemMetadata,
+    CheckpointLoadingMetrics, ReplicatedState, SystemMetadata,
     canister_state::canister_snapshots::CanisterSnapshot,
     page_map::TestPageAllocatorFileDescriptorImpl, testing::ReplicatedStateTesting,
 };
@@ -299,10 +299,6 @@ fn split_subnet_b_helper(new_subnet_batch_time_delta: Option<Duration>) {
                 assert_eq!(SUBNET_A, deserialize_split_from(&root, height_b));
             } else if file == SYSTEM_METADATA_FILE {
                 let mut expected = SystemMetadata::new(SUBNET_B, SubnetType::Application);
-                // Populate default priorities for all canisters.
-                for canister_id in [CANISTER_1, CANISTER_2, CANISTER_3] {
-                    expected.subnet_schedule.get_mut(canister_id);
-                }
                 // `batch_time` should be the provided `new_subnet_batch_time` (if `Some`); or
                 // else the original subnet's `batch_time`.
                 expected.batch_time = new_subnet_batch_time.unwrap_or(batch_time);
@@ -608,7 +604,6 @@ fn deserialize_system_metadata(root: &Path, height: Height, log: &ReplicaLogger)
         .into();
     (
         system_metadata.deserialize().unwrap(),
-        SubnetSchedule::default(),
         &CheckpointMetrics::new(&MetricsRegistry::new(), log.clone())
             as &dyn CheckpointLoadingMetrics,
     )

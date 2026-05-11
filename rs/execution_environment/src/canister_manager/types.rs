@@ -80,6 +80,7 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) max_environment_variables: usize,
     pub(crate) max_environment_variable_name_length: usize,
     pub(crate) max_environment_variable_value_length: usize,
+    pub(crate) log_memory_store_feature: FlagStatus,
 }
 
 impl CanisterMgrConfig {
@@ -104,6 +105,7 @@ impl CanisterMgrConfig {
         max_environment_variables: usize,
         max_environment_variable_name_length: usize,
         max_environment_variable_value_length: usize,
+        log_memory_store_feature: FlagStatus,
     ) -> Self {
         Self {
             default_provisional_cycles_balance,
@@ -125,6 +127,7 @@ impl CanisterMgrConfig {
             max_environment_variables,
             max_environment_variable_name_length,
             max_environment_variable_value_length,
+            log_memory_store_feature,
         }
     }
 }
@@ -402,11 +405,6 @@ pub(crate) enum CanisterManagerError {
         available: Cycles,
         required: Cycles,
     },
-    LogResizeNotEnoughCycles {
-        available: Cycles,
-        threshold: Cycles,
-        requested: Cycles,
-    },
     ReservedCyclesLimitExceededInMemoryAllocation {
         memory_allocation: MemoryAllocation,
         requested: Cycles,
@@ -613,10 +611,6 @@ impl AsErrorHelp for CanisterManagerError {
             CanisterManagerError::InsufficientCyclesInMemoryGrow { .. } => ErrorHelp::UserError {
                 suggestion: "Top up the canister with more cycles.".to_string(),
                 doc_link: doc_ref("insufficient-cycles-in-memory-grow-1"),
-            },
-            CanisterManagerError::LogResizeNotEnoughCycles { .. } => ErrorHelp::UserError {
-                suggestion: "Top up the canister with more cycles.".to_string(),
-                doc_link: doc_ref("log-resize-not-enough-cycles"),
             },
             CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation { .. } => {
                 ErrorHelp::UserError {
@@ -998,18 +992,6 @@ impl From<CanisterManagerError> for UserError {
                          At least {} additional cycles are required.{additional_help}",
                     bytes,
                     required - available
-                ),
-            ),
-            LogResizeNotEnoughCycles {
-                available,
-                threshold,
-                requested,
-            } => Self::new(
-                ErrorCode::CanisterOutOfCycles,
-                format!(
-                    "Cannot resize canister log memory due to insufficient cycles. \
-                     At least {} additional cycles are required.{additional_help}",
-                    (threshold + requested) - available
                 ),
             ),
             ReservedCyclesLimitExceededInMemoryAllocation {

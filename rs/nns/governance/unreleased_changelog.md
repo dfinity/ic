@@ -9,18 +9,18 @@ on the process that this file is part of, see
 
 ## Added
 
-* `TakeCanisterSnapshot` proposals now store the new snapshot ID in the
-  `success_value` field.
+* Daily timer task that fetches ICP/XDR rates from the Exchange Rate Canister, maintains a 365-day price history in Governance state, and computes Mission 70 maturity modulation locally. The computed value is not yet consumed by spawning or disbursement; that switchover will happen in a follow-up PR.
+
+* `get_maturity_modulation` query endpoint that returns the current Mission 70 maturity modulation value, including `current_value_permyriad` and `updated_at_timestamp_seconds`.
+
+* Expose `staked_maturity_e8s_equivalent` on `NeuronInfo`, so external callers
+  can read staked maturity from `get_neuron_info` / `list_neurons` responses.
 
 ## Changed
 
-* Relax eight year gang membership requirement(s): Instead of needing to have dissolve
-  delay >= 8 * 365.25 days (8 "years"), which is exactly 252_460_800 seconds, a second
-  round of induction requires only that neurons had dissolve delay >= 8 * 365 days,
-  which is exactly 252_288_000 seconds. This is less than a 0.07% difference.
-  Additionally, to avoid bonusing newly staked ICP, the neuron must currently be aging
-  since before March 30 (midnight UTC). (Furthermore, neurons that are already members
-  will not have their eight year gang bonus base re-assessed.)
+* The first Mission 70 maturity modulation calculation skips the daily speed limit, so the initial
+  value reflects the target directly (subject to global bounds) instead of being clamped to a tiny
+  step away from zero.
 
 ## Deprecated
 

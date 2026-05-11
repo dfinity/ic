@@ -129,6 +129,9 @@ pub struct NeuronInfo {
     /// net of fees (including staked maturity) captured at the time of migration.
     /// For all other neurons, this is 0.
     pub eight_year_gang_bonus_base_e8s: Option<u64>,
+
+    /// See analogous field in Neuron.
+    pub staked_maturity_e8s_equivalent: Option<u64>,
 }
 
 impl NeuronInfo {
@@ -2826,6 +2829,9 @@ pub struct FulfillSubnetRentalRequest {
     pub user: Option<PrincipalId>,
     pub node_ids: Option<Vec<PrincipalId>>,
     pub replica_version_id: Option<String>,
+    /// Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+    /// If not set, handling defaults to the NNS subnet.
+    pub initial_dkg_subnet_id: Option<PrincipalId>,
 }
 
 #[derive(
@@ -4735,3 +4741,23 @@ pub struct CreatedNeuron {
 }
 
 pub type CreateNeuronResponse = Result<CreatedNeuron, GovernanceError>;
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Default,
+)]
+pub struct MaturityModulation {
+    pub current_value_permyriad: Option<i32>,
+    pub updated_at_timestamp_seconds: Option<u64>,
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Default,
+)]
+pub struct GetMaturityModulationRequest {}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Default,
+)]
+pub struct GetMaturityModulationResponse {
+    pub maturity_modulation: Option<MaturityModulation>,
+}

@@ -30,12 +30,12 @@ use ic_limits::MAX_PAIRED_PRE_SIGNATURES;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterMetadataRequest, CanisterStatusType, ClearChunkStoreArgs,
-    CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
-    EmptyBlob, FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs, IC_00,
-    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    CanisterInfoResponse, CanisterMetadataRequest, CanisterMetricsArgs, CanisterStatusType,
+    ClearChunkStoreArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs,
+    ECDSAPublicKeyResponse, EmptyBlob, FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs,
+    IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
+    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
     ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
     SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
@@ -48,7 +48,10 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::{NextExecution, system_state::PausedExecutionId};
+use ic_replicated_state::canister_state::{
+    NextExecution,
+    system_state::{PausedExecutionId, wasm_chunk_store::CHUNK_SIZE},
+};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     EcdsaArguments, InstallCodeCall, InstallCodeCallId, PreSignatureStash, ReshareChainKeyContext,
     SchnorrArguments, SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall,
@@ -2030,6 +2033,18 @@ impl ExecutionEnvironment {
                 }
             }
 
+            Ok(Ic00Method::CanisterMetrics) => {
+                let res = CanisterMetricsArgs::decode(payload).and_then(|args| {
+                    let canister_id = args.get_canister_id();
+                    self.get_canister_metrics(*msg.sender(), canister_id, &state)
+                        .map(|res| (res, Some(canister_id)))
+                });
+                ExecuteSubnetMessageResult::Finished {
+                    response: res,
+                    refund: msg.take_cycles(),
+                }
+            }
+
             Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
@@ -2175,8 +2190,11 @@ impl ExecutionEnvironment {
             state.metadata.subnet_call_context_manager.push_context(
                 SubnetCallContext::CanisterHttpRequest(canister_http_request_context),
             );
-            if let Some(canister_stats) = state.canister_state_make_mut(&request.sender) {
-                canister_stats
+            if let Some(canister_state) = state.canister_state_make_mut(&request.sender) {
+                canister_state
+                    .system_state
+                    .observe_consumed_cycles_for_https_outcall(nominal_http_request_fee);
+                canister_state
                     .system_state
                     .canister_metrics_mut()
                     .load_metrics_mut()
@@ -2636,6 +2654,20 @@ impl ExecutionEnvironment {
                 subnet_admins,
             )
             .map(|status| status.encode())
+            .map_err(|err| err.into())
+    }
+
+    fn get_canister_metrics(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        state: &ReplicatedState,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister = get_canister(canister_id, state)?;
+        let subnet_admins = state.get_own_subnet_admins();
+        self.canister_manager
+            .get_canister_metrics(sender, canister, subnet_admins)
+            .map(|canister_metrics_result| canister_metrics_result.encode())
             .map_err(|err| err.into())
     }
 
@@ -3876,6 +3908,7 @@ impl ExecutionEnvironment {
     fn decode_input_and_take_canister(
         msg: &CanisterCall,
         state: &mut ReplicatedState,
+        config: &ExecutionConfig,
     ) -> Result<(InstallCodeContext, Arc<CanisterState>), UserError> {
         let payload = msg.method_payload();
         let method = Ic00Method::from_str(msg.method_name()).map_err(|_| {
@@ -3894,6 +3927,17 @@ impl ExecutionEnvironment {
             }
             Ic00Method::InstallChunkedCode => {
                 let args = InstallChunkedCodeArgs::decode(payload)?;
+                let max_chunks = config.embedders_config.wasm_max_size.get() / CHUNK_SIZE;
+                if args.chunk_hashes_list.len() as u64 > max_chunks {
+                    return Err(UserError::new(
+                        ErrorCode::CanisterContractViolation,
+                        format!(
+                            "InstallChunkedCode Error: chunk_hashes_list length {} exceeds the maximum of {} chunks",
+                            args.chunk_hashes_list.len(),
+                            max_chunks,
+                        ),
+                    ));
+                }
                 let origin = msg.canister_change_origin(args.get_sender_canister_version());
 
                 let store_canister_id = args
@@ -3968,7 +4012,7 @@ impl ExecutionEnvironment {
         let since = Instant::now();
 
         let (install_context, old_canister) =
-            match Self::decode_input_and_take_canister(&msg, &mut state) {
+            match Self::decode_input_and_take_canister(&msg, &mut state, &self.config) {
                 Ok(result) => result,
                 Err(err) => {
                     let refund = msg.take_cycles();

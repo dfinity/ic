@@ -9,23 +9,19 @@ use crate::canister_state::system_state::log_memory_store::{
     header::Header,
     log_record::LogRecord,
     memory::MemorySize,
-    ring_buffer::{DATA_CAPACITY_MIN, HEADER_SIZE, RingBuffer, VIRTUAL_PAGE_SIZE},
+    ring_buffer::{
+        DATA_CAPACITY_MIN, HEADER_SIZE, INDEX_TABLE_PAGES, RingBuffer, VIRTUAL_PAGE_SIZE,
+    },
 };
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_config::flag_status::FlagStatus;
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
-use ic_types::CanisterLog;
+use ic_types::{CanisterLog, NumBytes};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
-use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::time::Duration;
-
-/// Upper bound on stored delta-log sizes used for metrics.
-/// Limits memory growth, 10k covers expected per-round
-/// number of messages per canister (and so delta log appends).
-const DELTA_LOG_SIZES_CAP: usize = 10_000;
 
 /// Canister log storage backed by a PageMap-based ring buffer.
 ///
@@ -82,13 +78,6 @@ pub struct LogMemoryStore {
     /// `new_inner`.
     #[validate_eq(Ignore)]
     first_timestamp_cache: Option<u64>,
-
-    /// (!) No need to preserve across checkpoints.
-    /// Tracks the size of each delta log appended during a round.
-    /// Multiple logs can be appended in one round (e.g. heartbeat, timers, or message executions).
-    /// The collected sizes are used to expose per-round memory usage metrics
-    /// and the record is cleared at the end of the round.
-    delta_log_sizes: VecDeque<usize>,
 }
 
 impl LogMemoryStore {
@@ -139,7 +128,6 @@ impl LogMemoryStore {
             persistent_next_idx,
             header_cache: OnceLock::new(),
             first_timestamp_cache,
-            delta_log_sizes: VecDeque::new(),
         };
         debug_assert!(store.stats_ok());
         store
@@ -274,12 +262,35 @@ impl LogMemoryStore {
     /// It is 'virtual' because it is not aligned to actual OS page size.
     pub fn total_virtual_memory_usage(&self) -> usize {
         self.get_header()
-            .map(|h| {
-                (HEADER_SIZE.get()
-                    + h.index_table_pages as u64 * VIRTUAL_PAGE_SIZE as u64
-                    + h.data_capacity.get()) as usize
-            })
+            .map(|h| self.virtual_memory_for_data_capacity(h.data_capacity.get() as usize))
             .unwrap_or(0)
+    }
+
+    /// Returns the projected memory usage after `resize(limit)` would complete,
+    /// without mutating any state.
+    ///
+    /// Uses the canister's per-store `feature_flag` so that the projection
+    /// matches what `resize` will actually do, regardless of the current
+    /// global config value.
+    pub fn memory_usage_for_limit(&self, limit: NumBytes) -> NumBytes {
+        if self.feature_flag == FlagStatus::Disabled || limit == NumBytes::new(0) {
+            return NumBytes::new(0);
+        }
+        // Mirror resize_impl's capacity clamping exactly.
+        let target_capacity = (limit.get() as usize).max(DATA_CAPACITY_MIN);
+        NumBytes::new(self.virtual_memory_for_data_capacity(target_capacity) as u64)
+    }
+
+    /// Single source of truth for the ring-buffer memory layout formula.
+    ///
+    /// Returns the total virtual bytes consumed by a ring buffer whose data
+    /// region has the given capacity: header + index table + data.
+    fn virtual_memory_for_data_capacity(&self, data_capacity: usize) -> usize {
+        let index_table_pages = self
+            .get_header()
+            .map(|h| h.index_table_pages as usize)
+            .unwrap_or(INDEX_TABLE_PAGES);
+        HEADER_SIZE.get() as usize + index_table_pages * VIRTUAL_PAGE_SIZE + data_capacity
     }
 
     /// Returns the data capacity of the ring buffer.
@@ -393,34 +404,9 @@ impl LogMemoryStore {
         let Some(mut ring_buffer) = self.load_ring_buffer() else {
             return; // No ring buffer exists.
         };
-        // Record the size of the appended delta log for metrics.
-        self.push_delta_log_size(delta_log.bytes_used());
         // Append the delta records and persist the ring buffer.
         ring_buffer.append_log(delta_log.records_mut().drain(..));
         self.save_ring_buffer(ring_buffer);
-    }
-
-    /// Records the size of the appended delta log.
-    fn push_delta_log_size(&mut self, size: usize) {
-        if self.delta_log_sizes.len() >= DELTA_LOG_SIZES_CAP {
-            self.delta_log_sizes.pop_front();
-        }
-        self.delta_log_sizes.push_back(size);
-    }
-
-    /// Returns true if the delta log sizes are not empty.
-    pub fn has_delta_log_sizes(&self) -> bool {
-        !self.delta_log_sizes.is_empty()
-    }
-
-    /// Returns delta_log sizes.
-    pub fn delta_log_sizes(&self) -> Vec<usize> {
-        self.delta_log_sizes.iter().cloned().collect()
-    }
-
-    /// Clears the delta_log sizes.
-    pub fn clear_delta_log_sizes(&mut self) {
-        self.delta_log_sizes.clear();
     }
 
     /// Calculates the total memory footprint of canister log records
@@ -450,7 +436,6 @@ impl Clone for LogMemoryStore {
             // an independent snapshot.
             maybe_page_map: self.maybe_page_map.clone(),
             persistent_next_idx: self.persistent_next_idx,
-            delta_log_sizes: self.delta_log_sizes.clone(),
             // OnceLock is not Clone, so we must manually clone the state.
             header_cache: match self.header_cache.get() {
                 Some(val) => OnceLock::from(*val),
@@ -468,7 +453,6 @@ impl PartialEq for LogMemoryStore {
         self.feature_flag == other.feature_flag
             && self.maybe_page_map == other.maybe_page_map
             && self.persistent_next_idx == other.persistent_next_idx
-            && self.delta_log_sizes == other.delta_log_sizes
     }
 }
 

@@ -2,9 +2,10 @@ use anyhow::{Context, Result};
 use attestation::attestation_package::SevRootCertificateVerification;
 use config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::{GuestOSConfig, GuestVMType};
-use guest_disk::DEFAULT_PREVIOUS_SEV_KEY_PATH;
+use guest_disk::sev::DefaultSevStoreCryptoOps;
+use guest_disk::{DEFAULT_PREVIOUS_SEV_KEY_PATH, DEFAULT_STORE_LUKS_HEADER_PATH};
 use guest_upgrade_client::create_nns_registry_client;
-use guest_upgrade_shared::DEFAULT_SERVER_PORT;
+use guest_upgrade_shared::{DEFAULT_SERVER_PORT, STORE_DEVICE};
 use sev::firmware::guest::Firmware;
 use std::path::PathBuf;
 use std::process::Command;
@@ -43,8 +44,10 @@ async fn try_run_exchange(guestos_config: GuestOSConfig) -> Result<()> {
         SevRootCertificateVerification::Verify,
         Box::new(sev_firmware),
         Arc::new(nns_registry_client),
-        Box::new(guest_disk::sev::can_open_store),
+        Box::new(DefaultSevStoreCryptoOps),
+        PathBuf::from(STORE_DEVICE),
         PathBuf::from(DEFAULT_PREVIOUS_SEV_KEY_PATH),
+        PathBuf::from(DEFAULT_STORE_LUKS_HEADER_PATH),
         DEFAULT_SERVER_PORT,
     )
     .run()

@@ -1,3 +1,4 @@
+use super::allowed_panics::panic_sandboxed_execution_controller_reply_channel_closed;
 use crate::compiler_sandbox::WasmCompilerProxy;
 use crate::controller_launcher_service::ControllerLauncherService;
 use crate::launcher_service::LauncherService;
@@ -49,6 +50,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use super::active_execution_state_registry::{ActiveExecutionStateRegistry, CompletionResult};
+use super::allowed_panics::panic_launcher_exited_due_to_signal;
 use super::controller_service_impl::ControllerServiceImpl;
 use super::launch_as_process::{create_sandbox_process, spawn_launcher_process};
 use super::process_exe_and_args::{
@@ -1027,7 +1029,7 @@ impl WasmExecutor for SandboxedExecutionController {
         // Wait for completion.
         let result = rx
             .recv()
-            .expect("Sandboxed_execution_controller reply channel closed unexpectedly");
+            .unwrap_or_else(|_| panic_sandboxed_execution_controller_reply_channel_closed());
         drop(wait_timer);
         let _finish_timer = self
             .metrics
@@ -2182,9 +2184,7 @@ pub fn panic_due_to_exit(output: ExitStatus, pid: u32) {
         Some(code) => {
             panic!("Error from launcher process, pid {pid} exited with status code: {code}")
         }
-        None => panic!(
-            "Error from launcher process, pid {pid} exited due to signal! In test environments (e.g., PocketIC), you can safely ignore this message."
-        ),
+        None => panic_launcher_exited_due_to_signal(pid),
     }
 }
 

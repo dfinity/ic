@@ -71,14 +71,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set IS_BRANCH_IMAGE
+        id: is_branch_image
+        run: echo "IS_BRANCH_IMAGE=${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_PUSH_BASE_IMAGE') }}" >> $GITHUB_ENV
+
       - name: Build Base Image
         uses: docker/build-push-action@eb539f44b153603ccbfbd98e2ab9d4d0dcaf23a4 # v5
         id: build-base-image
         with:
           context: ${{ matrix.CONTEXT }}
           file: ${{ matrix.CONTEXT }}/Dockerfile.base
-          push: ${{ github.ref_name == 'master' }}
-          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.IMAGE }}:${{ env.DATE }}
+          # Only push to GHCR if we are targeting dfinity/ic, from dfinity/ic
+          # on master, or with the CI_PUSH_BASE_IMAGE label
+          push: |
+            ${{ (github.repository == 'dfinity/ic' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) &&
+            (github.ref_name == 'master' || env.IS_BRANCH_IMAGE == 'true') }}
+          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.IMAGE }}${{ case(env.IS_BRANCH_IMAGE == 'true', '-branch', '') }}:${{ env.DATE }}
           build-args: ${{ matrix.BUILD_ARGS }}
 
       - name: Collect SHA256 Digest
@@ -102,7 +110,11 @@ jobs:
     timeout-minutes: 10
     environment: CREATE_PR
     needs: [build-base-image]
-    if: ${{ github.ref_name == 'master' }}
+    # Only open a PR if we are in dfinity/ic
+    # on master
+    if: |
+      github.repository == 'dfinity/ic' &&
+      github.ref_name == 'master'
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0

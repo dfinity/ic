@@ -292,7 +292,9 @@ def icos_build(
                     # Create GuestLaunchMeasurements JSON for each CPU generation, vCPU count, and boot slot
                     (for vcpu_flag in """ + vcpu_type_flags + """; do
                         for vcpus in """ + vcpu_configs + """; do
-                            for cmdline in "$$BOOT_ARGS_A" "$$BOOT_ARGS_B"; do
+                            # Note: We only create launch measurements for the TEE boot arg variants
+                            # (BOOT_ARGS_TEE_A and BOOT_ARGS_TEE_B)
+                            for cmdline in "$$BOOT_ARGS_TEE_A" "$$BOOT_ARGS_TEE_B"; do
                                 hex=$$($(execpath //ic-os:sev-snp-measure) --mode snp --vcpus $$vcpus --ovmf "$(execpath //ic-os/components/ovmf:ovmf_sev)" $$vcpu_flag --append "$$cmdline" --initrd "$(location extracted_initrd.img)" --kernel "$(location extracted_vmlinuz)")
                                 # Convert hex string to decimal list, e.g. "abcd" ->  171\\n205
                                 measurement=$$(echo -n "$$hex" | fold -w2 | sed "s/^/0x/" | xargs printf "%d\n")
