@@ -98,10 +98,10 @@ pub struct Callback {
     #[prost(uint32, tag = "10")]
     pub deadline_seconds: u32,
     #[prost(message, optional, tag = "11")]
-    pub prepayment_for_response_execution:
+    pub prepayment_for_response_execution_compound:
         ::core::option::Option<super::super::queues::v1::CompoundCycles>,
     #[prost(message, optional, tag = "12")]
-    pub prepayment_for_response_transmission:
+    pub prepayment_for_response_transmission_compound:
         ::core::option::Option<super::super::queues::v1::CompoundCycles>,
     #[prost(message, optional, tag = "13")]
     pub prepayment_for_call_transmission:
@@ -318,7 +318,7 @@ pub mod execution_task {
         /// The execution cost that has already been charged from the canister.
         /// Retried execution does not have to pay for it again.
         #[prost(message, optional, tag = "7")]
-        pub prepaid_execution_cycles:
+        pub prepaid_execution_compound_cycles:
             ::core::option::Option<super::super::super::queues::v1::CompoundCycles>,
         #[prost(oneof = "aborted_execution::Input", tags = "1, 6, 3, 5")]
         pub input: ::core::option::Option<aborted_execution::Input>,
@@ -351,7 +351,7 @@ pub mod execution_task {
         /// The execution cost that has already been charged from the canister.
         /// Retried execution does not have to pay for it again.
         #[prost(message, optional, tag = "5")]
-        pub prepaid_execution_cycles:
+        pub prepaid_execution_compound_cycles:
             ::core::option::Option<super::super::super::queues::v1::CompoundCycles>,
         #[prost(oneof = "aborted_install_code::Message", tags = "1, 2")]
         pub message: ::core::option::Option<aborted_install_code::Message>,

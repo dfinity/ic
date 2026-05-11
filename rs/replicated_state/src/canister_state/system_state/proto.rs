@@ -1,6 +1,7 @@
 use super::*;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
+use ic_protobuf::state::queues::v1::CompoundCycles as PbCompoundCycles;
 
 impl From<&CanisterStatus> for pb::canister_state_bits::CanisterStatus {
     fn from(item: &CanisterStatus) -> Self {
@@ -98,7 +99,9 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                     task: Some(pb::execution_task::Task::AbortedExecution(
                         pb::execution_task::AbortedExecution {
                             input: Some(input),
-                            prepaid_execution_cycles: Some((*prepaid_execution_cycles).into()),
+                            prepaid_execution_compound_cycles: Some(PbCompoundCycles::from(
+                                *prepaid_execution_cycles,
+                            )),
                         },
                     )),
                 }
@@ -118,7 +121,9 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                         pb::execution_task::AbortedInstallCode {
                             message: Some(message),
                             call_id: Some(call_id.get()),
-                            prepaid_execution_cycles: Some((*prepaid_execution_cycles).into()),
+                            prepaid_execution_compound_cycles: Some(PbCompoundCycles::from(
+                                *prepaid_execution_cycles,
+                            )),
                         },
                     )),
                 }
@@ -174,8 +179,8 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     }
                 };
                 let prepaid_execution_cycles = try_from_option_field(
-                    aborted.prepaid_execution_cycles,
-                    "AbortedExecution::prepaid_execution_cycles",
+                    aborted.prepaid_execution_compound_cycles,
+                    "AbortedExecution::prepaid_execution_compound_cycles",
                 )?;
                 ExecutionTask::AbortedExecution {
                     input,
@@ -192,8 +197,8 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     Message::Ingress(v) => CanisterCall::Ingress(Arc::new(v.try_into()?)),
                 };
                 let prepaid_execution_cycles = try_from_option_field(
-                    aborted.prepaid_execution_cycles,
-                    "AbortedExecution::prepaid_execution_cycles",
+                    aborted.prepaid_execution_compound_cycles,
+                    "AbortedExecution::prepaid_execution_compound_cycles",
                 )?;
                 let call_id = aborted.call_id.ok_or(ProxyDecodeError::MissingField(
                     "AbortedInstallCode::call_id",

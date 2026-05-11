@@ -330,8 +330,10 @@ impl From<&Callback> for pb::Callback {
             call_context_id: item.call_context_id.get(),
             respondent: Some(pb_types::CanisterId::from(item.respondent)),
             cycles_sent: Some(item.cycles_sent.into()),
-            prepayment_for_response_execution: Some(item.prepayment_for_response_execution.into()),
-            prepayment_for_response_transmission: Some(
+            prepayment_for_response_execution_compound: Some(
+                item.prepayment_for_response_execution.into(),
+            ),
+            prepayment_for_response_transmission_compound: Some(
                 item.prepayment_for_response_transmission.into(),
             ),
             prepayment_for_call_transmission: Some(item.prepayment_for_call_transmission.into()),
@@ -364,11 +366,11 @@ impl TryFrom<pb::Callback> for Callback {
             try_from_option_field(value.cycles_sent, "Callback::cycles_sent")?;
 
         let prepayment_for_response_execution = try_from_option_field(
-            value.prepayment_for_response_execution,
+            value.prepayment_for_response_execution_compound,
             "Callback::prepayment_for_response_execution",
         )?;
         let prepayment_for_response_transmission = try_from_option_field(
-            value.prepayment_for_response_transmission,
+            value.prepayment_for_response_transmission_compound,
             "Callback::prepayment_for_response_transmission",
         )?;
         let prepayment_for_call_transmission = try_from_option_field(
