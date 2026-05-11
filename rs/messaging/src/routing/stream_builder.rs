@@ -575,8 +575,9 @@ impl StreamBuilderImpl {
                         }
                         RequestOrResponse::Response(rep) => {
                             // A Response: discard it.
-                            if rep.is_best_effort() {
-                                // Expected when the destination subnet has been deleted.
+                            if rep.is_best_effort() && rep.refund.is_zero() {
+                                // Expected when the destination subnet has been deleted: best-effort
+                                // responses with no cycles refund can be safely discarded.
                                 warn!(
                                     self.log,
                                     "Discarding best-effort response, destination not found: {:?}",
