@@ -37,15 +37,7 @@ pub struct HeapGovernanceData {
     pub xdr_conversion_rate: XdrConversionRate,
     pub restore_aging_summary: Option<RestoreAgingSummary>,
     pub topic_of_garbage_collected_proposals: HashMap<u64, Topic>,
-    /// Persisted-true sentinel: the one-time eight year gang bonus base migration ran on
-    /// mainnet. Kept as a rollback guard so a previous release that sees this `true` skips
-    /// the migration (re-running it would zero out the bonus bases on dissolve-delay-clamped
-    /// neurons).
-    pub eight_year_gang_bonus_migration_done: bool,
     pub neuron_id_to_pre_clamp_dissolve_state: HashMap<u64, NeuronDissolveStateSnapshot>,
-    /// Persisted-true sentinel for the relaxed eight year gang induction. See
-    /// `eight_year_gang_bonus_migration_done` for details.
-    pub relaxed_eight_year_gang_bonus_migration_done: bool,
     pub icp_price_history: Option<IcpPriceHistory>,
     pub maturity_modulation: Option<MaturityModulation>,
 }
@@ -217,9 +209,7 @@ pub fn initialize_governance(
         xdr_conversion_rate,
         restore_aging_summary,
         topic_of_garbage_collected_proposals: HashMap::new(),
-        eight_year_gang_bonus_migration_done: false,
         neuron_id_to_pre_clamp_dissolve_state: HashMap::new(),
-        relaxed_eight_year_gang_bonus_migration_done: false,
         icp_price_history: None,
         maturity_modulation: None,
     };
@@ -261,9 +251,7 @@ pub fn split_governance_proto(
         xdr_conversion_rate,
         restore_aging_summary,
         topic_of_garbage_collected_proposals,
-        eight_year_gang_bonus_migration_done,
         neuron_id_to_pre_clamp_dissolve_state,
-        relaxed_eight_year_gang_bonus_migration_done,
         rng_seed,
         icp_price_history,
         maturity_modulation,
@@ -309,9 +297,7 @@ pub fn split_governance_proto(
                 .into_iter()
                 .map(|(k, v)| (k, Topic::try_from(v).unwrap_or(Topic::Unspecified)))
                 .collect(),
-            eight_year_gang_bonus_migration_done,
             neuron_id_to_pre_clamp_dissolve_state,
-            relaxed_eight_year_gang_bonus_migration_done,
             icp_price_history,
             maturity_modulation,
         },
@@ -351,9 +337,7 @@ pub fn reassemble_governance_proto(
         xdr_conversion_rate,
         restore_aging_summary,
         topic_of_garbage_collected_proposals,
-        eight_year_gang_bonus_migration_done,
         neuron_id_to_pre_clamp_dissolve_state,
-        relaxed_eight_year_gang_bonus_migration_done,
         icp_price_history,
         maturity_modulation,
     } = heap_governance_proto;
@@ -386,9 +370,7 @@ pub fn reassemble_governance_proto(
             .into_iter()
             .map(|(k, v)| (k, v as i32))
             .collect(),
-        eight_year_gang_bonus_migration_done,
         neuron_id_to_pre_clamp_dissolve_state,
-        relaxed_eight_year_gang_bonus_migration_done,
         rng_seed: rng_seed.map(|seed| seed.to_vec()),
         icp_price_history,
         maturity_modulation,
@@ -431,8 +413,6 @@ mod tests {
             }),
             restore_aging_summary: None,
             topic_of_garbage_collected_proposals: hashmap! { 1 => Topic::Unspecified as i32 },
-            eight_year_gang_bonus_migration_done: true,
-            relaxed_eight_year_gang_bonus_migration_done: true,
             neuron_id_to_pre_clamp_dissolve_state: hashmap! {
                 1 => NeuronDissolveStateSnapshot {
                     dissolve_state: Some(
