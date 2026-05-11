@@ -32,6 +32,10 @@ crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
 # Use particular version with `@crate_index//:mycrate-3.14.16`
 
 crate.spec(
+    package = "actix-http",
+    version = "^3.12.1",
+)
+crate.spec(
     package = "actix-rt",
     version = "^2.10.0",
 )
