@@ -554,6 +554,14 @@ service : (minter_arg : MinterArg) -> {
     // Returns the status of a withdrawal request.
     retrieve_doge_status : (record { block_index : nat64 }) -> (RetrieveDogeStatus) query;
 
+    // Returns the list of supported ICRC standards.
+    icrc10_supported_standards : () -> (vec Icrc10StandardRecord) query;
+
+    // Returns a human-readable consent message describing the requested
+    // canister call. See the ICRC-21 standard for details:
+    // https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-21/ICRC-21.md
+    icrc21_canister_call_consent_message : (Icrc21ConsentMessageRequest) -> (variant { Ok : Icrc21ConsentInfo; Err : Icrc21Error });
+
     // Returns internal minter parameters.
     get_minter_info : () -> (MinterInfo) query;
 
@@ -570,12 +578,4 @@ service : (minter_arg : MinterArg) -> {
     //
     // NOTE: this method exists for debugging purposes and backwards-compatibility is **not** guaranteed.
     get_events : (record { start: nat64; length : nat64 }) -> (vec Event) query;
-
-    // Returns the list of supported ICRC standards.
-    icrc10_supported_standards : () -> (vec Icrc10StandardRecord) query;
-
-    // Returns a human-readable consent message describing the requested
-    // canister call. See the ICRC-21 standard for details:
-    // https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-21/ICRC-21.md
-    icrc21_canister_call_consent_message : (Icrc21ConsentMessageRequest) -> (variant { Ok : Icrc21ConsentInfo; Err : Icrc21Error });
 }
