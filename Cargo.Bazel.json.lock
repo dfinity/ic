@@ -1,5 +1,5 @@
 {
-  "checksum": "a0eab06ba3fe21217936a6455930441514569fe08f8bd0d563e3bdb4e0c18f4d",
+  "checksum": "921f6a70c3ccbdc483af5561dac92e1b15e3a871e31d0e6f662fcbb26c7c93a0",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -46086,7 +46086,7 @@
         ],
         "data": {
           "common": [
-            "@@+_repo_rules+openssl//:gen_dir"
+            "@openssl//:gen_dir"
           ],
           "selects": {}
         },
@@ -46933,8 +46933,8 @@
         ],
         "data": {
           "common": [
-            "@@+_repo_rules+lmdb//:liblmdb",
-            "@@+_repo_rules+lmdb//:lmdb.h"
+            "@lmdb//:liblmdb",
+            "@lmdb//:lmdb.h"
           ],
           "selects": {}
         },
@@ -46956,8 +46956,8 @@
         },
         "build_script_env": {
           "common": {
-            "LMDB_H_PATH": "$(location @@+_repo_rules+lmdb//:lmdb.h)",
-            "LMDB_OVERRIDE": "$(location @@+_repo_rules+lmdb//:liblmdb)"
+            "LMDB_H_PATH": "$(location @lmdb//:lmdb.h)",
+            "LMDB_OVERRIDE": "$(location @lmdb//:liblmdb)"
           },
           "selects": {}
         }
@@ -54195,7 +54195,7 @@
         ],
         "data": {
           "common": [
-            "@@+_repo_rules+openssl//:gen_dir"
+            "@openssl//:gen_dir"
           ],
           "selects": {}
         },
@@ -54221,8 +54221,8 @@
         },
         "build_script_env": {
           "common": {
-            "OPENSSL_INCLUDE_DIR": "$(execpath @@+_repo_rules+openssl//:gen_dir)/include",
-            "OPENSSL_LIB_DIR": "$(execpath @@+_repo_rules+openssl//:gen_dir)/lib64",
+            "OPENSSL_INCLUDE_DIR": "$(execpath @openssl//:gen_dir)/include",
+            "OPENSSL_LIB_DIR": "$(execpath @openssl//:gen_dir)/lib64",
             "OPENSSL_NO_VENDOR": "1",
             "OPENSSL_STATIC": "1"
           },
@@ -59262,7 +59262,7 @@
         ],
         "data": {
           "common": [
-            "@@protobuf+//:protoc"
+            "@protobuf//:protoc"
           ],
           "selects": {}
         },
@@ -59284,7 +59284,7 @@
         },
         "build_script_env": {
           "common": {
-            "PROTOC": "$(execpath @@protobuf+//:protoc)"
+            "PROTOC": "$(execpath @protobuf//:protoc)"
           },
           "selects": {}
         }
@@ -82140,7 +82140,7 @@
           "common": [],
           "selects": {
             "x86_64-unknown-linux-gnu": [
-              "@@+_repo_rules+jemalloc//:libjemalloc"
+              "@jemalloc//:libjemalloc"
             ]
           }
         },
@@ -82160,7 +82160,7 @@
           "common": {},
           "selects": {
             "x86_64-unknown-linux-gnu": {
-              "JEMALLOC_OVERRIDE": "$(location @@+_repo_rules+jemalloc//:libjemalloc)"
+              "JEMALLOC_OVERRIDE": "$(location @jemalloc//:libjemalloc)"
             }
           }
         },
