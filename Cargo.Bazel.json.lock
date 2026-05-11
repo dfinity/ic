@@ -1,5 +1,5 @@
 {
-  "checksum": "921f6a70c3ccbdc483af5561dac92e1b15e3a871e31d0e6f662fcbb26c7c93a0",
+  "checksum": "4168aacfa381cabbadfb8fb9e42663b0d8ca6a3994877ed71bebd8c5adc3ff65",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22341,7 +22341,7 @@
               "target": "ic_vetkeys"
             },
             {
-              "id": "ic-wasm 0.8.4",
+              "id": "ic-wasm 0.9.11",
               "target": "ic_wasm"
             },
             {
@@ -32461,54 +32461,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "heck 0.3.3": {
-      "name": "heck",
-      "version": "0.3.3",
-      "package_url": "https://github.com/withoutboats/heck",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/heck/0.3.3/download",
-          "sha256": "6d621efb26863f0e9924c6ac577e8275e5e6b77455db64ffa6c65c904e9e132c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "heck",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "heck",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "unicode-segmentation 1.12.0",
-              "target": "unicode_segmentation"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.3.3"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "heck 0.4.1": {
       "name": "heck",
       "version": "0.4.1",
@@ -39110,14 +39062,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-wasm 0.8.4": {
+    "ic-wasm 0.9.11": {
       "name": "ic-wasm",
-      "version": "0.8.4",
+      "version": "0.9.11",
       "package_url": "https://github.com/dfinity/ic-wasm",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-wasm/0.8.4/download",
-          "sha256": "45bc33855672981ae4a2f4e77c1a77d1bdc0756fb1b36ad0dbe47df77a955e2d"
+          "url": "https://static.crates.io/crates/ic-wasm/0.9.11/download",
+          "sha256": "04a4c6c1f1f7a2126be36fe51cdbc1c8991214f231811dca7ec1971d15cb6f91"
         }
       },
       "targets": [
@@ -39153,10 +39105,7 @@
         ],
         "crate_features": {
           "common": [
-            "anyhow",
-            "clap",
-            "exe",
-            "serde"
+            "exe"
           ],
           "selects": {}
         },
@@ -39187,22 +39136,22 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.145",
-              "target": "serde_json"
-            },
-            {
               "id": "thiserror 1.0.68",
               "target": "thiserror"
             },
             {
-              "id": "walrus 0.21.1",
+              "id": "walrus 0.22.0",
               "target": "walrus"
+            },
+            {
+              "id": "wasmparser 0.223.1",
+              "target": "wasmparser"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.8.4"
+        "version": "0.9.11"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -89426,14 +89375,14 @@
       ],
       "license_file": "LICENSE-MIT"
     },
-    "walrus 0.21.1": {
+    "walrus 0.22.0": {
       "name": "walrus",
-      "version": "0.21.1",
+      "version": "0.22.0",
       "package_url": "https://github.com/rustwasm/walrus",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/walrus/0.21.1/download",
-          "sha256": "467611cafbc8a84834b77d2b4bb191fd2f5769752def8340407e924390c6883b"
+          "url": "https://static.crates.io/crates/walrus/0.22.0/download",
+          "sha256": "d68aa3c7b80be75c8458fc087453e5a31a226cfffede2e9b932393b2ea1c624a"
         }
       },
       "targets": [
@@ -89492,13 +89441,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "walrus-macro 0.19.0",
+              "id": "walrus-macro 0.22.0",
               "target": "walrus_macro"
             }
           ],
           "selects": {}
         },
-        "version": "0.21.1"
+        "version": "0.22.0"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -89580,66 +89529,6 @@
           "selects": {}
         },
         "version": "0.23.3"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "walrus-macro 0.19.0": {
-      "name": "walrus-macro",
-      "version": "0.19.0",
-      "package_url": "https://github.com/rustwasm/walrus/tree/crates/macro",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/walrus-macro/0.19.0/download",
-          "sha256": "0a6e5bd22c71e77d60140b0bd5be56155a37e5bd14e24f5f87298040d0cc40d7"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "walrus_macro",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "walrus_macro",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "heck 0.3.3",
-              "target": "heck"
-            },
-            {
-              "id": "proc-macro2 1.0.103",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.42",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.19.0"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -91185,6 +91074,110 @@
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
         "Apache-2.0"
+      ],
+      "license_file": null
+    },
+    "wasmparser 0.223.1": {
+      "name": "wasmparser",
+      "version": "0.223.1",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasmparser/0.223.1/download",
+          "sha256": "664b980991ed9a8c834eb528a8979ab1109edcf52dc05dd5751e2cc3fb31035d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmparser",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasmparser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "component-model",
+            "default",
+            "features",
+            "hash-collections",
+            "serde",
+            "simd",
+            "std",
+            "validate"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.10.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "hashbrown 0.15.2",
+              "target": "hashbrown"
+            },
+            {
+              "id": "indexmap 2.14.0",
+              "target": "indexmap"
+            },
+            {
+              "id": "semver 1.0.27",
+              "target": "semver"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "wasmparser 0.223.1",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.223.1"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
       ],
       "license_file": null
     },
@@ -100189,7 +100182,7 @@
   },
   "binary_crates": [
     "canbench 0.4.1",
-    "ic-wasm 0.8.4",
+    "ic-wasm 0.9.11",
     "metrics-proxy 0.1.0"
   ],
   "workspace_members": {
@@ -100647,7 +100640,7 @@
     "ic-utils 0.45.0",
     "ic-verify-bls-signature 0.6.0",
     "ic-vetkeys 0.6.0",
-    "ic-wasm 0.8.4",
+    "ic-wasm 0.9.11",
     "ic-xrc-types 1.2.0",
     "ic0 1.0.1",
     "ic_bls12_381 0.10.1",

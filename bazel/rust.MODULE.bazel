@@ -778,7 +778,7 @@ crate.spec(
         "exe",
     ],
     package = "ic-wasm",
-    version = "^0.8.4",
+    version = "^0.9.11",
 )
 crate.spec(
     package = "ic-xrc-types",
