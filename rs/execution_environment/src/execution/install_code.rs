@@ -29,7 +29,7 @@ use ic_types::{
     CanisterLog, CanisterTimer, Height, MemoryAllocation, NumInstructions, Time,
     messages::CanisterCall,
 };
-use ic_types_cycles::{CompoundCycles, Cycles, Instructions, CyclesUseCase};
+use ic_types_cycles::{CompoundCycles, Cycles, CyclesUseCase, Instructions};
 use ic_wasm_types::WasmHash;
 
 use crate::{
