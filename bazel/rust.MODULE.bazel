@@ -2196,6 +2196,7 @@ crate.from_specs(
         ],
 )
 
+# inject nice names for those repos to avoid canonical naming
 inject_repo(crate, "openssl", "lmdb", "jemalloc", "protobuf")
 
 use_repo(crate, "crate_index")
