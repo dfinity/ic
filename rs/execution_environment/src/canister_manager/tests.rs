@@ -5,7 +5,7 @@ use crate::{
         CanisterManager, CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult,
         InstallCodeContext, MAX_SLICE_SIZE_BYTES, WasmSource, uninstall_canister,
     },
-    canister_settings::CanisterSettings,
+    canister_settings::{CanisterSettings, CanisterSettingsBuilder},
     execution_environment::{CompilationCostHandling, RoundCounters, as_round_instructions},
     hypervisor::Hypervisor,
     types::{IngressResponse, Response},
@@ -2323,7 +2323,14 @@ fn installing_a_canister_with_not_enough_cycles_fails() {
 
     // Give the new canister a relatively small number of cycles so it doesn't have
     // enough to be installed.
-    let canister_id = test.create_canister(Cycles::new(100));
+    let canister_id = test
+        .create_canister_with_settings(
+            Cycles::new(100),
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(0)
+                .build(),
+        )
+        .unwrap();
 
     let err = test
         .install_code_v2(InstallCodeArgsV2::new(
@@ -3177,7 +3184,15 @@ fn creating_canisters_always_works_if_limit_is_set_to_zero() {
     for _ in 0..1_000 {
         test.inject_call_to_ic00(
             Method::CreateCanister,
-            EmptyBlob.encode(),
+            CreateCanisterArgs {
+                settings: Some(
+                    CanisterSettingsArgsBuilder::new()
+                        .with_log_memory_limit(0)
+                        .build(),
+                ),
+                sender_canister_version: None,
+            }
+            .encode(),
             test.canister_creation_fee().real(),
         );
         test.execute_all();
@@ -4669,6 +4684,7 @@ fn update_settings_can_set_reserved_cycles_limit() {
             CYCLES,
             CanisterSettingsArgsBuilder::new()
                 .with_reserved_cycles_limit(1)
+                .with_log_memory_limit(0)
                 .build(),
         )
         .unwrap();
@@ -7316,7 +7332,9 @@ fn create_canister_with_cycles_sender_in_whitelist() {
         .create_canister_with_cycles(
             canister_change_origin_from_principal(&sender),
             Some(123),
-            CanisterSettings::default(),
+            CanisterSettingsBuilder::new()
+                .with_log_memory_limit(NumBytes::new(0))
+                .build(),
             None,
             &mut state,
             &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
@@ -7356,7 +7374,9 @@ fn create_canister_with_specified_id(
     let creation_result = canister_manager.create_canister_with_cycles(
         canister_change_origin_from_principal(&creator),
         Some(123),
-        CanisterSettings::default(),
+        CanisterSettingsBuilder::new()
+            .with_log_memory_limit(NumBytes::new(0))
+            .build(),
         Some(specified_id),
         &mut state,
         &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
@@ -7557,8 +7577,15 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
         .system_state
         .set_balance(Cycles::new(2_000_000_000_000_000));
 
-    // Create a canister with default settings.
-    let args = CreateCanisterArgs::default();
+    // Create a canister with no compute allocation.
+    let args = CreateCanisterArgs {
+        settings: Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(0)
+                .build(),
+        ),
+        sender_canister_version: None,
+    };
     let create_canister = wasm()
         .call_with_cycles(
             CanisterId::ic_00(),
@@ -7575,6 +7602,7 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
     // Create a canister with zero compute allocation.
     let settings = CanisterSettingsArgsBuilder::new()
         .with_compute_allocation(0)
+        .with_log_memory_limit(0)
         .build();
     let args = CreateCanisterArgs {
         settings: Some(settings),
@@ -7597,6 +7625,7 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
     // Create a canister with compute allocation.
     let settings = CanisterSettingsArgsBuilder::new()
         .with_compute_allocation(10)
+        .with_log_memory_limit(0)
         .build();
     let args = CreateCanisterArgs {
         settings: Some(settings),
@@ -7645,7 +7674,13 @@ fn create_canister_checks_freezing_threshold_for_compute_allocation() {
         .build();
 
     let err = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000), Some(50), None)
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000),
+            CanisterSettingsArgsBuilder::new()
+                .with_compute_allocation(50)
+                .with_log_memory_limit(0)
+                .build(),
+        )
         .unwrap_err();
 
     assert!(
@@ -7828,6 +7863,71 @@ fn create_canister_reserves_cycles_for_memory_allocation() {
 }
 
 #[test]
+fn create_canister_reverts_round_limits_on_failure() {
+    // In validate_and_update_canister_settings, compute_allocation_used is
+    // incremented and subnet_available_memory is decremented before
+    // reserve_cycles is called for memory allocation.
+    // Setting reserved_cycles_limit=0 with non-zero memory_allocation ensures
+    // reserve_cycles fails (ReservedCyclesLimitExceededInMemoryAllocation) after
+    // both round_limits fields were already updated.
+    // The caller must revert both from the round_limits snapshot.
+    let subnet_id = subnet_test_id(1);
+    let canister_manager = CanisterManagerBuilder::default()
+        .with_subnet_id(subnet_id)
+        .build();
+    let mut state = initial_state(subnet_id, false);
+    // Use zero threshold so that storage_reservation_cycles is non-zero for
+    // any memory allocation, causing reserve_cycles to fail when
+    // reserved_cycles_limit is 0.
+    let subnet_memory_saturation = ResourceSaturation::new(0, 0, 100_000_000_000);
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
+        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
+    };
+
+    let initial_compute_allocation_used = round_limits.compute_allocation_used;
+    let initial_subnet_available_memory =
+        round_limits.subnet_available_memory.get_execution_memory();
+
+    let sender = canister_test_id(1).get();
+    let err = canister_manager
+        .create_canister_with_cycles(
+            canister_change_origin_from_principal(&sender),
+            Some(100_000_000_000_000),
+            CanisterSettingsBuilder::new()
+                .with_compute_allocation(ComputeAllocation::try_from(50_u64).unwrap())
+                .with_memory_allocation(MemoryAllocation::from(NumBytes::new(MIB)))
+                .with_reserved_cycles_limit(Cycles::zero())
+                .build(),
+            None,
+            &mut state,
+            &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
+            MAX_NUMBER_OF_CANISTERS,
+            &mut round_limits,
+            subnet_memory_saturation,
+            SMALL_APP_SUBNET_MAX_SIZE,
+            &no_op_counter(),
+        )
+        .unwrap_err();
+
+    assert_matches!(
+        err,
+        CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation { .. }
+    );
+    assert_eq!(
+        round_limits.compute_allocation_used,
+        initial_compute_allocation_used,
+    );
+    assert_eq!(
+        round_limits.subnet_available_memory.get_execution_memory(),
+        initial_subnet_available_memory,
+    );
+}
+
+#[test]
 fn create_canister_fails_with_reserved_cycles_limit_exceeded() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
     const CAPACITY: u64 = 20_000_000_000;
@@ -7893,6 +7993,7 @@ fn create_canister_can_set_reserved_cycles_limit() {
     // empty canister is zero, setting the reserved cycles limit should succeed.
     let settings = CanisterSettingsArgsBuilder::new()
         .with_reserved_cycles_limit(1)
+        .with_log_memory_limit(0)
         .build();
     let args = CreateCanisterArgs {
         settings: Some(settings),

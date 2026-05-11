@@ -90,9 +90,10 @@ RUN RUST_VERSION=$(sed -n 's/^channel = "\(.*\)"$/\1/p' /tmp/rust-toolchain.toml
     rustup component add clippy && \
     sudo rm /tmp/rust-toolchain.toml
 
-# Add cargo-audit
+# Add cargo-audit and remove build files (we don't need them in the build images)
 ARG CARGO_AUDIT_VERSION=0.22.0
-RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
+RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION} && \
+    find /home/ubuntu/.cargo -not -name bin -maxdepth 1 -mindepth 1 -exec rm -r {} +
 
 # switch back to root user after cargo install so that we have permissions to install additional packages
 USER root
