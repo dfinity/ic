@@ -197,6 +197,16 @@ def finalize_wasm(*, name, src_wasm, service_file = None, version_file, testonly
     file), `ic-wasm check-endpoints --hidden <conf>` is also run on the finalized
     wasm before gzip, failing the build if the wasm exports a method that is
     neither in the candid `service` nor allowlisted in the conf.
+
+    Args:
+      name: target name; the rule outputs a file `name`.
+      src_wasm: the input wasm label.
+      service_file: optional candid `.did` file to embed as `candid:service` metadata.
+      version_file: text file whose contents become the `git_commit_id` metadata.
+      testonly: testonly attribute on the generated genrule.
+      visibility: visibility of the output target.
+      keep_name_section: pass `--keep-name-section` to every `ic-wasm` invocation.
+      hidden_endpoints: optional `hidden_endpoints.conf` label; enables `ic-wasm check-endpoints --hidden <conf>`.
     """
 
     steps = [
