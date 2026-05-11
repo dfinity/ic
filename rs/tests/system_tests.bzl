@@ -121,6 +121,7 @@ def system_test(
     _runtime_deps = dict(runtime_deps)
 
     _runtime_deps["TEST_BIN"] = test_driver_target
+    _runtime_deps["VOLATILE_STATUS_FILE"] = "//bazel:volatile-status.txt"
 
     env_var_files = {}
     icos_images = dict()
@@ -133,7 +134,6 @@ def system_test(
     icos_images |= icos_config.icos_images
 
     env_var_files["FARM_METADATA"] = "//rs/tests:farm_metadata.txt"
-    env_var_files["DC"] = "//rs/tests:DC.txt"
 
     extra_args_simple = []
     extra_args_colocated = []

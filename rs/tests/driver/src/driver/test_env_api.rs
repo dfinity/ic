@@ -1512,12 +1512,8 @@ impl HasGroupSetup for TestEnv {
             match InfraProvider::read_attribute(self) {
                 InfraProvider::Farm => {
                     let required_host_features = if allocate_testnet_to_local_dc {
-                        let dc = std::env::var("DC").expect("Expected env var to DC be set");
-                        if dc.is_empty() {
-                            vec![]
-                        } else {
-                            vec![HostFeature::DC(dc)]
-                        }
+                        read_var_from_volatile_status_file("DC")
+                            .map_or_else(Vec::new, |dc| vec![HostFeature::DC(dc.clone())])
                     } else {
                         vec![]
                     };
@@ -1637,6 +1633,21 @@ pub fn read_dependency_from_env_to_string(v: &str) -> Result<String> {
     let path_from_env =
         std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {v} not set"));
     read_dependency_to_string(path_from_env)
+}
+
+pub fn read_var_from_volatile_status_file(var_name: &str) -> Option<String> {
+    let volatile_status_path = get_dependency_path_from_env("VOLATILE_STATUS_FILE");
+    let content = fs::read_to_string(&volatile_status_path).unwrap_or_else(|e| {
+        panic!("Couldn't read content of the {volatile_status_path:?} file: {e:?}")
+    });
+    for line in content.lines() {
+        if let Some((name, value)) = line.split_once(' ')
+            && name.trim() == var_name
+        {
+            return Some(value.trim().to_string());
+        }
+    }
+    None
 }
 
 pub fn load_wasm<P: AsRef<Path>>(p: P) -> Vec<u8> {

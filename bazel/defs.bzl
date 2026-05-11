@@ -368,24 +368,14 @@ write_info_file_var = rule(
     },
 )
 
-def _write_version_file_var_impl(ctx):
-    """Helper rule that creates a file with the content of the provided var from the version file."""
+def _volatile_status_impl(ctx):
+    return [DefaultInfo(
+        files = depset([ctx.version_file]),
+        runfiles = ctx.runfiles(files = [ctx.version_file]),
+    )]
 
-    output = ctx.actions.declare_file(ctx.label.name)
-    ctx.actions.run_shell(
-        command = """
-            grep <{version_file} -e '{varname}' \\
-                    | cut -d' ' -f2 > {out}""".format(varname = ctx.attr.varname, version_file = ctx.version_file.path, out = output.path),
-        inputs = [ctx.version_file],
-        outputs = [output],
-    )
-    return [DefaultInfo(files = depset([output]))]
-
-write_version_file_var = rule(
-    implementation = _write_version_file_var_impl,
-    attrs = {
-        "varname": attr.string(mandatory = True),
-    },
+volatile_status = rule(
+    implementation = _volatile_status_impl,
 )
 
 def file_size_check(
