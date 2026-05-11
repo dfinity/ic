@@ -16,6 +16,7 @@ rust_library(
         "//packages/ic-ed25519",
         "//packages/ic-secp256k1",
         "@crate_index//:ic-management-canister-types",
+        "@crate_index//:ic_management_canister_types_0_5",
         "@crate_index//:ic-vetkeys",
     ],
 )

@@ -214,7 +214,15 @@ impl TryFrom<&VetKDKeyId> for MasterPublicKey {
     fn try_from(key_id: &VetKDKeyId) -> Result<Self, Self::Error> {
         #[cfg(feature = "vetkeys")]
         {
-            if let Some(mk) = ic_vetkeys::MasterPublicKey::for_mainnet_key(key_id) {
+            let key_id_v0_5 = ic_management_canister_types_0_5::VetKDKeyId {
+                curve: match key_id.curve {
+                    VetKDCurve::Bls12_381_G2 => {
+                        ic_management_canister_types_0_5::VetKDCurve::Bls12_381_G2
+                    }
+                },
+                name: key_id.name.clone(),
+            };
+            if let Some(mk) = ic_vetkeys::MasterPublicKey::for_mainnet_key(&key_id_v0_5) {
                 let inner = MasterPublicKeyInner::VetKD(mk);
                 return Ok(Self { inner });
             }
