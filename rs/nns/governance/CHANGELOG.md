@@ -11,7 +11,7 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
-# 2026-05-09: Proposal 141738
+# 2026-05-08: Proposal 141738
 
 http://dashboard.internetcomputer.org/proposal/141738
 
