@@ -792,3 +792,37 @@ fn test_next_idx_preserved_after_deallocate() {
     // The next_idx should be preserved even if deallocated
     assert_eq!(store.next_idx(), TEST_NEXT_IDX + 2);
 }
+
+fn assert_memory_usage_for_limit(feature_flag: FlagStatus, limit: usize) {
+    let mut s = LogMemoryStore::new(feature_flag);
+    s.resize_for_testing(limit);
+    assert_eq!(
+        s.memory_usage_for_limit(NumBytes::new(limit as u64)).get() as usize,
+        s.memory_usage(),
+    );
+}
+
+#[test]
+fn memory_usage_for_limit_feature_disabled() {
+    assert_memory_usage_for_limit(FlagStatus::Disabled, 1);
+}
+
+#[test]
+fn memory_usage_for_limit_zero_limit() {
+    assert_memory_usage_for_limit(TEST_LOG_MEMORY_STORE_FEATURE, 0);
+}
+
+#[test]
+fn memory_usage_for_limit_below_minimum() {
+    assert_memory_usage_for_limit(TEST_LOG_MEMORY_STORE_FEATURE, 1); // below DATA_CAPACITY_MIN
+}
+
+#[test]
+fn memory_usage_for_limit_at_minimum() {
+    assert_memory_usage_for_limit(TEST_LOG_MEMORY_STORE_FEATURE, EXPECTED_DATA_CAPACITY_MIN);
+}
+
+#[test]
+fn memory_usage_for_limit_above_minimum() {
+    assert_memory_usage_for_limit(TEST_LOG_MEMORY_STORE_FEATURE, TEST_LOG_MEMORY_LIMIT);
+}
