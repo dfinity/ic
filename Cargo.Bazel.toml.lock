@@ -6831,6 +6831,7 @@ dependencies = [
  "parse-display",
  "rustc-demangle",
  "serde",
+ "serde_json",
  "thiserror 1.0.68",
  "walrus 0.22.0",
  "wasmparser 0.223.1",
