@@ -15,7 +15,7 @@ pub(crate) fn validate_webauthn_sig(
     signable: &impl Signable,
     public_key: &UserPublicKey,
 ) -> Result<(), String> {
-    let basic_sig = basic_sig_from_webauthn_sig(&webauthn_sig, public_key.algorithm_id)?;
+    let basic_sig = basic_sig_from_webauthn_sig(webauthn_sig, public_key.algorithm_id)?;
 
     let envelope = match WebAuthnEnvelope::try_from(webauthn_sig) {
         Ok(envelope) => envelope,
@@ -48,7 +48,7 @@ pub(crate) fn validate_webauthn_sig(
 }
 
 fn basic_sig_from_webauthn_sig(
-    webauthn_sig: &&WebAuthnSignature,
+    webauthn_sig: &WebAuthnSignature,
     algorithm_id: AlgorithmId,
 ) -> Result<BasicSig, String> {
     match algorithm_id {
