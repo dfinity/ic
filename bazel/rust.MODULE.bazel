@@ -2043,6 +2043,11 @@ crate.annotation(
     gen_binaries = ["canbench"],
 )
 crate.annotation(
+    crate = "askama_derive",
+    patch_args = ["-p2"],
+    patches = ["@@//bazel:askama.patch"],
+)
+crate.annotation(
     crate = "cc",
     patch_args = ["-p1"],
     patches = ["@@//bazel:cc_rs.patch"],
