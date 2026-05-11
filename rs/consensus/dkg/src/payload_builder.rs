@@ -190,21 +190,29 @@ pub(crate) fn create_early_remote_transcripts(
         let configs = match config_results {
             Ok(configs) => configs,
             Err(errs) => {
+                // Skip requests for which we already have a transcript result on chain.
+                if errs
+                    .iter()
+                    .any(|(dkg_id, _)| completed_dkgs.contains(dkg_id))
+                {
+                    continue;
+                }
+                // Skip requests that would exceed the maximum number of early remote transcripts.
+                if selected_transcripts.len() + errs.len() > MAX_EARLY_REMOTE_TRANSCRIPTS {
+                    continue;
+                }
                 // Reject contexts for which we failed to create configs.
                 for (dkg_id, err) in errs {
-                    // Skip requests for which we already have a transcript on chain.
-                    if !completed_dkgs.contains(&dkg_id) {
-                        error!(
-                            logger,
-                            "Failed to create remote transcript config for dkg id {:?} at height {}: {}",
-                            dkg_id,
-                            parent.height.increment(),
-                            err
-                        );
-                        // Including the error in the payload will cause the context to receive
-                        // a reject response.
-                        selected_transcripts.push((dkg_id, callback_id, Err(err)));
-                    }
+                    error!(
+                        logger,
+                        "Failed to create remote transcript config for dkg id {:?} at height {}: {}",
+                        dkg_id,
+                        parent.height.increment(),
+                        err
+                    );
+                    // Including the error in the payload will cause the context to receive
+                    // a reject response.
+                    selected_transcripts.push((dkg_id, callback_id, Err(err)));
                 }
                 continue;
             }
@@ -1147,12 +1155,12 @@ mod tests {
                 }
 
                 // The first data block after the last summary should contain repeated-failure
-                // errors for remote DKG transcripts.
+                // errors for the setup DKG transcripts.
                 deps.pool.advance_round_normal_operation();
                 let data_block = deps.pool.get_cache().finalized_block();
                 let dkg_data = data_block.payload.as_ref().as_data().dkg.clone();
                 assert_eq!(dkg_data.messages.len(), 0);
-                assert_eq!(dkg_data.transcripts_for_remote_subnets.len(), 3);
+                assert_eq!(dkg_data.transcripts_for_remote_subnets.len(), 2);
                 assert_eq!(
                     dkg_data
                         .transcripts_for_remote_subnets
@@ -1164,6 +1172,14 @@ mod tests {
                         .count(),
                     2
                 );
+
+                // The second data block after the last summary should contain repeated-failure
+                // errors for the reshare chain key transcript.
+                deps.pool.advance_round_normal_operation();
+                let data_block = deps.pool.get_cache().finalized_block();
+                let dkg_data = data_block.payload.as_ref().as_data().dkg.clone();
+                assert_eq!(dkg_data.messages.len(), 0);
+                assert_eq!(dkg_data.transcripts_for_remote_subnets.len(), 1);
                 assert_eq!(
                     dkg_data
                         .transcripts_for_remote_subnets
