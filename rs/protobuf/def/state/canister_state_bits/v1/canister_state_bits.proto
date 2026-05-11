@@ -64,6 +64,8 @@ message WasmClosure {
 
 message Callback {
   reserved 6;
+  reserved 8;
+  reserved 9;
 
   uint64 call_context_id = 1;
   WasmClosure on_reply = 2;
@@ -71,13 +73,9 @@ message Callback {
   WasmClosure on_cleanup = 4;
   state.queues.v1.Cycles cycles_sent = 5;
   types.v1.CanisterId respondent = 7;
-  state.queues.v1.Cycles prepayment_for_response_execution = 8;
-  state.queues.v1.Cycles prepayment_for_response_transmission = 9;
   // If non-zero, this is a best-effort call.
   uint32 deadline_seconds = 10;
-  // To replace `prepayment_for_response_execution`.
   state.queues.v1.CompoundCycles prepayment_for_response_execution_compound = 11;
-  // To replace `prepayment_for_response_transmission`.
   state.queues.v1.CompoundCycles prepayment_for_response_transmission_compound = 12;
   state.queues.v1.CompoundCycles prepayment_for_call_transmission = 13;
 }
@@ -212,6 +210,7 @@ message ExecutionTask {
 
   message AbortedExecution {
     reserved 2;
+    reserved 4;
 
     message AbortedResponse {
       state.queues.v1.Response response = 7;
@@ -226,26 +225,20 @@ message ExecutionTask {
     }
     // The execution cost that has already been charged from the canister.
     // Retried execution does not have to pay for it again.
-    state.queues.v1.Cycles prepaid_execution_cycles = 4;
-    // The execution cost that has already been charged from the canister.
-    // Retried execution does not have to pay for it again.
-    // This field will replace the existing `prepaid_execution_cycles`.
     state.queues.v1.CompoundCycles prepaid_execution_compound_cycles = 7;
   }
 
   message AbortedInstallCode {
+    reserved 3;
+
     oneof message {
       state.queues.v1.Request request = 1;
       ingress.v1.Ingress ingress = 2;
     }
-    // The execution cost that has already been charged from the canister.
-    // Retried execution does not have to pay for it again.
-    state.queues.v1.Cycles prepaid_execution_cycles = 3;
     reserved "request_id";
     optional uint64 call_id = 4;
     // The execution cost that has already been charged from the canister.
     // Retried execution does not have to pay for it again.
-    // Will replace the existing `prepaid_execution_cycles`.
     state.queues.v1.CompoundCycles prepaid_execution_compound_cycles = 5;
   }
 
