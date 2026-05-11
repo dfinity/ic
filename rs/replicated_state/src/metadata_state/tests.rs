@@ -491,6 +491,7 @@ fn network_topology_roundtrip_encoding() {
         canister_migrations.clone(),
         nns_subnet_id,
         chain_key_enabled_subnets.clone(),
+        vec![],
         bitcoin_testnet_canister_id,
         bitcoin_mainnet_canister_id,
         None,
@@ -507,6 +508,7 @@ fn network_topology_roundtrip_encoding() {
         canister_migrations,
         nns_subnet_id,
         chain_key_enabled_subnets,
+        vec![],
         bitcoin_testnet_canister_id,
         bitcoin_mainnet_canister_id,
         Some(FullTopology {

@@ -108,6 +108,7 @@ impl Registry {
             subnet_admins: source_subnet_record.subnet_admins.clone(),
             resource_limits: source_subnet_record.resource_limits,
             start_as_nns: false,
+            default_initial_dkg_subnet: false,
             is_halted: false,
             halt_at_cup_height: false,
             // We don't support splitting signing subnets (yet). If we are here then we know that

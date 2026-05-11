@@ -267,6 +267,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         dkg_interval_length: 59,
         dkg_dealings_per_block: 1,
         start_as_nns: false,
+        default_initial_dkg_subnet: false,
         subnet_type: SubnetType::Application.into(),
         is_halted: false,
         halt_at_cup_height: false,

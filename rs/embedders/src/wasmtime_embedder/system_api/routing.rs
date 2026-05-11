@@ -74,13 +74,13 @@ pub(super) fn resolve_destination(
         | Ok(Ic00Method::BitcoinGetSuccessors) => Ok(own_subnet.get()),
         Ok(Ic00Method::SetupInitialDKG) => {
             let args = SetupInitialDKGArgs::decode(payload)?;
-            // This message should be routed to the NNS subnet by default. We assume that
-            // this message can only be sent by canisters on the NNS subnet hence
-            // defaulting to `own_subnet` here is fine.
-            //
-            // It might be cleaner to pipe in the actual NNS subnet id to this
-            // function and return that instead.
-            Ok(args.get_subnet_id().unwrap_or(own_subnet).get())
+            // Honor an explicitly requested subnet; otherwise use registry default.
+            // If no default exists, fall back to the caller subnet (NNS in production).
+            Ok(args
+                .get_subnet_id()
+                .or_else(|| network_topology.default_initial_dkg_subnet())
+                .unwrap_or(own_subnet)
+                .get())
         }
         Ok(Ic00Method::UpdateSettings) => {
             // Find the destination canister from the payload.
@@ -568,6 +568,7 @@ mod tests {
             },
             subnet_test_id(2) => SubnetTopology::default(),
         });
+        network_topology.set_initial_dkg_subnets(vec![subnet_id0]);
         network_topology
     }
 
@@ -684,12 +685,31 @@ mod tests {
     }
 
     #[test]
-    fn resolve_setup_initial_dkg_defaults_to_own_subnet() {
+    fn resolve_setup_initial_dkg_defaults_to_default_initial_dkg_subnet() {
         let logger = no_op_logger();
         let own_subnet = subnet_test_id(2);
         assert_eq!(
             resolve_destination(
                 &network_with_ecdsa_subnets(),
+                &Ic00Method::SetupInitialDKG.to_string(),
+                &setup_initial_dkg_request(None),
+                own_subnet,
+                canister_test_id(1),
+                false,
+                &logger,
+            )
+            .unwrap(),
+            subnet_test_id(0).get()
+        );
+    }
+
+    #[test]
+    fn resolve_setup_initial_dkg_defaults_to_own_subnet_when_no_default_is_configured() {
+        let logger = no_op_logger();
+        let own_subnet = subnet_test_id(2);
+        assert_eq!(
+            resolve_destination(
+                &network_without_chain_key_subnets(),
                 &Ic00Method::SetupInitialDKG.to_string(),
                 &setup_initial_dkg_request(None),
                 own_subnet,

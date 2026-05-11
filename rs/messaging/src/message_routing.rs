@@ -1011,6 +1011,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
 
         // Populate subnet topologies for all subnets.
         let mut all_subnets = BTreeMap::new();
+        let mut initial_dkg_subnets = Vec::new();
 
         for subnet_id in &subnet_ids {
             let public_key = self
@@ -1065,6 +1066,9 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                         ))
                     })?;
             let subnet_features: SubnetFeatures = subnet_record.features.unwrap_or_default().into();
+            if subnet_record.default_initial_dkg_subnet {
+                initial_dkg_subnets.push(*subnet_id);
+            }
             let chain_keys_held = subnet_record
                 .chain_key_config
                 .map(|chain_key_config| {
@@ -1218,6 +1222,10 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 }
             })
             .collect();
+        let initial_dkg_subnets: Vec<_> = initial_dkg_subnets
+            .into_iter()
+            .filter(|id| subnets.contains_key(id))
+            .collect();
 
         // Only the NNS subnet needs the full (unfiltered) topology so that its
         // certified state tree contains entries for every subnet (including
@@ -1237,6 +1245,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             Arc::new(canister_migrations),
             nns_subnet_id,
             chain_key_enabled_subnets,
+            initial_dkg_subnets,
             self.bitcoin_config.testnet_canister_id,
             self.bitcoin_config.mainnet_canister_id,
             full_topology,

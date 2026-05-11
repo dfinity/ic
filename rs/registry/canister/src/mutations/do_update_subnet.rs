@@ -233,6 +233,7 @@ pub struct UpdateSubnetPayload {
     pub dkg_dealings_per_block: Option<u64>,
 
     pub start_as_nns: Option<bool>,
+    pub default_initial_dkg_subnet: Option<bool>,
 
     pub subnet_type: Option<SubnetType>,
 
@@ -447,6 +448,7 @@ fn merge_subnet_record(
         dkg_interval_length,
         dkg_dealings_per_block,
         start_as_nns,
+        default_initial_dkg_subnet,
         subnet_type,
         is_halted,
         halt_at_cup_height,
@@ -482,6 +484,7 @@ fn merge_subnet_record(
     maybe_set!(subnet_record, dkg_dealings_per_block);
 
     maybe_set!(subnet_record, start_as_nns);
+    maybe_set!(subnet_record, default_initial_dkg_subnet);
 
     // See EXC-408: changing of the subnet type is disabled.
     if let Some(value) = subnet_type {
@@ -544,6 +547,7 @@ mod tests {
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
             start_as_nns: None,
+            default_initial_dkg_subnet: None,
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: None,
@@ -582,6 +586,7 @@ mod tests {
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             start_as_nns: false,
+            default_initial_dkg_subnet: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
             halt_at_cup_height: false,
@@ -627,6 +632,7 @@ mod tests {
             dkg_interval_length: Some(8),
             dkg_dealings_per_block: Some(1),
             start_as_nns: Some(true),
+            default_initial_dkg_subnet: Some(true),
             subnet_type: None,
             is_halted: Some(true),
             halt_at_cup_height: Some(false),
@@ -677,6 +683,7 @@ mod tests {
                 dkg_interval_length: 8,
                 dkg_dealings_per_block: 1,
                 start_as_nns: true,
+                default_initial_dkg_subnet: true,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: true,
                 halt_at_cup_height: false,
@@ -722,6 +729,7 @@ mod tests {
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             start_as_nns: false,
+            default_initial_dkg_subnet: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
             halt_at_cup_height: false,
@@ -758,6 +766,7 @@ mod tests {
             dkg_interval_length: Some(2),
             dkg_dealings_per_block: Some(1),
             start_as_nns: None,
+            default_initial_dkg_subnet: None,
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: Some(true),
@@ -794,6 +803,7 @@ mod tests {
                 dkg_interval_length: 2,
                 dkg_dealings_per_block: 1,
                 start_as_nns: false,
+                default_initial_dkg_subnet: false,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
                 halt_at_cup_height: true,

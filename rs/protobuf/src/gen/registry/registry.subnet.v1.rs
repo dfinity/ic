@@ -103,6 +103,9 @@ pub struct SubnetRecord {
     /// Limits on resource consumption (e.g., memory usage).
     #[prost(message, optional, tag = "34")]
     pub resource_limits: ::core::option::Option<ResourceLimits>,
+    /// If `true`, this subnet is used by default to handle `setup_initial_dkg`.
+    #[prost(bool, tag = "35")]
+    pub default_initial_dkg_subnet: bool,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaInitialization {

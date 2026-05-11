@@ -73,6 +73,8 @@ pub struct NetworkTopology {
     pub chain_key_enabled_subnets: ::prost::alloc::vec::Vec<ChainKeySubnetEntry>,
     #[prost(message, optional, tag = "9")]
     pub full_topology: ::core::option::Option<FullTopology>,
+    #[prost(message, repeated, tag = "10")]
+    pub initial_dkg_subnets: ::prost::alloc::vec::Vec<super::super::super::types::v1::SubnetId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FullTopology {

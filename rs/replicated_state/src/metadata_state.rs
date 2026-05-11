@@ -220,6 +220,9 @@ pub struct NetworkTopology {
     /// Mapping from master public key_id to a list of subnets which can use the
     /// given key. Keys without any chain-key enabled subnets are not included in the map.
     pub chain_key_enabled_subnets: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
+    /// Subnets eligible as default targets for `setup_initial_dkg`.
+    #[serde(default)]
+    initial_dkg_subnets: Vec<SubnetId>,
 
     /// The ID of the canister to forward bitcoin testnet requests to.
     pub bitcoin_testnet_canister_id: Option<CanisterId>,
@@ -255,6 +258,7 @@ impl Default for NetworkTopology {
             canister_migrations: Default::default(),
             nns_subnet_id: SubnetId::new(PrincipalId::new_anonymous()),
             chain_key_enabled_subnets: Default::default(),
+            initial_dkg_subnets: Default::default(),
             bitcoin_testnet_canister_id: None,
             bitcoin_mainnet_canister_id: None,
             full_topology: None,
@@ -270,6 +274,7 @@ impl NetworkTopology {
         canister_migrations: Arc<CanisterMigrations>,
         nns_subnet_id: SubnetId,
         chain_key_enabled_subnets: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
+        initial_dkg_subnets: Vec<SubnetId>,
         bitcoin_testnet_canister_id: Option<CanisterId>,
         bitcoin_mainnet_canister_id: Option<CanisterId>,
         full_topology: Option<FullTopology>,
@@ -280,6 +285,7 @@ impl NetworkTopology {
             canister_migrations,
             nns_subnet_id,
             chain_key_enabled_subnets,
+            initial_dkg_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
             full_topology,
@@ -301,6 +307,11 @@ impl NetworkTopology {
         self.chain_key_enabled_subnets
             .get(key_id)
             .map_or(&[], |ids| &ids[..])
+    }
+
+    /// Returns the first subnet marked as default for `setup_initial_dkg`.
+    pub fn default_initial_dkg_subnet(&self) -> Option<SubnetId> {
+        self.initial_dkg_subnets.first().copied()
     }
 
     /// Returns the size of the given subnet.
@@ -2024,6 +2035,8 @@ pub mod testing {
         fn subnets_mut(&mut self) -> &mut BTreeMap<SubnetId, SubnetTopology>;
         /// Sets the subnets map.
         fn set_subnets(&mut self, subnets: BTreeMap<SubnetId, SubnetTopology>);
+        /// Sets the initial DKG subnet index.
+        fn set_initial_dkg_subnets(&mut self, initial_dkg_subnets: Vec<SubnetId>);
         /// Returns a mutable reference to the routing table.
         fn routing_table_mut(&mut self) -> &mut RoutingTable;
         /// Sets the routing table.
@@ -2038,6 +2051,10 @@ pub mod testing {
         }
         fn set_subnets(&mut self, subnets: BTreeMap<SubnetId, SubnetTopology>) {
             self.subnets = subnets;
+            self.initial_dkg_subnets = Vec::new();
+        }
+        fn set_initial_dkg_subnets(&mut self, initial_dkg_subnets: Vec<SubnetId>) {
+            self.initial_dkg_subnets = initial_dkg_subnets;
         }
         fn routing_table_mut(&mut self) -> &mut RoutingTable {
             Arc::make_mut(&mut self.routing_table)

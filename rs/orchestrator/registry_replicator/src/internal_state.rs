@@ -730,6 +730,7 @@ mod test {
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             start_as_nns,
+            default_initial_dkg_subnet: false,
             subnet_type: subnet_type as i32,
             is_halted: false,
             halt_at_cup_height: false,

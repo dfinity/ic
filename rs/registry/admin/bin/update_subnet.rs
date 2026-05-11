@@ -81,6 +81,10 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
     /// of this field.
     pub start_as_nns: Option<bool>,
 
+    #[clap(long)]
+    /// If set, marks this subnet as the default target for `setup_initial_dkg`.
+    pub default_initial_dkg_subnet: Option<bool>,
+
     /// If set, the subnet will be halted: it will no longer create or execute
     /// blocks
     #[clap(long)]
@@ -363,6 +367,7 @@ impl ProposeToUpdateSubnetCmd {
             dkg_dealings_per_block: self.dkg_dealings_per_block,
 
             start_as_nns: self.start_as_nns,
+            default_initial_dkg_subnet: self.default_initial_dkg_subnet,
 
             // See EXC-408: changing the subnet type is disabled.
             subnet_type: None,
@@ -435,6 +440,7 @@ mod tests {
             registry_poll_period_ms: None,
             retransmission_request_ms: None,
             start_as_nns: None,
+            default_initial_dkg_subnet: None,
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: None,
@@ -469,6 +475,7 @@ mod tests {
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
             start_as_nns: None,
+            default_initial_dkg_subnet: None,
             is_halted: None,
             halt_at_cup_height: None,
             chain_key_configs_to_generate: None,

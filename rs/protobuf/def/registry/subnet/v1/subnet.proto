@@ -107,6 +107,9 @@ message SubnetRecord {
   // Limits on resource consumption (e.g., memory usage).
   ResourceLimits resource_limits = 34;
 
+  // If `true`, this subnet is used by default to handle `setup_initial_dkg`.
+  bool default_initial_dkg_subnet = 35;
+
   reserved 1, 2, 4, 6, 13, 20, 21, 22, 27;
   reserved "ic_version_id";
   reserved "initial_dkg_transcript";

@@ -569,6 +569,7 @@ impl From<CreateSubnetPayload> for SubnetRecord {
             dkg_dealings_per_block: val.dkg_dealings_per_block,
 
             start_as_nns: val.start_as_nns,
+            default_initial_dkg_subnet: false,
 
             subnet_type: val.subnet_type.into(),
 

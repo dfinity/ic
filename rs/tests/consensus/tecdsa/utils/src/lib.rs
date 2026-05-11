@@ -212,6 +212,7 @@ pub fn empty_subnet_update() -> UpdateSubnetPayload {
         dkg_interval_length: None,
         dkg_dealings_per_block: None,
         start_as_nns: None,
+        default_initial_dkg_subnet: None,
         subnet_type: None,
         is_halted: None,
         halt_at_cup_height: None,

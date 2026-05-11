@@ -253,6 +253,7 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
         Arc::new(CanisterMigrations::default()),
         subnet_test_id(1),
         Default::default(),
+        vec![],
         None,
         None,
         None,

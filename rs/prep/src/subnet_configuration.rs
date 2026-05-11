@@ -347,6 +347,7 @@ impl SubnetConfig {
             // to set it to false. ic-admin can set it to true when adding a
             // subnet via NNS.
             start_as_nns: false,
+            default_initial_dkg_subnet: false,
             subnet_type: self.subnet_type.into(),
             is_halted: self.running_state == SubnetRunningState::Halted,
             halt_at_cup_height: false,

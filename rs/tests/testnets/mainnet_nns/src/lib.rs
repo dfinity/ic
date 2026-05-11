@@ -277,6 +277,7 @@ async fn setup_recovered_nns(
             dkg_interval_length: Some(dkg_interval),
             dkg_dealings_per_block: None,
             start_as_nns: None,
+            default_initial_dkg_subnet: None,
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: None,

@@ -52,6 +52,11 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                     }
                 })
                 .collect(),
+            initial_dkg_subnets: item
+                .initial_dkg_subnets
+                .iter()
+                .map(|id| subnet_id_into_protobuf(*id))
+                .collect(),
             full_topology: item
                 .full_topology
                 .as_ref()
@@ -84,6 +89,10 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
         let nns_subnet_id =
             subnet_id_try_from_option(item.nns_subnet_id, "NetworkTopology::nns_subnet_id")?;
 
+        let mut initial_dkg_subnets = vec![];
+        for subnet_id in item.initial_dkg_subnets {
+            initial_dkg_subnets.push(subnet_id_try_from_protobuf(subnet_id)?);
+        }
         let mut chain_key_enabled_subnets = BTreeMap::new();
         for entry in item.chain_key_enabled_subnets {
             let mut subnet_ids = vec![];
@@ -122,6 +131,7 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
                 .into(),
             nns_subnet_id,
             chain_key_enabled_subnets,
+            initial_dkg_subnets,
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
             full_topology: match item.full_topology {

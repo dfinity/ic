@@ -471,6 +471,7 @@ type UpdateSubnetPayload = record {
   dkg_dealings_per_block : opt nat64;
   max_block_payload_size : opt nat64;
   start_as_nns : opt bool;
+  default_initial_dkg_subnet : opt bool;
   is_halted : opt bool;
   max_ingress_messages_per_block : opt nat64;
   max_ingress_bytes_per_block: opt nat64;

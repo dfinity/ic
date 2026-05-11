@@ -33,6 +33,8 @@ message SubnetTopology {
   repeated types.v1.MasterPublicKeyId chain_keys_held = 6;
   registry.subnet.v1.CanisterCyclesCostSchedule canister_cycles_cost_schedule = 7;
   repeated types.v1.PrincipalId subnet_admins = 8;
+  reserved 9;
+  reserved "default_initial_dkg_subnet";
 }
 
 message SubnetsEntry {
@@ -56,6 +58,7 @@ message NetworkTopology {
   repeated types.v1.CanisterId bitcoin_mainnet_canister_ids = 7;
   repeated ChainKeySubnetEntry chain_key_enabled_subnets = 8;
   FullTopology full_topology = 9;
+  repeated types.v1.SubnetId initial_dkg_subnets = 10;
 }
 
 message FullTopology {
