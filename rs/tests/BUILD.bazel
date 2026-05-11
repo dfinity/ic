@@ -288,4 +288,5 @@ write_info_file_var(
 write_version_file_var(
     name = "DC.txt",
     varname = "DC",
+    visibility = ["//visibility:public"],
 )
