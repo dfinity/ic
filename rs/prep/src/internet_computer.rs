@@ -189,16 +189,20 @@ impl TopologyConfig {
         self.unassigned_nodes.insert(idx, nc);
     }
 
-    /// Set all node providers to the principal `node_operator`.
+    /// Set node operator on nodes that don't already have one set.
     pub fn with_initial_node_operator(mut self, node_operator: PrincipalId) -> Self {
         for (_, sc) in self.subnets.iter_mut() {
             for (_, nc) in sc.membership.iter_mut() {
-                nc.node_operator_principal_id = Some(node_operator);
+                if nc.node_operator_principal_id.is_none() {
+                    nc.node_operator_principal_id = Some(node_operator);
+                }
             }
         }
 
         for (_, nc) in self.unassigned_nodes.iter_mut() {
-            nc.node_operator_principal_id = Some(node_operator);
+            if nc.node_operator_principal_id.is_none() {
+                nc.node_operator_principal_id = Some(node_operator);
+            }
         }
         self
     }
@@ -207,7 +211,7 @@ impl TopologyConfig {
         let assigned = self
             .subnets
             .iter()
-            .fold(0usize, |a, (_, x)| a + x.membership.len());
+            .fold(0_usize, |a, (_, x)| a + x.membership.len());
         let unassigned = self.unassigned_nodes.len();
         assigned + unassigned
     }
@@ -424,6 +428,35 @@ impl IcConfig {
         }
     }
 
+    /// Add a data center record to the initial registry.
+    pub fn add_data_center_record(&mut self, mut dc_record: DataCenterRecord) {
+        dc_record.id = dc_record.id.to_lowercase();
+        self.initial_dc_records.push(dc_record);
+    }
+
+    /// Add a node operator record to the initial registry.
+    pub fn add_node_operator_record(
+        &mut self,
+        name: String,
+        principal_id: PrincipalId,
+        node_provider_principal_id: Option<PrincipalId>,
+        node_allowance: u64,
+        dc_id: String,
+        rewardable_nodes: BTreeMap<String, u32>,
+    ) {
+        self.initial_registry_node_operator_entries
+            .push(NodeOperatorEntry {
+                _name: name,
+                principal_id,
+                node_provider_principal_id,
+                node_allowance,
+                dc_id,
+                rewardable_nodes: rewardable_nodes.clone(),
+                ipv6: None,
+                max_rewardable_nodes: rewardable_nodes,
+            });
+    }
+
     pub fn set_use_specified_ids_allocation_range(
         &mut self,
         use_specified_ids_allocation_range: bool,
@@ -495,7 +528,10 @@ impl IcConfig {
                     dc_id: "".into(),
                     rewardable_nodes: BTreeMap::new(),
                     ipv6: None,
-                    max_rewardable_nodes: BTreeMap::new(),
+                    max_rewardable_nodes: BTreeMap::from([(
+                        "type3.1".into(),
+                        node_allowance.try_into().unwrap_or(u32::MAX),
+                    )]),
                 });
         }
 

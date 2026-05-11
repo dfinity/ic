@@ -1,9 +1,6 @@
 use crate::{
     RecoveryArgs, RecoveryResult,
-    cli::{
-        consent_given, print_height_info, read_optional, read_optional_data_location,
-        read_optional_version,
-    },
+    cli::{consent_given, print_height_info, read_optional, read_optional_data_location},
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
@@ -48,8 +45,8 @@ pub enum StepType {
     /// replica bug and not due to malicious actors, this step should not reveal any problems.
     MergeCertificationPools,
     /// In this step we will download all finalized consensus artifacts. For that we should use a
-    /// node, that is up to date with the highest finalization height because this node will contain
-    /// all required artifacts for the recovery.
+    /// node, that is up to date with the highest finalization and CUP height because this node
+    /// will contain all required artifacts for the recovery.
     DownloadConsensusPool,
     /// In this step we will download the subnet state from a node that is sufficiently up to date
     /// with the rest of the subnet, i.e. not behind by more than 1 DKG interval. To avoid
@@ -159,6 +156,10 @@ pub struct NNSRecoverySameNodesArgs {
     #[clap(long)]
     pub keep_downloaded_state: Option<bool>,
 
+    /// Height of the checkpoint to download. If not provided, the latest checkpoint is used.
+    #[clap(long)]
+    pub download_state_height: Option<u64>,
+
     /// IP address of the node used to upload the recovery CUP and registry local store to and poll
     /// for the CUP
     #[clap(long)]
@@ -201,12 +202,7 @@ impl NNSRecoverySameNodes {
     ) -> Self {
         let recovery = Recovery::new(
             logger.clone(),
-            RecoveryArgs {
-                // ic-admin is not needed for NNS recovery on same nodes so we force this argument
-                // to true to avoid downloading it.
-                use_local_binaries: true,
-                ..recovery_args.clone()
-            },
+            recovery_args.clone(),
             /*neuron_args=*/ None,
             recovery_args.nns_url.clone(),
             RegistryPollingStrategy::OnlyOnInit,
@@ -261,8 +257,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
         match step_type {
             StepType::DownloadConsensusPool => {
                 if self.params.download_pool_node.is_none() {
-                    // We could pick a node with highest finalization height automatically, but we
-                    // might have a preference between nodes of the same finalization height.
+                    // We could pick a node with highest finalization and CUP height automatically,
+                    // but we might have a preference between nodes of same heights.
                     print_height_info(
                         &self.logger,
                         &self.recovery.registry_helper,
@@ -286,12 +282,18 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         "Preserve original downloaded state locally?",
                     ));
                 }
+
+                if self.params.download_state_height.is_none() {
+                    self.params.download_state_height = read_optional(
+                        &self.logger,
+                        "Enter the height of the checkpoint to download (leave empty for latest checkpoint):",
+                    );
+                }
             }
 
             StepType::ICReplay => {
                 if self.params.upgrade_version.is_none() {
-                    self.params.upgrade_version =
-                        read_optional_version(&self.logger, "Upgrade version: ");
+                    self.params.upgrade_version = read_optional(&self.logger, "Upgrade version: ");
                 };
                 if self.params.upgrade_version.is_some()
                     && self.params.add_and_bless_upgrade_version.is_none()
@@ -330,7 +332,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                             &format!(
                                 "Would you like to recover the admin node now, i.e. upload the CUP and registry local store to it? ({ip})"
                             ),
-                            ).then_some(ip)
+                        ).then_some(ip)
                     } else {
                         read_optional(
                             &self.logger,
@@ -384,15 +386,17 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             }
 
             StepType::DownloadState => match self.params.admin_access_location {
-                Some(DataLocation::Local) => {
-                    Ok(Box::new(self.recovery.get_copy_local_state_step()))
-                }
+                Some(DataLocation::Local) => Ok(Box::new(
+                    self.recovery
+                        .get_copy_local_state_step(self.params.download_state_height)?,
+                )),
                 Some(DataLocation::Remote(node_ip)) => {
                     Ok(Box::new(self.recovery.get_download_state_step(
                         node_ip,
                         SshUser::Admin,
                         self.recovery.admin_key_file.clone(),
                         self.params.keep_downloaded_state == Some(true),
+                        self.params.download_state_height,
                     )?))
                 }
                 None => Err(RecoveryError::StepSkipped),
@@ -471,9 +475,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
             StepType::UploadState => {
                 if let Some(method) = self.params.admin_access_location {
-                    Ok(Box::new(
-                        self.recovery.get_upload_state_and_restart_step(method),
-                    ))
+                    Ok(Box::new(self.recovery.get_upload_state_and_restart_step(
+                        SshUser::Admin,
+                        method,
+                        self.recovery.admin_key_file.clone(),
+                    )))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }

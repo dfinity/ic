@@ -32,6 +32,7 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/types",
     "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
+    "@crate_index//:mockall",
 ]
 
 MACRO_DEPENDENCIES = [

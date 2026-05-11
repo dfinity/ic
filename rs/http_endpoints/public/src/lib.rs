@@ -32,8 +32,7 @@ pub use common::{cors_layer, make_plaintext_response};
 use ic_http_endpoints_async_utils::start_tcp_listener;
 use ic_nns_delegation_manager::NNSDelegationReader;
 pub use query::QueryServiceBuilder;
-pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
-pub use read_state::subnet::SubnetReadStateServiceBuilder;
+pub use read_state::{ReadStateService, ReadStateServiceBuilder, Target};
 
 use crate::{
     catch_up_package::CatchUpPackageService,
@@ -131,8 +130,10 @@ struct HttpHandler {
     call_v2_router: Router,
     call_v3_router: Router,
     call_v4_router: Router,
+    subnet_call_v4_router: Router,
     query_v2_router: Router,
     query_v3_router: Router,
+    subnet_query_v3_router: Router,
     catchup_router: Router,
     dashboard_router: Router,
     status_router: Router,
@@ -328,6 +329,8 @@ pub fn start_server(
     let call_v3_router = call_sync_router(call_sync::Version::V3);
     let call_v4_router = call_sync_router(call_sync::Version::V4);
 
+    let subnet_call_v4_router = call_sync_router(call_sync::Version::SubnetV4);
+
     let query_router = |version| {
         QueryServiceBuilder::builder(
             log.clone(),
@@ -337,6 +340,7 @@ pub fn start_server(
             ingress_verifier.clone(),
             nns_delegation_reader.clone(),
             query_execution_service.clone(),
+            subnet_id,
             version,
         )
         .with_health_status(health_status.clone())
@@ -346,16 +350,19 @@ pub fn start_server(
 
     let query_v2_router = query_router(query::Version::V2);
     let query_v3_router = query_router(query::Version::V3);
+    let subnet_query_v3_router = query_router(query::Version::SubnetV3);
 
-    let canister_read_state_router = |version| {
-        CanisterReadStateServiceBuilder::builder(
+    let read_state_router = |version, target| {
+        ReadStateServiceBuilder::builder(
             log.clone(),
+            metrics.clone(),
             state_reader.clone(),
             registry_client.clone(),
             ingress_verifier.clone(),
             nns_delegation_reader.clone(),
             nns_subnet_id,
             version,
+            target,
         )
         .with_health_status(health_status.clone())
         .with_malicious_flags(malicious_flags.clone())
@@ -363,22 +370,14 @@ pub fn start_server(
     };
 
     let canister_read_state_v2_router =
-        canister_read_state_router(read_state::canister::Version::V2);
+        read_state_router(read_state::Version::V2, read_state::Target::Canister);
     let canister_read_state_v3_router =
-        canister_read_state_router(read_state::canister::Version::V3);
+        read_state_router(read_state::Version::V3, read_state::Target::Canister);
 
-    let subnet_read_state_router = |version| {
-        SubnetReadStateServiceBuilder::builder(
-            nns_delegation_reader.clone(),
-            state_reader.clone(),
-            nns_subnet_id,
-            version,
-        )
-        .with_health_status(health_status.clone())
-        .build_router()
-    };
-    let subnet_read_state_v2_router = subnet_read_state_router(read_state::subnet::Version::V2);
-    let subnet_read_state_v3_router = subnet_read_state_router(read_state::subnet::Version::V3);
+    let subnet_read_state_v2_router =
+        read_state_router(read_state::Version::V2, read_state::Target::Subnet);
+    let subnet_read_state_v3_router =
+        read_state_router(read_state::Version::V3, read_state::Target::Subnet);
 
     let status_router = StatusService::build_router(
         log.clone(),
@@ -418,8 +417,10 @@ pub fn start_server(
         call_v2_router,
         call_v3_router,
         call_v4_router,
+        subnet_call_v4_router,
         query_v2_router,
         query_v3_router,
+        subnet_query_v3_router,
         status_router,
         catchup_router,
         dashboard_router,
@@ -605,10 +606,14 @@ fn make_router(
             // TODO(CON-1574): see if there is any reasonable explicit concurrency limit we could use here.
             .merge(http_handler.call_v3_router)
             .merge(http_handler.call_v4_router)
+            .merge(http_handler.subnet_call_v4_router)
             .merge(http_handler.query_v2_router.layer(service_builder(
                 GlobalConcurrencyLimitLayer::new(config.max_query_concurrent_requests),
             )))
             .merge(http_handler.query_v3_router.layer(service_builder(
+                GlobalConcurrencyLimitLayer::new(config.max_query_concurrent_requests),
+            )))
+            .merge(http_handler.subnet_query_v3_router.layer(service_builder(
                 GlobalConcurrencyLimitLayer::new(config.max_query_concurrent_requests),
             )))
             .merge(
@@ -762,7 +767,6 @@ async fn collect_timer_metric(
 pub(crate) mod tests {
     use super::*;
 
-    use crate::read_state::subnet::SubnetReadStateService;
     use crate::{common::Cbor, query::QueryService};
 
     use axum::body::Body;
@@ -807,12 +811,20 @@ pub(crate) mod tests {
                 call_sync::route(call_sync::Version::V4),
                 axum::routing::post(dummy),
             ),
+            subnet_call_v4_router: Router::new().route(
+                call_sync::route(call_sync::Version::SubnetV4),
+                axum::routing::post(dummy),
+            ),
             query_v2_router: Router::new().route(
                 QueryService::route(query::Version::V2),
                 axum::routing::post(dummy_cbor),
             ),
             query_v3_router: Router::new().route(
                 QueryService::route(query::Version::V3),
+                axum::routing::post(dummy_cbor),
+            ),
+            subnet_query_v3_router: Router::new().route(
+                QueryService::route(query::Version::SubnetV3),
                 axum::routing::post(dummy_cbor),
             ),
             catchup_router: Router::new().route(
@@ -823,19 +835,19 @@ pub(crate) mod tests {
                 .route(DashboardService::route(), axum::routing::get(dummy)),
             status_router: Router::new().route(StatusService::route(), axum::routing::get(dummy)),
             canister_read_state_v2_router: Router::new().route(
-                CanisterReadStateService::route(read_state::canister::Version::V2),
+                ReadStateService::route(read_state::Version::V2, Target::Canister),
                 axum::routing::post(dummy),
             ),
             canister_read_state_v3_router: Router::new().route(
-                CanisterReadStateService::route(read_state::canister::Version::V3),
+                ReadStateService::route(read_state::Version::V3, Target::Canister),
                 axum::routing::post(dummy),
             ),
             subnet_read_state_v2_router: Router::new().route(
-                SubnetReadStateService::route(read_state::subnet::Version::V2),
+                ReadStateService::route(read_state::Version::V2, Target::Subnet),
                 axum::routing::post(dummy),
             ),
             subnet_read_state_v3_router: Router::new().route(
-                SubnetReadStateService::route(read_state::subnet::Version::V3),
+                ReadStateService::route(read_state::Version::V3, Target::Subnet),
                 axum::routing::post(dummy),
             ),
             pprof_home_router: Router::new()

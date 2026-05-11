@@ -35,7 +35,7 @@ use ic_types::Height;
 use slog::info;
 
 const SCHNORR_MSG_SIZE_BYTES: usize = 32;
-const DKG_INTERVAL: u64 = 9;
+const DKG_INTERVAL: u64 = 29;
 const ALLOWED_FAILURES: usize = 1;
 const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
 const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(35 * 60);
@@ -77,7 +77,7 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
     let target_version = bless_target_version(&env, &nns_node);
     let agent = nns_node.with_default_agent(|agent| async move { agent });
     let key_ids = make_key_ids_for_all_schemes();
-    get_chain_key_canister_and_public_key(
+    let ecdsa_state = get_chain_key_canister_and_public_key(
         &env,
         &nns_node,
         &agent,
@@ -118,7 +118,7 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         &nns_node,
         &target_version,
         SubnetType::Application,
-        None,
+        Some(&ecdsa_state),
     );
     let initial_version = get_guestos_img_version();
     info!(logger, "Upgrading to initial version: {}", initial_version);
@@ -127,7 +127,7 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         &nns_node,
         &initial_version,
         SubnetType::Application,
-        None,
+        Some(&ecdsa_state),
     );
     info!(
         logger,
@@ -174,9 +174,6 @@ fn main() -> Result<()> {
         .with_timeout_per_test(UP_DOWNGRADE_PER_TEST_TIMEOUT)
         .with_setup(setup)
         .add_test(systest!(upgrade_downgrade_app_subnet))
-        // TODO(CON-1644): remove once the mainnet version no longer handles
-        // duplicate artifacts as invalid.
-        .remove_metrics_to_check("idkg_invalidated_artifacts")
         .execute_from_args()?;
     Ok(())
 }

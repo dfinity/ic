@@ -39,7 +39,7 @@ use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_test_utilities_load_wasm::load_wasm;
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
@@ -201,6 +201,166 @@ fn test_install_ckbtc_minter_canister() {
     let env = new_state_machine();
     let ledger_id = install_ledger(&env);
     install_minter(&env, ledger_id);
+}
+
+/// Smoke-tests the ICRC-21 / ICRC-10 endpoints exposed by the minter:
+///
+/// * `icrc10_supported_standards` advertises both standards with the canonical
+///   `dfinity/ICRC` URLs.
+/// * `icrc21_canister_call_consent_message` produces both a GenericDisplay
+///   markdown message and a FieldsDisplay structured message for
+///   `retrieve_btc_with_approval`, with the configured network's token symbols
+///   threaded through.
+/// * Unsupported methods return `Icrc21Error::UnsupportedCanisterCall`.
+#[test]
+fn test_icrc21_endpoints_smoke() {
+    use ic_ckbtc_minter::updates::icrc21::StandardRecord;
+    use icrc_ledger_types::icrc21::errors::Icrc21Error;
+    use icrc_ledger_types::icrc21::requests::{
+        ConsentMessageMetadata, ConsentMessageRequest, ConsentMessageSpec, DisplayMessageType,
+    };
+    use icrc_ledger_types::icrc21::responses::{ConsentInfo, ConsentMessage, Value};
+
+    let setup = CkBtcSetup::new(); // mainnet minter; "ckBTC" / "BTC" symbols.
+
+    let consent_message = |req: &ConsentMessageRequest| -> Result<ConsentInfo, Icrc21Error> {
+        Decode!(
+            &assert_reply(
+                setup
+                    .env
+                    .execute_ingress_as(
+                        setup.caller,
+                        setup.minter_id,
+                        "icrc21_canister_call_consent_message",
+                        Encode!(req).unwrap(),
+                    )
+                    .expect("icrc21_canister_call_consent_message ingress failed")
+            ),
+            Result<ConsentInfo, Icrc21Error>
+        )
+        .unwrap()
+    };
+    let make_request = |method: &str,
+                        arg: Vec<u8>,
+                        device_spec: Option<DisplayMessageType>|
+     -> ConsentMessageRequest {
+        ConsentMessageRequest {
+            method: method.to_string(),
+            arg,
+            user_preferences: ConsentMessageSpec {
+                metadata: ConsentMessageMetadata {
+                    language: "en".to_string(),
+                    utc_offset_minutes: None,
+                },
+                device_spec,
+            },
+        }
+    };
+
+    // 1. icrc10_supported_standards advertises ICRC-10 and ICRC-21.
+    let standards = Decode!(
+        &assert_reply(
+            setup
+                .env
+                .query(
+                    setup.minter_id,
+                    "icrc10_supported_standards",
+                    Encode!().unwrap()
+                )
+                .expect("icrc10_supported_standards query failed")
+        ),
+        Vec<StandardRecord>
+    )
+    .unwrap();
+    let names: Vec<_> = standards.iter().map(|s| s.name.as_str()).collect();
+    assert!(
+        names.contains(&"ICRC-10") && names.contains(&"ICRC-21"),
+        "expected ICRC-10 and ICRC-21 in supported standards, got {names:?}"
+    );
+    let icrc21 = standards
+        .iter()
+        .find(|s| s.name == "ICRC-21")
+        .expect("ICRC-21 entry missing");
+    assert_eq!(
+        icrc21.url,
+        "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-21/ICRC-21.md"
+    );
+
+    // 2a. retrieve_btc_with_approval / GenericDisplay renders the expected
+    // Markdown sections, with the configured (mainnet) token symbols. The
+    // assertion is a full-string equality so any wording change has to be
+    // updated here consciously.
+    let args = RetrieveBtcWithApprovalArgs {
+        amount: 250_000,
+        address: WITHDRAWAL_ADDRESS.to_string(),
+        from_subaccount: None,
+    };
+    let info = consent_message(&make_request(
+        "retrieve_btc_with_approval",
+        Encode!(&args).unwrap(),
+        Some(DisplayMessageType::GenericDisplay),
+    ))
+    .expect("consent message should be produced for retrieve_btc_with_approval");
+    let message = match info.consent_message {
+        ConsentMessage::GenericDisplayMessage(m) => m,
+        other => panic!("expected GenericDisplayMessage, got {other:?}"),
+    };
+    assert_eq!(
+        message,
+        format!(
+            "# Convert ckBTC to BTC\n\n\
+             Authorize the ckBTC minter to burn ckBTC from your account and \
+             send the equivalent amount in BTC (minus network and minter fees) to \
+             the Bitcoin address below.\n\n\
+             **Amount to convert:** `0.0025 ckBTC`\n\n\
+             **Bitcoin destination address:**\n`{WITHDRAWAL_ADDRESS}`"
+        )
+    );
+
+    // 2b. retrieve_btc_with_approval / FieldsDisplay renders the structured
+    // intent + (Amount, BTC address) pair.
+    let info = consent_message(&make_request(
+        "retrieve_btc_with_approval",
+        Encode!(&args).unwrap(),
+        Some(DisplayMessageType::FieldsDisplay),
+    ))
+    .expect("consent message should be produced for retrieve_btc_with_approval");
+    let fields_display = match info.consent_message {
+        ConsentMessage::FieldsDisplayMessage(f) => f,
+        other => panic!("expected FieldsDisplayMessage, got {other:?}"),
+    };
+    assert_eq!(fields_display.intent, "ckBTC to BTC");
+    assert_eq!(
+        fields_display.fields,
+        vec![
+            (
+                "Amount".to_string(),
+                Value::TokenAmount {
+                    decimals: 8,
+                    amount: 250_000,
+                    symbol: "ckBTC".to_string(),
+                }
+            ),
+            (
+                "BTC address".to_string(),
+                Value::Text {
+                    content: WITHDRAWAL_ADDRESS.to_string(),
+                }
+            ),
+        ]
+    );
+
+    // 3. Unsupported methods return UnsupportedCanisterCall. `retrieve_btc`
+    // is intentionally listed here — the minter only renders consent for
+    // the approval-based flow.
+    for method in ["retrieve_btc", "update_balance", "get_btc_address"] {
+        let err = consent_message(&make_request(method, vec![], None))
+            .expect_err("expected UnsupportedCanisterCall");
+        assert!(
+            matches!(err, Icrc21Error::UnsupportedCanisterCall(_)),
+            "method {method:?} should be rejected as unsupported, got {err:?}"
+        );
+    }
 }
 
 #[test]
@@ -723,7 +883,10 @@ impl CkBtcSetup {
                     .with_minting_account(minter_id.get().0)
                     .with_transfer_fee(TRANSFER_FEE)
                     .with_max_memo_length(CKBTC_LEDGER_MEMO_SIZE)
-                    .with_feature_flags(ic_icrc1_ledger::FeatureFlags { icrc2: true })
+                    .with_feature_flags(ic_icrc1_ledger::FeatureFlags {
+                        icrc2: true,
+                        icrc152: false
+                    })
                     .build()
             ))
             .unwrap(),
@@ -2952,18 +3115,21 @@ fn should_cancel_and_reimburse_large_withdrawal() {
         subaccount,
     };
 
-    // Step 1: deposit a lot of small UTXOs
-    const NUM_UXTOS: usize = 2_000;
+    // Step 1: deposit enough small UTXOs to exceed the max inputs limit.
+    // We need at least max + 1 UTXOs for the withdrawal to trigger TooManyInputs,
+    // plus a small buffer so there are leftover UTXOs in the set.
+    const MAX_INPUTS: usize = ic_ckbtc_minter::state::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION;
+    const NUM_UTXOS: usize = MAX_INPUTS + 100;
     let deposit_value = 100_000_u64;
     let _deposited_utxos =
-        ckbtc.deposit_utxos_with_value(user_account, &[deposit_value; NUM_UXTOS]);
+        ckbtc.deposit_utxos_with_value(user_account, &[deposit_value; NUM_UTXOS]);
     let balance_after_deposit = ckbtc.balance_of(user_account);
     assert_eq!(
         balance_after_deposit,
-        Nat::from(NUM_UXTOS as u64 * (deposit_value - CHECK_FEE))
+        Nat::from(NUM_UTXOS as u64 * (deposit_value - CHECK_FEE))
     );
 
-    let withdrawal_amount = 1_800 * deposit_value;
+    let withdrawal_amount = (MAX_INPUTS as u64 + 1) * deposit_value;
     ckbtc.approve_minter(user, withdrawal_amount, subaccount);
     let balance_before_withdrawal = ckbtc.balance_of(user_account);
 
@@ -3026,19 +3192,23 @@ fn should_cancel_and_reimburse_large_withdrawal() {
         }
     );
     let schedule_reimbursement_event = events.pop().unwrap();
-    assert_eq!(
+    assert_matches!(
         schedule_reimbursement_event.payload,
         EventType::ScheduleWithdrawalReimbursement {
-            account: user_account,
-            amount: reimbursement_amount,
+            account,
+            amount,
             reason: WithdrawalReimbursementReason::InvalidTransaction(
                 InvalidTransactionError::TooManyInputs {
-                    num_inputs: 1800,
-                    max_num_inputs: ic_ckbtc_minter::state::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
+                    num_inputs,
+                    max_num_inputs,
                 }
             ),
-            burn_block_index: block_index,
-        }
+            burn_block_index,
+        } if account == user_account
+          && amount == reimbursement_amount
+          && num_inputs > max_num_inputs
+          && max_num_inputs == MAX_INPUTS
+          && burn_block_index == block_index
     );
 
     ckbtc.assert_ledger_transaction_reimbursement_correct(block_index, reimbursement_block_index);

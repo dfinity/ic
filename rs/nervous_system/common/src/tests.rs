@@ -38,7 +38,7 @@ fn test_e8s_to_tokens() {
 #[test]
 fn test_compute_neuron_staking_subaccount_bytes() {
     let principal_id = PrincipalId::new_user_test_id(1);
-    let nonce = 42u64;
+    let nonce = 42_u64;
 
     // The equivalent implementation in the ic-js is at
     // https://github.com/dfinity/ic-js/blob/0dd5c1954d94dad6911b73707c454f978624f607/packages/nns/src/governance.canister.ts#L952-L967.

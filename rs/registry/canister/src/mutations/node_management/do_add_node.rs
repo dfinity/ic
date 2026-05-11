@@ -1,4 +1,6 @@
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{
+    common::LOG_PREFIX, mutations::common::get_elected_replica_version_ids, registry::Registry,
+};
 use attestation::attestation_package::{
     AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
@@ -263,7 +265,7 @@ impl Registry {
         let parsed =
             ParsedSevAttestationPackage::parse(attestation_package.clone(), root_cert_verification)
                 .verify_custom_data(&expected_custom_data)
-                .verify_measurement(&self.get_all_blessed_guest_launch_measurements())
+                .verify_measurement(&self.get_all_elected_guest_launch_measurements())
                 .map_err(|e| {
                     format!("{LOG_PREFIX}do_add_node: Attestation verification failed: {e}")
                 })?;
@@ -278,9 +280,9 @@ impl Registry {
         Ok(Some(chip_id))
     }
 
-    pub fn get_all_blessed_guest_launch_measurements(&self) -> Vec<Vec<u8>> {
+    pub fn get_all_elected_guest_launch_measurements(&self) -> Vec<Vec<u8>> {
         let version = self.latest_version();
-        self.get_blessed_replica_version_ids()
+        get_elected_replica_version_ids(self)
             .iter()
             .filter_map(|version_id| {
                 self.get(make_replica_version_key(version_id).as_bytes(), version)
@@ -312,6 +314,11 @@ fn validate_str_as_node_reward_type<T: AsRef<str> + Display>(
         "type3.1" => NodeRewardType::Type3dot1,
         "type1.1" => NodeRewardType::Type1dot1,
         "type4" => NodeRewardType::Type4,
+        "type4.1" => NodeRewardType::Type4dot1,
+        "type4.2" => NodeRewardType::Type4dot2,
+        "type4.3" => NodeRewardType::Type4dot3,
+        "type4.4" => NodeRewardType::Type4dot4,
+        "type4.5" => NodeRewardType::Type4dot5,
         _ => return Err(format!("Invalid node type: {type_string}")),
     })
 }
@@ -346,12 +353,6 @@ fn valid_keys_from_payload(
     if payload.transport_tls_cert.is_empty() {
         return Err(String::from("transport_tls_cert is empty"));
     };
-    // TODO(NNS1-1197): Refactor this when nodes are provisioned for threshold ECDSA subnets
-    if let Some(idkg_dealing_encryption_pk) = &payload.idkg_dealing_encryption_pk
-        && idkg_dealing_encryption_pk.is_empty()
-    {
-        return Err(String::from("idkg_dealing_encryption_pk is empty"));
-    };
 
     // 2. get the keys for verification -- for that, we need to create
     // NodePublicKeys first
@@ -365,15 +366,18 @@ fn valid_keys_from_payload(
         .map_err(|e| {
             format!("ni_dkg_dealing_encryption_pk is not in the expected format: {e:?}")
         })?;
+
     // TODO(NNS1-1197): Refactor when nodes are provisioned for threshold ECDSA subnets
-    let idkg_dealing_encryption_pk =
-        if let Some(idkg_de_pk_bytes) = &payload.idkg_dealing_encryption_pk {
-            Some(PublicKey::decode(&idkg_de_pk_bytes[..]).map_err(|e| {
-                format!("idkg_dealing_encryption_pk is not in the expected format: {e:?}")
-            })?)
-        } else {
-            None
-        };
+    let idkg_dealing_encryption_pk = match &payload.idkg_dealing_encryption_pk {
+        None => return Err(String::from("idkg_dealing_encryption_pk is missing")),
+        Some(pk) if pk.is_empty() => {
+            return Err(String::from("idkg_dealing_encryption_pk is empty"));
+        }
+
+        Some(pk) => PublicKey::decode(&pk[..]).map_err(|e| {
+            format!("idkg_dealing_encryption_pk is not in the expected format: {e:?}")
+        })?,
+    };
 
     // 3. get the node id from the node_signing_pk
     let node_id = crypto_basicsig_conversions::derive_node_id(&node_signing_pk)
@@ -385,7 +389,7 @@ fn valid_keys_from_payload(
         committee_signing_public_key: Some(committee_signing_pk),
         tls_certificate: Some(tls_certificate),
         dkg_dealing_encryption_public_key: Some(dkg_dealing_encryption_pk),
-        idkg_dealing_encryption_public_key: idkg_dealing_encryption_pk,
+        idkg_dealing_encryption_public_key: Some(idkg_dealing_encryption_pk),
     };
 
     // 5. validate the keys and the node_id
@@ -607,7 +611,7 @@ mod tests {
             connection_endpoint_from_string("192.168.1.3:8080"),
             ConnectionEndpoint {
                 ip_addr: "192.168.1.3".to_string(),
-                port: 8080u32,
+                port: 8080_u32,
             }
         );
     }
@@ -624,7 +628,7 @@ mod tests {
             connection_endpoint_from_string("[fe80::1]:80"),
             ConnectionEndpoint {
                 ip_addr: "fe80::1".to_string(),
-                port: 80u32,
+                port: 80_u32,
             }
         );
     }
@@ -1396,7 +1400,7 @@ mod tests {
             .into()
     }
 
-    fn add_blessed_measurement_to_registry(registry: &mut Registry, measurement: &[u8]) {
+    fn add_elected_measurement_to_registry(registry: &mut Registry, measurement: &[u8]) {
         let replica_version_id = ReplicaVersion::default().to_string();
         let replica_version = ReplicaVersionRecord {
             release_package_sha256_hex: "".to_string(),
@@ -1420,7 +1424,7 @@ mod tests {
     fn should_succeed_for_adding_node_with_valid_sev_attestation() {
         // Arrange
         let mut registry = invariant_compliant_registry(0);
-        add_blessed_measurement_to_registry(&mut registry, &SEV_TEST_MEASUREMENT);
+        add_elected_measurement_to_registry(&mut registry, &SEV_TEST_MEASUREMENT);
 
         let node_operator_record = NodeOperatorRecord {
             max_rewardable_nodes: btreemap! { "type1".to_string() => 1 },
@@ -1454,12 +1458,12 @@ mod tests {
     }
 
     #[test]
-    fn should_fail_for_sev_attestation_with_unblessed_measurement() {
+    fn should_fail_for_sev_attestation_with_unelected_measurement() {
         // Arrange
         let mut registry = invariant_compliant_registry(0);
-        // Add a blessed measurement that does NOT match what we'll put in the attestation
+        // Add a elected measurement that does NOT match what we'll put in the attestation
         let different_measurement: [u8; 48] = [99; 48];
-        add_blessed_measurement_to_registry(&mut registry, &different_measurement);
+        add_elected_measurement_to_registry(&mut registry, &different_measurement);
 
         let node_operator_record = NodeOperatorRecord {
             max_rewardable_nodes: btreemap! { "type1".to_string() => 1 },
@@ -1474,7 +1478,7 @@ mod tests {
         let (mut payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
         payload.node_registration_attestation = Some(create_mock_sev_attestation_package(
             &payload.node_signing_pk,
-            SEV_TEST_MEASUREMENT, // This won't match the blessed measurement
+            SEV_TEST_MEASUREMENT, // This won't match the elected measurement
             SEV_TEST_CHIP_ID,
         ));
 
@@ -1482,7 +1486,7 @@ mod tests {
         let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
 
         // Assert
-        let err = result.expect_err("should fail with unblessed measurement");
+        let err = result.expect_err("should fail with unelected measurement");
         assert!(
             err.contains("Attestation verification failed"),
             "Expected attestation verification error, got: {err}"
@@ -1493,7 +1497,7 @@ mod tests {
     fn should_fail_for_sev_attestation_with_wrong_custom_data() {
         // Arrange
         let mut registry = invariant_compliant_registry(0);
-        add_blessed_measurement_to_registry(&mut registry, &SEV_TEST_MEASUREMENT);
+        add_elected_measurement_to_registry(&mut registry, &SEV_TEST_MEASUREMENT);
 
         let node_operator_record = NodeOperatorRecord {
             max_rewardable_nodes: btreemap! { "type1".to_string() => 1 },
@@ -1507,7 +1511,7 @@ mod tests {
 
         let (mut payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
         // Create attestation with a DIFFERENT node_signing_pk than what's in the payload
-        let wrong_node_signing_pk = vec![0u8; payload.node_signing_pk.len()];
+        let wrong_node_signing_pk = vec![0_u8; payload.node_signing_pk.len()];
         payload.node_registration_attestation = Some(create_mock_sev_attestation_package(
             &wrong_node_signing_pk,
             SEV_TEST_MEASUREMENT,

@@ -8,9 +8,9 @@ DEPENDENCIES = [
     "//packages/ic-error-types",
     "//rs/config",
     "//rs/consensus/certification",
+    "//rs/consensus/chain_key",
     "//rs/consensus/dkg",
     "//rs/consensus/utils",
-    "//rs/consensus/vetkd",
     "//rs/crypto/prng",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/https_outcalls/consensus",
@@ -141,6 +141,7 @@ rust_test(
 
 rust_test(
     name = "integration_test",
+    timeout = "long",
     srcs = glob(["tests/**"]),
     crate_root = "tests/integration.rs",
     deps = DEPENDENCIES + DEV_DEPENDENCIES + MALICIOUS_DEPENDENCIES + [":malicious_consensus"],

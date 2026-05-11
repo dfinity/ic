@@ -1,9 +1,7 @@
 use ic_state_machine_tests::two_subnets_simple;
 use ic_test_utilities_types::ids::user_test_id;
-use ic_types::{
-    Cycles,
-    ingress::{IngressStatus, WasmResult},
-};
+use ic_types::ingress::{IngressStatus, WasmResult};
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);

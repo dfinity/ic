@@ -206,7 +206,7 @@ mod deposit {
 
 mod withdrawal {
     use ic_ckdoge_minter::{
-        DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, InvalidTransactionError, UTXOS_COUNT_THRESHOLD,
+        DOGECOIN_MAX_NUM_INPUTS_IN_TRANSACTION, InvalidTransactionError, UTXOS_COUNT_THRESHOLD,
         WithdrawalReimbursementReason, candid_api::RetrieveDogeWithApprovalError,
     };
     use ic_ckdoge_minter_test_utils::{
@@ -420,7 +420,7 @@ mod withdrawal {
         };
         // Step 1: deposit a lot of small UTXOs
         // < 2_000 to avoid ledger spawning an archive.
-        const NUM_UXTOS: usize = 1_900;
+        const NUM_UXTOS: usize = DOGECOIN_MAX_NUM_INPUTS_IN_TRANSACTION + 2;
         let deposit_value = RETRIEVE_DOGE_MIN_AMOUNT;
         setup
             .deposit_flow()
@@ -430,8 +430,8 @@ mod withdrawal {
             .minter_update_balance()
             .expect_mint();
 
-        let too_large_num_inputs = 1_800;
-        let withdrawal_amount = too_large_num_inputs * deposit_value;
+        let too_large_num_inputs = DOGECOIN_MAX_NUM_INPUTS_IN_TRANSACTION + 1;
+        let withdrawal_amount = too_large_num_inputs as u64 * deposit_value;
 
         setup
             .withdrawal_flow()
@@ -443,8 +443,8 @@ mod withdrawal {
             .expect_withdrawal_request_accepted()
             .minter_await_withdrawal_reimbursed(WithdrawalReimbursementReason::InvalidTransaction(
                 InvalidTransactionError::TooManyInputs {
-                    num_inputs: too_large_num_inputs as usize,
-                    max_num_inputs: DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
+                    num_inputs: too_large_num_inputs,
+                    max_num_inputs: DOGECOIN_MAX_NUM_INPUTS_IN_TRANSACTION,
                 },
             ));
     }
@@ -455,6 +455,7 @@ fn should_estimate_withdrawal_fee() {
     fn estimate_withdrawal_fee_and_check(
         minter: &MinterCanister,
         withdrawal_amount: u64,
+        expected_num_utxos: usize,
     ) -> Result<WithdrawalFee, EstimateWithdrawalFeeError> {
         let utxos_before = minter.get_known_utxos(USER_PRINCIPAL);
         let result = minter.estimate_withdrawal_fee(withdrawal_amount);
@@ -463,6 +464,7 @@ fn should_estimate_withdrawal_fee() {
             utxos_before, utxos_after,
             "BUG: a query endpoint should not be able to modify state!"
         );
+        assert_eq!(utxos_before.len(), expected_num_utxos);
         result
     }
 
@@ -470,7 +472,7 @@ fn should_estimate_withdrawal_fee() {
     let minter = setup.minter();
 
     assert_eq!(
-        estimate_withdrawal_fee_and_check(&minter, DOGE),
+        estimate_withdrawal_fee_and_check(&minter, DOGE, 0),
         Err(EstimateWithdrawalFeeError::AmountTooHigh),
         "Any amount should be too high since there are no UTXOs"
     );
@@ -484,7 +486,7 @@ fn should_estimate_withdrawal_fee() {
         .expect_mint();
 
     assert_eq!(
-        estimate_withdrawal_fee_and_check(&minter, DOGE),
+        estimate_withdrawal_fee_and_check(&minter, DOGE, 2),
         Err(EstimateWithdrawalFeeError::AmountTooLow {
             min_amount: RETRIEVE_DOGE_MIN_AMOUNT
         })
@@ -495,11 +497,13 @@ fn should_estimate_withdrawal_fee() {
         dogecoin_fee: 227_000_000,
     };
     assert_eq!(
-        estimate_withdrawal_fee_and_check(&minter, RETRIEVE_DOGE_MIN_AMOUNT),
-        Ok(expected_fee)
+        estimate_withdrawal_fee_and_check(&minter, RETRIEVE_DOGE_MIN_AMOUNT, 2),
+        Ok(expected_fee),
+        "Minter logs {:?}",
+        minter.get_logs()
     );
     assert_eq!(
-        estimate_withdrawal_fee_and_check(&minter, RETRIEVE_DOGE_MIN_AMOUNT),
+        estimate_withdrawal_fee_and_check(&minter, RETRIEVE_DOGE_MIN_AMOUNT, 2),
         Ok(expected_fee),
         "BUG: estimate_withdrawal_fee should be idempotent"
     );

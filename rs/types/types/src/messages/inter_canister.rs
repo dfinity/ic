@@ -1,5 +1,5 @@
 use crate::{
-    CanisterId, CountBytes, Cycles, NumBytes, Time,
+    CanisterId, CountBytes, NumBytes, Time,
     ingress::WasmResult,
     time::{CoarseTime, UNIX_EPOCH},
 };
@@ -7,18 +7,20 @@ use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInfoRequest, CanisterMetadataRequest, ClearChunkStoreArgs,
-    DeleteCanisterSnapshotArgs, FetchCanisterLogsRequest, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload as _,
-    ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
-    RenameCanisterArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    CanisterIdRecord, CanisterInfoRequest, CanisterMetadataRequest, CanisterMetricsArgs,
+    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, FetchCanisterLogsRequest,
+    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    Method, Payload as _, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
+    ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs, StoredChunksArgs,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
     state::queues::v1 as pb_queues,
     types::v1 as pb_types,
 };
+use ic_types_cycles::Cycles;
 use ic_utils::{byte_slice_fmt::truncate_and_format, str::StrEllipsize};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -255,6 +257,12 @@ impl Request {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,
             },
+            Ok(Method::CanisterMetrics) => {
+                match CanisterMetricsArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
             Ok(Method::CreateCanister)
             | Ok(Method::SetupInitialDKG)
             | Ok(Method::HttpRequest)

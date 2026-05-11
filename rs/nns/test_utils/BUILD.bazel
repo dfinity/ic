@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     # Keep sorted.
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/crypto/node_key_generation",
@@ -53,6 +53,7 @@ BASE_DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/test_utilities/types",
     "//rs/types/base_types",
+    "//rs/types/cycles",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/utils",

@@ -13,7 +13,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
     "//rs/ledger_suite/common/ledger_canister_core",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icrc1",
@@ -180,7 +180,6 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = glob([
         "tests/common/*.rs",
     ]),
-    flaky = True,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
@@ -204,7 +203,6 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = glob([
         "tests/common/*.rs",
     ]),
-    flaky = True,
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     tags = ["cpu:4"],
     deps = DEV_DEPENDENCIES + DEPENDENCIES,

@@ -8,13 +8,12 @@ use ic_management_canister_types_private::IC_00;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, NO_DEADLINE, Request,
-    RequestMetadata,
+    RequestMetadata, SenderInfo,
 };
 use ic_types::methods::Callback;
 use ic_types::time::CoarseTime;
-use ic_types::{
-    CanisterId, Cycles, NumInstructions, PrincipalId, Time, UserId, user_id_into_protobuf,
-};
+use ic_types::{CanisterId, NumInstructions, PrincipalId, Time, UserId, user_id_into_protobuf};
+use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::convert::{From, TryFrom, TryInto};
@@ -52,6 +51,10 @@ pub struct CallContext {
     /// The total number of instructions executed in the given call context.
     /// This value is used for the `ic0.performance_counter` type 1.
     instructions_executed: NumInstructions,
+
+    /// Sender info from the ingress message that created this call context.
+    /// `None` for call contexts created by inter-canister calls or system tasks.
+    sender_info: Option<Arc<SenderInfo>>,
 }
 
 impl CallContext {
@@ -62,6 +65,7 @@ impl CallContext {
         available_cycles: Cycles,
         time: Time,
         metadata: RequestMetadata,
+        sender_info: Option<SenderInfo>,
     ) -> Self {
         Self {
             call_origin,
@@ -71,6 +75,7 @@ impl CallContext {
             time,
             metadata,
             instructions_executed: NumInstructions::default(),
+            sender_info: sender_info.map(Arc::new),
         }
     }
 
@@ -144,6 +149,12 @@ impl CallContext {
     /// `None` for all other origins.
     pub fn deadline(&self) -> Option<CoarseTime> {
         self.call_origin.deadline()
+    }
+
+    /// Returns the sender info from the ingress message that created this call context.
+    /// `None` for call contexts created by inter-canister calls or system tasks.
+    pub fn sender_info(&self) -> Option<&SenderInfo> {
+        self.sender_info.as_deref()
     }
 }
 
@@ -402,6 +413,7 @@ impl CallContextManager {
         cycles: Cycles,
         time: Time,
         metadata: RequestMetadata,
+        sender_info: Option<SenderInfo>,
     ) -> CallContextId {
         self.stats.on_new_call_context(&call_origin);
 
@@ -417,6 +429,7 @@ impl CallContextManager {
                 time,
                 metadata,
                 instructions_executed: NumInstructions::default(),
+                sender_info: sender_info.map(Arc::new),
             },
         );
         debug_assert!(self.stats_ok());
@@ -609,18 +622,6 @@ impl CallContextManager {
         self.next_callback_id += 1;
         let callback_id = CallbackId::from(self.next_callback_id);
 
-        self.insert_callback(callback_id, callback);
-
-        callback_id
-    }
-
-    /// Inserts a callback under the given ID. Returns an error if the canister is
-    /// `Stopped`.
-    //
-    // TODO(DSM-95) Drop this when we drop the legacy `CanisterMessage::Response`
-    // variant and no longer need forward compatible decoding.
-    #[doc(hidden)]
-    pub fn insert_callback(&mut self, callback_id: CallbackId, callback: Callback) {
         self.stats.on_register_callback(&callback);
         if callback.deadline != NO_DEADLINE {
             self.unexpired_callbacks
@@ -640,6 +641,8 @@ impl CallContextManager {
             self.outstanding_callbacks
         );
         debug_assert!(self.stats_ok());
+
+        callback_id
     }
 
     /// If we get a response for one of the outstanding calls, we unregister

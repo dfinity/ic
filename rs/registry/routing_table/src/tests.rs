@@ -68,25 +68,25 @@ fn try_convert_string_into_canister_id_range() {
 }
 
 #[test]
-fn canister_id_range_generate_canister_id() {
+fn canister_id_range_next_canister_id() {
     let range = CanisterIdRange {
         start: 5.into(),
         end: 10.into(),
     };
 
     // `previous_canister_id` is `None`: `range.start`.
-    assert_eq!(Some(5.into()), range.generate_canister_id(None));
+    assert_eq!(Some(5.into()), range.next_canister_id(None));
 
     // `previous_canister_id < range.start`: `range.start`.
-    assert_eq!(Some(5.into()), range.generate_canister_id(Some(0.into())));
+    assert_eq!(Some(5.into()), range.next_canister_id(Some(0.into())));
 
     // In-range `previous_canister_id`: next canister ID.
-    assert_eq!(Some(6.into()), range.generate_canister_id(Some(5.into())));
-    assert_eq!(Some(10.into()), range.generate_canister_id(Some(9.into())));
+    assert_eq!(Some(6.into()), range.next_canister_id(Some(5.into())));
+    assert_eq!(Some(10.into()), range.next_canister_id(Some(9.into())));
 
     // `previous_canister_id >= range.end`: `None`.
-    assert_eq!(None, range.generate_canister_id(Some(10.into())));
-    assert_eq!(None, range.generate_canister_id(Some(11.into())));
+    assert_eq!(None, range.next_canister_id(Some(10.into())));
+    assert_eq!(None, range.next_canister_id(Some(11.into())));
 }
 
 #[test]
@@ -175,49 +175,31 @@ fn canister_id_ranges_are_not_disjoint() {
 }
 
 #[test]
-fn canister_id_ranges_generate_canister_id() {
+fn canister_id_ranges_next_canister_id() {
     let empty_ranges = new_canister_id_ranges(vec![]);
 
     // Empty ranges: `None`.
-    assert_eq!(None, empty_ranges.generate_canister_id(Some(1.into())));
-    assert_eq!(None, empty_ranges.generate_canister_id(None));
+    assert_eq!(None, empty_ranges.next_canister_id(Some(1.into())));
+    assert_eq!(None, empty_ranges.next_canister_id(None));
 
     let ranges = new_canister_id_ranges(vec![(10, 19), (30, 39)]);
 
     // `previous_canister_id` is `None`: `self.start`.
-    assert_eq!(Some(10.into()), ranges.generate_canister_id(None));
+    assert_eq!(Some(10.into()), ranges.next_canister_id(None));
 
     // `previous_canister_id < self.start`: `self.start`.
-    assert_eq!(Some(10.into()), ranges.generate_canister_id(Some(9.into())));
+    assert_eq!(Some(10.into()), ranges.next_canister_id(Some(9.into())));
 
     // `previous_canister_id < ranges.end()`: next canister ID.
-    assert_eq!(
-        Some(11.into()),
-        ranges.generate_canister_id(Some(10.into()))
-    );
-    assert_eq!(
-        Some(19.into()),
-        ranges.generate_canister_id(Some(18.into()))
-    );
-    assert_eq!(
-        Some(30.into()),
-        ranges.generate_canister_id(Some(19.into()))
-    );
-    assert_eq!(
-        Some(30.into()),
-        ranges.generate_canister_id(Some(25.into()))
-    );
-    assert_eq!(
-        Some(31.into()),
-        ranges.generate_canister_id(Some(30.into()))
-    );
-    assert_eq!(
-        Some(39.into()),
-        ranges.generate_canister_id(Some(38.into()))
-    );
+    assert_eq!(Some(11.into()), ranges.next_canister_id(Some(10.into())));
+    assert_eq!(Some(19.into()), ranges.next_canister_id(Some(18.into())));
+    assert_eq!(Some(30.into()), ranges.next_canister_id(Some(19.into())));
+    assert_eq!(Some(30.into()), ranges.next_canister_id(Some(25.into())));
+    assert_eq!(Some(31.into()), ranges.next_canister_id(Some(30.into())));
+    assert_eq!(Some(39.into()), ranges.next_canister_id(Some(38.into())));
 
     // `previous_canister_id == self.end`: `None`.
-    assert_eq!(None, ranges.generate_canister_id(Some(39.into())));
+    assert_eq!(None, ranges.next_canister_id(Some(39.into())));
 }
 
 #[test]
@@ -355,14 +337,14 @@ fn can_insert_valid_route() {
     let mut rt = new_routing_table(vec![((1, 1000), 1)]);
     assert_eq!(rt.well_formed(), Ok(()));
     let new_range = CanisterIdRange {
-        start: CanisterId::from(1001u64),
-        end: CanisterId::from(2000u64),
+        start: CanisterId::from(1001_u64),
+        end: CanisterId::from(2000_u64),
     };
     let new_subnet_id = subnet_test_id(2);
     assert_eq!(rt.insert(new_range, new_subnet_id), Ok(()));
     assert_eq!(rt.well_formed(), Ok(()));
     assert_eq!(
-        rt.lookup_entry(CanisterId::from(1001u64)),
+        rt.lookup_entry(CanisterId::from(1001_u64)),
         Some((new_range, new_subnet_id))
     );
 }
@@ -372,19 +354,19 @@ fn cannot_insert_invalid_route() {
     let mut rt = new_routing_table(vec![((1, 1000), 1)]);
     assert_eq!(rt.well_formed(), Ok(()));
     let invalid_range = CanisterIdRange {
-        start: CanisterId::from(100u64),
-        end: CanisterId::from(2000u64),
+        start: CanisterId::from(100_u64),
+        end: CanisterId::from(2000_u64),
     };
     assert_matches!(
         rt.insert(invalid_range, subnet_test_id(2)),
         Err(WellFormedError::RoutingTableNotDisjoint(_))
     );
     let original_range = CanisterIdRange {
-        start: CanisterId::from(1u64),
-        end: CanisterId::from(1000u64),
+        start: CanisterId::from(1_u64),
+        end: CanisterId::from(1000_u64),
     };
     assert_eq!(
-        rt.lookup_entry(CanisterId::from(101u64)),
+        rt.lookup_entry(CanisterId::from(101_u64)),
         Some((original_range, subnet_test_id(1)))
     );
     assert_eq!(rt.well_formed(), Ok(()));
@@ -395,18 +377,18 @@ fn can_remove_subnet() {
     let mut rt = new_routing_table(vec![((1, 1000), 1), ((2000, 3000), 2)]);
     assert_eq!(rt.well_formed(), Ok(()));
     assert_eq!(
-        rt.lookup_entry(CanisterId::from(100u64)),
+        rt.lookup_entry(CanisterId::from(100_u64)),
         Some((
             CanisterIdRange {
-                start: CanisterId::from(1u64),
-                end: CanisterId::from(1000u64),
+                start: CanisterId::from(1_u64),
+                end: CanisterId::from(1000_u64),
             },
             subnet_test_id(1)
         ))
     );
     rt.remove_subnet(subnet_test_id(1));
     assert_eq!(rt.well_formed(), Ok(()));
-    assert_eq!(rt.lookup_entry(CanisterId::from(100u64)), None);
+    assert_eq!(rt.lookup_entry(CanisterId::from(100_u64)), None);
 }
 
 #[test]
@@ -418,8 +400,8 @@ fn can_reassign_ranges() {
         ((30, 30), 4),
     ]);
     let dst = subnet_test_id(10);
-    for start in 0..=30u64 {
-        for end in start..=30u64 {
+    for start in 0..=30_u64 {
+        for end in start..=30_u64 {
             let mut rt_copy = rt.clone();
 
             let res = rt_copy.assign_ranges(
@@ -431,7 +413,7 @@ fn can_reassign_ranges() {
             );
             assert_eq!(res, Ok(()));
 
-            for i in 0u64..start {
+            for i in 0_u64..start {
                 assert_eq!(
                     rt.lookup_entry(CanisterId::from(i)).map(|(_, s)| s),
                     rt_copy.lookup_entry(CanisterId::from(i)).map(|(_, s)| s)
@@ -443,7 +425,7 @@ fn can_reassign_ranges() {
                     Some(dst)
                 );
             }
-            for i in (end + 1)..=30u64 {
+            for i in (end + 1)..=30_u64 {
                 assert_eq!(
                     rt.lookup_entry(CanisterId::from(i)).map(|(_, s)| s),
                     rt_copy.lookup_entry(CanisterId::from(i)).map(|(_, s)| s)

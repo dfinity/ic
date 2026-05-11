@@ -14,7 +14,7 @@ use ic_system_test_driver::driver::{
 use ic_system_test_driver::systest;
 use ic_system_test_driver::types::CreateCanisterResult;
 use ic_system_test_driver::util::{UniversalCanister, assert_reject, block_on};
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use ic_utils::interfaces::ManagementCanister;
 
 fn main() -> Result<()> {
@@ -106,7 +106,7 @@ pub fn ingress_message_to_subnet_id_fails(env: TestEnv) {
                 AgentError::HttpError(payload) => {
                     let error_message = String::from_utf8(payload.content).unwrap();
                     assert!(error_message.contains(&format!(
-                        "Specified CanisterId {subnet_id} does not match effective canister id in URL {canister_id}"
+                        "Specified canister ID {subnet_id} does not match effective canister ID in URL {canister_id}"
                     )));
                 }
                 _ => panic!("Unexpected error: {err:?}"),
@@ -159,7 +159,7 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(env: 
                         &other_subnet.get().into(),
                         "create_canister",
                         Encode!().unwrap(),
-                        Cycles::from(100_000_000_000_000u64),
+                        Cycles::from(100_000_000_000_000_u64),
                     )
                     .await
                     .map(|res| {
@@ -197,7 +197,7 @@ pub fn nns_canister_attempt_to_create_canister_on_another_subnet_succeeds(env: T
                     &other_subnet.get().into(),
                     "create_canister",
                     Encode!().unwrap(),
-                    Cycles::from(100_000_000_000_000u64),
+                    Cycles::from(100_000_000_000_000_u64),
                 )
                 .await
                 .map(|res| {

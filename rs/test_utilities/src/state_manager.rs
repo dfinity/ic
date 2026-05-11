@@ -121,6 +121,10 @@ fn initial_state() -> Labeled<Arc<ReplicatedState>> {
 }
 
 impl StateManager for FakeStateManager {
+    fn tip_height(&self) -> Height {
+        self.tip_height()
+    }
+
     fn take_tip(&self) -> (Height, Self::State) {
         (
             self.tip_height(),
@@ -208,6 +212,10 @@ impl StateManager for FakeStateManager {
                 ),
             })
             .collect()
+    }
+
+    fn list_state_heights_to_certify(&self) -> Vec<Height> {
+        vec![]
     }
 
     fn deliver_state_certification(&self, certification: Certification) {
@@ -688,6 +696,10 @@ impl RefMockStateManager {
 }
 
 impl StateManager for RefMockStateManager {
+    fn tip_height(&self) -> Height {
+        self.mock.read().unwrap().tip_height()
+    }
+
     fn take_tip(&self) -> (Height, Self::State) {
         self.mock.read().unwrap().take_tip()
     }
@@ -714,6 +726,10 @@ impl StateManager for RefMockStateManager {
 
     fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata> {
         self.mock.read().unwrap().list_state_hashes_to_certify()
+    }
+
+    fn list_state_heights_to_certify(&self) -> Vec<Height> {
+        self.mock.read().unwrap().list_state_heights_to_certify()
     }
 
     fn deliver_state_certification(&self, certification: Certification) {

@@ -27,6 +27,7 @@ ic-replicated-state = { path = "../replicated_state" }
 ic-state-layout = { path = "../state_layout" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
+ic-types-cycles = { path = "../types/cycles" }
 ic-utils = { path = "../utils" }
 ic-utils-thread = { path = "../utils/thread" }
 ic-validate-eq = { path = "../utils/validate_eq" }

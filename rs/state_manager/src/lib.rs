@@ -1,5 +1,6 @@
 // Needs to be `pub` so that the benchmarking code in `state_benches`
 // can access it.
+mod allowed_panics;
 pub mod checkpoint;
 pub mod labeled_tree_visitor;
 pub mod manifest;
@@ -11,7 +12,7 @@ pub mod tree_diff;
 pub mod tree_hash;
 
 use crate::{
-    checkpoint::{PageMapType, flush_canister_snapshots_and_page_maps},
+    checkpoint::{PageMapType, flush_checkpoint_ops_and_page_maps},
     manifest::compute_bundled_manifest,
     state_sync::{
         chunkable::cache::StateSyncCache,
@@ -19,6 +20,7 @@ use crate::{
     },
     tip::{PageMapToFlush, TipRequest, flush_tip_channel, spawn_tip_thread},
 };
+use allowed_panics::panic_with_replica_diverged_at_height;
 use crossbeam_channel::Sender;
 use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use ic_canonical_state_tree_hash::{
@@ -85,7 +87,7 @@ use std::sync::{
 };
 use std::time::{Duration, Instant, SystemTime};
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
     sync::Mutex,
 };
 use tempfile::tempfile;
@@ -120,8 +122,14 @@ const CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT: &str =
 const ARCHIVED_DIVERGED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
 /// The maximum number of consecutive rounds for which the optimization of
-/// skipping state cloning and certification metadata computation triggers.
+/// skipping state cloning and computing certification metadata triggers
+/// while catching up.
 const MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING: u64 = 10;
+
+/// The maximum number of future heights starting at tip height
+/// that the state manager optimistically asks consensus to certify
+/// in advance while catching up.
+const MAX_FUTURE_HEIGHTS_TO_CERTIFY: u64 = 20;
 
 /// Write an overlay file this many rounds before each checkpoint.
 pub const NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY: u64 = 50;
@@ -767,6 +775,7 @@ impl StateSyncMetrics {
 type StatesMetadata = BTreeMap<Height, StateMetadata>;
 
 type CertificationsMetadata = BTreeMap<Height, CertificationMetadata>;
+type Certifications = BTreeMap<Height, Certification>;
 
 /// This struct bundles the root hash, manifest and meta-manifest.
 #[derive(Clone, Debug)]
@@ -891,6 +900,8 @@ impl StateSyncRefs {
 struct SharedState {
     /// Certifications metadata kept for all states
     certifications_metadata: CertificationsMetadata,
+    /// Certifications delivered optimistically to optimize state hashing.
+    certifications: Certifications,
     /// Metadata for each checkpoint
     states_metadata: StatesMetadata,
     /// A list of states present in the memory.  This list is guaranteed to not be
@@ -1041,7 +1052,7 @@ fn initialize_tip(
     tip_channel
         .send(TipRequest::ResetTipAndMerge {
             checkpoint_layout,
-            pagemaptypes: PageMapType::list_all_including_snapshots(&snapshot.state),
+            pagemaptypes: PageMapType::list_all(&snapshot.state),
         })
         .unwrap();
     ReplicatedState::clone(&snapshot.state)
@@ -1561,6 +1572,7 @@ impl StateManagerImpl {
 
         let states = Arc::new(parking_lot::RwLock::new(SharedState {
             certifications_metadata,
+            certifications: BTreeMap::new(),
             states_metadata,
             snapshots,
             last_advertised: Self::INITIAL_STATE_HEIGHT,
@@ -1654,7 +1666,7 @@ impl StateManagerImpl {
     fn observe_num_loaded_pagemaps(&self, state: &ReplicatedState) {
         let mut loaded = 0;
         let mut not_loaded = 0;
-        for entry in PageMapType::list_all_including_snapshots(state) {
+        for entry in PageMapType::list_all(state) {
             if let Some(page_map) = entry.get(state) {
                 if page_map.is_loaded() {
                     loaded += 1;
@@ -1688,17 +1700,23 @@ impl StateManagerImpl {
             })
             .count();
 
-        let num_loaded_snapshot_wasm = state
-            .canister_snapshots
-            .iter()
-            .filter(|(_, snapshot)| {
-                snapshot
-                    .execution_snapshot()
-                    .wasm_binary
-                    .module_loading_status()
-                    == ModuleLoadingStatus::FileLoaded
+        let num_loaded_snapshot_wasm: usize = state
+            .canister_states()
+            .values()
+            .map(|canister| {
+                canister
+                    .canister_snapshots
+                    .iter()
+                    .filter(|(_, snapshot)| {
+                        snapshot
+                            .execution_snapshot()
+                            .wasm_binary
+                            .module_loading_status()
+                            == ModuleLoadingStatus::FileLoaded
+                    })
+                    .count()
             })
-            .count();
+            .sum();
 
         self.metrics
             .checkpoint_metrics
@@ -2329,6 +2347,10 @@ impl StateManagerImpl {
             .latest_certified_height
             .set(latest_certified_height.get() as i64);
 
+        let mut certifications = states.certifications.split_off(&last_height_to_keep);
+        std::mem::swap(&mut certifications, &mut states.certifications);
+        self.deallocator_thread.send(Box::new(certifications));
+
         let mut metadata_to_keep = states.states_metadata.split_off(&last_height_to_keep);
 
         for h in checkpoint_heights_to_keep.iter() {
@@ -2569,7 +2591,7 @@ impl StateManagerImpl {
                 .start_timer();
             let tip_requests = vec![TipRequest::ResetTipAndMerge {
                 checkpoint_layout: cp_layout.clone(),
-                pagemaptypes: PageMapType::list_all_including_snapshots(&state),
+                pagemaptypes: PageMapType::list_all(&state),
             }];
 
             CreateCheckpointResult {
@@ -2709,6 +2731,10 @@ impl StateManager for StateManagerImpl {
             .unwrap_or(Err(StateHashError::Transient(HashNotComputedYet(height))))
     }
 
+    fn tip_height(&self) -> Height {
+        self.states.read().tip_height
+    }
+
     fn take_tip(&self) -> (Height, ReplicatedState) {
         let _timer = self
             .metrics
@@ -2743,6 +2769,8 @@ impl StateManager for StateManagerImpl {
                     states.certifications_metadata.get(&tip_height)
                 {
                     CryptoHashOfPartialState::from(tip_metadata.certified_state_hash.clone())
+                } else if let Some(tip_certification) = states.certifications.get(&tip_height) {
+                    tip_certification.signed.content.hash.clone()
                 } else {
                     std::mem::drop(states);
 
@@ -3020,6 +3048,47 @@ impl StateManager for StateManagerImpl {
             .collect()
     }
 
+    fn list_state_heights_to_certify(&self) -> Vec<Height> {
+        let _timer = self
+            .metrics
+            .api_call_duration
+            .with_label_values(&["list_state_heights_to_certify"])
+            .start_timer();
+
+        let states = self.states.read();
+        let tip_height = states.tip_height.get();
+        let heights_with_certification_in_metadata: HashSet<_> = states
+            .certifications_metadata
+            .iter()
+            .filter_map(|(height, metadata)| {
+                if metadata.certification.is_some() {
+                    Some(height)
+                } else {
+                    None
+                }
+            })
+            .cloned()
+            .collect();
+        let heights_with_certification: HashSet<_> =
+            states.certifications.keys().cloned().collect();
+        drop(states);
+
+        let fast_forward_height = self.fast_forward_height.load(Ordering::Relaxed);
+        let state_heights = tip_height
+            ..min(
+                tip_height + MAX_FUTURE_HEIGHTS_TO_CERTIFY,
+                fast_forward_height,
+            );
+        state_heights
+            .into_iter()
+            .map(Height::new)
+            .filter(|h| {
+                !heights_with_certification_in_metadata.contains(h)
+                    && !heights_with_certification.contains(h)
+            })
+            .collect()
+    }
+
     fn deliver_state_certification(&self, certification: Certification) {
         let _timer = self
             .metrics
@@ -3071,6 +3140,9 @@ impl StateManager for StateManagerImpl {
                     self.deallocator_thread.send(Box::new(tree));
                 }
             }
+        } else {
+            let height = certification.height;
+            states.certifications.insert(height, certification);
         }
     }
 
@@ -3276,7 +3348,7 @@ impl StateManager for StateManagerImpl {
                     .saturating_sub(height.get())
                     == NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
             {
-                flush_canister_snapshots_and_page_maps(&mut state, height, &self.tip_channel);
+                flush_checkpoint_ops_and_page_maps(&mut state, height, &self.tip_channel);
             }
         }
 
@@ -3345,7 +3417,7 @@ impl StateManager for StateManagerImpl {
             CertificationScope::Metadata => Arc::new(state),
         };
 
-        let certification_metadata =
+        let mut certification_metadata =
             Self::compute_certification_metadata(&state, height, &self.metrics, &self.log)
                 .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
 
@@ -3374,11 +3446,7 @@ impl StateManager for StateManagerImpl {
 
         assert_tip_is_none(&states);
 
-        // It's possible that we already computed this state before.  We
-        // validate that hashes agree to spot bugs causing non-determinism as
-        // early as possible.
-        if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
-            let prev_hash = &prev_metadata.certified_state_hash;
+        let assert_prev_hash_matches = |prev_hash| {
             let hash = &certification_metadata.certified_state_hash;
             if prev_hash != hash {
                 if let Err(err) = self.state_layout.create_diverged_state_marker(height) {
@@ -3391,6 +3459,23 @@ impl StateManager for StateManagerImpl {
                     "Committed state @{height} with hash {hash:?} which is different from previously computed or delivered hash {prev_hash:?}"
                 );
             }
+        };
+
+        // It's possible that we already computed this state before.  We
+        // validate that hashes agree to spot bugs causing non-determinism as
+        // early as possible.
+        if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
+            let prev_hash = &prev_metadata.certified_state_hash;
+            assert_prev_hash_matches(prev_hash);
+        }
+
+        // We reuse certification delivered by consensus if possible.
+        // We also validate that hashes agree to spot bugs causing non-determinism as
+        // early as possible.
+        if let Some(certification) = states.certifications.get(&height) {
+            let prev_hash = &certification.signed.content.hash.clone().get();
+            assert_prev_hash_matches(prev_hash);
+            certification_metadata.certification = Some(certification.clone());
         }
 
         if !states
@@ -3506,7 +3591,7 @@ impl StateManager for StateManagerImpl {
 
         self.release_lock_and_persist_metadata(states);
 
-        fatal!(self.log, "Replica diverged at height {}", height)
+        panic_with_replica_diverged_at_height(height);
     }
 }
 
@@ -3996,7 +4081,7 @@ fn maliciously_return_wrong_hash(
             height.get();
             malicious_behavior => MaliciousBehaviorLogEntry { malicious_behavior: MaliciousBehavior::CorruptOwnStateAtHeights as i32}
         );
-        CryptoHashOfState::from(CryptoHash(vec![0u8; 32]))
+        CryptoHashOfState::from(CryptoHash(vec![0_u8; 32]))
     } else {
         CryptoHashOfState::from(CryptoHash(
             crate::manifest::manifest_hash(manifest).to_vec(),
@@ -4106,6 +4191,15 @@ pub mod testing {
     }
 
     pub trait StateManagerTesting {
+        /// Testing only: Asserts that the given `height` matches the height used by `commit_and_certify`.
+        fn commit_and_certify_at_height(
+            &self,
+            state: ReplicatedState,
+            height: Height,
+            scope: CertificationScope,
+            batch_summary: Option<BatchSummary>,
+        );
+
         /// Testing only: Purges the `manifest` at `height` in `states.states_metadata`.
         fn purge_manifest(&mut self, height: Height) -> bool;
 
@@ -4130,11 +4224,34 @@ pub mod testing {
         /// Testing only: Returns certification at a given height in `states.certifications_metadata`.
         fn certifications_metadata_certification(&self, height: Height) -> Option<Certification>;
 
+        /// Testing only: Returns certifications in `states.certifications`.
+        fn certifications(&self) -> BTreeMap<Height, Certification>;
+
         /// Testing only: Returns `fast_forward_height`.
         fn fast_forward_height(&self) -> u64;
     }
 
     impl StateManagerTesting for StateManagerImpl {
+        fn commit_and_certify_at_height(
+            &self,
+            state: ReplicatedState,
+            height: Height,
+            scope: CertificationScope,
+            batch_summary: Option<BatchSummary>,
+        ) {
+            let actual_height = {
+                let states = self.states.read();
+                states.tip_height.increment()
+            };
+            assert_eq!(
+                height, actual_height,
+                "`commit_and_certify` would use height {} which is different from provided height {}",
+                actual_height, height
+            );
+
+            self.commit_and_certify(state, scope, batch_summary);
+        }
+
         fn purge_manifest(&mut self, height: Height) -> bool {
             let mut guard = self.states.write();
             let purged = match guard.states_metadata.get_mut(&height) {
@@ -4210,6 +4327,11 @@ pub mod testing {
                 .expect("Did not find metadata at given height")
                 .certification
                 .clone()
+        }
+
+        fn certifications(&self) -> BTreeMap<Height, Certification> {
+            let states = self.states.read();
+            states.certifications.clone()
         }
 
         fn fast_forward_height(&self) -> u64 {

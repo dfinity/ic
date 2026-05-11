@@ -63,6 +63,10 @@ gc2Q0JiGrqKks1AVi+8wzmZ+2PQXXA==
 const CONFIG_CHECK_TIMEOUT: Duration = Duration::from_secs(60);
 const CONFIG_CHECK_SLEEP: Duration = Duration::from_secs(1);
 
+const UNASSIGNED_NODE_IPV4_ADDRESS: &str = "193.118.59.142";
+const IPV4_GATEWAY: &str = "193.118.59.137";
+const APP_NODE_IPV4_ADDRESS: &str = "193.118.59.140";
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(config)
@@ -75,8 +79,8 @@ fn main() -> Result<()> {
 pub fn config(env: TestEnv) {
     let domain = "api-example.com".to_string();
     let ipv4_config = IPv4Config::try_new(
-        "193.118.59.142".to_string(),
-        "193.118.59.137".to_string(),
+        UNASSIGNED_NODE_IPV4_ADDRESS.to_string(),
+        IPV4_GATEWAY.to_string(),
         29,
     )
     .unwrap();
@@ -131,8 +135,8 @@ pub fn test(env: TestEnv) {
         let payload = UpdateNodeIPv4ConfigDirectlyPayload {
             node_id: app_node.node_id,
             ipv4_config: Some(IPv4Config::try_new(
-                "193.118.59.140".into(),
-                "193.118.59.137".into(),
+                APP_NODE_IPV4_ADDRESS.into(),
+                IPV4_GATEWAY.into(),
                 29,
             ).unwrap()),
         };
@@ -149,8 +153,8 @@ pub fn test(env: TestEnv) {
         info!(log, "Check that the IPv4 address is in the node record in the registry ...");
         let app_node = env.get_first_healthy_application_node_snapshot();
         let ipv4_config = app_node.get_ipv4_configuration().expect("Failed to get IPv4 configuration");
-        assert_eq!(ipv4_config.ip_addr, "193.118.59.140");
-        assert_eq!(ipv4_config.gateway_ip_addr, vec!["193.118.59.137"]);
+        assert_eq!(ipv4_config.ip_addr, APP_NODE_IPV4_ADDRESS);
+        assert_eq!(ipv4_config.gateway_ip_addr, vec![IPV4_GATEWAY]);
         assert_eq!(ipv4_config.prefix_length, 29);
         info!(log, "IPv4 config of node with id={} has been updated successfully", app_node.node_id);
         info!(log, "Checking node's IPv4 and domain name settings at the node registration level");
@@ -199,8 +203,8 @@ EOT
         info!(log, "Checking unassigned node's IPv4 config and domain name after its registration");
         let unassigned_node: IcNodeSnapshot = topology.unassigned_nodes().next().unwrap();
         let ipv4_config = unassigned_node.get_ipv4_configuration().expect("Failed to get IPv4 configuration");
-        assert_eq!(ipv4_config.ip_addr, "193.118.59.142");
-        assert_eq!(ipv4_config.gateway_ip_addr, vec!["193.118.59.137"]);
+        assert_eq!(ipv4_config.ip_addr, UNASSIGNED_NODE_IPV4_ADDRESS);
+        assert_eq!(ipv4_config.gateway_ip_addr, vec![IPV4_GATEWAY]);
         assert_eq!(ipv4_config.prefix_length, 29);
         assert_eq!(unassigned_node.get_domain(), Some("api-example.com".to_string()));
 
@@ -213,12 +217,14 @@ EOT
             CONFIG_CHECK_SLEEP,
             || {
                 wait_for_expected_node_ipv4_config(unassigned_node.clone(), Some(IPv4Config::try_new(
-                    "193.118.59.142".into(),
-                    "193.118.59.137".into(),
+                    UNASSIGNED_NODE_IPV4_ADDRESS.into(),
+                    IPV4_GATEWAY.into(),
                     29,
                 ).unwrap()))
             }
         ).expect("Failed to check the applied IPv4 configuration on the unassigned node");
+
+
 
         retry_with_msg!(
             "check that the orchestrator applied the IPv4 config on the app node",
@@ -227,8 +233,8 @@ EOT
             CONFIG_CHECK_SLEEP,
             || {
                 wait_for_expected_node_ipv4_config(app_node.clone(), Some(IPv4Config::try_new(
-                    "193.118.59.140".into(),
-                    "193.118.59.137".into(),
+                    APP_NODE_IPV4_ADDRESS.into(),
+                    IPV4_GATEWAY.into(),
                     29).unwrap()
                 ))
             }
@@ -345,6 +351,37 @@ EOT
     });
 }
 
+/// Parses an IPv4 interface config string (e.g. "192.168.1.1/24") and a gateway
+/// address into an `IPv4Config`.
+fn parse_ipv4_config(interface_config: &str, gateway_address: String) -> Result<IPv4Config, Error> {
+    let config_parts: Vec<&str> = interface_config.split('/').collect();
+    let address = config_parts.first().map_or_else(
+        || {
+            Err(anyhow!(
+                "failed to extract the IPv4 address: {:?}",
+                interface_config
+            ))
+        },
+        |&address| Ok(address.to_string()),
+    )?;
+
+    let prefix_length_string = config_parts.get(1).ok_or_else(|| {
+        anyhow!(
+            "failed to extract the prefix length: {:?}",
+            interface_config
+        )
+    })?;
+    let prefix_length: u32 = prefix_length_string
+        .parse()
+        .map_err(|_| anyhow!("invalid prefix length: '{:?}'", prefix_length_string))?;
+
+    Ok(IPv4Config::try_new(
+        address,
+        gateway_address,
+        prefix_length,
+    )?)
+}
+
 // this helper obtains the IPv4 configuration of the specified node by
 // SSHing into the node and checking the interface configuration.
 // It keeps checking until the node's configuration matches the expected one
@@ -353,48 +390,30 @@ fn wait_for_expected_node_ipv4_config(
     vm: IcNodeSnapshot,
     expected_ipv4_config: Option<IPv4Config>,
 ) -> Result<(), Error> {
-    // first, get the current IPv4 config on the provided node
+    let session = &vm.block_on_ssh_session()?;
+    // first, get the current IPv4 configs of the provided node
     // check if the interface has any IPv4 config
-    let actual_interface_config =
-        vm.block_on_bash_script(r#"ip -4 addr show enp1s0 | awk '/inet / {print $2}'"#)?;
-    let actual_interface_config = actual_interface_config.trim();
+    let actual_interface_configs = vm.block_on_bash_script_from_session(
+        session,
+        r#"ip -4 -j addr show enp1s0 | jq -r '.[].addr_info[] | "\(.local)/\(.prefixlen)"'"#,
+    )?;
+    let actual_interface_configs: Vec<&str> = actual_interface_configs.trim().lines().collect();
 
-    let actual_ipv4_config = if actual_interface_config.is_empty() {
-        None
-    } else {
-        // extract the IPv4 address
-        let config_parts: Vec<&str> = actual_interface_config.split('/').collect();
-        let actual_address = config_parts.first().map_or_else(
-            || {
-                Err(anyhow!(
-                    "failed to extract the IPv4 address: {:?}",
-                    actual_interface_config
-                ))
-            },
-            |&address| Ok(address.to_string()),
-        )?;
+    // get the default gateway
+    let default_gateway = vm.block_on_bash_script_from_session(
+        session,
+        r#"ip -4 -j route show default | jq -r '.[0].gateway // empty'"#,
+    )?;
+    let actual_gateway_address = default_gateway.trim().to_string();
 
-        let prefix_length_string = config_parts.get(1).ok_or_else(|| {
-            anyhow!(
-                "failed to extract the prefix length: {:?}",
-                actual_interface_config
-            )
-        })?;
-        let actual_prefix_length: u32 = prefix_length_string
-            .parse()
-            .map_err(|_| anyhow!("invalid prefix length: '{:?}'", prefix_length_string))?;
+    let ipv4_configs: Vec<IPv4Config> = actual_interface_configs
+        .iter()
+        .filter_map(|config| parse_ipv4_config(config, actual_gateway_address.clone()).ok())
+        // Filter out 10.x.x.x addresses that could be assigned by DHCP in the dm1 DC.
+        .filter(|ipv4_config| !ipv4_config.ip_addr().starts_with("10."))
+        .collect();
 
-        // get the default gateway
-        let default_gateway =
-            vm.block_on_bash_script(r#"ip route | awk '/default/ {print $3}'"#)?;
-        let actual_gateway_address = default_gateway.trim().to_string();
-
-        Some(IPv4Config::try_new(
-            actual_address,
-            actual_gateway_address,
-            actual_prefix_length,
-        )?)
-    };
+    let actual_ipv4_config = ipv4_configs.first().cloned();
 
     // then, compare the expected and actual configuration
     if actual_ipv4_config == expected_ipv4_config {

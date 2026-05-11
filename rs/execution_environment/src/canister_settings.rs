@@ -1,11 +1,12 @@
 use ic_base_types::{EnvironmentVariables, NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, UserError};
-use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2};
-use ic_types::{
-    ComputeAllocation, Cycles, InvalidComputeAllocationError, MemoryAllocation, PrincipalId,
+use ic_management_canister_types_private::{
+    BoundedAllowedViewers, CanisterSettingsArgs, LogVisibilityV2, SnapshotVisibility,
 };
+use ic_types::{ComputeAllocation, InvalidComputeAllocationError, MemoryAllocation, PrincipalId};
+use ic_types_cycles::Cycles;
 use num_traits::cast::ToPrimitive;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 
 #[cfg(test)]
@@ -25,6 +26,7 @@ pub(crate) struct CanisterSettings {
     pub(crate) freezing_threshold: Option<NumSeconds>,
     pub(crate) reserved_cycles_limit: Option<Cycles>,
     pub(crate) log_visibility: Option<LogVisibilityV2>,
+    pub(crate) snapshot_visibility: Option<SnapshotVisibility>,
     pub(crate) log_memory_limit: Option<NumBytes>,
     pub(crate) wasm_memory_limit: Option<NumBytes>,
     pub(crate) environment_variables: Option<EnvironmentVariables>,
@@ -39,6 +41,7 @@ impl CanisterSettings {
         freezing_threshold: Option<NumSeconds>,
         reserved_cycles_limit: Option<Cycles>,
         log_visibility: Option<LogVisibilityV2>,
+        snapshot_visibility: Option<SnapshotVisibility>,
         log_memory_limit: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
         environment_variables: Option<EnvironmentVariables>,
@@ -51,6 +54,7 @@ impl CanisterSettings {
             freezing_threshold,
             reserved_cycles_limit,
             log_visibility,
+            snapshot_visibility,
             log_memory_limit,
             wasm_memory_limit,
             environment_variables,
@@ -85,6 +89,10 @@ impl CanisterSettings {
         self.log_visibility.as_ref()
     }
 
+    pub fn snapshot_visibility(&self) -> Option<&SnapshotVisibility> {
+        self.snapshot_visibility.as_ref()
+    }
+
     pub fn log_memory_limit(&self) -> Option<NumBytes> {
         self.log_memory_limit
     }
@@ -102,6 +110,33 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
     type Error = UpdateSettingsError;
 
     fn try_from(input: CanisterSettingsArgs) -> Result<Self, Self::Error> {
+        if input.log_memory_limit.is_some() {
+            // The destructure is exhaustive so that adding a new field to
+            // CanisterSettingsArgs causes a compile error here, prompting the
+            // developer to decide whether the new field affects memory
+            // usage/allocation — if it does, it must also be rejected together
+            // with log_memory_limit below.
+            let CanisterSettingsArgs {
+                controllers: _,
+                compute_allocation: _,
+                memory_allocation,
+                freezing_threshold: _,
+                reserved_cycles_limit: _,
+                log_visibility: _,
+                snapshot_visibility: _,
+                log_memory_limit: _,
+                wasm_memory_limit: _,
+                wasm_memory_threshold: _,
+                environment_variables: _,
+            } = &input;
+            if memory_allocation.is_some() {
+                return Err(UpdateSettingsError::ForbiddenSettings {
+                    message: "log_memory_limit cannot be set together with memory_allocation"
+                        .to_string(),
+                });
+            }
+        }
+
         let compute_allocation = match input.compute_allocation {
             Some(ca) => Some(ComputeAllocation::try_from(ca.0.to_u64().ok_or_else(
                 || UpdateSettingsError::ComputeAllocation(InvalidComputeAllocationError::new(ca)),
@@ -191,6 +226,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             freezing_threshold,
             reserved_cycles_limit,
             input.log_visibility,
+            input.snapshot_visibility,
             log_memory_limit,
             wasm_memory_limit,
             environment_variables,
@@ -217,6 +253,7 @@ pub(crate) struct CanisterSettingsBuilder {
     freezing_threshold: Option<NumSeconds>,
     reserved_cycles_limit: Option<Cycles>,
     log_visibility: Option<LogVisibilityV2>,
+    snapshot_visibility: Option<SnapshotVisibility>,
     log_memory_limit: Option<NumBytes>,
     wasm_memory_limit: Option<NumBytes>,
     environment_variables: Option<EnvironmentVariables>,
@@ -233,6 +270,7 @@ impl CanisterSettingsBuilder {
             freezing_threshold: None,
             reserved_cycles_limit: None,
             log_visibility: None,
+            snapshot_visibility: None,
             log_memory_limit: None,
             wasm_memory_limit: None,
             environment_variables: None,
@@ -248,6 +286,7 @@ impl CanisterSettingsBuilder {
             freezing_threshold: self.freezing_threshold,
             reserved_cycles_limit: self.reserved_cycles_limit,
             log_visibility: self.log_visibility,
+            snapshot_visibility: self.snapshot_visibility,
             log_memory_limit: self.log_memory_limit,
             wasm_memory_limit: self.wasm_memory_limit,
             environment_variables: self.environment_variables,
@@ -303,6 +342,13 @@ impl CanisterSettingsBuilder {
         }
     }
 
+    pub fn with_snapshot_visibility(self, snapshot_visibility: SnapshotVisibility) -> Self {
+        Self {
+            snapshot_visibility: Some(snapshot_visibility),
+            ..self
+        }
+    }
+
     pub fn with_log_memory_limit(self, log_memory_limit: NumBytes) -> Self {
         Self {
             log_memory_limit: Some(log_memory_limit),
@@ -334,6 +380,7 @@ pub enum UpdateSettingsError {
     WasmMemoryThresholdOutOfRange { provided: candid::Nat },
     DuplicateEnvironmentVariables,
     LogMemoryLimitOutOfRange { provided: candid::Nat },
+    ForbiddenSettings { message: String },
 }
 
 impl From<UpdateSettingsError> for UserError {
@@ -386,6 +433,9 @@ impl From<UpdateSettingsError> for UserError {
                     "Log memory limit expected to be in the range of [0..2^64-1], got {provided}"
                 ),
             ),
+            UpdateSettingsError::ForbiddenSettings { message } => {
+                UserError::new(ErrorCode::CanisterContractViolation, message)
+            }
         }
     }
 }
@@ -396,90 +446,45 @@ impl From<InvalidComputeAllocationError> for UpdateSettingsError {
     }
 }
 
-pub(crate) struct ValidatedCanisterSettings {
-    controllers: Option<Vec<PrincipalId>>,
-    compute_allocation: Option<ComputeAllocation>,
-    memory_allocation: Option<MemoryAllocation>,
-    wasm_memory_threshold: Option<NumBytes>,
-    freezing_threshold: Option<NumSeconds>,
-    reserved_cycles_limit: Option<Cycles>,
-    reservation_cycles: Cycles,
-    log_visibility: Option<LogVisibilityV2>,
-    log_memory_limit: Option<NumBytes>,
-    wasm_memory_limit: Option<NumBytes>,
-    environment_variables: Option<EnvironmentVariables>,
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub(crate) enum VisibilitySettings<'a> {
+    Public,
+    Controllers,
+    AllowedViewers(&'a BoundedAllowedViewers),
 }
 
-impl ValidatedCanisterSettings {
-    pub fn new(
-        controllers: Option<Vec<PrincipalId>>,
-        compute_allocation: Option<ComputeAllocation>,
-        memory_allocation: Option<MemoryAllocation>,
-        wasm_memory_threshold: Option<NumBytes>,
-        freezing_threshold: Option<NumSeconds>,
-        reserved_cycles_limit: Option<Cycles>,
-        reservation_cycles: Cycles,
-        log_visibility: Option<LogVisibilityV2>,
-        log_memory_limit: Option<NumBytes>,
-        wasm_memory_limit: Option<NumBytes>,
-        environment_variables: Option<EnvironmentVariables>,
-    ) -> Self {
-        Self {
-            controllers,
-            compute_allocation,
-            memory_allocation,
-            wasm_memory_threshold,
-            freezing_threshold,
-            reserved_cycles_limit,
-            reservation_cycles,
-            log_visibility,
-            log_memory_limit,
-            wasm_memory_limit,
-            environment_variables,
+impl<'a> From<&'a LogVisibilityV2> for VisibilitySettings<'a> {
+    fn from(v: &'a LogVisibilityV2) -> Self {
+        match v {
+            LogVisibilityV2::Public => Self::Public,
+            LogVisibilityV2::Controllers => Self::Controllers,
+            LogVisibilityV2::AllowedViewers(principals) => Self::AllowedViewers(principals),
         }
     }
+}
 
-    pub fn controllers(&self) -> Option<Vec<PrincipalId>> {
-        self.controllers.clone()
+impl<'a> From<&'a SnapshotVisibility> for VisibilitySettings<'a> {
+    fn from(v: &'a SnapshotVisibility) -> Self {
+        match v {
+            SnapshotVisibility::Public => Self::Public,
+            SnapshotVisibility::Controllers => Self::Controllers,
+            SnapshotVisibility::AllowedViewers(principals) => Self::AllowedViewers(principals),
+        }
     }
+}
 
-    pub fn compute_allocation(&self) -> Option<ComputeAllocation> {
-        self.compute_allocation
-    }
-
-    pub fn memory_allocation(&self) -> Option<MemoryAllocation> {
-        self.memory_allocation
-    }
-
-    pub fn wasm_memory_threshold(&self) -> Option<NumBytes> {
-        self.wasm_memory_threshold
-    }
-
-    pub fn freezing_threshold(&self) -> Option<NumSeconds> {
-        self.freezing_threshold
-    }
-
-    pub fn reserved_cycles_limit(&self) -> Option<Cycles> {
-        self.reserved_cycles_limit
-    }
-
-    pub fn reservation_cycles(&self) -> Cycles {
-        self.reservation_cycles
-    }
-
-    pub fn log_visibility(&self) -> Option<&LogVisibilityV2> {
-        self.log_visibility.as_ref()
-    }
-
-    pub fn log_memory_limit(&self) -> Option<NumBytes> {
-        self.log_memory_limit
-    }
-
-    pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
-        self.wasm_memory_limit
-    }
-
-    pub fn environment_variables(&self) -> Option<&EnvironmentVariables> {
-        self.environment_variables.as_ref()
+impl VisibilitySettings<'_> {
+    pub(crate) fn has_access(
+        &self,
+        caller: &PrincipalId,
+        controllers: &BTreeSet<PrincipalId>,
+    ) -> bool {
+        match self {
+            Self::Public => true,
+            Self::Controllers => controllers.contains(caller),
+            Self::AllowedViewers(allowed) => {
+                allowed.get().contains(caller) || controllers.contains(caller)
+            }
+        }
     }
 }

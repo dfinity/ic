@@ -55,9 +55,9 @@ mod index_and_dealing_of_dealer {
     #[test]
     fn should_fail_if_internal_dealing_cannot_be_deserialized() {
         let transcript = dummy_transcript_with_verified_dealings(btreemap! {
-            0 => batch_signed_dealing_with(vec![32; 1usize], NODE_1),
-            1 => batch_signed_dealing_with(vec![32; 2usize], NODE_1),
-            2 => batch_signed_dealing_with(vec![32; 3usize], NODE_1)
+            0 => batch_signed_dealing_with(vec![32; 1_usize], NODE_1),
+            1 => batch_signed_dealing_with(vec![32; 2_usize], NODE_1),
+            2 => batch_signed_dealing_with(vec![32; 3_usize], NODE_1)
         });
         let dealer_id = NODE_1;
 
@@ -73,8 +73,8 @@ mod index_and_dealing_of_dealer {
         let valid_internal_dealing = valid_internal_dealing_raw();
         let transcript = dummy_transcript_with_verified_dealings(btreemap! {
             0 => batch_signed_dealing_with(valid_internal_dealing.clone(), NODE_1),
-            1 => batch_signed_dealing_with(vec![32; 2usize], NODE_1),
-            2 => batch_signed_dealing_with(vec![32; 3usize], NODE_1)
+            1 => batch_signed_dealing_with(vec![32; 2_usize], NODE_1),
+            2 => batch_signed_dealing_with(vec![32; 3_usize], NODE_1)
         });
         let dealer_id = NODE_1;
         let expected_dealing = IDkgDealingInternal::deserialize(&valid_internal_dealing)
@@ -90,9 +90,9 @@ mod index_and_dealing_of_dealer {
     fn should_return_correct_index_if_dealer_in_dealings() {
         let valid_internal_dealing = valid_internal_dealing_raw();
         let transcript = dummy_transcript_with_verified_dealings(btreemap! {
-            0 => batch_signed_dealing_with(vec![32; 2usize], NODE_2),
+            0 => batch_signed_dealing_with(vec![32; 2_usize], NODE_2),
             1 => batch_signed_dealing_with(valid_internal_dealing.clone(), NODE_1),
-            2 => batch_signed_dealing_with(vec![32; 3usize], NODE_3)
+            2 => batch_signed_dealing_with(vec![32; 3_usize], NODE_3)
         });
         let dealer_id = NODE_1;
         let expected_dealing = IDkgDealingInternal::deserialize(&valid_internal_dealing)

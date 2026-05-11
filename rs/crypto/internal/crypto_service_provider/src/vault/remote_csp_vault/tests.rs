@@ -71,7 +71,7 @@ mod timeout {
         let tokio_rt = new_tokio_runtime();
         let csp_vault =
             new_csp_vault_for_test_with_timeout(Duration::from_millis(1), tokio_rt.handle());
-        let node_id = NodeId::from(PrincipalId::new_node_test_id(1u64));
+        let node_id = NodeId::from(PrincipalId::new_node_test_id(1_u64));
         let gen_key_result = csp_vault.gen_dealing_encryption_key_pair(node_id);
 
         assert_matches!(gen_key_result,

@@ -1,10 +1,7 @@
 use crate::{
     governance::{Environment, LOG_PREFIX},
-    pb::v1::{
-        FulfillSubnetRentalRequest, GovernanceError, SelfDescribingValue,
-        governance_error::ErrorType,
-    },
-    proposals::self_describing::LocallyDescribableProposalAction,
+    pb::v1::{FulfillSubnetRentalRequest, GovernanceError, governance_error::ErrorType},
+    proposals::self_describing::DocumentedAction,
 };
 
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
@@ -45,6 +42,9 @@ pub(crate) struct ValidFulfillSubnetRentalRequest {
     user: PrincipalId,
     node_ids: Vec<PrincipalId>,
     replica_version_id: String,
+    /// Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+    /// If not set, handling defaults to the NNS subnet.
+    initial_dkg_subnet_id: Option<PrincipalId>,
 }
 
 impl TryFrom<FulfillSubnetRentalRequest> for ValidFulfillSubnetRentalRequest {
@@ -55,6 +55,7 @@ impl TryFrom<FulfillSubnetRentalRequest> for ValidFulfillSubnetRentalRequest {
             user,
             node_ids,
             replica_version_id,
+            initial_dkg_subnet_id,
         } = value;
 
         let mut defects = vec![];
@@ -96,20 +97,17 @@ impl TryFrom<FulfillSubnetRentalRequest> for ValidFulfillSubnetRentalRequest {
             user,
             node_ids,
             replica_version_id,
+            initial_dkg_subnet_id,
         })
     }
 }
 
-impl LocallyDescribableProposalAction for ValidFulfillSubnetRentalRequest {
-    const TYPE_NAME: &'static str = "Subnet Rental Agreement";
-    const TYPE_DESCRIPTION: &'static str = "Create a rented subnet with a subnet rental \
+impl DocumentedAction for ValidFulfillSubnetRentalRequest {
+    const NAME: &'static str = "Subnet Rental Agreement";
+    const DESCRIPTION: &'static str = "Create a rented subnet with a subnet rental \
         agreement, based on a previously executed Subnet Rental Request proposal. The resulting \
         subnet allows only the user of the rental agreement to create canisters, and canisters \
         are not charged cycles for computation and storage.";
-
-    fn to_self_describing_value(&self) -> SelfDescribingValue {
-        SelfDescribingValue::from(self.clone())
-    }
 }
 
 impl ValidFulfillSubnetRentalRequest {
@@ -225,6 +223,7 @@ impl ValidFulfillSubnetRentalRequest {
             // These are the main things that distinguish this subnet from "normal" subnets.
             canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Free),
             subnet_admins: Some(vec![self.user]),
+            resource_limits: Default::default(),
 
             // Copy values from self.
             node_ids: self
@@ -245,6 +244,7 @@ impl ValidFulfillSubnetRentalRequest {
 
             subnet_type: SubnetType::Application,
             subnet_id_override: None,
+            initial_dkg_subnet_id: self.initial_dkg_subnet_id.map(SubnetId::from),
             start_as_nns: false,
             is_halted: false,
             chain_key_config: None,

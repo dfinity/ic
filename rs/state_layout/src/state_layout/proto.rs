@@ -6,7 +6,6 @@ use ic_protobuf::{
         canister_state_bits::v1 as pb_canister_state_bits,
     },
 };
-use ic_replicated_state::CallContextManager;
 
 impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     fn from(item: CanisterStateBits) -> Self {
@@ -16,14 +15,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 .into_iter()
                 .map(|controller| controller.into())
                 .collect(),
-            last_full_execution_round: item.last_full_execution_round.get(),
             compute_allocation: item.compute_allocation.as_percent(),
-            accumulated_priority: item.accumulated_priority.get(),
-            priority_credit: item.priority_credit.get(),
-            long_execution_mode: pb_canister_state_bits::LongExecutionMode::from(
-                item.long_execution_mode,
-            )
-            .into(),
             execution_state_bits: item.execution_state_bits.as_ref().map(|v| v.into()),
             memory_allocation: item.memory_allocation.pre_allocated_bytes().get(),
             wasm_memory_threshold: Some(item.wasm_memory_threshold.get()),
@@ -55,11 +47,25 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                     },
                 )
                 .collect(),
+            consumed_cycles_by_use_cases_as_counters: item
+                .consumed_cycles_by_use_cases_as_counters
+                .into_iter()
+                .map(
+                    |(use_case, cycles)| pb_canister_state_bits::ConsumedCyclesByUseCase {
+                        use_case: pb_canister_state_bits::CyclesUseCase::from(use_case).into(),
+                        cycles: Some((&cycles).into()),
+                    },
+                )
+                .collect(),
             canister_history: Some((&item.canister_history).into()),
             wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
             total_query_stats: Some((&item.total_query_stats).into()),
             log_visibility_v2: pb_canister_state_bits::LogVisibilityV2::from(&item.log_visibility)
                 .into(),
+            snapshot_visibility: pb_canister_state_bits::SnapshotVisibility::from(
+                &item.snapshot_visibility,
+            )
+            .into(),
             log_memory_limit: item.log_memory_limit.get(),
             canister_log_records: item
                 .canister_log
@@ -67,10 +73,9 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 .iter()
                 .map(|record| record.into())
                 .collect(),
-            next_canister_log_record_idx: item.canister_log.next_idx(),
+            next_canister_log_record_idx: item.next_canister_log_record_idx,
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
-            snapshots_memory_usage: item.snapshots_memory_usage.get(),
             tasks: Some((&item.task_queue).into()),
             environment_variables: item.environment_variables.into_iter().collect(),
             instructions_executed: item.instructions_executed.get(),
@@ -129,40 +134,33 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             );
         }
 
+        let mut consumed_cycles_by_use_cases_as_counters = BTreeMap::new();
+        for x in value.consumed_cycles_by_use_cases_as_counters.into_iter() {
+            consumed_cycles_by_use_cases_as_counters.insert(
+                CyclesUseCase::try_from(
+                    pb_canister_state_bits::CyclesUseCase::try_from(x.use_case).map_err(|_| {
+                        ProxyDecodeError::ValueOutOfRange {
+                            typ: "CyclesUseCase",
+                            err: format!("Unexpected value of cycles use case: {}", x.use_case),
+                        }
+                    })?,
+                )?,
+                NominalCycles::try_from(x.cycles.unwrap_or_default()).unwrap_or_default(),
+            );
+        }
+
         let tasks: pb_canister_state_bits::TaskQueue =
             try_from_option_field(value.tasks, "CanisterStateBits::tasks").unwrap_or_default();
-
-        let mut status: CanisterStatus =
-            try_from_option_field(value.canister_status, "CanisterStateBits::canister_status")?;
-        let call_context_manager = match &mut status {
-            CanisterStatus::Running {
-                call_context_manager,
-                ..
-            }
-            | CanisterStatus::Stopping {
-                call_context_manager,
-                ..
-            } => call_context_manager,
-            CanisterStatus::Stopped => &mut CallContextManager::default(),
-        };
-        let task_queue = TaskQueue::try_from((tasks, call_context_manager))?;
+        let task_queue = TaskQueue::try_from(tasks)?;
 
         Ok(Self {
             controllers,
-            last_full_execution_round: value.last_full_execution_round.into(),
             compute_allocation: ComputeAllocation::try_from(value.compute_allocation).map_err(
                 |e| ProxyDecodeError::ValueOutOfRange {
                     typ: "ComputeAllocation",
                     err: format!("{e:?}"),
                 },
             )?,
-            accumulated_priority: value.accumulated_priority.into(),
-            priority_credit: value.priority_credit.into(),
-            long_execution_mode: pb_canister_state_bits::LongExecutionMode::try_from(
-                value.long_execution_mode,
-            )
-            .unwrap_or_default()
-            .into(),
             execution_state_bits,
             memory_allocation: MemoryAllocation::from(NumBytes::from(value.memory_allocation)),
             wasm_memory_threshold: NumBytes::new(value.wasm_memory_threshold.unwrap_or(0)),
@@ -171,7 +169,10 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             cycles_debit,
             reserved_balance,
             reserved_balance_limit: value.reserved_balance_limit.map(|v| v.into()),
-            status,
+            status: try_from_option_field(
+                value.canister_status,
+                "CanisterStateBits::canister_status",
+            )?,
             rounds_scheduled: value.rounds_scheduled,
             scheduled_as_first: value.scheduled_as_first,
             executed: value.executed,
@@ -188,6 +189,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             global_timer_nanos: value.global_timer_nanos,
             canister_version: value.canister_version,
             consumed_cycles_by_use_cases,
+            consumed_cycles_by_use_cases_as_counters,
             // TODO(MR-412): replace `unwrap_or_default` by returning an error on missing canister_history field
             canister_history: try_from_option_field(
                 value.canister_history,
@@ -209,6 +211,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::log_visibility_v2",
             )
             .unwrap_or_default(),
+            snapshot_visibility: try_from_option_field(
+                value.snapshot_visibility,
+                "CanisterStateBits::snapshot_visibility",
+            )
+            .unwrap_or_default(),
             log_memory_limit: NumBytes::from(value.log_memory_limit),
             canister_log: CanisterLog::new_aggregate(
                 value.next_canister_log_record_idx,
@@ -218,9 +225,9 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                     .map(|record| record.into())
                     .collect(),
             ),
+            next_canister_log_record_idx: value.next_canister_log_record_idx,
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
             next_snapshot_id: value.next_snapshot_id,
-            snapshots_memory_usage: NumBytes::from(value.snapshots_memory_usage),
             task_queue,
             environment_variables: value.environment_variables.into_iter().collect(),
             instructions_executed: NumInstructions::from(value.instructions_executed),
@@ -299,7 +306,7 @@ impl From<CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotB
     fn from(item: CanisterSnapshotBits) -> Self {
         Self {
             snapshot_id: item.snapshot_id.get_local_snapshot_id(),
-            canister_id: Some((item.canister_id).into()),
+            canister_id: Some(item.snapshot_id.get_canister_id().into()),
             taken_at_timestamp: item.taken_at_timestamp.as_nanos_since_unix_epoch(),
             canister_version: item.canister_version,
             binary_hash: item.binary_hash.to_vec(),
@@ -358,7 +365,6 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
         let source = SnapshotSource::try_from(source).unwrap_or_default();
         Ok(Self {
             snapshot_id: SnapshotId::from((canister_id, item.snapshot_id)),
-            canister_id,
             taken_at_timestamp: Time::from_nanos_since_unix_epoch(item.taken_at_timestamp),
             canister_version: item.canister_version,
             binary_hash: WasmHash::from(binary_hash),

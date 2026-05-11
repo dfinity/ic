@@ -284,7 +284,7 @@ mod benches {
             // NOTE: Those benchmarks reflect the performance of the minter on **mainnet**.
             // Changing the number of available of UTXOs is unavoidable when updating the retrieved mainnet events used for testing,
             // so that fluctuations in performance is acceptable, but large degradation would indicate a regression.
-            assert_eq!(s.available_utxos.len(), 66_212);
+            assert_eq!(s.available_utxos.len(), 7_519);
         });
 
         let dummy_minter_address = crate::BitcoinAddress::P2wpkhV0([u8::MAX; 20]);
@@ -316,7 +316,7 @@ mod benches {
             // NOTE: Those benchmarks reflect the performance of the minter on **mainnet**.
             // Changing the number of available of UTXOs is unavoidable when updating the retrieved mainnet events used for testing,
             // so that fluctuations in performance is acceptable, but large degradation would indicate a regression.
-            assert_eq!(s.available_utxos.len(), 66_212);
+            assert_eq!(s.available_utxos.len(), 7_519);
         });
         let fee_estimator = state::read_state(|s| IC_CANISTER_RUNTIME.fee_estimator(s));
 
@@ -348,7 +348,7 @@ mod benches {
                 .expect("failed to initialize stable log")
             })
         });
-        assert_eq!(count_events(), 768_723);
+        assert_eq!(count_events(), 865_698);
 
         let state = CkBtcEventLogger
             .replay::<DoNotCheckInvariants>(CkBtcEventLogger.events_iter())

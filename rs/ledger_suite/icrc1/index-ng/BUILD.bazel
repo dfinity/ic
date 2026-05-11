@@ -7,7 +7,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-http-types",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
     "//rs/crypto/sha2",
     "//rs/ledger_suite/common/ledger_canister_core",
     "//rs/ledger_suite/common/ledger_core",
@@ -94,6 +94,7 @@ rust_test(
         name = "index_ng_test" + conf["test_suffix"],
         timeout = "long",
         srcs = [
+            "tests/index_timer_backoff.rs",
             "tests/retrieve_blocks_from_ledger_interval.rs",
             "tests/tests.rs",
         ],
@@ -116,7 +117,7 @@ rust_test(
             # Keep sorted.
             ":index-ng",
             "//packages/ic-http-types",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
@@ -131,6 +132,7 @@ rust_test(
             "//rs/state_machine_tests",
             "//rs/test_utilities/load_wasm",
             "//rs/types/base_types",
+            "//rs/types/cycles",
             "//rs/types/types",
             "@crate_index//:candid",
             "@crate_index//:ic-agent",
@@ -216,7 +218,7 @@ rust_ic_test_suite_with_extra_srcs(
         # Keep sorted.
         ":index-ng",
         "//packages/ic-http-types",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/ledger_suite/common/ledger_canister_core",
         "//rs/ledger_suite/icrc1/ledger",
         "//rs/ledger_suite/icrc1/test_utils",
@@ -224,6 +226,7 @@ rust_ic_test_suite_with_extra_srcs(
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:candid",
         "@crate_index//:ic-agent",

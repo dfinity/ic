@@ -9,7 +9,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/icrc-ledger-agent:icrc_ledger_agent",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/canister_client",
         "//rs/canister_client/sender",
         "//rs/ledger_suite/common/ledger_core",
@@ -29,6 +29,7 @@ rust_library(
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",

@@ -13,7 +13,7 @@ use bitcoin::dogecoin::Network as DogeNetwork;
 use candid::{Encode, Principal};
 use ic_btc_adapter_test_utils::bitcoind::Daemon;
 use ic_ckdoge_minter::{
-    Txid,
+    DOGECOIN_MAX_NUM_INPUTS_IN_TRANSACTION, Txid,
     lifecycle::{
         MinterArg,
         init::{InitArgs, Mode, Network},
@@ -67,7 +67,7 @@ impl Setup {
                 Some(Arc::new(Daemon::new(
                     &dogecoind_path,
                     DogeNetwork::Regtest,
-                    ic_btc_adapter_test_utils::bitcoind::Conf {
+                    &ic_btc_adapter_test_utils::bitcoind::Conf {
                         p2p: true,
                         ..Default::default()
                     },
@@ -87,7 +87,14 @@ impl Setup {
                     .with_icp_features(icp_features)
                     .build();
                 pic.set_time(SystemTime::now().into());
-                Arc::new(pic)
+                let env = Arc::new(pic);
+                let dogecoind = DogecoinDaemon {
+                    env: env.clone(),
+                    daemon: daemon.clone(),
+                };
+                // Ensure that dogecoin canister is up and running.
+                dogecoind.mine_blocks(1);
+                env
             }
             None => Arc::new(
                 PocketIcBuilder::new()
@@ -131,7 +138,7 @@ impl Setup {
                 mode: Mode::GeneralAvailability,
                 get_utxos_cache_expiration_seconds: Some(Duration::from_secs(60).as_secs()),
                 utxo_consolidation_threshold: Some(10_000),
-                max_num_inputs_in_transaction: Some(500),
+                max_num_inputs_in_transaction: Some(DOGECOIN_MAX_NUM_INPUTS_IN_TRANSACTION as u64),
             });
             env.install_canister(
                 minter,

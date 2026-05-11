@@ -2,30 +2,9 @@
 
 set -euo pipefail
 
-# criterion supports specifying a "home" where it places its benchmark result tree.
-# at the time of writing, our bazel version (.bazelversion) is outdated and sh_binary
-# does not support `env_inherit` so add (or rather intercept) a new CLI argument
-# `--criterion-home` which we convert into `CRITERION_HOME`, which is read by
-# criterion.rs.
-#
-# https://github.com/criterion-rs/criterion.rs/blob/950c3b727a09d10067ea686e2ac6f1f23569168f/src/lib.rs#L142-L142
-
-# store passthru args
-args=()
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --criterion-home)
-            shift
-            export CRITERION_HOME="$1"
-            shift
-            ;;
-        *)
-            # passthru
-            args+=("$1")
-            shift
-            ;;
-    esac
-done
+if [ -n "${CRITERION_HOME:-}" ]; then
+    echo "Benchmark results will be placed in CRITERION_HOME: '$CRITERION_HOME'"
+fi
 
 # When Cargo runs benchmarks, it passes the --bench or --test command-line arguments to
 # the benchmark executables. Criterion.rs looks for these arguments and tries to either

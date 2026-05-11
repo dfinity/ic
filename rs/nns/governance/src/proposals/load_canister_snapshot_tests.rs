@@ -1,6 +1,4 @@
-use crate::{
-    pb::v1::LoadCanisterSnapshot, proposals::self_describing::LocallyDescribableProposalAction,
-};
+use crate::pb::v1::{LoadCanisterSnapshot, SelfDescribingValue as SelfDescribingValuePb};
 use ic_base_types::PrincipalId;
 use ic_nns_governance_api::SelfDescribingValue;
 use maplit::hashmap;
@@ -15,8 +13,7 @@ fn test_load_canister_snapshot_to_self_describing() {
         snapshot_id: snapshot_id.clone(),
     };
 
-    let action = load_snapshot.to_self_describing_action();
-    let value = SelfDescribingValue::from(action.value.unwrap());
+    let value = SelfDescribingValue::from(SelfDescribingValuePb::from(load_snapshot));
 
     assert_eq!(
         value,

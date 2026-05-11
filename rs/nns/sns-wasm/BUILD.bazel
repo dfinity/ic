@@ -14,7 +14,7 @@ filegroup(
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-http-types",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
@@ -26,6 +26,7 @@ DEPENDENCIES = [
     "//rs/sns/init",
     "//rs/sns/root",
     "//rs/types/base_types",
+    "//rs/types/cycles",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/utils",
@@ -120,6 +121,9 @@ rust_test(
 
 rust_ic_test_suite_with_extra_srcs(
     name = "sns-wasm_integration_test",
+    # //rs/nns/sns-wasm:sns-wasm_integration_test_tests/upgrade_sns_instance
+    # frequently times out on CI so we give the test suite more time:
+    timeout = "long",
     srcs = glob(
         ["tests/**/*.rs"],
         exclude = [

@@ -8,7 +8,8 @@ use ic_types::messages::{
     CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Request, RequestOrResponse, Response,
 };
 use ic_types::time::CoarseTime;
-use ic_types::{CountBytes, Cycles, Time};
+use ic_types::{CountBytes, Time};
+use ic_types_cycles::Cycles;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::BTreeSet;

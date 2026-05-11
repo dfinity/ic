@@ -7,7 +7,7 @@ package(default_visibility = ["//visibility:public"])
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     # Keep sorted.
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
     "//rs/crypto/sha2",
     "//rs/ledger_suite/common/ledger_canister_core",
     "//rs/ledger_suite/common/ledger_core",
@@ -126,7 +126,7 @@ rust_canister(
     service_file = ":test_canisters/empty.did",
     deps = [
         # Keep sorted.
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/ledger_suite/icrc1",
         "//rs/nervous_system/common",
         "//rs/rust_canisters/dfn_core",
@@ -212,7 +212,6 @@ rust_ic_test_suite_with_extra_srcs(
     data = DATA_DEPS,
     env = ENV,
     extra_srcs = [],
-    flaky = True,  # flakiness rate of over 1% for the "proposals" and "upgrade_canister" tests over the month from 2025-02-11 till 2025-03-11.
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["cpu:8"],
     deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES,
@@ -229,7 +228,6 @@ rust_ic_test(
     crate_features = ["test"],
     data = DATA_DEPS,
     env = ENV,
-    flaky = True,  # flakiness rate of over 1% over the month from 2025-02-11 till 2025-03-11.
     #proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:8",

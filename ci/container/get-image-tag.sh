@@ -5,7 +5,6 @@ set -eEuo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 INPUT_FILES=(
-    .bazelversion
     rust-toolchain.toml
     ci/container/Dockerfile
     ci/container/files/*

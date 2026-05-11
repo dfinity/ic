@@ -182,7 +182,7 @@ async fn test_api_boundary_node(
 
     info!(
         logger,
-        "api/v2/query - issue a query call (read the current counter value, expecting {index})"
+        "api/v3/query - issue a query call (read the current counter value, expecting {index})"
     );
     retry_with_msg_async!(
         format!("query call on canister={counter_canister_id}"),
@@ -220,7 +220,7 @@ async fn test_api_boundary_node(
 
     info!(
         logger,
-        "api/v3/call - issue an update call (increase the counter value)"
+        "api/v4/call - issue an update call (increase the counter value)"
     );
     retry_with_msg_async!(
         format!("update call on canister={counter_canister_id}"),

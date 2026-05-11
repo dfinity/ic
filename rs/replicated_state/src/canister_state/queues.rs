@@ -28,7 +28,8 @@ use ic_types::messages::{
     CallbackId, Ingress, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload, RejectContext, Request,
     RequestOrResponse, Response,
 };
-use ic_types::{CanisterId, CountBytes, Cycles, NumBytes, Time};
+use ic_types::{CanisterId, CountBytes, NumBytes, Time};
+use ic_types_cycles::Cycles;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use message_pool::ToContext;
@@ -314,7 +315,7 @@ impl Iterator for CanisterOutputQueuesIterator<'_> {
 /// `CanisterQueues::peek_input()`: in addition to the regular ingress messages
 /// and canister requests / responses, `pop_input()` / `peek_input()` may also
 /// return concise "reject response for callback ID" messages.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) enum CanisterInput {
     Ingress(Arc<Ingress>),
     Request(Arc<Request>),

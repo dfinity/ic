@@ -54,3 +54,58 @@ fn test_ssh_node_state_write_access_not_too_long() {
         assert!(message.contains(key_word), "{err:?}");
     }
 }
+
+#[test]
+fn test_chip_id_uniqueness_distinct_chip_ids() {
+    let mut snapshot = RegistrySnapshot::new();
+
+    snapshot.insert(
+        make_node_record_key(NodeId::from(PrincipalId::new_user_test_id(1))).into_bytes(),
+        NodeRecord {
+            chip_id: Some(vec![0xAA; 64]),
+            ..Default::default()
+        }
+        .encode_to_vec(),
+    );
+    snapshot.insert(
+        make_node_record_key(NodeId::from(PrincipalId::new_user_test_id(2))).into_bytes(),
+        NodeRecord {
+            chip_id: Some(vec![0xBB; 64]),
+            ..Default::default()
+        }
+        .encode_to_vec(),
+    );
+
+    check_node_record_invariants(&snapshot).unwrap();
+}
+
+#[test]
+fn test_chip_id_uniqueness_duplicate_chip_ids() {
+    let mut snapshot = RegistrySnapshot::new();
+    let duplicate_chip_id = vec![0xCC; 64];
+
+    snapshot.insert(
+        make_node_record_key(NodeId::from(PrincipalId::new_user_test_id(1))).into_bytes(),
+        NodeRecord {
+            chip_id: Some(duplicate_chip_id.clone()),
+            ..Default::default()
+        }
+        .encode_to_vec(),
+    );
+    snapshot.insert(
+        make_node_record_key(NodeId::from(PrincipalId::new_user_test_id(2))).into_bytes(),
+        NodeRecord {
+            chip_id: Some(duplicate_chip_id.clone()),
+            ..Default::default()
+        }
+        .encode_to_vec(),
+    );
+
+    let err = check_node_record_invariants(&snapshot).unwrap_err();
+    assert!(err.msg.contains("multiple nodes"), "{}", err.msg);
+    assert!(
+        err.msg.contains(&hex::encode(&duplicate_chip_id)),
+        "{}",
+        err.msg
+    );
+}

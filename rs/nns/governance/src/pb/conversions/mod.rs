@@ -1,13 +1,15 @@
-use crate::pb::proposal_conversions::{ProposalDisplayOptions, convert_proposal};
-use crate::pb::v1 as pb;
+use crate::pb::{
+    proposal_conversions::{ProposalDisplayOptions, convert_proposal},
+    v1::{self as pb, successful_proposal_execution_value::ProposalType},
+};
 
 use ic_crypto_sha2::Sha256;
 use ic_nns_governance_api as api;
-use ic_protobuf::registry::replica_version::v1::{
-    GuestLaunchMeasurement as PbGuestLaunchMeasurement,
-    GuestLaunchMeasurementMetadata as PbGuestLaunchMeasurementMetadata,
-    GuestLaunchMeasurements as PbGuestLaunchMeasurements,
+use ic_nns_governance_conversions::{
+    convert_guest_launch_measurements_from_api_to_pb,
+    convert_guest_launch_measurements_from_pb_to_api,
 };
+use ic_nns_handler_root_interface as root;
 
 #[cfg(test)]
 mod tests;
@@ -463,6 +465,9 @@ impl From<api::proposal::Action> for pb::proposal::Action {
             api::proposal::Action::LoadCanisterSnapshot(v) => {
                 pb::proposal::Action::LoadCanisterSnapshot(v.into())
             }
+            api::proposal::Action::CreateCanisterAndInstallCode(v) => {
+                pb::proposal::Action::CreateCanisterAndInstallCode(v.into())
+            }
         }
     }
 }
@@ -520,6 +525,9 @@ impl From<api::ProposalActionRequest> for pb::proposal::Action {
             }
             api::ProposalActionRequest::LoadCanisterSnapshot(v) => {
                 pb::proposal::Action::LoadCanisterSnapshot(v.into())
+            }
+            api::ProposalActionRequest::CreateCanisterAndInstallCode(v) => {
+                pb::proposal::Action::CreateCanisterAndInstallCode(v.into())
             }
         }
     }
@@ -1481,8 +1489,9 @@ impl From<api::ProposalData> for pb::ProposalData {
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
             total_potential_voting_power: item.total_potential_voting_power,
             topic: item.topic,
-            // This is not intended to be initialized from outside of canister.
+            // These are not intended to be initialized from outside of canister.
             previous_ballots_timestamp_seconds: None,
+            success_value: None,
         }
     }
 }
@@ -1758,6 +1767,92 @@ impl From<api::DerivedProposalInformation> for pb::DerivedProposalInformation {
     fn from(item: api::DerivedProposalInformation) -> Self {
         Self {
             swap_background_information: item.swap_background_information.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb::SuccessfulProposalExecutionValue> for Option<api::SuccessfulProposalExecutionValue> {
+    fn from(item: pb::SuccessfulProposalExecutionValue) -> Self {
+        let result = match item.proposal_type? {
+            ProposalType::CreateCanisterAndInstallCode(ok) => {
+                api::SuccessfulProposalExecutionValue::CreateCanisterAndInstallCode(ok.into())
+            }
+            ProposalType::TakeCanisterSnapshot(ok) => {
+                api::SuccessfulProposalExecutionValue::TakeCanisterSnapshot(ok.into())
+            }
+        };
+
+        Some(result)
+    }
+}
+
+impl From<pb::CreateCanisterAndInstallCodeOk> for api::CreateCanisterAndInstallCodeOk {
+    fn from(item: pb::CreateCanisterAndInstallCodeOk) -> Self {
+        Self {
+            canister_id: item.canister_id,
+        }
+    }
+}
+
+impl From<root::CreateCanisterAndInstallCodeOk> for pb::CreateCanisterAndInstallCodeOk {
+    fn from(ok: root::CreateCanisterAndInstallCodeOk) -> Self {
+        Self {
+            canister_id: Some(ok.canister_id),
+        }
+    }
+}
+
+/// This is not actually used. It is just needed to satisfy some `where` clause
+/// of perform_call_canister.
+impl From<()> for pb::SuccessfulProposalExecutionValue {
+    fn from(_: ()) -> Self {
+        Self {
+            proposal_type: None,
+        }
+    }
+}
+
+impl From<root::CreateCanisterAndInstallCodeOk> for pb::SuccessfulProposalExecutionValue {
+    fn from(ok: root::CreateCanisterAndInstallCodeOk) -> Self {
+        Self::from(pb::CreateCanisterAndInstallCodeOk::from(ok))
+    }
+}
+
+/// This is an "upgrade" conversion.
+/// I.e. if you have enum E { A(A) }, then, you can upgrade A to E.
+impl From<pb::CreateCanisterAndInstallCodeOk> for pb::SuccessfulProposalExecutionValue {
+    fn from(ok: pb::CreateCanisterAndInstallCodeOk) -> Self {
+        Self {
+            proposal_type: Some(ProposalType::CreateCanisterAndInstallCode(ok)),
+        }
+    }
+}
+
+impl From<root::TakeCanisterSnapshotOk> for pb::TakeCanisterSnapshotOk {
+    fn from(ok: root::TakeCanisterSnapshotOk) -> Self {
+        Self { snapshot_id: ok.id }
+    }
+}
+
+impl From<root::TakeCanisterSnapshotOk> for pb::SuccessfulProposalExecutionValue {
+    fn from(ok: root::TakeCanisterSnapshotOk) -> Self {
+        Self::from(pb::TakeCanisterSnapshotOk::from(ok))
+    }
+}
+
+// Upgrade Ok to result.
+impl From<pb::TakeCanisterSnapshotOk> for pb::SuccessfulProposalExecutionValue {
+    fn from(ok: pb::TakeCanisterSnapshotOk) -> Self {
+        Self {
+            proposal_type: Some(ProposalType::TakeCanisterSnapshot(ok)),
+        }
+    }
+}
+
+impl From<pb::TakeCanisterSnapshotOk> for api::TakeCanisterSnapshotOk {
+    fn from(item: pb::TakeCanisterSnapshotOk) -> Self {
+        Self {
+            snapshot_id: item.snapshot_id,
         }
     }
 }
@@ -2695,6 +2790,7 @@ impl From<pb::FulfillSubnetRentalRequest> for api::FulfillSubnetRentalRequest {
             user: item.user,
             node_ids: Some(item.node_ids),
             replica_version_id: Some(item.replica_version_id),
+            initial_dkg_subnet_id: item.initial_dkg_subnet_id,
         }
     }
 }
@@ -2705,6 +2801,7 @@ impl From<api::FulfillSubnetRentalRequest> for pb::FulfillSubnetRentalRequest {
             user: item.user,
             node_ids: item.node_ids.unwrap_or_default(),
             replica_version_id: item.replica_version_id.unwrap_or_default(),
+            initial_dkg_subnet_id: item.initial_dkg_subnet_id,
         }
     }
 }
@@ -2733,70 +2830,6 @@ impl From<api::BlessAlternativeGuestOsVersion> for pb::BlessAlternativeGuestOsVe
     }
 }
 
-fn convert_guest_launch_measurements_from_pb_to_api(
-    item: PbGuestLaunchMeasurements,
-) -> api::GuestLaunchMeasurements {
-    api::GuestLaunchMeasurements {
-        guest_launch_measurements: Some(
-            item.guest_launch_measurements
-                .into_iter()
-                .map(convert_guest_launch_measurement_from_pb_to_api)
-                .collect(),
-        ),
-    }
-}
-
-fn convert_guest_launch_measurements_from_api_to_pb(
-    item: api::GuestLaunchMeasurements,
-) -> PbGuestLaunchMeasurements {
-    PbGuestLaunchMeasurements {
-        guest_launch_measurements: item
-            .guest_launch_measurements
-            .unwrap_or_default()
-            .into_iter()
-            .map(convert_guest_launch_measurement_from_api_to_pb)
-            .collect(),
-    }
-}
-
-fn convert_guest_launch_measurement_from_pb_to_api(
-    item: PbGuestLaunchMeasurement,
-) -> api::GuestLaunchMeasurement {
-    api::GuestLaunchMeasurement {
-        measurement: Some(item.measurement),
-        metadata: item
-            .metadata
-            .map(convert_guest_launch_measurement_metadata_from_pb_to_api),
-    }
-}
-
-fn convert_guest_launch_measurement_from_api_to_pb(
-    item: api::GuestLaunchMeasurement,
-) -> PbGuestLaunchMeasurement {
-    PbGuestLaunchMeasurement {
-        measurement: item.measurement.unwrap_or_default(),
-        metadata: item
-            .metadata
-            .map(convert_guest_launch_measurement_metadata_from_api_to_pb),
-    }
-}
-
-fn convert_guest_launch_measurement_metadata_from_pb_to_api(
-    item: PbGuestLaunchMeasurementMetadata,
-) -> api::GuestLaunchMeasurementMetadata {
-    api::GuestLaunchMeasurementMetadata {
-        kernel_cmdline: item.kernel_cmdline,
-    }
-}
-
-fn convert_guest_launch_measurement_metadata_from_api_to_pb(
-    item: api::GuestLaunchMeasurementMetadata,
-) -> PbGuestLaunchMeasurementMetadata {
-    PbGuestLaunchMeasurementMetadata {
-        kernel_cmdline: item.kernel_cmdline,
-    }
-}
-
 impl From<pb::LoadCanisterSnapshot> for api::LoadCanisterSnapshot {
     fn from(item: pb::LoadCanisterSnapshot) -> Self {
         Self {
@@ -2814,10 +2847,8 @@ impl From<api::LoadCanisterSnapshot> for pb::LoadCanisterSnapshot {
     }
 }
 
-impl From<pb::update_canister_settings::CanisterSettings>
-    for api::update_canister_settings::CanisterSettings
-{
-    fn from(item: pb::update_canister_settings::CanisterSettings) -> Self {
+impl From<pb::CanisterSettings> for api::CanisterSettings {
+    fn from(item: pb::CanisterSettings) -> Self {
         Self {
             controllers: item.controllers.map(|x| x.into()),
             compute_allocation: item.compute_allocation,
@@ -2826,14 +2857,13 @@ impl From<pb::update_canister_settings::CanisterSettings>
             log_visibility: item.log_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
             wasm_memory_threshold: item.wasm_memory_threshold,
+            snapshot_visibility: item.snapshot_visibility,
         }
     }
 }
 
-impl From<api::update_canister_settings::CanisterSettings>
-    for pb::update_canister_settings::CanisterSettings
-{
-    fn from(item: api::update_canister_settings::CanisterSettings) -> Self {
+impl From<api::CanisterSettings> for pb::CanisterSettings {
+    fn from(item: api::CanisterSettings) -> Self {
         Self {
             controllers: item.controllers.map(|x| x.into()),
             compute_allocation: item.compute_allocation,
@@ -2842,62 +2872,112 @@ impl From<api::update_canister_settings::CanisterSettings>
             log_visibility: item.log_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
             wasm_memory_threshold: item.wasm_memory_threshold,
+            snapshot_visibility: item.snapshot_visibility,
         }
     }
 }
 
-impl From<pb::update_canister_settings::Controllers>
-    for api::update_canister_settings::Controllers
-{
-    fn from(item: pb::update_canister_settings::Controllers) -> Self {
+impl From<pb::canister_settings::Controllers> for api::canister_settings::Controllers {
+    fn from(item: pb::canister_settings::Controllers) -> Self {
         Self {
             controllers: item.controllers,
         }
     }
 }
 
-impl From<api::update_canister_settings::Controllers>
-    for pb::update_canister_settings::Controllers
-{
-    fn from(item: api::update_canister_settings::Controllers) -> Self {
+impl From<api::canister_settings::Controllers> for pb::canister_settings::Controllers {
+    fn from(item: api::canister_settings::Controllers) -> Self {
         Self {
             controllers: item.controllers,
         }
     }
 }
 
-impl From<pb::update_canister_settings::LogVisibility>
-    for api::update_canister_settings::LogVisibility
-{
-    fn from(item: pb::update_canister_settings::LogVisibility) -> Self {
+impl From<pb::canister_settings::LogVisibility> for api::canister_settings::LogVisibility {
+    fn from(item: pb::canister_settings::LogVisibility) -> Self {
         match item {
-            pb::update_canister_settings::LogVisibility::Unspecified => {
-                api::update_canister_settings::LogVisibility::Unspecified
+            pb::canister_settings::LogVisibility::Unspecified => {
+                api::canister_settings::LogVisibility::Unspecified
             }
-            pb::update_canister_settings::LogVisibility::Controllers => {
-                api::update_canister_settings::LogVisibility::Controllers
+            pb::canister_settings::LogVisibility::Controllers => {
+                api::canister_settings::LogVisibility::Controllers
             }
-            pb::update_canister_settings::LogVisibility::Public => {
-                api::update_canister_settings::LogVisibility::Public
+            pb::canister_settings::LogVisibility::Public => {
+                api::canister_settings::LogVisibility::Public
             }
         }
     }
 }
 
-impl From<api::update_canister_settings::LogVisibility>
-    for pb::update_canister_settings::LogVisibility
-{
-    fn from(item: api::update_canister_settings::LogVisibility) -> Self {
+impl From<api::canister_settings::LogVisibility> for pb::canister_settings::LogVisibility {
+    fn from(item: api::canister_settings::LogVisibility) -> Self {
         match item {
-            api::update_canister_settings::LogVisibility::Unspecified => {
-                pb::update_canister_settings::LogVisibility::Unspecified
+            api::canister_settings::LogVisibility::Unspecified => {
+                pb::canister_settings::LogVisibility::Unspecified
             }
-            api::update_canister_settings::LogVisibility::Controllers => {
-                pb::update_canister_settings::LogVisibility::Controllers
+            api::canister_settings::LogVisibility::Controllers => {
+                pb::canister_settings::LogVisibility::Controllers
             }
-            api::update_canister_settings::LogVisibility::Public => {
-                pb::update_canister_settings::LogVisibility::Public
+            api::canister_settings::LogVisibility::Public => {
+                pb::canister_settings::LogVisibility::Public
             }
+        }
+    }
+}
+
+// The api type here (the conversion destination) is a response type (per the
+// Widget (response) vs. WidgetRequest convention described at the top of
+// api/src/types.rs), and thus, it doesn't have the whole wasm (nor install arg),
+// but rather, just the hashes of those.
+impl From<pb::CreateCanisterAndInstallCode> for api::CreateCanisterAndInstallCode {
+    fn from(item: pb::CreateCanisterAndInstallCode) -> Self {
+        Self {
+            host_subnet_id: item.host_subnet_id,
+            canister_settings: item.canister_settings.map(|x| x.into()),
+            wasm_module_hash: item.wasm_module.as_ref().and_then(|w| w.hash.clone()),
+            install_arg_hash: item.install_arg_hash,
+        }
+    }
+}
+
+// Only used during canister_init (see InstallCode for the same pattern).
+impl From<api::CreateCanisterAndInstallCode> for pb::CreateCanisterAndInstallCode {
+    fn from(item: api::CreateCanisterAndInstallCode) -> Self {
+        Self {
+            host_subnet_id: item.host_subnet_id,
+            canister_settings: item.canister_settings.map(|x| x.into()),
+            install_arg_hash: item.install_arg_hash,
+
+            // The api version of this type does not have these. Really,
+            // this conversion should just explode, since it is impossible
+            // to do correctly, but quietly letting errors happen in these
+            // cases was an existing pattern, and we just carry on that
+            // (bad) tradition here. It wouldn't cause a problem in
+            // in production, since canister_init would never again
+            // be called in production, since the Governance canister
+            // already exists, and there would only be one of them.
+            wasm_module: None,
+            install_arg: None,
+        }
+    }
+}
+
+// Used when submitting a proposal.
+impl From<api::CreateCanisterAndInstallCodeRequest> for pb::CreateCanisterAndInstallCode {
+    fn from(item: api::CreateCanisterAndInstallCodeRequest) -> Self {
+        let install_arg_hash = item
+            .install_arg
+            .as_ref()
+            .map(|arg| Sha256::hash(arg).to_vec());
+
+        let wasm_module = item.wasm_module.map(pb::WasmModule::from);
+
+        Self {
+            host_subnet_id: item.host_subnet_id,
+            canister_settings: item.canister_settings.map(|x| x.into()),
+            wasm_module,
+            install_arg: item.install_arg,
+            install_arg_hash,
         }
     }
 }
@@ -3023,6 +3103,8 @@ impl From<pb::governance::GovernanceCachedMetrics> for api::governance::Governan
             fully_lost_voting_power_neuron_subset_metrics: item
                 .fully_lost_voting_power_neuron_subset_metrics
                 .map(|x| x.into()),
+            total_maturity_disbursements_in_progress_e8s_equivalent: item
+                .total_maturity_disbursements_in_progress_e8s_equivalent,
         }
     }
 }
@@ -3087,6 +3169,8 @@ impl From<api::governance::GovernanceCachedMetrics> for pb::governance::Governan
             fully_lost_voting_power_neuron_subset_metrics: item
                 .fully_lost_voting_power_neuron_subset_metrics
                 .map(|x| x.into()),
+            total_maturity_disbursements_in_progress_e8s_equivalent: item
+                .total_maturity_disbursements_in_progress_e8s_equivalent,
         }
     }
 }
@@ -3795,6 +3879,8 @@ impl From<pb::NnsFunction> for api::NnsFunction {
             pb::NnsFunction::SetSubnetOperationalLevel => {
                 api::NnsFunction::SetSubnetOperationalLevel
             }
+            pb::NnsFunction::SplitSubnet => api::NnsFunction::SplitSubnet,
+            pb::NnsFunction::DeleteSubnet => api::NnsFunction::DeleteSubnet,
         }
     }
 }
@@ -3890,6 +3976,8 @@ impl From<api::NnsFunction> for pb::NnsFunction {
             api::NnsFunction::SetSubnetOperationalLevel => {
                 pb::NnsFunction::SetSubnetOperationalLevel
             }
+            api::NnsFunction::SplitSubnet => pb::NnsFunction::SplitSubnet,
+            api::NnsFunction::DeleteSubnet => pb::NnsFunction::DeleteSubnet,
         }
     }
 }

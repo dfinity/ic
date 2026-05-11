@@ -920,7 +920,7 @@ mod test {
             MAX_CONNECTIONS_DURING_ADDRESS_DISCOVERY
         );
         manager.tick(BLOCK_HEIGHT_FOR_TESTS, simple_handle).await;
-        for i in 0..4u8 {
+        for i in 0..4_u8 {
             tokio::select! {
                 event = manager
                 .stream_event_receiver

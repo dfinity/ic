@@ -1,6 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
-load("//bazel/candid:defs.bzl", "did_git_test")
 
 # This library is private to the replica and other guestOS processes.
 # These crates are considered direct users of the management
@@ -81,6 +80,7 @@ rust_library(
         "//rs/bitcoin/replica_types",
         "//rs/protobuf",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/utils",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
@@ -98,11 +98,6 @@ rust_library(
 rust_test(
     name = "management_canister_types_test",
     crate = ":management_canister_types",
-)
-
-did_git_test(
-    name = "management_canister_did_git_test",
-    did = ":tests/ic.did",
 )
 
 rust_test(

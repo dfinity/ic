@@ -7,7 +7,10 @@ use ic_protobuf::{
 };
 use ic_types::{
     NumBytes,
-    batch::{CanisterHttpPayload, iterator_to_bytes, slice_to_messages},
+    batch::{
+        CanisterHttpPayload, FlexibleCanisterHttpError, FlexibleCanisterHttpResponses,
+        iterator_to_bytes, slice_to_messages,
+    },
     messages::CallbackId,
 };
 use std::collections::HashSet;
@@ -24,6 +27,12 @@ pub(crate) fn bytes_to_payload(data: &[u8]) -> Result<CanisterHttpPayload, Proxy
             Some(MessageType::DivergenceResponse(response)) => {
                 payload.divergence_responses.push(response.try_into()?)
             }
+            Some(MessageType::FlexibleResponses(flex_responses)) => payload
+                .flexible_responses
+                .push(FlexibleCanisterHttpResponses::try_from(flex_responses)?),
+            Some(MessageType::FlexibleError(flex_error)) => payload
+                .flexible_errors
+                .push(FlexibleCanisterHttpError::try_from(flex_error)?),
             None => return Err(ProxyDecodeError::MissingField("message_type")),
         }
     }
@@ -31,28 +40,52 @@ pub(crate) fn bytes_to_payload(data: &[u8]) -> Result<CanisterHttpPayload, Proxy
     Ok(payload)
 }
 
-pub(crate) fn payload_to_bytes(payload: &CanisterHttpPayload, max_size: NumBytes) -> Vec<u8> {
+pub(crate) fn payload_to_bytes(payload: CanisterHttpPayload, max_size: NumBytes) -> Vec<u8> {
+    let CanisterHttpPayload {
+        timeouts,
+        divergence_responses,
+        responses,
+        flexible_responses,
+        flexible_errors,
+    } = payload;
+
     let message_iterator =
-        payload
-            .timeouts
-            .iter()
+        timeouts
+            .into_iter()
             .map(|timeout| CanisterHttpResponseMessage {
                 message_type: Some(MessageType::Timeout(timeout.get())),
             })
-            .chain(payload.divergence_responses.iter().map(|response| {
+            .chain(
+                divergence_responses
+                    .into_iter()
+                    .map(|response| CanisterHttpResponseMessage {
+                        message_type: Some(MessageType::DivergenceResponse(
+                            pb::CanisterHttpResponseDivergence::from(response),
+                        )),
+                    }),
+            )
+            .chain(
+                responses
+                    .into_iter()
+                    .map(|response| CanisterHttpResponseMessage {
+                        message_type: Some(MessageType::Response(
+                            pb::CanisterHttpResponseWithConsensus::from(response),
+                        )),
+                    }),
+            )
+            .chain(flexible_responses.into_iter().map(|flex_responses| {
                 CanisterHttpResponseMessage {
-                    message_type: Some(MessageType::DivergenceResponse(
-                        pb::CanisterHttpResponseDivergence::from(response),
+                    message_type: Some(MessageType::FlexibleResponses(
+                        pb::FlexibleCanisterHttpResponses::from(flex_responses),
                     )),
                 }
             }))
             .chain(
-                payload
-                    .responses
-                    .iter()
-                    .map(|response| CanisterHttpResponseMessage {
-                        message_type: Some(MessageType::Response(
-                            pb::CanisterHttpResponseWithConsensus::from(response),
+                flexible_errors
+                    .into_iter()
+                    .map(|flex_error| CanisterHttpResponseMessage {
+                        message_type: Some(MessageType::FlexibleError(
+                            pb::FlexibleCanisterHttpError::from(flex_error),
                         )),
                     }),
             );
@@ -94,6 +127,8 @@ fn get_id_from_message(message: CanisterHttpResponseMessage) -> Option<u64> {
             .shares
             .first()
             .and_then(|share| share.metadata.as_ref().map(|md| md.id)),
+        Some(MessageType::FlexibleResponses(flex_responses)) => Some(flex_responses.callback_id),
+        Some(MessageType::FlexibleError(flex_error)) => Some(flex_error.callback_id),
         Some(MessageType::Timeout(id)) => Some(id),
         None => None,
     }

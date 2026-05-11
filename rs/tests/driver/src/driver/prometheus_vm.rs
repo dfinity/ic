@@ -7,34 +7,32 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use ic_crypto_sha2::Sha256;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use slog::{Logger, debug, info, warn};
 
+use ic_registry_local_registry::LocalRegistry;
+
 use crate::driver::{
     constants::SSH_USERNAME,
-    farm::HostFeature,
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
-    ic_gateway_vm::HasIcGatewayVm,
-    ic_gateway_vm::Playnet,
+    farm::{DnsRecord, DnsRecordType, HostFeature},
+    ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResourceOverrides},
+    ic_gateway_vm::{HasIcGatewayVm, Playnet},
     log_events,
+    nested::HasNestedVms,
     resource::{DiskImage, ImageType},
-    test_env::TestEnv,
+    test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
     test_env_api::{
-        HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, RetrieveIpv4Addr, SshSession,
-        TopologySnapshot, scp_recv_from, scp_send_to,
+        CreateDnsRecords, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, RetrieveIpv4Addr,
+        SshSession, TopologySnapshot, scp_recv_from, try_scp_send_to,
     },
     test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},
 };
-use crate::driver::{
-    farm::{DnsRecord, DnsRecordType},
-    test_env::TestEnvAttribute,
-    test_env_api::CreateDnsRecords,
-};
+use crate::util::block_on;
 
 const PROMETHEUS_VM_NAME: &str = "prometheus";
 
@@ -44,7 +42,7 @@ const PROMETHEUS_VM_NAME: &str = "prometheus";
 /// Following through to the "Upload UVM images to S3" job and copying the <SHA256-HASH> from the line:
 /// upload: ../../../../../nix/store/...-nixos-disk-image-out-refs-discarded/nixos.img.zst to s3://dfinity-download/farm/prometheus-vm/<SHA256-HASH>/x86_64-linux/prometheus-vm.img.zst
 const DEFAULT_PROMETHEUS_VM_IMG_SHA256: &str =
-    "4e483c264e64c775c87f1e48793301f39262167863af89ccffd47c462b62f119";
+    "49ecc84e46e5cc5b970fc9cf94aa3decd03161642c91f4d1153955110e0ee13f";
 
 fn get_default_prometheus_vm_img_url() -> String {
     format!(
@@ -86,6 +84,7 @@ const DOGECOIN_MAINNET_CANISTER_PROMETHEUS_TARGET: &str = "dogecoin_mainnet_cani
 const DOGECOIN_TESTNET_CANISTER_PROMETHEUS_TARGET: &str = "dogecoin_testnet_canister.json";
 const IC_GATEWAY_PROMETHEUS_TARGET: &str = "ic_gateways.json";
 const IC_BOUNDARY_PROMETHEUS_TARGET: &str = "ic_boundary.json";
+const NESTED_HOSTS_PROMETHEUS_TARGET: &str = "nested_hosts.json";
 const GRAFANA_DASHBOARDS: &str = "grafana_dashboards";
 
 pub struct PrometheusVm {
@@ -133,7 +132,7 @@ impl PrometheusVm {
                         .expect("should not fail!"),
                     sha256: String::from(DEFAULT_PROMETHEUS_VM_IMG_SHA256),
                 })
-                .with_vm_resources(VmResources {
+                .with_resource_overrides(VmResourceOverrides {
                     vcpus: Some(NrOfVCPUs::new(2)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(16780000)), // 16GiB
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(100)),
@@ -148,8 +147,10 @@ impl PrometheusVm {
         self
     }
 
-    pub fn with_vm_resources(mut self, vm_resources: VmResources) -> Self {
-        self.universal_vm = self.universal_vm.with_vm_resources(vm_resources);
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.universal_vm = self
+            .universal_vm
+            .with_resource_overrides(vm_resource_overrides);
         self
     }
 
@@ -405,6 +406,28 @@ impl HasPrometheus for TestEnv {
             None
         };
 
+        // Sync the local registry store with the NNS before picking up the topology
+        let prep_dir = self
+            .prep_dir("")
+            .ok_or_else(|| anyhow!("No no-name Internet Computer"))?;
+        let local_store_path = prep_dir.registry_local_store_path();
+        match LocalRegistry::new(local_store_path, Duration::from_secs(5)) {
+            Ok(local_registry) => {
+                if let Err(e) = block_on(local_registry.sync_with_nns()) {
+                    warn!(
+                        self.logger(),
+                        "Failed to sync local registry with NNS: {e:?}. Using cached topology."
+                    );
+                }
+            }
+            Err(e) => {
+                warn!(
+                    self.logger(),
+                    "Failed to create local registry for NNS sync: {e:?}. Using cached topology."
+                );
+            }
+        }
+
         let topology_snapshot = self.safe_topology_snapshot()?;
 
         sync_prometheus_config_dir(
@@ -416,6 +439,11 @@ impl HasPrometheus for TestEnv {
         sync_prometheus_config_dir_with_ic_gateways(
             self,
             prometheus_config_dir.clone(),
+            group_name.clone(),
+        )?;
+        sync_prometheus_config_dir_with_nested_hosts(
+            self,
+            prometheus_config_dir.clone(),
             group_name,
         )?;
 
@@ -425,6 +453,7 @@ impl HasPrometheus for TestEnv {
             NODE_EXPORTER_PROMETHEUS_TARGET,
             IC_BOUNDARY_PROMETHEUS_TARGET,
             IC_GATEWAY_PROMETHEUS_TARGET,
+            NESTED_HOSTS_PROMETHEUS_TARGET,
         ];
         if playnet_domain.is_some() {
             target_json_files.push(LEDGER_CANISTER_PROMETHEUS_TARGET);
@@ -461,7 +490,7 @@ impl HasPrometheus for TestEnv {
         for file in &target_json_files {
             let from = prometheus_config_dir.join(file);
             let to = Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(file);
-            scp_send_to(self.logger(), &session, &from, &to, 0o644);
+            try_scp_send_to(self.logger(), &session, &from, &to, 0o644)?;
         }
         PrometheusConfigHash { hash: new_hash }.write_attribute(self);
         Ok(())
@@ -532,6 +561,8 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(IC_BOUNDARY_PROMETHEUS_TARGET);
     let ic_gateways_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(IC_GATEWAY_PROMETHEUS_TARGET);
+    let nested_hosts_scraping_targets_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(NESTED_HOSTS_PROMETHEUS_TARGET);
     let replica_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(REPLICA_PROMETHEUS_TARGET);
     let orchestrator_scraping_targets_path =
@@ -562,6 +593,13 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
                 "job_name": "ic_gateways",
                 "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "file_sd_configs": [{"files": [ic_gateways_scraping_targets_path]}],
+            },
+            {
+                "job_name": "nested_hosts",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "file_sd_configs": [{"files": [nested_hosts_scraping_targets_path]}],
+                "scheme": "https",
+                "tls_config": {"insecure_skip_verify": true},
             },
             {
                 "job_name": "ic_boundary",
@@ -695,6 +733,43 @@ fn sync_prometheus_config_dir_with_ic_gateways(
     ::serde_json::to_writer(
         &File::create(prometheus_config_dir.join(IC_GATEWAY_PROMETHEUS_TARGET))?,
         &ic_gateways_p8s_static_configs,
+    )?;
+
+    Ok(())
+}
+
+fn sync_prometheus_config_dir_with_nested_hosts(
+    env: &TestEnv,
+    prometheus_config_dir: PathBuf,
+    group_name: String,
+) -> Result<()> {
+    let mut nested_hosts_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
+
+    let hosts: Vec<(String, Ipv6Addr)> = env
+        .get_all_nested_vms()?
+        .into_iter()
+        .map(|host| {
+            let allocated_vm = host.get_vm()?;
+            Ok((allocated_vm.name, allocated_vm.ipv6))
+        })
+        .collect::<Result<_>>()?;
+
+    for (name, ipv6) in hosts.iter() {
+        let labels: BTreeMap<String, String> = [
+            ("ic".to_string(), group_name.clone()),
+            ("nested_hosts".to_string(), name.to_string()),
+        ]
+        .into_iter()
+        .collect();
+        nested_hosts_p8s_static_configs.push(PrometheusStaticConfig {
+            targets: vec![format!("[{:?}]:{:?}", ipv6, NODE_EXPORTER_METRICS_PORT)],
+            labels: labels.clone(),
+        });
+    }
+
+    ::serde_json::to_writer(
+        &File::create(prometheus_config_dir.join(NESTED_HOSTS_PROMETHEUS_TARGET))?,
+        &nested_hosts_p8s_static_configs,
     )?;
 
     Ok(())

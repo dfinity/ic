@@ -20,13 +20,13 @@ use ic_recovery::{
     CUPS_DIR, IC_STATE_DIR, NeuronArgs, Recovery, RecoveryArgs,
     cli::{consent_given, read_optional, wait_for_confirmation},
     error::{RecoveryError, RecoveryResult},
-    get_node_heights_from_metrics,
+    get_available_nodes_heights_from_metrics,
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryPollingStrategy,
     ssh_helper::SshHelper,
     steps::{AdminStep, Step, UploadStateAndRestartStep},
-    util::{DataLocation, SshUser},
+    util::{CheckpointHeight, DataLocation, ExecutionMode, SshUser},
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -273,12 +273,12 @@ impl SubnetSplitting {
         }
 
         if check_height
-            && get_node_heights_from_metrics(
+            && get_available_nodes_heights_from_metrics(
                 &recovery.logger,
                 &recovery.registry_helper,
                 subnet_id,
             )?
-            .iter()
+            .into_values()
             .any(|metrics| metrics.finalization_height > Height::new(0))
         {
             return validation_error(String::from("Subnet has a non-zero height"));
@@ -307,11 +307,8 @@ impl SubnetSplitting {
     }
 
     fn unhalt(&self, target_subnet: TargetSubnet) -> impl Step + use<> {
-        self.recovery.halt_subnet(
-            self.subnet_id(target_subnet),
-            /*is_halted=*/ false,
-            /*keys=*/ &[],
-        )
+        self.recovery
+            .bring_subnet_back_online_after_repairs(self.subnet_id(target_subnet))
     }
 
     fn propose_cup(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step + use<>> {
@@ -329,6 +326,7 @@ impl SubnetSplitting {
             state_hash,
             /*replacement_nodes=*/ &[],
             /*registry_params=*/ None,
+            /*initial_dkg_subnet_id=*/ None,
             /*chain_key_subnet_id=*/ None,
         )
     }
@@ -340,6 +338,7 @@ impl SubnetSplitting {
         match self.upload_node(target_subnet) {
             Some(node_ip) => Ok(UploadStateAndRestartStep {
                 logger: self.recovery.logger.clone(),
+                ssh_user: SshUser::Admin,
                 upload_method: DataLocation::Remote(node_ip),
                 work_dir: self.layout.work_dir(target_subnet),
                 data_src: self.layout.ic_state_dir(target_subnet),
@@ -586,7 +585,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                     self.recovery.ssh_confirmation,
                     key_file,
                 );
-                let mut includes = Recovery::get_ic_state_includes(Some(&ssh_helper))?;
+                let mut includes = Recovery::get_ic_state_includes(
+                    &self.recovery.logger,
+                    ExecutionMode::Remote(&ssh_helper),
+                    CheckpointHeight::Latest,
+                )?;
                 includes.push(PathBuf::from(CUPS_DIR));
 
                 self.recovery

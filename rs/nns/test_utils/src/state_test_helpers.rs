@@ -25,6 +25,7 @@ use ic_nervous_system_common::{
     DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS,
     ledger::{compute_neuron_staking_subaccount, compute_neuron_staking_subaccount_bytes},
 };
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::init::LifelineCanisterInitPayload;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
@@ -39,13 +40,14 @@ use ic_nns_constants::{
     canister_id_to_nns_canister_name, memory_allocation_of,
 };
 use ic_nns_governance_api::{
-    self as nns_governance_pb, Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
-    GetNeuronsFundAuditInfoResponse, Governance, GovernanceError, InstallCodeRequest,
-    ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons, ListNeuronsResponse,
-    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfoRequest,
-    ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
-    ProposalActionRequest, ProposalInfo, ProposalStatus, RewardNodeProviders, Vote,
+    self as nns_governance_pb, CreateNeuronRequest, CreateNeuronResponse, Empty,
+    ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+    Governance, GovernanceError, InstallCodeRequest, ListNeuronVotesRequest,
+    ListNeuronVotesResponse, ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
+    ListNodeProviderRewardsResponse, ListProposalInfoRequest, ListProposalInfoResponse,
+    MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
+    MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, ProposalActionRequest, ProposalInfo,
+    ProposalStatus, RewardNodeProviders, Vote,
     manage_neuron::{
         self, AddHotKey, ChangeAutoStakeMaturity, ClaimOrRefresh, Configure, Disburse,
         DisburseMaturity, Follow, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund,
@@ -77,14 +79,18 @@ use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities::universal_canister::{
     UNIVERSAL_CANISTER_WASM, call_args, wasm as universal_canister_argument_builder,
 };
-use ic_types::{Cycles, ingress::WasmResult};
+use ic_types::ingress::WasmResult;
+use ic_types_cycles::Cycles;
 use icp_ledger::{
     AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, LedgerCanisterInitPayload, Memo,
     SendArgs, Tokens,
 };
-use icrc_ledger_types::icrc1::{
-    account::Account,
-    transfer::{TransferArg, TransferError},
+use icrc_ledger_types::{
+    icrc1::{
+        account::Account,
+        transfer::{TransferArg, TransferError},
+    },
+    icrc2::approve::{ApproveArgs, ApproveError},
 };
 use num_traits::ToPrimitive;
 use prost::Message;
@@ -904,6 +910,31 @@ pub fn nns_governance_get_proposal_info(
     Decode!(&result, Option<ProposalInfo>).unwrap().unwrap()
 }
 
+/// Like `nns_governance_get_proposal_info_as_anonymous`, but returns `None`
+/// when the proposal does not exist, rather than panicking.
+pub fn nns_get_proposal_info(
+    state_machine: &StateMachine,
+    proposal_id: u64,
+) -> Option<ProposalInfo> {
+    let result = state_machine
+        .execute_ingress_as(
+            PrincipalId::new_anonymous(),
+            GOVERNANCE_CANISTER_ID,
+            "get_proposal_info",
+            Encode!(&proposal_id).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!("get_proposal_info was rejected by the NNS governance canister: {reject:#?}")
+        }
+    };
+
+    Decode!(&result, Option<ProposalInfo>).unwrap()
+}
+
 pub fn nns_send_icp_to_claim_or_refresh_neuron(
     state_machine: &StateMachine,
     sender: PrincipalId,
@@ -927,6 +958,32 @@ pub fn nns_send_icp_to_claim_or_refresh_neuron(
             },
             created_at_time: None,
             memo: None,
+        },
+    )
+    .unwrap();
+}
+
+pub fn nns_approve_governance_to_spend_from_account(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    amount: Tokens,
+) {
+    icrc2_approve(
+        state_machine,
+        LEDGER_CANISTER_ID,
+        sender,
+        ApproveArgs {
+            from_subaccount: None,
+            spender: Account {
+                owner: GOVERNANCE_CANISTER_ID.get().0,
+                subaccount: None,
+            },
+            amount: Nat::from(amount.get_e8s()),
+            created_at_time: None,
+            fee: None,
+            memo: None,
+            expires_at: None,
+            expected_allowance: None,
         },
     )
     .unwrap();
@@ -1098,6 +1155,32 @@ pub fn nns_claim_or_refresh_neuron(
         _ => panic!("{result:?}"),
     };
     *neuron_id
+}
+
+pub fn nns_create_neuron(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    amount_e8s: u64,
+) -> Result<NeuronId, String> {
+    let result: Result<CreateNeuronResponse, String> = update_with_sender(
+        state_machine,
+        GOVERNANCE_CANISTER_ID,
+        "create_neuron",
+        CreateNeuronRequest {
+            amount_e8s: Some(amount_e8s),
+            source_subaccount: None,
+            controller: None,
+            followees: None,
+            dissolve_delay_seconds: None,
+            dissolving: None,
+            auto_stake_maturity: None,
+        },
+        sender,
+    );
+    result
+        .unwrap()
+        .map(|r| r.neuron_id.unwrap())
+        .map_err(|e| format!("Error when creating neuron: {:?}", e))
 }
 
 pub fn nns_disburse_neuron(
@@ -1409,6 +1492,12 @@ pub fn nns_leave_community_fund(
     manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
 
+/// If you are in the common case where
+///
+/// 1. TEST_NEURON_1 has a majority of the voting power, and
+/// 2. You expect the proposal to pass right away and execute successfully
+///
+/// Then, use nns_execute_proposal instead.
 pub fn nns_governance_make_proposal(
     state_machine: &StateMachine,
     sender: PrincipalId,
@@ -1418,6 +1507,38 @@ pub fn nns_governance_make_proposal(
     let command = ManageNeuronCommandRequest::MakeProposal(Box::new(proposal.clone()));
 
     manage_neuron_or_panic(state_machine, sender, neuron_id, command)
+}
+
+/// Returns proposal ID.
+///
+/// TEST_NEURON_1 submits the proposal. Then, waits for it to execute
+/// successfully (see `nns_wait_for_proposal_execution`).
+///
+/// Panics if the proposal is Rejected, fails during execution (i.e. reaches
+/// Failed status), times out, etc.
+pub fn nns_execute_proposal(
+    state_machine: &StateMachine,
+    action: ProposalActionRequest,
+) -> ProposalId {
+    let response = nns_governance_make_proposal(
+        state_machine,
+        *TEST_NEURON_1_OWNER_PRINCIPAL,
+        NeuronId {
+            id: TEST_NEURON_1_ID,
+        },
+        &MakeProposalRequest {
+            title: Some(format!("{action:?}")),
+            summary: String::new(),
+            url: String::new(),
+            action: Some(action),
+        },
+    );
+    let proposal_id = match response.command.unwrap() {
+        manage_neuron_response::Command::MakeProposal(r) => r.proposal_id.unwrap(),
+        other => panic!("{other:#?}"),
+    };
+    nns_wait_for_proposal_execution(state_machine, proposal_id.id);
+    proposal_id
 }
 
 pub fn nns_add_hot_key(
@@ -1880,6 +2001,26 @@ pub fn icrc1_token_logo(machine: &StateMachine, ledger_id: CanisterId) -> Option
             MetadataValue::Text(s) => s,
             m => panic!("Unexpected metadata value {m:?}"),
         })
+}
+
+pub fn icrc2_approve(
+    state_machine: &StateMachine,
+    ledger_id: CanisterId,
+    sender: PrincipalId,
+    icrc2_approve_args: ApproveArgs,
+) -> Result<BlockIndex, String> {
+    let result: Result<Result<Nat, ApproveError>, String> = update_with_sender(
+        state_machine,
+        ledger_id,
+        "icrc2_approve",
+        icrc2_approve_args,
+        sender,
+    );
+    let result = result.unwrap();
+    match result {
+        Ok(n) => Ok(n.0.to_u64().unwrap()),
+        Err(e) => Err(format!("{:?}", e)),
+    }
 }
 
 /// Claim a staked neuron for an SNS StateMachine test

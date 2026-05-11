@@ -535,10 +535,11 @@ impl From<&SignWithThresholdContext> for pb_metadata::SignWithThresholdContext {
             request: Some((&context.request).into()),
             args: Some((&context.args).into()),
             derivation_path_vec: context.derivation_path.to_vec(),
-            pseudo_random_id: context.pseudo_random_id.to_vec(),
+            deprecated_pseudo_random_id: context
+                .deprecated_pseudo_random_id
+                .map(|id| id.to_vec())
+                .unwrap_or_default(),
             batch_time: context.batch_time.as_nanos_since_unix_epoch(),
-            pre_signature_id: context.matched_pre_signature.as_ref().map(|q| q.0.id()),
-            height: context.matched_pre_signature.as_ref().map(|q| q.1.get()),
             nonce: context.nonce.map(|n| n.to_vec()),
         }
     }
@@ -555,13 +556,11 @@ impl TryFrom<pb_metadata::SignWithThresholdContext> for SignWithThresholdContext
             request,
             args,
             derivation_path: Arc::new(context.derivation_path_vec),
-            pseudo_random_id: try_into_array_pseudo_random_id(context.pseudo_random_id)?,
+            deprecated_pseudo_random_id: try_into_array_pseudo_random_id(
+                context.deprecated_pseudo_random_id,
+            )
+            .ok(),
             batch_time: Time::from_nanos_since_unix_epoch(context.batch_time),
-            matched_pre_signature: context
-                .pre_signature_id
-                .map(PreSigId)
-                .zip(context.height)
-                .map(|(q, h)| (q, Height::from(h))),
             nonce: context.nonce.map(try_into_array_nonce).transpose()?,
         })
     }

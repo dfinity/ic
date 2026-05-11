@@ -537,8 +537,6 @@ pub struct CanisterHttpRequest {
 pub struct CanisterHttpResponse {
     #[prost(uint64, tag = "1")]
     pub id: u64,
-    #[prost(uint64, tag = "2")]
-    pub timeout: u64,
     #[prost(message, optional, tag = "4")]
     pub canister_id: ::core::option::Option<CanisterId>,
     #[prost(message, optional, tag = "3")]
@@ -548,14 +546,16 @@ pub struct CanisterHttpResponse {
 pub struct CanisterHttpResponseMetadata {
     #[prost(uint64, tag = "1")]
     pub id: u64,
-    #[prost(uint64, tag = "2")]
-    pub timeout: u64,
     #[prost(bytes = "vec", tag = "3")]
     pub content_hash: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "4")]
     pub registry_version: u64,
     #[prost(string, tag = "5")]
     pub replica_version: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "6")]
+    pub content_size: u32,
+    #[prost(bool, tag = "7")]
+    pub is_reject: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseContent {
@@ -598,6 +598,10 @@ pub struct CanisterHttpResponseWithConsensus {
     pub replica_version: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "7")]
     pub signatures: ::prost::alloc::vec::Vec<CanisterHttpResponseSignature>,
+    #[prost(uint32, tag = "9")]
+    pub content_size: u32,
+    #[prost(bool, tag = "10")]
+    pub is_reject: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpShare {
@@ -612,10 +616,59 @@ pub struct CanisterHttpResponseDivergence {
     pub shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FlexibleCanisterHttpResponseWithProof {
+    #[prost(message, optional, tag = "1")]
+    pub response: ::core::option::Option<CanisterHttpResponse>,
+    #[prost(message, optional, tag = "2")]
+    pub proof: ::core::option::Option<CanisterHttpShare>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FlexibleCanisterHttpResponses {
+    #[prost(uint64, tag = "1")]
+    pub callback_id: u64,
+    #[prost(message, repeated, tag = "2")]
+    pub responses: ::prost::alloc::vec::Vec<FlexibleCanisterHttpResponseWithProof>,
+}
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct FlexibleCanisterHttpTimeout {}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FlexibleCanisterHttpResponsesTooLarge {
+    #[prost(message, repeated, tag = "1")]
+    pub all_seen_shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
+    #[prost(uint32, tag = "2")]
+    pub total_requests: u32,
+    #[prost(uint32, tag = "3")]
+    pub min_responses: u32,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FlexibleCanisterHttpTooManyRejects {
+    #[prost(message, repeated, tag = "1")]
+    pub reject_responses: ::prost::alloc::vec::Vec<FlexibleCanisterHttpResponseWithProof>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FlexibleCanisterHttpError {
+    #[prost(uint64, tag = "1")]
+    pub callback_id: u64,
+    #[prost(oneof = "flexible_canister_http_error::ErrorDetails", tags = "2, 3, 4")]
+    pub error_details: ::core::option::Option<flexible_canister_http_error::ErrorDetails>,
+}
+/// Nested message and enum types in `FlexibleCanisterHttpError`.
+pub mod flexible_canister_http_error {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum ErrorDetails {
+        #[prost(message, tag = "2")]
+        Timeout(super::FlexibleCanisterHttpTimeout),
+        #[prost(message, tag = "3")]
+        ResponsesTooLarge(super::FlexibleCanisterHttpResponsesTooLarge),
+        #[prost(message, tag = "4")]
+        TooManyRejects(super::FlexibleCanisterHttpTooManyRejects),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseMessage {
     #[prost(
         oneof = "canister_http_response_message::MessageType",
-        tags = "1, 2, 3"
+        tags = "1, 2, 3, 4, 5"
     )]
     pub message_type: ::core::option::Option<canister_http_response_message::MessageType>,
 }
@@ -629,6 +682,10 @@ pub mod canister_http_response_message {
         Timeout(u64),
         #[prost(message, tag = "3")]
         DivergenceResponse(super::CanisterHttpResponseDivergence),
+        #[prost(message, tag = "4")]
+        FlexibleResponses(super::FlexibleCanisterHttpResponses),
+        #[prost(message, tag = "5")]
+        FlexibleError(super::FlexibleCanisterHttpError),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -640,8 +697,6 @@ pub struct CanisterHttpArtifact {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgPayload {
-    #[prost(message, repeated, tag = "1")]
-    pub signature_agreements: ::prost::alloc::vec::Vec<CompletedSignature>,
     #[prost(message, optional, tag = "5")]
     pub next_unused_transcript_id:
         ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscriptId>,
@@ -660,6 +715,8 @@ pub struct IDkgPayload {
     pub available_pre_signatures: ::prost::alloc::vec::Vec<AvailablePreSignature>,
     #[prost(message, repeated, tag = "15")]
     pub pre_signatures_in_creation: ::prost::alloc::vec::Vec<PreSignatureInProgress>,
+    #[prost(bool, tag = "17")]
+    pub empty_signature_agreements_flag: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConsensusResponse {
@@ -947,13 +1004,6 @@ pub struct PreSignatureTranscriptRef {
     pub blinder_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
     #[prost(message, optional, tag = "3")]
     pub key_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CompletedSignature {
-    #[prost(message, optional, tag = "3")]
-    pub unreported: ::core::option::Option<ConsensusResponse>,
-    #[prost(bytes = "vec", tag = "4")]
-    pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgReshareRequest {
@@ -1364,7 +1414,7 @@ pub struct Block {
     #[prost(bytes = "vec", tag = "16")]
     pub query_stats_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "17")]
-    pub vetkd_payload_bytes: ::prost::alloc::vec::Vec<u8>,
+    pub chain_key_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "11")]
     pub payload_hash: ::prost::alloc::vec::Vec<u8>,
 }
@@ -1579,19 +1629,19 @@ pub struct CanisterQueryStats {
     pub egress_payload_size: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct VetKdAgreement {
+pub struct ChainKeyAgreement {
     #[prost(uint64, tag = "1")]
     pub callback_id: u64,
-    #[prost(oneof = "vet_kd_agreement::Agreement", tags = "2, 3")]
-    pub agreement: ::core::option::Option<vet_kd_agreement::Agreement>,
+    #[prost(oneof = "chain_key_agreement::Agreement", tags = "2, 3")]
+    pub agreement: ::core::option::Option<chain_key_agreement::Agreement>,
 }
-/// Nested message and enum types in `VetKdAgreement`.
-pub mod vet_kd_agreement {
+/// Nested message and enum types in `ChainKeyAgreement`.
+pub mod chain_key_agreement {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Agreement {
         #[prost(bytes, tag = "2")]
         Data(::prost::alloc::vec::Vec<u8>),
-        #[prost(enumeration = "super::VetKdErrorCode", tag = "3")]
+        #[prost(enumeration = "super::ChainKeyErrorCode", tag = "3")]
         Reject(i32),
     }
 }
@@ -1701,29 +1751,29 @@ pub struct StrippedConsensusMessageId {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
-pub enum VetKdErrorCode {
+pub enum ChainKeyErrorCode {
     Unspecified = 0,
     TimedOut = 1,
     InvalidKey = 2,
 }
-impl VetKdErrorCode {
+impl ChainKeyErrorCode {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Self::Unspecified => "VET_KD_ERROR_CODE_UNSPECIFIED",
-            Self::TimedOut => "VET_KD_ERROR_CODE_TIMED_OUT",
-            Self::InvalidKey => "VET_KD_ERROR_CODE_INVALID_KEY",
+            Self::Unspecified => "CHAIN_KEY_ERROR_CODE_UNSPECIFIED",
+            Self::TimedOut => "CHAIN_KEY_ERROR_CODE_TIMED_OUT",
+            Self::InvalidKey => "CHAIN_KEY_ERROR_CODE_INVALID_KEY",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
-            "VET_KD_ERROR_CODE_UNSPECIFIED" => Some(Self::Unspecified),
-            "VET_KD_ERROR_CODE_TIMED_OUT" => Some(Self::TimedOut),
-            "VET_KD_ERROR_CODE_INVALID_KEY" => Some(Self::InvalidKey),
+            "CHAIN_KEY_ERROR_CODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "CHAIN_KEY_ERROR_CODE_TIMED_OUT" => Some(Self::TimedOut),
+            "CHAIN_KEY_ERROR_CODE_INVALID_KEY" => Some(Self::InvalidKey),
             _ => None,
         }
     }

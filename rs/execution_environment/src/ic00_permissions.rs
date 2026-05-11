@@ -6,7 +6,7 @@ use ic_types::{CanisterId, SubnetId};
 
 /// Keeps track of when an IC00 method is allowed to be executed.
 #[derive(Eq, PartialEq)]
-pub(crate) struct Ic00MethodPermissions {
+pub struct Ic00MethodPermissions {
     method: Ic00Method,
 
     /// Call initiated by a remote subnet.
@@ -15,7 +15,9 @@ pub(crate) struct Ic00MethodPermissions {
     allow_only_nns_subnet_sender: bool,
     /// Due to the substantial complexity of this call, it must be counted toward the round limit.
     counts_toward_round_limit: bool,
-    /// As this call modifies the canister state, it must not be executed on an aborted canister.
+    /// As this call modifies the canister state (changes to the cycles balance are ignored here),
+    /// it must not be executed on an aborted canister.
+    /// The only exception is `update_settings` to enable changing an aborted canister's compute allocation.
     does_not_run_on_aborted_canister: bool,
     /// The call installs a new canister code.
     installs_code: bool,
@@ -30,8 +32,6 @@ impl Ic00MethodPermissions {
             | Ic00Method::DepositCycles
             | Ic00Method::ECDSAPublicKey
             | Ic00Method::SignWithECDSA
-            | Ic00Method::StartCanister
-            | Ic00Method::UninstallCode
             | Ic00Method::UpdateSettings
             | Ic00Method::SchnorrPublicKey
             | Ic00Method::SignWithSchnorr
@@ -49,18 +49,48 @@ impl Ic00MethodPermissions {
             | Ic00Method::ProvisionalCreateCanisterWithCycles
             | Ic00Method::ProvisionalTopUpCanister
             | Ic00Method::StoredChunks
-            | Ic00Method::ClearChunkStore
             | Ic00Method::ListCanisterSnapshots
-            | Ic00Method::DeleteCanisterSnapshot
-            | Ic00Method::ReadCanisterSnapshotMetadata
-            | Ic00Method::ReadCanisterSnapshotData
-            | Ic00Method::UploadCanisterSnapshotMetadata
-            | Ic00Method::UploadCanisterSnapshotData => Self {
+            | Ic00Method::CanisterMetrics => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
                 counts_toward_round_limit: false,
                 does_not_run_on_aborted_canister: false,
+                installs_code: false,
+            },
+            Ic00Method::FetchCanisterLogs
+            | Ic00Method::ReadCanisterSnapshotMetadata
+            | Ic00Method::ReadCanisterSnapshotData => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+                counts_toward_round_limit: true,
+                does_not_run_on_aborted_canister: false,
+                installs_code: false,
+            },
+            Ic00Method::UploadChunk
+            | Ic00Method::TakeCanisterSnapshot
+            | Ic00Method::LoadCanisterSnapshot
+            | Ic00Method::UploadCanisterSnapshotMetadata
+            | Ic00Method::UploadCanisterSnapshotData => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+                counts_toward_round_limit: true,
+                does_not_run_on_aborted_canister: true,
+                installs_code: false,
+            },
+            Ic00Method::StartCanister
+            | Ic00Method::StopCanister
+            | Ic00Method::UninstallCode
+            | Ic00Method::ClearChunkStore
+            | Ic00Method::DeleteCanisterSnapshot
+            | Ic00Method::DeleteCanister => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+                counts_toward_round_limit: false,
+                does_not_run_on_aborted_canister: true,
                 installs_code: false,
             },
             Ic00Method::CreateCanister
@@ -74,16 +104,6 @@ impl Ic00MethodPermissions {
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
             },
-            Ic00Method::DeleteCanister | Ic00Method::StopCanister => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-                counts_toward_round_limit: false,
-                // Deleting an aborted canister requires to stop it first.
-                // Stopping an aborted canister does not generate a reply.
-                does_not_run_on_aborted_canister: true,
-                installs_code: false,
-            },
             Ic00Method::InstallCode | Ic00Method::InstallChunkedCode => Self {
                 method,
                 allow_remote_subnet_sender: true,
@@ -93,9 +113,7 @@ impl Ic00MethodPermissions {
                 // Only one install code message allowed at a time.
                 installs_code: true,
             },
-            Ic00Method::SetupInitialDKG
-            | Ic00Method::ReshareChainKey
-            | Ic00Method::RenameCanister => Self {
+            Ic00Method::SetupInitialDKG | Ic00Method::ReshareChainKey => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: true,
@@ -103,31 +121,12 @@ impl Ic00MethodPermissions {
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
             },
-            Ic00Method::FetchCanisterLogs => Self {
-                method,
-                // `FetchCanisterLogs` disallows inter-canister calls by default.
-                // A feature flag can enable them, so permissions are preset here,
-                // while the actual handling is done elsewhere.
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-                counts_toward_round_limit: true,
-                does_not_run_on_aborted_canister: true,
-                installs_code: false,
-            },
-            Ic00Method::UploadChunk | Ic00Method::TakeCanisterSnapshot => Self {
+            // Renaming a canister can only be called by NNS.
+            Ic00Method::RenameCanister => Self {
                 method,
                 allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-                counts_toward_round_limit: true,
-                does_not_run_on_aborted_canister: false,
-                installs_code: false,
-            },
-            Ic00Method::LoadCanisterSnapshot => Self {
-                method,
-                allow_remote_subnet_sender: true,
-                allow_only_nns_subnet_sender: false,
-                // Loading a snapshot is similar to the install code.
-                counts_toward_round_limit: true,
+                allow_only_nns_subnet_sender: true,
+                counts_toward_round_limit: false,
                 does_not_run_on_aborted_canister: true,
                 installs_code: false,
             },
@@ -204,5 +203,9 @@ impl Ic00MethodPermissions {
         !(self.counts_toward_round_limit && instructions_reached
             || self.does_not_run_on_aborted_canister && effective_canister_is_aborted
             || self.installs_code && ongoing_long_install_code)
+    }
+
+    pub fn counts_toward_round_limit(&self) -> bool {
+        self.counts_toward_round_limit
     }
 }

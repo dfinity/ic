@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://github.com/dfinity/icp-cli/raw/refs/tags/v0.1.0/docs/schemas/icp-yaml-schema.json
+
+canisters:
+  - name: blob_store
+    build:
+      steps:
+        - type: script
+          commands:
+            - bazel build //rs/cross-chain/blob_store:canister
+            - cp ../../../bazel-bin/rs/cross-chain/blob_store/canister.wasm.gz "$ICP_WASM_OUTPUT_PATH"

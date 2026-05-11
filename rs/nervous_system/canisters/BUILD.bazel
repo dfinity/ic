@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/common",
@@ -17,6 +17,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:mockall",
     "@crate_index//:prost",
+    "@crate_index//:rust_decimal",
 ]
 
 MACRO_DEPENDENCIES = [

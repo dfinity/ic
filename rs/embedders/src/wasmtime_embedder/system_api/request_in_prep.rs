@@ -4,11 +4,12 @@ use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::ReplicaLogger;
 use ic_types::Time;
 use ic_types::{
-    CanisterId, Cycles, NumBytes, PrincipalId,
+    CanisterId, NumBytes, PrincipalId,
     messages::{CallContextId, NO_DEADLINE, Request},
     methods::{Callback, WasmClosure},
     time::CoarseTime,
 };
+use ic_types_cycles::{CompoundCycles, Cycles, Instructions, RequestAndResponseTransmission};
 use ic_wasm_types::doc_ref;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, time::Duration};
@@ -203,8 +204,8 @@ impl RequestInPrep {
 
 pub(crate) struct RequestWithPrepayment {
     pub request: Request,
-    pub prepayment_for_response_execution: Cycles,
-    pub prepayment_for_response_transmission: Cycles,
+    pub prepayment_for_response_execution: CompoundCycles<Instructions>,
+    pub prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
 }
 
 /// Turns a `RequestInPrep` into a `Request`.
@@ -248,6 +249,8 @@ pub(crate) fn into_request(
         sandbox_safe_system_state.prepayment_for_response_execution();
     let prepayment_for_response_transmission =
         sandbox_safe_system_state.prepayment_for_response_transmission();
+    let prepayment_for_call_transmission =
+        sandbox_safe_system_state.xnet_total_transmission_fee(NumBytes::from(payload_size));
 
     let deadline = if let Some(timeout_seconds) = timeout_seconds {
         match time.checked_add(Duration::from_secs(timeout_seconds.into())) {
@@ -273,6 +276,7 @@ pub(crate) fn into_request(
         cycles,
         prepayment_for_response_execution,
         prepayment_for_response_transmission,
+        prepayment_for_call_transmission,
         on_reply,
         on_reject,
         on_cleanup,
@@ -300,7 +304,7 @@ pub(crate) fn into_request(
     Ok(RequestWithPrepayment {
         request: req,
         prepayment_for_response_execution,
-        prepayment_for_response_transmission,
+        prepayment_for_call_transmission,
     })
 }
 

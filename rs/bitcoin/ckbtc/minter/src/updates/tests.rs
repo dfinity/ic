@@ -4,10 +4,13 @@ mod update_balance {
     use crate::metrics::{Histogram, NumUtxoPages};
     use crate::metrics::{LatencyHistogram, MetricsResult};
     use crate::state::eventlog::{CkBtcEventLogger, CkBtcMinterEvent};
-    use crate::state::{SuspendedReason, audit, eventlog::EventType, mutate_state, read_state};
+    use crate::state::{
+        RetrieveBtcRequest, SubmittedBtcTransaction, SubmittedWithdrawalRequests, SuspendedReason,
+        audit, eventlog::EventType, mutate_state, read_state,
+    };
     use crate::test_fixtures::{
-        BTC_CHECKER_CANISTER_ID, DAY, MINTER_CANISTER_ID, NOW, ecdsa_public_key, get_uxos_response,
-        ignored_utxo, init_args, init_state, ledger_account,
+        BTC_CHECKER_CANISTER_ID, DAY, MINTER_CANISTER_ID, NOW, bitcoin_address, ecdsa_public_key,
+        get_uxos_response, ignored_utxo, init_args, init_state, ledger_account,
         mock::{MockCanisterRuntime, mock_increasing_time},
         quarantined_utxo, utxo,
     };
@@ -16,10 +19,12 @@ mod update_balance {
     use crate::updates::update_balance::{
         SuspendedUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
     };
-    use crate::{CanisterRuntime, GetUtxosResponse, Timestamp};
+    use crate::{CanisterRuntime, GetUtxosResponse, Timestamp, state};
+    use assert_matches::assert_matches;
     use ic_btc_checker::{CheckTransactionResponse, CheckTransactionStatus};
     use ic_btc_interface::Utxo;
     use icrc_ledger_types::icrc1::account::Account;
+    use maplit::btreeset;
     use std::iter;
     use std::time::Duration;
 
@@ -128,6 +133,150 @@ mod update_balance {
             suspended_utxo(&ignored_utxo),
             Some(SuspendedReason::Quarantined)
         );
+    }
+
+    #[tokio::test]
+    async fn should_not_mint_cached_utxo() {
+        init_state_with_ecdsa_public_key();
+        let account = ledger_account();
+        let mut runtime = MockCanisterRuntime::new();
+        use_ckbtc_event_logger(&mut runtime);
+        mock_increasing_time(&mut runtime, NOW, Duration::from_secs(1));
+        let utxo = utxo();
+        let minted_amount = utxo.value - read_state(|s| s.check_fee);
+
+        // Step 1: First update_balance call succeeds and mints.
+        mock_derive_user_address(&mut runtime, account);
+        mock_get_utxos_for_account(&mut runtime, account, vec![utxo.clone()]);
+        expect_check_transaction_returning(
+            &mut runtime,
+            utxo.clone(),
+            CheckTransactionResponse::Passed,
+        );
+        runtime
+            .expect_mint_ckbtc()
+            .times(1)
+            .withf(move |amount_, account_, _memo| {
+                amount_ == &minted_amount && account_ == &account
+            })
+            .return_const(Ok(1));
+        mock_schedule_now_process_logic(&mut runtime);
+
+        let result = update_balance(
+            UpdateBalanceArgs {
+                owner: Some(account.owner),
+                subaccount: account.subaccount,
+            },
+            &runtime,
+        )
+        .await;
+
+        assert_eq!(
+            result,
+            Ok(vec![UtxoStatus::Minted {
+                block_index: 1,
+                minted_amount,
+                utxo: utxo.clone(),
+            }])
+        );
+
+        // Step 2: sends a transaction that uses this UTXO
+        let pending_withdrawal = RetrieveBtcRequest {
+            amount: 1,
+            address: bitcoin_address(),
+            block_index: 0,
+            received_at: 0,
+            kyt_provider: None,
+            reimbursement_account: Some(account),
+        };
+        mutate_state(|s| {
+            audit::accept_retrieve_btc_request(s, pending_withdrawal.clone(), &runtime)
+        });
+        let batch = mutate_state(|s| s.build_batch(1));
+        assert_eq!(batch.len(), 1);
+        let submitted_btc_tx = SubmittedBtcTransaction {
+            requests: SubmittedWithdrawalRequests::from(vec![pending_withdrawal]),
+            txid: "c61fde25eeffe494f93876d7cfd17ad6b2a84a3e5f68c3b40fd8f7e6e586665f"
+                .parse()
+                .unwrap(),
+            used_utxos: vec![utxo.clone()],
+            submitted_at: 0,
+            change_output: None,
+            effective_fee_per_vbyte: None,
+            withdrawal_fee: None,
+            signed_tx: None,
+        };
+        mutate_state(|s| {
+            for block_index in submitted_btc_tx.requests.iter_block_index() {
+                s.push_in_flight_request(block_index, state::InFlightStatus::Signing);
+            }
+        });
+        mutate_state(|s| {
+            audit::sent_transaction(s, submitted_btc_tx.clone(), &runtime);
+        });
+
+        // Step 3: Just before the transaction is confirmed, call update_balance again to fill the cache.
+        runtime.checkpoint();
+        use_ckbtc_event_logger(&mut runtime);
+        mock_increasing_time(
+            &mut runtime,
+            NOW.checked_add(Duration::from_hours(1)).unwrap(),
+            Duration::from_secs(1),
+        );
+        mock_derive_user_address(&mut runtime, account);
+        //not yet 4 confirmations, utxo still returned by bitcoin canister
+        mock_get_utxos_for_account(&mut runtime, account, vec![utxo.clone()]);
+        // UTXO still known by minter, no double mint
+        read_state(|s| {
+            assert_eq!(
+                s.utxos_state_addresses.get(&account),
+                Some(&btreeset! {utxo.clone()})
+            )
+        });
+        let result = update_balance(
+            UpdateBalanceArgs {
+                owner: Some(account.owner),
+                subaccount: account.subaccount,
+            },
+            &runtime,
+        )
+        .await;
+        assert_matches!(result, Err(UpdateBalanceError::NoNewUtxos{pending_utxos, ..}) if pending_utxos == Some(vec![]));
+        let time = runtime.time();
+
+        // Step 4: Transaction is confirmed and UTXO is forgotten.
+        runtime.checkpoint();
+        use_ckbtc_event_logger(&mut runtime);
+        mock_increasing_time(&mut runtime, time.into(), Duration::from_secs(1));
+        mutate_state(|s| audit::confirm_transaction(s, &submitted_btc_tx.txid, &runtime));
+        read_state(|s| assert_eq!(s.utxos_state_addresses.get(&account), None));
+        let time = runtime.time();
+
+        // Step 5: Soon after, call update_balance again to use the cached value,
+        // which contains the already-used UTXO that the minter just forgot about.
+        runtime.checkpoint();
+        use_ckbtc_event_logger(&mut runtime);
+        mock_increasing_time(&mut runtime, time.into(), Duration::from_secs(1));
+        mock_derive_user_address(&mut runtime, account);
+        runtime.expect_caller().return_const(account.owner);
+        runtime.expect_id().return_const(MINTER_CANISTER_ID);
+
+        let result = update_balance(
+            UpdateBalanceArgs {
+                owner: Some(account.owner),
+                subaccount: account.subaccount,
+            },
+            &runtime,
+        )
+        .await;
+        assert_matches!(result, Err(UpdateBalanceError::NoNewUtxos{pending_utxos, ..}) if pending_utxos == Some(vec![]));
+        read_state(|s| {
+            assert!(
+                s.duplicated_outpoints.contains(&utxo.outpoint),
+                "Expected duplicated_outpoints to contain {:?}",
+                utxo.outpoint
+            );
+        });
     }
 
     #[tokio::test]
@@ -483,7 +632,12 @@ mod update_balance {
 
     #[tokio::test]
     async fn should_observe_get_utxos_latency_metrics() {
-        init_state_with_ecdsa_public_key();
+        init_state(crate::lifecycle::init::InitArgs {
+            // disable cache for this test
+            get_utxos_cache_expiration_seconds: None,
+            ..init_args()
+        });
+        mutate_state(|s| s.ecdsa_public_key = Some(ecdsa_public_key()));
 
         fn mock_get_utxos_for_account_with_num_pages(
             runtime: &mut MockCanisterRuntime,
@@ -689,7 +843,7 @@ mod update_balance {
         ) -> Result<Vec<u8>, CallError> {
             let key_name = "test_key".to_string();
             let derivation_path = vec![];
-            let message_hash = [0u8; 32];
+            let message_hash = [0_u8; 32];
 
             let mut runtime = MockCanisterRuntime::new();
 
@@ -1008,5 +1162,317 @@ mod update_balance {
     fn events() -> impl Iterator<Item = CkBtcMinterEvent> {
         use crate::state::eventlog::{CkBtcEventLogger, EventLogger};
         CkBtcEventLogger.events_iter()
+    }
+}
+
+mod icrc21 {
+    use crate::Network;
+    use crate::updates::icrc21::{DECIMALS, TokenSymbols, build_consent_info, format_amount};
+    use crate::updates::retrieve_btc::RetrieveBtcWithApprovalArgs;
+    use candid::Encode;
+    use icrc_ledger_types::icrc21::errors::Icrc21Error;
+    use icrc_ledger_types::icrc21::lib::MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES;
+    use icrc_ledger_types::icrc21::requests::{
+        ConsentMessageMetadata, ConsentMessageRequest, ConsentMessageSpec, DisplayMessageType,
+    };
+    use icrc_ledger_types::icrc21::responses::{ConsentMessage, Value};
+
+    fn make_request(
+        method: &str,
+        arg: Vec<u8>,
+        device_spec: Option<DisplayMessageType>,
+    ) -> ConsentMessageRequest {
+        ConsentMessageRequest {
+            method: method.to_string(),
+            arg,
+            user_preferences: ConsentMessageSpec {
+                metadata: ConsentMessageMetadata {
+                    language: "en".to_string(),
+                    utc_offset_minutes: None,
+                },
+                device_spec,
+            },
+        }
+    }
+
+    #[test]
+    fn test_format_amount() {
+        assert_eq!(format_amount(0, 8), "0");
+        assert_eq!(format_amount(1, 8), "0.00000001");
+        assert_eq!(format_amount(100_000_000, 8), "1");
+        assert_eq!(format_amount(150_000_000, 8), "1.5");
+        assert_eq!(format_amount(123_456_789, 8), "1.23456789");
+    }
+
+    #[test]
+    fn test_unsupported_method() {
+        // Includes `retrieve_btc` because the minter intentionally only
+        // supports ICRC-21 for the approval-based flow — wallets calling
+        // `retrieve_btc` should not get a consent message rendered for them.
+        for method in ["update_balance", "retrieve_btc", "get_btc_address", ""] {
+            let req = make_request(method, vec![], None);
+            let err = build_consent_info(req, Network::Mainnet).unwrap_err();
+            assert!(
+                matches!(err, Icrc21Error::UnsupportedCanisterCall(_)),
+                "method {method:?} should be unsupported, got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_argument_too_large() {
+        let req = make_request(
+            "retrieve_btc_with_approval",
+            vec![0; MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES as usize + 1],
+            None,
+        );
+        let err = build_consent_info(req, Network::Mainnet).unwrap_err();
+        match err {
+            Icrc21Error::UnsupportedCanisterCall(info) => {
+                assert!(info.description.contains("argument size is too large"));
+            }
+            _ => panic!("expected UnsupportedCanisterCall, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn test_retrieve_btc_with_approval_generic_display() {
+        let args = RetrieveBtcWithApprovalArgs {
+            amount: 150_000,
+            address: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq".to_string(),
+            from_subaccount: None,
+        };
+        let req = make_request(
+            "retrieve_btc_with_approval",
+            Encode!(&args).unwrap(),
+            Some(DisplayMessageType::GenericDisplay),
+        );
+        let info = build_consent_info(req, Network::Mainnet).unwrap();
+        assert_eq!(info.metadata.language, "en");
+        let message = match info.consent_message {
+            ConsentMessage::GenericDisplayMessage(m) => m,
+            other => panic!("expected GenericDisplayMessage, got {other:?}"),
+        };
+        assert!(message.starts_with("# Convert ckBTC to BTC"));
+        assert!(message.contains("0.0015 ckBTC"));
+        assert!(message.contains("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"));
+        // No subaccount section if from_subaccount is None.
+        assert!(!message.contains("source subaccount"));
+    }
+
+    #[test]
+    fn test_retrieve_btc_with_approval_generic_display_with_subaccount() {
+        let mut subaccount = [0_u8; 32];
+        subaccount[31] = 0x42;
+        let args = RetrieveBtcWithApprovalArgs {
+            amount: 100_000_000,
+            address: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq".to_string(),
+            from_subaccount: Some(subaccount),
+        };
+        let req = make_request("retrieve_btc_with_approval", Encode!(&args).unwrap(), None);
+        let info = build_consent_info(req, Network::Mainnet).unwrap();
+        let message = match info.consent_message {
+            ConsentMessage::GenericDisplayMessage(m) => m,
+            other => panic!("expected GenericDisplayMessage, got {other:?}"),
+        };
+        assert!(message.contains("1 ckBTC"));
+        assert!(message.contains(&hex::encode(subaccount)));
+    }
+
+    #[test]
+    fn test_retrieve_btc_with_approval_fields_display() {
+        // Long values (Bitcoin address, subaccount hex) are emitted as a
+        // single Value::Text — wallets paginate them across screens. The
+        // number of fields is therefore independent of the value length.
+        let mut subaccount = [0_u8; 32];
+        subaccount[0] = 0xab;
+        subaccount[31] = 0xcd;
+        let address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq".to_string();
+        let args = RetrieveBtcWithApprovalArgs {
+            amount: 250_000,
+            address: address.clone(),
+            from_subaccount: Some(subaccount),
+        };
+        let req = make_request(
+            "retrieve_btc_with_approval",
+            Encode!(&args).unwrap(),
+            Some(DisplayMessageType::FieldsDisplay),
+        );
+        let info = build_consent_info(req, Network::Mainnet).unwrap();
+        let fields_display = match info.consent_message {
+            ConsentMessage::FieldsDisplayMessage(f) => f,
+            other => panic!("expected FieldsDisplayMessage, got {other:?}"),
+        };
+        assert_eq!(fields_display.intent, "ckBTC to BTC");
+        assert_eq!(
+            fields_display.fields,
+            vec![
+                (
+                    "Amount".to_string(),
+                    Value::TokenAmount {
+                        decimals: DECIMALS,
+                        amount: 250_000,
+                        symbol: "ckBTC".to_string(),
+                    }
+                ),
+                ("BTC address".to_string(), Value::Text { content: address }),
+                (
+                    "From subaccount".to_string(),
+                    Value::Text {
+                        content: hex::encode(subaccount)
+                    }
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_retrieve_btc_with_approval_fields_display_no_subaccount() {
+        let args = RetrieveBtcWithApprovalArgs {
+            amount: 250_000,
+            address: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq".to_string(),
+            from_subaccount: None,
+        };
+        let req = make_request(
+            "retrieve_btc_with_approval",
+            Encode!(&args).unwrap(),
+            Some(DisplayMessageType::FieldsDisplay),
+        );
+        let info = build_consent_info(req, Network::Mainnet).unwrap();
+        let fields_display = match info.consent_message {
+            ConsentMessage::FieldsDisplayMessage(f) => f,
+            other => panic!("expected FieldsDisplayMessage, got {other:?}"),
+        };
+        assert_eq!(fields_display.fields.len(), 2);
+        // No subaccount field when from_subaccount is None.
+        assert!(
+            !fields_display
+                .fields
+                .iter()
+                .any(|(label, _)| label == "From subaccount")
+        );
+    }
+
+    #[test]
+    fn test_token_symbols_for_network() {
+        assert_eq!(
+            TokenSymbols::for_network(Network::Mainnet),
+            TokenSymbols {
+                ckbtc: "ckBTC",
+                btc: "BTC"
+            }
+        );
+        assert_eq!(
+            TokenSymbols::for_network(Network::Testnet),
+            TokenSymbols {
+                ckbtc: "ckTESTBTC",
+                btc: "TESTBTC"
+            }
+        );
+        assert_eq!(
+            TokenSymbols::for_network(Network::Regtest),
+            TokenSymbols {
+                ckbtc: "ckTESTBTC",
+                btc: "TESTBTC"
+            }
+        );
+    }
+
+    #[test]
+    fn test_retrieve_btc_with_approval_uses_testnet_symbols() {
+        let args = RetrieveBtcWithApprovalArgs {
+            amount: 250_000,
+            address: "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx".to_string(),
+            from_subaccount: None,
+        };
+        let req = make_request(
+            "retrieve_btc_with_approval",
+            Encode!(&args).unwrap(),
+            Some(DisplayMessageType::FieldsDisplay),
+        );
+        let info = build_consent_info(req, Network::Testnet).unwrap();
+        let fields_display = match info.consent_message {
+            ConsentMessage::FieldsDisplayMessage(f) => f,
+            other => panic!("expected FieldsDisplayMessage, got {other:?}"),
+        };
+        assert_eq!(fields_display.intent, "ckTESTBTC to TESTBTC");
+        match &fields_display.fields[0].1 {
+            Value::TokenAmount { symbol, .. } => assert_eq!(symbol, "ckTESTBTC"),
+            other => panic!("expected TokenAmount, got {other:?}"),
+        }
+        // FieldsDisplay address label uses the testnet native symbol too.
+        assert_eq!(fields_display.fields[1].0, "TESTBTC address");
+    }
+
+    #[test]
+    fn test_retrieve_btc_with_approval_generic_uses_testnet_symbols() {
+        let args = RetrieveBtcWithApprovalArgs {
+            amount: 100_000_000,
+            address: "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx".to_string(),
+            from_subaccount: None,
+        };
+        let req = make_request(
+            "retrieve_btc_with_approval",
+            Encode!(&args).unwrap(),
+            Some(DisplayMessageType::GenericDisplay),
+        );
+        let info = build_consent_info(req, Network::Testnet).unwrap();
+        let message = match info.consent_message {
+            ConsentMessage::GenericDisplayMessage(m) => m,
+            other => panic!("expected GenericDisplayMessage, got {other:?}"),
+        };
+        assert!(message.starts_with("# Convert ckTESTBTC to TESTBTC"));
+        assert!(message.contains("1 ckTESTBTC"));
+        assert!(message.contains("ckTESTBTC minter"));
+        assert!(message.contains("equivalent amount in TESTBTC"));
+    }
+
+    #[test]
+    fn test_invalid_args() {
+        let req = make_request("retrieve_btc_with_approval", vec![1, 2, 3], None);
+        let err = build_consent_info(req, Network::Mainnet).unwrap_err();
+        match err {
+            Icrc21Error::UnsupportedCanisterCall(info) => {
+                assert!(info.description.contains("Failed to decode"));
+            }
+            _ => panic!("expected UnsupportedCanisterCall, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn test_malformed_address_is_rejected() {
+        // The minter must not interpolate an unparseable address into the
+        // Markdown consent message — that would be a Markdown-injection vector
+        // (e.g. an "address" containing newlines, backticks, or '#' that fakes
+        // additional fields).
+        for bad_address in [
+            "not-a-real-address",
+            "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq\n# You will receive 100 BTC",
+            "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa`\n\n**Amount:** 100 BTC\n`",
+            "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx", // valid testnet but on Mainnet
+        ] {
+            let args = RetrieveBtcWithApprovalArgs {
+                amount: 50_000,
+                address: bad_address.to_string(),
+                from_subaccount: None,
+            };
+            let req = make_request(
+                "retrieve_btc_with_approval",
+                Encode!(&args).unwrap(),
+                Some(DisplayMessageType::GenericDisplay),
+            );
+            let err = build_consent_info(req, Network::Mainnet).unwrap_err();
+            match err {
+                Icrc21Error::UnsupportedCanisterCall(info) => {
+                    assert!(
+                        info.description
+                            .contains("Invalid Bitcoin destination address"),
+                        "unexpected error description: {}",
+                        info.description
+                    );
+                }
+                other => panic!("expected UnsupportedCanisterCall, got {other:?}"),
+            }
+        }
     }
 }

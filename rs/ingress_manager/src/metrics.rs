@@ -9,6 +9,7 @@ pub(crate) struct IngressManagerMetrics {
     pub(crate) ingress_selector_get_payload_time: Histogram,
     pub(crate) ingress_selector_validate_payload_time: Histogram,
     pub(crate) ingress_payload_cache_size: IntGauge,
+    limit_reached: IntCounterVec,
 
     validated_ingress_message_size: Histogram,
     validated_ingress_message_field_size: HistogramVec,
@@ -62,6 +63,12 @@ impl IngressManagerMetrics {
                 "The number of invalidated ingress messages, partitioned by the reason",
                 &["reason"],
             ),
+            limit_reached: metrics_registry.int_counter_vec(
+                "ingress_selector_limit_reached_total",
+                "The total number of times we reached a limit while creating an ingress payload, \
+                labeled by a type of the limit",
+                &["limit_type"],
+            ),
         }
     }
 
@@ -103,5 +110,9 @@ impl IngressManagerMetrics {
         self.validated_ingress_message_field_size
             .with_label_values(&["remainder"])
             .observe(everything_else_size as f64);
+    }
+
+    pub(crate) fn observe_limit_reached(&self, limit_type: &str) {
+        self.limit_reached.with_label_values(&[limit_type]).inc();
     }
 }

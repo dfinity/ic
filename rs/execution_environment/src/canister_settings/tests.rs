@@ -1,5 +1,6 @@
-use crate::canister_settings::EnvironmentVariables;
+use crate::canister_settings::{CanisterSettings, EnvironmentVariables, UpdateSettingsError};
 use ic_crypto_sha2::Sha256;
+use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
 use std::collections::BTreeMap;
 
 #[test]
@@ -85,4 +86,91 @@ fn test_environment_variables_hash_output() {
     // Verify that the actual hash matches the expected hash.
     let actual = EnvironmentVariables::new(env_vars).hash();
     assert_eq!(actual, expected);
+}
+
+mod log_memory_limit {
+    use super::*;
+    use std::convert::TryFrom;
+
+    #[test]
+    fn log_memory_limit_alone_is_valid() {
+        let args = CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(4096)
+            .build();
+        assert!(CanisterSettings::try_from(args).is_ok());
+    }
+
+    #[test]
+    fn log_memory_limit_with_compute_allocation_is_valid() {
+        let args = CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(4096)
+            .with_compute_allocation(50)
+            .build();
+        assert!(CanisterSettings::try_from(args).is_ok());
+    }
+
+    #[test]
+    fn log_memory_limit_with_memory_allocation_is_forbidden() {
+        let args = CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(4096)
+            .with_memory_allocation(1 << 30)
+            .build();
+        assert!(matches!(
+            CanisterSettings::try_from(args),
+            Err(UpdateSettingsError::ForbiddenSettings { .. })
+        ));
+    }
+}
+
+mod visibility_settings {
+    use crate::canister_settings::VisibilitySettings;
+    use ic_management_canister_types_private::BoundedAllowedViewers;
+    use ic_types::PrincipalId;
+    use proptest::prelude::*;
+    use std::collections::BTreeSet;
+
+    proptest! {
+        #[test]
+        fn public_always_grants_access(
+            caller in arb_principal_id(),
+            controllers in arb_controllers(),
+        ) {
+            prop_assert!(VisibilitySettings::Public.has_access(&caller, &controllers));
+        }
+
+        #[test]
+        fn controllers_grants_access_only_to_controllers(
+            caller in arb_principal_id(),
+            controllers in arb_controllers(),
+        ) {
+            prop_assert_eq!(
+                VisibilitySettings::Controllers.has_access(&caller, &controllers),
+                controllers.contains(&caller),
+            );
+        }
+
+        #[test]
+        fn allowed_viewers_grants_access_to_viewers_and_controllers(
+            caller in arb_principal_id(),
+            controllers in arb_controllers(),
+            viewers in proptest::collection::vec(arb_principal_id(), 0..=10),
+        ) {
+            let allowed = BoundedAllowedViewers::new(viewers.clone());
+            let settings = VisibilitySettings::AllowedViewers(&allowed);
+            prop_assert_eq!(
+                settings.has_access(&caller, &controllers),
+                viewers.contains(&caller) || controllers.contains(&caller),
+            );
+        }
+    }
+
+    fn arb_principal_id() -> BoxedStrategy<PrincipalId> {
+        (0..u64::MAX)
+            .prop_map(PrincipalId::new_user_test_id)
+            .boxed()
+    }
+
+    fn arb_controllers() -> BoxedStrategy<BTreeSet<PrincipalId>> {
+        proptest::collection::btree_set(arb_principal_id(), 0..=10).boxed()
+    }
 }

@@ -42,7 +42,7 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
-    CanisterId, CountBytes, Cycles, RegistryVersion, ReplicaVersion, Time,
+    CanisterId, CountBytes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
     crypto::{CryptoHashOf, Signed},
     messages::{CallbackId, RejectContext, Request},
@@ -55,14 +55,16 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{
     ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS, CanisterHttpRequestArgs,
-    DEFAULT_HTTP_OUTCALLS_PRICING_VERSION, DataSize, HttpHeader, HttpMethod,
-    PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, TransformContext,
+    DEFAULT_HTTP_OUTCALLS_PRICING_VERSION, DataSize, FlexibleCanisterHttpRequestArgs, HttpHeader,
+    HttpMethod, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, TransformContext,
 };
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
     state::system_metadata::v1 as pb_metadata,
 };
-use rand::{Rng, RngCore};
+use ic_types_cycles::Cycles;
+use rand::RngCore;
+use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeSet,
@@ -175,6 +177,18 @@ pub enum Replication {
         min_responses: u32,
         max_responses: u32,
     },
+}
+
+impl Replication {
+    /// Returns true if the given node is authorized to sign a share, assuming
+    /// it is part of the canister HTTP committee.
+    pub fn is_authorized_signer(&self, signer: &NodeId) -> bool {
+        match self {
+            Replication::FullyReplicated => true,
+            Replication::NonReplicated(node_id) => node_id == signer,
+            Replication::Flexible { committee, .. } => committee.contains(signer),
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, FromRepr)]
@@ -447,6 +461,32 @@ pub fn validate_http_headers_and_body(
     Ok(())
 }
 
+fn validate_transform_principal(
+    transform: &Option<TransformContext>,
+    sender: PrincipalId,
+) -> Result<(), CanisterHttpRequestContextError> {
+    if let Some(tc) = transform {
+        let actual = PrincipalId::from(tc.function.0.principal);
+        if sender != actual {
+            return Err(CanisterHttpRequestContextError::TransformPrincipalId(
+                InvalidTransformPrincipalId {
+                    expected_principal_id: sender,
+                    actual_principal_id: actual,
+                },
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_url_length(url: &str) -> Result<(), CanisterHttpRequestContextError> {
+    let url_len = url.len();
+    if url_len > MAX_CANISTER_HTTP_URL_SIZE {
+        return Err(CanisterHttpRequestContextError::UrlTooLong(url_len));
+    }
+    Ok(())
+}
+
 impl CanisterHttpRequestContext {
     /// Calculate the size of all unbounded struct elements.
     pub fn variable_parts_size(&self) -> NumBytes {
@@ -468,19 +508,14 @@ impl CanisterHttpRequestContext {
         request: &Request,
         args: CanisterHttpRequestArgs,
         node_ids: &BTreeSet<NodeId>,
-        subnet_size: usize,
         rng: &mut dyn RngCore,
     ) -> Result<Self, CanisterHttpRequestContextError> {
-        if let Some(transform_principal_id) = args.transform_principal()
-            && request.sender.get() != transform_principal_id
-        {
-            return Err(CanisterHttpRequestContextError::TransformPrincipalId(
-                InvalidTransformPrincipalId {
-                    expected_principal_id: request.sender.get(),
-                    actual_principal_id: transform_principal_id,
-                },
-            ));
-        };
+        validate_transform_principal(&args.transform, request.sender.get())?;
+        validate_url_length(&args.url)?;
+        validate_http_headers_and_body(args.headers.get(), args.body.as_ref().unwrap_or(&vec![]))?;
+        if node_ids.is_empty() {
+            return Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation);
+        }
 
         let max_response_bytes = match args.max_response_bytes {
             Some(max_response_bytes) => {
@@ -499,17 +534,6 @@ impl CanisterHttpRequestContext {
             None => Ok(None),
         }?;
 
-        let url_len = args.url.len();
-        if url_len > MAX_CANISTER_HTTP_URL_SIZE {
-            return Err(CanisterHttpRequestContextError::UrlTooLong(url_len));
-        }
-
-        let request_body = args.body;
-        validate_http_headers_and_body(
-            args.headers.get(),
-            request_body.as_ref().unwrap_or(&vec![]),
-        )?;
-
         // Allow PUT and DELETE only in non-replicated mode to avoid confusing
         // race conditions that may occur.
         // For example, if first a DELETE outcall for resource R is made,
@@ -522,23 +546,18 @@ impl CanisterHttpRequestContext {
         if matches!(args.method, HttpMethod::PUT | HttpMethod::DELETE)
             && args.is_replicated != Some(false)
         {
-            return Err(CanisterHttpRequestContextError::NonReplicatedModeRequired);
+            return Err(CanisterHttpRequestContextError::DeterministicResponseCountRequired);
         }
 
         let replication = match args.is_replicated {
             Some(false) => {
-                if node_ids.is_empty() {
-                    return Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation);
-                }
-
-                let random_index = rng.gen_range(0..node_ids.len());
-
                 let delegated_node_id = node_ids
                     .iter()
-                    .nth(random_index)
-                    .ok_or(CanisterHttpRequestContextError::NoNodesAvailableForDelegation)?; // never panic.
+                    .copied()
+                    .choose(rng)
+                    .ok_or(CanisterHttpRequestContextError::NoNodesAvailableForDelegation)?;
 
-                Replication::NonReplicated(*delegated_node_id)
+                Replication::NonReplicated(delegated_node_id)
             }
             _ => Replication::FullyReplicated,
         };
@@ -547,24 +566,9 @@ impl CanisterHttpRequestContext {
             request: request.clone(),
             url: args.url,
             max_response_bytes,
-            headers: args
-                .headers
-                .get()
-                .clone()
-                .into_iter()
-                .map(|h| CanisterHttpHeader {
-                    name: h.name,
-                    value: h.value,
-                })
-                .collect(),
-            body: request_body,
-            http_method: match args.method {
-                HttpMethod::GET => CanisterHttpMethod::GET,
-                HttpMethod::POST => CanisterHttpMethod::POST,
-                HttpMethod::HEAD => CanisterHttpMethod::HEAD,
-                HttpMethod::PUT => CanisterHttpMethod::PUT,
-                HttpMethod::DELETE => CanisterHttpMethod::DELETE,
-            },
+            headers: args.headers.get().iter().cloned().map(From::from).collect(),
+            body: args.body,
+            http_method: args.method.into(),
             transform: args.transform.map(From::from),
             time,
             replication,
@@ -578,7 +582,112 @@ impl CanisterHttpRequestContext {
             refund_status: RefundStatus {
                 //TODO(IC-1937): subtract the base fee from the refundable amount.
                 refundable_cycles: request.payment,
-                per_replica_allowance: request.payment / subnet_size.max(1),
+                per_replica_allowance: request.payment / node_ids.len(),
+                refunded_cycles: Cycles::new(0),
+                refunding_nodes: BTreeSet::new(),
+            },
+        })
+    }
+
+    pub fn generate_from_flexible_args(
+        time: Time,
+        request: &Request,
+        args: FlexibleCanisterHttpRequestArgs,
+        node_ids: &BTreeSet<NodeId>,
+        rng: &mut dyn RngCore,
+    ) -> Result<Self, CanisterHttpRequestContextError> {
+        validate_transform_principal(&args.transform, request.sender.get())?;
+        validate_url_length(&args.url)?;
+        validate_http_headers_and_body(args.headers.get(), args.body.as_ref().unwrap_or(&vec![]))?;
+
+        let n = node_ids.len() as u32;
+        let (total_requests, min_responses, max_responses) = match args.replication {
+            Some(counts) => {
+                let total = counts.total_requests;
+                let min = counts.min_responses;
+                let max = counts.max_responses;
+
+                if total < 1 {
+                    return Err(CanisterHttpRequestContextError::InvalidReplicationCounts(
+                        format!("total_requests ({total}) must be at least 1"),
+                    ));
+                }
+                if total > n {
+                    return Err(CanisterHttpRequestContextError::InvalidReplicationCounts(
+                        format!(
+                            "total_requests ({total}) must not exceed the number of available nodes ({n})",
+                        ),
+                    ));
+                }
+                if min > max {
+                    return Err(CanisterHttpRequestContextError::InvalidReplicationCounts(
+                        format!("min_responses ({min}) must not exceed max_responses ({max})"),
+                    ));
+                }
+                if max > total {
+                    return Err(CanisterHttpRequestContextError::InvalidReplicationCounts(
+                        format!("max_responses ({max}) must not exceed total_requests ({total})"),
+                    ));
+                }
+                (total, min, max)
+            }
+            None => {
+                if n == 0 {
+                    return Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation);
+                }
+                let default_min = (2 * n) / 3 + 1; // floor(2/3 * n) + 1
+                (n, default_min, n)
+            }
+        };
+        // From here, the following invariants are expected to hold:
+        // 0 <= min_responses <= max_responses <= total_requests
+        // 1 <= total_requests <= N
+        debug_assert!(min_responses <= max_responses && max_responses <= total_requests);
+        debug_assert!(1 <= total_requests && total_requests <= n);
+
+        // Allow PUT and DELETE only if the response behavior is deterministic,
+        // to avoid confusing race conditions that may occur.
+        // For flexible outcalls this means all delegated requests must complete,
+        // i.e. min_responses == max_responses == total_requests.
+        // Otherwise, if first a DELETE outcall for resource R is made,
+        // directly followed by a PUT or POST outcall for R, in a mode where
+        // min_responses < total_requests, it may happen that R is actually
+        // deleted after the PUT/POST outcall has finished, because the IC does
+        // not necessarily wait for all outcalls to complete before a result is
+        // delivered back to the canister: The IC only waits for sufficient calls
+        // to complete to reach consensus on the result.
+        if matches!(args.method, HttpMethod::PUT | HttpMethod::DELETE)
+            && !(min_responses == max_responses && max_responses == total_requests)
+        {
+            return Err(CanisterHttpRequestContextError::DeterministicResponseCountRequired);
+        }
+
+        let committee: BTreeSet<_> = node_ids
+            .iter()
+            .copied()
+            .choose_multiple(rng, total_requests as usize)
+            .into_iter()
+            .collect();
+
+        Ok(CanisterHttpRequestContext {
+            request: request.clone(),
+            url: args.url,
+            max_response_bytes: None,
+            headers: args.headers.get().iter().cloned().map(Into::into).collect(),
+            body: args.body,
+            http_method: args.method.into(),
+            transform: args.transform.map(From::from),
+            time,
+            replication: Replication::Flexible {
+                committee,
+                min_responses,
+                max_responses,
+            },
+            pricing_version: PricingVersion::PayAsYouGo,
+            refund_status: RefundStatus {
+                //TODO(IC-1937): subtract the base fee from the refundable amount.
+                refundable_cycles: request.payment,
+                per_replica_allowance: request.payment / (total_requests as usize).max(1),
                 refunded_cycles: Cycles::new(0),
                 refunding_nodes: BTreeSet::new(),
             },
@@ -616,7 +725,8 @@ pub enum CanisterHttpRequestContextError {
     TooLargeHeaders(usize),
     TooLargeRequest(usize),
     NoNodesAvailableForDelegation,
-    NonReplicatedModeRequired,
+    DeterministicResponseCountRequired,
+    InvalidReplicationCounts(String),
 }
 
 impl From<CanisterHttpRequestContextError> for UserError {
@@ -675,11 +785,15 @@ impl From<CanisterHttpRequestContextError> for UserError {
                 "No nodes available for delegation for non-replicated canister HTTP request."
                     .to_string(),
             ),
-            CanisterHttpRequestContextError::NonReplicatedModeRequired => UserError::new(
+            CanisterHttpRequestContextError::DeterministicResponseCountRequired => UserError::new(
                 ErrorCode::CanisterRejectedMessage,
-                "The requested HTTP method is only allowed for non-replicated requests."
+                "The requested HTTP method is only allowed for non-replicated requests, \
+                or flexible requests with min_responses = max_responses = total_requests."
                     .to_string(),
             ),
+            CanisterHttpRequestContextError::InvalidReplicationCounts(msg) => {
+                UserError::new(ErrorCode::CanisterRejectedMessage, msg)
+            }
         }
     }
 }
@@ -688,8 +802,6 @@ impl From<CanisterHttpRequestContextError> for UserError {
 /// client to make a request
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct CanisterHttpRequest {
-    /// Timestamp indicating when this request will be considered timed out.
-    pub timeout: Time,
     /// This requests unique identifier
     pub id: CanisterHttpRequestId,
     /// The context of the request which captures all the metadata about this request
@@ -705,23 +817,25 @@ pub struct CanisterHttpRequest {
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponse {
     pub id: CanisterHttpRequestId,
-    pub timeout: Time,
     pub canister_id: CanisterId,
     pub content: CanisterHttpResponseContent,
+}
+
+impl CanisterHttpResponse {
+    /// Same calculation as `Self::count_bytes` but from decomposed parts.
+    pub fn count_bytes_from_parts(canister_id: &CanisterId, content_size: usize) -> usize {
+        size_of::<CanisterHttpRequestId>() + canister_id.get_ref().data_size() + content_size
+    }
 }
 
 impl CountBytes for CanisterHttpResponse {
     fn count_bytes(&self) -> usize {
         let CanisterHttpResponse {
-            id,
-            timeout,
+            id: _,
             canister_id,
             content,
         } = &self;
-        size_of_val(id)
-            + size_of_val(timeout)
-            + canister_id.get_ref().data_size()
-            + content.count_bytes()
+        Self::count_bytes_from_parts(canister_id, content.count_bytes())
     }
 }
 
@@ -734,6 +848,15 @@ pub enum CanisterHttpResponseContent {
     /// In case of a reject, this will be a [`CanisterHttpReject`], indicating why the
     /// request was rejected.
     Reject(CanisterHttpReject),
+}
+
+impl CanisterHttpResponseContent {
+    pub fn is_reject(&self) -> bool {
+        match self {
+            CanisterHttpResponseContent::Success(_) => false,
+            CanisterHttpResponseContent::Reject(_) => true,
+        }
+    }
 }
 
 impl CountBytes for CanisterHttpResponseContent {
@@ -777,6 +900,15 @@ impl CountBytes for CanisterHttpReject {
 pub struct CanisterHttpHeader {
     pub name: String,
     pub value: String,
+}
+
+impl From<HttpHeader> for CanisterHttpHeader {
+    fn from(header: HttpHeader) -> Self {
+        CanisterHttpHeader {
+            name: header.name,
+            value: header.value,
+        }
+    }
 }
 
 /// Specifies the HTTP method that is used in the [`CanisterHttpRequest`].
@@ -831,6 +963,18 @@ impl TryFrom<pb_metadata::HttpMethod> for CanisterHttpMethod {
     }
 }
 
+impl From<HttpMethod> for CanisterHttpMethod {
+    fn from(method: HttpMethod) -> Self {
+        match method {
+            HttpMethod::GET => CanisterHttpMethod::GET,
+            HttpMethod::POST => CanisterHttpMethod::POST,
+            HttpMethod::HEAD => CanisterHttpMethod::HEAD,
+            HttpMethod::PUT => CanisterHttpMethod::PUT,
+            HttpMethod::DELETE => CanisterHttpMethod::DELETE,
+        }
+    }
+}
+
 /// A proof that the replicas have reached consensus on some [`CanisterHttpResponseContent`].
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
@@ -868,15 +1012,29 @@ impl CountBytes for CanisterHttpResponseDivergence {
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseMetadata {
     pub id: CallbackId,
-    pub timeout: Time,
     pub content_hash: CryptoHashOf<CanisterHttpResponse>,
+    pub content_size: u32,
+    pub is_reject: bool,
     pub registry_version: RegistryVersion,
     pub replica_version: ReplicaVersion,
 }
 
 impl CountBytes for CanisterHttpResponseMetadata {
     fn count_bytes(&self) -> usize {
-        size_of::<CanisterHttpResponseMetadata>()
+        let Self {
+            id,
+            content_hash,
+            content_size,
+            is_reject,
+            registry_version,
+            replica_version,
+        } = self;
+        size_of_val(id)
+            + content_hash.get_ref().0.len()
+            + size_of_val(content_size)
+            + size_of_val(is_reject)
+            + size_of_val(registry_version)
+            + replica_version.as_ref().len()
     }
 }
 
@@ -919,24 +1077,21 @@ impl PbArtifact for CanisterHttpResponseArtifact {
 pub type CanisterHttpResponseProof =
     Signed<CanisterHttpResponseMetadata, BasicSignatureBatch<CanisterHttpResponseMetadata>>;
 
-impl CountBytes for CanisterHttpResponseProof {
-    fn count_bytes(&self) -> usize {
-        size_of::<CanisterHttpResponseProof>()
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::{Cycles, messages::NO_DEADLINE, time::UNIX_EPOCH};
+    use crate::{messages::NO_DEADLINE, time::UNIX_EPOCH};
 
     use super::*;
 
     use assert_matches::assert_matches;
+    use candid::Principal;
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
     use ic_management_canister_types_private::{
-        BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod,
+        BoundedHttpHeaders, CanisterHttpRequestArgs, FlexibleCanisterHttpRequestArgs, HttpHeader,
+        HttpMethod, ReplicationCounts, TransformFunc,
     };
     use ic_types_test_utils::ids::node_test_id;
+    use rstest::rstest;
     use strum::IntoEnumIterator;
 
     #[test]
@@ -1101,83 +1256,516 @@ mod tests {
     }
 
     #[test]
-    fn put_requires_non_replicated() {
+    fn replication_authorized_signer() {
+        let node1 = node_test_id(1);
+        let node2 = node_test_id(2);
+
+        let fully_replicated = Replication::FullyReplicated;
+        assert!(fully_replicated.is_authorized_signer(&node1));
+        assert!(fully_replicated.is_authorized_signer(&node2));
+
+        let non_replicated = Replication::NonReplicated(node1);
+        assert!(non_replicated.is_authorized_signer(&node1));
+        assert!(!non_replicated.is_authorized_signer(&node2));
+
+        let flexible = Replication::Flexible {
+            committee: BTreeSet::from([node1, node_test_id(3)]),
+            min_responses: 1,
+            max_responses: 2,
+        };
+        assert!(flexible.is_authorized_signer(&node1));
+        assert!(!flexible.is_authorized_signer(&node2));
+    }
+
+    #[rstest]
+    #[case(HttpMethod::PUT)]
+    #[case(HttpMethod::DELETE)]
+    fn put_delete_requires_non_replicated(#[case] method: HttpMethod) {
         let rng = &mut ReproducibleRng::new();
         let node_ids = BTreeSet::from([node_test_id(1)]);
         let request = dummy_request();
+        let expected_method: CanisterHttpMethod = method.into();
 
-        // PUT with is_replicated None -> rejected
-        let args = dummy_args(HttpMethod::PUT, None);
+        // Method with is_replicated None -> rejected.
+        let args = dummy_args(method, None);
         let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+            UNIX_EPOCH, &request, args, &node_ids, rng,
         );
         assert_matches!(
             result,
-            Err(CanisterHttpRequestContextError::NonReplicatedModeRequired)
+            Err(CanisterHttpRequestContextError::DeterministicResponseCountRequired)
         );
 
-        // PUT with is_replicated Some(true) -> rejected
-        let args = dummy_args(HttpMethod::PUT, Some(true));
+        // Method with is_replicated Some(true) -> rejected.
+        let args = dummy_args(method, Some(true));
         let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+            UNIX_EPOCH, &request, args, &node_ids, rng,
         );
         assert_matches!(
             result,
-            Err(CanisterHttpRequestContextError::NonReplicatedModeRequired)
+            Err(CanisterHttpRequestContextError::DeterministicResponseCountRequired)
         );
 
-        // PUT with is_replicated Some(false) -> accepted
-        let args = dummy_args(HttpMethod::PUT, Some(false));
+        // Method with is_replicated Some(false) -> accepted.
+        let args = dummy_args(method, Some(false));
         let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
+            UNIX_EPOCH, &request, args, &node_ids, rng,
         );
         assert_matches!(
             result,
             Ok(ctx) => {
-                assert_eq!(ctx.http_method, CanisterHttpMethod::PUT);
+                assert_eq!(ctx.http_method, expected_method);
                 assert_matches!(ctx.replication, Replication::NonReplicated(_));
             }
         );
     }
 
     #[test]
-    fn delete_requires_non_replicated() {
+    fn rejects_invalid_transform_principal() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::from([node_test_id(1)]);
+        let wrong_principal = PrincipalId::new_user_test_id(42);
+        let request = dummy_request();
+        assert_ne!(request.sender.get(), wrong_principal);
+        let mut args = dummy_args(HttpMethod::GET, None);
+        args.transform = Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: Principal::from(wrong_principal),
+                method: "transform".to_string(),
+            }),
+            context: vec![],
+        });
+
+        let result = CanisterHttpRequestContext::generate_from_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
+        );
+
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::TransformPrincipalId(_))
+        );
+    }
+
+    #[test]
+    fn rejects_empty_node_ids() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::new();
+        let request = dummy_request();
+        let args = dummy_args(HttpMethod::GET, None);
+
+        let result = CanisterHttpRequestContext::generate_from_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
+        );
+
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation)
+        );
+    }
+
+    #[test]
+    fn flexible_rejects_invalid_transform_principal() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::from([node_test_id(1)]);
+        let wrong_principal = PrincipalId::new_user_test_id(42);
+        let request = dummy_request();
+        assert_ne!(request.sender.get(), wrong_principal);
+        let mut args = dummy_flexible_args(None);
+        args.transform = Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: wrong_principal.into(),
+                method: "transform".to_string(),
+            }),
+            context: vec![],
+        });
+
+        let result = CanisterHttpRequestContext::generate_from_flexible_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
+        );
+
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::TransformPrincipalId(_))
+        );
+    }
+
+    #[test]
+    fn flexible_rejects_url_too_long() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::from([node_test_id(1)]);
+        let request = dummy_request();
+        let mut args = dummy_flexible_args(None);
+        args.url = "a".repeat(MAX_CANISTER_HTTP_URL_SIZE + 1);
+
+        let result = CanisterHttpRequestContext::generate_from_flexible_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
+        );
+
+        assert_matches!(result, Err(CanisterHttpRequestContextError::UrlTooLong(_)));
+    }
+
+    #[test]
+    fn flexible_rejects_headers_too_large() {
         let rng = &mut ReproducibleRng::new();
         let node_ids = BTreeSet::from([node_test_id(1)]);
         let request = dummy_request();
 
-        // DELETE with is_replicated None -> rejected
-        let args = dummy_args(HttpMethod::DELETE, None);
-        let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
-        );
-        assert_matches!(
-            result,
-            Err(CanisterHttpRequestContextError::NonReplicatedModeRequired)
+        let headers = vec![HttpHeader {
+            name: "X-Big".to_string(),
+            value: "v".repeat(MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE + 1),
+        }];
+        let args = FlexibleCanisterHttpRequestArgs {
+            url: "https://example.com".to_string(),
+            headers: BoundedHttpHeaders::new(headers),
+            body: None,
+            method: HttpMethod::GET,
+            transform: None,
+            replication: None,
+        };
+
+        let result = CanisterHttpRequestContext::generate_from_flexible_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
         );
 
-        // DELETE with is_replicated Some(true) -> rejected
-        let args = dummy_args(HttpMethod::DELETE, Some(true));
-        let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
-        );
         assert_matches!(
             result,
-            Err(CanisterHttpRequestContextError::NonReplicatedModeRequired)
+            Err(CanisterHttpRequestContextError::TooLongHeaderValue(_))
+        );
+    }
+
+    #[test]
+    fn flexible_rejects_total_requests_zero() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]);
+        let request = dummy_request();
+        let args = dummy_flexible_args(Some(ReplicationCounts {
+            total_requests: 0,
+            min_responses: 0,
+            max_responses: 0,
+        }));
+
+        let result = CanisterHttpRequestContext::generate_from_flexible_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
         );
 
-        // DELETE with is_replicated Some(false) -> accepted
-        let args = dummy_args(HttpMethod::DELETE, Some(false));
-        let result = CanisterHttpRequestContext::generate_from_args(
-            UNIX_EPOCH, &request, args, &node_ids, 1, rng,
-        );
         assert_matches!(
             result,
-            Ok(ctx) => {
-                assert_eq!(ctx.http_method, CanisterHttpMethod::DELETE);
-                assert_matches!(ctx.replication, Replication::NonReplicated(_));
-            }
+            Err(CanisterHttpRequestContextError::InvalidReplicationCounts(msg))
+            if msg.contains("total_requests (0) must be at least 1")
         );
+    }
+
+    #[test]
+    fn flexible_rejects_total_requests_greater_than_node_count() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2)]);
+        let request = dummy_request();
+        let args = dummy_flexible_args(Some(ReplicationCounts {
+            total_requests: 3,
+            min_responses: 1,
+            max_responses: 3,
+        }));
+
+        let result = CanisterHttpRequestContext::generate_from_flexible_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
+        );
+
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::InvalidReplicationCounts(msg))
+            if msg.contains("total_requests (3) must not exceed the number of available nodes (2)")
+        );
+    }
+
+    #[test]
+    fn flexible_rejects_min_greater_than_max() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]);
+        let request = dummy_request();
+        let args = dummy_flexible_args(Some(ReplicationCounts {
+            total_requests: 3,
+            min_responses: 3,
+            max_responses: 2,
+        }));
+
+        let result = CanisterHttpRequestContext::generate_from_flexible_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
+        );
+
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::InvalidReplicationCounts(msg))
+            if msg.contains("min_responses (3) must not exceed max_responses (2)")
+        );
+    }
+
+    #[test]
+    fn flexible_rejects_max_greater_than_total() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]);
+        let request = dummy_request();
+        let args = dummy_flexible_args(Some(ReplicationCounts {
+            total_requests: 2,
+            min_responses: 1,
+            max_responses: 3,
+        }));
+
+        let result = CanisterHttpRequestContext::generate_from_flexible_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
+        );
+
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::InvalidReplicationCounts(msg))
+            if msg.contains("max_responses (3) must not exceed total_requests (2)")
+        );
+    }
+
+    #[test]
+    fn flexible_defaults_when_replication_is_none() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids: BTreeSet<NodeId> = (1..=13).map(node_test_id).collect();
+        let n = node_ids.len() as u32;
+        let request = dummy_request();
+        let args = dummy_flexible_args(None);
+
+        let result = CanisterHttpRequestContext::generate_from_flexible_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
+        );
+
+        assert_matches!(
+            result,
+            Ok(CanisterHttpRequestContext {
+                replication: Replication::Flexible {
+                    committee,
+                    min_responses,
+                    max_responses,
+                },
+                ..
+            }) if committee.len() == n as usize
+                && min_responses == (2 * n) / 3 + 1 // floor(2/3 * 13) + 1 = 8 + 1 = 9
+                && max_responses == n
+                && committee.is_subset(&node_ids)
+        );
+    }
+
+    #[test]
+    fn flexible_defaults_no_nodes_rejected() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::new();
+        let request = dummy_request();
+        let args = dummy_flexible_args(None);
+
+        let result = CanisterHttpRequestContext::generate_from_flexible_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
+        );
+
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation)
+        );
+    }
+
+    #[test]
+    fn flexible_committee_selection() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids: BTreeSet<NodeId> = (1..=10).map(node_test_id).collect();
+        let request = dummy_request();
+        let args = dummy_flexible_args(Some(ReplicationCounts {
+            total_requests: 4,
+            min_responses: 2,
+            max_responses: 4,
+        }));
+
+        let ctx = CanisterHttpRequestContext::generate_from_flexible_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
+        );
+
+        assert_matches!(
+            ctx,
+            Ok(CanisterHttpRequestContext {
+                replication: Replication::Flexible {
+                    committee,
+                    min_responses,
+                    max_responses,
+                },
+                ..
+            }) if committee.len() == 4
+                && min_responses == 2
+                && max_responses == 4
+                && committee.is_subset(&node_ids)
+        );
+    }
+
+    #[test]
+    fn flexible_max_response_bytes_is_none() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]);
+        let request = dummy_request();
+        let args = dummy_flexible_args(Some(ReplicationCounts {
+            total_requests: 2,
+            min_responses: 1,
+            max_responses: 2,
+        }));
+
+        let ctx = CanisterHttpRequestContext::generate_from_flexible_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
+        );
+
+        assert_matches!(
+            ctx,
+            Ok(CanisterHttpRequestContext {
+                max_response_bytes: None,
+                ..
+            })
+        );
+    }
+
+    #[test]
+    fn flexible_permits_zero_min_responses() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]);
+        let request = dummy_request();
+
+        let args = dummy_flexible_args(Some(ReplicationCounts {
+            total_requests: 3,
+            min_responses: 0,
+            max_responses: 3,
+        }));
+        let ctx = CanisterHttpRequestContext::generate_from_flexible_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
+        );
+
+        assert_matches!(
+            ctx,
+            Ok(CanisterHttpRequestContext {
+                replication: Replication::Flexible {
+                    min_responses,
+                    max_responses,
+                    committee,
+                },
+                ..
+            }) if min_responses == 0
+                 && max_responses == 3
+                 && committee.len() == 3
+                 && committee.is_subset(&node_ids)
+        );
+    }
+
+    #[test]
+    fn flexible_permits_zero_max_responses() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2)]);
+        let request = dummy_request();
+
+        for total_requests in 1..=node_ids.len() {
+            let args = dummy_flexible_args(Some(ReplicationCounts {
+                total_requests: total_requests as u32,
+                min_responses: 0,
+                max_responses: 0,
+            }));
+            let ctx = CanisterHttpRequestContext::generate_from_flexible_args(
+                UNIX_EPOCH, &request, args, &node_ids, rng,
+            );
+            assert_matches!(
+                ctx,
+                Ok(CanisterHttpRequestContext {
+                    replication: Replication::Flexible {
+                        min_responses,
+                        max_responses,
+                        committee,
+                    },
+                    ..
+                }) if min_responses == 0 && max_responses == 0
+                     && committee.len() == total_requests
+                     && committee.is_subset(&node_ids)
+            );
+        }
+    }
+
+    #[test]
+    fn flexible_permits_all_equal_replication_values() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]);
+        let request = dummy_request();
+        let args = dummy_flexible_args(Some(ReplicationCounts {
+            total_requests: 3,
+            min_responses: 3,
+            max_responses: 3,
+        }));
+
+        let ctx = CanisterHttpRequestContext::generate_from_flexible_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
+        );
+
+        assert_matches!(
+            ctx,
+            Ok(CanisterHttpRequestContext {
+                replication: Replication::Flexible {
+                    min_responses,
+                    max_responses,
+                    committee,
+                },
+                ..
+            }) if min_responses == 3
+                 && max_responses == 3
+                 && committee.len() == 3
+                 && committee.is_subset(&node_ids)
+        );
+    }
+
+    #[rstest]
+    #[case(HttpMethod::PUT, 3, 2, 3, false)]
+    #[case(HttpMethod::DELETE, 3, 2, 3, false)]
+    #[case(HttpMethod::PUT, 3, 3, 3, true)]
+    #[case(HttpMethod::DELETE, 3, 3, 3, true)]
+    #[case(HttpMethod::PUT, 3, 2, 2, false)]
+    #[case(HttpMethod::DELETE, 3, 2, 2, false)]
+    fn flexible_methods_require_deterministic_response_counts(
+        #[case] method: HttpMethod,
+        #[case] total_requests: u32,
+        #[case] min_responses: u32,
+        #[case] max_responses: u32,
+        #[case] should_succeed: bool,
+    ) {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]);
+        let request = dummy_request();
+        let mut args = dummy_flexible_args(Some(ReplicationCounts {
+            total_requests,
+            min_responses,
+            max_responses,
+        }));
+        args.method = method;
+
+        let result = CanisterHttpRequestContext::generate_from_flexible_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
+        );
+
+        if should_succeed {
+            let expected_method: CanisterHttpMethod = method.into();
+            assert_matches!(
+                result,
+                Ok(CanisterHttpRequestContext {
+                    http_method,
+                    replication: Replication::Flexible {
+                        min_responses: actual_min,
+                        max_responses: actual_max,
+                        committee,
+                    },
+                    ..
+                }) if http_method == expected_method
+                    && actual_min == min_responses
+                    && actual_max == max_responses
+                    && committee.len() == total_requests as usize
+                    && committee.is_subset(&node_ids)
+            );
+        } else {
+            assert_matches!(
+                result,
+                Err(CanisterHttpRequestContextError::DeterministicResponseCountRequired)
+            );
+        }
     }
 
     fn dummy_request() -> Request {
@@ -1203,6 +1791,19 @@ mod tests {
             transform: None,
             is_replicated,
             pricing_version: None,
+        }
+    }
+
+    fn dummy_flexible_args(
+        replication: Option<ReplicationCounts>,
+    ) -> FlexibleCanisterHttpRequestArgs {
+        FlexibleCanisterHttpRequestArgs {
+            url: "https://example.com".to_string(),
+            headers: BoundedHttpHeaders::new(vec![]),
+            body: None,
+            method: HttpMethod::GET,
+            transform: None,
+            replication,
         }
     }
 }

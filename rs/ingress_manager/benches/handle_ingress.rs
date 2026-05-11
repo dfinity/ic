@@ -33,10 +33,7 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    CanisterQueues, RefundPool, ReplicatedState, SystemMetadata,
-    canister_snapshots::CanisterSnapshots,
-};
+use ic_replicated_state::{CanisterQueues, RefundPool, ReplicatedState, SystemMetadata};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_registry::test_subnet_record;
 use ic_test_utilities_state::{MockIngressHistory, ReplicatedStateBuilder};
@@ -194,7 +191,6 @@ where
                         CanisterQueues::default(),
                         RefundPool::default(),
                         RawQueryStats::default(),
-                        CanisterSnapshots::default(),
                     )),
                 )
             });
@@ -326,21 +322,29 @@ fn handle_ingress(criterion: &mut Criterion) {
              log: ReplicaLogger,
              history: &SimulatedIngressHistory,
              manager: &mut IngressManager| {
-                let messages = prepare(time_source.as_ref(), expiry_range, total_messages as usize);
-                let (pool, message_ids) = setup(time_source.as_ref(), pool_config, log, messages);
                 group.bench_function(format!("handle_ingress({ingress_rate})"), |bench| {
                     bench.iter_custom(|iters| {
                         let mut elapsed = Duration::from_secs(0);
                         for _ in 0..iters {
-                            let bench_start = Instant::now();
-                            let mut ingress_pool = pool.clone();
+                            let messages = prepare(
+                                time_source.as_ref(),
+                                expiry_range,
+                                total_messages as usize,
+                            );
+                            let (mut ingress_pool, message_ids) = setup(
+                                time_source.as_ref(),
+                                pool_config.clone(),
+                                log.clone(),
+                                messages,
+                            );
                             time_source.reset();
                             // We skip the first MAX_INGRESS_TTL duration in order to save
                             // overall benchmark time. Also by this time, the ingress
                             // history has become fully populated.
                             let start = time_source.get_relative_time() + MAX_INGRESS_TTL;
                             time_source.set_time(start).unwrap();
-                            history.set_history(message_ids.clone());
+                            history.set_history(message_ids);
+                            let bench_start = Instant::now();
                             // Increment time every 200ms until it is over.
                             loop {
                                 on_state_change(&mut ingress_pool, manager);

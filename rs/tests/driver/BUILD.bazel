@@ -28,7 +28,7 @@ rust_library(
     ],
     deps = [
         # Keep sorted.
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/canister_client",
         "//rs/config",
         "//rs/crypto/sha2",
@@ -49,6 +49,7 @@ rust_library(
         "//rs/nns/common",
         "//rs/nns/constants",
         "//rs/nns/governance/api",
+        "//rs/nns/governance/conversions",
         "//rs/nns/gtc",
         "//rs/nns/init",
         "//rs/nns/sns-wasm",
@@ -64,6 +65,7 @@ rust_library(
         "//rs/registry/nns_data_provider",
         "//rs/registry/provisional_whitelist",
         "//rs/registry/regedit",
+        "//rs/registry/resource_limits",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
@@ -81,6 +83,7 @@ rust_library(
         "//rs/tests/test_canisters/message:lib",
         "//rs/tests/test_canisters/signer:lib",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/universal_canister/lib",

@@ -75,6 +75,7 @@ async fn prepare_network_for_test(
         port: None,
         domains: None,
         https_config: None,
+        domain_custom_provider_local_file: None,
     };
     let pocket_ic = PocketIcBuilder::new()
         .with_state_dir(state_dir)

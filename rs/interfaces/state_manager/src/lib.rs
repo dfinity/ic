@@ -165,6 +165,12 @@ pub trait StateManager: StateReader {
     /// * The returned witness is minimal (pruned) and deterministic.
     fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata>;
 
+    /// Returns a list of heights for which the state manager optimistically requests
+    /// a certification to be delivered via `state_manager.deliver_state_certification`.
+    /// A call to `deliver_state_certification` with a certification of some
+    /// height removes that height from the list.
+    fn list_state_heights_to_certify(&self) -> Vec<Height>;
+
     /// Delivers a `certification` corresponding to some state hash / height
     /// pair.
     ///
@@ -275,6 +281,11 @@ pub trait StateManager: StateReader {
         scope: CertificationScope,
         batch_summary: Option<BatchSummary>,
     );
+
+    /// Returns the height of the latest [`StateManager::commit_and_certify`] call,
+    /// or of the latest state sync once the subsequent [`StateManager::take_tip`]
+    /// call has advanced the tip to the synced height.
+    fn tip_height(&self) -> Height;
 
     /// Returns the version of the state that can be modified in-place and the
     /// height of that state.

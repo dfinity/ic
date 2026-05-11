@@ -46,7 +46,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
@@ -142,10 +142,10 @@ pub fn setup(env: TestEnv) {
     for _ in 0..32 {
         ic = ic.add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(VmResources {
+                .with_resource_overrides(VmResourceOverrides {
                     vcpus: Some(NrOfVCPUs::new(1)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(8_389_000)),
-                    boot_image_minimal_size_gibibytes: None,
+                    ..VmResourceOverrides::default()
                 })
                 .add_nodes(1),
         );
@@ -260,6 +260,13 @@ async fn execute_fulfill_subnet_rental_request(
     let previous_registry_version = topology_snapshot.get_registry_version();
 
     let an_nns_subnet_node = topology_snapshot.root_subnet().nodes().next().unwrap();
+    let initial_dkg_subnet_id = topology_snapshot
+        .subnets()
+        .find(|subnet| {
+            subnet.subnet_type() == SubnetType::System
+                && subnet.subnet_id != topology_snapshot.root_subnet_id()
+        })
+        .unwrap();
 
     let node_ids = topology_snapshot
         .unassigned_nodes()
@@ -274,6 +281,7 @@ async fn execute_fulfill_subnet_rental_request(
         *SUBNET_USER_PRINCIPAL_ID,
         node_ids,
         replica_version_id,
+        Some(initial_dkg_subnet_id.subnet_id),
     )
     .await;
     info!(
