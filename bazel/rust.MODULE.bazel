@@ -245,7 +245,7 @@ crate.spec(
 )
 crate.spec(
     package = "canbench-rs",
-    version = "^0.4.1",
+    version = "^0.5.0",
 )
 crate.spec(
     package = "candid",
@@ -642,7 +642,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-canister-runtime",
-    version = "^0.2.0",
+    version = "^0.2.2",
 )
 crate.spec(
     git = "https://github.com/dfinity/ic-canister-sig-creation.git",
@@ -655,7 +655,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-cdk",
-    version = "^0.19.0",
+    version = "^0.20.1",
 )
 crate.spec(
     package = "ic-cdk-executor",
