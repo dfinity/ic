@@ -282,7 +282,8 @@ fn state_machine_handles_messages_to_deleted_subnet() {
 
     // Add a canister with a bounded-wait output request, a best-effort output response, and a
     // bounded-wait subnet message (callee = the deleted subnet's ID), all destined for the
-    // deleted subnet.
+    // deleted subnet. Also add a bounded-wait subnet output response (remote canister →
+    // local subnet) to the subnet queues.
     let local_canister_id = CANISTER_RANGE_A.start;
     // Use a canister ID outside the routing table range so it has no route,
     // causing the stream builder to generate a reject for the output request.
@@ -359,6 +360,30 @@ fn state_machine_handles_messages_to_deleted_subnet() {
 
     initial_state.put_canister_state(canister_state);
 
+    // Subnet output response: local subnet → remote (bounded-wait).
+    // Bounded-wait responses with no route are dropped without a critical error.
+    // First push then pop a matching input request to create the output-queue reservation.
+    initial_state
+        .push_input(
+            RequestBuilder::new()
+                .sender(remote_canister_id)
+                .receiver(CanisterId::from(SUBNET_1))
+                .deadline(deadline)
+                .build()
+                .into(),
+            &mut subnet_available_memory,
+        )
+        .unwrap();
+    initial_state.pop_subnet_input().unwrap();
+    initial_state.push_subnet_output_response(Arc::new(Response {
+        originator: remote_canister_id,
+        respondent: CanisterId::from(SUBNET_1),
+        originator_reply_callback: CallbackId::from(0),
+        refund: Cycles::zero(),
+        response_payload: Payload::Data(vec![]),
+        deadline,
+    }));
+
     // Network topology with only SUBNET_0 (NNS) and SUBNET_1 (local); SUBNET_2 is absent.
     let mut subnets = BTreeMap::new();
     subnets.insert(
@@ -423,14 +448,15 @@ fn state_machine_handles_messages_to_deleted_subnet() {
 
         // Stream to the deleted subnet is gone.
         assert!(state.get_stream(&SUBNET_2).is_none());
-        // Output queue is empty: request was consumed (reject response generated),
-        // best-effort response was dropped.
+        // Output queues are empty: requests were consumed (reject responses generated),
+        // best-effort and bounded-wait responses were dropped.
         assert!(
             !state
                 .canister_state(&local_canister_id)
                 .unwrap()
                 .has_output()
         );
+        assert!(!state.subnet_queues().has_output());
         // Reject responses for both unroutable output requests (canister request and subnet
         // message) are in the local canister's input queue.
         let canister = Arc::make_mut(state.canister_state_mut_arc(&local_canister_id).unwrap());
