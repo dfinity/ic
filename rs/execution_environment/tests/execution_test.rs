@@ -1624,7 +1624,16 @@ fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
 
     fn install_canister(env: &StateMachine) -> Result<CanisterId, UserError> {
         let wasm = wat::parse_str(TEST_CANISTER).expect("invalid WAT");
-        env.install_canister_with_cycles(wasm, vec![], None, Cycles::new(301 * B))
+        env.install_canister_with_cycles(
+            wasm,
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_log_memory_limit(0)
+                    .build(),
+            ),
+            Cycles::new(301 * B),
+        )
     }
 
     fn send_ingress(env: &StateMachine, canister_id: &CanisterId) -> MessageId {

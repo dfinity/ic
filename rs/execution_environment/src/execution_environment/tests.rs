@@ -1608,10 +1608,20 @@ fn clean_in_progress_stop_canister_calls_from_subnet_call_context_manager() {
 
     // Create two canisters.
     let canister_id_1 = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            ic00::CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(0)
+                .build(),
+        )
         .unwrap();
     let canister_id_2 = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            ic00::CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(0)
+                .build(),
+        )
         .unwrap();
 
     // Set controllers.
@@ -1808,10 +1818,20 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
 
     // Create two canisters.
     let canister_id_1 = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            ic00::CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(0)
+                .build(),
+        )
         .unwrap();
     let canister_id_2 = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            ic00::CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(0)
+                .build(),
+        )
         .unwrap();
 
     // Set controllers.
@@ -1985,10 +2005,20 @@ fn consistent_stop_canister_calls_after_split() {
 
     // Create two canisters.
     let canister_id_1 = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            ic00::CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(0)
+                .build(),
+        )
         .unwrap();
     let canister_id_2 = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000_000),
+            ic00::CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(0)
+                .build(),
+        )
         .unwrap();
 
     // Set controllers.

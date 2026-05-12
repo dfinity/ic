@@ -1168,6 +1168,17 @@ impl ExecutionTest {
         self.canister_from_cycles_and_wat(self.initial_canister_cycles, wat)
     }
 
+    pub fn canister_from_wat_with_settings<S: ToString>(
+        &mut self,
+        wat: S,
+        settings: CanisterSettingsArgs,
+    ) -> Result<CanisterId, UserError> {
+        let canister_id =
+            self.create_canister_with_settings(self.initial_canister_cycles, settings)?;
+        self.install_canister(canister_id, wat::parse_str(wat.to_string()).unwrap())?;
+        Ok(canister_id)
+    }
+
     pub fn create_canister_with_default_cycles(&mut self) -> CanisterId {
         self.create_canister(self.initial_canister_cycles)
     }

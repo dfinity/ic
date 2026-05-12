@@ -14,9 +14,9 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, MessageMemoryUsage};
 use ic_management_canister_types_private::Global;
 use ic_management_canister_types_private::{
-    CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, Payload, SchnorrAlgorithm, SchnorrKeyId,
-    TakeCanisterSnapshotArgs, VetKdCurve, VetKdKeyId,
+    CanisterChange, CanisterHttpResponsePayload, CanisterSettingsArgsBuilder, CanisterStatusType,
+    CanisterUpgradeOptions, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, Payload, SchnorrAlgorithm,
+    SchnorrKeyId, TakeCanisterSnapshotArgs, VetKdCurve, VetKdKeyId,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -192,7 +192,14 @@ fn ic0_stable_write_increases_heap_delta() {
             )"#
         )
     }
-    let canister_id = test.canister_from_wat(wat(4097)).unwrap();
+    let canister_id = test
+        .canister_from_wat_with_settings(
+            wat(4097),
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(0)
+                .build(),
+        )
+        .unwrap();
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
     let result = test.ingress(canister_id, "test", vec![]);
     expect_canister_did_not_reply(result);
@@ -202,7 +209,14 @@ fn ic0_stable_write_increases_heap_delta() {
         NumBytes::from(8192),
         test.state().metadata.heap_delta_estimate
     );
-    let canister_id = test.canister_from_wat(wat(8192)).unwrap();
+    let canister_id = test
+        .canister_from_wat_with_settings(
+            wat(8192),
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(0)
+                .build(),
+        )
+        .unwrap();
     let heap_delta_estimate_before = test.state().metadata.heap_delta_estimate;
     let result = test.ingress(canister_id, "test", vec![]);
     expect_canister_did_not_reply(result);
@@ -232,7 +246,14 @@ fn ic0_stable64_write_increases_heap_delta() {
             )"#
         )
     }
-    let canister_id = test.canister_from_wat(wat(4097)).unwrap();
+    let canister_id = test
+        .canister_from_wat_with_settings(
+            wat(4097),
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(0)
+                .build(),
+        )
+        .unwrap();
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
     let result = test.ingress(canister_id, "test", vec![]);
     expect_canister_did_not_reply(result);
@@ -242,7 +263,14 @@ fn ic0_stable64_write_increases_heap_delta() {
         NumBytes::from(8192),
         test.state().metadata.heap_delta_estimate
     );
-    let canister_id = test.canister_from_wat(wat(8192)).unwrap();
+    let canister_id = test
+        .canister_from_wat_with_settings(
+            wat(8192),
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(0)
+                .build(),
+        )
+        .unwrap();
     let heap_delta_estimate_before = test.state().metadata.heap_delta_estimate;
     let result = test.ingress(canister_id, "test", vec![]);
     expect_canister_did_not_reply(result);
@@ -270,7 +298,14 @@ fn ic0_stable64_grow_does_not_change_heap_delta() {
             )
             (memory 1)
         )"#;
-    let canister_id = test.canister_from_wat(wat).unwrap();
+    let canister_id = test
+        .canister_from_wat_with_settings(
+            wat,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(0)
+                .build(),
+        )
+        .unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
     expect_canister_did_not_reply(result);
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
@@ -5265,7 +5300,14 @@ fn update_message_produces_heap_delta() {
             (memory (export "memory") 1)
         )"#;
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
-    let canister_id = test.canister_from_wat(wat).unwrap();
+    let canister_id = test
+        .canister_from_wat_with_settings(
+            wat,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(0)
+                .build(),
+        )
+        .unwrap();
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
     let result = test.ingress(canister_id, "hello", vec![]);
     expect_canister_did_not_reply(result);
@@ -5287,7 +5329,13 @@ fn canister_start_produces_heap_delta() {
             (start 0)
         )"#;
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
-    test.canister_from_wat(wat).unwrap();
+    test.canister_from_wat_with_settings(
+        wat,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(0)
+            .build(),
+    )
+    .unwrap();
     assert_eq!(
         NumBytes::from(PAGE_SIZE as u64),
         test.state().metadata.heap_delta_estimate
@@ -5305,7 +5353,13 @@ fn canister_init_produces_heap_delta() {
             (memory (export "memory") 1)
         )"#;
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
-    test.canister_from_wat(wat).unwrap();
+    test.canister_from_wat_with_settings(
+        wat,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(0)
+            .build(),
+    )
+    .unwrap();
     assert_eq!(
         NumBytes::from(PAGE_SIZE as u64),
         test.state().metadata.heap_delta_estimate
