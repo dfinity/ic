@@ -391,9 +391,11 @@ rust_ic_bench(
         # Keep sorted.
         ":execution_environment",
         "//rs/config",
+        "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
+        "//rs/test_utilities/types",
         "//rs/types/base_types",
         "//rs/types/cycles",
         "//rs/types/types",

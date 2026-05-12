@@ -1138,7 +1138,16 @@ fn global_timer_produces_transient_error_on_out_of_cycles() {
         .build();
     // The canister has no enough cycles for the install.
     let err = env
-        .install_canister_with_cycles(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None, 0_u64.into())
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_log_memory_limit(0)
+                    .build(),
+            ),
+            0_u64.into(),
+        )
         .unwrap_err();
 
     assert_eq!(RejectCode::SysTransient, err.code().into());

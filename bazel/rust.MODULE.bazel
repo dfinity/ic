@@ -32,6 +32,10 @@ crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
 # Use particular version with `@crate_index//:mycrate-3.14.16`
 
 crate.spec(
+    package = "actix-http",
+    version = "^3.12.1",
+)
+crate.spec(
     package = "actix-rt",
     version = "^2.10.0",
 )
@@ -774,7 +778,7 @@ crate.spec(
         "exe",
     ],
     package = "ic-wasm",
-    version = "^0.8.4",
+    version = "^0.9.11",
 )
 crate.spec(
     package = "ic-xrc-types",
@@ -1914,7 +1918,7 @@ crate.spec(
 crate.spec(
     features = ["parallel"],
     package = "wirm",
-    version = "2.1.0",
+    version = "4.0.4",
 )
 crate.spec(
     package = "wsl",
@@ -2024,12 +2028,12 @@ crate.annotation_select(
 )
 crate.annotation(
     build_script_data = [
-        "@@+_repo_rules+openssl//:gen_dir",
+        "@openssl//:gen_dir",
     ],
     build_script_env = {
         "OPENSSL_NO_VENDOR": "1",
-        "OPENSSL_LIB_DIR": "$(execpath @@+_repo_rules+openssl//:gen_dir)/lib64",
-        "OPENSSL_INCLUDE_DIR": "$(execpath @@+_repo_rules+openssl//:gen_dir)/include",
+        "OPENSSL_LIB_DIR": "$(execpath @openssl//:gen_dir)/lib64",
+        "OPENSSL_INCLUDE_DIR": "$(execpath @openssl//:gen_dir)/include",
         "OPENSSL_STATIC": "1",
     },
     crate = "openssl-sys",
@@ -2045,7 +2049,7 @@ crate.annotation(
 )
 crate.annotation(
     build_script_data = [
-        "@@+_repo_rules+openssl//:gen_dir",
+        "@openssl//:gen_dir",
     ],
     crate = "libssh2-sys",
     # Patch for determinism issues
@@ -2089,12 +2093,12 @@ crate.annotation(
 )
 crate.annotation(
     build_script_data = [
-        "@@+_repo_rules+lmdb//:liblmdb",
-        "@@+_repo_rules+lmdb//:lmdb.h",
+        "@lmdb//:liblmdb",
+        "@lmdb//:lmdb.h",
     ],
     build_script_env = {
-        "LMDB_OVERRIDE": "$(location @@+_repo_rules+lmdb//:liblmdb)",
-        "LMDB_H_PATH": "$(location @@+_repo_rules+lmdb//:lmdb.h)",
+        "LMDB_OVERRIDE": "$(location @lmdb//:liblmdb)",
+        "LMDB_H_PATH": "$(location @lmdb//:lmdb.h)",
     },
     crate = "lmdb-rkv-sys",
     # patch our fork of the lmdb-rkv-sys to allow specifying the path
@@ -2111,8 +2115,8 @@ crate.annotation(
 )
 crate.annotation_select(
     # Avoid building jemalloc from rust (in part bc it creates builder-specific config files)
-    build_script_data = ["@@+_repo_rules+jemalloc//:libjemalloc"],
-    build_script_env = {"JEMALLOC_OVERRIDE": "$(location @@+_repo_rules+jemalloc//:libjemalloc)"},
+    build_script_data = ["@jemalloc//:libjemalloc"],
+    build_script_env = {"JEMALLOC_OVERRIDE": "$(location @jemalloc//:libjemalloc)"},
     crate = "tikv-jemalloc-sys",
     triples = ["x86_64-unknown-linux-gnu"],
 )
@@ -2162,10 +2166,10 @@ crate.annotation(
 )
 crate.annotation(
     build_script_data = [
-        "@@protobuf+//:protoc",
+        "@protobuf//:protoc",
     ],
     build_script_env = {
-        "PROTOC": "$(execpath @@protobuf+//:protoc)",
+        "PROTOC": "$(execpath @protobuf//:protoc)",
     },
     crate = "pprof",
 )
@@ -2195,6 +2199,10 @@ crate.from_specs(
             "x86_64-unknown-linux-gnu",
         ],
 )
+
+# inject nice names for those repos to avoid canonical naming
+inject_repo(crate, "openssl", "lmdb", "jemalloc", "protobuf")
+
 use_repo(crate, "crate_index")
 
 ####

@@ -18,6 +18,9 @@ use ic_ckdoge_minter::{
     updates,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
+use icrc_ledger_types::icrc21::errors::Icrc21Error;
+use icrc_ledger_types::icrc21::requests::ConsentMessageRequest;
+use icrc_ledger_types::icrc21::responses::ConsentInfo;
 
 #[init]
 fn init(args: MinterArg) {
@@ -228,6 +231,18 @@ fn get_events(args: GetEventsArg) -> Vec<CkDogeMinterEvent> {
         .skip(args.start as usize)
         .take(MAX_EVENTS_PER_QUERY.min(args.length as usize))
         .collect()
+}
+
+#[update]
+fn icrc21_canister_call_consent_message(
+    consent_msg_request: ConsentMessageRequest,
+) -> Result<ConsentInfo, Icrc21Error> {
+    updates::icrc21::icrc21_canister_call_consent_message(consent_msg_request)
+}
+
+#[query]
+fn icrc10_supported_standards() -> Vec<updates::icrc21::StandardRecord> {
+    updates::icrc21::icrc10_supported_standards()
 }
 
 #[query(hidden = true)]
