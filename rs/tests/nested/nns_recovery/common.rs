@@ -854,7 +854,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, 
     // Resume the recovery by re-executing the command starting from WaitForCUP. The command should
     // succeed this time.
     let session = node.block_on_ssh_session().unwrap(); // New session after reboot
-    let command = command + r#"--resume WaitForCUP \"#;
+    let command = command + r#"--resume WaitForCUP"#;
     info!(logger, "Resuming local recovery command: \n{command}");
     node.block_on_bash_script_from_session(&session, &command)
         .expect("Local recovery failed to complete");
