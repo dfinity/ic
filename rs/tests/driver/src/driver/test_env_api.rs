@@ -1504,7 +1504,7 @@ impl HasGroupSetup for TestEnv {
                     let farm_base_url = FarmBaseUrl::read_attribute(self);
                     let farm = Farm::new(farm_base_url.into(), self.logger());
                     let group_spec = GroupSpec {
-                        vm_allocation: None,
+                        vm_allocation_mode: None,
                         required_host_features: vec![],
                         preferred_network: None,
                         metadata: None,
