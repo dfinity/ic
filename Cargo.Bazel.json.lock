@@ -1,5 +1,5 @@
 {
-  "checksum": "359e577a8484fa49abe7ba9265d86c694dc344f29a2978135506b1d0d5326218",
+  "checksum": "4f1cf82ac666a0611364bfaf3791321b4dc45dc198cd0822d093d6e09d5d9895",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -30613,13 +30613,7 @@
             "custom",
             "std"
           ],
-          "selects": {
-            "wasm32-unknown-unknown": [
-              "js",
-              "js-sys",
-              "wasm-bindgen"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -30639,16 +30633,6 @@
               {
                 "id": "libc 0.2.177",
                 "target": "libc"
-              }
-            ],
-            "wasm32-unknown-unknown": [
-              {
-                "id": "js-sys 0.3.77",
-                "target": "js_sys"
-              },
-              {
-                "id": "wasm-bindgen 0.2.100",
-                "target": "wasm_bindgen"
               }
             ]
           }
