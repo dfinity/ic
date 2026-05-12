@@ -64,11 +64,11 @@ impl Runtime for CdkRuntime {
             .with_cycles(cycles as u128)
             .await
             .map_err(|e| match &e {
-                ic_cdk::call::CallFailed::CallRejected(r) => (r.raw_reject_code() as i32, r.reject_message().to_string()),
+                ic_cdk::call::CallFailed::CallRejected(r) => {
+                    (r.raw_reject_code() as i32, r.reject_message().to_string())
+                }
                 _ => (-1, e.to_string()),
             })?;
-        response
-            .candid_tuple()
-            .map_err(|e| (-1, e.to_string()))
+        response.candid_tuple().map_err(|e| (-1, e.to_string()))
     }
 }

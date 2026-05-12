@@ -5,9 +5,9 @@ mod benches;
 use candid::Principal;
 use candid::types::number::Nat;
 use ic_canister_log::{declare_log_buffer, export, log};
-use ic_cdk::stable::StableReader;
 #[cfg(not(feature = "canbench-rs"))]
 use ic_cdk::init;
+use ic_cdk::stable::StableReader;
 use ic_cdk::{post_upgrade, pre_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icrc1::{
