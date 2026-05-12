@@ -36,7 +36,7 @@ impl DkgClientMetrics {
 
 pub struct DkgPayloadMetrics {
     payload_errors: IntCounterVec,
-    pub(crate) payload_duration: HistogramVec,
+    payload_duration: HistogramVec,
 }
 
 impl DkgPayloadMetrics {
