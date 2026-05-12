@@ -28,9 +28,6 @@ use std::{
 /// ECDSA message hash size in bytes.
 const MESSAGE_HASH_SIZE: usize = 32;
 
-/// Threshold algorithm pseudo-random ID size in bytes.
-const PSEUDO_RANDOM_ID_SIZE: usize = 32;
-
 /// Threshold algorithm nonce size in bytes.
 const NONCE_SIZE: usize = 32;
 
@@ -558,7 +555,6 @@ pub struct SignWithThresholdContext {
     pub request: Request,
     pub args: ThresholdArguments,
     pub derivation_path: Arc<Vec<Vec<u8>>>,
-    pub deprecated_pseudo_random_id: Option<[u8; PSEUDO_RANDOM_ID_SIZE]>,
     pub batch_time: Time,
     pub nonce: Option<[u8; NONCE_SIZE]>,
 }

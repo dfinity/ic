@@ -42,6 +42,14 @@ impl CanisterPriority {
         long_execution_start_round: None,
         last_full_execution_round: ExecutionRound::new(0),
     };
+
+    /// Returns true if the canister has non-zero accumulated priority or is in a
+    /// long execution.
+    pub fn is_non_zero(&self) -> bool {
+        self.accumulated_priority.get() != 0
+            || self.executed_rounds != 0
+            || self.long_execution_start_round.is_some()
+    }
 }
 
 impl Default for CanisterPriority {

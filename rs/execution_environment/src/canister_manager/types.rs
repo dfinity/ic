@@ -405,11 +405,6 @@ pub(crate) enum CanisterManagerError {
         available: Cycles,
         required: Cycles,
     },
-    LogResizeNotEnoughCycles {
-        available: Cycles,
-        threshold: Cycles,
-        requested: Cycles,
-    },
     ReservedCyclesLimitExceededInMemoryAllocation {
         memory_allocation: MemoryAllocation,
         requested: Cycles,
@@ -616,10 +611,6 @@ impl AsErrorHelp for CanisterManagerError {
             CanisterManagerError::InsufficientCyclesInMemoryGrow { .. } => ErrorHelp::UserError {
                 suggestion: "Top up the canister with more cycles.".to_string(),
                 doc_link: doc_ref("insufficient-cycles-in-memory-grow-1"),
-            },
-            CanisterManagerError::LogResizeNotEnoughCycles { .. } => ErrorHelp::UserError {
-                suggestion: "Top up the canister with more cycles.".to_string(),
-                doc_link: doc_ref("log-resize-not-enough-cycles"),
             },
             CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation { .. } => {
                 ErrorHelp::UserError {
@@ -1001,18 +992,6 @@ impl From<CanisterManagerError> for UserError {
                          At least {} additional cycles are required.{additional_help}",
                     bytes,
                     required - available
-                ),
-            ),
-            LogResizeNotEnoughCycles {
-                available,
-                threshold,
-                requested,
-            } => Self::new(
-                ErrorCode::CanisterOutOfCycles,
-                format!(
-                    "Cannot resize canister log memory due to insufficient cycles. \
-                     At least {} additional cycles are required.{additional_help}",
-                    (threshold + requested) - available
                 ),
             ),
             ReservedCyclesLimitExceededInMemoryAllocation {

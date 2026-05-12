@@ -61,7 +61,6 @@ impl Fake for DkgSummary {
             /*current_transcripts=*/
             empty_ni_dkg_transcripts_with_committee(registry_version),
             /*next_transcripts=*/ BTreeMap::default(),
-            /*transcript_for_new_subnets=*/ Vec::default(),
             RegistryVersion::from(registry_version),
             /*interval_length=*/ Height::new(59),
             /*next_interval_length=*/ Height::new(59),
