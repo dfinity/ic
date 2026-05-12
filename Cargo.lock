@@ -2787,6 +2787,7 @@ dependencies = [
  "candid",
  "futures",
  "ic-agent",
+ "ic-management-canister-types 0.5.0",
  "ic-management-canister-types 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-management-canister-types-private",
  "ic-registry-subnet-features",

@@ -3870,6 +3870,7 @@ dependencies = [
  "ic-cbor",
  "ic-cdk 0.19.0",
  "ic-cdk-executor",
+ "ic-cdk-management-canister",
  "ic-cdk-timers",
  "ic-certificate-verification",
  "ic-certification",
