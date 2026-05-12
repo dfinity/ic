@@ -244,7 +244,6 @@ pub fn fake_signature_request_context_with_pre_sig(
         args: fake_signature_request_args(key_id.into(), height, pre_signature, rv),
         derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
-        deprecated_pseudo_random_id: None,
         nonce: None,
     };
     (request_id.callback_id, context)
@@ -262,7 +261,6 @@ pub fn fake_signature_request_context_from_id(
         args: fake_signature_request_args(key_id, height, Some(pre_sig_id), rv),
         derivation_path: Arc::new(vec![vec![]]),
         batch_time: UNIX_EPOCH,
-        deprecated_pseudo_random_id: None,
         nonce: Some([0; 32]),
     };
     (request_id.callback_id, context)
@@ -318,7 +316,6 @@ pub fn fake_signature_request_context_with_registry_version(
         args: fake_signature_request_args(key_id.clone(), height, pre_sig_id, rv),
         derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
-        deprecated_pseudo_random_id: None,
         nonce: Some([0; 32]),
     }
 }

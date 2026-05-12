@@ -11,10 +11,14 @@ use ic_ckdoge_minter::{
     },
     event::{CkDogeMinterEvent, CkDogeMinterEventType},
     lifecycle::{MinterArg, upgrade::UpgradeArgs},
+    updates::icrc21::StandardRecord,
 };
 use ic_management_canister_types::{CanisterId, CanisterStatusResult};
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc21::errors::Icrc21Error;
+use icrc_ledger_types::icrc21::requests::ConsentMessageRequest;
+use icrc_ledger_types::icrc21::responses::ConsentInfo;
 use pocket_ic::common::rest::RawMessageId;
 use pocket_ic::{PocketIc, RejectResponse};
 use std::sync::Arc;
@@ -301,6 +305,36 @@ impl MinterCanister {
             )
             .expect("BUG: failed to call get_events");
         Decode!(&call_result, Vec<CkDogeMinterEvent>).unwrap()
+    }
+
+    pub fn icrc10_supported_standards(&self) -> Vec<StandardRecord> {
+        let call_result = self
+            .env
+            .query_call(
+                self.id,
+                Principal::anonymous(),
+                "icrc10_supported_standards",
+                Encode!().unwrap(),
+            )
+            .expect("BUG: failed to call icrc10_supported_standards");
+        Decode!(&call_result, Vec<StandardRecord>).unwrap()
+    }
+
+    pub fn icrc21_canister_call_consent_message(
+        &self,
+        sender: Principal,
+        request: &ConsentMessageRequest,
+    ) -> Result<ConsentInfo, Icrc21Error> {
+        let call_result = self
+            .env
+            .update_call(
+                self.id,
+                sender,
+                "icrc21_canister_call_consent_message",
+                Encode!(request).unwrap(),
+            )
+            .expect("BUG: failed to call icrc21_canister_call_consent_message");
+        Decode!(&call_result, Result<ConsentInfo, Icrc21Error>).unwrap()
     }
 
     pub fn id(&self) -> CanisterId {

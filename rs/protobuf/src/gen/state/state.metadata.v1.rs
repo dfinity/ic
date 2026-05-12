@@ -162,8 +162,6 @@ pub struct SignWithThresholdContext {
     pub args: ::core::option::Option<ThresholdArguments>,
     #[prost(bytes = "vec", repeated, tag = "3")]
     pub derivation_path_vec: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
-    #[prost(bytes = "vec", tag = "4")]
-    pub deprecated_pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "5")]
     pub batch_time: u64,
     #[prost(bytes = "vec", optional, tag = "8")]

@@ -73,13 +73,17 @@ pub(super) fn complement_state_manager_with_dkg_contexts(
             .subnet_call_context_manager
             .push_context(context);
     }
+    let state = Arc::new(state);
     let mut mock = state_manager.get_mut();
     let expectation = mock
         .expect_get_state_at()
-        .return_const(Ok(Labeled::new(Height::new(0), Arc::new(state))));
+        .return_const(Ok(Labeled::new(Height::new(0), state.clone())));
     if let Some(times) = times {
         expectation.times(times);
     }
+
+    mock.expect_get_latest_certified_state()
+        .return_const(Some(Labeled::new(Height::new(0), state.clone())));
 }
 
 pub(super) fn complement_state_manager_with_setup_initial_dkg_request(
@@ -92,23 +96,6 @@ pub(super) fn complement_state_manager_with_setup_initial_dkg_request(
     let contexts = target
         .into_iter()
         .map(|t| make_setup_initial_dkg_context(registry_version, node_ids.clone(), t))
-        .collect();
-    complement_state_manager_with_dkg_contexts(state_manager, contexts, times);
-}
-
-pub(super) fn complement_state_manager_with_reshare_chain_key_request(
-    state_manager: Arc<RefMockStateManager>,
-    registry_version: RegistryVersion,
-    key_id: VetKdKeyId,
-    node_ids: Vec<u64>,
-    times: Option<usize>,
-    target: Option<NiDkgTargetId>,
-) {
-    let contexts = target
-        .into_iter()
-        .map(|t| {
-            make_reshare_chain_key_context(registry_version, key_id.clone(), node_ids.clone(), t)
-        })
         .collect();
     complement_state_manager_with_dkg_contexts(state_manager, contexts, times);
 }
@@ -145,19 +132,6 @@ pub(super) fn extract_dealings_from_highest_block(pool: &TestConsensusPool) -> D
         BlockPayload::Summary(_) => vec![],
         BlockPayload::Data(data) => data.dkg.messages.clone(),
     }
-}
-
-/// Extract the remote dkg IDs from the current highest validated block
-pub(super) fn extract_remote_dkg_ids_from_highest_block(
-    pool: &TestConsensusPool,
-    target_id: NiDkgTargetId,
-) -> Vec<NiDkgId> {
-    extract_dkg_configs_from_highest_block(pool)
-        .iter()
-        .filter(|(id, _)| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
-        .map(|(id, _)| id)
-        .cloned()
-        .collect()
 }
 
 /// Extract the DKG configs from the current highest validated block
