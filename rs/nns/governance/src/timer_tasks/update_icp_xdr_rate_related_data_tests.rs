@@ -173,7 +173,7 @@ fn test_update_rates_buffer_sorted() {
 #[test]
 fn test_update_rates_buffer_no_longer_caps_by_size() {
     // update_rates_buffer no longer evicts: eviction is a separate, timestamp-anchored step.
-    // Confirm that inserting beyond MAX_RATES_BUFFER_SIZE leaves the buffer length unchanged.
+    // Confirm that inserting beyond MAX_RATES_BUFFER_SIZE grows the buffer (no size cap).
     let rates: Vec<SampledPrice> = (0..MAX_RATES_BUFFER_SIZE as u64)
         .map(|d| SampledPrice {
             timestamp_seconds: d * ONE_DAY_SECONDS,
@@ -400,7 +400,7 @@ fn test_compute_maturity_modulation_no_data_with_previous() {
     let result = compute_maturity_modulation_permyriad(&[], 100, Some((50, 99)));
     assert_eq!(
         result,
-        Err("insufficient recent price data despite full history".to_string())
+        Err("no rate available for the recent price window".to_string())
     );
 }
 
@@ -409,7 +409,7 @@ fn test_compute_maturity_modulation_no_data_no_previous() {
     let result = compute_maturity_modulation_permyriad(&[], 100, None);
     assert_eq!(
         result,
-        Err("insufficient recent price data despite full history".to_string())
+        Err("no rate available for the recent price window".to_string())
     );
 }
 

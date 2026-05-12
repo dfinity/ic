@@ -64,8 +64,10 @@ const ERROR_RETRY_INTERVAL_SECONDS: u64 = 60;
 /// even when XRC fails to return a rate for one or more days. The fallback is computation-only;
 /// nothing is written back to `rates`.
 ///
-/// Returns `None` if no rate exists at or before any day in the window (e.g., the window starts
-/// before the buffer's first entry and stays that way).
+/// Returns `None` only when LOCF never finds a value to carry — i.e., no rate in the buffer has
+/// a timestamp at or before `current_day` (so every day in the window is skipped). If a rate
+/// appears partway into the window, leading days that precede it are skipped and the average is
+/// computed over the days that do have a value.
 pub(crate) fn compute_average_icp_xdr_rate(
     rates: &[SampledPrice],
     current_day: u64,
@@ -135,14 +137,14 @@ fn compute_maturity_modulation_permyriad(
         current_day,
         MATURITY_MODULATION_CURRENT_ICP_PRICE_WINDOW_DAYS,
     )
-    .ok_or_else(|| "insufficient recent price data despite full history".to_string())?;
+    .ok_or_else(|| "no rate available for the recent price window".to_string())?;
 
     let reference_icp_price = compute_average_icp_xdr_rate(
         rates,
         current_day,
         MATURITY_MODULATION_REFERENCE_ICP_PRICE_WINDOW_DAYS,
     )
-    .ok_or_else(|| "insufficient reference price data despite full history".to_string())?;
+    .ok_or_else(|| "no rate available for the reference price window".to_string())?;
 
     if reference_icp_price == 0 {
         return Err("reference price averaged to zero".to_string());
