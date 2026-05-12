@@ -55,6 +55,10 @@ impl DkgPayloadMetrics {
             ),
         }
     }
+
+    pub fn payload_errors_inc(&self, label: &str) {
+        self.payload_errors.with_label_values(&[label]).inc();
+    }
 }
 
 pub(crate) trait DkgPayloadMetricsOptionExt {
@@ -65,7 +69,7 @@ pub(crate) trait DkgPayloadMetricsOptionExt {
 impl DkgPayloadMetricsOptionExt for Option<&DkgPayloadMetrics> {
     fn payload_errors_inc(self, label: &str) {
         if let Some(metrics) = self {
-            metrics.payload_errors.with_label_values(&[label]).inc();
+            metrics.payload_errors_inc(label);
         }
     }
 
