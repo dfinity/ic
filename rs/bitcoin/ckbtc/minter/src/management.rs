@@ -229,13 +229,21 @@ pub async fn ecdsa_public_key(
     key_name: String,
     derivation_path: DerivationPath,
 ) -> Result<ECDSAPublicKey, CallError> {
+    let key_id = EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: key_name,
+    };
     ic_cdk::management_canister::ecdsa_public_key(
         &ic_cdk::management_canister::EcdsaPublicKeyArgs {
             canister_id: None,
             derivation_path: derivation_path.into_inner(),
-            key_id: EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: key_name,
+            key_id: ic_management_canister_types_0_5::EcdsaKeyId {
+                curve: match key_id.curve {
+                    EcdsaCurve::Secp256k1 => {
+                        ic_management_canister_types_0_5::EcdsaCurve::Secp256k1
+                    }
+                },
+                name: key_id.name,
             },
         },
     )

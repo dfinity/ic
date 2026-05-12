@@ -11,9 +11,8 @@ use ic_btc_checker::{
 use ic_btc_interface::Txid;
 use ic_canister_log::{export as export_logs, log};
 use ic_cdk::call::Error;
-use ic_cdk::management_canister::TransformArgs;
 use ic_http_types as http;
-use ic_management_canister_types::HttpRequestResult;
+use ic_management_canister_types::{HttpRequestResult, TransformArgs};
 use logs::{DEBUG, Log, LogEntry, Priority, WARN};
 use state::{Config, FetchGuardError, FetchTxStatus, HttpGetTxError, get_config, set_config};
 use std::cell::RefCell;

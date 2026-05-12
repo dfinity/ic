@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate};
 use ic_base_types::{NodeId, SubnetId};
 use ic_cdk::call::CallResult;
-use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
+use ic_management_canister_types::{NodeMetrics, NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
 use ic_stable_structures::StableBTreeMap;
 use itertools::Itertools;
 use rewards_calculation::types::{NodeMetricsDailyRaw, UnixTsNanos};
@@ -33,7 +33,29 @@ impl ManagementCanisterClient for ICCanisterClient {
         &self,
         args: &NodeMetricsHistoryArgs,
     ) -> CallResult<Vec<NodeMetricsHistoryRecord>> {
-        ic_cdk::management_canister::node_metrics_history(args).await
+        let args_v0_5 = ic_management_canister_types_0_5::NodeMetricsHistoryArgs {
+            subnet_id: args.subnet_id,
+            start_at_timestamp_nanos: args.start_at_timestamp_nanos,
+        };
+        ic_cdk::management_canister::node_metrics_history(&args_v0_5)
+            .await
+            .map(|records| {
+                records
+                    .into_iter()
+                    .map(|record| NodeMetricsHistoryRecord {
+                        timestamp_nanos: record.timestamp_nanos,
+                        node_metrics: record
+                            .node_metrics
+                            .into_iter()
+                            .map(|m| NodeMetrics {
+                                node_id: m.node_id,
+                                num_blocks_proposed_total: m.num_blocks_proposed_total,
+                                num_block_failures_total: m.num_block_failures_total,
+                            })
+                            .collect(),
+                    })
+                    .collect()
+            })
     }
 }
 
