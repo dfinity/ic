@@ -88,6 +88,27 @@ system_test_nns(
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
 )
 
+# Tests if the current GuestOS version on a bare-metal SEV-enabled node can successfully
+# upgrade to the current test image.
+# This test requires manually injecting the baremetal configuration.
+# ict test //rs/tests/nested:guestos_upgrade_from_current_to_current_test_sev -- --test_env=BARE_METAL_HOST_SECRETS="$(realpath zh2-dll01.ini)"
+# zh2-dll01.ini can be retrieved from our 1password
+system_test_nns(
+    name = "guestos_upgrade_from_current_to_current_test_sev",
+    env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
+    guestos = True,
+    guestos_update = "test",
+    hostos = True,
+    tags = [
+        "manual",
+    ],
+    test_driver_target = ":guestos_upgrade_test_bin",
+    test_timeout = "eternal",
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
+    },
+)
+
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully guestos upgrade to current commit
 system_test_nns(
     name = "guestos_upgrade_from_latest_release_to_current",
