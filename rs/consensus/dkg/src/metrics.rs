@@ -34,13 +34,13 @@ impl DkgClientMetrics {
     }
 }
 
-pub(crate) struct DkgPayloadMetrics {
+pub struct DkgPayloadMetrics {
     payload_errors: IntCounterVec,
     pub(crate) payload_duration: HistogramVec,
 }
 
 impl DkgPayloadMetrics {
-    pub(crate) fn new(metrics_registry: MetricsRegistry) -> Self {
+    pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             payload_errors: metrics_registry.int_counter_vec(
                 "dkg_payload_errors",
