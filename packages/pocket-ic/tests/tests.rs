@@ -11,8 +11,9 @@ use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
 use ic_utils::interfaces::ManagementCanister;
 use pocket_ic::{
-    DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult, PocketIc, PocketIcBuilder,
-    PocketIcState, RejectCode, StartServerParams, Time,
+    CreateCanisterParams, CreateCanisterPlacement, DefaultEffectiveCanisterIdError, ErrorCode,
+    IngressStatusResult, PocketIc, PocketIcBuilder, PocketIcState, RejectCode, StartServerParams,
+    Time,
     common::rest::{
         AutoProgressConfig, BlobCompression, CanisterCyclesCostSchedule, CanisterHttpReply,
         CanisterHttpResponse, CanisterIdRange, CreateInstanceResponse, ExtendedSubnetConfigSet,
@@ -210,6 +211,94 @@ fn test_create_canister_with_not_mainnet_id_panics() {
         None,
         Principal::from_slice(&[0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01]),
     );
+}
+
+#[test]
+fn test_create_canister_with_params_default() {
+    let pic = PocketIc::new();
+    let canister_id = pic
+        .create_canister_with_params(None, CreateCanisterParams::default())
+        .unwrap();
+    // Default cycles balance is 100T.
+    assert_eq!(pic.cycle_balance(canister_id), 100_000_000_000_000);
+}
+
+#[test]
+fn test_create_canister_with_params_cycles() {
+    let pic = PocketIc::new();
+    let cycles = 42_000_000_000_000u128;
+    let canister_id = pic
+        .create_canister_with_params(
+            None,
+            CreateCanisterParams {
+                cycles: Some(cycles),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(pic.cycle_balance(canister_id), cycles);
+}
+
+#[test]
+fn test_create_canister_with_params_subnet() {
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_fiduciary_subnet()
+        .build();
+    let topology = pic.topology();
+    let fidu_subnet_id = topology.get_fiduciary().unwrap();
+    let canister_id = pic
+        .create_canister_with_params(
+            None,
+            CreateCanisterParams {
+                placement: Some(CreateCanisterPlacement::SubnetId(fidu_subnet_id)),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(pic.get_subnet(canister_id).unwrap(), fidu_subnet_id);
+}
+
+#[test]
+fn test_create_canister_with_params_canister_id() {
+    let pic = PocketIcBuilder::new().with_nns_subnet().build();
+    let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+    let actual_canister_id = pic
+        .create_canister_with_params(
+            None,
+            CreateCanisterParams {
+                placement: Some(CreateCanisterPlacement::CanisterId(canister_id)),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(actual_canister_id, canister_id);
+    assert_eq!(
+        pic.get_subnet(canister_id).unwrap(),
+        pic.topology().get_nns().unwrap()
+    );
+}
+
+#[test]
+fn test_create_canister_with_params_duplicate_id_fails() {
+    let pic = PocketIcBuilder::new().with_nns_subnet().build();
+    let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+    let res = pic.create_canister_with_params(
+        None,
+        CreateCanisterParams {
+            placement: Some(CreateCanisterPlacement::CanisterId(canister_id)),
+            ..Default::default()
+        },
+    );
+    assert!(res.is_ok());
+    let res = pic.create_canister_with_params(
+        None,
+        CreateCanisterParams {
+            placement: Some(CreateCanisterPlacement::CanisterId(canister_id)),
+            ..Default::default()
+        },
+    );
+    assert!(res.is_err());
 }
 
 #[test]
