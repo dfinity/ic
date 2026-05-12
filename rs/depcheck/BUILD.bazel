@@ -2,21 +2,23 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:cargo_metadata",
-]
-
 rust_library(
     name = "depcheck",
     srcs = glob(["src/**"]),
     crate_name = "depcheck",
     version = "0.1.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:cargo_metadata",
+    ],
 )
 
 rust_binary(
     name = "depcheck_bin",
     srcs = ["src/main.rs"],
-    deps = [":depcheck"] + DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":depcheck",
+        "@crate_index//:cargo_metadata",
+    ],
 )
