@@ -1,5 +1,5 @@
 {
-  "checksum": "82bc62071cc709268d7003276b9e389f1811d03d6d8b4155890915618f639274",
+  "checksum": "fc8fc4f2a640ad3ff8a7d350fdc4967a0c71d598a90fa020f184a93fa8486e1f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22551,7 +22551,7 @@
               "target": "ic_cbor"
             },
             {
-              "id": "ic-cdk 0.20.1",
+              "id": "ic-cdk 0.19.0",
               "target": "ic_cdk"
             },
             {
@@ -101192,7 +101192,7 @@
     "ic-canister-runtime 0.2.2",
     "ic-canister-sig-creation 1.3.0",
     "ic-cbor 3.1.0",
-    "ic-cdk 0.20.1",
+    "ic-cdk 0.19.0",
     "ic-cdk-executor 2.0.0",
     "ic-cdk-timers 1.0.0",
     "ic-certificate-verification 3.1.0",
