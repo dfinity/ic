@@ -55,7 +55,7 @@ use candid::Principal;
 use slog::{Logger, info};
 use std::{thread, time::Duration};
 
-const DKG_INTERVAL: u64 = 9;
+const DKG_INTERVAL: u64 = 29;
 const APP_NODES: usize = 1;
 
 const MESSAGE_IN_THE_CANISTER_TO_BE_MIGRATED: &str =
