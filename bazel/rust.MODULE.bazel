@@ -666,6 +666,10 @@ crate.spec(
     version = "^2.0.0",
 )
 crate.spec(
+    package = "ic-cdk-management-canister",
+    version = "^0.1.1",
+)
+crate.spec(
     package = "ic-cdk-timers",
     version = "^1.0.0",
 )
