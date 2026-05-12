@@ -3046,7 +3046,7 @@ impl PocketIc {
                             tokio::sync::watch::channel(ic_types::Height::from(0)).0,
                             Some(ReplicatedStateInvariants::new(
                                 &metrics_registry,
-                                &icp_config.hypervisor_config,
+                                &execution_environment::Config::default(),
                             )),
                             &metrics_registry,
                             no_op_logger(),
