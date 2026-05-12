@@ -28,6 +28,7 @@ LIB_DEPS = [
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-management-canister-types",
+    "@crate_index//:ic_management_canister_types_0_5",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:ic0",
