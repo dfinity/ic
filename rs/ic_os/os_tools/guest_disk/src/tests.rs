@@ -743,7 +743,7 @@ fn test_format_store_populates_detached_header_and_sets_permissions() {
             .permissions()
             .mode()
             & 0o777,
-        0o600,
+        0o644,
         "detached Store LUKS header should be readable and writable by owner only"
     );
 }
