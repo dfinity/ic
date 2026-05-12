@@ -204,7 +204,7 @@ pub(super) struct UpdateIcpXdrRateRelatedData {
     /// Reset to `None` at the end of a round (when maturity modulation is updated). The state is
     /// in-memory only and resets across canister upgrades; that just means the next round retries
     /// everything from scratch, which is what the next-midnight tick would do anyway.
-    attempted_through_day: Option<u64>,
+    last_attempted_day_in_round: Option<u64>,
 }
 
 impl UpdateIcpXdrRateRelatedData {
@@ -215,12 +215,12 @@ impl UpdateIcpXdrRateRelatedData {
         Self {
             governance,
             xrc_client,
-            attempted_through_day: None,
+            last_attempted_day_in_round: None,
         }
     }
 
     /// Returns the oldest missing day in `[current_day - 364, current_day]` that is strictly
-    /// greater than `self.attempted_through_day`, or `None` if no such day exists (either the
+    /// greater than `self.last_attempted_day_in_round`, or `None` if no such day exists (either the
     /// history is complete or every missing day in the window has been attempted this round).
     ///
     /// Walks the sorted rates slice and the expected day range together in O(n).
@@ -233,7 +233,7 @@ impl UpdateIcpXdrRateRelatedData {
                 .map(|h| &h.icp_xdr_rates[..])
                 .unwrap_or(&[]);
             let oldest_needed = current_day.saturating_sub(MAX_RATES_BUFFER_SIZE as u64 - 1);
-            let start_day = match self.attempted_through_day {
+            let start_day = match self.last_attempted_day_in_round {
                 Some(d) => d.saturating_add(1).max(oldest_needed),
                 None => oldest_needed,
             };
@@ -487,7 +487,7 @@ impl RecurringAsyncTask for UpdateIcpXdrRateRelatedData {
                 );
             });
 
-            self.attempted_through_day = None;
+            self.last_attempted_day_in_round = None;
             return (duration_until_next_midnight_utc(now), self);
         };
 
@@ -497,7 +497,7 @@ impl RecurringAsyncTask for UpdateIcpXdrRateRelatedData {
         let maybe_rate = self
             .fetch_and_validate_rate(day_to_fetch * ONE_DAY_SECONDS)
             .await;
-        self.attempted_through_day = Some(day_to_fetch);
+        self.last_attempted_day_in_round = Some(day_to_fetch);
 
         let Some(rate) = maybe_rate else {
             return (Duration::from_secs(ERROR_RETRY_INTERVAL_SECONDS), self);

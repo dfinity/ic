@@ -951,7 +951,7 @@ async fn test_execute_resets_cursor_for_next_round() {
     let task = UpdateIcpXdrRateRelatedData::new(&GOV, Arc::new(mock_client));
     let (_, task) = task.execute().await;
     assert!(
-        task.attempted_through_day.is_none(),
+        task.last_attempted_day_in_round.is_none(),
         "cursor must reset after a completed round"
     );
 }
