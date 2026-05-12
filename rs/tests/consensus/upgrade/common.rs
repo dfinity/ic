@@ -177,11 +177,18 @@ pub fn upgrade(
             .await
             .expect("Failed to create agent");
         let mgr = ManagementCanister::create(&agent);
-        let snapshot_args = TakeCanisterSnapshotArgs {
+        let _snapshot_args = TakeCanisterSnapshotArgs {
             canister_id: CanisterId::from(can_id),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         };
-        mgr.take_canister_snapshot(&can_id, &snapshot_args)
+        // Convert to the 0.5-typed args expected by ic-utils 0.45.
+        let snapshot_args_v0_5 = ic_management_canister_types_0_5::TakeCanisterSnapshotArgs {
+            canister_id: _snapshot_args.canister_id,
+            replace_snapshot: _snapshot_args.replace_snapshot,
+        };
+        mgr.take_canister_snapshot(&can_id, &snapshot_args_v0_5)
             .await
             .unwrap();
     });
