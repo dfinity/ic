@@ -9,6 +9,7 @@ rust_library(
     version = "0.9.0",
     deps = [
         # Keep sorted.
+        "//packages/ic-ed25519",
         "//packages/ic-secp256r1",
         "//rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
         "//rs/types/types",
@@ -22,6 +23,7 @@ rust_test(
     crate = ":cose",
     deps = [
         # Keep sorted.
+        "//packages/ic-ed25519",
         "//packages/ic-secp256r1",
         "//rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
         "//rs/crypto/internal/test_vectors",
@@ -38,6 +40,7 @@ rust_test_suite(
     deps = [
         # Keep sorted.
         ":cose",
+        "//packages/ic-ed25519",
         "//packages/ic-secp256r1",
         "//rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
         "//rs/crypto/internal/test_vectors",

@@ -8379,6 +8379,7 @@ dependencies = [
  "hex",
  "ic-crypto-internal-basic-sig-rsa-pkcs1",
  "ic-crypto-internal-test-vectors",
+ "ic-ed25519 0.6.0",
  "ic-secp256r1",
  "ic-types",
  "serde",
