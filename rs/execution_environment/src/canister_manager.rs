@@ -724,7 +724,7 @@ impl CanisterManager {
         &self,
         origin: CanisterChangeOrigin,
         cycles: Cycles,
-        mut settings: CanisterSettings,
+        settings: CanisterSettings,
         max_number_of_canisters: u64,
         state: &mut ReplicatedState,
         subnet_size: usize,
@@ -769,19 +769,6 @@ impl CanisterManager {
                 cycles,
             );
         }
-
-        // Set the field to the default value if it is empty.
-        settings
-            .reserved_cycles_limit
-            .get_or_insert_with(|| self.cycles_account_manager.default_reserved_balance_limit());
-
-        settings
-            .wasm_memory_limit
-            .get_or_insert(self.config.default_wasm_memory_limit);
-
-        settings
-            .log_memory_limit
-            .get_or_insert(NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64));
 
         // Test coverage relies on the fact that
         // the IC method `provisional_create_canister_with_cycles`
@@ -1348,7 +1335,7 @@ impl CanisterManager {
         &self,
         origin: CanisterChangeOrigin,
         cycles_amount: Option<u128>,
-        mut settings: CanisterSettings,
+        settings: CanisterSettings,
         specified_id: Option<PrincipalId>,
         state: &mut ReplicatedState,
         provisional_whitelist: &ProvisionalWhitelist,
@@ -1368,19 +1355,6 @@ impl CanisterManager {
             Some(cycles_amount) => Cycles::from(cycles_amount),
             None => self.config.default_provisional_cycles_balance,
         };
-
-        // Set the field to the default value if it is empty.
-        settings
-            .reserved_cycles_limit
-            .get_or_insert_with(|| self.cycles_account_manager.default_reserved_balance_limit());
-
-        settings
-            .wasm_memory_limit
-            .get_or_insert(self.config.default_wasm_memory_limit);
-
-        settings
-            .log_memory_limit
-            .get_or_insert(NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64));
 
         // Test coverage relies on the fact that
         // the IC method `provisional_create_canister_with_cycles`
@@ -1443,7 +1417,7 @@ impl CanisterManager {
         origin: CanisterChangeOrigin,
         cycles: Cycles,
         creation_fee: CompoundCycles<CanisterCreation>,
-        settings: CanisterSettings,
+        mut settings: CanisterSettings,
         max_number_of_canisters: u64,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
@@ -1453,6 +1427,19 @@ impl CanisterManager {
         canister_creation_error: &IntCounter,
     ) -> Result<CanisterId, CanisterManagerError> {
         let sender = origin.origin();
+
+        // Set the field to the default value if it is empty.
+        settings
+            .reserved_cycles_limit
+            .get_or_insert_with(|| self.cycles_account_manager.default_reserved_balance_limit());
+
+        settings
+            .wasm_memory_limit
+            .get_or_insert(self.config.default_wasm_memory_limit);
+
+        settings
+            .log_memory_limit
+            .get_or_insert(NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64));
 
         // A value of 0 is equivalent to setting no limit.
         // See documentation of `SubnetRecord` for the semantics of `max_number_of_canisters`.

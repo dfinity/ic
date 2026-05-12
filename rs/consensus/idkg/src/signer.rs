@@ -612,14 +612,6 @@ impl ThresholdSigner for ThresholdSignerImpl {
             .signature_request_contexts()
             .iter()
             .flat_map(|(callback_id, context)| {
-                if let Some(id) = context.deprecated_pseudo_random_id {
-                    warn!(
-                        every_n_seconds => 15,
-                        self.log,
-                        "Deprecated pseudo random ID still in use by context {}: {:?}",
-                        callback_id, id
-                    );
-                }
                 context.height().map(|height| RequestId {
                     callback_id: *callback_id,
                     height,
