@@ -140,7 +140,7 @@ use super::{
 use crate::{
     driver::{
         constants::{self, GROUP_TTL, SSH_USERNAME},
-        farm::{Farm, GroupSpec},
+        farm::{Farm, GroupSpec, VmAllocationMode},
         log_events,
         test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
     },
@@ -1482,11 +1482,21 @@ pub fn get_build_setupos_config_image_tool() -> PathBuf {
 }
 
 pub trait HasGroupSetup {
-    fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool);
+    fn create_group_setup(
+        &self,
+        group_base_name: String,
+        vm_allocation_mode: Option<VmAllocationMode>,
+        no_group_ttl: bool,
+    );
 }
 
 impl HasGroupSetup for TestEnv {
-    fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool) {
+    fn create_group_setup(
+        &self,
+        group_base_name: String,
+        vm_allocation_mode: Option<VmAllocationMode>,
+        no_group_ttl: bool,
+    ) {
         let log = self.logger();
         if GroupSetup::attribute_exists(self) {
             let group_setup = GroupSetup::read_attribute(self);
@@ -1504,7 +1514,7 @@ impl HasGroupSetup for TestEnv {
                     let farm_base_url = FarmBaseUrl::read_attribute(self);
                     let farm = Farm::new(farm_base_url.into(), self.logger());
                     let group_spec = GroupSpec {
-                        vm_allocation_mode: None,
+                        vm_allocation_mode,
                         required_host_features: vec![],
                         preferred_network: None,
                         metadata: None,

@@ -1303,7 +1303,11 @@ impl SystemTestGroup {
             }
             InfraProvider::Farm.write_attribute(&root_env);
             if with_farm {
-                root_env.create_group_setup(group_ctx.group_base_name.clone(), args.no_group_ttl);
+                root_env.create_group_setup(
+                    group_ctx.group_base_name.clone(),
+                    self.vm_allocation_mode.clone(),
+                    args.no_group_ttl,
+                );
             }
             debug!(group_ctx.log(), "Created group context: {:?}", group_ctx);
         }
