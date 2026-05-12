@@ -1,0 +1,111 @@
+# Local 4-node IC subnet running x86_64 Linux replicas under Rosetta.
+#
+# Run:
+#   ./prep.sh           # one-time, generates ./bootstrap/
+#   docker compose up -d
+#   docker compose logs -f
+#
+# All 4 nodes are on subnet 0 (which doubles as the NNS subnet).
+# Only node-0 publishes its HTTP API (8080) and metrics (9090) to the host;
+# the other nodes are reachable only from inside the docker network.
+name: ic-local-net
+
+x-replica: &replica-defaults
+  image: ic-replica:dev
+  platform: linux/amd64
+  # The replica calls setpgid() on startup to manage sandbox children.
+  # Docker's default seccomp profile blocks that under PID 1; turning it
+  # off for local dev is fine — we don't run adversarial workloads here.
+  security_opt:
+    - seccomp=unconfined
+  command:
+    - ic-replica
+    - --replica-version
+    - "0.9.0"
+    - --config-file
+    - /etc/ic/ic.json5
+  # Probe the HTTP API port directly via bash's /dev/tcp. The replica
+  # takes a few seconds to bind, so we allow generous startup time.
+  healthcheck:
+    test:
+      - CMD
+      - bash
+      - -c
+      - "exec 3<>/dev/tcp/127.0.0.1/8080"
+    interval: 5s
+    timeout: 3s
+    retries: 60
+    start_period: 30s
+  restart: unless-stopped
+  stop_grace_period: 30s
+
+services:
+  replica-0:
+    <<: *replica-defaults
+    container_name: ic-replica-0
+    networks:
+      ic-local:
+        ipv6_address: fd00:1::10
+    ports:
+      - "8080:8080"    # public HTTP API
+      - "9090:9090"    # prometheus metrics
+    volumes:
+      - ./bootstrap/ic_registry_local_store:/etc/ic/registry:ro
+      - ./bootstrap/node-0/crypto:/etc/ic/crypto
+      - ./bootstrap/node-0/ic.json5:/etc/ic/ic.json5:ro
+      - ./out:/usr/local/bin:ro    # bind-mount latest binaries (see iter.sh)
+      - state-0:/var/lib/ic
+
+  replica-1:
+    <<: *replica-defaults
+    container_name: ic-replica-1
+    networks:
+      ic-local:
+        ipv6_address: fd00:1::11
+    volumes:
+      - ./bootstrap/ic_registry_local_store:/etc/ic/registry:ro
+      - ./bootstrap/node-1/crypto:/etc/ic/crypto
+      - ./bootstrap/node-1/ic.json5:/etc/ic/ic.json5:ro
+      - ./out:/usr/local/bin:ro    # bind-mount latest binaries (see iter.sh)
+      - state-1:/var/lib/ic
+
+  replica-2:
+    <<: *replica-defaults
+    container_name: ic-replica-2
+    networks:
+      ic-local:
+        ipv6_address: fd00:1::12
+    volumes:
+      - ./bootstrap/ic_registry_local_store:/etc/ic/registry:ro
+      - ./bootstrap/node-2/crypto:/etc/ic/crypto
+      - ./bootstrap/node-2/ic.json5:/etc/ic/ic.json5:ro
+      - ./out:/usr/local/bin:ro    # bind-mount latest binaries (see iter.sh)
+      - state-2:/var/lib/ic
+
+  replica-3:
+    <<: *replica-defaults
+    container_name: ic-replica-3
+    networks:
+      ic-local:
+        ipv6_address: fd00:1::13
+    volumes:
+      - ./bootstrap/ic_registry_local_store:/etc/ic/registry:ro
+      - ./bootstrap/node-3/crypto:/etc/ic/crypto
+      - ./bootstrap/node-3/ic.json5:/etc/ic/ic.json5:ro
+      - ./out:/usr/local/bin:ro    # bind-mount latest binaries (see iter.sh)
+      - state-3:/var/lib/ic
+
+networks:
+  ic-local:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: fd00:1::/64
+          gateway: fd00:1::1
+
+volumes:
+  state-0:
+  state-1:
+  state-2:
+  state-3:
