@@ -6,48 +6,65 @@ package(default_visibility = [
     "//rs/replica:__subpackages__",
 ])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-error-types",
-    "//rs/config",
-    "//rs/http_endpoints/async_utils",
-    "//rs/https_outcalls/pricing",
-    "//rs/https_outcalls/service",
-    "//rs/interfaces",
-    "//rs/interfaces/adapter_client",
-    "//rs/monitoring/adapter_metrics/client",
-    "//rs/monitoring/logger",
-    "//rs/monitoring/metrics",
-    "//rs/types/management_canister_types",
-    "//rs/types/types",
-    "@crate_index//:candid",
-    "@crate_index//:futures",
-    "@crate_index//:hyper-util",
-    "@crate_index//:prometheus",
-    "@crate_index//:slog",
-    "@crate_index//:tokio",
-    "@crate_index//:tonic",
-    "@crate_index//:tower",
-    "@crate_index//:tracing",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/test_utilities/time",
-    "//rs/test_utilities/types",
-    "@crate_index//:tower-test",
-]
-
 rust_library(
     name = "client",
     srcs = glob(["src/**"]),
     crate_name = "ic_https_outcalls_adapter_client",
     version = "0.1.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-error-types",
+        "//rs/config",
+        "//rs/http_endpoints/async_utils",
+        "//rs/https_outcalls/pricing",
+        "//rs/https_outcalls/service",
+        "//rs/interfaces",
+        "//rs/interfaces/adapter_client",
+        "//rs/monitoring/adapter_metrics/client",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:hyper-util",
+        "@crate_index//:prometheus",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+        "@crate_index//:tonic",
+        "@crate_index//:tower",
+        "@crate_index//:tracing",
+    ],
 )
 
 rust_test(
     name = "client_test",
     crate = ":client",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-error-types",
+        "//rs/config",
+        "//rs/http_endpoints/async_utils",
+        "//rs/https_outcalls/pricing",
+        "//rs/https_outcalls/service",
+        "//rs/interfaces",
+        "//rs/interfaces/adapter_client",
+        "//rs/monitoring/adapter_metrics/client",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/test_utilities/time",
+        "//rs/test_utilities/types",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:hyper-util",
+        "@crate_index//:prometheus",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+        "@crate_index//:tonic",
+        "@crate_index//:tower",
+        "@crate_index//:tower-test",
+        "@crate_index//:tracing",
+    ],
 )

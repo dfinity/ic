@@ -6,20 +6,21 @@ Runbook::
 . setup the testnet of 3f + 1 nodes with f = 4 (like on mainnet)
 . pick a random node and install 4 "seed" canisters through it (the state sync test canister is used as "seed")
 . create 100,000 canisters via the "seed" canisters (in parallel)
-. deploy 8 "busy" canisters (universal canister with heartbeats executing 1.8B instructions)
+. make the "seed" canisters cycle through those 100,000 canisters (in parallel) and keep changing their canister state
 . pick the slowest node required for consensus in terms of batch processing time and kill that node
 . wait for the subnet producing a CUP
 . start the killed node
 
 Success::
-.. if the restarted node reaches the next CUP height and becomes healthy by the time the next CUP is produced
-.. if metrics confirm that the restarted node skipped cloning many states to speed up its catch-up
+.. if the restarted node reaches the second next CUP height and becomes healthy by the time the second next CUP is produced
+.. if metrics confirm that the restarted node skipped cloning and hashing many states to speed up its catch-up
 
 end::catalog[] */
 
 use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::farm::HostFeature;
+use ic_system_test_driver::driver::farm::VmAllocationMode;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
@@ -46,6 +47,7 @@ fn main() -> Result<()> {
     let config = Config::new(NUM_NODES, NUM_CANISTERS);
     let test = config.clone().test();
     SystemTestGroup::new()
+        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(config.build())
         .add_test(systest!(test))
         .with_timeout_per_test(PER_TASK_TIMEOUT)

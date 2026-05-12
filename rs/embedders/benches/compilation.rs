@@ -13,12 +13,13 @@ use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use embedders_bench::SetupAction;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
-    WasmtimeEmbedder,
+    CompilationResult, SerializedModule, WasmtimeEmbedder,
     wasm_utils::{compile, validate_and_instrument_for_testing},
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::BinaryEncodedWasm;
 use std::io::Read;
+use std::sync::OnceLock;
 
 lazy_static::lazy_static! {
     static ref GOVERNANCE_BENCH_CANISTER: Vec<u8> =
@@ -43,10 +44,44 @@ fn unzip_wasm(bytes: &[u8]) -> BinaryEncodedWasm {
     BinaryEncodedWasm::new(buf)
 }
 
+/// A Wasm binary used by the compilation benchmarks, together with a slot for
+/// lazily caching its compilation output so that benchmarks that only need the
+/// result of compilation (but don't measure compilation itself) can avoid
+/// recompiling.
+struct Binary {
+    name: String,
+    wasm: BinaryEncodedWasm,
+    compiled: OnceLock<(CompilationResult, SerializedModule)>,
+}
+
+impl Binary {
+    fn new(name: &str, wasm: BinaryEncodedWasm) -> Self {
+        Self {
+            name: name.to_string(),
+            wasm,
+            compiled: OnceLock::new(),
+        }
+    }
+
+    /// Returns the compiled artifact for this binary, compiling it on first
+    /// access and caching the result for subsequent calls. Benchmarks that are
+    /// measuring compilation time must not call this — they should compile
+    /// `&self.wasm` directly inside the benchmark loop.
+    fn compiled(&self) -> &(CompilationResult, SerializedModule) {
+        self.compiled.get_or_init(|| {
+            let config = EmbeddersConfig::default();
+            let embedder = WasmtimeEmbedder::new(config, no_op_logger());
+            compile(&embedder, &self.wasm)
+                .1
+                .expect("Failed to compile canister wasm")
+        })
+    }
+}
+
 /// Tuples of (benchmark_name, compilation_cost, wasm) to run compilation benchmarks on.
-fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
-    let mut result = vec![(
-        "minimal".to_string(),
+fn generate_binaries() -> Vec<Binary> {
+    let mut result = vec![Binary::new(
+        "minimal",
         BinaryEncodedWasm::new(
             wat::parse_str(
                 r#"
@@ -77,8 +112,8 @@ fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
         many_adds.push_str("(i64.add (i64.const 1))");
     }
     many_adds.push_str("(drop) (call $ic0_msg_reply)))");
-    result.push((
-        "many_adds".to_string(),
+    result.push(Binary::new(
+        "many_adds",
         BinaryEncodedWasm::new(wat::parse_str(many_adds).expect("Failed to convert wat to wasm")),
     ));
 
@@ -97,8 +132,8 @@ fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
         many_funcs.push_str("(func)");
     }
     many_funcs.push(')');
-    result.push((
-        "many_funcs".to_string(),
+    result.push(Binary::new(
+        "many_funcs",
         BinaryEncodedWasm::new(wat::parse_str(many_funcs).expect("Failed to convert wat to wasm")),
     ));
 
@@ -106,25 +141,35 @@ fn generate_binaries() -> Vec<(String, BinaryEncodedWasm)> {
     // binary file in this repo.  It is generated from
     // https://github.com/dfinity/open-chat/tree/abk/for-replica-benchmarking
     let open_chat_wasm = unzip_wasm(&include_bytes!("test-data/user.wasm.gz")[..]);
-    result.push(("open_chat".to_string(), open_chat_wasm));
+    result.push(Binary::new("open_chat", open_chat_wasm));
 
     // This benchmark uses the QR code generator canister which is stored as a
     // binary file in this repo.  It is generated from the directory
     // `rust/qrcode` in
     // https://github.com/dfinity/examples/tree/abk/for-replica-benchmarking
     let qrcode_wasm = unzip_wasm(&include_bytes!("test-data/qrcode_backend.wasm.gz")[..]);
-    result.push(("qrcode".to_string(), qrcode_wasm));
+    result.push(Binary::new("qrcode", qrcode_wasm));
 
     // This benchmark uses a canister from the motoko playground which is stored
     // as a binary file in this repo.  It is generated from
     // https://github.com/dfinity/motoko-playground/tree/abk/for-replica-benchmarking
     let motoko_wasm = BinaryEncodedWasm::new(include_bytes!("test-data/pool.wasm").to_vec());
-    result.push(("motoko".to_string(), motoko_wasm));
+    result.push(Binary::new("motoko", motoko_wasm));
 
     let governance_wasm = unzip_wasm(&GOVERNANCE_BENCH_CANISTER[..]);
-    result.push(("governance".to_string(), governance_wasm));
+    result.push(Binary::new("governance", governance_wasm));
 
     result
+}
+
+/// Returns the generated binaries, producing them on first access and caching
+/// the result so that subsequent benchmarks reuse the same Wasm artifacts.
+/// The raw Wasm bytes are always shared; the compiled artifact is cached
+/// lazily per binary via `Binary::compiled` and only used by benchmarks that
+/// don't measure compilation themselves.
+fn get_binaries() -> &'static [Binary] {
+    static BINARIES: OnceLock<Vec<Binary>> = OnceLock::new();
+    BINARIES.get_or_init(generate_binaries)
 }
 
 /// Print a table of benchmark name, compilation cost, and expected compilation
@@ -162,22 +207,19 @@ fn print_table(data: Vec<Vec<String>>) {
 /// Wasm and what it corresponds to in terms of expected compilation time (based
 /// on 2B instructions per second).
 fn compilation_cost(c: &mut Criterion) {
-    let binaries = generate_binaries();
+    let binaries = get_binaries();
     let group = c.benchmark_group("embedders:compilation/compilation-cost");
-    let config = EmbeddersConfig::default();
 
     let mut table = vec![];
-    for (name, wasm) in binaries {
-        let embedder = WasmtimeEmbedder::new(config.clone(), no_op_logger());
-        let (_, r) = compile(&embedder, &wasm);
-        let r = r.expect("Failed to compile canister wasm");
-        let cost = r.1.compilation_cost.get() as f64;
+    for binary in binaries {
+        let (_, serialized) = binary.compiled();
+        let cost = serialized.compilation_cost.get() as f64;
         let mill_instructions = cost / 1_000_000.0;
         // 2B inst/second == 2000 inst/microsecond
         let expected_comp_time = std::time::Duration::from_micros((cost / 2_000.0) as u64);
 
         table.push(vec![
-            name,
+            binary.name.clone(),
             format!("{mill_instructions:?}M"),
             format!("{expected_comp_time:?}"),
         ]);
@@ -190,19 +232,26 @@ fn compilation_cost(c: &mut Criterion) {
 fn wasm_compilation(c: &mut Criterion) {
     set_production_rayon_threads();
 
-    let binaries = generate_binaries();
+    let binaries = get_binaries();
     let mut group = c.benchmark_group("embedders:compilation/compilation");
     let config = EmbeddersConfig::default();
-    for (name, wasm) in binaries {
+    for binary in binaries {
         let embedder = WasmtimeEmbedder::new(config.clone(), no_op_logger());
 
+        // Intentionally compile `binary.wasm` directly (not `binary.compiled()`)
+        // so that this benchmark measures compilation from scratch. As a side
+        // effect, the first compile populates the shared compilation cache so
+        // later benchmarks in this binary can reuse it.
         group.bench_with_input(
-            BenchmarkId::from_parameter(name.clone()),
-            &(embedder, wasm),
+            BenchmarkId::from_parameter(&binary.name),
+            &(embedder, &binary.wasm),
             |b, (embedder, wasm)| {
                 b.iter_with_large_drop(|| {
                     let (c, r) = compile(embedder, wasm);
                     let r = r.expect("Failed to compile canister wasm");
+                    if binary.compiled.get().is_none() {
+                        let _ = binary.compiled.set(r.clone());
+                    }
                     (c, r)
                 })
             },
@@ -214,18 +263,15 @@ fn wasm_compilation(c: &mut Criterion) {
 fn wasm_deserialization(c: &mut Criterion) {
     set_production_rayon_threads();
 
-    let binaries = generate_binaries();
+    let binaries = get_binaries();
     let mut group = c.benchmark_group("embedders:compilation/deserialization");
-    for (name, wasm) in binaries {
+    for binary in binaries {
         let config = EmbeddersConfig::default();
         let embedder = WasmtimeEmbedder::new(config, no_op_logger());
-        let (_, serialized_module) = compile(&embedder, &wasm)
-            .1
-            .expect("Failed to compile canister wasm");
-        let serialized_module_bytes = serialized_module.bytes;
+        let serialized_module_bytes = &binary.compiled().1.bytes;
 
         group.bench_with_input(
-            BenchmarkId::from_parameter(name),
+            BenchmarkId::from_parameter(&binary.name),
             &(embedder, serialized_module_bytes),
             |b, (embedder, serialized_module_bytes)| {
                 b.iter_with_large_drop(|| {
@@ -242,15 +288,15 @@ fn wasm_deserialization(c: &mut Criterion) {
 fn wasm_validation_instrumentation(c: &mut Criterion) {
     set_production_rayon_threads();
 
-    let binaries = generate_binaries();
+    let binaries = get_binaries();
     let mut group = c.benchmark_group("embedders:compilation/validation-instrumentation");
     let config = EmbeddersConfig::default();
-    for (name, wasm) in binaries {
+    for binary in binaries {
         let embedder = WasmtimeEmbedder::new(config.clone(), no_op_logger());
 
         group.bench_with_input(
-            BenchmarkId::from_parameter(&name),
-            &(embedder, wasm),
+            BenchmarkId::from_parameter(&binary.name),
+            &(embedder, &binary.wasm),
             |b, (embedder, wasm)| {
                 b.iter_with_large_drop(|| {
                     let _ = validate_and_instrument_for_testing(embedder, wasm)
@@ -265,18 +311,20 @@ fn wasm_validation_instrumentation(c: &mut Criterion) {
 fn execution(c: &mut Criterion) {
     set_production_rayon_threads();
 
-    let binaries = generate_binaries();
-    for (name, wasm) in binaries {
-        embedders_bench::query_bench(
+    let binaries = get_binaries();
+    for binary in binaries {
+        let (_, serialized_module) = binary.compiled();
+        embedders_bench::query_bench_with_precompiled_module(
             c,
             "embedders:compilation/query",
-            &name,
-            wasm.as_slice(),
+            &binary.name,
+            binary.wasm.as_slice(),
             &Encode!(&()).unwrap(),
             "go",
             &Encode!(&()).unwrap(),
             None,
             SetupAction::None,
+            serialized_module,
         );
     }
 }
@@ -284,7 +332,10 @@ fn execution(c: &mut Criterion) {
 criterion_group! {
     name = benchmarks;
     config = Criterion::default().sample_size(10);
-    targets = compilation_cost, wasm_compilation, wasm_deserialization,
+    // `wasm_compilation` is listed first so that its bench body can populate
+    // `Binary::compiled`, letting the remaining benchmarks reuse it instead
+    // of recompiling.
+    targets = wasm_compilation, compilation_cost, wasm_deserialization,
         wasm_validation_instrumentation, execution
 }
 criterion_main!(benchmarks);

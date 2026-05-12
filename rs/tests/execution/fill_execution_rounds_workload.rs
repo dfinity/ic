@@ -14,7 +14,7 @@ use ic_registry_routing_table::CanisterIdRanges;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        farm::HostFeature,
+        farm::{HostFeature, VmAllocationMode},
         group::SystemTestGroup,
         ic::{
             AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet,
@@ -79,6 +79,7 @@ fn main() -> Result<()> {
         )
     };
     SystemTestGroup::new()
+        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(setup)
         .add_test(systest!(test))
         .with_timeout_per_test(per_task_timeout) // each task (including the setup function) may take up to `per_task_timeout`.
@@ -199,7 +200,7 @@ pub fn fill_execution_rounds(
             &log,
         ));
         canister_id = canister_id_ranges
-            .generate_canister_id(Some(canister_id))
+            .next_canister_id(Some(canister_id))
             .expect("Canister ID can be generated");
 
         currently_installing_canisters += 1;
@@ -219,7 +220,7 @@ pub fn fill_execution_rounds(
                     &log,
                 ));
                 canister_id = canister_id_ranges
-                    .generate_canister_id(Some(canister_id))
+                    .next_canister_id(Some(canister_id))
                     .expect("Canister ID can be generated");
 
                 currently_installing_canisters += 1;

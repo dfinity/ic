@@ -1,6 +1,6 @@
 [package]
 name = "ic-metrics-assert"
-version = "0.4.0"
+version = "0.5.0"
 description = "Fluent assertions for metrics"
 license = "Apache-2.0"
 readme = "README.md"
@@ -8,7 +8,7 @@ include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
 repository = "https://github.com/dfinity/ic"
 authors.workspace = true
 edition.workspace = true
-documentation.workspace = true
+documentation = "https://docs.rs/ic_metrics_assert"
 
 [dependencies]
 async-trait = { workspace = true }

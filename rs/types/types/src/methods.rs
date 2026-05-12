@@ -9,10 +9,7 @@ use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::{canister_state_bits::v1 as pb, queues::v1::Cycles as PbCycles};
 use ic_protobuf::types::v1 as pb_types;
-use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions,
-    RequestAndResponseTransmission,
-};
+use ic_types_cycles::{CompoundCycles, Cycles, Instructions, RequestAndResponseTransmission};
 use serde::{Deserialize, Serialize};
 use std::{
     convert::{From, TryFrom},
@@ -280,10 +277,14 @@ pub struct Callback {
     ///
     /// `Cycles::zero()` if the `Callback` was created before February 2022.
     pub prepayment_for_response_execution: CompoundCycles<Instructions>,
-    /// Cycles prepaid by the caller for response transimission.
+    /// Cycles prepaid by the caller for response transmission.
     ///
-    /// `Cycles::zero()` if the `Callback` was created before February 2022.
+    /// `CompoundCycles::zero()` if the `Callback` was created before February 2022.
     pub prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+    /// Cycles prepaid by the caller for call transmission (includes both request and response transmission).
+    ///
+    /// `CompoundCycles::zero()` if the `Callback` was created before April 2026.
+    pub prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
     /// A closure to be executed if the call succeeded.
     pub on_reply: WasmClosure,
     /// A closure to be executed if the call was rejected.
@@ -302,6 +303,7 @@ impl Callback {
         cycles_sent: Cycles,
         prepayment_for_response_execution: CompoundCycles<Instructions>,
         prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+        prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
         on_reply: WasmClosure,
         on_reject: WasmClosure,
         on_cleanup: Option<WasmClosure>,
@@ -313,6 +315,7 @@ impl Callback {
             cycles_sent,
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
+            prepayment_for_call_transmission,
             on_reply,
             on_reject,
             on_cleanup,
@@ -327,18 +330,13 @@ impl From<&Callback> for pb::Callback {
             call_context_id: item.call_context_id.get(),
             respondent: Some(pb_types::CanisterId::from(item.respondent)),
             cycles_sent: Some(item.cycles_sent.into()),
-            prepayment_for_response_execution: Some(
-                item.prepayment_for_response_execution.real().into(),
-            ),
-            prepayment_for_response_transmission: Some(
-                item.prepayment_for_response_transmission.real().into(),
-            ),
             prepayment_for_response_execution_compound: Some(
                 item.prepayment_for_response_execution.into(),
             ),
             prepayment_for_response_transmission_compound: Some(
                 item.prepayment_for_response_transmission.into(),
             ),
+            prepayment_for_call_transmission: Some(item.prepayment_for_call_transmission.into()),
             on_reply: Some(pb::WasmClosure {
                 func_idx: item.on_reply.func_idx,
                 env: item.on_reply.env,
@@ -367,36 +365,18 @@ impl TryFrom<pb::Callback> for Callback {
         let cycles_sent: PbCycles =
             try_from_option_field(value.cycles_sent, "Callback::cycles_sent")?;
 
-        // cost_schedule should ideally be read from the checkpoint, however there
-        // is no easy access to it here (will need to be propagated from `StateManager`).
-        // Given that the current state is that the values for `Cycles` and `NominalCycles`
-        // should still match and that they should be 0 on `Free` schedule, we can use `Normal`
-        // without any loss (to maintain values on subnets with `Normal` schedule).
-        // This code will be removed anyway when the new fields are set and the old fields
-        // containing just `Cycles` can be retired.
-        let cost_schedule = CanisterCyclesCostSchedule::Normal;
-        let prepayment_for_response_execution =
-            match value.prepayment_for_response_execution_compound {
-                Some(value) => CompoundCycles::try_from(value)?,
-                None => CompoundCycles::new(
-                    try_from_option_field(
-                        value.prepayment_for_response_execution,
-                        "Callback::prepayment_for_response_execution",
-                    )?,
-                    cost_schedule,
-                ),
-            };
-        let prepayment_for_response_transmission =
-            match value.prepayment_for_response_transmission_compound {
-                Some(value) => CompoundCycles::try_from(value)?,
-                None => CompoundCycles::new(
-                    try_from_option_field(
-                        value.prepayment_for_response_transmission,
-                        "Callback::prepayment_for_response_transmission",
-                    )?,
-                    cost_schedule,
-                ),
-            };
+        let prepayment_for_response_execution = try_from_option_field(
+            value.prepayment_for_response_execution_compound,
+            "Callback::prepayment_for_response_execution",
+        )?;
+        let prepayment_for_response_transmission = try_from_option_field(
+            value.prepayment_for_response_transmission_compound,
+            "Callback::prepayment_for_response_transmission",
+        )?;
+        let prepayment_for_call_transmission = try_from_option_field(
+            value.prepayment_for_call_transmission,
+            "Callback::prepayment_for_call_transmission",
+        )?;
 
         Ok(Self {
             call_context_id: CallContextId::from(value.call_context_id),
@@ -404,6 +384,7 @@ impl TryFrom<pb::Callback> for Callback {
             cycles_sent: Cycles::from(cycles_sent),
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
+            prepayment_for_call_transmission,
             on_reply: WasmClosure {
                 func_idx: on_reply.func_idx,
                 env: on_reply.env,

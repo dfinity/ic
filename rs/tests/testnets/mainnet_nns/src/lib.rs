@@ -1,17 +1,18 @@
 use anyhow::Result;
+use flate2::read::GzDecoder;
 use ic_base_types::PrincipalId;
 use ic_canister_client::{Ed25519KeyPair, Sender};
 use ic_canister_client_sender::SigKeys;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_crypto_utils_threshold_sig_der::public_key_der_to_pem;
-use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nervous_system_common::E8;
 use ic_nns_common::types::NeuronId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
+use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::ic::{
-    ImageSizeGiB, InternetComputer, Subnet, VmResourceOverrides,
+    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResourceOverrides,
 };
 use ic_system_test_driver::driver::ic_gateway_vm::{
     HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm,
@@ -24,12 +25,15 @@ use ic_types::{ReplicaVersion, SubnetId};
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{Logger, info};
 use ssh2::Session;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
+use std::io::Cursor;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Output;
 use std::str::FromStr;
-use std::sync::mpsc::{self, Receiver};
+use std::time::Duration;
 use std::{io::Write, process::Command};
+use tokio::sync::oneshot;
 use url::Url;
 
 use crate::proposals::{
@@ -37,12 +41,17 @@ use crate::proposals::{
 };
 
 pub const MAINNET_NODE_VM_RESOURCE_OVERRIDES: VmResourceOverrides = VmResourceOverrides {
+    memory_kibibytes: Some(AmountOfMemoryKiB::new(67108864)), // 64 GiB
     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(192)),
     ..VmResourceOverrides::const_default()
 };
+/// Request to be deployed in `zh1` by default to be physically closer to the backup pod.
+pub fn mainnet_node_required_host_features() -> Vec<HostFeature> {
+    vec![HostFeature::DC("zh1".to_string())]
+}
 
-// Default path to the mainnet NNS state tarball on the backup pod. Can be overridden through the
-// NNS_STATE_ON_BACKUP_POD environment variable.
+/// Default path to the mainnet NNS state tarball on the backup pod. Can be overridden through the
+/// NNS_STATE_ON_BACKUP_POD environment variable.
 const NNS_STATE_ON_BACKUP_POD: &str =
     "dev@zh1-pyr07.zh1.dfinity.network:/home/dev/nns_state.tar.zst";
 
@@ -52,8 +61,8 @@ const PATH_RECOVERY_WORKING_DIR: &str = "recovery/working_dir";
 const PATH_NNS_STATE_DIR_PATH: &str = "recovery/working_dir/data";
 const PATH_IC_CONFIG_DESTINATION: &str = "recovery/working_dir/ic.json5";
 const PATH_IC_CONFIG_SRC_PATH: &str = "/run/ic-node/config/ic.json5";
-const PATH_IC_REPLAY: &str = "ic-replay";
-const PATH_IC_RECOVERY: &str = "ic-recovery";
+const IC_REPLAY: &str = "ic-replay";
+const IC_RECOVERY: &str = "ic-recovery";
 const PATH_RECOVERED_NNS_PUBLIC_KEY_PEM: &str = "recovered_nns_public_key.pem";
 const PATH_SET_TESTNET_ENV_VARS_SH: &str = "set_testnet_env_variables.sh";
 
@@ -61,6 +70,25 @@ const AUX_NODE_NAME: &str = "aux";
 
 const ORIGINAL_NNS_ID: &str = "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe";
 const MAINNET_NNS_DAPP_CANISTER_ID: &str = "qoctq-giaaa-aaaaa-aaaea-cai";
+
+// In general, the constants below should be set to `Mainnet` to download the mainnet version of
+// `ic-replay` and `ic-recovery` respectively and avoid compatibility bugs. Though, if some changes
+// were made to them specifically to make this testnet work, then we should use the HEAD version
+// and switch the corresponding flag to `Head`. Though, this could potentially introduce some
+// incompatible changes. If this happens, one can use the third option `Commit` to specify a
+// specific commit to download. In practice, this commit would be one where the required changes are
+// made on top of the current mainnet version and not including the incompatible changes.
+// After switching to `Head`/`Commit` it is then advised to switch back to `Mainnet` when the
+// changes reach mainnet NNS to avoid compatibility bugs.
+const IC_REPLAY_VERSION: BinaryVersion = BinaryVersion::Mainnet;
+const IC_RECOVERY_VERSION: BinaryVersion = BinaryVersion::Mainnet;
+enum BinaryVersion {
+    Mainnet,
+    #[allow(dead_code)]
+    Head,
+    #[allow(dead_code)]
+    Commit(&'static str),
+}
 
 pub mod proposals;
 
@@ -81,42 +109,51 @@ pub mod proposals;
 /// except the root subnet (tdb26), which will contain only the single-node NNS subnet.
 /// Proposals can be made (and will instantly execute) using the relevant functions in
 /// `crate::proposals`.
-pub fn setup(env: TestEnv) {
-    // Since we're creating the IC concurrently with fetching the state we use a channel to tell the
-    // thread fetching the state when the IC is ready such that it can scp the ic.json5 config file
-    // from the NNS node once it's online, used by ic-replay.
-    let (tx_finished_ic_setup, rx_finished_ic_setup): (mpsc::Sender<()>, mpsc::Receiver<()>) =
-        mpsc::channel();
-    // The aux node will be sent to the recovery thread once it's setup.
-    let (tx_aux_node, rx_aux_node): (
-        std::sync::mpsc::Sender<DeployedUniversalVm>,
-        Receiver<DeployedUniversalVm>,
-    ) = mpsc::channel();
+pub fn setup(env: TestEnv, dkg_interval: Option<u64>) {
+    block_on(setup_async(env, dkg_interval));
+}
+
+async fn setup_async(env: TestEnv, dkg_interval: Option<u64>) {
+    // Since we're creating the IC concurrently with fetching the state we use a channel to tell
+    // the task fetching the state when the IC is ready such that it can scp the ic.json5 config
+    // file from the NNS node once it's online, used by ic-replay.
+    let (tx_finished_ic_setup, rx_finished_ic_setup) = oneshot::channel();
+    // The aux node will be sent to the recovery task once it's setup.
+    let (tx_aux_node, rx_aux_node) = oneshot::channel();
 
     // Recover the NNS concurrently:
     let env_clone = env.clone();
-    let recover_nns_thread = std::thread::spawn(move || {
-        setup_recovered_nns(env_clone, rx_finished_ic_setup, rx_aux_node)
+    let recover_nns_task = tokio::task::spawn_blocking(move || {
+        block_on(setup_recovered_nns(
+            env_clone,
+            dkg_interval,
+            rx_finished_ic_setup,
+            rx_aux_node,
+        ))
     });
 
     // Setup and start the aux UVM concurrently:
     let env_clone = env.clone();
-    let uvm_thread = std::thread::spawn(move || {
+    let uvm_task = tokio::task::spawn_blocking(move || {
         UniversalVm::new(AUX_NODE_NAME.to_string())
             .start(&env_clone)
             .expect("Failed to start Universal VM")
     });
 
     let env_clone = env.clone();
-    setup_ic(env_clone);
+    tokio::task::spawn_blocking(move || setup_ic(env_clone))
+        .await
+        .unwrap();
 
-    // Once the IC is setup, we signal the other thread that it can now scp the ic.json5 config file
-    tx_finished_ic_setup.send(()).unwrap();
+    // Once the IC is setup, we signal the other task that it can now scp the ic.json5 config
+    // file
+    tx_finished_ic_setup.send(()).expect("receiver dropped");
 
     // Deploy the HTTP gateway
     let env_clone = env.clone();
-    let deploy_gateway_thread = std::thread::spawn(move || {
+    let deploy_gateway_task = tokio::task::spawn_blocking(move || {
         IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+            .with_required_host_features(mainnet_node_required_host_features())
             .start(&env_clone)
             .expect("Failed to setup ic-gateway");
 
@@ -125,15 +162,18 @@ pub fn setup(env: TestEnv) {
             .unwrap()
     });
 
-    // When the aux host is ready, we send it to the other thread so that it can start the recovery
-    uvm_thread.join().unwrap();
+    // When the aux host is ready, we send it to the other task so that it can start the
+    // recovery
+    uvm_task.await.unwrap();
     let deployed_universal_vm = env.get_deployed_universal_vm(AUX_NODE_NAME).unwrap();
-    tx_aux_node.send(deployed_universal_vm).unwrap();
+    tx_aux_node
+        .send(deployed_universal_vm)
+        .expect("receiver dropped");
 
-    let http_gateway = deploy_gateway_thread.join().unwrap();
-    let neuron_id = recover_nns_thread.join().unwrap();
-    // After the NNS has been recovered and the API BN fixed, we should restart the HTTP gateway to
-    // let it fetch the new root public key from the API BN.
+    let http_gateway = deploy_gateway_task.await.unwrap();
+    let neuron_id = recover_nns_task.await.unwrap();
+    // After the NNS has been recovered and the API BN fixed, we should restart the HTTP
+    // gateway to let it fetch the new root public key from the API BN.
     // Alternatively, we could start deploying the HTTP gateway only now. But deploying it in
     // parallel earlier and only having to restart the container now is faster.
     http_gateway
@@ -153,7 +193,7 @@ pub fn setup(env: TestEnv) {
         env.logger(),
         "Patching test environment's registry local store..."
     );
-    patch_env_local_store(&env);
+    patch_env_local_store(&env).await;
     info!(
         env.logger(),
         "Patching test environment's root public key..."
@@ -166,22 +206,21 @@ pub fn setup(env: TestEnv) {
     remove_large_files(&env);
 }
 
-fn setup_recovered_nns(
+async fn setup_recovered_nns(
     env: TestEnv,
-    rx_finished_ic_setup: Receiver<()>,
-    rx_aux_node: Receiver<DeployedUniversalVm>,
+    dkg_interval: Option<u64>,
+    rx_finished_ic_setup: oneshot::Receiver<()>,
+    rx_aux_node: oneshot::Receiver<DeployedUniversalVm>,
 ) -> NeuronId {
     let env_clone = env.clone();
-    let fetch_mainnet_ic_replay_thread =
-        std::thread::spawn(move || fetch_mainnet_ic_replay(&env_clone));
+    let fetch_ic_replay_task = tokio::task::spawn_blocking(move || fetch_ic_replay(&env_clone));
     let env_clone = env.clone();
-    let fetch_mainnet_ic_recovery_thread =
-        std::thread::spawn(move || fetch_mainnet_ic_recovery(&env_clone));
+    let fetch_ic_recovery_task = tokio::task::spawn_blocking(move || fetch_ic_recovery(&env_clone));
     fetch_nns_state_from_backup_pod(&env);
 
     // Wait until the IC setup is finished such that we can scp the ic.json5 config file from the
     // NNS
-    rx_finished_ic_setup.recv().unwrap();
+    rx_finished_ic_setup.await.unwrap();
 
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();
@@ -189,8 +228,8 @@ fn setup_recovered_nns(
     fetch_ic_config(&env, &nns_node);
 
     // Wait until we have fetched ic-replay before setting the test neuron (which needs ic-replay)
-    fetch_mainnet_ic_replay_thread
-        .join()
+    fetch_ic_replay_task
+        .await
         .unwrap_or_else(|e| panic!("Failed to fetch the mainnet ic-replay because {e:?}"));
 
     // Replace the subnet list record in the registry with a singleton containing only the
@@ -202,12 +241,12 @@ fn setup_recovered_nns(
     let (neuron_id, neuron_secret_key_pem) = setup_test_neuron(&env);
 
     // Wait until the aux node is setup and we have fetched ic-recovery before starting the recovery
-    let aux_node = rx_aux_node.recv().unwrap();
-    fetch_mainnet_ic_recovery_thread
-        .join()
+    let aux_node = rx_aux_node.await.unwrap();
+    fetch_ic_recovery_task
+        .await
         .unwrap_or_else(|e| panic!("Failed to fetch the mainnet ic-recovery because {e:?}"));
 
-    recover_nns_subnet(&env, &nns_node, &recovered_nns_node, &aux_node);
+    recover_nns_subnet(&env, &nns_node, &recovered_nns_node, &aux_node).await;
     ProposalWithMainnetState::write_dictator_neuron_identity_to_env(
         &env,
         RecoveredNnsDictatorNeuron {
@@ -216,7 +255,7 @@ fn setup_recovered_nns(
         },
     );
 
-    test_recovered_nns(&env, &recovered_nns_node);
+    test_recovered_nns(&env, &recovered_nns_node).await;
 
     info!(
         env.logger(),
@@ -225,48 +264,48 @@ fn setup_recovered_nns(
         neuron_id,
     );
 
-    let dkg_interval = std::env::var("DKG_INTERVAL")
-        .ok()
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(DKG_INTERVAL_HEIGHT);
-    let subnet_config = UpdateSubnetPayload {
-        subnet_id: SubnetId::from(PrincipalId::from_str(ORIGINAL_NNS_ID).unwrap()),
-        max_ingress_bytes_per_message: None,
-        max_ingress_messages_per_block: None,
-        max_ingress_bytes_per_block: None,
-        max_block_payload_size: None,
-        unit_delay_millis: None,
-        initial_notary_delay_millis: None,
-        dkg_interval_length: Some(dkg_interval),
-        dkg_dealings_per_block: None,
-        start_as_nns: None,
-        subnet_type: None,
-        is_halted: None,
-        halt_at_cup_height: None,
-        features: None,
-        resource_limits: None,
-        chain_key_config: None,
-        chain_key_signing_enable: None,
-        chain_key_signing_disable: None,
-        max_number_of_canisters: None,
-        ssh_readonly_access: None,
-        ssh_backup_access: None,
-        max_artifact_streams_per_peer: None,
-        max_chunk_wait_ms: None,
-        max_duplicity: None,
-        max_chunk_size: None,
-        receive_check_cache_size: None,
-        pfn_evaluation_period_ms: None,
-        registry_poll_period_ms: None,
-        retransmission_request_ms: None,
-        set_gossip_config_to_default: false,
-    };
-    block_on(ProposalWithMainnetState::update_subnet_record(
-        recovered_nns_node.get_public_url(),
-        subnet_config,
-    ));
+    if let Some(dkg_interval) = dkg_interval {
+        info!(env.logger(), "Overriding DKG interval to {dkg_interval}");
+        let subnet_config = UpdateSubnetPayload {
+            subnet_id: SubnetId::from(PrincipalId::from_str(ORIGINAL_NNS_ID).unwrap()),
+            max_ingress_bytes_per_message: None,
+            max_ingress_messages_per_block: None,
+            max_ingress_bytes_per_block: None,
+            max_block_payload_size: None,
+            unit_delay_millis: None,
+            initial_notary_delay_millis: None,
+            dkg_interval_length: Some(dkg_interval),
+            dkg_dealings_per_block: None,
+            start_as_nns: None,
+            subnet_type: None,
+            is_halted: None,
+            halt_at_cup_height: None,
+            features: None,
+            resource_limits: None,
+            chain_key_config: None,
+            chain_key_signing_enable: None,
+            chain_key_signing_disable: None,
+            max_number_of_canisters: None,
+            ssh_readonly_access: None,
+            ssh_backup_access: None,
+            max_artifact_streams_per_peer: None,
+            max_chunk_wait_ms: None,
+            max_duplicity: None,
+            max_chunk_size: None,
+            receive_check_cache_size: None,
+            pfn_evaluation_period_ms: None,
+            registry_poll_period_ms: None,
+            retransmission_request_ms: None,
+            set_gossip_config_to_default: false,
+        };
+        ProposalWithMainnetState::update_subnet_record(
+            recovered_nns_node.get_public_url(),
+            subnet_config,
+        )
+        .await;
+    }
 
-    let recovered_nns_pub_key = fetch_recovered_nns_public_key_pem(&recovered_nns_node);
+    let recovered_nns_pub_key = fetch_recovered_nns_public_key_pem(&recovered_nns_node).await;
 
     info!(
         env.logger(),
@@ -281,27 +320,76 @@ fn setup_recovered_nns(
     .unwrap();
 
     let api_bn = env.topology_snapshot().api_boundary_nodes().next().unwrap();
-    patch_api_bn(&env, &recovered_nns_node, &api_bn);
+    patch_api_bn(&env, &recovered_nns_node, &api_bn).await;
 
     neuron_id
 }
 
-fn fetch_mainnet_ic_replay(env: &TestEnv) {
-    // TODO (CON-1624): fetch the mainnet version of ic-replay
-    std::fs::copy(
-        get_dependency_path_from_env("IC_REPLAY_PATH"),
-        env.get_path(PATH_IC_REPLAY),
-    )
-    .unwrap();
+fn fetch_ic_replay(env: &TestEnv) {
+    fetch_binary(env, IC_REPLAY, IC_REPLAY_VERSION, "IC_REPLAY_PATH")
 }
 
-fn fetch_mainnet_ic_recovery(env: &TestEnv) {
-    // TODO (CON-1624): fetch the mainnet version of ic-recovery
-    std::fs::copy(
-        get_dependency_path_from_env("IC_RECOVERY_PATH"),
-        env.get_path(PATH_IC_RECOVERY),
-    )
-    .unwrap();
+fn fetch_ic_recovery(env: &TestEnv) {
+    fetch_binary(env, IC_RECOVERY, IC_RECOVERY_VERSION, "IC_RECOVERY_PATH")
+}
+
+fn fetch_binary(
+    env: &TestEnv,
+    binary_name: &str,
+    binary_version: BinaryVersion,
+    built_binary_env_var: &str,
+) {
+    let binary_path = env.get_path(binary_name);
+
+    let version = match binary_version {
+        BinaryVersion::Head => {
+            // Shortcut that copies the built binary to the expected location
+            std::fs::copy(
+                get_dependency_path_from_env(built_binary_env_var),
+                binary_path,
+            )
+            .unwrap();
+            return;
+        }
+        BinaryVersion::Mainnet => get_mainnet_nns_revision().unwrap().to_string(),
+        BinaryVersion::Commit(commit) => commit.to_string(),
+    };
+
+    let logger = env.logger();
+    let binary_url =
+        format!("https://download.dfinity.systems/ic/{version}/release/{binary_name}.gz");
+    let binary_gz_path = env.get_path(format!("{binary_name}.gz"));
+    info!(
+        logger,
+        "Downloading {binary_url:?} to {binary_gz_path:?} ..."
+    );
+    let response = reqwest::blocking::get(binary_url.clone())
+        .unwrap_or_else(|e| panic!("Failed to download {binary_url:?} because {e:?}"));
+    if !response.status().is_success() {
+        panic!("Failed to download {binary_url}");
+    }
+    let bytes = response.bytes().unwrap();
+    let mut content = Cursor::new(bytes);
+    let mut binary_gz_file = File::create(binary_gz_path.clone()).unwrap();
+    std::io::copy(&mut content, &mut binary_gz_file)
+        .unwrap_or_else(|e| panic!("Can't copy {binary_url} to {binary_gz_path:?} because {e:?}"));
+    info!(
+        logger,
+        "Downloaded {binary_url:?} to {binary_gz_path:?}. Uncompressing to {binary_path:?} ..."
+    );
+    let binary_gz_file = File::open(binary_gz_path.clone()).unwrap();
+    let mut gz = GzDecoder::new(&binary_gz_file);
+    let mut binary_file = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .mode(0o755)
+        .open(binary_path.clone())
+        .unwrap();
+    std::io::copy(&mut gz, &mut binary_file).unwrap_or_else(|e| {
+        panic!("Can't uncompress {binary_gz_path:?} to {binary_path:?} because {e:?}")
+    });
+    info!(logger, "Uncompressed {binary_gz_path:?} to {binary_path:?}");
 }
 
 fn fetch_nns_state_from_backup_pod(env: &TestEnv) {
@@ -453,7 +541,7 @@ fn with_trusted_neurons_following_neuron_for_tests(
 
 fn ic_replay(env: &TestEnv, mut mutate_cmd: impl FnMut(&mut Command)) -> Output {
     let logger: slog::Logger = env.logger();
-    let ic_replay_path = env.get_path(PATH_IC_REPLAY);
+    let ic_replay_path = env.get_path(IC_REPLAY);
     let subnet_id = SubnetId::from(PrincipalId::from_str(ORIGINAL_NNS_ID).unwrap());
     let nns_state_dir = env.get_path(PATH_NNS_STATE_DIR_PATH);
     let ic_config_file = env.get_path(PATH_IC_CONFIG_DESTINATION);
@@ -477,7 +565,7 @@ fn ic_replay(env: &TestEnv, mut mutate_cmd: impl FnMut(&mut Command)) -> Output 
     ic_replay_out
 }
 
-fn recover_nns_subnet(
+async fn recover_nns_subnet(
     env: &TestEnv,
     nns_node: &IcNodeSnapshot,
     recovered_nns_node: &IcNodeSnapshot,
@@ -489,7 +577,7 @@ fn recover_nns_subnet(
         logger,
         "Waiting until the {AUX_NODE_NAME} node is reachable over SSH before we run ic-recovery ..."
     );
-    let _session = aux_node.block_on_ssh_session();
+    let _session = aux_node.block_on_ssh_session_async().await;
 
     info!(logger, "Starting ic-recovery ...");
     let nns_url: Url = nns_node.get_public_url();
@@ -502,8 +590,8 @@ fn recover_nns_subnet(
     let nns_ip = nns_node.get_ip_addr();
     let upload_ip = recovered_nns_node.get_ip_addr();
 
-    let recovery_dir = tempdir().unwrap().path().to_path_buf();
-    let mut cmd = Command::new(get_dependency_path_from_env("IC_RECOVERY_PATH"));
+    let recovery_dir = env.base_path();
+    let mut cmd = Command::new(env.get_path(IC_RECOVERY));
     cmd.arg("--skip-prompts")
         .arg("--dir")
         .arg(recovery_dir)
@@ -523,8 +611,10 @@ fn recover_nns_subnet(
         .arg(aux_ip.to_string())
         .arg("--aux-user")
         .arg(SSH_USERNAME)
+        // --validate-nns-url will not actually be used because the backup pod tarball also
+        // contains the local store, which initializes ic-recovery
         .arg("--validate-nns-url")
-        .arg(nns_url.to_string())
+        .arg("https://will.not.be.used.invalid")
         .arg("--upload-method")
         .arg(upload_ip.to_string())
         .arg("--parent-nns-host-ip")
@@ -552,40 +642,42 @@ fn recover_nns_subnet(
         panic!("{cmd:?} failed!");
     }
     recovered_nns_node
-        .await_status_is_healthy()
+        .await_status_is_healthy_async()
+        .await
         .expect("Recovered NNS node should become healthy.");
 }
 
-fn test_recovered_nns(env: &TestEnv, nns_node: &IcNodeSnapshot) {
+async fn test_recovered_nns(env: &TestEnv, nns_node: &IcNodeSnapshot) {
     let logger = env.logger();
     info!(logger, "Testing recovered NNS ...");
 
-    block_on(ProposalWithMainnetState::bless_replica_version(
+    ProposalWithMainnetState::bless_replica_version(
         nns_node,
         &ReplicaVersion::try_from("1111111111111111111111111111111111111111").unwrap(),
         &logger,
         "2222222222222222222222222222222222222222222222222222222222222222".to_string(),
         None,
         vec![],
-    ));
+    )
+    .await;
 }
 
-fn fetch_recovered_nns_public_key_pem(recovered_nns_node: &IcNodeSnapshot) -> Vec<u8> {
+async fn fetch_recovered_nns_public_key_pem(recovered_nns_node: &IcNodeSnapshot) -> Vec<u8> {
     let recovered_nns_agent = ic_agent::Agent::builder()
         .with_url(recovered_nns_node.get_public_url())
         .build()
         .unwrap();
-    block_on(recovered_nns_agent.fetch_root_key()).unwrap();
+    recovered_nns_agent.fetch_root_key().await.unwrap();
     let der_encoded = recovered_nns_agent.read_root_key();
 
     public_key_der_to_pem(&der_encoded)
 }
 
-fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcNodeSnapshot) {
+async fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcNodeSnapshot) {
     let logger = env.logger();
     let recovered_nns_node_ipv6 = recovered_nns_node.get_ip_addr();
 
-    let ssh_session = api_bn.block_on_ssh_session().unwrap();
+    let ssh_session = api_bn.block_on_ssh_session_async().await.unwrap();
 
     // Stop ic-replica
     api_bn
@@ -603,7 +695,7 @@ fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcN
     )
     .expect("Could not patch config NNS URLs of API BN");
 
-    // Path config NNS public key to the recovered NNS public key
+    // Patch config NNS public key to the recovered NNS public key
     patch_config_nns_public_key(
         &logger,
         api_bn,
@@ -612,12 +704,13 @@ fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcN
     )
     .expect("Could not patch NNS public key of API BN");
 
-    block_on(ProposalWithMainnetState::add_api_boundary_nodes(
+    ProposalWithMainnetState::add_api_boundary_nodes(
         recovered_nns_node,
         &env.logger(),
         vec![api_bn.node_id],
         get_mainnet_nns_revision().unwrap().to_string(),
-    ));
+    )
+    .await;
 
     // Regenerate IC config and start ic-replica
     api_bn
@@ -627,8 +720,13 @@ fn patch_api_bn(env: &TestEnv, recovered_nns_node: &IcNodeSnapshot, api_bn: &IcN
         )
         .expect("Could not restart ic-replica on API BN");
 
+    // Replicating mainnet registry can take a bit of time
     api_bn
-        .await_status_is_healthy()
+        .await_status_is_healthy_with_retries_async(
+            Duration::from_mins(15),
+            Duration::from_secs(30),
+        )
+        .await
         .expect("API BN did not become healthy after patching");
 }
 
@@ -709,6 +807,7 @@ fn setup_ic(env: TestEnv) {
 
     InternetComputer::new()
         .with_resource_overrides(MAINNET_NODE_VM_RESOURCE_OVERRIDES)
+        .with_required_host_features(mainnet_node_required_host_features())
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .with_api_boundary_nodes(1)
         .with_unassigned_nodes(1)
@@ -729,7 +828,7 @@ fn write_sh_lib(env: &TestEnv, NeuronId(neuron_id): NeuronId, http_gateway: &Url
     let logger: slog::Logger = env.logger();
     let set_testnet_env_vars_sh_path = env.get_path(PATH_SET_TESTNET_ENV_VARS_SH);
     let set_testnet_env_vars_sh_str = set_testnet_env_vars_sh_path.display();
-    let ic_admin = fs::canonicalize(get_dependency_path_from_env("IC_ADMIN_PATH")).unwrap();
+    let ic_admin = fs::canonicalize(env.get_path("recovery/binaries/ic-admin")).unwrap();
     let pem = env.get_path("neuron_secret_key.pem");
     let mut pem_file = File::create(&pem).unwrap();
     pem_file
@@ -761,10 +860,10 @@ fn write_sh_lib(env: &TestEnv, NeuronId(neuron_id): NeuronId, http_gateway: &Url
     info!(logger, "source {canonical_sh_lib_path:?}");
 }
 
-// Overwrite the local store of the test environment with the new one, corresponding to the
-// recovered NNS. Any topology snapshot taken after this will reflect the new topology. This means
-// it will contain all mainnet subnets and nodes.
-fn patch_env_local_store(env: &TestEnv) {
+/// Overwrite the local store of the test environment with the new one, corresponding to the
+/// recovered NNS. Any topology snapshot taken after this will reflect the new topology. This means
+/// it will contain all mainnet subnets and nodes.
+async fn patch_env_local_store(env: &TestEnv) {
     let local_store_path = env
         .get_path(PATH_RECOVERY_WORKING_DIR)
         .join("data")
@@ -795,15 +894,14 @@ fn patch_env_local_store(env: &TestEnv) {
     rm.output()
         .expect("Failed to remove temporary new local store");
 
-    block_on(
-        env.topology_snapshot()
-            .block_for_newest_mainnet_registry_version(),
-    )
-    .unwrap();
+    env.topology_snapshot()
+        .block_for_newest_mainnet_registry_version()
+        .await
+        .unwrap();
 }
 
-// Overwrite the root public key of the test environment with the new one, corresponding to the
-// recovered NNS. This enables future nested VMs to register using the correct root public key.
+/// Overwrite the root public key of the test environment with the new one, corresponding to the
+/// recovered NNS. This enables future nested VMs to register using the correct root public key.
 fn patch_env_root_public_key(env: &TestEnv) {
     std::fs::copy(
         env.get_path(PATH_RECOVERED_NNS_PUBLIC_KEY_PEM),
@@ -812,13 +910,13 @@ fn patch_env_root_public_key(env: &TestEnv) {
     .unwrap();
 }
 
-// Remove large files inside the test environment that are no longer needed to speed up the
-// transition between `setup` and following `test` tasks, since every `test` task will copy the
-// `setup` test environment to a new location.
+/// Remove large files inside the test environment that are no longer needed to speed up the
+/// transition between `setup` and following `test` tasks, since every `test` task will copy the
+/// `setup` test environment to a new location.
 fn remove_large_files(env: &TestEnv) {
     let mut rm = Command::new("rm");
     rm.arg("-rf")
         .arg(env.get_path(PATH_STATE_TARBALL))
-        .arg(env.get_path("recovery"));
+        .arg(env.get_path(PATH_RECOVERY_WORKING_DIR));
     rm.output().expect("Failed to remove large files");
 }

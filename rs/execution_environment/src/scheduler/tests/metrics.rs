@@ -22,8 +22,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_test_utilities_metrics::{
-    HistogramStats, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_histogram_vec_stats,
-    fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
+    HistogramStats, fetch_counter_vec, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats,
+    fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_types::NumBytes;
@@ -188,7 +188,6 @@ fn can_record_metrics_for_a_round() {
     assert_eq!(metrics.canister_age.get_sample_sum() as i64, 0);
     assert_eq!(metrics.round_preparation_duration.get_sample_count(), 1);
     assert_eq!(metrics.round_preparation_ingress.get_sample_count(), 1);
-    assert_eq!(metrics.round_scheduling_duration.get_sample_count(), 1);
     assert_eq!(metrics.round_finalization_scheduling.get_sample_count(), 1);
     assert_eq!(
         metrics.round_inner_iteration_scheduling.get_sample_count(),
@@ -229,8 +228,7 @@ fn can_record_metrics_for_a_round() {
     // Bump up the round number.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // For allocation violation to happen, the canister age should be more than `100/9 = 11 rounds`
-    // plus 2 rounds already executed.
+    // Advance 11 rounds (relative to the 2 rounds already executed).
     test.advance_to_round(ExecutionRound::from(11 + 2));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
@@ -1030,6 +1028,14 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
             ),
             metric_vec(&[(&[("use_case", "HTTPOutcalls")], fee.nominal().get() as f64),]),
         );
+
+        assert_eq!(
+            fetch_counter_vec(
+                test.metrics_registry(),
+                "replicated_state_consumed_cycles_from_replica_start_as_counters",
+            ),
+            metric_vec(&[(&[("use_case", "HTTPOutcalls")], fee.nominal().get() as f64),]),
+        );
     }
 }
 
@@ -1181,6 +1187,26 @@ fn consumed_cycles_for_resource_allocations_are_updated_from_valid_canisters() {
             fetch_gauge_vec(
                 test.metrics_registry(),
                 "replicated_state_consumed_cycles_from_replica_start",
+            ),
+            metric_vec(&[
+                (
+                    &[("use_case", "Memory")],
+                    test.memory_cost(memory_allocation, duration)
+                        .nominal()
+                        .get() as f64
+                ),
+                (
+                    &[("use_case", "ComputeAllocation")],
+                    test.compute_allocation_cost(compute_allocation, duration)
+                        .nominal()
+                        .get() as f64,
+                ),
+            ]),
+        );
+        assert_eq!(
+            fetch_counter_vec(
+                test.metrics_registry(),
+                "replicated_state_consumed_cycles_from_replica_start_as_counters",
             ),
             metric_vec(&[
                 (

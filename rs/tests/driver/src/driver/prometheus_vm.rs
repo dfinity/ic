@@ -19,7 +19,7 @@ use ic_registry_local_registry::LocalRegistry;
 use crate::driver::{
     constants::SSH_USERNAME,
     farm::{DnsRecord, DnsRecordType, HostFeature},
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResourceOverrides},
+    ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResourceOverrides},
     ic_gateway_vm::{HasIcGatewayVm, Playnet},
     log_events,
     nested::HasNestedVms,
@@ -27,7 +27,7 @@ use crate::driver::{
     test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
     test_env_api::{
         CreateDnsRecords, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, RetrieveIpv4Addr,
-        SshSession, TopologySnapshot, scp_recv_from, scp_send_to,
+        SshSession, TopologySnapshot, scp_recv_from, try_scp_send_to,
     },
     test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},
@@ -151,11 +151,6 @@ impl PrometheusVm {
         self.universal_vm = self
             .universal_vm
             .with_resource_overrides(vm_resource_overrides);
-        self
-    }
-
-    pub fn with_vm_allocation(mut self, vm_allocation: VmAllocationStrategy) -> Self {
-        self.universal_vm = self.universal_vm.with_vm_allocation(vm_allocation);
         self
     }
 
@@ -490,7 +485,7 @@ impl HasPrometheus for TestEnv {
         for file in &target_json_files {
             let from = prometheus_config_dir.join(file);
             let to = Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(file);
-            scp_send_to(self.logger(), &session, &from, &to, 0o644);
+            try_scp_send_to(self.logger(), &session, &from, &to, 0o644)?;
         }
         PrometheusConfigHash { hash: new_hash }.write_attribute(self);
         Ok(())

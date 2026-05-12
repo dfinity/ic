@@ -140,7 +140,7 @@ use super::{
 use crate::{
     driver::{
         constants::{self, GROUP_TTL, SSH_USERNAME},
-        farm::{Farm, GroupSpec},
+        farm::{Farm, GroupSpec, VmAllocationMode},
         log_events,
         test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
     },
@@ -1482,11 +1482,21 @@ pub fn get_build_setupos_config_image_tool() -> PathBuf {
 }
 
 pub trait HasGroupSetup {
-    fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool);
+    fn create_group_setup(
+        &self,
+        group_base_name: String,
+        vm_allocation_mode: Option<VmAllocationMode>,
+        no_group_ttl: bool,
+    );
 }
 
 impl HasGroupSetup for TestEnv {
-    fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool) {
+    fn create_group_setup(
+        &self,
+        group_base_name: String,
+        vm_allocation_mode: Option<VmAllocationMode>,
+        no_group_ttl: bool,
+    ) {
         let log = self.logger();
         if GroupSetup::attribute_exists(self) {
             let group_setup = GroupSetup::read_attribute(self);
@@ -1504,7 +1514,7 @@ impl HasGroupSetup for TestEnv {
                     let farm_base_url = FarmBaseUrl::read_attribute(self);
                     let farm = Farm::new(farm_base_url.into(), self.logger());
                     let group_spec = GroupSpec {
-                        vm_allocation: None,
+                        vm_allocation_mode,
                         required_host_features: vec![],
                         preferred_network: None,
                         metadata: None,
@@ -1881,11 +1891,20 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     }
 
     async fn await_status_is_healthy_async(&self) -> Result<()> {
+        self.await_status_is_healthy_with_retries_async(READY_WAIT_TIMEOUT, RETRY_BACKOFF)
+            .await
+    }
+
+    async fn await_status_is_healthy_with_retries_async(
+        &self,
+        timeout: Duration,
+        backoff: Duration,
+    ) -> Result<()> {
         retry_with_msg_async!(
             &format!("await_status_is_healthy of {}", self.get_public_url()),
             &self.test_env().logger(),
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
+            timeout,
+            backoff,
             || async {
                 self.status_is_healthy_async()
                     .await
@@ -2842,7 +2861,21 @@ pub fn scp_send_to(
     to_remote: &std::path::Path,
     mode: i32,
 ) {
-    let size = fs::metadata(from_local).unwrap().len();
+    try_scp_send_to(log, session, from_local, to_remote, mode).unwrap_or_else(|e| panic!("{e:#}"));
+}
+
+/// Copy a local file via SSH to a remote host, returning an `Err` on failure
+/// instead of panicking like [`scp_send_to`].
+pub fn try_scp_send_to(
+    log: Logger,
+    session: &Session,
+    from_local: &std::path::Path,
+    to_remote: &std::path::Path,
+    mode: i32,
+) -> Result<()> {
+    let size = fs::metadata(from_local)
+        .with_context(|| format!("Failed to read metadata for local path {from_local:?}"))?
+        .len();
     retry_with_msg!(
         format!("scp-ing local {from_local:?} of {size:?} B to remote {to_remote:?}"),
         log.clone(),
@@ -2865,9 +2898,7 @@ pub fn scp_send_to(
             Ok(())
         }
     )
-    .unwrap_or_else(|e| {
-        panic!("Failed to scp local {from_local:?} to remote {to_remote:?} because: {e}")
-    });
+    .with_context(|| format!("Failed to scp local {from_local:?} to remote {to_remote:?}"))
 }
 
 /// Copy a file from a remote host to a local file.

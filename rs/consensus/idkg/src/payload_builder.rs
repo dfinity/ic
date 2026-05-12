@@ -10,7 +10,7 @@ use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::retrieve_mega_public_key_from_registry;
 use ic_interfaces::idkg::IDkgPool;
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
@@ -135,6 +135,7 @@ pub fn make_bootstrap_summary_with_initial_dealings(
             None => {
                 // Leave the feature disabled if the initial dealings are incorrect.
                 warn!(
+                    every_n_seconds => 10,
                     log,
                     "make_idkg_genesis_summary(): failed to unpack initial dealings"
                 );
@@ -349,9 +350,6 @@ fn create_summary_payload_helper(
 
     idkg_summary.idkg_transcripts.clear();
 
-    // Purge deprecated signature agreements in the idkg payload.
-    idkg_summary.signature_agreements.clear();
-
     // We purge available pre-signatures of the parent payload,
     // because they were already delivered with the previous payload.
     idkg_summary.available_pre_signatures.clear();
@@ -482,7 +480,7 @@ pub fn create_data_payload(
     registry_client: &dyn RegistryClient,
     pool_reader: &PoolReader<'_>,
     idkg_pool: Arc<RwLock<dyn IDkgPool>>,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     context: &ValidationContext,
     parent_block: &Block,
     idkg_payload_metrics: &IDkgPayloadMetrics,
@@ -534,8 +532,9 @@ pub fn create_data_payload(
         &summary_block,
         &block_reader,
         &transcript_builder,
-        state_manager,
+        state_reader,
         registry_client,
+        Some(idkg_payload_metrics),
         log,
     )?;
 
@@ -573,8 +572,9 @@ pub(crate) fn create_data_payload_helper(
     summary_block: &Block,
     block_reader: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     registry_client: &dyn RegistryClient,
+    idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<Option<IDkgPayload>, IDkgPayloadError> {
     let height = parent_block.height().increment();
@@ -598,7 +598,7 @@ pub(crate) fn create_data_payload_helper(
     };
 
     let receivers = get_subnet_nodes(registry_client, next_interval_registry_version, subnet_id)?;
-    let state = state_manager.get_state_at(context.certified_height)?;
+    let state = state_reader.get_state_at(context.certified_height)?;
 
     let reshare_contexts = state.get_ref().reshare_chain_key_contexts();
     let idkg_dealings_contexts = filter_idkg_reshare_chain_key_contexts(reshare_contexts);
@@ -615,6 +615,7 @@ pub(crate) fn create_data_payload_helper(
         total_pre_signatures,
         block_reader,
         transcript_builder,
+        idkg_payload_metrics,
         log,
     )?;
 
@@ -632,6 +633,7 @@ pub(crate) fn create_data_payload_helper_2(
     total_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, usize>,
     block_reader: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
+    idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<(), IDkgPayloadError> {
     // Check if we are creating a new key, if so, start using it immediately.
@@ -648,14 +650,12 @@ pub(crate) fn create_data_payload_helper_2(
     // because they were already delivered with the previous payload.
     idkg_payload.available_pre_signatures.clear();
 
-    // Purge deprecated signature agreements in the idkg payload.
-    idkg_payload.signature_agreements.clear();
-
     let new_transcripts = [
         pre_signatures::update_pre_signatures_in_creation(
             idkg_payload,
             transcript_builder,
             height,
+            idkg_payload_metrics,
             log,
         )?,
         key_transcript::update_next_key_transcripts(
@@ -693,6 +693,7 @@ pub(crate) fn create_data_payload_helper_2(
         idkg_dealings_contexts,
         block_reader,
         transcript_builder,
+        idkg_payload_metrics,
         log,
     );
     resharing::initiate_reshare_requests(
@@ -701,6 +702,8 @@ pub(crate) fn create_data_payload_helper_2(
             idkg_dealings_contexts,
             validation_context_registry_version,
         ),
+        idkg_payload_metrics,
+        log,
     );
     Ok(())
 }
@@ -778,7 +781,6 @@ mod tests {
                 vec![],
                 BTreeMap::new(),
                 BTreeMap::new(),
-                Vec::new(),
                 RegistryVersion::from(0),
                 Height::from(100),
                 Height::from(100),
@@ -878,6 +880,7 @@ mod tests {
             BTreeMap::from([(key_id.clone(), 2)]),
             &TestIDkgBlockReader::new(),
             &TestIDkgTranscriptBuilder::new(),
+            None,
             &ic_logger::replica_logger::no_op_logger(),
         )
         .unwrap();
@@ -1025,6 +1028,7 @@ mod tests {
                 &mut idkg_payload,
                 &transcript_builder,
                 parent_block_height,
+                None,
                 &no_op_logger(),
             )
             .unwrap();
@@ -1284,18 +1288,12 @@ mod tests {
                 &mut idkg_payload,
                 &transcript_builder,
                 parent_block_height,
+                None,
                 &no_op_logger(),
             )
             .unwrap();
             assert_eq!(result.len(), 1);
 
-            idkg_payload
-                .signature_agreements
-                .insert([2; 32], idkg::CompletedSignature::ReportedToExecution);
-            idkg_payload.signature_agreements.insert(
-                [3; 32],
-                idkg::CompletedSignature::Unreported(empty_response()),
-            );
             idkg_payload.xnet_reshare_agreements.insert(
                 create_reshare_request(key_id, 6, 6),
                 idkg::CompletedReshareRequest::ReportedToExecution,
@@ -1338,24 +1336,6 @@ mod tests {
                 Ok(())
             );
 
-            let (reported, unreported) = {
-                let mut reported = 0;
-                let mut unreported = 0;
-                for agreement in summary.signature_agreements.values() {
-                    match agreement {
-                        idkg::CompletedSignature::ReportedToExecution => {
-                            reported += 1;
-                        }
-                        idkg::CompletedSignature::Unreported(_) => {
-                            unreported += 1;
-                        }
-                    }
-                }
-                (reported, unreported)
-            };
-            assert!(!summary.signature_agreements.is_empty());
-            assert!(reported > 0);
-            assert!(unreported > 0);
             assert!(!summary.available_pre_signatures.is_empty());
             assert!(!summary.pre_signatures_in_creation.is_empty());
             assert!(!summary.idkg_transcripts.is_empty());
@@ -1397,24 +1377,9 @@ mod tests {
             assert_proposal_conversion(b);
 
             // Convert to proto format and back
-            let mut summary_proto = pb::IDkgPayload::from(&summary);
+            let summary_proto = pb::IDkgPayload::from(&summary);
             let summary_from_proto = IDkgPayload::try_from(summary_proto.clone()).unwrap();
             assert_eq!(summary, summary_from_proto);
-
-            // Check signature_agreement upgrade compatibility
-            summary_proto
-                .signature_agreements
-                .push(pb::CompletedSignature {
-                    pseudo_random_id: vec![4; 32],
-                    unreported: None,
-                });
-            let summary_from_proto = IDkgPayload::try_from(summary_proto).unwrap();
-            // Make sure the previous RequestId record can be retrieved by its pseudo_random_id.
-            assert!(
-                summary_from_proto
-                    .signature_agreements
-                    .contains_key(&[4; 32])
-            );
         })
     }
 
@@ -1887,6 +1852,7 @@ mod tests {
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
+                None,
                 &no_op_logger(),
             )
             .unwrap();
@@ -1911,6 +1877,7 @@ mod tests {
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
+                None,
                 &no_op_logger(),
             )
             .unwrap();
@@ -1994,6 +1961,7 @@ mod tests {
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
+                None,
                 &no_op_logger(),
             );
             assert!(result.is_ok());
@@ -2102,6 +2070,7 @@ mod tests {
             BTreeMap::default(),
             &block_reader,
             &transcript_builder,
+            None,
             &no_op_logger(),
         )
         .unwrap();
@@ -2219,6 +2188,7 @@ mod tests {
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
+                None,
                 &no_op_logger(),
             );
             assert!(result.is_ok());
@@ -2244,6 +2214,7 @@ mod tests {
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
+                None,
                 &no_op_logger(),
             );
             assert!(result.is_ok());
@@ -2267,6 +2238,7 @@ mod tests {
                 BTreeMap::default(),
                 &block_reader,
                 &transcript_builder,
+                None,
                 &no_op_logger(),
             );
             assert!(result.is_ok());

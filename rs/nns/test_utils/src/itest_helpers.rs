@@ -8,8 +8,7 @@ use crate::{
 };
 use candid::{CandidType, Encode, Principal};
 use canister_test::{
-    Canister, Project, Runtime, Wasm, local_test_with_config_e,
-    local_test_with_config_with_mutations_on_system_subnet,
+    Canister, Project, Runtime, Wasm, local_test_with_config_with_mutations_on_system_subnet,
 };
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use dfn_candid::{CandidOne, candid_one};
@@ -827,18 +826,7 @@ pub async fn set_up_migration_canister(runtime: &'_ Runtime) -> Canister<'_> {
     canister
 }
 
-/// Runs a local test on the nns subnetwork, so that the canister will be
-/// assigned the same ids as in prod.
-pub fn local_test_on_nns_subnet<Fut, Out, F>(run: F) -> Out
-where
-    Fut: Future<Output = Result<Out, String>>,
-    F: FnOnce(Runtime) -> Fut + 'static,
-{
-    let (config, _tmpdir) = Config::temp_config();
-    local_test_with_config_e(config, run)
-}
-
-/// Runs a test in a StateMachine in a way that is (mostly) compatible with local_test_on_nns_subnet
+/// Runs a test in a StateMachine in a way that is (mostly) compatible with local_test_on_nns_subnet_with_mutations
 pub fn state_machine_test_on_nns_subnet<Fut, Out, F>(run: F) -> Out
 where
     Fut: Future<Output = Result<Out, String>>,

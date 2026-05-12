@@ -108,8 +108,9 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::{
     self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
-    GetNeuronIndexRequest, GetPendingProposalsRequest, ListNeuronVotesRequest, ListNeurons,
-    ListNeuronsResponse, ListProposalInfoRequest, ListProposalInfoResponse, ManageNeuronResponse,
+    GetMaturityModulationResponse, GetNeuronIndexRequest, GetPendingProposalsRequest,
+    ListNeuronVotesRequest, ListNeurons, ListNeuronsResponse, ListProposalInfoRequest,
+    ListProposalInfoResponse, ManageNeuronResponse, MaturityModulation as ApiMaturityModulation,
     NeuronIndexData, NeuronInfo, NeuronVote, NeuronVotes, ProposalInfo,
     manage_neuron_response::{self, StakeMaturityResponse},
     proposal_validation::{
@@ -284,6 +285,12 @@ pub const MAX_NEURONS_FUND_PARTICIPANTS: u64 = 5_000;
 /// A key for the neuron rate limiter, to make sure all add_neuron operations are limited
 /// in the same limit.
 const NEURON_RATE_LIMITER_KEY: &str = "ADD_NEURON";
+
+/// The minimum dissolve delay (in seconds) a neuron must have to submit a
+/// non-ManageNeuron proposal. This is intentionally decoupled from the voting
+/// eligibility threshold (`neuron_minimum_dissolve_delay_to_vote_seconds`),
+/// which can be lower.
+pub const NEURON_MINIMUM_DISSOLVE_DELAY_TO_PROPOSE_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
 
 // The maximum dissolve delay allowed for a neuron.
 pub const MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70: u64 = 8 * ONE_YEAR_SECONDS;
@@ -1346,9 +1353,6 @@ impl Governance {
             rate_limiter: new_rate_limiter(),
         };
 
-        // A one-time data migration.
-        governance.maybe_set_eight_year_gang_bonus_base();
-
         // Clamp all neuron dissolve delays to the Mission 70 maximum exactly once.
         // The snapshot serves as the idempotency guard: if it's already populated,
         // clamping has already run and we must not overwrite the pre-clamp record.
@@ -1367,17 +1371,6 @@ impl Governance {
         }
 
         governance
-    }
-
-    fn maybe_set_eight_year_gang_bonus_base(&mut self) {
-        if self.heap_data.eight_year_gang_bonus_migration_done {
-            return;
-        }
-
-        self.neuron_store
-            .set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic();
-
-        self.heap_data.eight_year_gang_bonus_migration_done = true;
     }
 
     /// After calling this method, the proto and neuron_store (the heap neurons at least)
@@ -5214,18 +5207,16 @@ impl Governance {
             ));
         }
 
-        let min_dissolve_delay_seconds_to_vote = if action.manage_neuron().is_some() {
+        let min_dissolve_delay_seconds_to_propose = if action.manage_neuron().is_some() {
             0
         } else {
-            self.neuron_minimum_dissolve_delay_to_vote_seconds()
+            NEURON_MINIMUM_DISSOLVE_DELAY_TO_PROPOSE_SECONDS
         };
 
-        // The proposer must be eligible to vote. This also ensures that the
-        // neuron cannot be dissolved until the proposal has been adopted or
-        // rejected.
-        if proposer_dissolve_delay_seconds < min_dissolve_delay_seconds_to_vote {
+        // The proposer must have sufficient dissolve delay to submit proposals.
+        if proposer_dissolve_delay_seconds < min_dissolve_delay_seconds_to_propose {
             return Err(GovernanceError::new_with_message(
-                ErrorType::InsufficientFunds,
+                ErrorType::PreconditionFailed,
                 "Neuron's dissolve delay is too short.",
             ));
         }
@@ -8019,6 +8010,16 @@ impl Governance {
 
     pub fn get_restore_aging_summary(&self) -> Option<RestoreAgingSummary> {
         self.heap_data.restore_aging_summary.clone()
+    }
+
+    /// Returns the current maturity modulation, as defined by Mission 70.
+    pub fn get_maturity_modulation(&self) -> GetMaturityModulationResponse {
+        GetMaturityModulationResponse {
+            maturity_modulation: self
+                .heap_data
+                .maturity_modulation
+                .map(ApiMaturityModulation::from),
+        }
     }
 }
 

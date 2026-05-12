@@ -134,6 +134,10 @@ pub struct CanisterSettings {
     ///
     /// Default value: `4096`.
     pub log_memory_limit: Option<Nat>,
+    /// Defines who is allowed to read the canister's snapshots.
+    ///
+    /// Default value: [`SnapshotVisibility::Controllers`].
+    pub snapshot_visibility: Option<SnapshotVisibility>,
     /// Indicates the upper limit on the WASM heap memory (bytes) consumption of the canister.
     ///
     /// Must be a number between 0 and 2<sup>48</sup>-1 (i.e 256TB), inclusively.
@@ -157,11 +161,6 @@ pub struct CanisterSettings {
     ///
     /// Default value: `null` (i.e., no environment variables provided).
     pub environment_variables: Option<Vec<EnvironmentVariable>>,
-
-    /// Defines who is allowed to read the canister's snapshots.
-    ///
-    /// Default value: [`SnapshotVisibility::Controllers`].
-    pub snapshot_visibility: Option<SnapshotVisibility>,
 }
 
 /// # Definite Canister Settings
@@ -187,14 +186,14 @@ pub struct DefiniteCanisterSettings {
     pub log_visibility: LogVisibility,
     /// Upper limit on the memory used for canister logs (bytes).
     pub log_memory_limit: Nat,
+    /// Visibility of canister snapshots.
+    pub snapshot_visibility: SnapshotVisibility,
     /// Upper limit on the WASM heap memory (bytes) consumption of the canister.
     pub wasm_memory_limit: Nat,
     /// Threshold on the remaining wasm memory size of the canister in bytes.
     pub wasm_memory_threshold: Nat,
     /// A list of environment variables.
     pub environment_variables: Vec<EnvironmentVariable>,
-    /// Visibility of canister snapshots.
-    pub snapshot_visibility: SnapshotVisibility,
 }
 
 /// # Create Canister Args
@@ -900,12 +899,18 @@ pub enum HttpMethod {
     #[default]
     #[serde(rename = "get")]
     GET,
-    /// POST
-    #[serde(rename = "post")]
-    POST,
     /// HEAD
     #[serde(rename = "head")]
     HEAD,
+    /// POST
+    #[serde(rename = "post")]
+    POST,
+    /// PUT
+    #[serde(rename = "put")]
+    PUT,
+    /// DELETE
+    #[serde(rename = "delete")]
+    DELETE,
 }
 
 /// # HTTP Header.
@@ -1352,6 +1357,30 @@ pub struct SubnetInfoResult {
     pub registry_version: u64,
 }
 
+/// # Canister ID Range.
+///
+/// A closed range of canister IDs, both endpoints inclusive.
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
+)]
+pub struct CanisterIdRange {
+    /// Start of the range (inclusive).
+    pub start: CanisterId,
+    /// End of the range (inclusive).
+    pub end: CanisterId,
+}
+
+/// # List Canisters Result.
+///
+/// Result type of [`list_canisters`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-list_canisters).
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
+)]
+pub struct ListCanistersResult {
+    /// Canister IDs of existing canisters on the subnet, encoded as a list of closed ranges.
+    pub canisters: Vec<CanisterIdRange>,
+}
+
 /// # Provisional Create Canister With Cycles Args.
 ///
 /// Argument type of [`provisional_create_canister_with_cycles`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-provisional_create_canister_with_cycles).
@@ -1470,6 +1499,8 @@ pub struct DeleteCanisterSnapshotArgs {
 }
 
 /// # Read Canister Snapshot Metadata Args.
+///
+/// Argument type of [`read_canister_snapshot_metadata`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-read_canister_snapshot_metadata).
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct ReadCanisterSnapshotMetadataArgs {
     /// Canister ID.
@@ -1479,47 +1510,57 @@ pub struct ReadCanisterSnapshotMetadataArgs {
 }
 
 /// # Read Canister Snapshot Metadata Result.
+///
+/// Result type of [`read_canister_snapshot_metadata`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-read_canister_snapshot_metadata).
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct ReadCanisterSnapshotMetadataResult {
-    /// The source of the snapshot.
+    /// How the snapshot was created.
     pub source: Option<SnapshotSource>,
     /// The Unix nanosecond timestamp the snapshot was taken at.
     pub taken_at_timestamp: u64,
-    /// The size of the Wasm module.
+    /// The size of the Wasm module in bytes.
     pub wasm_module_size: u64,
-    /// The globals.
+    /// The exported WebAssembly global variables of the canister.
     pub globals: Vec<Option<SnapshotMetadataGlobal>>,
-    /// The size of the Wasm memory.
+    /// The size of the Wasm heap memory in bytes.
     pub wasm_memory_size: u64,
-    /// The size of the stable memory.
+    /// The size of the stable memory in bytes.
     pub stable_memory_size: u64,
-    /// The chunk store of the Wasm module.
+    /// Hashes of the chunks in the Wasm chunk store.
     pub wasm_chunk_store: StoredChunksResult,
-    /// The version of the canister.
+    /// The version of the canister at the time the snapshot was taken.
     pub canister_version: u64,
-    /// The certified data.
+    /// The certified data of the canister.
     #[serde(with = "serde_bytes")]
     pub certified_data: Vec<u8>,
-    /// The status of the global timer.
+    /// The status of the canister's global timer.
     pub global_timer: Option<CanisterTimer>,
-    /// The status of the low wasm memory hook.
+    /// The status of the on-low-Wasm-memory hook.
     pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
 }
 
-/// # The source of a snapshot.
+/// # Snapshot Source.
+///
+/// How a canister snapshot was created.
+///
+/// See [`ReadCanisterSnapshotMetadataResult::source`].
 #[derive(
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
 )]
 pub enum SnapshotSource {
-    /// The snapshot was taken from a canister.
+    /// The snapshot was taken from a running canister.
     #[serde(rename = "taken_from_canister")]
     TakenFromCanister(Reserved),
-    /// The snapshot was created by uploading metadata.
+    /// The snapshot was created by uploading metadata and data.
     #[serde(rename = "metadata_upload")]
     MetadataUpload(Reserved),
 }
 
-/// # An exported global variable.
+/// # Snapshot Metadata Global.
+///
+/// An exported WebAssembly global variable of a canister snapshot.
+///
+/// See [`ReadCanisterSnapshotMetadataResult::globals`].
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub enum SnapshotMetadataGlobal {
     /// A 32-bit integer.
@@ -1539,43 +1580,57 @@ pub enum SnapshotMetadataGlobal {
     V128(Nat),
 }
 
-/// # The status of a global timer.
+/// # Canister Timer.
+///
+/// The status of a canister's global timer.
+///
+/// See [`ReadCanisterSnapshotMetadataResult::global_timer`].
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub enum CanisterTimer {
-    /// The global timer is inactive.
+    /// The global timer is not set.
     #[serde(rename = "inactive")]
     Inactive,
-    /// The global timer is active.
+    /// The global timer is set to fire at the given Unix nanosecond timestamp.
     #[serde(rename = "active")]
     Active(u64),
 }
 
-/// # The status of a low wasm memory hook.
+/// # On Low Wasm Memory Hook Status.
+///
+/// The execution status of the on-low-Wasm-memory hook.
+///
+/// See [`ReadCanisterSnapshotMetadataResult::on_low_wasm_memory_hook_status`].
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub enum OnLowWasmMemoryHookStatus {
-    /// The condition for the  low wasm memory hook is not satisfied.
+    /// The hook's trigger condition is not satisfied.
     #[serde(rename = "condition_not_satisfied")]
     ConditionNotSatisfied,
-    /// The low wasm memory hook is ready to be executed.
+    /// The hook is scheduled to run.
     #[serde(rename = "ready")]
     Ready,
-    /// The low wasm memory hook has been executed.
+    /// The hook has already been executed.
     #[serde(rename = "executed")]
     Executed,
 }
 
 /// # Read Canister Snapshot Data Args.
+///
+/// Argument type of [`read_canister_snapshot_data`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-read_canister_snapshot_data).
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct ReadCanisterSnapshotDataArgs {
     /// Canister ID.
     pub canister_id: CanisterId,
     /// ID of the snapshot.
     pub snapshot_id: SnapshotId,
-    /// The kind of data to be read.
+    /// The region of the snapshot to read.
     pub kind: SnapshotDataKind,
 }
 
-/// # Snapshot data kind.
+/// # Snapshot Data Kind.
+///
+/// Identifies a region within a snapshot to read.
+///
+/// See [`ReadCanisterSnapshotDataArgs::kind`].
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub enum SnapshotDataKind {
     /// Wasm module.
@@ -1612,14 +1667,18 @@ pub enum SnapshotDataKind {
 }
 
 /// # Read Canister Snapshot Data Result.
+///
+/// Result type of [`read_canister_snapshot_data`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-read_canister_snapshot_data).
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct ReadCanisterSnapshotDataResult {
-    /// The returned chunk of data.
+    /// The requested chunk of snapshot data.
     #[serde(with = "serde_bytes")]
     pub chunk: Vec<u8>,
 }
 
 /// # Upload Canister Snapshot Metadata Args.
+///
+/// Argument type of [`upload_canister_snapshot_metadata`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-upload_canister_snapshot_metadata).
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct UploadCanisterSnapshotMetadataArgs {
     /// Canister ID.
@@ -1645,6 +1704,8 @@ pub struct UploadCanisterSnapshotMetadataArgs {
 }
 
 /// # Upload Canister Snapshot Metadata Result.
+///
+/// Result type of [`upload_canister_snapshot_metadata`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-upload_canister_snapshot_metadata).
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct UploadCanisterSnapshotMetadataResult {
     /// The ID of the snapshot.
@@ -1652,19 +1713,25 @@ pub struct UploadCanisterSnapshotMetadataResult {
 }
 
 /// # Upload Canister Snapshot Data Args.
+///
+/// Argument type of [`upload_canister_snapshot_data`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-upload_canister_snapshot_data).
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct UploadCanisterSnapshotDataArgs {
     /// Canister ID.
     pub canister_id: CanisterId,
     /// ID of the snapshot.
     pub snapshot_id: SnapshotId,
-    /// The kind of data to be uploaded.
+    /// The region of the snapshot to write.
     pub kind: SnapshotDataOffset,
-    /// The chunk of data to be uploaded.
+    /// The chunk of data to upload.
     pub chunk: Vec<u8>,
 }
 
-/// # Snapshot data offset.
+/// # Snapshot Data Offset.
+///
+/// Identifies a region within a snapshot to write.
+///
+/// See [`UploadCanisterSnapshotDataArgs::kind`].
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub enum SnapshotDataOffset {
     /// Wasm module.
@@ -1743,4 +1810,54 @@ pub struct CanisterLogRecord {
 pub struct FetchCanisterLogsResult {
     /// The logs of the canister.
     pub canister_log_records: Vec<CanisterLogRecord>,
+}
+
+/// # Cycles Consumed.
+///
+/// Breakdown of cycles consumed by a canister.
+///
+/// See [`CanisterMetricsResult::cycles_consumed`].
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
+)]
+pub struct CyclesConsumed {
+    /// Cycles consumed for memory storage.
+    pub memory: Nat,
+    /// Cycles consumed for compute allocation.
+    pub compute_allocation: Nat,
+    /// Cycles consumed for ingress induction.
+    pub ingress_induction: Nat,
+    /// Cycles consumed for instruction execution.
+    pub instructions: Nat,
+    /// Cycles consumed for request and response transmission.
+    pub request_and_response_transmission: Nat,
+    /// Cycles consumed when the canister was uninstalled by the system due to running out of cycles.
+    ///
+    /// This is only updated on system-triggered uninstallation (i.e. the canister ran out of
+    /// cycles). Explicit calls to [`uninstall_code`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-uninstall_code)
+    /// do not update this metric; in that case other metrics (e.g. [`ingress_induction`](Self::ingress_induction))
+    /// may be updated instead.
+    pub uninstall: Nat,
+    /// Cycles consumed for canister creation.
+    pub canister_creation: Nat,
+    /// Cycles consumed for HTTP outcalls.
+    pub http_outcalls: Nat,
+    /// Cycles burned (i.e. not returned to the canister).
+    pub burned_cycles: Nat,
+}
+
+/// # Canister Metrics Args.
+///
+/// Argument type of [`canister_metrics`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-canister_metrics).
+pub type CanisterMetricsArgs = CanisterIdRecord;
+
+/// # Canister Metrics Result.
+///
+/// Result type of [`canister_metrics`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-canister_metrics).
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
+)]
+pub struct CanisterMetricsResult {
+    /// Cycles consumed by the canister.
+    pub cycles_consumed: CyclesConsumed,
 }

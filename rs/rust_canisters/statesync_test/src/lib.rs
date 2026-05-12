@@ -1,12 +1,12 @@
-use candid::CandidType;
+use candid::{CandidType, Principal};
 use serde::{Deserialize, Serialize};
 
-#[derive(CandidType, Copy, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub enum CanisterCreationStatus {
     #[serde(rename = "idle")]
     Idle,
     #[serde(rename = "in_progress")]
     InProgress(u64),
     #[serde(rename = "done")]
-    Done(u64),
+    Done(Vec<Principal>),
 }

@@ -2015,7 +2015,7 @@ mod sender_info {
             root_public_key: root_of_trust.public_key,
             root_secret_key: root_of_trust.secret_key,
         };
-        let sig = signer.sign(&SenderInfoContent(info_bytes.clone()));
+        let sig = signer.sign(&SenderInfoContent(&info_bytes));
         let raw = RawSignedSenderInfo {
             info: Blob(info_bytes),
             signer: Blob(CANISTER_ID_SIGNER.get().into_vec()),

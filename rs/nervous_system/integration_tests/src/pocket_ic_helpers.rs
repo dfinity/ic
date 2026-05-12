@@ -1098,6 +1098,36 @@ pub async fn upgrade_nns_canister_to_tip_of_master_or_panic(
     );
 }
 
+pub mod management {
+    use super::*;
+    use ic_management_canister_types_private::ListCanisterSnapshotArgs;
+    use pocket_ic::common::rest::RawEffectivePrincipal;
+
+    pub async fn list_canister_snapshots(
+        pocket_ic: &PocketIc,
+        canister_id: CanisterId,
+        sender: PrincipalId,
+    ) -> Vec<ic_management_canister_types_private::CanisterSnapshotResponse> {
+        let reply = pocket_ic
+            .update_call_with_effective_principal(
+                Principal::management_canister(),
+                RawEffectivePrincipal::CanisterId(
+                    PrincipalId::from(canister_id).as_slice().to_vec(),
+                ),
+                Principal::from(sender),
+                "list_canister_snapshots",
+                Encode!(&ListCanisterSnapshotArgs::new(canister_id)).unwrap(),
+            )
+            .await
+            .expect("Failed to list canister snapshots");
+        Decode!(
+            &reply,
+            Vec<ic_management_canister_types_private::CanisterSnapshotResponse>
+        )
+        .unwrap()
+    }
+}
+
 pub mod nns {
     use super::*;
     use ic_nervous_system_agent::{helpers::nns as nns_agent_helpers, nns as nns_agent};
@@ -1162,6 +1192,18 @@ pub mod nns {
             .await
         }
 
+        pub async fn get_proposal_info(
+            pocket_ic: &PocketIc,
+            proposal_id: u64,
+        ) -> Option<ProposalInfo> {
+            nns_agent::governance::get_proposal_info(
+                &PocketIcAgent::new(pocket_ic, Principal::anonymous()),
+                ProposalId { id: proposal_id },
+            )
+            .await
+            .unwrap()
+        }
+
         pub async fn nns_get_proposal_info(
             pocket_ic: &PocketIc,
             proposal_id: ProposalId,
@@ -1218,9 +1260,14 @@ pub mod nns {
 
     pub mod registry {
         use ic_registry_transport::{
-            deserialize_get_value_response, pb::v1::HighCapacityRegistryGetValueResponse,
+            deserialize_get_value_response,
+            pb::v1::{
+                HighCapacityRegistryGetValueResponse,
+                high_capacity_registry_get_value_response::Content,
+            },
             serialize_get_value_request,
         };
+        use prost::Message;
         use registry_canister::mutations::{
             do_migrate_node_operator_directly::MigrateNodeOperatorPayload,
             do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
@@ -1287,12 +1334,53 @@ pub mod nns {
                     response
                 })
         }
+
+        /// Fetch a registry value by key and decode it as a protobuf message.
+        ///
+        /// # Panics
+        ///
+        /// Panics if the registry response contains chunked large value keys
+        /// instead of a direct value.
+        pub async fn decode_registry_value<T: Message + Default>(
+            pocket_ic: &PocketIc,
+            key: impl AsRef<str>,
+        ) -> T {
+            let key = key.as_ref();
+            let response = get_value(pocket_ic, key, None).await.unwrap_or_else(|err| {
+                panic!("failed to fetch registry value for key `{key}`: {err:?}")
+            });
+            let bytes = match response
+                .content
+                .unwrap_or_else(|| panic!("registry response for key `{key}` had no content"))
+            {
+                Content::Value(bytes) => bytes,
+                Content::LargeValueChunkKeys(_) => {
+                    panic!("unexpected large value chunk keys for key `{key}`")
+                }
+            };
+            T::decode(bytes.as_slice()).unwrap_or_else(|err| {
+                panic!("failed to decode registry value for key `{key}`: {err}")
+            })
+        }
     }
 
     pub mod ledger {
         use super::*;
         use ic_nervous_system_agent::nns::ledger as nns_agent_ledger;
         use icp_ledger::{Memo, TransferArgs};
+
+        pub async fn icrc1_balance_of(pocket_ic: &PocketIc, account: Account) -> Nat {
+            let reply = pocket_ic
+                .query_call(
+                    Principal::from(PrincipalId::from(LEDGER_CANISTER_ID)),
+                    Principal::anonymous(),
+                    "icrc1_balance_of",
+                    Encode!(&account).unwrap(),
+                )
+                .await
+                .unwrap();
+            Decode!(&reply, Nat).unwrap()
+        }
 
         pub async fn icrc1_transfer(
             pocket_ic: &PocketIc,

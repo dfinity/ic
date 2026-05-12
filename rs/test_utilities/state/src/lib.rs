@@ -877,6 +877,7 @@ pub fn register_callback(
             Cycles::zero(),
             CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
             CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::new(168), CanisterCyclesCostSchedule::Normal),
             WasmClosure::new(0, 2),
             WasmClosure::new(0, 2),
             None,
@@ -1102,7 +1103,6 @@ pub(crate) fn arb_cycles_use_case() -> impl Strategy<Value = CyclesUseCase> {
         Just(CyclesUseCase::ECDSAOutcalls),
         Just(CyclesUseCase::HTTPOutcalls),
         Just(CyclesUseCase::DeletedCanisters),
-        Just(CyclesUseCase::NonConsumed),
     ]
 }
 

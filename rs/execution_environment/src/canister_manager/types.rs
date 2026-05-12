@@ -80,6 +80,7 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) max_environment_variables: usize,
     pub(crate) max_environment_variable_name_length: usize,
     pub(crate) max_environment_variable_value_length: usize,
+    pub(crate) log_memory_store_feature: FlagStatus,
 }
 
 impl CanisterMgrConfig {
@@ -104,6 +105,7 @@ impl CanisterMgrConfig {
         max_environment_variables: usize,
         max_environment_variable_name_length: usize,
         max_environment_variable_value_length: usize,
+        log_memory_store_feature: FlagStatus,
     ) -> Self {
         Self {
             default_provisional_cycles_balance,
@@ -125,6 +127,7 @@ impl CanisterMgrConfig {
             max_environment_variables,
             max_environment_variable_name_length,
             max_environment_variable_value_length,
+            log_memory_store_feature,
         }
     }
 }
@@ -444,7 +447,7 @@ pub(crate) enum CanisterManagerError {
         canister_id: CanisterId,
         limit: usize,
     },
-    CanisterSnapshotNotEnoughCycles(CanisterOutOfCyclesError),
+    NotEnoughCycles(CanisterOutOfCyclesError),
     CanisterSnapshotImmutable,
     CanisterSnapshotInconsistent {
         message: String,
@@ -669,9 +672,9 @@ impl AsErrorHelp for CanisterManagerError {
                 suggestion: "Consider deleting an unnecessary snapshot of the specified canister before creating a new one.".to_string(),
                 doc_link: "canister-snapshot-limit-exceeded".to_string(),
             },
-            CanisterManagerError::CanisterSnapshotNotEnoughCycles { .. } => ErrorHelp::UserError {
+            CanisterManagerError::NotEnoughCycles { .. } => ErrorHelp::UserError {
                 suggestion: "Try sending more cycles with the request.".to_string(),
-                doc_link: "canister-snapshot-not-enough-cycles".to_string(),
+                doc_link: "not-enough-cycles".to_string(),
             },
             CanisterManagerError::CanisterSnapshotImmutable => ErrorHelp::UserError {
                 suggestion: "Only canister snapshots created by metadata upload can be mutated.".to_string(),
@@ -1059,9 +1062,9 @@ impl From<CanisterManagerError> for UserError {
                     "Canister {canister_id} has reached the maximum number of snapshots allowed: {limit}.{additional_help}",
                 ),
             ),
-            CanisterSnapshotNotEnoughCycles(err) => Self::new(
+            NotEnoughCycles(err) => Self::new(
                 ErrorCode::CanisterOutOfCycles,
-                format!("Canister snapshotting failed with: `{err}`{additional_help}"),
+                format!("Canister management operation failed with: `{err}`{additional_help}"),
             ),
             CanisterSnapshotImmutable => Self::new(
                 ErrorCode::CanisterSnapshotImmutable,

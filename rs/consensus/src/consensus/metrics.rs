@@ -1,3 +1,4 @@
+use ic_consensus_dkg::metrics::DkgPayloadStats;
 use ic_consensus_idkg::{
     metrics::{CounterPerMasterPublicKeyId, IDkgPayloadStats, KEY_ID_LABEL, key_id_label},
     utils::CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
@@ -12,6 +13,7 @@ use ic_types::{
     Height, Time,
     batch::BatchPayload,
     consensus::{Block, BlockPayload, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank},
+    crypto::threshold_sig::ni_dkg::NiDkgTargetSubnet,
 };
 use prometheus::{
     GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
@@ -114,6 +116,7 @@ pub(crate) struct BlockStats {
     pub block_height: u64,
     pub block_time: Time,
     pub block_context_certified_height: u64,
+    pub dkg_stats: DkgPayloadStats,
     pub idkg_stats: Option<IDkgPayloadStats>,
 }
 
@@ -124,6 +127,7 @@ impl From<&Block> for BlockStats {
             block_height: block.height().get(),
             block_time: block.context.time,
             block_context_certified_height: block.context.certified_height.get(),
+            dkg_stats: DkgPayloadStats::from(block.payload.as_ref()),
             idkg_stats: block.payload.as_ref().as_idkg().map(IDkgPayloadStats::from),
         }
     }
@@ -168,9 +172,12 @@ pub(crate) struct FinalizerMetrics {
     pub ingress_message_bytes_delivered: Histogram,
     pub xnet_bytes_delivered: Histogram,
     pub finalization_certified_state_difference: IntGauge,
+    pub dkg_remote_transcript_attempts_size: IntGauge,
+    pub dkg_remote_transcript_attempts_sum: IntGauge,
+    pub dkg_dealings_included: IntCounterVec,
+    pub dkg_remote_transcripts_delivered: IntCounterVec,
     // idkg payload related metrics
     pub master_key_transcripts_created: IntCounterVec,
-    pub threshold_signature_agreements: IntCounter,
     pub idkg_available_pre_signatures: IntGaugeVec,
     pub idkg_pre_signatures_in_creation: IntGaugeVec,
     pub idkg_ongoing_xnet_reshares: IntGaugeVec,
@@ -181,6 +188,7 @@ pub(crate) struct FinalizerMetrics {
     pub canister_http_timeouts_delivered: IntCounter,
     pub canister_http_divergences_delivered: IntCounter,
     pub canister_http_flexible_candid_failures: IntCounter,
+    pub canister_http_flexible_errors_delivered: IntCounter,
     pub canister_http_payload_bytes_delivered: Histogram,
 }
 
@@ -212,6 +220,24 @@ impl FinalizerMetrics {
                 "consensus_finalization_certified_state_difference",
                 "The height difference between the finalized tip and the referenced certified state",
             ),
+            dkg_remote_transcript_attempts_size: metrics_registry.int_gauge(
+                "consensus_dkg_remote_transcript_attempts_size",
+                "Size of remote DKG attempts map for delivered summary payloads",
+            ),
+            dkg_remote_transcript_attempts_sum: metrics_registry.int_gauge(
+                "consensus_dkg_remote_transcript_attempts_sum",
+                "Sum of remote DKG attempts map values for delivered summary payloads",
+            ),
+            dkg_dealings_included: metrics_registry.int_counter_vec(
+                "consensus_dkg_dealings_included_total",
+                "Number of DKG dealings delivered in data payloads by tag and target subnet",
+                &["tag", "target_subnet"],
+            ),
+            dkg_remote_transcripts_delivered: metrics_registry.int_counter_vec(
+                "consensus_dkg_remote_transcripts_delivered_total",
+                "Number of remote DKG transcripts included in delivered data payloads by tag",
+                &["tag"],
+            ),
             ingress_messages_delivered: metrics_registry.histogram(
                 "consensus_ingress_messages_delivered",
                 "The number of the ingress messages delivered to Message Routing",
@@ -235,10 +261,6 @@ impl FinalizerMetrics {
                 "consensus_master_key_transcripts_created",
                 "The number of times a master key transcript is created",
                 &[KEY_ID_LABEL],
-            ),
-            threshold_signature_agreements: metrics_registry.int_counter(
-                "consensus_threshold_signature_agreements",
-                "Total number of threshold signature agreements created",
             ),
             idkg_available_pre_signatures: metrics_registry.int_gauge_vec(
                 "consensus_idkg_available_pre_signatures",
@@ -281,6 +303,10 @@ impl FinalizerMetrics {
                 "canister_http_flexible_candid_failures",
                 "Total number of flexible canister http responses skipped due to candid encoding/decoding failures",
             ),
+            canister_http_flexible_errors_delivered: metrics_registry.int_counter(
+                "canister_http_flexible_errors_delivered",
+                "Total number of flexible canister http errors delivered",
+            ),
             canister_http_payload_bytes_delivered: metrics_registry.histogram(
                 "canister_http_payload_bytes_delivered",
                 "Total number of bytes in the canister http payload",
@@ -303,6 +329,28 @@ impl FinalizerMetrics {
         self.finalization_certified_state_difference.set(
             block_stats.block_height as i64 - block_stats.block_context_certified_height as i64,
         );
+        let dkg = &block_stats.dkg_stats;
+        if let Some(size) = dkg.remote_dkg_attempts_map_size {
+            self.dkg_remote_transcript_attempts_size.set(size as i64);
+        }
+        if let Some(total) = dkg.remote_dkg_attempts_map_sum {
+            self.dkg_remote_transcript_attempts_sum.set(total as i64);
+        }
+        for ((tag, target_subnet), count) in &dkg.dealings_included {
+            let target_str = match target_subnet {
+                NiDkgTargetSubnet::Local => "local".to_string(),
+                NiDkgTargetSubnet::Remote(_) => "remote".to_string(),
+            };
+            self.dkg_dealings_included
+                .with_label_values(&[format!("{tag:?}"), target_str])
+                .inc_by(*count as u64);
+        }
+        for (tag, count) in &dkg.remote_transcripts_delivered {
+            self.dkg_remote_transcripts_delivered
+                .with_label_values(&[format!("{tag:?}")])
+                .inc_by(*count as u64);
+        }
+
         self.canister_http_success_delivered
             .with_label_values(&["fully_replicated"])
             .inc_by(batch_stats.canister_http.responses as u64);
@@ -316,11 +364,17 @@ impl FinalizerMetrics {
             .inc_by(batch_stats.canister_http.timeouts as u64);
         self.canister_http_divergences_delivered
             .inc_by(batch_stats.canister_http.divergence_responses as u64);
-        self.canister_http_flexible_candid_failures.inc_by(
-            batch_stats
-                .canister_http
-                .flexible_ok_responses_candid_failures as u64,
-        );
+
+        let flexible_ok_candid_failures = batch_stats
+            .canister_http
+            .flexible_ok_responses_candid_failures as u64;
+        let flexible_error_candid_failures =
+            batch_stats.canister_http.flexible_errors_candid_failures as u64;
+        self.canister_http_flexible_candid_failures
+            .inc_by(flexible_ok_candid_failures + flexible_error_candid_failures);
+
+        self.canister_http_flexible_errors_delivered
+            .inc_by(batch_stats.canister_http.flexible_errors as u64);
         self.canister_http_payload_bytes_delivered
             .observe(batch_stats.canister_http.payload_bytes as f64);
 
@@ -345,8 +399,6 @@ impl FinalizerMetrics {
                 &self.master_key_transcripts_created,
                 &idkg.key_transcripts_created,
             );
-            self.threshold_signature_agreements
-                .inc_by(idkg.signature_agreements as u64);
             set(
                 &self.idkg_available_pre_signatures,
                 &idkg.available_pre_signatures,

@@ -28,11 +28,7 @@ use std::sync::Arc;
 fn default_canister_state_bits() -> CanisterStateBits {
     CanisterStateBits {
         controllers: BTreeSet::new(),
-        last_full_execution_round: ExecutionRound::from(0),
         compute_allocation: ComputeAllocation::try_from(0).unwrap(),
-        accumulated_priority: AccumulatedPriority::default(),
-        priority_credit: AccumulatedPriority::default(),
-        long_execution_mode: LongExecutionMode::default(),
         execution_state_bits: None,
         memory_allocation: MemoryAllocation::default(),
         wasm_memory_threshold: NumBytes::new(0),
@@ -56,6 +52,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         global_timer_nanos: None,
         canister_version: 0,
         consumed_cycles_by_use_cases: BTreeMap::new(),
+        consumed_cycles_by_use_cases_as_counters: BTreeMap::new(),
         canister_history: CanisterHistory::default(),
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         total_query_stats: TotalQueryStats::default(),
@@ -322,6 +319,10 @@ fn test_encode_decode_task_queue() {
         ),
         prepayment_for_response_transmission: CompoundCycles::new(
             Cycles::new(2197),
+            CanisterCyclesCostSchedule::Normal,
+        ),
+        prepayment_for_call_transmission: CompoundCycles::new(
+            Cycles::new(3213),
             CanisterCyclesCostSchedule::Normal,
         ),
         on_reply: WasmClosure::new(13, 14),
@@ -1254,6 +1255,10 @@ mod mainnet_compatibility_tests {
                     CanisterCyclesCostSchedule::Normal,
                 ),
                 prepayment_for_response_transmission: CompoundCycles::new(
+                    Cycles::zero(),
+                    CanisterCyclesCostSchedule::Normal,
+                ),
+                prepayment_for_call_transmission: CompoundCycles::new(
                     Cycles::zero(),
                     CanisterCyclesCostSchedule::Normal,
                 ),

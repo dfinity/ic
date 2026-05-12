@@ -832,12 +832,6 @@ impl NeuronStore {
         })
     }
 
-    pub fn set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic(&mut self) {
-        with_stable_neuron_store_mut(|stable_neuron_store| {
-            stable_neuron_store.set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic();
-        });
-    }
-
     pub fn clamp_dissolve_delay_for_all_neurons_or_panic(
         &mut self,
         now_seconds: u64,

@@ -23,6 +23,7 @@ use crate::{
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::{EnvironmentVariables, NumSeconds};
 use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE;
+use ic_config::flag_status::FlagStatus;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::{ReplicaLogger, error};
@@ -153,6 +154,7 @@ pub struct CanisterMetrics {
     load_metrics: LoadMetrics,
     consumed_cycles: NominalCycles,
     consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+    consumed_cycles_by_use_cases_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,
 }
 
 impl CanisterMetrics {
@@ -163,6 +165,7 @@ impl CanisterMetrics {
         interrupted_during_execution: u64,
         consumed_cycles: NominalCycles,
         consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+        consumed_cycles_by_use_cases_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,
         instructions_executed: NumInstructions,
         load_metrics: LoadMetrics,
     ) -> Self {
@@ -173,6 +176,7 @@ impl CanisterMetrics {
             interrupted_during_execution,
             consumed_cycles,
             consumed_cycles_by_use_cases,
+            consumed_cycles_by_use_cases_as_counters,
             instructions_executed,
             load_metrics,
         }
@@ -204,6 +208,12 @@ impl CanisterMetrics {
 
     pub fn consumed_cycles_by_use_cases(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
         &self.consumed_cycles_by_use_cases
+    }
+
+    pub fn consumed_cycles_by_use_cases_as_counters(
+        &self,
+    ) -> &BTreeMap<CyclesUseCase, NominalCycles> {
+        &self.consumed_cycles_by_use_cases_as_counters
     }
 
     pub fn observe_round_scheduled(&mut self) {
@@ -583,6 +593,7 @@ impl SystemState {
         time_of_last_allocation_charge: Time,
         freeze_threshold: NumSeconds,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        log_memory_store_feature: FlagStatus,
     ) -> Self {
         Self::new_internal(
             canister_id,
@@ -592,6 +603,7 @@ impl SystemState {
             freeze_threshold,
             CanisterStatus::new_running(),
             WasmChunkStore::new(fd_factory),
+            log_memory_store_feature,
         )
     }
 
@@ -603,6 +615,7 @@ impl SystemState {
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         wasm_chunk_store: WasmChunkStore,
+        log_memory_store_feature: FlagStatus,
     ) -> Self {
         Self {
             canister_id,
@@ -633,7 +646,7 @@ impl SystemState {
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
             canister_log: CanisterLog::default_aggregate(),
-            log_memory_store: LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
+            log_memory_store: LogMemoryStore::new(log_memory_store_feature),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
         }
@@ -779,6 +792,7 @@ impl SystemState {
             freeze_threshold,
             status,
             WasmChunkStore::new_for_testing(),
+            LOG_MEMORY_STORE_FEATURE,
         )
     }
 
@@ -1883,7 +1897,6 @@ impl SystemState {
             | CyclesUseCase::VetKd
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
-            | CyclesUseCase::NonConsumed
             | CyclesUseCase::BurnedCycles
             | CyclesUseCase::DroppedMessages => requested_real,
         };
@@ -1944,6 +1957,17 @@ impl SystemState {
         self.consume_cycles(CompoundCycles::<Uninstall>::new(balance, cost_schedule));
     }
 
+    /// Observes the consumed cycles for HTTPS outcalls. This should only be
+    /// called to update the counter metric on the canister level, as the gauge
+    /// metric for HTTPS outcalls is updated on the subnet level only.
+    pub fn observe_consumed_cycles_for_https_outcall(&mut self, amount: NominalCycles) {
+        *self
+            .canister_metrics
+            .consumed_cycles_by_use_cases_as_counters
+            .entry(CyclesUseCase::HTTPOutcalls)
+            .or_insert_with(NominalCycles::zero) += amount;
+    }
+
     fn observe_consumed_cycles_with_use_case(
         &mut self,
         prepayment: NominalCycles,
@@ -1958,13 +1982,6 @@ impl SystemState {
         debug_assert_ne!(use_case, CyclesUseCase::DeletedCanisters);
         debug_assert_ne!(use_case, CyclesUseCase::DroppedMessages);
 
-        // CyclesUseCase::NonConsumed should never be sent to this function.
-        debug_assert_ne!(
-            use_case,
-            CyclesUseCase::NonConsumed,
-            "Non-consumed cycles should not be tracked in the canister metrics."
-        );
-
         // `prepayment` must be greater or equal to `refund`.
         // `refund` must be 0 when we are handling a prepayment.
         debug_assert!(
@@ -1978,26 +1995,52 @@ impl SystemState {
             ConsumingCycles::Refund => {}
         }
 
-        // Skip if the amounts are zero and no metric updates are needed.
-        if (consuming_cycles == ConsumingCycles::Prepayment && prepayment.is_zero())
-            || (consuming_cycles == ConsumingCycles::Refund && refund.is_zero())
-        {
+        // Skip if the consumed cycles are zero and no metric updates are needed.
+        if prepayment - refund == NominalCycles::zero() {
             return;
         }
 
         let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> =
             &mut self.canister_metrics.consumed_cycles_by_use_cases;
-
         let use_case_consumption = metric.entry(use_case).or_insert_with(NominalCycles::zero);
+        let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> = &mut self
+            .canister_metrics
+            .consumed_cycles_by_use_cases_as_counters;
+        let use_case_consumption_as_counter =
+            metric.entry(use_case).or_insert_with(NominalCycles::zero);
 
         match consuming_cycles {
             ConsumingCycles::Prepayment => {
                 *use_case_consumption += prepayment;
                 self.canister_metrics.consumed_cycles += prepayment;
+                match use_case {
+                    CyclesUseCase::Instructions | CyclesUseCase::RequestAndResponseTransmission => {
+                        // These use cases are accounted for during refund
+                        // for the counter metrics.
+                    }
+                    CyclesUseCase::Memory
+                    | CyclesUseCase::ComputeAllocation
+                    | CyclesUseCase::Uninstall
+                    | CyclesUseCase::IngressInduction
+                    | CyclesUseCase::CanisterCreation
+                    | CyclesUseCase::BurnedCycles => {
+                        *use_case_consumption_as_counter += prepayment;
+                    }
+
+                    CyclesUseCase::ECDSAOutcalls
+                    | CyclesUseCase::SchnorrOutcalls
+                    | CyclesUseCase::VetKd
+                    | CyclesUseCase::HTTPOutcalls
+                    | CyclesUseCase::DeletedCanisters
+                    | CyclesUseCase::DroppedMessages => {
+                        // These use cases should not be tracked on the canister level.
+                    }
+                }
             }
             ConsumingCycles::Refund => {
                 *use_case_consumption -= refund;
                 self.canister_metrics.consumed_cycles -= refund;
+                *use_case_consumption_as_counter += prepayment - refund;
             }
         }
     }
@@ -2302,6 +2345,7 @@ fn invalid_callback() -> Arc<Callback> {
         Cycles::zero(),
         CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
         CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 0),
         WasmClosure::new(0, 0),
         None,
@@ -2407,6 +2451,7 @@ pub mod testing {
                 Cycles::new(13),
                 CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
                 CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
+                CompoundCycles::new(Cycles::new(168), CanisterCyclesCostSchedule::Normal),
                 WasmClosure::new(0, 2),
                 WasmClosure::new(0, 2),
                 None,

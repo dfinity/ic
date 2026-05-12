@@ -9,11 +9,7 @@ on the process that this file is part of, see
 
 ## Added
 
-* Enabled CreateCanisterAndInstallCode proposals.
-
 ## Changed
-
-* Mission 70 voting rewards adjustment has been re-calculated. Now: 63.29%. Before: 65.5%.
 
 ## Deprecated
 

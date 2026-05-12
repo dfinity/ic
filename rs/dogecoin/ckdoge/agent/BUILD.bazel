@@ -10,7 +10,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-http-types",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/dogecoin/ckdoge/minter",
         "//rs/ledger_suite/icrc1",
         "@crate_index//:candid",

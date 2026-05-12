@@ -4,14 +4,12 @@ use ic_base_types::NodeId;
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_protobuf::registry::node::v1::NodeRecord;
 
-use crate::invariants::common::{
-    InvariantCheckError, RegistrySnapshot, get_node_records_from_snapshot,
-};
+use crate::invariants::common::{InvariantCheckError, RegistrySnapshot, get_all_node_records};
 
 pub(crate) fn check_node_record_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    let node_records = get_node_records_from_snapshot(snapshot);
+    let node_records = get_all_node_records(snapshot);
 
     check_ssh_key_limits(&node_records)?;
     check_chip_ids_are_unique(&node_records)?;

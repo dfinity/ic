@@ -4,7 +4,9 @@ use crate::consensus::{
     metrics::BlockMakerMetrics,
     status::{self, Status},
 };
-use ic_consensus_dkg::payload_builder::create_payload as create_dkg_payload;
+use ic_consensus_dkg::{
+    metrics::DkgPayloadMetrics, payload_builder::create_payload as create_dkg_payload,
+};
 use ic_consensus_idkg::{self as idkg, metrics::IDkgPayloadMetrics};
 use ic_consensus_utils::{
     find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
@@ -16,7 +18,7 @@ use ic_interfaces::{
     consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, debug, error, trace, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
@@ -72,8 +74,9 @@ pub(crate) struct BlockMaker {
     payload_builder: Arc<dyn PayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     idkg_pool: Arc<RwLock<dyn IDkgPool>>,
-    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     metrics: BlockMakerMetrics,
+    dkg_payload_metrics: DkgPayloadMetrics,
     idkg_payload_metrics: IDkgPayloadMetrics,
     log: ReplicaLogger,
     // The minimal age of the registry version we want to use for the validation context of a new
@@ -94,7 +97,7 @@ impl BlockMaker {
         payload_builder: Arc<dyn PayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         idkg_pool: Arc<RwLock<dyn IDkgPool>>,
-        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         stable_registry_version_age: Duration,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
@@ -108,9 +111,10 @@ impl BlockMaker {
             payload_builder,
             dkg_pool,
             idkg_pool,
-            state_manager,
+            state_reader,
             log,
             metrics: BlockMakerMetrics::new(metrics_registry.clone()),
+            dkg_payload_metrics: DkgPayloadMetrics::new(metrics_registry.clone()),
             idkg_payload_metrics: IDkgPayloadMetrics::new(metrics_registry),
             stable_registry_version_age,
         }
@@ -184,7 +188,7 @@ impl BlockMaker {
         parent: HashedBlock,
     ) -> Option<BlockProposal> {
         let height = parent.height().increment();
-        let certified_height = self.state_manager.latest_certified_height();
+        let certified_height = self.state_reader.latest_certified_height();
 
         // Note that we will skip blockmaking if registry versions or replica_versions
         // are missing or temporarily not retrievable.
@@ -302,12 +306,17 @@ impl BlockMaker {
             pool,
             Arc::clone(&self.dkg_pool),
             parent.as_ref(),
-            &*self.state_manager,
+            &*self.state_reader,
             &context,
             self.log.clone(),
             max_dealings_per_block,
+            Some(&self.dkg_payload_metrics),
         )
-        .map_err(|err| warn!(self.log, "Payload construction has failed: {:?}", err))
+        .map_err(|err| {
+            warn!(self.log, "Payload construction has failed: {:?}", err);
+            self.dkg_payload_metrics
+                .payload_errors_inc("create_data_payload");
+        })
         .ok()?;
 
         let payload = Payload::new(
@@ -325,9 +334,12 @@ impl BlockMaker {
                         Some(&self.idkg_payload_metrics),
                         &self.log,
                     )
-                    .map_err(|err| warn!(self.log, "Payload construction has failed: {:?}", err))
-                    .ok()
-                    .flatten();
+                    .map_err(|err| {
+                        warn!(self.log, "Payload construction has failed: {:?}", err);
+                        self.idkg_payload_metrics
+                            .payload_errors_inc("create_summary_payload");
+                    })
+                    .ok()?;
 
                     BlockPayload::Summary(SummaryPayload {
                         dkg: summary,
@@ -366,17 +378,18 @@ impl BlockMaker {
                                 &*self.registry_client,
                                 pool,
                                 self.idkg_pool.clone(),
-                                &*self.state_manager,
+                                &*self.state_reader,
                                 &context,
                                 parent.as_ref(),
                                 &self.idkg_payload_metrics,
                                 &self.log,
                             )
                             .map_err(|err| {
-                                warn!(self.log, "Payload construction has failed: {:?}", err)
+                                warn!(self.log, "Payload construction has failed: {:?}", err);
+                                self.idkg_payload_metrics
+                                    .payload_errors_inc("create_data_payload");
                             })
-                            .ok()
-                            .flatten();
+                            .ok()?;
 
                             (batch_payload, dkg, idkg_data)
                         }

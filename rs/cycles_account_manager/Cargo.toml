@@ -15,8 +15,8 @@ ic-management-canister-types-private = { path = "../types/management_canister_ty
 ic-nns-constants = { path = "../nns/constants" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
-ic-types-cycles = { path = "../types/cycles" }
 ic-types = { path = "../types/types" }
+ic-types-cycles = { path = "../types/cycles" }
 prometheus = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }
