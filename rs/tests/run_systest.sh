@@ -79,6 +79,7 @@ done
 
 exec \
     env -C "$TEST_TMPDIR" \
+    VOLATILE_STATUS_FILE="$(realpath "$VOLATILE_STATUS_FILE")" \
     "$(realpath $RUN_SCRIPT_TEST_EXECUTABLE)" \
     --working-dir "$TEST_TMPDIR" \
     "${test_driver_extra_args[@]}" \

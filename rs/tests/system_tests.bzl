@@ -121,7 +121,6 @@ def system_test(
     _runtime_deps = dict(runtime_deps)
 
     _runtime_deps["TEST_BIN"] = test_driver_target
-    _runtime_deps["VOLATILE_STATUS_FILE"] = "//bazel:volatile-status.txt"
 
     env_var_files = {}
     icos_images = dict()
@@ -132,8 +131,6 @@ def system_test(
     env |= icos_config.env
     _runtime_deps |= icos_config.runtime_deps
     icos_images |= icos_config.icos_images
-
-    env_var_files["FARM_METADATA"] = "//rs/tests:farm_metadata.txt"
 
     extra_args_simple = []
     extra_args_colocated = []
@@ -211,6 +208,14 @@ def system_test(
 
     tags = tags + ["requires-network", "system_test"]
 
+    # VOLATILE_STATUS_FILE is read during group creation time to determine the required host features and Farm metadata.
+    # In colocated tests the group is created in the non-colocated wrapper driver, we shouldn't use runtime_deps
+    # to depend on the VOLATILE_STATUS_FILE since that will cause the variable to be repointed to a path on the colocated VM
+    # which won't exist during group creaton time on the non-colocated wrapper. Instead we pass it as a regular environment variable
+    # and repoint it to its realpath in ./run_systest.sh.
+    env["VOLATILE_STATUS_FILE"] = "$(rootpath //bazel:volatile-status.txt)"
+    data.append("//bazel:volatile-status.txt")
+
     sh_test(
         name = test_name,
         srcs = ["//rs/tests:run_systest.sh"],
@@ -226,8 +231,6 @@ def system_test(
         visibility = visibility,
     )
 
-    COLOCATED_RUNTIME_DEP_ENV_VARS = RUN_SCRIPT_RUNTIME_DEP_ENV_VARS
-
     # create a colocated version of the test (marked as manual _unless_ the test is tagged with "colocate")
     sh_test(
         srcs = ["//rs/tests:run_systest.sh"],
@@ -240,7 +243,6 @@ def system_test(
         env = env | {
                   "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath //rs/tests/idx:colocate_test_bin)",
                   "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_colocated),
-                  "COLOCATED_RUNTIME_DEP_ENV_VARS": COLOCATED_RUNTIME_DEP_ENV_VARS,
                   "COLOCATED_UVM_CONFIG_IMAGE_PATH": "$(rootpath //rs/tests:colocate_uvm_config_image)",
                   "COLOCATED_TEST_NAME": test_name,
                   "COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES": json.encode(colocated_test_driver_vm_required_host_features),
