@@ -1,13 +1,13 @@
 //! A background thread that runs workloads off the critical path.
 //!
-//! Backpressure: the worker has a single-slot channel plus the job currently
-//! being processed (so at most two workloads pinned in memory at any time). If
-//! a new workload arrives while both slots are full, the new workload is
-//! dropped and a "skipped" counter is bumped.
+//! Backpressure: we use a synchronous, zero-capacity channel, with the worker
+//! thread blocking on `recv()` when not processing a workload. If a new
+//! workload arrives while the worker is busy, the new workload is dropped and a
+//! "skipped" counter is bumped.
 //!
 //! The struct is `Send + Sync` and shuts down cleanly on `Drop`: dropping the
-//! sender closes the channel, the worker drains any enqueued workloads, its
-//! `recv()` returns `Err`, and the `JoinOnDrop` handle joins the thread.
+//! sender closes the channel, the worker completes any in-progress workload,
+//! its `recv()` returns `Err`, and the `JoinOnDrop` handle joins the thread.
 
 use crate::JoinOnDrop;
 use crossbeam_channel::{Sender, TrySendError, bounded};
@@ -18,9 +18,9 @@ pub type Workload = Box<dyn FnOnce() + Send>;
 
 enum Job {
     Workload(Workload),
-    /// Test-only barrier: notify when the worker has drained all preceding
-    /// jobs; only used in tests.
-    Flush(Sender<()>),
+    /// Test-only barrier: enqueued with `send()`, will only unblock when the worker
+    /// thread is idle (having completed any in-progress job).
+    Flush(),
 }
 
 /// A worker thread that executes workloads in the background.
@@ -32,9 +32,9 @@ pub struct WorkerThread {
 
 impl WorkerThread {
     pub fn new(name: &str, skipped: IntCounter) -> Self {
-        // At most one queued job; combined with the in-flight job that's the
-        // most state we'll keep alive.
-        let (sender, receiver) = bounded::<Job>(1);
+        // Synchronous channel: worker blocks on `recv()`, sender, using `try_send()`
+        // doesn't block when enqueuing jobs.
+        let (sender, receiver) = bounded::<Job>(0);
 
         let handle = JoinOnDrop::new(
             std::thread::Builder::new()
@@ -45,10 +45,8 @@ impl WorkerThread {
                             Job::Workload(workload) => {
                                 workload();
                             }
-                            Job::Flush(notify) => {
-                                // Best-effort notify; ignore if the receiver is
-                                // already gone (e.g. test was aborted).
-                                let _ = notify.send(());
+                            Job::Flush() => {
+                                // No need to do anything: sender already knows the worker is idle.
                             }
                         }
                     }
@@ -72,25 +70,20 @@ impl WorkerThread {
                 self.skipped.inc();
             }
             Err(TrySendError::Disconnected(_)) => {
-                // The worker thread exited; should only happen during shutdown.
+                // Don't allow the worker thread to exit silently (e.g. by panicking).
+                panic!("worker thread has exited unexpectedly");
             }
         }
     }
 
-    /// Test-only: blocks until all previously-enqueued workloads have been
-    /// processed.
+    /// Test-only: blocks until the worker thread has completed any previous
+    /// workload.
     #[doc(hidden)]
     pub fn flush_channel(&self) {
-        let (notify_send, notify_recv) = bounded(1);
-        // Use a blocking send: this waits for the in-flight + queued job (if
-        // any) to drain, then enqueues the flush marker.
-        if self.sender.send(Job::Flush(notify_send)).is_err() {
-            // Worker is gone; nothing to flush.
-            return;
-        }
-        notify_recv
-            .recv()
-            .expect("worker thread exited while flushing");
+        // Blocking send waits for the worker thread to complete any in-progress job.
+        let res = self.sender.send(Job::Flush());
+        println!("flush_channel: {:?}", res);
+        res.expect("worker thread has exited unexpectedly");
     }
 }
 
@@ -108,7 +101,7 @@ mod tests {
     #[test]
     fn enqueue_does_not_block_caller_under_load() {
         // Spam the worker with many workloads and ensure that the caller is
-        // never blocked: with a single-slot channel, the surplus must be
+        // never blocked: with a synchronous channel, the surplus must be
         // dropped via the `skipped` counter rather than queued. We only
         // assert that the loop completes promptly and that `skipped + processed`
         // accounts for all the workloads we attempted.
@@ -118,6 +111,9 @@ mod tests {
         let skipped = skipped_counter();
 
         let worker_thread = WorkerThread::new("test_worker_thread_skip", skipped.clone());
+        // Wait for the worker thread to become responsive.
+        worker_thread.flush_channel();
+
         for _ in 0..N {
             let completed = Arc::clone(&completed);
             worker_thread.enqueue(Box::new(move || {
