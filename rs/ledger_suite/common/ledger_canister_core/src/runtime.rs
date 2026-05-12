@@ -59,8 +59,16 @@ impl Runtime for CdkRuntime {
         Out: for<'a> ArgumentDecoder<'a>,
     {
         let principal_id = PrincipalId::from(id);
-        ic_cdk::api::call::call_with_payment(principal_id.into(), method, args, cycles)
+        let response = ic_cdk::call::Call::unbounded_wait(principal_id.into(), method)
+            .with_args(&args)
+            .with_cycles(cycles as u128)
             .await
-            .map_err(|(code, msg)| (code as i32, msg))
+            .map_err(|e| match &e {
+                ic_cdk::call::CallFailed::CallRejected(r) => (r.raw_reject_code() as i32, r.reject_message().to_string()),
+                _ => (-1, e.to_string()),
+            })?;
+        response
+            .candid_tuple()
+            .map_err(|e| (-1, e.to_string()))
     }
 }
