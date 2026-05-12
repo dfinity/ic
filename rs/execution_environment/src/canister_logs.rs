@@ -60,7 +60,7 @@ pub(crate) fn fetch_canister_logs_response(
     check_log_visibility_permission(&sender, canister.log_visibility(), canister.controllers())?;
     let s = &canister.system_state;
     let canister_log_records = match log_memory_store_feature {
-        FlagStatus::Disabled => filter_records(&args, s.canister_log.records())?,
+        FlagStatus::Disabled => filter_records(&args, s.canister_log.records()),
         FlagStatus::Enabled => s.log_memory_store.records(args.filter),
     };
     Ok(Encode!(&FetchCanisterLogsResponse {
@@ -87,9 +87,9 @@ pub(crate) fn check_log_visibility_permission(
 fn filter_records(
     args: &FetchCanisterLogsRequest,
     records: &VecDeque<CanisterLogRecord>,
-) -> Result<Vec<CanisterLogRecord>, UserError> {
+) -> Vec<CanisterLogRecord> {
     let Some(filter) = &args.filter else {
-        return Ok(records.iter().cloned().collect());
+        return records.iter().cloned().collect();
     };
 
     let (range, key): (&FetchCanisterLogsRange, fn(&CanisterLogRecord) -> u64) = match filter {
@@ -98,12 +98,12 @@ fn filter_records(
     };
 
     if range.is_empty() {
-        return Ok(Vec::new());
+        return Vec::new();
     }
 
-    Ok(records
+    records
         .iter()
         .filter(|r| range.contains(key(r)))
         .cloned()
-        .collect())
+        .collect()
 }
