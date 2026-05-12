@@ -16,8 +16,8 @@ rust_library(
     ],
     version = "0.9.0",
     deps = [
-        # There should not be any deps from "//rs".
-        # If you have to add a new one please consult the NET team.
+        # Avoid adding new deps from "//rs"; the entries below are existing exceptions.
+        # If you have to add a new one, please consult the NET team.
         "//rs/http_endpoints/async_utils",
         "//rs/crypto/tls_interfaces",
         "//rs/crypto/utils/tls",
