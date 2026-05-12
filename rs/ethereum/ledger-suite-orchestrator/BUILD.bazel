@@ -36,7 +36,7 @@ package(default_visibility = ["//visibility:public"])
             # Keep sorted.
             "//packages/ic-ethereum-types",
             "//packages/ic-http-types",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/crypto/sha2",
             "//rs/ledger_suite/icrc1/index-ng",
             "//rs/ledger_suite/icrc1/ledger",
@@ -165,7 +165,7 @@ rust_ic_test(
         # Keep sorted.
         ":ledger_suite_orchestrator",
         "//packages/ic-http-types",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/ethereum/ledger-suite-orchestrator/test_utils",
         "//rs/ledger_suite/icrc1/ledger",

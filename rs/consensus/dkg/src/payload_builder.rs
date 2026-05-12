@@ -107,7 +107,7 @@ pub fn create_payload(
 
 #[allow(clippy::too_many_arguments)]
 fn create_data_payload(
-    this_subnet_id: SubnetId,
+    subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     pool_reader: &PoolReader<'_>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
@@ -131,7 +131,7 @@ fn create_data_payload(
         .get_state_at(validation_context.certified_height)
         .map_err(DkgPayloadCreationError::StateManagerError)?;
     let remote_config_results = build_callback_id_config_map(
-        this_subnet_id,
+        subnet_id,
         registry_client,
         state.get_ref(),
         validation_context.registry_version,
@@ -142,7 +142,7 @@ fn create_data_payload(
 
     // Select new dealings for the payload.
     let new_validated_dealings = select_dealings_for_payload(
-        configs,
+        &configs,
         &dealers_from_chain,
         &*dkg_pool
             .read()
@@ -200,22 +200,30 @@ pub(crate) fn create_early_remote_transcripts(
         let configs = match config_results {
             Ok(configs) => configs,
             Err(errs) => {
+                // Skip requests for which we already have a transcript result on chain.
+                if errs
+                    .iter()
+                    .any(|(dkg_id, _)| completed_dkgs.contains(dkg_id))
+                {
+                    continue;
+                }
+                // Skip requests that would exceed the maximum number of early remote transcripts.
+                if selected_transcripts.len() + errs.len() > MAX_EARLY_REMOTE_TRANSCRIPTS {
+                    continue;
+                }
                 // Reject contexts for which we failed to create configs.
                 for (dkg_id, err) in errs {
-                    // Skip requests for which we already have a transcript on chain.
-                    if !completed_dkgs.contains(&dkg_id) {
-                        dkg_payload_metrics.payload_errors_inc("remote_config_creation_failed");
-                        error!(
-                            logger,
-                            "Failed to create remote transcript config for dkg id {:?} at height {}: {}",
-                            dkg_id,
-                            parent.height.increment(),
-                            err
-                        );
-                        // Including the error in the payload will cause the context to receive
-                        // a reject response.
-                        selected_transcripts.push((dkg_id, callback_id, Err(err)));
-                    }
+                    dkg_payload_metrics.payload_errors_inc("remote_config_creation_failed");
+                    error!(
+                        logger,
+                        "Failed to create remote transcript config for dkg id {:?} at height {}: {}",
+                        dkg_id,
+                        parent.height.increment(),
+                        err
+                    );
+                    // Including the error in the payload will cause the context to receive
+                    // a reject response.
+                    selected_transcripts.push((dkg_id, callback_id, Err(err)));
                 }
                 continue;
             }
@@ -300,7 +308,7 @@ pub(crate) fn create_early_remote_transcripts(
 /// 2. Among remote targets, prioritize dealings for targets that are closer to their threshold.
 /// 3. Use `target_subnet` as a tie-breaker between dealings for targets with the same remaining capacity.
 fn select_dealings_for_payload(
-    configs: BTreeMap<&NiDkgId, &NiDkgConfig>,
+    configs: &BTreeMap<&NiDkgId, &NiDkgConfig>,
     dealers_from_chain: &HashSet<(NiDkgId, NodeId)>,
     dkg_pool: &dyn DkgPool,
     max_dealings_per_block: usize,
@@ -431,18 +439,18 @@ pub(super) fn create_summary_payload(
     let mut next_transcripts = BTreeMap::new();
     // Try to create transcripts from the last round.
     for (dkg_id, config) in last_summary.configs.iter() {
-        if dkg_id.target_subnet != NiDkgTargetSubnet::Local {
+        if dkg_id.target_subnet.is_remote() {
             // Skip remote DKGs
             continue;
         }
         let dealings = all_dealings.remove(dkg_id).unwrap_or_default();
         match NiDkgAlgorithm::create_transcript(crypto, config, dealings) {
             Ok(transcript) => {
-                let previous_value_found = next_transcripts
+                if next_transcripts
                     .insert(dkg_id.dkg_tag.clone(), transcript)
-                    .is_some();
-                if previous_value_found {
-                    unreachable!(
+                    .is_some()
+                {
+                    panic!(
                         "last summary has multiple configs for tag {:?}",
                         dkg_id.dkg_tag
                     );
@@ -1167,12 +1175,12 @@ mod tests {
                 }
 
                 // The first data block after the last summary should contain repeated-failure
-                // errors for remote DKG transcripts.
+                // errors for the setup DKG transcripts.
                 deps.pool.advance_round_normal_operation();
                 let data_block = deps.pool.get_cache().finalized_block();
                 let dkg_data = data_block.payload.as_ref().as_data().dkg.clone();
                 assert_eq!(dkg_data.messages.len(), 0);
-                assert_eq!(dkg_data.transcripts_for_remote_subnets.len(), 3);
+                assert_eq!(dkg_data.transcripts_for_remote_subnets.len(), 2);
                 assert_eq!(
                     dkg_data
                         .transcripts_for_remote_subnets
@@ -1184,6 +1192,14 @@ mod tests {
                         .count(),
                     2
                 );
+
+                // The second data block after the last summary should contain repeated-failure
+                // errors for the reshare chain key transcript.
+                deps.pool.advance_round_normal_operation();
+                let data_block = deps.pool.get_cache().finalized_block();
+                let dkg_data = data_block.payload.as_ref().as_data().dkg.clone();
+                assert_eq!(dkg_data.messages.len(), 0);
+                assert_eq!(dkg_data.transcripts_for_remote_subnets.len(), 1);
                 assert_eq!(
                     dkg_data
                         .transcripts_for_remote_subnets
@@ -1219,6 +1235,22 @@ mod tests {
                 );
                 let callback_map = build_callback_map(dkg_summary);
                 assert!(callback_map.is_empty(), "{callback_map:?}");
+
+                // Remove remote DKG requests from the state.
+                deps.state_manager.get_mut().checkpoint();
+                complement_state_manager_with_dkg_contexts(
+                    deps.state_manager.clone(),
+                    vec![],
+                    None,
+                );
+
+                // It should no longer appear in `initial_dkg_attempts` of the next summary.
+                deps.pool
+                    .advance_round_normal_operation_n(dkg_interval_length + 1);
+                let summary_block =
+                    PoolReader::new(&deps.pool).get_highest_finalized_summary_block();
+                let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
+                assert!(dkg_summary.initial_dkg_attempts.is_empty());
             });
         });
     }
@@ -1847,8 +1879,8 @@ mod tests {
             messages: (0..4).map(|i| create_dealing(i, id.clone())).collect(),
         };
 
-        let selected =
-            select_dealings_for_payload(configs.iter().collect(), &HashSet::new(), &pool, 10);
+        let configs: BTreeMap<&NiDkgId, &NiDkgConfig> = configs.iter().collect();
+        let selected = select_dealings_for_payload(&configs, &HashSet::new(), &pool, 10);
 
         // Only collection_threshold (2) dealings should be included.
         assert_eq!(selected.len(), 2);
@@ -1872,7 +1904,7 @@ mod tests {
             messages: (0..4).map(|i| create_dealing(i, id.clone())).collect(),
         };
 
-        let selected = select_dealings_for_payload(configs, &dealers_from_chain, &pool, 10);
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
 
         // Dealer 0's dealing should be filtered out, only dealer 1's remains.
         assert_eq!(selected.len(), 1);
@@ -1900,7 +1932,7 @@ mod tests {
                 .collect(),
         };
 
-        let selected = select_dealings_for_payload(configs, &HashSet::new(), &pool, 3);
+        let selected = select_dealings_for_payload(&configs, &HashSet::new(), &pool, 3);
 
         assert_eq!(selected.len(), 3);
         // All 3 should be remote (prioritized), since remote has 4 available.
@@ -1926,7 +1958,7 @@ mod tests {
             ],
         };
 
-        let selected = select_dealings_for_payload(configs, &HashSet::new(), &pool, 10);
+        let selected = select_dealings_for_payload(&configs, &HashSet::new(), &pool, 10);
 
         assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].content.dkg_id, known_id);
@@ -1954,7 +1986,7 @@ mod tests {
                 .collect(),
         };
 
-        let selected = select_dealings_for_payload(configs.clone(), &HashSet::new(), &pool, 2);
+        let selected = select_dealings_for_payload(&configs, &HashSet::new(), &pool, 2);
         assert_eq!(selected.len(), 2);
         assert!(selected.iter().all(|msg| msg.content.dkg_id == remote_id));
         assert_eq!(
@@ -1962,7 +1994,7 @@ mod tests {
             BTreeSet::from_iter((3..5).map(node_test_id))
         );
 
-        let selected = select_dealings_for_payload(configs, &HashSet::new(), &pool, 10);
+        let selected = select_dealings_for_payload(&configs, &HashSet::new(), &pool, 10);
 
         // 2 remote + 2 local (both capped at collection_threshold)
         assert_eq!(selected.len(), 4);
@@ -2018,11 +2050,11 @@ mod tests {
             ],
         };
 
-        let selected = select_dealings_for_payload(configs.clone(), &dealers_from_chain, &pool, 1);
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 1);
         assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].content.dkg_id, remote_low_remaining_id);
 
-        let selected = select_dealings_for_payload(configs, &dealers_from_chain, &pool, 10);
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
         assert_eq!(selected.len(), 2);
         assert_eq!(
             BTreeSet::from_iter(selected.iter().map(|msg| msg.content.dkg_id.clone())),
@@ -2070,13 +2102,13 @@ mod tests {
         };
 
         // With max_dealings_per_block = 1, we should prioritize local.
-        let selected = select_dealings_for_payload(configs.clone(), &dealers_from_chain, &pool, 1);
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 1);
         assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].content.dkg_id, local_id);
 
         // With max_dealings_per_block = 10, we should prioritize local (although it has higher remaining capacity).
         // We should also include remote, once local is capped at collection_threshold.
-        let selected = select_dealings_for_payload(configs, &dealers_from_chain, &pool, 10);
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
         assert_eq!(selected.len(), 3);
         assert_eq!(
             selected
@@ -2120,7 +2152,7 @@ mod tests {
             ],
         };
 
-        let selected = select_dealings_for_payload(configs, &HashSet::new(), &pool, 1);
+        let selected = select_dealings_for_payload(&configs, &HashSet::new(), &pool, 1);
 
         assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].content.dkg_id, remote_target_0);
@@ -2169,11 +2201,11 @@ mod tests {
 
         // With MAX_REMOTE_DKGS_PER_INTERVAL = 1 and no completed remote target IDs,
         // remote dealings should still be prioritized.
-        let selected = select_dealings_for_payload(configs.clone(), &dealers_from_chain, &pool, 1);
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 1);
         assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].content.dkg_id, remote_high_id);
 
-        let selected = select_dealings_for_payload(configs, &dealers_from_chain, &pool, 10);
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
         assert_eq!(selected.len(), 2);
         assert_eq!(
             BTreeSet::from_iter(selected.iter().map(|msg| msg.content.dkg_id.clone())),
@@ -2205,7 +2237,7 @@ mod tests {
             ],
         };
 
-        let selected = select_dealings_for_payload(configs, &dealers_from_chain, &pool, 10);
+        let selected = select_dealings_for_payload(&configs, &dealers_from_chain, &pool, 10);
         assert!(selected.is_empty());
     }
 }

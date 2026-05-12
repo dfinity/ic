@@ -1246,8 +1246,9 @@ fn split() {
     expected.put_canister_state(canister_state);
     // And the split marker should be reset.
     expected.metadata.split_from = None;
-    // The canister priority for `CANISTER_1` is gone, as it was not persisted.
-    expected.metadata.subnet_schedule.remove(&CANISTER_1);
+    // The canister priority for `CANISTER_2` is replaced with the default, as it
+    // was not persisted.
+    expected.metadata.subnet_schedule.get_mut(CANISTER_2);
     // Everything else should be the same as in phase 1.
     assert_eq!(expected, state_b);
 }
@@ -1352,6 +1353,8 @@ fn online_split() {
                     CanisterCyclesCostSchedule::Normal,
                 ),
             });
+        // Canister must be in the subnet schedule.
+        fixture.state.canister_priority_mut(canister_id);
     };
     add_aborted_install_code_task(CANISTER_1);
     add_aborted_install_code_task(CANISTER_2);

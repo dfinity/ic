@@ -30,12 +30,12 @@ use ic_limits::MAX_PAIRED_PRE_SIGNATURES;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterMetadataRequest, CanisterStatusType, ClearChunkStoreArgs,
-    CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
-    EmptyBlob, FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs, IC_00,
-    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    CanisterInfoResponse, CanisterMetadataRequest, CanisterMetricsArgs, CanisterStatusType,
+    ClearChunkStoreArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs,
+    ECDSAPublicKeyResponse, EmptyBlob, FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs,
+    IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
+    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
     ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
     SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
@@ -2033,6 +2033,18 @@ impl ExecutionEnvironment {
                 }
             }
 
+            Ok(Ic00Method::CanisterMetrics) => {
+                let res = CanisterMetricsArgs::decode(payload).and_then(|args| {
+                    let canister_id = args.get_canister_id();
+                    self.get_canister_metrics(*msg.sender(), canister_id, &state)
+                        .map(|res| (res, Some(canister_id)))
+                });
+                ExecuteSubnetMessageResult::Finished {
+                    response: res,
+                    refund: msg.take_cycles(),
+                }
+            }
+
             Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
@@ -2178,8 +2190,11 @@ impl ExecutionEnvironment {
             state.metadata.subnet_call_context_manager.push_context(
                 SubnetCallContext::CanisterHttpRequest(canister_http_request_context),
             );
-            if let Some(canister_stats) = state.canister_state_make_mut(&request.sender) {
-                canister_stats
+            if let Some(canister_state) = state.canister_state_make_mut(&request.sender) {
+                canister_state
+                    .system_state
+                    .observe_consumed_cycles_for_https_outcall(nominal_http_request_fee);
+                canister_state
                     .system_state
                     .canister_metrics_mut()
                     .load_metrics_mut()
@@ -2639,6 +2654,20 @@ impl ExecutionEnvironment {
                 subnet_admins,
             )
             .map(|status| status.encode())
+            .map_err(|err| err.into())
+    }
+
+    fn get_canister_metrics(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        state: &ReplicatedState,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister = get_canister(canister_id, state)?;
+        let subnet_admins = state.get_own_subnet_admins();
+        self.canister_manager
+            .get_canister_metrics(sender, canister, subnet_admins)
+            .map(|canister_metrics_result| canister_metrics_result.encode())
             .map_err(|err| err.into())
     }
 
@@ -3835,7 +3864,6 @@ impl ExecutionEnvironment {
                 request,
                 args,
                 derivation_path: Arc::new(derivation_path),
-                deprecated_pseudo_random_id: None,
                 batch_time: state.metadata.batch_time,
                 nonce: None,
             }),

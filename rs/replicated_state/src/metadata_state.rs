@@ -396,6 +396,7 @@ pub struct SubnetMetrics {
     consumed_cycles_http_outcalls: NominalCycles,
     consumed_cycles_ecdsa_outcalls: NominalCycles,
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, NominalCycles>,
+    consumed_cycles_by_use_case_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,
     pub threshold_signature_agreements: BTreeMap<MasterPublicKeyId, u64>,
     /// The number of canisters that exist on this subnet.
     pub num_canisters: u64,
@@ -418,6 +419,10 @@ impl SubnetMetrics {
         }
         *self
             .consumed_cycles_by_use_case
+            .entry(use_case)
+            .or_insert_with(NominalCycles::zero) += cycles;
+        *self
+            .consumed_cycles_by_use_case_as_counters
             .entry(use_case)
             .or_insert_with(NominalCycles::zero) += cycles;
     }
@@ -450,6 +455,12 @@ impl SubnetMetrics {
         &self.consumed_cycles_by_use_case
     }
 
+    pub fn get_consumed_cycles_by_use_case_as_counters(
+        &self,
+    ) -> &BTreeMap<CyclesUseCase, NominalCycles> {
+        &self.consumed_cycles_by_use_case_as_counters
+    }
+
     pub fn consumed_cycles_total(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
 
@@ -465,8 +476,6 @@ impl SubnetMetrics {
                 CyclesUseCase::ECDSAOutcalls
                 | CyclesUseCase::HTTPOutcalls
                 | CyclesUseCase::DeletedCanisters => {}
-                // Non consumed cycles should not be counted towards the total consumed.
-                CyclesUseCase::NonConsumed => {}
                 // For the remaining use cases simply add the values to the total.
                 CyclesUseCase::Memory
                 | CyclesUseCase::ComputeAllocation
@@ -767,8 +776,6 @@ impl SystemMetadata {
     /// roll back `Stopping` states on all subnet B canisters.
     ///
     /// Notes:
-    ///  * `prev_state_hash` has just been set by `take_tip()` to the checkpoint
-    ///    hash (checked against the hash in the CUP). It must be preserved.
     ///  * `own_subnet_type` has just been set during `load_checkpoint()`, based on
     ///    the registry subnet record of the subnet that this node is part of.
     ///  * `batch_time`, `network_topology` and `own_subnet_features` will be set

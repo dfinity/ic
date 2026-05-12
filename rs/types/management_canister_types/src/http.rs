@@ -359,7 +359,7 @@ fn test_http_header_data_size() {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum HttpMethod {
     #[serde(rename = "get")]
     GET,

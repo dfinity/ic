@@ -533,7 +533,7 @@ fn generate_dkg_response_payload(
                 ),
             )))
         }
-        _ => None,
+        (None, None) => None,
     }
 }
 

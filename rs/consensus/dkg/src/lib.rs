@@ -176,7 +176,7 @@ impl DkgImpl {
         dkg_pool: &dyn DkgPool,
         configs: &BTreeMap<&NiDkgId, &NiDkgConfig>,
         dkg_start_height: Height,
-        messages: Vec<&Message>,
+        messages: &[&Message],
     ) -> Mutations {
         // Because dealing generation is not entirely deterministic, it is
         // actually possible to receive multiple dealings from an honest dealer.
@@ -206,7 +206,7 @@ impl DkgImpl {
         // until the request appears in the state, or the dealing is purged.
         let config = match configs.get(message_dkg_id) {
             Some(config) => config,
-            None if message_dkg_id.target_subnet != NiDkgTargetSubnet::Local => {
+            None if message_dkg_id.target_subnet.is_remote() => {
                 return Mutations::new();
             }
             None => {
@@ -339,7 +339,7 @@ impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
         let mut processed = 0;
         let dealings: Vec<Vec<&Message>> = dkg_pool
             .get_unvalidated()
-            // Group all unvalidated dealings by dealer.
+            // Group all unvalidated dealings by (dealer, DKG ID).
             .fold(BTreeMap::new(), |mut map, dealing| {
                 let key = (dealing.signature.signer, dealing.content.dkg_id.clone());
                 let dealings: &mut Vec<_> = map.entry(key).or_default();
@@ -347,20 +347,14 @@ impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
                 processed += 1;
                 map
             })
-            // Get the dealings sorted by dealers
-            .values()
-            .cloned()
+            // Get the dealings sorted by (dealer, DKG ID)
+            .into_values()
             .collect();
 
         let changeset = dealings
             .par_iter()
             .map(|dealings| {
-                self.validate_dealings_for_dealer(
-                    dkg_pool,
-                    &configs,
-                    start_height,
-                    dealings.to_vec(),
-                )
+                self.validate_dealings_for_dealer(dkg_pool, &configs, start_height, dealings)
             })
             .collect::<Vec<Mutations>>()
             .into_iter()
@@ -844,8 +838,7 @@ mod tests {
                         assert_eq!(
                             [a, b, c, d]
                                 .iter()
-                                .filter(|msg| msg.content.dkg_id.target_subnet
-                                    == NiDkgTargetSubnet::Local)
+                                .filter(|msg| msg.content.dkg_id.target_subnet.is_local())
                                 .count(),
                             2
                         );
@@ -909,13 +902,13 @@ mod tests {
                 let change_set = dkg.on_state_change(&*dkg_pool.read().unwrap());
                 let remote_dealings = change_set
                     .iter()
-                    .filter(|change| match change {
-                        ChangeAction::AddToValidated(message) => {
-                            message.content.dkg_id.target_subnet
-                                == NiDkgTargetSubnet::Remote(target_id)
-                        }
-                        _ => false,
-                    })
+                    .filter(|change|
+                        matches!(
+                            change,
+                            ChangeAction::AddToValidated(message)
+                            if message.content.dkg_id.target_subnet == NiDkgTargetSubnet::Remote(target_id)
+                        )
+                    )
                     .count();
                 assert_eq!(
                     remote_dealings, 0,
@@ -973,6 +966,7 @@ mod tests {
                 assert_eq!(data.dkg.transcripts_for_remote_subnets.len(), 2);
                 let mut tags = BTreeSet::new();
                 for dkg in data.dkg.transcripts_for_remote_subnets.iter() {
+                    assert_eq!(dkg.0.target_subnet, NiDkgTargetSubnet::Remote(target_id));
                     assert!(dkg.2.is_err());
                     assert!(tags.insert(dkg.0.dkg_tag.clone()));
                 }
@@ -1646,8 +1640,7 @@ mod tests {
                             assert_eq!(
                                 [a, b, c, d]
                                     .iter()
-                                    .filter(|msg| msg.content.dkg_id.target_subnet
-                                        == NiDkgTargetSubnet::Local)
+                                    .filter(|msg| msg.content.dkg_id.target_subnet.is_local())
                                     .count(),
                                 2
                             );
@@ -1690,8 +1683,7 @@ mod tests {
                             assert_eq!(
                                 [a, b, c, d]
                                     .iter()
-                                    .filter(|msg| msg.content.dkg_id.target_subnet
-                                        == NiDkgTargetSubnet::Local)
+                                    .filter(|msg| msg.content.dkg_id.target_subnet.is_local())
                                     .count(),
                                 2
                             );
@@ -2246,7 +2238,7 @@ mod tests {
                 summary
                     .configs
                     .keys()
-                    .filter(|id| id.target_subnet != NiDkgTargetSubnet::Local)
+                    .filter(|id| id.target_subnet.is_remote())
                     .count(),
                 0
             );
@@ -2377,7 +2369,7 @@ mod tests {
                 let remote_dkg_ids_count = summary
                     .configs
                     .keys()
-                    .filter(|id| id.target_subnet != NiDkgTargetSubnet::Local)
+                    .filter(|id| id.target_subnet.is_remote())
                     .count();
                 assert_eq!(remote_dkg_ids_count, 0);
 
@@ -2445,6 +2437,12 @@ mod tests {
                             "[{desc}] transcript should be for ReshareChainKey target id"
                         );
                         assert!(result.is_ok(), "[{desc}]");
+                        assert_eq!(
+                            dkg_id.dkg_tag,
+                            NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(
+                                key_id.clone()
+                            ))
+                        );
                     }
                 };
 
