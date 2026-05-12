@@ -30,6 +30,7 @@ rust_canister(
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-0_19",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
     ],
@@ -76,6 +77,7 @@ rust_ic_test(
         "@crate_index//:hex",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-0_19",
         "@crate_index//:rand",
     ],
 )

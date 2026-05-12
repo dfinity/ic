@@ -6755,6 +6755,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-btc-interface",
+ "ic-cdk 0.19.0",
  "ic-cdk 0.20.1",
  "ic-config",
  "ic-state-machine-tests",

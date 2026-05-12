@@ -11,6 +11,7 @@ bech32 = "0.9.0"
 candid = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-cdk = { workspace = true }
+ic-cdk-0_19 = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
