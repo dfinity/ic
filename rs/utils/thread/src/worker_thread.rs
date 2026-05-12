@@ -14,7 +14,7 @@ use crossbeam_channel::{Sender, TrySendError, bounded};
 use prometheus::IntCounter;
 
 /// A workload to be executed by the worker thread.
-type Workload = Box<dyn FnOnce() + Send>;
+pub type Workload = Box<dyn FnOnce() + Send>;
 
 enum Job {
     Workload(Workload),
