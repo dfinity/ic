@@ -43,13 +43,13 @@ impl DkgPayloadMetrics {
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             payload_errors: metrics_registry.int_counter_vec(
-                "dkg_payload_errors",
-                "DKG payload related errors",
+                "consensus_dkg_payload_errors",
+                "NiDKG payload related errors",
                 &["type"],
             ),
             payload_duration: metrics_registry.histogram_vec(
-                "dkg_payload_creation_seconds",
-                "Time taken to create a DKG payload, in seconds",
+                "consensus_dkg_payload_creation_seconds",
+                "Time taken to create a NiDKG payload, in seconds",
                 decimal_buckets(-4, 2),
                 &["type"],
             ),
