@@ -1,0 +1,65 @@
+name: External Contributor Branch Policy
+
+on:
+  pull_request_target:
+    types: [opened, reopened, edited]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check-external-branch-policy:
+    name: Check Unallowed Target Branch
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository
+    steps:
+      - name: Check target branch
+        id: check_branch
+        run: |
+          set -euo pipefail
+          target_branch="${{ github.event.pull_request.base.ref }}"
+          # Branches that external contributors are not allowed to target.
+          blocked_branches=(
+            "feat-ai-on-engines"
+          )
+          for branch in "${blocked_branches[@]}"; do
+            if [[ "${target_branch}" == "${branch}" ]]; then
+              echo "Target branch '${target_branch}' is not allowed for external contributors."
+              echo "blocked_branch=${branch}" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+          done
+          echo "Target branch '${target_branch}' is allowed."
+        shell: bash
+
+      - name: Close PR
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        if: ${{ !cancelled() && steps.check_branch.conclusion == 'failure' }}
+        with:
+          script: |
+            const blockedBranch = "${{ steps.check_branch.outputs.blocked_branch }}";
+            const message = [
+              "Thanks for the contribution!",
+              "",
+              `Pull requests from forks targeting the \`${blockedBranch}\` branch are not accepted.`,
+              "This branch is a feature branch managed internally; please retarget your PR to `master` instead.",
+              "",
+              "Closing this PR automatically. Feel free to open a new one against `master`.",
+              "",
+              "— The DFINITY Foundation"
+            ].join("\n");
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message,
+            });
+
+            await github.rest.pulls.update({
+              pull_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'closed',
+            });

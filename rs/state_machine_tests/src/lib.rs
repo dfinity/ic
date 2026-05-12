@@ -1187,7 +1187,6 @@ pub struct StateMachine {
     consensus_pool_cache: Arc<FakeConsensusPoolCache>,
     canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
     canister_http_payload_builder: Arc<CanisterHttpPayloadBuilderImpl>,
-    certified_height_tx: watch::Sender<Height>,
     pub ingress_watcher_handle: IngressWatcherHandle,
     /// A drop guard to gracefully cancel the ingress watcher task.
     _ingress_watcher_drop_guard: tokio_util::sync::DropGuard,
@@ -1825,10 +1824,6 @@ impl StateMachine {
         self.certify_latest_state();
         let certified_height = self.state_manager.latest_certified_height();
 
-        self.certified_height_tx
-            .send(certified_height)
-            .expect("Ingress watcher is running");
-
         let state = self
             .state_manager
             .get_state_at(certified_height)
@@ -2049,6 +2044,11 @@ impl StateMachine {
             ..Default::default()
         };
 
+        // Setup ingress watcher for synchronous call endpoint.
+        let (completed_execution_messages_tx, completed_execution_messages_rx) =
+            mpsc::channel(COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE);
+        let (certified_height_tx, certified_height_rx) = watch::channel(Height::from(0));
+
         let state_manager_impl = StateManagerImpl::new(
             Arc::new(FakeVerifier),
             subnet_id,
@@ -2058,6 +2058,7 @@ impl StateMachine {
             &sm_config,
             None,
             malicious_flags.clone(),
+            certified_height_tx,
         );
         let state_manager = Arc::new(StateMachineStateManager {
             inner: state_manager_impl,
@@ -2105,11 +2106,6 @@ impl StateMachine {
         ));
 
         let chain_key_payload_builder = Arc::new(MockBatchPayloadBuilder::new().expect_noop());
-
-        // Setup ingress watcher for synchronous call endpoint.
-        let (completed_execution_messages_tx, completed_execution_messages_rx) =
-            mpsc::channel(COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE);
-        let (certified_height_tx, certified_height_rx) = watch::channel(Height::from(0));
 
         let cancellation_token = tokio_util::sync::CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
@@ -2354,7 +2350,6 @@ impl StateMachine {
             transform_handler: Arc::new(Mutex::new(execution_services.transform_execution_service)),
             ingress_watcher_handle,
             _ingress_watcher_drop_guard: ingress_watcher_drop_guard,
-            certified_height_tx,
             runtime,
             // Note: state machine tests are commonly used for testing
             // canisters, such tests usually don't rely on any persistence.
@@ -3078,6 +3073,7 @@ impl StateMachine {
             .process_batch(batch)
             .expect("Could not process batch");
 
+        self.state_manager.flush_hash_channel();
         if self.remove_old_states {
             self.state_manager.remove_states_below(batch_number);
         }
@@ -3187,6 +3183,7 @@ impl StateMachine {
         replicated_state.metadata.batch_time = time;
         self.state_manager
             .commit_and_certify(replicated_state, CertificationScope::Metadata, None);
+        self.state_manager.flush_hash_channel();
         self.set_time(time.into());
         *self.time_of_last_round.write().unwrap() = time;
     }
@@ -3387,6 +3384,7 @@ impl StateMachine {
 
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
+        self.state_manager.flush_hash_channel();
     }
 
     /// Enables checkpoints and makes a tick to write a checkpoint.
@@ -3427,6 +3425,7 @@ impl StateMachine {
         *state.canister_priority_mut(canister_id) = *source_state.canister_priority(&canister_id);
         self.state_manager
             .commit_and_certify(state, CertificationScope::Full, None);
+        self.state_manager.flush_hash_channel();
         self.state_manager.remove_states_below(h.increment());
     }
 
@@ -3452,6 +3451,8 @@ impl StateMachine {
         if state.take_canister_state(&canister_id).is_some() {
             self.state_manager
                 .commit_and_certify(state, CertificationScope::Full, None);
+            self.state_manager.flush_hash_channel();
+
             self.state_manager.flush_tip_channel();
 
             other_env.import_canister_state(
@@ -3664,6 +3665,7 @@ impl StateMachine {
 
         self.state_manager
             .commit_and_certify(state, CertificationScope::Full, None);
+        self.state_manager.flush_hash_channel();
 
         // Perform the split on `env`, which requires preserving the `prev_state_hash`
         // (as opposed to MVP subnet splitting where it is adjusted manually).
@@ -3675,6 +3677,7 @@ impl StateMachine {
 
         env.state_manager
             .commit_and_certify(state, CertificationScope::Full, None);
+        env.state_manager.flush_hash_channel();
 
         Ok(env)
     }
@@ -4985,6 +4988,7 @@ impl StateMachine {
             .stable_memory = memory;
         self.state_manager
             .commit_and_certify(replicated_state, CertificationScope::Metadata, None);
+        self.state_manager.flush_hash_channel();
     }
 
     /// Returns the query stats of the specified canister.
@@ -5017,6 +5021,7 @@ impl StateMachine {
 
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
+        self.state_manager.flush_hash_channel();
     }
 
     /// Returns the cycle balance of the specified canister.
@@ -5048,6 +5053,7 @@ impl StateMachine {
         let balance = canister_state.system_state.balance().get();
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
+        self.state_manager.flush_hash_channel();
         balance
     }
 
@@ -5131,6 +5137,7 @@ impl StateMachine {
 
     /// Make sure the latest state is certified.
     pub fn certify_latest_state(&self) {
+        self.state_manager.flush_hash_channel();
         certify_latest_state_helper(self.state_manager.clone(), &self.secret_key, self.subnet_id)
     }
 
@@ -5267,6 +5274,7 @@ impl StateMachine {
         }
         self.state_manager
             .commit_and_certify(replicated_state, CertificationScope::Metadata, None);
+        self.state_manager.flush_hash_channel();
     }
 }
 
@@ -5279,6 +5287,7 @@ pub fn certify_latest_state_helper(
     if state_manager.latest_state_height() == Height::from(0) {
         let (_height, replicated_state) = state_manager.take_tip();
         state_manager.commit_and_certify(replicated_state, CertificationScope::Metadata, None);
+        state_manager.flush_hash_channel();
     }
     assert_ne!(state_manager.latest_state_height(), Height::from(0));
     if state_manager.latest_state_height() > state_manager.latest_certified_height() {
