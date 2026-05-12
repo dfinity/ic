@@ -11,7 +11,7 @@ mod tests;
 use crate::execution_environment::full_subnet_memory_capacity;
 use crate::{
     CanisterManager,
-    canister_logs::fetch_canister_logs,
+    canister_logs::fetch_canister_logs_response,
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
@@ -234,13 +234,24 @@ impl InternalHttpQueryHandler {
             match QueryMethod::from_str(&query.method_name) {
                 Ok(QueryMethod::FetchCanisterLogs) => {
                     let since = Instant::now(); // Start logging execution time.
-                    let response = fetch_canister_logs(
+                    let args = FetchCanisterLogsRequest::decode(&query.method_payload)?;
+                    let canister_id = args.get_canister_id();
+                    let canister =
+                        state
+                            .get_ref()
+                            .canister_state(&canister_id)
+                            .ok_or_else(|| {
+                                UserError::new(
+                                    ErrorCode::CanisterNotFound,
+                                    format!("Canister {canister_id} not found"),
+                                )
+                            })?;
+                    let result = Ok(WasmResult::Reply(fetch_canister_logs_response(
                         query.source(),
-                        state.get_ref(),
-                        FetchCanisterLogsRequest::decode(&query.method_payload)?,
+                        canister,
+                        args,
                         self.config.log_memory_store_feature,
-                    )?;
-                    let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
+                    )?));
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::FetchCanisterLogs,
                         since.elapsed().as_secs_f64(),

@@ -501,6 +501,10 @@ pub(crate) enum CanisterManagerError {
         caller: PrincipalId,
         method_name: String,
     },
+    FetchCanisterLogsNotEnoughCycles {
+        sent: Cycles,
+        required: Cycles,
+    },
 }
 
 impl AsErrorHelp for CanisterManagerError {
@@ -756,6 +760,10 @@ impl AsErrorHelp for CanisterManagerError {
             },
             CanisterManagerError::CanisterLogMemoryLimitIsTooHigh { .. } => ErrorHelp::UserError {
                 suggestion: "Set a lower canister log memory limit.".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::FetchCanisterLogsNotEnoughCycles { .. } => ErrorHelp::UserError {
+                suggestion: "Try sending more cycles with the request.".to_string(),
                 doc_link: "".to_string(),
             },
         }
@@ -1188,6 +1196,12 @@ impl From<CanisterManagerError> for UserError {
                 ErrorCode::CanisterRejectedMessage,
                 format!(
                     "The canister log memory limit {bytes} is too high. It must be at most {limit}."
+                ),
+            ),
+            FetchCanisterLogsNotEnoughCycles { sent, required } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "fetch_canister_logs request sent with {sent} cycles, but {required} cycles are required."
                 ),
             ),
         }
