@@ -50,9 +50,6 @@ pub struct DiskEncryptionKeyExchangeClientAgent {
     crypto_ops: Box<dyn DiskCryptoOps>,
 }
 
-// Allow 32MB ingress messages - we need 16MB for the LUKS header
-const MAX_INCOMING_MESSAGE_SIZE: usize = 32 * 1024 * 1024;
-
 impl DiskEncryptionKeyExchangeClientAgent {
     pub fn new(
         guestos_config: GuestOSConfig,
@@ -300,8 +297,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
             .context("Failed to connect to server")?;
 
         Ok((
-            DiskEncryptionKeyExchangeServiceClient::new(channel)
-                .max_decoding_message_size(MAX_INCOMING_MESSAGE_SIZE),
+            DiskEncryptionKeyExchangeServiceClient::new(channel),
             server_public_key_der,
         ))
     }
