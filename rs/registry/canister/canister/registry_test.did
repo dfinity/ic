@@ -548,6 +548,7 @@ type SplitSubnetPayload = record {
   source_subnet_id: principal;
   destination_canister_ranges: vec CanisterIdRange;
   destination_node_ids: vec principal;
+  initial_dkg_subnet_id: opt principal;
 };
 
 type OperationType = variant {

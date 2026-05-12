@@ -4,7 +4,7 @@ use crate::driver::{
     context::{GroupContext, ProcessContext},
     dsl::{SubprocessFn, TestFunction},
     event::TaskId,
-    farm::{Farm, HostFeature},
+    farm::{Farm, HostFeature, VmAllocationMode},
     plan::{EvalOrder, Plan},
     report::Outcome,
     task::{DebugKeepaliveTask, EmptyTask},
@@ -648,6 +648,7 @@ impl SystemTestSubGroup {
 }
 
 pub struct SystemTestGroup {
+    vm_allocation_mode: Option<VmAllocationMode>,
     setup: Option<Box<dyn PotSetupFn>>,
     teardowns: Vec<Box<dyn PotSetupFn>>,
     tests: Vec<SystemTestSubGroup>,
@@ -692,6 +693,7 @@ impl TestEnvAttribute for CliArguments {
 impl SystemTestGroup {
     pub fn new() -> Self {
         Self {
+            vm_allocation_mode: Default::default(),
             setup: Default::default(),
             teardowns: Default::default(),
             tests: Default::default(),
@@ -719,8 +721,9 @@ impl SystemTestGroup {
                     BTreeSet::from([
                         // Canisters are expected to panic:
                         "canister".to_string(),
-                        // TODO: remove the following line after mainnet has advanced to include the `allowed_panics.rs` changes:
+                        // TODO: remove the following two lines after mainnet has advanced to include the `allowed_panics.rs` changes:
                         "rs/canister_sandbox/src/replica_controller/sandboxed_execution_controller.rs:2185".to_string(),
+                        "rs/canister_sandbox/src/replica_controller/sandboxed_execution_controller.rs:1030".to_string(),
                         "rs/canister_sandbox/src/replica_controller/allowed_panics.rs".to_string(),
                         "rs/state_manager/src/allowed_panics.rs".to_string(),
                     ]),
@@ -740,6 +743,11 @@ impl SystemTestGroup {
 
     pub fn with_overall_timeout(mut self, overall_timeout: Duration) -> Self {
         self.overall_timeout = Some(overall_timeout);
+        self
+    }
+
+    pub fn with_vm_allocation_mode(mut self, mode: VmAllocationMode) -> Self {
+        self.vm_allocation_mode = Some(mode);
         self
     }
 
@@ -1295,7 +1303,11 @@ impl SystemTestGroup {
             }
             InfraProvider::Farm.write_attribute(&root_env);
             if with_farm {
-                root_env.create_group_setup(group_ctx.group_base_name.clone(), args.no_group_ttl);
+                root_env.create_group_setup(
+                    group_ctx.group_base_name.clone(),
+                    self.vm_allocation_mode.clone(),
+                    args.no_group_ttl,
+                );
             }
             debug!(group_ctx.log(), "Created group context: {:?}", group_ctx);
         }

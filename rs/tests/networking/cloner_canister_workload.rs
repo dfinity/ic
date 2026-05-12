@@ -24,7 +24,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     canister_agent::{CanisterAgent, HasCanisterAgentCapability},
     driver::{
-        farm::HostFeature,
+        farm::{HostFeature, VmAllocationMode},
         group::SystemTestGroup,
         ic::{
             AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet,
@@ -57,6 +57,7 @@ const AMOUNT_OF_CLONER_CANISTERS: u64 =
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
+        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(setup)
         .add_test(systest!(install_cloner_canisters))
         .with_timeout_per_test(TEST_TIMEOUT)

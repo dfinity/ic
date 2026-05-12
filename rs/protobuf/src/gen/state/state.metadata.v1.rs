@@ -162,8 +162,6 @@ pub struct SignWithThresholdContext {
     pub args: ::core::option::Option<ThresholdArguments>,
     #[prost(bytes = "vec", repeated, tag = "3")]
     pub derivation_path_vec: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
-    #[prost(bytes = "vec", tag = "4")]
-    pub deprecated_pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "5")]
     pub batch_time: u64,
     #[prost(bytes = "vec", optional, tag = "8")]
@@ -475,6 +473,9 @@ pub struct SubnetMetrics {
     pub update_transactions_total: ::core::option::Option<u64>,
     #[prost(message, repeated, tag = "11")]
     pub threshold_signature_agreements: ::prost::alloc::vec::Vec<ThresholdSignatureAgreementsEntry>,
+    #[prost(message, repeated, tag = "12")]
+    pub consumed_cycles_by_use_case_as_counters:
+        ::prost::alloc::vec::Vec<super::super::canister_state_bits::v1::ConsumedCyclesByUseCase>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinGetSuccessorsFollowUpResponses {

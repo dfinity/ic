@@ -214,15 +214,20 @@ impl Drop for DogecoinSyncGuard<'_> {
             .await_ok(|dogecoind| dogecoind.get_blockchain_info())
             .blocks;
 
-        for _ in 0..MAX_TICKS {
+        for i in 0..MAX_TICKS {
             match dogecoin_canister.get_block_height() {
                 Ok(dogecoin_canister_block_height)
                     if dogecoin_canister_block_height >= dogecoin_block_height =>
                 {
+                    println!(
+                        "Dogecoin canister ready ({i}/{MAX_TICKS}). Has block height {dogecoin_canister_block_height} (wanted at least {dogecoin_block_height})."
+                    );
                     return;
                 }
                 result => {
-                    println!("Dogecoin canister not ready {result:?}");
+                    println!(
+                        "Dogecoin canister not ready ({i}/{MAX_TICKS}). Got {result:?}, expected at least {dogecoin_block_height}"
+                    );
                     self.daemon.env.tick();
                 }
             }

@@ -42,6 +42,9 @@ pub(crate) struct ValidFulfillSubnetRentalRequest {
     user: PrincipalId,
     node_ids: Vec<PrincipalId>,
     replica_version_id: String,
+    /// Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+    /// If not set, handling defaults to the NNS subnet.
+    initial_dkg_subnet_id: Option<PrincipalId>,
 }
 
 impl TryFrom<FulfillSubnetRentalRequest> for ValidFulfillSubnetRentalRequest {
@@ -52,6 +55,7 @@ impl TryFrom<FulfillSubnetRentalRequest> for ValidFulfillSubnetRentalRequest {
             user,
             node_ids,
             replica_version_id,
+            initial_dkg_subnet_id,
         } = value;
 
         let mut defects = vec![];
@@ -93,6 +97,7 @@ impl TryFrom<FulfillSubnetRentalRequest> for ValidFulfillSubnetRentalRequest {
             user,
             node_ids,
             replica_version_id,
+            initial_dkg_subnet_id,
         })
     }
 }
@@ -239,7 +244,7 @@ impl ValidFulfillSubnetRentalRequest {
 
             subnet_type: SubnetType::Application,
             subnet_id_override: None,
-            initial_dkg_subnet_id: None,
+            initial_dkg_subnet_id: self.initial_dkg_subnet_id.map(SubnetId::from),
             start_as_nns: false,
             is_halted: false,
             chain_key_config: None,

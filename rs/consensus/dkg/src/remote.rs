@@ -294,7 +294,6 @@ mod tests {
             vec![],
             current_transcripts,
             next_transcripts,
-            vec![],
             RegistryVersion::from(1),
             Height::from(10),
             Height::from(10),
