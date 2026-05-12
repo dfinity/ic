@@ -34,13 +34,13 @@ impl DkgClientMetrics {
     }
 }
 
-pub struct DkgPayloadMetrics {
+pub(crate) struct DkgPayloadMetrics {
     payload_errors: IntCounterVec,
     pub(crate) payload_duration: HistogramVec,
 }
 
 impl DkgPayloadMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+    pub(crate) fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             payload_errors: metrics_registry.int_counter_vec(
                 "dkg_payload_errors",
@@ -55,16 +55,6 @@ impl DkgPayloadMetrics {
             ),
         }
     }
-
-    pub fn payload_errors_inc(&self, label: &str) {
-        self.payload_errors.with_label_values(&[label]).inc();
-    }
-
-    pub(crate) fn payload_creation_timer(&self, label: &str) -> HistogramTimer {
-        self.payload_duration
-            .with_label_values(&[label])
-            .start_timer()
-    }
 }
 
 pub(crate) trait DkgPayloadMetricsOptionExt {
@@ -75,12 +65,17 @@ pub(crate) trait DkgPayloadMetricsOptionExt {
 impl DkgPayloadMetricsOptionExt for Option<&DkgPayloadMetrics> {
     fn payload_errors_inc(self, label: &str) {
         if let Some(metrics) = self {
-            metrics.payload_errors_inc(label);
+            metrics.payload_errors.with_label_values(&[label]).inc();
         }
     }
 
     fn payload_creation_timer(self, label: &str) -> Option<HistogramTimer> {
-        self.map(|metrics| metrics.payload_creation_timer(label))
+        self.map(|metrics| {
+            metrics
+                .payload_duration
+                .with_label_values(&[label])
+                .start_timer()
+        })
     }
 }
 
