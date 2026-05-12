@@ -505,6 +505,9 @@ pub(crate) enum CanisterManagerError {
         sent: Cycles,
         required: Cycles,
     },
+    FetchCanisterLogsAccessDenied {
+        caller: PrincipalId,
+    },
 }
 
 impl AsErrorHelp for CanisterManagerError {
@@ -757,6 +760,12 @@ impl AsErrorHelp for CanisterManagerError {
                 suggestion: "Execute this call from a principal with snapshot read access."
                     .to_string(),
                 doc_link: doc_ref("invalid-controller"),
+            },
+            CanisterManagerError::FetchCanisterLogsAccessDenied { .. } => ErrorHelp::UserError {
+                suggestion: "Execute this call from a controller of the target canister or \
+                a principal with log read access."
+                    .to_string(),
+                doc_link: "".to_string(),
             },
             CanisterManagerError::CanisterLogMemoryLimitIsTooHigh { .. } => ErrorHelp::UserError {
                 suggestion: "Set a lower canister log memory limit.".to_string(),
@@ -1203,6 +1212,10 @@ impl From<CanisterManagerError> for UserError {
                 format!(
                     "fetch_canister_logs request sent with {sent} cycles, but {required} cycles are required."
                 ),
+            ),
+            FetchCanisterLogsAccessDenied { caller } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!("Caller {caller} is not allowed to access canister logs"),
             ),
         }
     }

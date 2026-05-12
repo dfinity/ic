@@ -3,7 +3,6 @@ use crate::canister_settings::VisibilitySettings;
 use candid::Encode;
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
     CanisterLogRecord, FetchCanisterLogsFilter, FetchCanisterLogsRange, FetchCanisterLogsRequest,
     FetchCanisterLogsResponse, LogVisibilityV2,
@@ -33,8 +32,7 @@ pub(crate) fn fetch_canister_logs(
         });
     }
     let canister_id = canister.canister_id();
-    let reply = fetch_canister_logs_response(sender, canister, args, log_memory_store_feature)
-        .map_err(|_| CanisterManagerError::CallerNotAuthorized)?;
+    let reply = fetch_canister_logs_response(sender, canister, args, log_memory_store_feature)?;
     msg.deduct_cycles(cycles_account_manager.fetch_canister_logs_fee(
         NumBytes::new(reply.len() as u64),
         subnet_size,
@@ -56,7 +54,7 @@ pub(crate) fn fetch_canister_logs_response(
     canister: &CanisterState,
     args: FetchCanisterLogsRequest,
     log_memory_store_feature: FlagStatus,
-) -> Result<Vec<u8>, UserError> {
+) -> Result<Vec<u8>, CanisterManagerError> {
     check_log_visibility_permission(&sender, canister.log_visibility(), canister.controllers())?;
     let s = &canister.system_state;
     let canister_log_records = match log_memory_store_feature {
@@ -74,12 +72,9 @@ pub(crate) fn check_log_visibility_permission(
     caller: &PrincipalId,
     log_visibility: &LogVisibilityV2,
     controllers: &std::collections::BTreeSet<PrincipalId>,
-) -> Result<(), UserError> {
+) -> Result<(), CanisterManagerError> {
     if !VisibilitySettings::from(log_visibility).has_access(caller, controllers) {
-        return Err(UserError::new(
-            ErrorCode::CanisterRejectedMessage,
-            format!("Caller {caller} is not allowed to access canister logs"),
-        ));
+        return Err(CanisterManagerError::FetchCanisterLogsAccessDenied { caller: *caller });
     }
     Ok(())
 }
