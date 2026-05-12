@@ -35,7 +35,7 @@ const REPLICATED_QUERY_METHOD: &str = "get_config";
 fn inspect_message() {
     // In order for this hook to succeed, accept_message() must be invoked.
     let caller_id: Principal = ic_cdk::api::msg_caller();
-    let called_method = ic_cdk::api::call::method_name();
+    let called_method = ic_cdk::api::msg_method_name();
 
     let (has_full_access, has_full_read_access) = with_canister_state(|state| {
         let authorized_principal = state.get_authorized_principal();
@@ -47,7 +47,7 @@ fn inspect_message() {
 
     if called_method == REPLICATED_QUERY_METHOD {
         if has_full_access || has_full_read_access {
-            ic_cdk::api::call::accept_message();
+            ic_cdk::api::accept_message();
         } else {
             ic_cdk::api::trap(
                 "message_inspection_failed: method call is prohibited in the current context",
@@ -55,7 +55,7 @@ fn inspect_message() {
         }
     } else if UPDATE_METHODS.contains(&called_method.as_str()) {
         if has_full_access {
-            ic_cdk::api::call::accept_message();
+            ic_cdk::api::accept_message();
         } else {
             ic_cdk::api::trap("message_inspection_failed: unauthorized caller");
         }

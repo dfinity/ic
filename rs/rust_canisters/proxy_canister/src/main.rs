@@ -172,7 +172,7 @@ async fn send_request_with_refund_callback(
             Err((r, m))
         }
     };
-    let refunded_cycles = ic_cdk::api::call::msg_cycles_refunded();
+    let refunded_cycles = ic_cdk::api::msg_cycles_refunded();
     ResponseWithRefundedCycles {
         result,
         refunded_cycles,

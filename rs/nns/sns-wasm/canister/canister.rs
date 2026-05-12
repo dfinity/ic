@@ -165,7 +165,7 @@ impl CanisterApi for CanisterApiImpl {
     }
 
     fn message_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String> {
-        let available = ic_cdk::api::call::msg_cycles_available();
+        let available = ic_cdk::api::msg_cycles_available();
 
         if available < required_cycles {
             return Err(format!(
@@ -176,7 +176,7 @@ impl CanisterApi for CanisterApiImpl {
     }
 
     fn accept_message_cycles(&self, cycles: Option<u64>) -> Result<u64, String> {
-        let cycles = cycles.unwrap_or_else(ic_cdk::api::call::msg_cycles_available);
+        let cycles = cycles.unwrap_or_else(ic_cdk::api::msg_cycles_available);
         self.message_has_enough_cycles(cycles)?;
 
         let accepted = ic_cdk::api::call::msg_cycles_accept(cycles);
