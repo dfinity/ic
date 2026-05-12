@@ -24,7 +24,7 @@
 #![allow(deprecated)]
 
 use crate::pb::v1::{SnsWasm, StableCanisterState};
-use ic_cdk::api::stable::{StableMemory, StableMemoryError, StableReader, StableWriter};
+use ic_cdk::stable::{StableMemory, StableMemoryError, StableReader, StableWriter};
 use prost::Message;
 use std::mem::size_of;
 

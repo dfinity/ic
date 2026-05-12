@@ -633,7 +633,7 @@ const BUFFER_SIZE: usize = 8388608;
 fn post_upgrade(args: Option<LedgerCanisterPayload>) {
     let start = instruction_counter();
 
-    let mut magic_bytes_reader = ic_cdk::api::stable::StableReader::default();
+    let mut magic_bytes_reader = ic_cdk::stable::StableReader::default();
     const MAGIC_BYTES: &[u8; 3] = b"MGR";
     let mut first_bytes = [0_u8; 3];
     let memory_manager_found = match magic_bytes_reader.read_exact(&mut first_bytes) {
@@ -1147,12 +1147,12 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "ledger_stable_memory_pages",
-        ic_cdk::api::stable::stable_size() as f64,
+        ic_cdk::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "stable_memory_bytes",
-        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
+        (ic_cdk::stable::stable_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(

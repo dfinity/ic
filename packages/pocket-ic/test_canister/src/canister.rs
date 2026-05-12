@@ -10,7 +10,7 @@ use ic_cdk::api::management_canister::http_request::{
     CanisterHttpRequestArgument, HttpMethod, HttpResponse, TransformArgs, TransformContext,
     TransformFunc, http_request as canister_http_outcall,
 };
-use ic_cdk::api::stable::{stable_grow, stable_size as raw_stable_size, stable_write};
+use ic_cdk::stable::{stable_grow, stable_size as raw_stable_size, stable_write};
 use ic_cdk::{inspect_message, query, trap, update};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;

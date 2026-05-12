@@ -5,7 +5,7 @@ mod benches;
 use candid::Principal;
 use candid::types::number::Nat;
 use ic_canister_log::{declare_log_buffer, export, log};
-use ic_cdk::api::stable::StableReader;
+use ic_cdk::stable::StableReader;
 #[cfg(not(feature = "canbench-rs"))]
 use ic_cdk::init;
 use ic_cdk::{post_upgrade, pre_upgrade, query, update};
@@ -288,12 +288,12 @@ fn log_message(msg: &str) {
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "ledger_stable_memory_pages",
-        ic_cdk::api::stable::stable_size() as f64,
+        ic_cdk::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "stable_memory_bytes",
-        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
+        (ic_cdk::stable::stable_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(

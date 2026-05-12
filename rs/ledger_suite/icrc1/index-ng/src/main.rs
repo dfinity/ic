@@ -372,7 +372,7 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
     // storage scheme. This trick allows SNSes to update the legacy
     // index to index-ng.
     if let Ok(old_state) = ciborium::de::from_reader::<LegacyIndexState, _>(
-        ic_cdk::api::stable::StableReader::default().take(MAX_LEGACY_STATE_BYTES),
+        ic_cdk::stable::StableReader::default().take(MAX_LEGACY_STATE_BYTES),
     ) {
         log!(
             P1,
@@ -1404,12 +1404,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "index_stable_memory_pages",
-        ic_cdk::api::stable::stable_size() as f64,
+        ic_cdk::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "stable_memory_bytes",
-        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
+        (ic_cdk::stable::stable_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(

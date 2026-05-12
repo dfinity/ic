@@ -1,6 +1,6 @@
 #![allow(deprecated)]
 use candid::CandidType;
-use ic_cdk::api::stable::{stable_grow, stable_read, stable_size, stable_write};
+use ic_cdk::stable::{stable_grow, stable_read, stable_size, stable_write};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]

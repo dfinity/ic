@@ -1,5 +1,5 @@
 #![allow(deprecated)]
-use ic_cdk::api::stable;
+use ic_cdk::stable;
 use std::cell::RefCell;
 use std::time::Duration;
 

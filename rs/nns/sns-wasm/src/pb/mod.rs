@@ -12,7 +12,7 @@ use crate::{
     stable_memory::SnsWasmStableMemory,
 };
 use ic_base_types::CanisterId;
-use ic_cdk::api::stable::StableMemory;
+use ic_cdk::stable::StableMemory;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::hash_to_hex_string;
 use std::{collections::HashMap, convert::TryFrom, str::FromStr};

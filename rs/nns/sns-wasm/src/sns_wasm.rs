@@ -20,7 +20,7 @@ use crate::{
 };
 use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_cdk::api::stable::StableMemory;
+use ic_cdk::stable::StableMemory;
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common::{ONE_TRILLION, SNS_CREATION_FEE, hash_to_hex_string};
 use ic_nervous_system_proto::pb::v1::Canister;

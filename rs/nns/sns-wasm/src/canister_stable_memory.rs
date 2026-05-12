@@ -1,5 +1,5 @@
 #![allow(deprecated)]
-use ic_cdk::api::stable::{
+use ic_cdk::stable::{
     StableMemory, StableMemoryError, stable_grow, stable_read, stable_size, stable_write,
 };
 use std::sync::{Arc, Mutex};

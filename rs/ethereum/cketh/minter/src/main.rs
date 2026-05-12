@@ -919,7 +919,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             read_state(|s| {
                 w.encode_gauge(
                     "stable_memory_bytes",
-                    ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
+                    ic_cdk::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
                     "Size of the stable memory allocated by this canister.",
                 )?;
 
