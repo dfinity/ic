@@ -1,8 +1,6 @@
-use crate::{
-    error::{OrchestratorError, OrchestratorResult},
-    registry_helper::RegistryHelper,
-};
+use crate::registry_helper::RegistryHelper;
 use backoff::{ExponentialBackoff, backoff::Backoff};
+use ic_image_upgrader::error::{UpgradeError, UpgradeResult};
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
 use ic_sys::utility_command::UtilityCommand;
@@ -63,7 +61,7 @@ impl HostosUpgrader {
         }
     }
 
-    async fn check_for_upgrade(&mut self) -> OrchestratorResult<()> {
+    async fn check_for_upgrade(&mut self) -> UpgradeResult<()> {
         let latest_registry_version = self.registry.get_latest_version();
 
         let node_id = self.node_id;
@@ -92,7 +90,7 @@ impl HostosUpgrader {
         Ok(())
     }
 
-    async fn execute_upgrade(&mut self, version: &HostosVersion) -> OrchestratorResult<()> {
+    async fn execute_upgrade(&mut self, version: &HostosVersion) -> UpgradeResult<()> {
         let hostos_version_record = self
             .registry
             .get_hostos_version_record(version.clone(), self.registry.get_latest_version())?;
@@ -103,14 +101,20 @@ impl HostosUpgrader {
             ..
         } = hostos_version_record;
 
+        let url_count = release_package_urls.len();
+        if url_count == 0 {
+            return Err(UpgradeError::GenericError(format!(
+                "No download URLs are provided for version {version:?}"
+            )));
+        }
+
         // Load-balance, by making each node rotate the `release_package_urls` by some number.
         // Note that the order is the same for everyone; only the starting point is different.
         // This is okay because we do expect the first attempt to be successful.
-        let url_count = release_package_urls.len();
         release_package_urls.rotate_right(self.get_load_balance_number() % url_count);
 
-        let mut error = format!("No download URLs are provided for version {version:?}");
-
+        let mut error =
+            "All download URLs succeeded but the orchestrator is still alive".to_string();
         for release_package_url in release_package_urls.iter() {
             // We only ever expect this command to exit in error. If the
             // upgrade call succeeds, the HostOS will reboot and shut us down.
@@ -124,7 +128,7 @@ impl HostosUpgrader {
             }
         }
 
-        Err(OrchestratorError::UpgradeError(error))
+        Err(UpgradeError::GenericError(error))
     }
 
     fn get_load_balance_number(&self) -> usize {

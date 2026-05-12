@@ -193,7 +193,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
 
             if let Err(e) = download_result {
                 warn!(self.log(), "{} failed in {:?}: {}", req, duration, e);
-                error = UpgradeError::from(e);
+                error = UpgradeError::FileDownloadError(e);
             } else {
                 info!(self.log(), "{} processed in {:?}", req, duration);
                 return Ok(());

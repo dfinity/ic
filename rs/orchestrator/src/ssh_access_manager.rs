@@ -1,10 +1,9 @@
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::OrchestratorMetrics,
-    registry_helper::RegistryHelper,
+    registry_helper::{RegistryError, RegistryHelper},
 };
 use ic_logger::{ReplicaLogger, debug, warn};
-use ic_registry_client_helpers::unassigned_nodes::UnassignedNodeRegistry;
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::{
     io::Write,
@@ -162,20 +161,17 @@ impl SshAccessManager {
                 // API boundary nodes (for now) do not have readonly or backup keys
                 Ok(_) => Ok(ReadonlyBackupKeySets::default()),
                 // If it is not an API boundary node, it is an unassigned node
-                Err(OrchestratorError::ApiBoundaryNodeMissingError(_, _)) => match self
-                    .registry
-                    .get_registry_client()
-                    .get_unassigned_nodes_config(version)
-                    .map_err(OrchestratorError::RegistryClientError)
-                {
-                    // Unassigned nodes do not need backup keys
-                    Ok(Some(record)) => Ok(ReadonlyBackupKeySets {
-                        readonly: record.ssh_readonly_access,
-                        backup: vec![],
-                    }),
-                    Ok(None) => Ok(ReadonlyBackupKeySets::default()),
-                    Err(err) => Err(err),
-                },
+                Err(RegistryError::ApiBoundaryNodeMissing(_, _)) => {
+                    match self.registry.get_unassigned_nodes_config(version) {
+                        // Unassigned nodes do not need backup keys
+                        Ok(Some(record)) => Ok(ReadonlyBackupKeySets {
+                            readonly: record.ssh_readonly_access,
+                            backup: vec![],
+                        }),
+                        Ok(None) => Ok(ReadonlyBackupKeySets::default()),
+                        Err(err) => Err(err),
+                    }
+                }
                 Err(err) => Err(err),
             },
             Some(subnet_id) => {
@@ -188,8 +184,8 @@ impl SshAccessManager {
             }
         };
         KeySets {
-            readonly_backup: ssh_readonly_backup_access,
-            recovery: ssh_recovery_access,
+            readonly_backup: ssh_readonly_backup_access.map_err(OrchestratorError::RegistryError),
+            recovery: ssh_recovery_access.map_err(OrchestratorError::RegistryError),
         }
     }
 }
@@ -219,7 +215,7 @@ mod tests {
     use crate::{
         error::OrchestratorError,
         metrics::OrchestratorMetrics,
-        registry_helper::RegistryHelper,
+        registry_helper::{RegistryError, RegistryHelper},
         ssh_access_manager::{KeySets, SshAccessManager},
     };
 
@@ -627,7 +623,9 @@ mod tests {
 
                 assert_matches!(
                     keys.readonly_backup,
-                    Err(OrchestratorError::SubnetMissingError(_, _))
+                    Err(OrchestratorError::RegistryError(
+                        RegistryError::SubnetMissing(_, _)
+                    ))
                 );
                 assert!(keys.has_recovery());
             }
@@ -676,7 +674,9 @@ mod tests {
 
                 assert_matches!(
                     keys.recovery,
-                    Err(OrchestratorError::NodeRecordMissingError(_, _))
+                    Err(OrchestratorError::RegistryError(
+                        RegistryError::NodeMissing(_, _)
+                    ))
                 );
                 assert!(keys.has_assigned_readonly());
                 assert!(keys.has_backup());
@@ -701,11 +701,15 @@ mod tests {
 
                 assert_matches!(
                     keys.readonly_backup,
-                    Err(OrchestratorError::RegistryClientError(_))
+                    Err(OrchestratorError::RegistryError(
+                        RegistryError::RegistryClientError(_)
+                    ))
                 );
                 assert_matches!(
                     keys.recovery,
-                    Err(OrchestratorError::RegistryClientError(_))
+                    Err(OrchestratorError::RegistryError(
+                        RegistryError::RegistryClientError(_)
+                    ))
                 );
             }
         })

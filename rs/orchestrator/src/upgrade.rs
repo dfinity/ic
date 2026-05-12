@@ -4,7 +4,7 @@ use crate::{
     metrics::OrchestratorMetrics,
     orchestrator::SubnetAssignment,
     process_manager::{Process, ProcessManager},
-    registry_helper::RegistryHelper,
+    registry_helper::{RegistryError, RegistryHelper},
 };
 use async_trait::async_trait;
 use guest_upgrade_server::DiskEncryptionKeyExchangeServerAgent;
@@ -192,7 +192,7 @@ impl Upgrade {
         value
     }
 
-    fn report_reboot_time(&self) -> OrchestratorResult<()> {
+    fn report_reboot_time(&self) -> UpgradeResult<()> {
         let elapsed_time = self.get_time_since_last_reboot_trigger()?;
         self.metrics
             .reboot_duration
@@ -209,7 +209,7 @@ impl Upgrade {
     /// 3. Downloading and upgrading to a new replica version if necessary.
     /// 4. Launching the replica process if assigned to a subnet.
     /// 5. Stopping the replica process and removing the node state if leaving the subnet.
-    pub(crate) async fn check(&mut self) -> OrchestratorResult<OrchestratorControlFlow> {
+    pub(crate) async fn check(&mut self) -> UpgradeResult<OrchestratorControlFlow> {
         let latest_registry_version = self.registry.get_latest_version();
 
         let maybe_local_cup_proto = self.cup_provider.get_local_cup_proto();
@@ -222,13 +222,8 @@ impl Upgrade {
         });
         // Determine the subnet_id using the local CUP.
         let subnet_id = match (&maybe_local_cup, &maybe_local_cup_proto) {
-            (Some(cup), _) => {
-                get_subnet_id(self.registry.get_registry_client(), cup).map_err(|err| {
-                    OrchestratorError::UpgradeError(format!(
-                        "Couldn't determine the subnet id: {err:?}"
-                    ))
-                })?
-            }
+            (Some(cup), _) => get_subnet_id(self.registry.get_registry_client(), cup)
+                .map_err(UpgradeError::FailedToDetermineSubnetId)?,
             (None, Some(proto)) => {
                 // We found a local CUP proto that we can't deserialize. This may only happen
                 // if this is the first CUP we are reading on a new replica version after an
@@ -240,11 +235,7 @@ impl Upgrade {
                 // Try to find the subnet ID by deserializing only the NiDkgId. If it fails
                 // we will have to recover using failover nodes.
                 let nidkg_id: NiDkgId = try_from_option_field(proto.signer.clone(), "NiDkgId")
-                    .map_err(|err| {
-                        OrchestratorError::UpgradeError(format!(
-                            "Couldn't deserialize NiDkgId to determine the subnet id: {err:?}"
-                        ))
-                    })?;
+                    .map_err(|err| UpgradeError::FailedToDetermineSubnetId(err.to_string()))?;
 
                 match nidkg_id.target_subnet {
                     NiDkgTargetSubnet::Local => nidkg_id.dealer_subnet,
@@ -255,7 +246,7 @@ impl Upgrade {
                         // "oldest registry version in use" which is responsible for subnet membership.
                         match self.registry.get_subnet_id(latest_registry_version) {
                             Ok(subnet_id) => subnet_id,
-                            Err(OrchestratorError::NodeUnassignedError(_, _)) => {
+                            Err(RegistryError::NodeUnassigned(_, _)) => {
                                 // If the registry says that we are unassigned, this unassignment
                                 // must have happened after the registry CUP triggering the upgrade.
                                 // Otherwise we would have left the subnet before upgrading. This means
@@ -271,7 +262,7 @@ impl Upgrade {
 
                                 return Ok(OrchestratorControlFlow::Unassigned);
                             }
-                            Err(other) => return Err(other),
+                            Err(other) => return Err(other.into()),
                         }
                     }
                 }
@@ -283,7 +274,7 @@ impl Upgrade {
                         info!(self.logger, "Assignment to subnet {} detected", subnet_id);
                         subnet_id
                     }
-                    Err(OrchestratorError::NodeUnassignedError(_, _)) => {
+                    Err(RegistryError::NodeUnassigned(_, _)) => {
                         // At this point, we know we are unassigned. We return from the function
                         // here, after checking for an upgrade as an unassigned node.
                         *self.subnet_assignment.write().unwrap() = SubnetAssignment::Unassigned;
@@ -292,7 +283,7 @@ impl Upgrade {
                             .check_for_upgrade_as_unassigned(latest_registry_version)
                             .await;
                     }
-                    Err(other) => return Err(other),
+                    Err(other) => return Err(other.into()),
                 }
             }
         };
@@ -393,7 +384,6 @@ impl Upgrade {
             return self
                 .execute_upgrade(&new_replica_version)
                 .await
-                .map_err(OrchestratorError::from)
                 .map(|Rebooting| OrchestratorControlFlow::Stop);
         }
 
@@ -426,7 +416,7 @@ impl Upgrade {
         &self,
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
-    ) -> OrchestratorResult<()> {
+    ) -> UpgradeResult<()> {
         let Some(registry_store_uri) = self
             .registry
             .get_registry_client()
@@ -455,7 +445,7 @@ impl Upgrade {
                 Some(registry_store_uri.hash),
             )
             .await
-            .map_err(OrchestratorError::FileDownloadError)?;
+            .map_err(UpgradeError::FileDownloadError)?;
         if let Err(e) = self.stop_replica() {
             // Even though we fail to stop the replica, we should still
             // replace the registry local store, so we simply issue a warning.
@@ -470,21 +460,18 @@ impl Upgrade {
         Err(reexec_current_process(&self.logger))
     }
 
-    async fn remove_state(&self) -> OrchestratorResult<()> {
+    async fn remove_state(&self) -> UpgradeResult<()> {
         // Reset the key changed errors counter to not raise alerts in other subnets
         self.metrics.master_public_key_changed_errors.reset();
         remove_node_state(
             self.replica_config_file.clone(),
             self.cup_provider.get_cup_path(),
             self.orchestrator_data_directory.clone(),
-        )
-        .map_err(OrchestratorError::UpgradeError)?;
+        )?;
         info!(self.logger, "Subnet state removed");
 
         let instant = Instant::now();
-        sync_and_trim_fs(&self.logger)
-            .await
-            .map_err(OrchestratorError::UpgradeError)?;
+        sync_and_trim_fs(&self.logger).await?;
         let elapsed = instant.elapsed().as_millis();
         self.metrics.fstrim_duration.set(elapsed as i64);
         info!(
@@ -502,7 +489,7 @@ impl Upgrade {
         &mut self,
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
-    ) -> OrchestratorResult<()> {
+    ) -> UpgradeResult<()> {
         let expected_replica_version = self
             .registry
             .get_replica_version(subnet_id, registry_version)?;
@@ -522,13 +509,13 @@ impl Upgrade {
     async fn check_for_upgrade_as_unassigned(
         &mut self,
         registry_version: RegistryVersion,
-    ) -> OrchestratorResult<OrchestratorControlFlow> {
+    ) -> UpgradeResult<OrchestratorControlFlow> {
         // If the node is a boundary node, we upgrade to that version, otherwise we upgrade to the unassigned version
         let replica_version = self
             .registry
             .get_api_boundary_node_version(self.node_id, registry_version)
             .or_else(|err| match err {
-                OrchestratorError::ApiBoundaryNodeMissingError(_, _) => self
+                RegistryError::ApiBoundaryNodeMissing(_, _) => self
                     .registry
                     .get_unassigned_replica_version(registry_version),
                 err => Err(err),
@@ -547,14 +534,13 @@ impl Upgrade {
 
         self.execute_upgrade(&replica_version)
             .await
-            .map_err(OrchestratorError::from)
             .map(|Rebooting| OrchestratorControlFlow::Stop)
     }
 
     /// Stop the current replica process.
-    pub fn stop_replica(&self) -> OrchestratorResult<()> {
+    pub fn stop_replica(&self) -> UpgradeResult<()> {
         self.replica_process.lock().unwrap().stop().map_err(|e| {
-            OrchestratorError::IoError(
+            UpgradeError::IoError(
                 "Error when attempting to stop replica during upgrade".into(),
                 e,
             )
@@ -569,7 +555,7 @@ impl Upgrade {
         subnet_id: SubnetId,
         latest_registry_version: RegistryVersion,
         new_replica_version: &ReplicaVersion,
-    ) -> OrchestratorResult<()> {
+    ) -> UpgradeResult<()> {
         if subnet_id == self.registry.get_root_subnet_id(latest_registry_version)? {
             // Upgrades on the NNS subnet are never blocked or delayed.
             return Ok(());
@@ -590,10 +576,10 @@ impl Upgrade {
                 .with_label_values(&[new_replica_version.as_ref(), "replicator_not_caught_up"])
                 .inc();
 
-            return Err(OrchestratorError::UpgradeError(format!(
-                "Delaying upgrade to {} until registry data is recent enough. Latest registry version: {}",
-                new_replica_version, latest_registry_version
-            )));
+            return Err(UpgradeError::ReplicatorNotCaughtUp(
+                new_replica_version.clone(),
+                latest_registry_version,
+            ));
         }
 
         let recalled_versions = self
@@ -607,10 +593,10 @@ impl Upgrade {
                 .with_label_values(&[new_replica_version.as_ref(), "version_recalled"])
                 .inc();
 
-            return Err(OrchestratorError::UpgradeError(format!(
-                "Not upgrading to recalled replica version {} at registry version {}",
-                new_replica_version, latest_registry_version
-            )));
+            return Err(UpgradeError::RecalledReplicaVersion(
+                new_replica_version.clone(),
+                latest_registry_version,
+            ));
         }
 
         Ok(())
@@ -644,7 +630,7 @@ impl Upgrade {
         &self,
         replica_version: &ReplicaVersion,
         subnet_id: SubnetId,
-    ) -> OrchestratorResult<()> {
+    ) -> UpgradeResult<()> {
         if self.replica_process.lock().unwrap().is_running() {
             return Ok(());
         }
@@ -672,7 +658,7 @@ impl Upgrade {
                 args: cmd,
             })
             .map_err(|e| {
-                OrchestratorError::IoError("Error when attempting to start new replica".into(), e)
+                UpgradeError::IoError("Error when attempting to start new replica".into(), e)
             })
     }
 }
@@ -707,8 +693,7 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
     ) -> UpgradeResult<(Vec<String>, Option<String>)> {
         let record = self
             .registry
-            .get_replica_version_record(version.clone(), self.registry.get_latest_version())
-            .map_err(UpgradeError::from)?;
+            .get_replica_version_record(version.clone(), self.registry.get_latest_version())?;
 
         Ok((
             record.release_package_urls,
@@ -738,7 +723,7 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
     }
 
     async fn check_for_upgrade(&mut self) -> UpgradeResult<OrchestratorControlFlow> {
-        self.check().await.map_err(UpgradeError::from)
+        self.check().await
     }
 }
 
@@ -874,7 +859,7 @@ fn node_is_in_subnet_at_version(
 }
 
 /// Call `sync` and `fstrim` on the data partition
-async fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
+async fn sync_and_trim_fs(logger: &ReplicaLogger) -> UpgradeResult<()> {
     let mut fstrim_script = tokio::process::Command::new("/opt/ic/bin/sync_fstrim.sh");
     info!(logger, "Running command '{:?}'...", fstrim_script);
     match fstrim_script.status().await {
@@ -882,13 +867,14 @@ async fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
             if status.success() {
                 Ok(())
             } else {
-                Err(format!(
+                Err(UpgradeError::GenericError(format!(
                     "Failed to run command '{fstrim_script:?}', return value: {status}"
-                ))
+                )))
             }
         }
-        Err(err) => Err(format!(
-            "Failed to run command '{fstrim_script:?}', error: {err}"
+        Err(err) => Err(UpgradeError::IoError(
+            format!("Failed to run command '{fstrim_script:?}'"),
+            err,
         )),
     }
 }
@@ -899,13 +885,15 @@ fn remove_node_state(
     replica_config_file: PathBuf,
     cup_path: PathBuf,
     orchestrator_data_directory: PathBuf,
-) -> Result<(), String> {
+) -> UpgradeResult<()> {
     use ic_config::{Config, ConfigSource};
     use std::fs::{remove_dir_all, remove_file};
     let tmpdir = tempfile::Builder::new()
         .prefix("ic_config")
         .tempdir()
-        .map_err(|err| format!("Couldn't create a temporary directory: {err:?}"))?;
+        .map_err(|err| {
+            UpgradeError::IoError("Couldn't create a temporary directory".into(), err)
+        })?;
     let config = Config::load_with_tmpdir(
         ConfigSource::File(replica_config_file),
         tmpdir.path().to_path_buf(),
@@ -913,7 +901,10 @@ fn remove_node_state(
 
     let consensus_pool_path = config.artifact_pool.consensus_pool_path;
     remove_dir_all(&consensus_pool_path).map_err(|err| {
-        format!("Couldn't delete the consensus pool at {consensus_pool_path:?}: {err:?}")
+        UpgradeError::IoError(
+            format!("Couldn't delete the consensus pool at {consensus_pool_path:?}"),
+            err,
+        )
     })?;
 
     let state_path = config.state_manager.state_root();
@@ -926,10 +917,9 @@ fn remove_node_state(
     // Deleting the page_deltas directory would thus remove the sandbox capacity to
     // do IO in the page delta files.
     for entry in std::fs::read_dir(state_path.as_path()).map_err(|err| {
-        format!(
-            "Error iterating through dir {:?}, because {:?}",
-            state_path.as_path(),
-            err
+        UpgradeError::IoError(
+            format!("Error iterating through dir {:?}", state_path.as_path()),
+            err,
         )
     })? {
         let en = entry
@@ -952,11 +942,7 @@ fn remove_node_state(
                 std::fs::remove_file(en.path())
             }
             .map_err(|err| {
-                format!(
-                    "Couldn't delete the path {:?}, because {:?}",
-                    en.path(),
-                    err
-                )
+                UpgradeError::IoError(format!("Couldn't delete the path {:?}", en.path()), err)
             })?;
         } else {
             // Look into the page_deltas/ directory and delete any possible leftover files.
@@ -966,33 +952,38 @@ fn remove_node_state(
                     .join(config.state_manager.page_deltas_dirname()),
             )
             .map_err(|err| {
-                format!(
-                    "Error iterating through dir {:?}, because {:?}",
-                    state_path.as_path(),
-                    err
+                UpgradeError::IoError(
+                    format!("Error iterating through dir {:?}", state_path.as_path()),
+                    err,
                 )
             })? {
                 std::fs::remove_file(entry.expect("Error getting file under page_delta/.").path())
                     .map_err(|err| {
-                        format!(
-                            "Couldn't delete the file {:?}, because {:?}",
-                            en.path(),
-                            err
+                        UpgradeError::IoError(
+                            format!("Couldn't delete the file {:?}", en.path()),
+                            err,
                         )
                     })?;
             }
         }
     }
 
-    remove_file(&cup_path)
-        .map_err(|err| format!("Couldn't delete the CUP at {cup_path:?}: {err:?}"))?;
+    remove_file(&cup_path).map_err(|err| {
+        UpgradeError::IoError(format!("Couldn't delete the CUP at {cup_path:?}"), err)
+    })?;
 
     let key_changed_metric = orchestrator_data_directory.join(KEY_CHANGES_FILENAME);
     if key_changed_metric.try_exists().map_err(|err| {
-        format!("Failed to check if {key_changed_metric:?} exists, because {err:?}")
+        UpgradeError::IoError(
+            format!("Failed to check if {key_changed_metric:?} exists"),
+            err,
+        )
     })? {
         remove_file(&key_changed_metric).map_err(|err| {
-            format!("Couldn't delete the key changes metric at {key_changed_metric:?}: {err:?}")
+            UpgradeError::IoError(
+                format!("Couldn't delete the key changes metric at {key_changed_metric:?}"),
+                err,
+            )
         })?;
     }
 
@@ -1000,7 +991,7 @@ fn remove_node_state(
 }
 
 /// Re-execute the current process, exactly as it was originally called.
-fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
+fn reexec_current_process(logger: &ReplicaLogger) -> UpgradeError {
     let args: Vec<String> = std::env::args().collect();
     info!(
         logger,
@@ -1008,7 +999,7 @@ fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
         &args[..]
     );
     let error = exec::Command::new(&args[0]).args(&args[1..]).exec();
-    OrchestratorError::ExecError(PathBuf::new(), error)
+    UpgradeError::ExecError(PathBuf::new(), error)
 }
 
 /// Return the threshold master public key of the given CUP, if it exists.
@@ -1655,22 +1646,22 @@ mod tests {
     impl ReplicaUpgradeScenario {
         // Returns the expected control flow of the upgrade loop when when the upgrade is about to
         // be executed. We should indeed first check if the replica version was recalled.
-        fn should_be_executed(&self) -> OrchestratorResult<OrchestratorControlFlow> {
+        fn should_be_executed(&self) -> UpgradeResult<OrchestratorControlFlow> {
             if !self.has_replicated_versions_before_init {
                 // The replicator has not yet replicated all registry versions that
                 // were certified before the replicator was started.
                 // Thus, we cannot be sure whether the replica version was recalled
                 // or not. We should thus wait until the replicator has caught up.
-                Err(OrchestratorError::UpgradeError(format!(
-                    "Delaying upgrade to {} until registry data is recent enough.",
-                    self.replica_version,
-                )))
+                Err(UpgradeError::ReplicatorNotCaughtUp(
+                    self.replica_version.clone(),
+                    self.registry_version,
+                ))
             } else if self.is_recalled {
                 // The replica version was recalled, so we should not upgrade
-                Err(OrchestratorError::UpgradeError(format!(
-                    "Not upgrading to recalled replica version {}",
-                    self.replica_version,
-                )))
+                Err(UpgradeError::RecalledReplicaVersion(
+                    self.replica_version.clone(),
+                    self.registry_version,
+                ))
             } else {
                 // The replica version was not recalled, so we are expected to stop
                 // and reboot
@@ -2110,7 +2101,7 @@ mod tests {
             &self,
             logs: Vec<LogEntry>,
             upgrade_loop: &Upgrade,
-        ) -> OrchestratorResult<OrchestratorControlFlow> {
+        ) -> UpgradeResult<OrchestratorControlFlow> {
             let needle_has_prepared_upgrade =
                 "Replica version upgrade detected at registry version";
             let logs_assert = LogEntriesAssert::assert_that(logs);
@@ -2568,11 +2559,17 @@ mod tests {
                 assert_eq!(actual_flow, expected_flow);
             }
             (
-                Err(OrchestratorError::UpgradeError(actual_error)),
-                Err(OrchestratorError::UpgradeError(expected_error)),
+                Err(UpgradeError::ReplicatorNotCaughtUp(actual_replica_version, _)),
+                Err(UpgradeError::ReplicatorNotCaughtUp(expected_replica_version, _)),
+            )
+            | (
+                Err(UpgradeError::RecalledReplicaVersion(actual_replica_version, _)),
+                Err(UpgradeError::RecalledReplicaVersion(expected_replica_version, _)),
             ) => {
-                // TODO(CON-1631): introduce distinct enum variants to better compare errors
-                assert!(actual_error.contains(expected_error));
+                // We can assert on the replica version but not the registry version, since the
+                // actual registry version is the latest one, but the expected one was set to be
+                // the one where the upgrade is scheduled.
+                assert_eq!(actual_replica_version, expected_replica_version);
             }
             _ => {
                 panic!("Upgrade loop flow result does not match expected flow");
@@ -2627,7 +2624,10 @@ mod tests {
                     SubnetAssignment::Assigned(_) | SubnetAssignment::Unassigned
                 )
             }
-            Err(OrchestratorError::UpgradeError(_)) => {}
+            Err(UpgradeError::ReplicatorNotCaughtUp(_, _))
+            | Err(UpgradeError::RecalledReplicaVersion(_, _)) => {
+                assert_matches!(new_subnet_assignment, SubnetAssignment::Assigned(_));
+            }
             Err(_) => {
                 panic!("Unexpected error from upgrade loop");
             }
@@ -2847,9 +2847,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_ignore_up_to_date_replicator_after_timeout() {
+        let current_replica_version = ReplicaVersion::try_from("replica_version_0.1").unwrap();
+        let upgrade_replica_version = ReplicaVersion::try_from("replica_version_0.2").unwrap();
+
         let test_scenario = UpgradeTestScenario {
             node_id: NODE_1,
-            current_replica_version: ReplicaVersion::try_from("replica_version_0.1").unwrap(),
+            current_replica_version,
             has_local_cup: Some(CUPScenario {
                 height: Height::from(100),
                 subnet_id: SUBNET_1,
@@ -2859,7 +2862,7 @@ mod tests {
             initial_subnet_assignment: SubnetAssignment::Unknown,
             is_leaving: None,
             upgrade_to: Some(ReplicaUpgradeScenario {
-                replica_version: ReplicaVersion::try_from("replica_version_0.2").unwrap(),
+                replica_version: upgrade_replica_version.clone(),
                 registry_version: RegistryVersion::from(10),
                 is_recalled: true,
                 has_replicated_versions_before_init: false,
@@ -2886,7 +2889,11 @@ mod tests {
 
         // Assert that despite the replicator not having replicated all versions before init,
         // we proceed with the our own view of the registry after the timeout.
-        assert_matches!(flow_result, Err(OrchestratorError::UpgradeError(err)) if err.contains("Not upgrading to recalled replica version"));
+        assert_matches!(
+            flow_result,
+            Err(UpgradeError::RecalledReplicaVersion(replica_version, _))
+                if replica_version == upgrade_replica_version
+        );
     }
 
     fn make_ecdsa_key_id() -> MasterPublicKeyId {
