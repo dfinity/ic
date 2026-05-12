@@ -363,7 +363,17 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
 
             StepType::BlessVersion => {
                 if self.params.upgrade_version.is_none() {
-                    self.params.upgrade_version = read_optional(&self.logger, "Upgrade version: ");
+                    self.params.upgrade_version =
+                        read_optional(&self.logger, "Version to bless (and upgrade to): ");
+                }
+            }
+
+            StepType::UpgradeVersion => {
+                if self.params.upgrade_version.is_none() {
+                    self.params.upgrade_version = read_optional(
+                        &self.logger,
+                        "Version to upgrade to (WARN: it should already be blessed): ",
+                    );
                 }
             }
 
