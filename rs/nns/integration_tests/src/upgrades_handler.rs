@@ -123,9 +123,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
         ] {
             assert!(is_elected_version(&nns_canisters.registry, version).await);
         }
-        for version in [version_to_elect] {
-            assert!(!is_elected_version(&nns_canisters.registry, version).await);
-        }
+        assert!(!is_elected_version(&nns_canisters.registry, version_to_elect).await);
 
         // update unassigned version
         let deploy_unassigned_payload = DeployGuestosToAllUnassignedNodesPayload {
