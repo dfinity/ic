@@ -34,6 +34,7 @@ type ListCanisterSnapshotsArgs = CanisterIdRecord;
 type ListCanisterSnapshotsResult = Vec<CanisterSnapshotResponse>;
 type FetchCanisterLogsArgs = FetchCanisterLogsRequest;
 type FetchCanisterLogsResult = FetchCanisterLogsResponse;
+type ListCanistersResult = ListCanistersResponse;
 
 #[candid_method(update)]
 fn create_canister(_: CreateCanisterArgs) -> CreateCanisterResult {
@@ -184,6 +185,11 @@ fn delete_canister_snapshot(_: DeleteCanisterSnapshotArgs) {
 
 #[candid_method(query)]
 fn fetch_canister_logs(_: FetchCanisterLogsArgs) -> FetchCanisterLogsResult {
+    unreachable!()
+}
+
+#[candid_method(query)]
+fn list_canisters() -> ListCanistersResult {
     unreachable!()
 }
 

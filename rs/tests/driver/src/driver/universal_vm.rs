@@ -4,22 +4,20 @@ use crate::driver::farm::ClaimResult;
 use crate::driver::farm::Farm;
 use crate::driver::farm::HostFeature;
 use crate::driver::farm::id_of_file;
-use crate::driver::ic::VmAllocationStrategy;
-use crate::driver::ic::VmResources;
+use crate::driver::ic::VmResourceOverrides;
 use crate::driver::resource::AllocatedVm;
 use crate::driver::resource::{
     DiskImage, allocate_resources, get_resource_request_for_universal_vm,
 };
 use crate::driver::test_env::SshKeyGen;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
-use crate::driver::test_env_api::{
-    HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession, get_dependency_path,
-};
+use crate::driver::test_env_api::{HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession};
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
 use anyhow::{Result, bail};
 use chrono::Duration;
 use chrono::Utc;
 use slog::info;
+use ssh2::Session;
 use std::fs::{self, File};
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr};
@@ -27,6 +25,7 @@ use std::os::unix::prelude::PermissionsExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
+use std::process::Stdio;
 
 use crate::driver::constants::SSH_USERNAME;
 
@@ -35,8 +34,7 @@ use crate::driver::constants::SSH_USERNAME;
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct UniversalVm {
     pub name: String,
-    pub vm_resources: VmResources,
-    pub vm_allocation: Option<VmAllocationStrategy>,
+    pub vm_resource_overrides: VmResourceOverrides,
     pub required_host_features: Vec<HostFeature>,
     pub has_ipv4: bool,
     pub primary_image: Option<DiskImage>,
@@ -57,12 +55,14 @@ const CONFIG_DIR_NAME: &str = "config";
 const CONFIG_SSH_DIR_NAME: &str = "config-ssh";
 const CONFIG_DIR_SSH_AUTHORIZED_KEYS_DIR: &str = "ssh-authorized-keys";
 
+const CREATE_UVM_CONFIG_IMAGE_SH: &[u8] =
+    include_bytes!("../../assets/create-universal-vm-config-image.sh");
+
 impl UniversalVm {
     pub fn new(name: String) -> Self {
         UniversalVm {
             name,
-            vm_resources: Default::default(),
-            vm_allocation: Default::default(),
+            vm_resource_overrides: Default::default(),
             required_host_features: Default::default(),
             has_ipv4: false,
             primary_image: Default::default(),
@@ -70,13 +70,8 @@ impl UniversalVm {
         }
     }
 
-    pub fn with_vm_resources(mut self, vm_resources: VmResources) -> Self {
-        self.vm_resources = vm_resources;
-        self
-    }
-
-    pub fn with_vm_allocation(mut self, vm_allocation: VmAllocationStrategy) -> Self {
-        self.vm_allocation = Some(vm_allocation);
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.vm_resource_overrides = vm_resource_overrides;
         self
     }
 
@@ -207,30 +202,26 @@ fn create_universal_vm_config_image(
     output_img: &Path,
     label: &str,
 ) -> Result<()> {
-    let script_path = get_dependency_path("rs/tests/create-universal-vm-config-image.sh");
-    let mut cmd = Command::new(script_path);
-
-    // Add /usr/sbin to the PATH env var to give access to required tools like mkfs.vfat.
-    let path_env_var = "PATH";
-    let path_prefix = match std::env::var(path_env_var) {
-        Ok(old_path) => {
-            format!("{old_path}:")
-        }
-        Err(_) => String::from(""),
-    };
-    cmd.env(path_env_var, format!("{path_prefix}{}", "/usr/sbin"));
-
-    cmd.arg("--input")
+    // pipe the uvm creation script into bash
+    let mut cmd = Command::new("/bin/bash")
+        .stdin(Stdio::piped())
+        // with .spawn() the parent's stdout & stderr are inherited
+        .arg("-s")
+        .arg("--") // run script from stdin
+        .arg("--input")
         .arg(input_dir)
         .arg("--output")
         .arg(output_img)
         .arg("--label")
-        .arg(label);
+        .arg(label)
+        .spawn()?;
 
-    let output = cmd.output()?;
-    std::io::stdout().write_all(&output.stdout)?;
-    std::io::stderr().write_all(&output.stderr)?;
-    if !output.status.success() {
+    cmd.stdin
+        .take()
+        .expect("could not open stdin")
+        .write_all(CREATE_UVM_CONFIG_IMAGE_SH)?;
+
+    if !cmd.wait_with_output()?.status.success() {
         bail!("could not spawn config image creation process");
     }
     Ok(())
@@ -358,7 +349,8 @@ until ipv4=$(ip -j address show dev enp2s0 \
             | jq -r -e \
             '.[0].addr_info | map(select(.scope == "global")) | .[0].local'); \
 do
-  if [ "$count" -ge 120 ]; then
+  if [ "$count" -ge 300 ]; then
+    echo "Timed out waiting for IPv4 address!" >&2
     exit 1
   fi
   sleep 1
@@ -368,6 +360,16 @@ echo "$ipv4"
 "#;
 
 impl RetrieveIpv4Addr for DeployedUniversalVm {
+    fn block_on_ipv4_from_session(&self, session: &Session) -> Result<Ipv4Addr> {
+        use anyhow::Context;
+        let ipv4_string =
+            self.block_on_bash_script_from_session(session, IPV4_RETRIEVE_SH_SCRIPT)?;
+        ipv4_string
+            .trim()
+            .parse::<Ipv4Addr>()
+            .context("ipv4 retrieval")
+    }
+
     fn block_on_ipv4(&self) -> Result<Ipv4Addr> {
         use anyhow::Context;
         let ipv4_string = self.block_on_bash_script(IPV4_RETRIEVE_SH_SCRIPT)?;

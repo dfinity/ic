@@ -163,6 +163,9 @@ async fn test_icps_per_sns_token_client() {
                                 burn: None,
                                 approve: None,
                                 transfer: None,
+                                fee_collector: None,
+                                authorized_mint: None,
+                                authorized_burn: None,
                             },
                         ],
 

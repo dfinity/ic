@@ -1,6 +1,9 @@
 //! Types for the Groth20-BLS12-381 implementation of Non-interactive
 //! Distributed Key Generation.
 
+// TODO: Remove after https://github.com/rust-lang/rust/issues/147648 is fixed
+#![allow(unused_assignments)]
+
 use ic_crypto_internal_types::curves::bls12_381::{G1Bytes, G2Bytes};
 use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
     FsEncryptionPop, FsEncryptionPublicKey,

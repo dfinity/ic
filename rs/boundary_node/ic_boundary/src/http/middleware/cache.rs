@@ -8,11 +8,15 @@ use axum::{
 };
 use http::Method;
 use ic_bn_lib::{
-    http::cache::{
-        Bypasser, Cache, CacheBuilder, CustomBypassReason, Error as CacheError, KeyExtractor,
-    },
+    http::cache::{Cache, CacheBuilder},
     prometheus::Registry,
-    tasks::Run,
+};
+use ic_bn_lib_common::{
+    traits::{
+        Run,
+        http::{Bypasser, CustomBypassReason, KeyExtractor},
+    },
+    types::http::CacheError,
 };
 use strum::{Display, IntoStaticStr};
 use tokio_util::sync::CancellationToken;
@@ -136,10 +140,8 @@ mod test {
     };
     use candid::Principal;
     use http::StatusCode;
-    use ic_bn_lib::{
-        http::cache::{CacheBypassReason, CacheStatus},
-        principal,
-    };
+    use ic_bn_lib::http::cache::CacheStatus;
+    use ic_bn_lib_common::{principal, types::http::CacheBypassReason};
     use tower::Service;
 
     use crate::{core::ANONYMOUS_PRINCIPAL, http::RequestType};
@@ -297,7 +299,7 @@ mod test {
             .get::<CacheStatus<BypassReasonIC>>()
             .cloned()
             .unwrap();
-        assert_eq!(cs, CacheStatus::Miss);
+        assert!(matches!(cs, CacheStatus::Miss(_)));
 
         let req = gen_request(CANISTER_1, false);
         let res = app.call(req).await.unwrap();
@@ -306,7 +308,7 @@ mod test {
             .get::<CacheStatus<BypassReasonIC>>()
             .cloned()
             .unwrap();
-        assert_eq!(cs, CacheStatus::Hit);
+        assert!(matches!(cs, CacheStatus::Hit(_)));
 
         // Check if the body from cache is correct
         let (_, body) = res.into_parts();

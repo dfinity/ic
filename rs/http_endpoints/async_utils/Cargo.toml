@@ -8,8 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 async-stream = { workspace = true }
-byte-unit = "4.0.14"
-bytes = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 hyper = { workspace = true }

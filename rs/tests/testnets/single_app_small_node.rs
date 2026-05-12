@@ -2,10 +2,10 @@
 //   one 1-node Application subnet and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 16 vCPUs, 64GiB of RAM, and 100 GiB disk.
 //
-// You can setup this testnet with a lifetime of 180 mins by executing the following commands:
+// You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/tools/docker-run
-//   $ ict testnet create single_app_small_node --lifetime-mins=180 --output-dir=./single_app_small_node -- --test_tmpdir=./single_app_small_node
+//   $ ict testnet create single_app_small_node --output-dir=./single_app_small_node -- --test_tmpdir=./single_app_small_node
 //
 // The --output-dir=./single_app_small_node will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./single_app_small_node will store the remaining test output in the specified directory.
@@ -39,9 +39,8 @@ use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{
-    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
+    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
 };
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 
 fn main() -> Result<()> {
@@ -52,14 +51,10 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
-
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(VmResources {
+                .with_resource_overrides(VmResourceOverrides {
                     vcpus: Some(NrOfVCPUs::new(16)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(67_108_864)),
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(100)),
@@ -68,5 +63,4 @@ pub fn setup(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
-    env.sync_with_prometheus();
 }

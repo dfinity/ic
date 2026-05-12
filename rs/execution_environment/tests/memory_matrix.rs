@@ -35,8 +35,10 @@ The scenarios cover the following:
 */
 
 use ic_base_types::{CanisterId, NumBytes, PrincipalId, SnapshotId};
+use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, UserError};
+use ic_execution_environment::units::{GIB, KIB};
 use ic_management_canister_types_private::{
     BoundedVec, CanisterSettingsArgsBuilder, CanisterSnapshotDataOffset, CanisterSnapshotResponse,
     ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, LoadCanisterSnapshotArgs, LogVisibilityV2,
@@ -47,16 +49,14 @@ use ic_management_canister_types_private::{
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_test_utilities::universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder, get_reply};
-use ic_types::Cycles;
 use ic_types::ingress::IngressState;
 use ic_types::messages::{MessageId, Payload};
+use ic_types_cycles::Cycles;
+use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use num_traits::ops::saturating::SaturatingSub;
 use std::cmp::max;
 
 const T: u128 = 1_000_000_000_000;
-
-const KIB: u64 = 1 << 10;
-const GIB: u64 = 1 << 30;
 
 /// High amount of cycles that a canister under test is created with
 /// to ensure that it has enough cycles for any setup.
@@ -97,6 +97,8 @@ enum Scenario {
     InstallCode,
     /// Management canister method `update_settings` increasing memory allocation.
     IncreaseMemoryAllocation,
+    /// Management canister method `update_settings` increasing log memory limit and memory allocation.
+    IncreaseLogAndMemoryAllocation,
     /// Management canister method `update_settings` decreasing memory allocation.
     DecreaseMemoryAllocation,
     /// Other management canister method.
@@ -123,7 +125,7 @@ struct ScenarioParams<F, G> {
     op: G,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 enum FreezingThreshold {
     /// Short freezing threshold so that the number of reserved cycles
     /// exceeds the freezing limit in cycles.
@@ -142,7 +144,7 @@ impl FreezingThreshold {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 enum MemoryAllocation {
     /// Memory allocation of 0.
     BestEffort,
@@ -206,25 +208,40 @@ where
     let memory_allocation = match run_params.memory_allocation {
         MemoryAllocation::BestEffort => 0,
         MemoryAllocation::Small => 1,
-        MemoryAllocation::CrossedDuringTest => match scenario_params.memory_usage_change {
-            // Uploading a chunk only increases the memory usage by 1MiB
-            // and thus we cannot have a larger offset in general.
-            MemoryUsageChange::Increase => memory_usage_after_setup.get() + 512 * KIB,
-            MemoryUsageChange::None => match scenario_params.scenario {
-                Scenario::IncreaseMemoryAllocation => {
-                    assert!(memory_usage_after_setup.get() >= GIB);
-                    memory_usage_after_setup.get() - GIB
+        MemoryAllocation::CrossedDuringTest => {
+            // Things to consider when chosing offset:
+            // - chunk store changes memory usage by 1 MiB at most
+            // - canister logging changes memory by 1 OS-page of 4 KiB
+            match scenario_params.memory_usage_change {
+                MemoryUsageChange::Increase => {
+                    // Increasing memory is often done on already installed
+                    // canister, which does not increase canister log, so
+                    // we don't have to account for that.
+                    let memory_allocation_crossed_offset = 512 * KIB;
+                    // What increases memory usage: chunk upload, installing code (canister logs).
+                    memory_usage_after_setup.get() + memory_allocation_crossed_offset
                 }
-                Scenario::DecreaseMemoryAllocation => memory_usage_after_setup.get() + GIB,
-                _ => memory_usage_after_setup.get(),
-            },
-            MemoryUsageChange::Decrease => {
-                // Clearing the chunk store decreases the memory usage by 1MiB
-                // and thus we cannot have a larger offset in general.
-                assert!(memory_usage_after_setup.get() >= 512 * KIB);
-                memory_usage_after_setup.get() - 512 * KIB
+                MemoryUsageChange::None => match scenario_params.scenario {
+                    Scenario::IncreaseMemoryAllocation => {
+                        assert_ge!(memory_usage_after_setup.get(), GIB);
+                        memory_usage_after_setup.get() - GIB
+                    }
+                    Scenario::DecreaseMemoryAllocation => memory_usage_after_setup.get() + GIB,
+                    _ => memory_usage_after_setup.get(),
+                },
+                MemoryUsageChange::Decrease => {
+                    // Decreasing memory is often done by uninstalling canister
+                    // which also clears canister logs, so we need to account for that.
+                    let memory_allocation_crossed_offset = 2 * KIB;
+                    // What decreases memory usage: clearning chunk store, uninstalling/deleting canister (canister logs).
+                    assert_ge!(
+                        memory_usage_after_setup.get(),
+                        memory_allocation_crossed_offset
+                    );
+                    memory_usage_after_setup.get() - memory_allocation_crossed_offset
+                }
             }
-        },
+        }
         MemoryAllocation::Large => 80 * GIB,
     };
     let settings = CanisterSettingsArgsBuilder::new()
@@ -241,7 +258,7 @@ where
         }
         _ => Cycles::zero(),
     };
-    assert!(run_params.initial_cycles >= refund_for_response_transmission);
+    assert_ge!(run_params.initial_cycles, refund_for_response_transmission);
     let initial_cycles = run_params.initial_cycles - refund_for_response_transmission;
     let consume_cycles = test.canister_state(canister_id).system_state.balance() - initial_cycles;
     test.consume_cycles(canister_id, consume_cycles);
@@ -254,7 +271,10 @@ where
     let dummy_canister_initial_cycles: Cycles = DEFAULT_INITIAL_CYCLES.into();
     let memory_allocated_bytes_after_setup =
         test.canister_state(canister_id).memory_allocated_bytes();
-    assert!(memory_allocated_bytes_after_setup <= run_params.subnet_memory_usage);
+    assert_le!(
+        memory_allocated_bytes_after_setup,
+        run_params.subnet_memory_usage
+    );
     let dummy_canister_memory_allocation =
         run_params.subnet_memory_usage - memory_allocated_bytes_after_setup;
     let dummy_canister_settings = CanisterSettingsArgsBuilder::new()
@@ -286,23 +306,23 @@ where
     // (in particular, now before running the operation under test).
     if let MemoryAllocation::Large = run_params.memory_allocation {
         let memory_usage = test.canister_state(canister_id).memory_usage();
-        assert!(memory_usage.get() <= memory_allocation);
+        assert_le!(memory_usage.get(), memory_allocation);
     }
     // Ensure that memory allocation is "crossed" if applicable.
     if let MemoryAllocation::CrossedDuringTest = run_params.memory_allocation {
         let current_memory_usage = test.canister_state(canister_id).memory_usage().get();
         match scenario_params.memory_usage_change {
-            MemoryUsageChange::Increase => assert!(current_memory_usage < memory_allocation),
+            MemoryUsageChange::Increase => assert_lt!(current_memory_usage, memory_allocation),
             MemoryUsageChange::None => match scenario_params.scenario {
                 Scenario::IncreaseMemoryAllocation => {
-                    assert!(current_memory_usage > memory_allocation)
+                    assert_gt!(current_memory_usage, memory_allocation)
                 }
                 Scenario::DecreaseMemoryAllocation => {
-                    assert!(current_memory_usage < memory_allocation)
+                    assert_lt!(current_memory_usage, memory_allocation)
                 }
                 _ => assert_eq!(current_memory_usage, memory_allocation),
             },
-            MemoryUsageChange::Decrease => assert!(current_memory_usage > memory_allocation),
+            MemoryUsageChange::Decrease => assert_gt!(current_memory_usage, memory_allocation),
         }
     }
 
@@ -345,7 +365,7 @@ where
         .memory_allocation()
         .allocated_bytes(final_memory_usage);
     let newly_allocated_bytes = final_allocated_bytes.saturating_sub(&initial_allocated_bytes);
-    // Note. The cycles prepayment in `install_code` is refunded before cycles are reserved
+    // Note. The cycles prepayment in `install_code` and `load_canister_snapshot` is refunded before cycles are reserved
     // and freezing threshold checked and thus we can ignore it here.
     // The cycles prepayment for response callback execution is charged during setup
     // and thus we can also ignore it here.
@@ -383,37 +403,55 @@ where
         assert_eq!(newly_reserved_cycles, expected_reserved_cycles);
         // The memory usage changed as expected.
         match scenario_params.memory_usage_change {
-            MemoryUsageChange::Increase => assert!(initial_memory_usage < final_memory_usage),
+            MemoryUsageChange::Increase => assert_lt!(initial_memory_usage, final_memory_usage),
             MemoryUsageChange::None => assert_eq!(initial_memory_usage, final_memory_usage),
-            MemoryUsageChange::Decrease => assert!(initial_memory_usage > final_memory_usage),
+            MemoryUsageChange::Decrease => assert_gt!(initial_memory_usage, final_memory_usage),
         };
         if newly_allocated_bytes.get() > 0 {
             // The freezing threshold has the property that either
             // freezing limit in cycles or reserved cycles dominate.
+            // Exception: `IncreaseLogAndMemoryAllocation` with `MemoryAllocation::Large`
+            // reserves cycles only for 128 KiB (memory allocation increase)
+            // while the freezing limit is based on the pre-existing 80 GiB allocation,
+            // so the invariant may not hold.
+            let skip_short_invariant =
+                matches!(
+                    scenario_params.scenario,
+                    Scenario::IncreaseLogAndMemoryAllocation
+                ) && matches!(run_params.memory_allocation, MemoryAllocation::Large);
             match run_params.freezing_threshold {
                 FreezingThreshold::Long => {
-                    assert!(freezing_limit_cycles > newly_reserved_cycles);
+                    assert_gt!(freezing_limit_cycles, newly_reserved_cycles);
                 }
-                FreezingThreshold::Short => {
-                    assert!(newly_reserved_cycles > freezing_limit_cycles);
+                FreezingThreshold::Short if !skip_short_invariant => {
+                    assert_gt!(newly_reserved_cycles, freezing_limit_cycles);
                 }
+                FreezingThreshold::Short => (),
             };
         }
         match scenario_params.memory_usage_change {
             MemoryUsageChange::Increase => {
-                assert!(initial_allocated_bytes <= final_allocated_bytes);
-                // New bytes are *allocated* if and only if the memory usage is not covered
-                // by memory allocation, i.e., if memory allocation is "large".
-                assert_eq!(
-                    newly_allocated_bytes.get() > 0,
-                    !matches!(run_params.memory_allocation, MemoryAllocation::Large)
-                )
+                assert_le!(initial_allocated_bytes, final_allocated_bytes);
+                match scenario_params.scenario {
+                    // New bytes are always allocated because memory allocation increases.
+                    Scenario::IncreaseLogAndMemoryAllocation => {
+                        assert_lt!(initial_allocated_bytes, final_allocated_bytes)
+                    }
+                    _ => {
+                        // New bytes are *allocated* if and only if the memory usage is not covered
+                        // by memory allocation, i.e., if memory allocation is "large".
+                        assert_eq!(
+                            newly_allocated_bytes.get() > 0,
+                            !matches!(run_params.memory_allocation, MemoryAllocation::Large)
+                        )
+                    }
+                }
             }
             // If memory usage does not change, then allocated bytes
             // only change if memory allocation changes.
             MemoryUsageChange::None => match scenario_params.scenario {
                 Scenario::IncreaseMemoryAllocation => {
-                    assert!(initial_allocated_bytes < final_allocated_bytes)
+                    assert_lt!(initial_allocated_bytes, final_allocated_bytes)
                 }
                 Scenario::DecreaseMemoryAllocation => {
                     // If memory usage exceeds memory allocation, then
@@ -421,13 +459,13 @@ where
                     if initial_memory_usage.get() > memory_allocation {
                         assert_eq!(initial_allocated_bytes, final_allocated_bytes);
                     } else {
-                        assert!(initial_allocated_bytes > final_allocated_bytes);
+                        assert_gt!(initial_allocated_bytes, final_allocated_bytes);
                     }
                 }
                 _ => assert_eq!(initial_allocated_bytes, final_allocated_bytes),
             },
             MemoryUsageChange::Decrease => {
-                assert!(initial_allocated_bytes >= final_allocated_bytes)
+                assert_ge!(initial_allocated_bytes, final_allocated_bytes)
             }
         };
         // Ensure that memory allocation is "crossed" if applicable.
@@ -441,19 +479,29 @@ where
                 .get();
             match scenario_params.memory_usage_change {
                 MemoryUsageChange::Increase => {
-                    assert!(current_memory_usage > current_memory_allocation)
+                    assert_gt!(current_memory_usage, current_memory_allocation)
                 }
                 MemoryUsageChange::None => match scenario_params.scenario {
                     Scenario::IncreaseMemoryAllocation => {
-                        assert!(current_memory_usage < current_memory_allocation)
+                        assert_lt!(current_memory_usage, current_memory_allocation)
                     }
                     Scenario::DecreaseMemoryAllocation => {
-                        assert!(current_memory_usage > current_memory_allocation)
+                        assert_gt!(current_memory_usage, current_memory_allocation)
                     }
-                    _ => assert_eq!(current_memory_usage, current_memory_allocation),
+                    _ => {
+                        // Memory allocation is set to match the memory usage after setup,
+                        // but canister history memory usage can increase even in case of `MemoryUsageChange::None`.
+                        let canister_history_memory_usage_increase =
+                            final_history_memory_usage - initial_history_memory_usage;
+                        assert_eq!(
+                            current_memory_usage,
+                            current_memory_allocation
+                                + canister_history_memory_usage_increase.get()
+                        );
+                    }
                 },
                 MemoryUsageChange::Decrease => {
-                    assert!(current_memory_usage < current_memory_allocation)
+                    assert_lt!(current_memory_usage, current_memory_allocation)
                 }
             }
         }
@@ -467,7 +515,7 @@ where
     // (in particular, now after running the operation under test).
     if let MemoryAllocation::Large = run_params.memory_allocation {
         let memory_usage = test.canister_state(canister_id).memory_usage();
-        assert!(memory_usage.get() <= memory_allocation);
+        assert_le!(memory_usage.get(), memory_allocation);
     }
 
     // Check that subnet available memory has been updated properly
@@ -495,7 +543,10 @@ where
     // Check that the total amount of cycles did not increase.
     let total_cycles_balance =
         test.canister_state(canister_id).system_state.balance() + newly_reserved_cycles;
-    assert!(run_params.initial_cycles + refund_for_response_execution >= total_cycles_balance);
+    assert_ge!(
+        run_params.initial_cycles + refund_for_response_execution,
+        total_cycles_balance
+    );
 
     // Return result.
     let cycles_used = run_params.initial_cycles - total_cycles_balance;
@@ -584,6 +635,10 @@ fn test_reserved_cycles_limit<F, G, H>(
             err.code(),
             ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
         ),
+        Scenario::IncreaseLogAndMemoryAllocation => assert!(
+            err.code() == ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
+                || err.code() == ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
+        ),
         Scenario::CanisterCleanupCallback(_) => {
             assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
             assert!(
@@ -638,6 +693,10 @@ fn test_freezing_threshold<F, G, H>(
                         || err.code() == ErrorCode::InsufficientCyclesInMemoryGrow
                 );
             }
+            Scenario::IncreaseLogAndMemoryAllocation => assert!(
+                err.code() == ErrorCode::InsufficientCyclesInMemoryAllocation
+                    || err.code() == ErrorCode::InsufficientCyclesInMemoryGrow
+            ),
             Scenario::CanisterCleanupCallback(_) => {
                 assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
                 assert!(err.description().contains("cannot grow memory"));
@@ -676,6 +735,10 @@ fn test_minimum_cycles_balance<F, G, H>(
         Scenario::IncreaseMemoryAllocation => {
             assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryAllocation)
         }
+        Scenario::IncreaseLogAndMemoryAllocation => assert!(
+            err.code() == ErrorCode::InsufficientCyclesInMemoryAllocation
+                || err.code() == ErrorCode::InsufficientCyclesInMemoryGrow
+        ),
         Scenario::CanisterCleanupCallback(_) => {
             assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
             assert!(err.description().contains("cannot grow memory"));
@@ -778,6 +841,35 @@ fn setup_universal_canister_with_much_memory(test: &mut ExecutionTest, canister_
         .unwrap();
 }
 
+fn setup_universal_canister_with_log_memory_limit(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+) {
+    setup_universal_canister(test, canister_id);
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(1024 * 1024)
+        .build();
+    test.update_settings(canister_id, settings).unwrap();
+}
+
+/// Setups a fixed memory canister with no custom sections.
+/// Custom section size matters in canister snapshot tests
+/// since it is accounted for in canister memory usage,
+/// but not in canister snapshot memory usage.
+fn setup_fixed_memory_canister(test: &mut ExecutionTest, canister_id: CanisterId) {
+    const FIXED_MEMORY_WAT: &str = r#"
+    (module
+        (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+        (func $init
+            (drop (call $stable64_grow (i64.const 1024))))
+        (memory $memory 1024)
+        (export "canister_init" (func $init))
+    )"#;
+    let fixed_memory_wasm = wat::parse_str(FIXED_MEMORY_WAT).unwrap();
+    test.install_canister(canister_id, fixed_memory_wasm)
+        .unwrap();
+}
+
 fn test_memory_suite_grow_memory_entry_point_(payload: Vec<u8>) {
     let op = |test: &mut ExecutionTest, canister_id, ()| {
         let msg_id = test.ingress_raw(canister_id, "update", payload.clone()).0;
@@ -873,7 +965,8 @@ fn test_memory_suite_grow_memory_cleanup_callback() {
 #[test]
 fn test_memory_suite_take_snapshot_growing_memory_usage() {
     let op = |test: &mut ExecutionTest, canister_id, ()| {
-        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
         test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -894,7 +987,8 @@ fn test_memory_suite_take_snapshot_shrinking_memory_usage() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister_with_much_memory(test, canister_id);
         // Take a "large" canister snapshot.
-        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
         let res = test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -911,7 +1005,7 @@ fn test_memory_suite_take_snapshot_shrinking_memory_usage() {
     };
     let op = |test: &mut ExecutionTest, canister_id, snapshot_id| {
         let take_canister_snapshot_args =
-            TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id));
+            TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id), None, None);
         test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -931,7 +1025,8 @@ fn test_memory_suite_take_snapshot_shrinking_memory_usage() {
 fn test_memory_suite_replace_snapshot() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister(test, canister_id);
-        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
         let res = test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -942,7 +1037,7 @@ fn test_memory_suite_replace_snapshot() {
     };
     let op = |test: &mut ExecutionTest, canister_id, snapshot_id| {
         let take_canister_snapshot_args =
-            TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id));
+            TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id), None, None);
         test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -959,10 +1054,48 @@ fn test_memory_suite_replace_snapshot() {
 }
 
 #[test]
+fn test_memory_suite_take_snapshot_and_uninstall_code() {
+    let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        setup_fixed_memory_canister(test, canister_id);
+        // We upload a chunk to test that its memory usage is accounted for
+        // after uninstalling the canister.
+        let upload_chunk_args = UploadChunkArgs {
+            canister_id: canister_id.get(),
+            chunk: vec![42; 1 << 20],
+        };
+        test.subnet_message(Method::UploadChunk, upload_chunk_args.encode())
+            .unwrap();
+    };
+    let op = |test: &mut ExecutionTest, canister_id, ()| {
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, Some(true), None);
+        test.subnet_message(
+            Method::TakeCanisterSnapshot,
+            take_canister_snapshot_args.encode(),
+        )
+        .err()
+    };
+    let memory_usage_change = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        // Uninstalling code removes canister log allocated memory.
+        MemoryUsageChange::Decrease
+    } else {
+        MemoryUsageChange::None
+    };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        memory_usage_change,
+        setup,
+        op,
+    };
+    test_memory_suite(params);
+}
+
+#[test]
 fn test_memory_suite_load_snapshot_growing_memory_usage() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
-        setup_universal_canister(test, canister_id);
-        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        setup_universal_canister_with_much_memory(test, canister_id);
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
         let res = test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -996,7 +1129,8 @@ fn test_memory_suite_load_snapshot_shrinking_memory_usage() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister(test, canister_id);
         // Take a "small" snapshot.
-        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
         let res = test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -1035,7 +1169,8 @@ fn test_memory_suite_load_snapshot_shrinking_memory_usage() {
 fn test_memory_suite_delete_snapshot() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister_with_much_memory(test, canister_id);
-        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
         let res = test.subnet_message(
             Method::TakeCanisterSnapshot,
             take_canister_snapshot_args.encode(),
@@ -1259,7 +1394,7 @@ fn take_snapshot_and_read_metadata(
     test: &mut ExecutionTest,
     canister_id: CanisterId,
 ) -> (SnapshotId, ReadCanisterSnapshotMetadataResponse) {
-    let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
     let res = test.subnet_message(
         Method::TakeCanisterSnapshot,
         take_canister_snapshot_args.encode(),
@@ -1426,7 +1561,8 @@ fn test_memory_suite_upload_canister_snapshot_data_wasm_chunk() {
 
 fn update_memory_allocation_args(
     canister_id: CanisterId,
-    memory_allocation: u64,
+    memory_allocation: Option<u64>,
+    log_memory_limit: Option<u64>,
 ) -> UpdateSettingsArgs {
     // We also set log visibility to many selected principals
     // to make the payload of `update_settings` large enough
@@ -1434,13 +1570,16 @@ fn update_memory_allocation_args(
     // See `MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE` for more details.
     let allowed_viewers: Vec<_> = (0..10).map(|i| PrincipalId::new(29, [i; 29])).collect();
     let log_visibility = LogVisibilityV2::AllowedViewers(BoundedVec::new(allowed_viewers));
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_memory_allocation(memory_allocation)
-        .with_log_visibility(log_visibility)
-        .build();
+    let mut settings = CanisterSettingsArgsBuilder::new().with_log_visibility(log_visibility);
+    if let Some(memory_allocation) = memory_allocation {
+        settings = settings.with_memory_allocation(memory_allocation);
+    }
+    if let Some(log_memory_limit) = log_memory_limit {
+        settings = settings.with_log_memory_limit(log_memory_limit);
+    }
     UpdateSettingsArgs {
         canister_id: canister_id.get(),
-        settings,
+        settings: settings.build(),
         sender_canister_version: None,
     }
 }
@@ -1452,8 +1591,11 @@ fn test_memory_suite_increase_memory_allocation() {
             .canister_state(canister_id)
             .memory_allocation()
             .pre_allocated_bytes();
-        let update_settings_args =
-            update_memory_allocation_args(canister_id, current_memory_allocation.get() + 3 * GIB);
+        let update_settings_args = update_memory_allocation_args(
+            canister_id,
+            Some(current_memory_allocation.get() + 3 * GIB),
+            None,
+        );
         test.subnet_message(Method::UpdateSettings, update_settings_args.encode())
             .err()
     };
@@ -1475,7 +1617,8 @@ fn test_memory_suite_decrease_memory_allocation() {
             .pre_allocated_bytes();
         let update_settings_args = update_memory_allocation_args(
             canister_id,
-            current_memory_allocation.get().saturating_sub(2 * GIB),
+            Some(current_memory_allocation.get().saturating_sub(2 * GIB)),
+            None,
         );
         test.subnet_message(Method::UpdateSettings, update_settings_args.encode())
             .err()
@@ -1484,6 +1627,73 @@ fn test_memory_suite_decrease_memory_allocation() {
         scenario: Scenario::DecreaseMemoryAllocation,
         memory_usage_change: MemoryUsageChange::None,
         setup: setup_universal_canister_with_much_memory,
+        op,
+    };
+    test_memory_suite(params);
+}
+
+#[test]
+fn test_memory_suite_increase_log_memory_limit() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let op = |test: &mut ExecutionTest, canister_id: CanisterId, ()| {
+        let update_settings_args =
+            update_memory_allocation_args(canister_id, None, Some(1024 * KIB));
+        test.subnet_message(Method::UpdateSettings, update_settings_args.encode())
+            .err()
+    };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        memory_usage_change: MemoryUsageChange::Increase,
+        setup: setup_universal_canister,
+        op,
+    };
+    test_memory_suite(params);
+}
+
+#[test]
+fn test_memory_suite_increase_log_memory_limit_and_memory_allocation() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let op = |test: &mut ExecutionTest, canister_id: CanisterId, ()| {
+        let current_memory_allocation = test
+            .canister_state(canister_id)
+            .memory_allocation()
+            .pre_allocated_bytes();
+        let update_settings_args = update_memory_allocation_args(
+            canister_id,
+            Some(current_memory_allocation.get() + 128 * KIB),
+            Some(1024 * KIB),
+        );
+        test.subnet_message(Method::UpdateSettings, update_settings_args.encode())
+            .err()
+    };
+    let params = ScenarioParams {
+        scenario: Scenario::IncreaseLogAndMemoryAllocation,
+        memory_usage_change: MemoryUsageChange::Increase,
+        setup: setup_universal_canister,
+        op,
+    };
+    test_memory_suite(params);
+}
+
+#[test]
+fn test_memory_suite_decrease_log_memory_limit() {
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let op = |test: &mut ExecutionTest, canister_id: CanisterId, ()| {
+        let update_settings_args =
+            update_memory_allocation_args(canister_id, None, Some(256 * KIB));
+        test.subnet_message(Method::UpdateSettings, update_settings_args.encode())
+            .err()
+    };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        memory_usage_change: MemoryUsageChange::Decrease,
+        setup: setup_universal_canister_with_log_memory_limit,
         op,
     };
     test_memory_suite(params);

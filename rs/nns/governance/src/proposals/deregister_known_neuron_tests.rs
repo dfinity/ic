@@ -1,10 +1,15 @@
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     neuron_store::NeuronStore,
-    pb::v1::{DeregisterKnownNeuron, KnownNeuronData, governance_error::ErrorType},
+    pb::v1::{
+        DeregisterKnownNeuron, KnownNeuronData, SelfDescribingValue as SelfDescribingValuePb,
+        governance_error::ErrorType,
+    },
 };
 use assert_matches::assert_matches;
 use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_governance_api::SelfDescribingValue;
+use maplit::hashmap;
 use std::collections::BTreeMap;
 
 fn create_test_neuron_store() -> NeuronStore {
@@ -183,4 +188,20 @@ fn test_execute_nonexistent_neuron() {
 
     let result = request.execute(&mut neuron_store);
     assert_matches!(result, Err(_), "Execute should fail for nonexistent neuron");
+}
+
+#[test]
+fn test_deregister_known_neuron_to_self_describing() {
+    let deregister = DeregisterKnownNeuron {
+        id: Some(NeuronId { id: 456 }),
+    };
+
+    let value = SelfDescribingValue::from(SelfDescribingValuePb::from(deregister));
+
+    assert_eq!(
+        value,
+        SelfDescribingValue::Map(hashmap! {
+            "neuron_id".to_string() => SelfDescribingValue::from(456_u64),
+        })
+    );
 }

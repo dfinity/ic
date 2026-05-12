@@ -335,7 +335,6 @@ fn get_next_compact_target(
         Network::Bitcoin | Network::Signet => {
             compute_next_difficulty(network, store, prev_header, prev_height)
         }
-        &other => unreachable!("Unsupported network: {:?}", other),
     }
 }
 
@@ -389,7 +388,6 @@ fn find_next_difficulty_in_chain(
             pow_limit_bits
         }
         Network::Bitcoin | Network::Signet => pow_limit_bits,
-        &other => unreachable!("Unsupported network: {:?}", other),
     }
 }
 

@@ -33,6 +33,7 @@ use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types_private::{HttpMethod, TransformContext, TransformFunc};
+use ic_system_test_driver::driver::farm::VmAllocationMode;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::IcNodeContainer;
 use ic_system_test_driver::driver::{
@@ -41,7 +42,7 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpStressRequest, RemoteHttpStressResponse};
 use serde::{Deserialize, Serialize};
@@ -60,6 +61,7 @@ struct BenchmarkResult {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
+        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(stress_setup)
         .add_test(systest!(test))
         // This test takes consistently around 20 mintues, so setting 30 minutes to be safe.

@@ -27,13 +27,24 @@ use http::{
         IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
     },
 };
-use ic_agent::agent::route_provider::RoundRobinRouteProvider;
-use ic_gateway::ic_bn_lib::http::{
-    Client, ConnInfo,
-    headers::{X_IC_CANISTER_ID, X_REQUEST_ID, X_REQUESTED_WITH},
-    proxy::proxy,
+use ic_bn_lib_common::{
+    traits::http::Client,
+    types::http::{ClientOptions, ConnInfo},
 };
-use ic_gateway::{Cli, setup_router};
+use ic_gateway::{
+    Cli, ProvidesCustomDomains,
+    ic_bn_lib::{
+        custom_domains::LocalFileProvider,
+        http::{
+            dns::Resolver,
+            headers::{X_IC_CANISTER_ID, X_REQUEST_ID, X_REQUESTED_WITH},
+            proxy::proxy,
+        },
+        ic_agent::agent::route_provider::RoundRobinRouteProvider,
+        utils::health_manager::HealthManager,
+    },
+    setup_router,
+};
 use ic_types::{CanisterId, NodeId, PrincipalId, SubnetId, canister_http::CanisterHttpRequestId};
 use itertools::Itertools;
 use pocket_ic::RejectResponse;
@@ -57,9 +68,12 @@ use tokio::{
     task::{JoinHandle, JoinSet, spawn, spawn_blocking},
     time::{self, sleep},
 };
+use tokio_util::sync::CancellationToken;
 use tower::ServiceExt;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, error, trace};
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::reload;
 
 // The maximum wait time for a computation to finish synchronously.
 pub(crate) const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
@@ -247,6 +261,7 @@ pub enum OpOut {
     MessageId((EffectivePrincipal, Vec<u8>)),
     Topology(Topology),
     CanisterHttp(Vec<CanisterHttpRequest>),
+    CanisterSnapshotId(Vec<u8>),
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
@@ -264,6 +279,8 @@ pub enum PocketIcError {
     Forbidden(String),
     BlockmakerNotFound(NodeId),
     BlockmakerContainedInFailed(NodeId),
+    InvalidCanisterSnapshotDirectory(String),
+    CanisterSnapshotError(String),
 }
 
 impl std::fmt::Debug for OpOut {
@@ -329,6 +346,12 @@ impl std::fmt::Debug for OpOut {
             OpOut::Error(PocketIcError::Forbidden(msg)) => {
                 write!(f, "Forbidden({msg})")
             }
+            OpOut::Error(PocketIcError::InvalidCanisterSnapshotDirectory(msg)) => {
+                write!(f, "InvalidSnapshotDirectory({msg})")
+            }
+            OpOut::Error(PocketIcError::CanisterSnapshotError(msg)) => {
+                write!(f, "CanisterSnapshotError({msg})")
+            }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
             OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
             OpOut::MaybeSubnetId(Some(subnet_id)) => write!(f, "SubnetId({subnet_id})"),
@@ -355,6 +378,9 @@ impl std::fmt::Debug for OpOut {
             }
             OpOut::CanisterHttp(canister_http_reqeusts) => {
                 write!(f, "CanisterHttp({canister_http_reqeusts:?})")
+            }
+            OpOut::CanisterSnapshotId(snapshot_id) => {
+                write!(f, "CanisterSnapshotId({})", hex::encode(snapshot_id))
             }
         }
     }
@@ -622,6 +648,8 @@ impl ApiState {
                     forward_to: HttpGatewayBackend::PocketIcInstance(instance_id),
                     domains: instance_http_gateway_config.domains,
                     https_config: instance_http_gateway_config.https_config,
+                    domain_custom_provider_local_file: instance_http_gateway_config
+                        .domain_custom_provider_local_file,
                 };
                 let res = self
                     .create_http_gateway(http_gateway_config, listener.unwrap())
@@ -747,7 +775,7 @@ impl ApiState {
         let replica_url = match http_gateway_config.forward_to {
             HttpGatewayBackend::Replica(ref replica_url) => replica_url.clone(),
             HttpGatewayBackend::PocketIcInstance(instance_id) => {
-                format!("http://localhost:{pocket_ic_server_port}/instances/{instance_id}/")
+                format!("http://127.0.0.1:{pocket_ic_server_port}/instances/{instance_id}/")
             }
         };
         let agent = ic_agent::Agent::builder()
@@ -761,16 +789,22 @@ impl ApiState {
 
         let handle = Handle::new();
         let axum_handle = handle.clone();
-        let domains: Vec<_> = http_gateway_config
-            .domains
-            .clone()
-            .unwrap_or(vec!["localhost".to_string()])
-            .iter()
-            .map(|d| fqdn!(d))
-            .collect();
+        let domain_custom_provider_local_file = http_gateway_config
+            .domain_custom_provider_local_file
+            .clone();
+        let raw_domains = http_gateway_config.domains.clone();
         spawn(async move {
             let router = {
                 let mut args = vec!["".to_string()];
+                if raw_domains.is_none() {
+                    args.push("--domain-skip-authority-validation".to_string());
+                }
+                let domains: Vec<_> = raw_domains
+                    .clone()
+                    .unwrap_or(vec!["localhost".to_string()])
+                    .iter()
+                    .map(|d| fqdn!(d))
+                    .collect();
                 for d in &domains {
                     args.push("--domain".to_string());
                     args.push(d.to_string());
@@ -781,32 +815,60 @@ impl ApiState {
                 }
                 args.push("--domain-canister-id-from-query-params".to_string());
                 args.push("--domain-canister-id-from-referer".to_string());
+                let custom_domain_providers: Vec<Arc<dyn ProvidesCustomDomains>> =
+                    domain_custom_provider_local_file
+                        .map(|path| {
+                            Arc::new(LocalFileProvider::new(path.into()))
+                                as Arc<dyn ProvidesCustomDomains>
+                        })
+                        .into_iter()
+                        .collect();
+                args.push("--domain-custom-provider-poll-interval".to_string());
+                args.push("1s".to_string());
                 args.push("--ic-unsafe-root-key-fetch".to_string());
                 let cli = Cli::parse_from(args);
 
-                let http_client_opts: ic_gateway::ic_bn_lib::http::client::Options<
-                    ic_gateway::ic_bn_lib::http::dns::Resolver,
-                > = (&cli.http_client).into();
+                let resolver = Resolver::default();
+
+                let http_client_opts: ClientOptions = (&cli.http_client).into();
                 let http_client = Arc::new(
-                    ic_gateway::ic_bn_lib::http::ReqwestClient::new(http_client_opts.clone())
-                        .unwrap(),
+                    ic_gateway::ic_bn_lib::http::ReqwestClient::new(
+                        http_client_opts.clone(),
+                        Some(resolver.clone()),
+                    )
+                    .unwrap(),
                 );
+                let http_client_hyper = Arc::new(ic_gateway::ic_bn_lib::http::HyperClient::new(
+                    http_client_opts,
+                    resolver,
+                ));
 
                 let route_provider =
                     RoundRobinRouteProvider::new(vec![replica_url.clone()]).unwrap();
 
                 let mut tasks = ic_gateway::ic_bn_lib::tasks::TaskManager::new();
 
+                let (_, reload_handle) = reload::Layer::new(EnvFilter::new("warn"));
+                let health_manager = Arc::new(HealthManager::default());
                 let ic_gateway_router = setup_router(
                     &cli,
-                    vec![],
+                    custom_domain_providers,
+                    reload_handle,
                     &mut tasks,
+                    health_manager,
                     http_client,
+                    http_client_hyper,
                     Arc::new(route_provider),
                     &ic_gateway::ic_bn_lib::prometheus::Registry::new(),
+                    CancellationToken::new(),
+                    None,
+                    None,
+                    None,
                 )
                 .await
                 .unwrap();
+
+                tasks.start();
 
                 let backend_client = Arc::new(ReqwestClient::new(reqwest::Client::new()));
                 let cors_get = layer(&[Method::HEAD, Method::GET]);

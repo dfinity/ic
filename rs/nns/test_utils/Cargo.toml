@@ -59,9 +59,10 @@ ic-sns-wasm = { path = "../sns-wasm" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
-ic-xrc-types = "1.0.0"
+ic-xrc-types = { workspace = true }
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lifeline = { path = "../handlers/lifeline/impl" }

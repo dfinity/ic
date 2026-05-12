@@ -1,11 +1,14 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use ic_types::NumBytes;
-use memory_tracker::prefetching::{PrefetchingMemoryTracker, basic_signal_handler};
-use memory_tracker::{DirtyPageTracking, MemoryTracker};
+use memory_tracker::{
+    DirtyPageTracking, MemoryLimits, MemoryTracker, PrefetchingMemoryTracker, basic_signal_handler,
+};
 
 use libc::{self, c_void};
+use memory_tracker::signal_mutex::SignalMutex;
 use nix::sys::mman::{MapFlags, ProtFlags, mmap};
 use std::ptr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use lazy_static::lazy_static;
@@ -55,6 +58,8 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
                         no_op_logger(),
                         DirtyPageTracking::Track,
                         page_map.clone(),
+                        MemoryLimits::default(),
+                        Arc::new(SignalMutex::new(|_| {})),
                     )
                     .unwrap(),
                     page_map,
@@ -103,6 +108,8 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
                         no_op_logger(),
                         DirtyPageTracking::Track,
                         page_map.clone(),
+                        MemoryLimits::default(),
+                        Arc::new(SignalMutex::new(|_| {})),
                     )
                     .unwrap(),
                     page_map,

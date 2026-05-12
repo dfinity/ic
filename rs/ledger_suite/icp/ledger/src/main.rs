@@ -10,7 +10,7 @@ use ic_cdk::api::{
     call::{arg_data_raw, reply_raw},
     caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
 };
-use ic_cdk::futures::{in_executor_context, in_query_executor_context};
+use ic_cdk::futures::internals::{in_executor_context, in_query_executor_context};
 use ic_cdk::{post_upgrade, pre_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icrc1::endpoints::{StandardRecord, convert_transfer_error};
@@ -50,6 +50,7 @@ use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
+    icrc::metadata_key::MetadataKey,
     icrc3::archive::QueryArchiveFn,
     icrc21::lib::{
         build_icrc21_consent_info, build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
@@ -163,7 +164,7 @@ fn init(
             .blockchain
             .last_hash
             .map(|h| h.into_bytes())
-            .unwrap_or([0u8; 32]),
+            .unwrap_or([0_u8; 32]),
     );
 
     if let Some(archive_options) = archive_options {
@@ -295,7 +296,7 @@ fn icrc1_send_not_async(
         .expect("Minting canister id not initialized");
     let now = TimeStamp::from_nanos_since_unix_epoch(time());
     let (operation, effective_fee) = if to == minting_acc {
-        if fee.is_some() && fee.as_ref() != Some(&Nat::from(0u64)) {
+        if fee.is_some() && fee.as_ref() != Some(&Nat::from(0_u64)) {
             return Err(CoreTransferError::BadFee {
                 expected_fee: Tokens::ZERO,
             });
@@ -323,7 +324,7 @@ fn icrc1_send_not_async(
         if spender_account.is_some() {
             trap("the minter account cannot delegate mints");
         }
-        if fee.is_some() && fee.as_ref() != Some(&Nat::from(0u64)) {
+        if fee.is_some() && fee.as_ref() != Some(&Nat::from(0_u64)) {
             return Err(CoreTransferError::BadFee {
                 expected_fee: Tokens::ZERO,
             });
@@ -465,12 +466,14 @@ fn icrc1_supported_standards() -> Vec<StandardRecord> {
             url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-2".to_string(),
         });
     }
-    standards.push(
-        StandardRecord {
-            name: "ICRC-21".to_string(),
-            url: "https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md".to_string(),
-        }
-    );
+    standards.push(StandardRecord {
+        name: "ICRC-21".to_string(),
+        url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-21/ICRC-21.md".to_string(),
+    });
+    standards.push(StandardRecord {
+        name: "ICRC-10".to_string(),
+        url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-10/ICRC-10.md".to_string(),
+    });
 
     standards
 }
@@ -486,15 +489,24 @@ fn transfer_fee(_: TransferFeeArgs) -> TransferFee {
 }
 
 #[query]
-fn icrc1_metadata() -> Vec<(String, Value)> {
+fn icrc1_metadata() -> Vec<(MetadataKey, Value)> {
     vec![
-        Value::entry("icrc1:decimals", DECIMAL_PLACES as u64),
-        Value::entry("icrc1:name", LEDGER.read().unwrap().token_name.to_string()),
+        Value::entry(MetadataKey::ICRC1_DECIMALS, DECIMAL_PLACES as u64).unwrap(),
         Value::entry(
-            "icrc1:symbol",
+            MetadataKey::ICRC1_NAME,
+            LEDGER.read().unwrap().token_name.to_string(),
+        )
+        .unwrap(),
+        Value::entry(
+            MetadataKey::ICRC1_SYMBOL,
             LEDGER.read().unwrap().token_symbol.to_string(),
-        ),
-        Value::entry("icrc1:fee", LEDGER.read().unwrap().transfer_fee.get_e8s()),
+        )
+        .unwrap(),
+        Value::entry(
+            MetadataKey::ICRC1_FEE,
+            LEDGER.read().unwrap().transfer_fee.get_e8s(),
+        )
+        .unwrap(),
     ]
 }
 
@@ -623,7 +635,7 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
 
     let mut magic_bytes_reader = ic_cdk::api::stable::StableReader::default();
     const MAGIC_BYTES: &[u8; 3] = b"MGR";
-    let mut first_bytes = [0u8; 3];
+    let mut first_bytes = [0_u8; 3];
     let memory_manager_found = match magic_bytes_reader.read_exact(&mut first_bytes) {
         Ok(_) => first_bytes == *MAGIC_BYTES,
         Err(_) => false,
@@ -643,13 +655,13 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
             let ledger_state = ciborium::de::from_reader(&mut buffered_reader).expect(
                 "Failed to read the Ledger state from memory manager managed stable memory",
             );
-            let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
+            let mut pre_upgrade_instructions_counter_bytes = [0_u8; 8];
             pre_upgrade_instructions_consumed =
                 match buffered_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
                     Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
                     Err(_) => {
                         // If upgrading from a version that didn't write the instructions counter to stable memory
-                        0u64
+                        0_u64
                     }
                 };
             ledger_state
@@ -684,7 +696,7 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
                 .blockchain
                 .last_hash
                 .map(|h| h.into_bytes())
-                .unwrap_or([0u8; 32]),
+                .unwrap_or([0_u8; 32]),
         );
         PRE_UPGRADE_INSTRUCTIONS_CONSUMED
             .with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
@@ -1194,7 +1206,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "ledger_notify_method_calls",
-        0f64,
+        0_f64,
         "Total number of calls to the notify-method method.",
     )?;
     w.encode_counter(
@@ -1431,7 +1443,7 @@ async fn remove_approval(args: RemoveApprovalArgs) -> Result<Nat, ApproveError> 
             owner: Principal::anonymous(),
             subaccount: None,
         },
-        amount: Nat::from(0u64),
+        amount: Nat::from(0_u64),
         expected_allowance: None,
         expires_at: None,
         fee: args.fee,

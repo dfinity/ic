@@ -18,13 +18,14 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_metrics::buckets::{decimal_buckets_with_zero, linear_buckets};
+use ic_metrics::buckets::{binary_buckets_with_zero, decimal_buckets_with_zero, linear_buckets};
 use ic_replicated_state::{ExecutionState, NetworkTopology, ReplicatedState, SystemState};
-use ic_types::batch::CanisterCyclesCostSchedule;
+use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::{
     CanisterId, DiskBytes, NumBytes, NumInstructions, SubnetId, Time, messages::RequestMetadata,
     methods::FuncRef,
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounter, IntGaugeVec};
 use std::{
@@ -37,6 +38,7 @@ use crate::execution::common::{apply_canister_state_changes, update_round_limits
 use crate::execution_environment::{CompilationCostHandling, RoundLimits, as_round_instructions};
 use crate::metrics::CallTreeMetrics;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
+use more_asserts::assert_ge;
 
 #[doc(hidden)] // pub for usage in tests
 pub struct HypervisorMetrics {
@@ -45,6 +47,7 @@ pub struct HypervisorMetrics {
     max_complexity: Histogram,
     compilation_cache_size: IntGaugeVec,
     code_section_size: Histogram,
+    canister_log_delta_memory_usage: Histogram,
 }
 
 impl HypervisorMetrics {
@@ -80,6 +83,13 @@ impl HypervisorMetrics {
                     the current limit).",
                 linear_buckets(1024.0 * 1024.0, 1024.0 * 1204.0, 11), // 1MiB, 2MiB, ..., 11 MiB. Current limit is 11 MiB.
             ),
+
+            canister_log_delta_memory_usage: metrics_registry.histogram(
+                "canister_log_delta_memory_usage_bytes",
+                "Canisters log delta (per single execution) memory usage distribution in bytes.",
+                // 1 KiB (2^10) .. 8 MiB (2^23), plus zero — 15 total buckets (0 + 14 powers).
+                binary_buckets_with_zero(10, 23),
+            ),
         }
     }
 
@@ -110,6 +120,12 @@ impl HypervisorMetrics {
     }
 }
 
+impl CanisterLogMetrics for HypervisorMetrics {
+    fn observe_delta_log_size(&self, size: usize) {
+        self.canister_log_delta_memory_usage.observe(size as f64);
+    }
+}
+
 #[doc(hidden)]
 pub struct Hypervisor {
     wasm_executor: Arc<dyn WasmExecutor>,
@@ -118,6 +134,7 @@ pub struct Hypervisor {
     log: ReplicaLogger,
     cycles_account_manager: Arc<CyclesAccountManager>,
     compilation_cache: Arc<CompilationCache>,
+    create_execution_state_base_cost: NumInstructions,
     cost_to_compile_wasm_instruction: NumInstructions,
     dirty_page_overhead: NumInstructions,
     canister_guaranteed_callback_quota: usize,
@@ -147,10 +164,11 @@ impl Hypervisor {
         };
         let compilation_cost = self.cost_to_compile_wasm_instruction * wasm_size as u64;
         if let Err(err) = wasm_size_result {
-            round_limits.instructions -= as_round_instructions(compilation_cost);
+            let total_cost = self.create_execution_state_base_cost + compilation_cost;
+            round_limits.instructions -= as_round_instructions(total_cost);
             self.compilation_cache
                 .insert_err(&canister_module, err.clone().into());
-            return (compilation_cost, Err(err.into()));
+            return (total_cost, Err(err.into()));
         }
 
         let creation_result = self.wasm_executor.create_execution_state(
@@ -168,14 +186,15 @@ impl Hypervisor {
                         self.compilation_cache.disk_bytes(),
                     );
                 }
-                let adjusted_compilation_cost =
-                    compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
-                round_limits.instructions -= as_round_instructions(adjusted_compilation_cost);
-                (adjusted_compilation_cost, Ok(execution_state))
+                let total_cost = self.create_execution_state_base_cost
+                    + compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
+                round_limits.instructions -= as_round_instructions(total_cost);
+                (total_cost, Ok(execution_state))
             }
             Err(err) => {
-                round_limits.instructions -= as_round_instructions(compilation_cost);
-                (compilation_cost, Err(err))
+                let total_cost = self.create_execution_state_base_cost + compilation_cost;
+                round_limits.instructions -= as_round_instructions(total_cost);
+                (total_cost, Err(err))
             }
         }
     }
@@ -229,6 +248,9 @@ impl Hypervisor {
                     .with_dir(tempfile::tempdir_in(temp_dir).unwrap())
                     .build(),
             ),
+            create_execution_state_base_cost: config
+                .embedders_config
+                .create_execution_state_base_cost,
             cost_to_compile_wasm_instruction: config
                 .embedders_config
                 .cost_to_compile_wasm_instruction,
@@ -243,6 +265,7 @@ impl Hypervisor {
         log: ReplicaLogger,
         cycles_account_manager: Arc<CyclesAccountManager>,
         wasm_executor: Arc<dyn WasmExecutor>,
+        create_execution_state_base_cost: NumInstructions,
         cost_to_compile_wasm_instruction: NumInstructions,
         dirty_page_overhead: NumInstructions,
         canister_guaranteed_callback_quota: usize,
@@ -259,6 +282,7 @@ impl Hypervisor {
                     .with_dir(tempfile::tempdir().unwrap())
                     .build(),
             ),
+            create_execution_state_base_cost,
             cost_to_compile_wasm_instruction,
             dirty_page_overhead,
             canister_guaranteed_callback_quota,
@@ -309,8 +333,8 @@ impl Hypervisor {
             cost_schedule,
         );
         let (slice, mut output, canister_state_changes) = match execution_result {
-            WasmExecutionResult::Finished(slice, output, system_state_modifications) => {
-                (slice, output, system_state_modifications)
+            WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
+                (slice, output, canister_state_changes)
             }
             WasmExecutionResult::Paused(_, _) => {
                 unreachable!("DTS is not supported");
@@ -326,6 +350,7 @@ impl Hypervisor {
             time,
             network_topology,
             self.own_subnet_id,
+            &self.metrics,
             &self.log,
             state_changes_error,
             call_tree_metrics,
@@ -352,9 +377,9 @@ impl Hypervisor {
         network_topology: &NetworkTopology,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> WasmExecutionResult {
-        assert!(
-            execution_parameters.instruction_limits.message()
-                >= execution_parameters.instruction_limits.slice()
+        assert_ge!(
+            execution_parameters.instruction_limits.message(),
+            execution_parameters.instruction_limits.slice()
         );
         let caller = api_type.caller();
         let subnet_available_callbacks = round_limits.subnet_available_callbacks.max(0) as u64;
@@ -451,5 +476,9 @@ impl Hypervisor {
         let canister_module = CanisterModule::new(bytes);
         self.compilation_cache
             .insert_ok(&canister_module, compiled_module);
+    }
+
+    pub(crate) fn metrics(&self) -> &HypervisorMetrics {
+        &self.metrics
     }
 }

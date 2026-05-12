@@ -3,18 +3,21 @@
   <uuid>fd897da5-8017-41c8-8575-a706dba30766</uuid>
   <metadata>
     <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
-      <libosinfo:os id="http://ubuntu.com/ubuntu/24.04"/>
+      <libosinfo:os id="http://ubuntu.com/ubuntu/26.04"/>
     </libosinfo:libosinfo>
   </metadata>
   <memory unit='GiB'>12</memory>
   <currentMemory unit='GiB'>12</currentMemory>
+  <memoryBacking>
+      <hugepages/>
+  </memoryBacking>
   <vcpu placement='static'>56</vcpu>
   <cpu mode='host-model'/>
   <resource>
     <partition>/machine</partition>
   </resource>
   <os type='efi'>
-    <type arch='x86_64' machine='pc-q35-9.2'>hvm</type>
+    <type arch='x86_64' machine='pc-q35-10.2'>hvm</type>
     <boot dev='hd'/>
     <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
     <nvram>/var/lib/libvirt/qemu/nvram/guestos_VARS.fd</nvram>

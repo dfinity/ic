@@ -209,7 +209,7 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
 
     let fake_driver = fake::FakeDriver::default()
         .at(NOW_SECONDS)
-        .with_supply(Tokens::from_tokens(100).unwrap());
+        .with_supply(Tokens::from_tokens(1_000_000).unwrap());
 
     let governance_init = api::Governance {
         neurons: NEURONS.clone(),
@@ -228,13 +228,14 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
 
     set_governance_for_tests(governance);
     let governance = legacy_governance_mut();
-    schedule_tasks();
+    schedule_tasks(None);
 
     // Step 2: Call code under test.
     run_pending_timers_every_interval_for_count(
         Duration::from_secs(REWARD_DISTRIBUTION_PERIOD_SECONDS),
         1,
-    );
+    )
+    .await;
 
     // Step 3: Inspect result(s).
     let get_neuron_rewards = |neuron_id| {
@@ -256,6 +257,7 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
 
     // Remember, this can return NEGATIVE. Most of the time, you want to do
     // assert!(e.abs() < EPSILON, ...). Do NOT forget the .abs() !
+    #[track_caller]
     fn assert_ratio_relative_error_close(
         observed: (u64, u64),
         expected: (u64, u64),
@@ -276,7 +278,7 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
     assert_ratio_relative_error_close(
         rewards,
         weighted_voting_powers,
-        2e-6,
+        3e-9,
         "rewards vs. weighted_voting_powers",
     );
 
@@ -284,13 +286,13 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
     assert_ratio_relative_error_close(
         (rewards.0, reward_event.total_available_e8s_equivalent),
         (weighted_voting_powers.0, (32_100 + 80_000 + 20 * 80_000)),
-        2e-6,
+        3e-9,
         "2nd neuron (ID = 1043)",
     );
     assert_ratio_relative_error_close(
         (rewards.1, reward_event.total_available_e8s_equivalent),
         (weighted_voting_powers.1, (32_100 + 80_000 + 20 * 80_000)),
-        2e-6,
+        3e-9,
         "2nd neuron (ID = 1043)",
     );
 }

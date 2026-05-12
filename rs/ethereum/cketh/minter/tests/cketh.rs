@@ -7,8 +7,9 @@ use ic_cketh_minter::endpoints::events::{
     EventPayload, EventSource, TransactionReceipt, TransactionStatus, UnsignedTransaction,
 };
 use ic_cketh_minter::endpoints::{
-    CandidBlockTag, EthTransaction, GasFeeEstimate, MinterInfo, RetrieveEthStatus,
-    TxFinalizedStatus, WithdrawalError, WithdrawalStatus,
+    BurnMemo as EndpointsBurn, CandidBlockTag, DecodeLedgerMemoError, DecodeLedgerMemoResult,
+    DecodedMemo, EthTransaction, GasFeeEstimate, MemoType, MintMemo as EndpointsMint, MinterInfo,
+    RetrieveEthStatus, TxFinalizedStatus, WithdrawalError, WithdrawalStatus,
 };
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::memo::{BurnMemo, MintMemo};
@@ -33,11 +34,13 @@ use ic_cketh_test_utils::{
     MINTER_ADDRESS,
 };
 use ic_ethereum_types::Address;
+use ic_management_canister_types_private::CanisterStatusType;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::{Burn, Mint};
 use num_traits::cast::ToPrimitive;
 use serde_json::json;
+use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -103,7 +106,7 @@ fn should_deposit_and_withdraw() {
         let withdrawal_id = cketh.withdrawal_id().clone();
 
         let time = cketh.setup.env.get_time().as_nanos_since_unix_epoch();
-        let max_fee_per_gas = Nat::from(33003708258u64);
+        let max_fee_per_gas = Nat::from(33003708258_u64);
         let gas_limit = Nat::from(21_000_u32);
         let max_priority_fee_per_gas = Nat::from(1_500_000_000_u32);
 
@@ -129,7 +132,7 @@ fn should_deposit_and_withdraw() {
             });
         assert_eq!(cketh.balance_of(account), Nat::from(0_u8));
 
-        cketh.assert_has_unique_events_in_order(&vec![
+        cketh.assert_has_unique_events_in_order(&[
             EventPayload::AcceptedEthWithdrawalRequest {
                 withdrawal_amount: withdrawal_amount.clone(),
                 destination: destination.clone(),
@@ -161,7 +164,7 @@ fn should_deposit_and_withdraw() {
                 transaction_receipt: TransactionReceipt {
                     block_hash: DEFAULT_BLOCK_HASH.to_string(),
                     block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
-                    effective_gas_price: Nat::from(4277923390u64),
+                    effective_gas_price: Nat::from(4277923390_u64),
                     gas_used: Nat::from(21_000_u32),
                     status: TransactionStatus::Success,
                     transaction_hash:
@@ -226,7 +229,7 @@ fn should_block_deposit_from_blocked_address() {
             ..Default::default()
         })
         .expect_no_mint()
-        .assert_has_unique_events_in_order(&vec![EventPayload::InvalidDeposit {
+        .assert_has_unique_events_in_order(&[EventPayload::InvalidDeposit {
             event_source: EventSource {
                 transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
                 log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
@@ -531,7 +534,7 @@ fn should_reimburse() {
         })
     );
 
-    let max_fee_per_gas = Nat::from(33003708258u64);
+    let max_fee_per_gas = Nat::from(33003708258_u64);
     let gas_limit = Nat::from(21_000_u32);
 
     cketh
@@ -549,7 +552,7 @@ fn should_reimburse() {
             created_at_time: None,
             fee: None,
         })
-        .assert_has_unique_events_in_order(&vec![
+        .assert_has_unique_events_in_order(&[
             EventPayload::AcceptedEthWithdrawalRequest {
                 withdrawal_amount: withdrawal_amount.clone(),
                 destination: destination.clone(),
@@ -581,7 +584,7 @@ fn should_reimburse() {
                 transaction_receipt: TransactionReceipt {
                     block_hash: DEFAULT_BLOCK_HASH.to_string(),
                     block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
-                    effective_gas_price: Nat::from(4277923390u64),
+                    effective_gas_price: Nat::from(4277923390_u64),
                     gas_used: Nat::from(21_000_u32),
                     status: TransactionStatus::Failure,
                     transaction_hash:
@@ -663,7 +666,7 @@ fn should_resubmit_new_transaction_when_price_increased() {
             resubmitted_tx.clone(),
             resubmitted_tx_sig,
         )
-        .assert_has_unique_events_in_order(&vec![
+        .assert_has_unique_events_in_order(&[
             EventPayload::ReplacedTransaction {
                 withdrawal_id: withdrawal_id.clone(),
                 transaction: UnsignedTransaction {
@@ -689,7 +692,7 @@ fn should_resubmit_new_transaction_when_price_increased() {
                 transaction_receipt: TransactionReceipt {
                     block_hash: DEFAULT_BLOCK_HASH.to_string(),
                     block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
-                    effective_gas_price: Nat::from(4277923390u64),
+                    effective_gas_price: Nat::from(4277923390_u64),
                     gas_used: Nat::from(21_000_u32),
                     status: TransactionStatus::Success,
                     transaction_hash: format!("{resubmitted_tx_hash:?}"),
@@ -743,7 +746,7 @@ fn should_not_overlap_when_scrapping_logs() {
 
     cketh
         .check_audit_logs_and_upgrade(Default::default())
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: second_to_block.into(),
         }]);
 }
@@ -779,7 +782,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
         .check_audit_logs_and_upgrade(Default::default())
         .check_events()
         .skip(prev_events_len)
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
         }]);
 
@@ -801,7 +804,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
 
     cketh
         .check_audit_logs_and_upgrade(Default::default())
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: Nat::from(to_block),
         }]);
 }
@@ -829,6 +832,102 @@ fn should_scrap_one_block_when_at_boundary_with_last_finalized_block() {
 }
 
 #[test]
+fn should_be_able_to_stop_canister_during_scraping() {
+    const UNSCRAPED_BLOCKS: u64 = 5_000;
+    const MAX_BLOCK: u64 = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + UNSCRAPED_BLOCKS;
+
+    let cketh = CkEthSetup::default();
+    let max_eth_logs_block_range = cketh.as_ref().max_logs_block_range();
+    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .respond_for_all_with(block_response(MAX_BLOCK))
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    // Starts scraping to create open call contexts.
+    let mut from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
+    let mut to_block = from_block
+        .checked_add(BlockNumber::from(max_eth_logs_block_range))
+        .unwrap();
+
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": from_block,
+            "toBlock": to_block,
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
+            "topics": [cketh.received_eth_event_topic()]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    cketh.env.tick();
+    cketh.env.tick();
+    assert_eq!(
+        cketh.env.canister_http_request_contexts().len(),
+        4,
+        "Expected HTTPS outcalls since scraping is still in progress."
+    );
+
+    // At this point:
+    // - 1 block range has been scraped
+    // - The minter has made an HTTP outcall for the 2nd block range
+    // - There's an open call context waiting for that HTTP response
+    // Request to stop the minter (without providing responses to pending HTTP outcalls).
+    // The stop will NOT complete because there's an open call context.
+    cketh.try_stop_minter_without_stopping_ongoing_https_outcalls();
+    cketh.tick_until_minter_canister_status(CanisterStatusType::Stopping);
+
+    // Answer 2nd block range to be able to stop.
+    from_block = to_block.checked_increment().unwrap();
+    to_block = from_block
+        .checked_add(BlockNumber::from(max_eth_logs_block_range))
+        .unwrap();
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": from_block,
+            "toBlock": to_block,
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
+            "topics": [cketh.received_eth_event_topic()]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    cketh.tick_until_minter_canister_status(CanisterStatusType::Stopped);
+    assert_eq!(
+        cketh.env.canister_http_request_contexts(),
+        BTreeMap::default(),
+        "Unexpected pending HTTPS outcalls"
+    );
+
+    // Restarting the canister should resume scraping from where we stopped
+    cketh.start_minter();
+    cketh.tick_until_minter_canister_status(CanisterStatusType::Running);
+    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .respond_for_all_with(block_response(MAX_BLOCK))
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    from_block = to_block.checked_increment().unwrap();
+    to_block = from_block
+        .checked_add(BlockNumber::from(max_eth_logs_block_range))
+        .unwrap();
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": from_block,
+            "toBlock": to_block,
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
+            "topics": [cketh.received_eth_event_topic()]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(&cketh);
+}
+
+#[test]
 fn should_panic_when_last_finalized_block_in_the_past() {
     let cketh = CkEthSetup::default();
     let prev_events_len = cketh.get_all_events().len();
@@ -843,7 +942,7 @@ fn should_panic_when_last_finalized_block_in_the_past() {
         .check_audit_logs_and_upgrade(Default::default())
         .check_events()
         .skip(prev_events_len)
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
         }]);
 
@@ -869,7 +968,7 @@ fn should_panic_when_last_finalized_block_in_the_past() {
 
     cketh
         .check_audit_logs_and_upgrade(Default::default())
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: last_finalized_block.into(),
         }]);
 }
@@ -906,7 +1005,7 @@ fn should_skip_scrapping_when_last_seen_block_newer_than_current_height() {
             ethereum_block_height: Some(CandidBlockTag::Finalized),
             ..Default::default()
         })
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: safe_block_number.into(),
         }]);
     cketh.env.tick();
@@ -978,7 +1077,7 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
 
     cketh
         .check_audit_logs_and_upgrade(Default::default())
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: half_to_block.into(),
         }])
         .assert_has_no_event_satisfying(|event| matches!(event, EventPayload::SkippedBlock { .. }));
@@ -1055,7 +1154,7 @@ fn should_skip_single_block_containing_too_many_events() {
 
     cketh
         .check_audit_logs_and_upgrade(Default::default())
-        .assert_has_unique_events_in_order(&vec![
+        .assert_has_unique_events_in_order(&[
             EventPayload::SkippedBlock {
                 contract_address: Some(
                     ETH_HELPER_CONTRACT_ADDRESS
@@ -1155,6 +1254,50 @@ fn format_ethereum_address_to_eip_55(address: &str) -> String {
     Address::from_str(address).unwrap().to_string()
 }
 
+#[test]
+fn decode_ledger_memo_smoke() {
+    let cketh = CkEthSetup::default();
+
+    // mint memo
+    let buf = hex::decode("8202811a000e2a39").expect("failed to decode hex");
+    let result = cketh.decode_ledger_memo(MemoType::Mint, buf);
+    let expected: DecodeLedgerMemoResult = Ok(Some(DecodedMemo::Mint(Some(
+        EndpointsMint::ReimburseWithdrawal {
+            withdrawal_id: 928313_u64,
+        },
+    ))));
+    assert_eq!(
+        result, expected,
+        "Decoded Memo mismatch: {:?} vs {:?}",
+        result, expected
+    );
+
+    // burn memo
+    let buf =
+        hex::decode("82018366636b555344541a0174b2e25423c68fabd29a2e4ad98544d6c9d1992685397781")
+            .expect("failed to decode hex");
+    let result = cketh.decode_ledger_memo(MemoType::Burn, buf);
+    let expected: DecodeLedgerMemoResult =
+        Ok(Some(DecodedMemo::Burn(Some(EndpointsBurn::Erc20GasFee {
+            ckerc20_token_symbol: "ckUSDT".to_string(),
+            ckerc20_withdrawal_amount: Nat::from(24425186_u64),
+            to_address: "0x23c68FAbD29A2E4AD98544d6c9D1992685397781".to_string(),
+        }))));
+    assert_eq!(
+        result, expected,
+        "Decoded Memo mismatch: {:?} vs {:?}",
+        result, expected
+    );
+
+    // invalid memo
+    let result = cketh.decode_ledger_memo(MemoType::Mint, vec![]);
+    assert_matches!(
+        result,
+        Err(Some(DecodeLedgerMemoError::InvalidMemo(msg)))
+        if msg.contains("Error decoding MintMemo")
+    );
+}
+
 /// Tests with the EVM RPC canister
 mod cketh_evm_rpc {
     use super::*;
@@ -1168,5 +1311,29 @@ mod cketh_evm_rpc {
             .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3))
             .build()
             .expect_rpc_calls(&cketh);
+    }
+
+    #[test]
+    fn should_not_panic_when_evm_rpc_canister_is_stopped() {
+        let cketh = CkEthSetup::default();
+        // The minter starts right away by scraping the logs,
+        // which leads the state machine to panic if we were to stop directly the EVM RPC canister.
+        // So we first stop the minter to start fresh.
+        cketh.stop_minter();
+        cketh
+            .env
+            .stop_canister(cketh.evm_rpc_id)
+            .expect("Failed to stop EVM RPC canister");
+        cketh.start_minter();
+
+        cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+
+        for _ in 0..10 {
+            cketh.env.tick();
+            let logs = cketh.minter_canister_logs();
+            if let Some(panicking_log) = logs.iter().find(|l| l.content.contains("ic0.trap")) {
+                panic!("Minter panicked: {}", panicking_log.content);
+            }
+        }
     }
 }

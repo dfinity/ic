@@ -1,6 +1,6 @@
 use ic_agent::{Agent, Certificate, export::Principal, hash_tree::Label, lookup_value};
 use ic_base_types::SubnetId;
-use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, public_key_to_der};
+use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key_from_pem_file, public_key_to_der};
 use ic_recovery::{
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::{read_bytes, write_bytes},
@@ -100,7 +100,7 @@ impl AgentHelper {
                 nns_public_key_path.display()
             );
 
-            let nns_public_key = parse_threshold_sig_key(nns_public_key_path)
+            let nns_public_key = parse_threshold_sig_key_from_pem_file(nns_public_key_path)
                 .map_err(|err| agent_error("Failed to parse NNS public key", err))?;
             let der_bytes = public_key_to_der(&nns_public_key.into_bytes())
                 .map_err(|err| agent_error("Failed to convert the NNS public key to DER", err))?;
@@ -119,18 +119,21 @@ impl AgentHelper {
     }
 
     /// Reads the state tree and prunes it to contain only the following paths:
-    /// * /subnet_id/$subnet_id/public_key
-    /// * /subnet_id/$subnet_id/canister_ranges
+    /// * /subnet/$subnet_id/public_key
+    /// * /canister_ranges/$subnet_id
     ///
     /// See: https://internetcomputer.org/docs/current/references/ic-interface-spec#state-tree-subnet
     /// for more information
     pub(crate) fn read_subnet_data(&self, subnet_id: SubnetId) -> RecoveryResult<StateTree> {
-        let certificate = block_on(self.agent.read_state_raw(
+        let certificate = block_on(self.agent.read_subnet_state_raw(
             vec![
                 create_path(subnet_id, PUBLIC_KEY_LABEL),
-                create_path(subnet_id, CANISTER_RANGES_LABEL),
+                vec![
+                    CANISTER_RANGES_LABEL.into(),
+                    subnet_id.get().as_slice().into(),
+                ],
             ],
-            self.nns_registry,
+            subnet_id.get().into(),
         ))
         .map_err(|err| agent_error("Failed to read the state tree", err))?;
 

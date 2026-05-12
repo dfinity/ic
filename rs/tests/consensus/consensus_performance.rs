@@ -11,7 +11,7 @@
 // You can setup this test by executing the following commands:
 //
 //   $ ci/container/container-run.sh
-//   $ ict test consensus_performance_colocate --keepalive -- --test_tmpdir=./performance --test_env DOWNLOAD_P8S_DATA=1
+//   $ ict test consensus_performance_colocate --keepalive -- --test_tmpdir=./performance --test_env FETCH_TEST_DIR=1 --test_env DOWNLOAD_P8S_DATA=1
 //
 // The --test_tmpdir=./performance will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
@@ -63,11 +63,13 @@ use ic_consensus_system_test_utils::performance::{persist_metrics, setup_jaeger_
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::test_env_api::get_current_branch_version;
+use ic_system_test_driver::driver::test_env_api::get_ic_build_version;
 use ic_system_test_driver::driver::{
-    farm::HostFeature,
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-    prometheus_vm::{HasPrometheus, PrometheusVm},
+    farm::{HostFeature, VmAllocationMode},
+    ic::{
+        AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
+    },
+    prometheus_vm::HasPrometheus,
     simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, NnsCustomizations},
@@ -99,11 +101,6 @@ const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
 const SHOULD_SPAWN_JAEGER_VM: bool = false;
 
 fn setup(env: TestEnv) {
-    PrometheusVm::default()
-        .with_required_host_features(vec![HostFeature::Performance])
-        .start(&env)
-        .expect("Failed to start prometheus VM");
-
     let mut ic_builder = InternetComputer::new();
 
     if SHOULD_SPAWN_JAEGER_VM {
@@ -114,25 +111,23 @@ fn setup(env: TestEnv) {
         ));
     }
 
+    let max_ingress_bytes: u64 = std::env::var("MAX_INGRESS_BYTES_PER_BLOCK")
+        .expect("`MAX_INGRESS_BYTES_PER_BLOCK` env variable must be set")
+        .parse()
+        .unwrap();
+
     ic_builder
         .with_required_host_features(vec![HostFeature::Performance])
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_default_vm_resources(VmResources {
-                    vcpus: Some(NrOfVCPUs::new(64)),
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)),
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-                })
-                .add_nodes(1),
-        )
+        .with_resource_overrides(VmResourceOverrides {
+            vcpus: Some(NrOfVCPUs::new(64)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)),
+            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+        })
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(VmResources {
-                    vcpus: Some(NrOfVCPUs::new(64)),
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
-                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-                })
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .with_max_ingress_bytes_per_block(max_ingress_bytes)
                 .add_nodes(NODES_COUNT),
         )
         .setup_and_start(&env)
@@ -141,7 +136,6 @@ fn setup(env: TestEnv) {
         env.topology_snapshot(),
         NnsCustomizations::default(),
     );
-    env.sync_with_prometheus();
 
     let topology_snapshot = env.topology_snapshot();
     let (app_subnet, _) = get_app_subnet_and_node(&topology_snapshot);
@@ -149,7 +143,13 @@ fn setup(env: TestEnv) {
     app_subnet.apply_network_settings(NETWORK_SIMULATION);
 }
 
-fn test(env: TestEnv, message_size: usize, rps: f64) {
+#[derive(Debug)]
+struct TestParameters {
+    message_size: usize,
+    rps: f64,
+}
+
+fn test(env: TestEnv, TestParameters { message_size, rps }: TestParameters) {
     let logger = env.logger();
 
     // create the runtime that lives until this variable is dropped.
@@ -175,7 +175,7 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
     )
     .unwrap();
     if cfg!(feature = "upload_perf_systest_results") {
-        let branch_version = get_current_branch_version();
+        let branch_version = get_ic_build_version();
 
         rt.block_on(persist_metrics(
             branch_version,
@@ -185,25 +185,15 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
             LATENCY,
             BANDWIDTH_MBITS * 1_000_000,
             NODES_COUNT,
+            Some(
+                std::env::var("MAX_INGRESS_BYTES_PER_BLOCK")
+                    .expect("If we are here then we know the variable has been set")
+                    .parse()
+                    .expect("If we are here then we know the content is parsable"),
+            ),
             &logger,
         ));
     }
-}
-
-fn test_few_small_messages(env: TestEnv) {
-    test(env, 1, 1.0)
-}
-
-fn test_small_messages(env: TestEnv) {
-    test(env, 4_000, 500.0)
-}
-
-fn test_few_large_messages(env: TestEnv) {
-    test(env, 1_999_000, 1.0)
-}
-
-fn test_large_messages(env: TestEnv) {
-    test(env, 950_000, 4.0)
 }
 
 fn teardown(env: TestEnv) {
@@ -229,12 +219,13 @@ fn main() -> Result<()> {
         // Since we setup VMs in sequence it takes more than the default timeout
         // of 10 minutes to setup this large testnet so let's increase the timeout:
         .with_timeout_per_test(Duration::from_secs(60 * 30))
+        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(setup)
-        .add_test(systest!(test_few_small_messages))
-        .add_test(systest!(test_small_messages))
-        .add_test(systest!(test_few_large_messages))
-        .add_test(systest!(test_large_messages))
-        .with_teardown(teardown)
+        .add_test(systest!(test; TestParameters { message_size: 1, rps: 1.0 }))
+        .add_test(systest!(test; TestParameters { message_size: 9_500, rps: 1_000.0 }))
+        .add_test(systest!(test; TestParameters { message_size: 1_999_500, rps: 1.0 }))
+        .add_test(systest!(test; TestParameters { message_size: 1_999_500, rps: 5.0 }))
+        .add_teardown(teardown)
         .execute_from_args()?;
     Ok(())
 }

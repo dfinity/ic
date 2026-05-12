@@ -6,14 +6,14 @@ use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardRates, NodeRewardsTable};
-use ic_protobuf::registry::subnet::v1::SubnetListRecord;
+use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord, SubnetType};
 use ic_registry_canister_client::{
     RegistryDataStableMemory, StableCanisterRegistryClient, StorableRegistryKey,
     StorableRegistryValue, test_registry_data_stable_memory_impl,
 };
 use ic_registry_keys::{
     DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
-    NODE_REWARDS_TABLE_KEY, make_subnet_list_record_key,
+    NODE_REWARDS_TABLE_KEY, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
@@ -173,13 +173,13 @@ fn test_subnets_list_returns_expected_subnets() {
         "2025-07-13",
     );
 
-    let got = client.subnets_list(version.into());
+    let got = client.subnets_list(version.into()).unwrap();
 
     let expected: Vec<SubnetId> = vec![subnet_1, subnet_2];
 
     assert_eq!(got, expected);
 
-    let got = client.subnets_list(deleted_version.into());
+    let got = client.subnets_list(deleted_version.into()).unwrap();
 
     let expected: Vec<SubnetId> = vec![];
 
@@ -309,39 +309,48 @@ fn test_node_re_registered_after_deletion() {
 }
 
 #[test]
-fn test_node_operator_data_returns_expected_data() {
+fn test_get_subnet_record_returns_correct_type() {
     let client = client_for_tests();
+    let app_subnet: SubnetId = PrincipalId::new_subnet_test_id(10).into();
+    let cloud_engine_subnet: SubnetId = PrincipalId::new_subnet_test_id(12).into();
+    let missing_subnet: SubnetId = PrincipalId::new_subnet_test_id(99).into();
 
-    let version = 39667;
-    let no_2_id = PrincipalId::new_user_test_id(30);
-    let data = client
-        .node_operator_data(no_2_id, version.into())
-        .unwrap()
-        .unwrap();
+    let version = 39680_u64;
+    let date = "2025-07-17";
 
-    assert_eq!(data.node_provider_id, PrincipalId::new_user_test_id(20));
-    assert_eq!(data.dc_id, "y");
-    assert_eq!(data.region, "A");
-
-    let version = 39675;
-    let no_1_id = PrincipalId::new_user_test_id(10);
-    let data = client
-        .node_operator_data(no_1_id, version.into())
-        .unwrap()
-        .unwrap();
-
-    assert_eq!(data.node_provider_id, PrincipalId::new_user_test_id(20));
-    assert_eq!(data.dc_id, "x");
-    assert_eq!(data.region, "A");
-
-    let not_yet_added_no_version = 39652;
-    let data = client
-        .node_operator_data(no_1_id, not_yet_added_no_version.into())
-        .unwrap();
-
-    assert!(
-        data.is_none(),
-        "Data should not exist for version {} because Operator was not yet added",
-        not_yet_added_no_version
+    add_record_helper(
+        &make_subnet_record_key(app_subnet),
+        version,
+        Some(SubnetRecord {
+            subnet_type: SubnetType::Application as i32,
+            ..SubnetRecord::default()
+        }),
+        date,
     );
+    add_record_helper(
+        &make_subnet_record_key(cloud_engine_subnet),
+        version,
+        Some(SubnetRecord {
+            subnet_type: SubnetType::CloudEngine as i32,
+            ..SubnetRecord::default()
+        }),
+        date,
+    );
+
+    let app_record = client
+        .get_subnet_record(app_subnet, version.into())
+        .unwrap()
+        .unwrap();
+    assert_eq!(app_record.subnet_type(), SubnetType::Application);
+
+    let cloud_record = client
+        .get_subnet_record(cloud_engine_subnet, version.into())
+        .unwrap()
+        .unwrap();
+    assert_eq!(cloud_record.subnet_type(), SubnetType::CloudEngine);
+
+    let missing = client
+        .get_subnet_record(missing_subnet, version.into())
+        .unwrap();
+    assert!(missing.is_none());
 }

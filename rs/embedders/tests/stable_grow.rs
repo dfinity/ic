@@ -6,7 +6,8 @@ use proptest::{
 use canister_test::{CanisterInstallMode, InstallCodeArgs};
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use ic_test_utilities_execution_environment::ExecutionTestBuilder;
-use ic_types::{Cycles, ingress::WasmResult};
+use ic_types::ingress::WasmResult;
+use ic_types_cycles::Cycles;
 
 #[derive(Copy, Clone, Debug)]
 enum GrowCommand {
@@ -26,7 +27,7 @@ fn run_memory_grows(grows: &[GrowCommand]) {
 
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(LARGE_INSTRUCTION_LIMIT)
-        .with_instruction_limit_without_dts(LARGE_INSTRUCTION_LIMIT)
+        .with_instruction_limit_per_query_message(LARGE_INSTRUCTION_LIMIT)
         .with_slice_instruction_limit(LARGE_INSTRUCTION_LIMIT)
         .build();
     let canister_id = test.create_canister(Cycles::from(1_u128 << 64));

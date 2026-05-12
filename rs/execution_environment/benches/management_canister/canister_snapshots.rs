@@ -8,7 +8,8 @@ use ic_management_canister_types_private::{
     TakeCanisterSnapshotArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
 };
 use ic_state_machine_tests::StateMachine;
-use ic_types::{CanisterId, Cycles, SnapshotId};
+use ic_types::{CanisterId, SnapshotId};
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use rand::Rng;
 
@@ -48,7 +49,7 @@ fn env_and_canister(canister_size: u64) -> (StateMachine, CanisterId) {
 fn env_and_canister_snapshot(canister_size: u64) -> (StateMachine, CanisterId, SnapshotId) {
     let (env, canister_id) = env_and_canister(canister_size);
     let snapshot_id = env
-        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None, None, None))
         .expect("Error taking canister snapshot")
         .snapshot_id();
     (env, canister_id, snapshot_id)
@@ -124,8 +125,13 @@ fn take_canister_snapshot_bench<M: criterion::measurement::Measurement>(
         b.iter_batched(
             || env_and_canister(canister_size),
             |(env, canister_id)| {
-                env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
-                    .expect("Error taking canister snapshot");
+                env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(
+                    canister_id,
+                    None,
+                    None,
+                    None,
+                ))
+                .expect("Error taking canister snapshot");
                 env
             },
             BatchSize::SmallInput,
@@ -135,8 +141,13 @@ fn take_canister_snapshot_bench<M: criterion::measurement::Measurement>(
         b.iter_batched(
             || env_and_canister(canister_size),
             |(env, canister_id)| {
-                env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
-                    .expect("Error taking canister snapshot");
+                env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(
+                    canister_id,
+                    None,
+                    None,
+                    None,
+                ))
+                .expect("Error taking canister snapshot");
                 env.checkpointed_tick();
                 env
             },
@@ -157,6 +168,8 @@ fn replace_canister_snapshot_bench<M: criterion::measurement::Measurement>(
                 env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(
                     canister_id,
                     Some(snapshot_id),
+                    None,
+                    None,
                 ))
                 .expect("Error replacing canister snapshot");
                 env
@@ -171,6 +184,8 @@ fn replace_canister_snapshot_bench<M: criterion::measurement::Measurement>(
                 env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(
                     canister_id,
                     Some(snapshot_id),
+                    None,
+                    None,
                 ))
                 .expect("Error replacing canister snapshot");
                 env.checkpointed_tick();
@@ -212,6 +227,26 @@ fn load_canister_snapshot_bench<M: criterion::measurement::Measurement>(
                 ))
                 .expect("Error loading canister snapshot");
                 env.checkpointed_tick();
+                env
+            },
+            BatchSize::SmallInput,
+        );
+    });
+}
+
+fn read_canister_snapshot_metadata_bench<M: criterion::measurement::Measurement>(
+    group: &mut BenchmarkGroup<M>,
+    bench_name: &str,
+    canister_size: u64,
+) {
+    group.bench_function(bench_name, |b| {
+        b.iter_batched(
+            || env_and_canister_snapshot(canister_size),
+            |(env, canister_id, snapshot_id)| {
+                let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
+                let _ = env
+                    .read_canister_snapshot_metadata(&args)
+                    .expect("Error reading snapshot metadata");
                 env
             },
             BatchSize::SmallInput,
@@ -341,6 +376,12 @@ pub fn benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("load_canister_snapshot");
     for (name, size) in sizes {
         load_canister_snapshot_bench(&mut group, name, size);
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("read_canister_snapshot_metadata");
+    for (name, size) in sizes {
+        read_canister_snapshot_metadata_bench(&mut group, name, size);
     }
     group.finish();
 

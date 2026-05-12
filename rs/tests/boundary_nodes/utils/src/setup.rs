@@ -1,7 +1,9 @@
 use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
-    test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder},
+    test_env_api::{
+        HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder, SshSession,
+    },
 };
 use std::str::FromStr;
 
@@ -48,5 +50,11 @@ pub fn setup_ic(env: TestEnv, num_api_bns: usize) {
     for node in env.topology_snapshot().unassigned_nodes() {
         node.await_can_login_as_admin_via_ssh()
             .expect("Unassigned node didn't come up healthy");
+    }
+    info!(&log, "Checking health of API boundary nodes ...");
+    for api_bn in env.topology_snapshot().api_boundary_nodes() {
+        api_bn
+            .await_api_bn_healthy()
+            .expect("API Boundary Node didn't come up healthy");
     }
 }

@@ -1,12 +1,12 @@
-use candid::Nat;
+use candid::{Nat, Principal};
 use ic_ledger_core::tokens::TokensType;
-use icrc_ledger_types::icrc::generic_value::ICRC3Value;
+use icrc_ledger_types::icrc::generic_value::{ICRC3Value, Value};
 use icrc_ledger_types::icrc1::account::Account;
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 
 /// Helper function to convert Account to ICRC3Value array format
-fn account_to_icrc3_value(account: &Account) -> ICRC3Value {
+pub fn account_to_icrc3_value(account: &Account) -> ICRC3Value {
     let mut account_array = vec![ICRC3Value::Blob(ByteBuf::from(account.owner.as_slice()))];
     if let Some(subaccount) = account.subaccount {
         account_array.push(ICRC3Value::Blob(ByteBuf::from(subaccount)));
@@ -21,6 +21,7 @@ pub struct BlockBuilder<Tokens: TokensType> {
     fee_collector_block: Option<u64>,
     fee: Option<Tokens>,
     parent_hash: Option<Vec<u8>>,
+    btype: Option<String>,
 }
 
 impl<Tokens: TokensType> BlockBuilder<Tokens> {
@@ -33,6 +34,7 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
             fee_collector_block: None,
             fee: None,
             parent_hash: None,
+            btype: None,
         }
     }
 
@@ -60,6 +62,12 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
         self
     }
 
+    /// Set the block type
+    pub fn with_btype(mut self, btype: String) -> Self {
+        self.btype = Some(btype);
+        self
+    }
+
     /// Create a transfer operation
     pub fn transfer(self, from: Account, to: Account, amount: Tokens) -> TransferBuilder<Tokens> {
         TransferBuilder {
@@ -68,6 +76,23 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
             to,
             amount,
             spender: None,
+        }
+    }
+
+    /// Create a transfer_from operation
+    pub fn transfer_from(
+        self,
+        from: Account,
+        to: Account,
+        spender: Account,
+        amount: Tokens,
+    ) -> TransferBuilder<Tokens> {
+        TransferBuilder {
+            builder: self,
+            from,
+            to,
+            amount,
+            spender: Some(spender),
         }
     }
 
@@ -107,12 +132,68 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
         }
     }
 
-    /// Build the final ICRC3Value block
+    /// Create an authorized mint operation (ICRC-122)
+    pub fn authorized_mint(self, to: Account, amount: Tokens) -> AuthorizedMintBuilder<Tokens> {
+        AuthorizedMintBuilder {
+            builder: self,
+            to,
+            amount,
+            caller: None,
+            mthd: None,
+            reason: None,
+            created_at_time: None,
+        }
+    }
+
+    /// Create an authorized burn operation (ICRC-122)
+    pub fn authorized_burn(self, from: Account, amount: Tokens) -> AuthorizedBurnBuilder<Tokens> {
+        AuthorizedBurnBuilder {
+            builder: self,
+            from,
+            amount,
+            caller: None,
+            mthd: None,
+            reason: None,
+            created_at_time: None,
+        }
+    }
+
+    /// Create a fee collector block
+    pub fn fee_collector(
+        self,
+        fee_collector: Option<Account>,
+        caller: Option<Principal>,
+        ts: Option<u64>,
+        mthd: Option<String>,
+    ) -> FeeCollectorBuilder<Tokens> {
+        FeeCollectorBuilder {
+            builder: self,
+            fee_collector,
+            caller,
+            ts,
+            mthd,
+        }
+    }
+
+    /// Create a block with a custom transaction
+    pub fn custom_transaction(self) -> CustomTxBuilder<Tokens> {
+        CustomTxBuilder {
+            builder: self,
+            tx_fields: Default::default(),
+        }
+    }
+
+    /// Build the final ICRC3Value block with an operation
     fn build_with_operation(
         self,
-        op_name: &str,
+        op_name: Option<&str>,
         tx_fields: BTreeMap<String, ICRC3Value>,
     ) -> ICRC3Value {
+        self.build(op_name, tx_fields)
+    }
+
+    /// Build the final ICRC3Value block
+    fn build(self, op_name: Option<&str>, tx_fields: BTreeMap<String, ICRC3Value>) -> ICRC3Value {
         let mut block_map = BTreeMap::new();
 
         // Add timestamp
@@ -120,7 +201,9 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
 
         // Create transaction
         let mut tx_map = BTreeMap::new();
-        tx_map.insert("op".to_string(), ICRC3Value::Text(op_name.to_string()));
+        if let Some(op_name) = op_name {
+            tx_map.insert("op".to_string(), ICRC3Value::Text(op_name.to_string()));
+        }
 
         // Add operation-specific fields
         for (key, value) in tx_fields {
@@ -149,11 +232,16 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
 
         // Add parent hash for blocks after the first
         if self.block_id > 0 {
-            let parent_hash = self.parent_hash.unwrap_or_else(|| vec![0u8; 32]); // Simplified parent hash for testing
+            let parent_hash = self.parent_hash.unwrap_or_else(|| vec![0_u8; 32]); // Simplified parent hash for testing
             block_map.insert(
                 "phash".to_string(),
                 ICRC3Value::Blob(ByteBuf::from(parent_hash)),
             );
+        }
+
+        // Add fee collector block if specified
+        if let Some(btype) = self.btype {
+            block_map.insert("btype".to_string(), ICRC3Value::Text(btype));
         }
 
         ICRC3Value::Map(block_map)
@@ -187,7 +275,7 @@ impl<Tokens: TokensType> TransferBuilder<Tokens> {
             tx_fields.insert("spender".to_string(), account_to_icrc3_value(spender));
         }
 
-        self.builder.build_with_operation("xfer", tx_fields)
+        self.builder.build_with_operation(Some("xfer"), tx_fields)
     }
 }
 
@@ -205,7 +293,7 @@ impl<Tokens: TokensType> MintBuilder<Tokens> {
         tx_fields.insert("to".to_string(), account_to_icrc3_value(&self.to));
         tx_fields.insert("amt".to_string(), ICRC3Value::Nat(self.amount.into()));
 
-        self.builder.build_with_operation("mint", tx_fields)
+        self.builder.build_with_operation(Some("mint"), tx_fields)
     }
 }
 
@@ -234,7 +322,7 @@ impl<Tokens: TokensType> BurnBuilder<Tokens> {
             tx_fields.insert("spender".to_string(), account_to_icrc3_value(spender));
         }
 
-        self.builder.build_with_operation("burn", tx_fields)
+        self.builder.build_with_operation(Some("burn"), tx_fields)
     }
 }
 
@@ -266,10 +354,7 @@ impl<Tokens: TokensType> ApproveBuilder<Tokens> {
         let mut tx_fields = BTreeMap::new();
         tx_fields.insert("from".to_string(), account_to_icrc3_value(&self.from));
         tx_fields.insert("spender".to_string(), account_to_icrc3_value(&self.spender));
-        tx_fields.insert(
-            "allowance".to_string(),
-            ICRC3Value::Nat(self.allowance.into()),
-        );
+        tx_fields.insert("amt".to_string(), ICRC3Value::Nat(self.allowance.into()));
 
         if let Some(expected_allowance) = self.expected_allowance {
             tx_fields.insert(
@@ -285,7 +370,164 @@ impl<Tokens: TokensType> ApproveBuilder<Tokens> {
             );
         }
 
-        self.builder.build_with_operation("approve", tx_fields)
+        self.builder
+            .build_with_operation(Some("approve"), tx_fields)
+    }
+}
+
+/// Builder for authorized mint operations (ICRC-122)
+pub struct AuthorizedMintBuilder<Tokens: TokensType> {
+    builder: BlockBuilder<Tokens>,
+    to: Account,
+    amount: Tokens,
+    caller: Option<Principal>,
+    mthd: Option<String>,
+    reason: Option<String>,
+    created_at_time: Option<u64>,
+}
+
+impl<Tokens: TokensType> AuthorizedMintBuilder<Tokens> {
+    pub fn with_caller(mut self, caller: Principal) -> Self {
+        self.caller = Some(caller);
+        self
+    }
+
+    pub fn with_mthd(mut self, mthd: String) -> Self {
+        self.mthd = Some(mthd);
+        self
+    }
+
+    pub fn with_reason(mut self, reason: String) -> Self {
+        self.reason = Some(reason);
+        self
+    }
+
+    pub fn with_created_at_time(mut self, ts: u64) -> Self {
+        self.created_at_time = Some(ts);
+        self
+    }
+
+    pub fn build(mut self) -> ICRC3Value {
+        self.builder.btype = Some("122mint".to_string());
+        let mut tx_fields = BTreeMap::new();
+        tx_fields.insert("to".to_string(), account_to_icrc3_value(&self.to));
+        tx_fields.insert("amt".to_string(), ICRC3Value::Nat(self.amount.into()));
+        if let Some(caller) = &self.caller {
+            tx_fields.insert("caller".to_string(), ICRC3Value::from(Value::from(*caller)));
+        }
+        if let Some(mthd) = self.mthd {
+            tx_fields.insert("mthd".to_string(), ICRC3Value::Text(mthd));
+        }
+        if let Some(reason) = self.reason {
+            tx_fields.insert("reason".to_string(), ICRC3Value::Text(reason));
+        }
+        if let Some(ts) = self.created_at_time {
+            tx_fields.insert("ts".to_string(), ICRC3Value::Nat(Nat::from(ts)));
+        }
+        self.builder.build_with_operation(None, tx_fields)
+    }
+}
+
+/// Builder for authorized burn operations (ICRC-122)
+pub struct AuthorizedBurnBuilder<Tokens: TokensType> {
+    builder: BlockBuilder<Tokens>,
+    from: Account,
+    amount: Tokens,
+    caller: Option<Principal>,
+    mthd: Option<String>,
+    reason: Option<String>,
+    created_at_time: Option<u64>,
+}
+
+impl<Tokens: TokensType> AuthorizedBurnBuilder<Tokens> {
+    pub fn with_caller(mut self, caller: Principal) -> Self {
+        self.caller = Some(caller);
+        self
+    }
+
+    pub fn with_mthd(mut self, mthd: String) -> Self {
+        self.mthd = Some(mthd);
+        self
+    }
+
+    pub fn with_reason(mut self, reason: String) -> Self {
+        self.reason = Some(reason);
+        self
+    }
+
+    pub fn with_created_at_time(mut self, ts: u64) -> Self {
+        self.created_at_time = Some(ts);
+        self
+    }
+
+    pub fn build(mut self) -> ICRC3Value {
+        self.builder.btype = Some("122burn".to_string());
+        let mut tx_fields = BTreeMap::new();
+        tx_fields.insert("from".to_string(), account_to_icrc3_value(&self.from));
+        tx_fields.insert("amt".to_string(), ICRC3Value::Nat(self.amount.into()));
+        if let Some(caller) = &self.caller {
+            tx_fields.insert("caller".to_string(), ICRC3Value::from(Value::from(*caller)));
+        }
+        if let Some(mthd) = self.mthd {
+            tx_fields.insert("mthd".to_string(), ICRC3Value::Text(mthd));
+        }
+        if let Some(reason) = self.reason {
+            tx_fields.insert("reason".to_string(), ICRC3Value::Text(reason));
+        }
+        if let Some(ts) = self.created_at_time {
+            tx_fields.insert("ts".to_string(), ICRC3Value::Nat(Nat::from(ts)));
+        }
+        self.builder.build_with_operation(None, tx_fields)
+    }
+}
+
+/// Builder for fee collector operations
+pub struct FeeCollectorBuilder<Tokens: TokensType> {
+    builder: BlockBuilder<Tokens>,
+    fee_collector: Option<Account>,
+    caller: Option<Principal>,
+    ts: Option<u64>,
+    mthd: Option<String>,
+}
+
+impl<Tokens: TokensType> FeeCollectorBuilder<Tokens> {
+    /// Build the fee collector block
+    pub fn build(self) -> ICRC3Value {
+        let mut tx_fields = BTreeMap::new();
+        if let Some(fee_collector) = &self.fee_collector {
+            tx_fields.insert(
+                "fee_collector".to_string(),
+                account_to_icrc3_value(fee_collector),
+            );
+        }
+        if let Some(caller) = &self.caller {
+            tx_fields.insert("caller".to_string(), ICRC3Value::from(Value::from(*caller)));
+        }
+        if let Some(ts) = self.ts {
+            tx_fields.insert("ts".to_string(), ICRC3Value::Nat(Nat::from(ts)));
+        }
+        if let Some(mthd) = self.mthd {
+            tx_fields.insert("mthd".to_string(), ICRC3Value::Text(mthd.to_string()));
+        }
+        self.builder.build_with_operation(None, tx_fields)
+    }
+}
+
+/// Builder for custom transactions
+pub struct CustomTxBuilder<Tokens: TokensType> {
+    builder: BlockBuilder<Tokens>,
+    tx_fields: BTreeMap<String, ICRC3Value>,
+}
+
+impl<Tokens: TokensType> CustomTxBuilder<Tokens> {
+    pub fn add_field(mut self, name: &str, value: ICRC3Value) -> Self {
+        self.tx_fields.insert(name.to_string(), value);
+        self
+    }
+
+    /// Build the custom transaction block
+    pub fn build(self) -> ICRC3Value {
+        self.builder.build(None, self.tx_fields)
     }
 }
 

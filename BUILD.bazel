@@ -6,14 +6,18 @@ load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 package(default_visibility = ["//visibility:public"])
 
 # WARNING! .git is the directory, not a regular file! only consume it in your rules if you know how exactly bazel works and understand implications!
+# The mainnet routing table can be updated using:
+# ```
+# bazel run //rs/registry/admin:ic-admin -- get-routing-table --json --registry-version "$(bazel run //rs/registry/admin:ic-admin -- get-registry-version)" > ./mainnet-routing-table.json
+# ```
 exports_files([
     ".git",
     "buf.yaml",
     "clippy.toml",
     "rustfmt.toml",
-    "WORKSPACE.bazel",
     "mainnet-canister-revisions.json",
     "mainnet-icos-images.bzl",
+    "mainnet-routing-table.json",
 ])
 
 alias(
@@ -22,18 +26,18 @@ alias(
 )
 
 alias(
-    name = "ruff-format",
-    actual = "//pre-commit:ruff-format",
+    name = "ruff-fix",
+    actual = "//pre-commit:ruff-fix",
 )
 
 alias(
     name = "protobuf-format",
-    actual = "//pre-commit:protobuf-format",
+    actual = "//pre-commit:buf-fix",
 )
 
 alias(
     name = "shfmt-format",
-    actual = "//pre-commit:shfmt-format",
+    actual = "//pre-commit:shfmt-fix",
 )
 
 alias(
@@ -160,8 +164,34 @@ alias(
 alias(
     name = "dfx",
     actual = select({
-        "@platforms//os:osx": "@dfx-x86_64-darwin//:dfx",  # No arm64 build for this version, use amd64 for now.
+        "@bazel_tools//src/conditions:darwin_x86_64": "@dfx-x86_64-darwin//:dfx",
+        "@bazel_tools//src/conditions:darwin_arm64": "@dfx-aarch64-darwin//:dfx",
         "@bazel_tools//src/conditions:linux_x86_64": "@dfx-x86_64-linux//:dfx",
+        "@bazel_tools//src/conditions:linux_aarch64": "@dfx-aarch64-linux//:dfx",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
+### pebble & pebble DNS, used in Boundary Nodes ACME testing
+
+alias(
+    name = "pebble",
+    actual = select({
+        "@bazel_tools//src/conditions:darwin_x86_64": "@pebble-x86_64-darwin//:pebble-bin",
+        "@bazel_tools//src/conditions:darwin_arm64": "@pebble-aarch64-darwin//:pebble-bin",
+        "@bazel_tools//src/conditions:linux_x86_64": "@pebble-x86_64-linux//:pebble-bin",
+        "@bazel_tools//src/conditions:linux_aarch64": "@pebble-aarch64-linux//:pebble-bin",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
+alias(
+    name = "pebble-challtestsrv",
+    actual = select({
+        "@bazel_tools//src/conditions:darwin_x86_64": "@pebble-challtestsrv-x86_64-darwin//:pebble-challtestsrv-bin",
+        "@bazel_tools//src/conditions:darwin_arm64": "@pebble-challtestsrv-aarch64-darwin//:pebble-challtestsrv-bin",
+        "@bazel_tools//src/conditions:linux_x86_64": "@pebble-challtestsrv-x86_64-linux//:pebble-challtestsrv-bin",
+        "@bazel_tools//src/conditions:linux_aarch64": "@pebble-challtestsrv-aarch64-linux//:pebble-challtestsrv-bin",
         "//conditions:default": "@platforms//:incompatible",
     }),
 )
@@ -268,11 +298,11 @@ upload_artifacts(
     name = "artifact-uploader",
 )
 
-# Test suite for super-fast tests (should only take a couple seconds to run).
-test_suite(
-    name = "insta_tests",
-    tests = [
-        "//bazel:buildifier_test",
-        "//bazel:gazelle_test",
+# Platform that can be used on arm64-darwin to cross compile to x86_64-darwin
+platform(
+    name = "macos-intel",
+    constraint_values = [
+        "@platforms//os:osx",
+        "@platforms//cpu:x86_64",
     ],
 )

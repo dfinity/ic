@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+if [ -n "${CRITERION_HOME:-}" ]; then
+    echo "Benchmark results will be placed in CRITERION_HOME: '$CRITERION_HOME'"
+fi
+
 # When Cargo runs benchmarks, it passes the --bench or --test command-line arguments to
 # the benchmark executables. Criterion.rs looks for these arguments and tries to either
 # run benchmarks or run in test mode. In particular, when you run cargo test --benches
@@ -11,7 +15,7 @@ set -euo pipefail
 # present, or when --bench and --test are both present.
 #
 # https://bheisler.github.io/criterion.rs/book/faq.html#when-i-run-benchmark-executables-directly-without-using-cargo-they-just-print-success-why
-CMD="${BAZEL_DEFS_BENCH_PREFIX}${BAZEL_DEFS_BENCH_BIN} --bench $@"
+CMD="${BAZEL_DEFS_BENCH_PREFIX}${BAZEL_DEFS_BENCH_BIN} --bench ${args[@]}"
 
 echo "running ${CMD}"
 ${CMD}

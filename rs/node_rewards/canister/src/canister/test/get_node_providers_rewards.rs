@@ -322,12 +322,14 @@ fn test_get_node_providers_rewards() {
         algorithm_version: None,
     };
     let result_endpoint =
-        NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone());
+        NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone())
+            .now_or_never()
+            .expect("Future should resolve immediately in test");
 
     let expected = NodeProvidersRewards {
-        algorithm_version: RewardsCalculationAlgorithmVersion::default(),
+        algorithm_version: RewardsCalculationAlgorithmVersion { version: 2 },
         rewards_xdr_permyriad: btreemap! {
-            test_provider_id(1).0 => 137200,
+            test_provider_id(1).0 => 135200,
             test_provider_id(2).0 => 10000,
         },
     };

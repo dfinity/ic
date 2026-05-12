@@ -102,16 +102,27 @@ fn create_and_verify_dealing(
         format!("ic-crypto-create-dealing-encryption-seed-{dealer_index}").as_bytes(),
     );
 
-    let dealing = create_dealing(
-        keygen_seed,
-        encryption_seed,
-        threshold,
-        receiver_keys,
-        epoch,
-        dealer_index,
-        resharing_secret,
-    )
-    .expect("Unable to create dealing");
+    let dealing = match resharing_secret {
+        Some(secret) => create_resharing_dealing(
+            keygen_seed,
+            encryption_seed,
+            threshold,
+            receiver_keys,
+            epoch,
+            dealer_index,
+            secret,
+        )
+        .expect("Unable to create resharing dealing"),
+        None => create_dealing(
+            keygen_seed,
+            encryption_seed,
+            threshold,
+            receiver_keys,
+            epoch,
+            dealer_index,
+        )
+        .expect("Unable to create dealing"),
+    };
 
     assert!(verify_dealing(dealer_index, threshold, epoch, receiver_keys, &dealing).is_ok());
 
@@ -120,7 +131,7 @@ fn create_and_verify_dealing(
 
 #[test]
 fn test_create_dealings_and_transcript_without_resharing_secret_is_stable() {
-    let nodes = 4u32;
+    let nodes = 4_u32;
     let threshold = NumberOfNodes::from(2);
 
     let (receiver_pk, receiver_sk) = create_receiver_keys(4);
@@ -172,7 +183,7 @@ fn test_create_dealings_and_transcript_without_resharing_secret_is_stable() {
 
 #[test]
 fn test_create_dealings_and_transcript_with_resharing_secret_is_stable() {
-    let nodes = 4u32;
+    let nodes = 4_u32;
     let threshold = NumberOfNodes::from(2);
     let (receiver_pk, receiver_sk) = create_receiver_keys(nodes as usize);
     let epoch = Epoch::from(2);
@@ -209,7 +220,7 @@ fn test_create_dealings_and_transcript_with_resharing_secret_is_stable() {
     let fixed0 = hex::decode("9772c16106e9c70b2073dfe17989225dd10f3adb675365fc6d833587ad4cbd3ae692ad1e20679003f676b0b089e83feb058b3e8b9fc9552e30787cb4a541a1c3bf67a02e91fc648b2c19f4bb333e14c5c73b9bfbc5ec56dadabb07ff15d45124").unwrap();
     coefficients.push(PublicKeyBytes(fixed0.try_into().expect("Size checked")));
     for _ in 1..nodes {
-        let mut coefficient = [0u8; 96];
+        let mut coefficient = [0_u8; 96];
         rng.fill_bytes(&mut coefficient);
         coefficients.push(PublicKeyBytes(coefficient));
     }

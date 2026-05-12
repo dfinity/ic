@@ -111,7 +111,7 @@ impl CanisterEnv {
             // inception.
             rng: {
                 let now_nanos = now_nanoseconds() as u128;
-                let mut seed = [0u8; 32];
+                let mut seed = [0_u8; 32];
                 seed[..16].copy_from_slice(&now_nanos.to_be_bytes());
                 seed[16..32].copy_from_slice(&now_nanos.to_be_bytes());
                 ChaCha20Rng::from_seed(seed)
@@ -629,8 +629,8 @@ fn init_timers() {
         ..Default::default()
     });
 
-    let new_timer_id = ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, || {
-        ic_cdk::spawn(run_periodic_tasks())
+    let new_timer_id = ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, async || {
+        run_periodic_tasks().await
     });
     TIMER_ID.with(|saved_timer_id| {
         let mut saved_timer_id = saved_timer_id.borrow_mut();

@@ -1,28 +1,28 @@
 use crate::tls::SkipServerCertificateCheck;
 use anyhow::{Context, Error, Result, anyhow, bail};
-use attestation::attestation_package::generate_attestation_package;
-use attestation::custom_data::DerEncodedCustomData;
-use attestation::registry::get_blessed_guest_launch_measurements_from_registry;
-use attestation::verification::{SevRootCertificateVerification, verify_attestation_package};
+use attestation::attestation_package::{
+    AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
+};
 use config_types::GuestOSConfig;
 use der::asn1::OctetStringRef;
+use guest_disk::sev::DiskCryptoOps;
 use guest_upgrade_shared::api::disk_encryption_key_exchange_service_client::DiskEncryptionKeyExchangeServiceClient;
 use guest_upgrade_shared::api::{GetDiskEncryptionKeyRequest, SignalStatusRequest};
 use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
 use http::Uri;
 use hyper_rustls::{HttpsConnectorBuilder, MaybeHttpsStream};
 use hyper_util::rt::TokioIo;
-use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_pem_file;
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client::client::RegistryClientImpl;
+use ic_registry_client_helpers::blessed_replica_version::BlessedReplicaVersionRegistry;
 use ic_registry_nns_data_provider_wrappers::CertifiedNnsDataProvider;
-use ic_sev::guest::firmware::SevGuestFirmware;
 use rcgen::CertifiedKey;
 use rustls::ClientConfig;
 use rustls::pki_types::PrivateKeyDer;
 use rustls::version::TLS13;
-use sev::firmware::guest::AttestationReport;
-use sev::parser::ByteParser;
+use sev_guest::attestation_package::generate_attestation_package;
+use sev_guest::firmware::SevGuestFirmware;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::TcpStream;
@@ -37,20 +37,21 @@ mod tls;
 const NNS_PUBLIC_KEY_PATH: &str = "/run/config/nns_public_key.pem";
 
 type ServiceClientType = DiskEncryptionKeyExchangeServiceClient<Channel>;
-pub type CanOpenStore =
-    Box<dyn Fn(&Path, &Path, &mut dyn SevGuestFirmware) -> Result<bool> + Send + Sync>;
 
 pub struct DiskEncryptionKeyExchangeClientAgent {
     guestos_config: GuestOSConfig,
     sev_firmware: Box<dyn SevGuestFirmware>,
     nns_registry_client: Arc<dyn RegistryClient>,
+    store_device_path: PathBuf,
     previous_key_path: PathBuf,
+    store_luks_header_path: PathBuf,
     server_port: u16,
     sev_root_certificate_verification: SevRootCertificateVerification,
-    // We mock can_open_store for easier testing, in production it calls
-    // guest_disk::sev::can_open_store, the signature corresponds to that function
-    can_open_store: CanOpenStore,
+    crypto_ops: Box<dyn DiskCryptoOps>,
 }
+
+// Allow 32MB ingress messages - we need 16MB for the LUKS header
+const MAX_INCOMING_MESSAGE_SIZE: usize = 32 * 1024 * 1024;
 
 impl DiskEncryptionKeyExchangeClientAgent {
     pub fn new(
@@ -58,18 +59,22 @@ impl DiskEncryptionKeyExchangeClientAgent {
         sev_root_certificate_verification: SevRootCertificateVerification,
         sev_firmware: Box<dyn SevGuestFirmware>,
         nns_registry_client: Arc<dyn RegistryClient>,
-        can_open_store: CanOpenStore,
+        crypto_ops: Box<dyn DiskCryptoOps>,
+        store_device_path: PathBuf,
         previous_key_path: PathBuf,
+        store_luks_header_path: PathBuf,
         server_port: u16,
     ) -> Self {
         DiskEncryptionKeyExchangeClientAgent {
             guestos_config,
             sev_firmware,
             nns_registry_client,
+            store_device_path,
             previous_key_path,
+            store_luks_header_path,
             server_port,
             sev_root_certificate_verification,
-            can_open_store,
+            crypto_ops,
         }
     }
 
@@ -100,23 +105,27 @@ impl DiskEncryptionKeyExchangeClientAgent {
         // If we can already open the store, we don't need to run the key exchange.
         // (We still have to call signal_status, since the server is expecting us to signal
         // success)
-        let can_open_store = (self.can_open_store)(
-            Path::new("/dev/vda10"),
+        let can_open_store = self.crypto_ops.can_open_store(
+            &self.store_device_path,
             &self.previous_key_path,
+            &self.store_luks_header_path,
             self.sev_firmware.as_mut(),
         )?;
 
         let retrieve_status = if can_open_store {
-            println!("/dev/vda10 can be opened with our derived key, no need to run exchange");
+            println!(
+                "{} can be opened with our derived key, no need to run exchange",
+                self.store_device_path.display()
+            );
             Ok(())
         } else {
-            self.retrieve_disk_encryption_key(
+            self.retrieve_disk_encryption_data(
                 &mut upgrade_service_client,
                 &my_public_key_der,
                 &server_public_key_der,
             )
             .await
-            .context("Failed to retrieve disk encryption key")
+            .context("Failed to retrieve disk encryption data")
         };
 
         let _ignored = upgrade_service_client
@@ -129,18 +138,18 @@ impl DiskEncryptionKeyExchangeClientAgent {
         retrieve_status
     }
 
-    async fn retrieve_disk_encryption_key(
+    async fn retrieve_disk_encryption_data(
         &mut self,
         upgrade_service_client: &mut ServiceClientType,
         my_public_key_der: &[u8],
         server_public_key_der: &[u8],
     ) -> Result<()> {
-        let custom_data = DerEncodedCustomData(GetDiskEncryptionKeyTokenCustomData {
+        let custom_data = GetDiskEncryptionKeyTokenCustomData {
             client_tls_public_key: OctetStringRef::new(my_public_key_der)
                 .expect("Could not encode public key"),
             server_tls_public_key: OctetStringRef::new(server_public_key_der)
                 .expect("Could not encode server public key"),
-        });
+        };
         let my_attestation_package = generate_attestation_package(
             self.sev_firmware.as_mut(),
             self.guestos_config
@@ -151,56 +160,92 @@ impl DiskEncryptionKeyExchangeClientAgent {
         )
         .context("Failed to generate attestation package")?;
 
-        let my_attestation_report = AttestationReport::from_bytes(
-            my_attestation_package
-                .attestation_report
-                .as_ref()
-                .context("My attestation report is missing")?,
-        )
-        .context("Failed to parse my attestation report")?;
+        let my_attestation_report = *my_attestation_package.attestation_report();
 
-        let get_key_response = upgrade_service_client
+        let disk_encryption_data = upgrade_service_client
             .get_disk_encryption_key(GetDiskEncryptionKeyRequest {
-                sev_attestation_package: Some(my_attestation_package),
+                sev_attestation_package: Some(my_attestation_package.into()),
             })
             .await
             .context("Call to get_disk_encryption_key failed")?
             .into_inner();
 
-        let server_attestation_package = get_key_response
+        let server_attestation_package = disk_encryption_data
             .sev_attestation_package
             .context("Server attestation report is missing")?;
 
-        let blessed_measurements =
-            get_blessed_guest_launch_measurements_from_registry(&*self.nns_registry_client)
-                .map_err(|e| anyhow!("Failed to get blessed measurements from registry: {e}"))?;
+        let registry_version = self.nns_registry_client.get_latest_version();
+        let blessed_measurements = self
+            .nns_registry_client
+            .get_blessed_guest_launch_measurements(registry_version)
+            .map_err(|e| anyhow!("Failed to get blessed measurements from registry: {e}"))?;
 
         // Verify the server's attestation report. This is to ensure that the key comes from a
         // trusted source. Without this check, an attacker could start with a malicious GuestOS,
         // inject malicious files into the data partition then trigger an upgrade to a
         // legit version. The malicious data would remain on the data partition.
-        verify_attestation_package(
-            &server_attestation_package,
+        ParsedSevAttestationPackage::parse(
+            server_attestation_package,
             self.sev_root_certificate_verification,
-            &blessed_measurements,
-            &custom_data,
-            Some(my_attestation_report.chip_id.as_ref()),
         )
+        .verify_measurement(&blessed_measurements)
+        .verify_custom_data(&custom_data)
+        .verify_chip_id(&[my_attestation_report.chip_id])
         .context("Server attestation report verification failed")?;
 
-        let disk_encryption_key = get_key_response
+        let disk_encryption_key = disk_encryption_data
             .key
             .context("GetKeyResponse does not contain a key")?;
 
+        self.persist_disk_encryption_artifacts(
+            disk_encryption_key,
+            // This can be None when upgrading from older GuestOS-s that do not populate this field.
+            // TODO: Error on None once all GuestOS-s support detached headers
+            disk_encryption_data.luks_header,
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    async fn persist_disk_encryption_artifacts(
+        &self,
+        disk_encryption_key: Vec<u8>,
+        luks_header: Option<Vec<u8>>,
+    ) -> Result<()> {
         let disk_encryption_key =
             String::from_utf8(disk_encryption_key).context("Key is not valid UTF-8")?;
 
-        std::fs::write(&*self.previous_key_path, disk_encryption_key).with_context(|| {
-            format!(
-                "Failed to write key to {}",
-                self.previous_key_path.display()
-            )
-        })?;
+        match luks_header {
+            Some(luks_header) => {
+                tokio::fs::write(&self.store_luks_header_path, &luks_header)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "Failed to write store LUKS header to {}",
+                            self.store_luks_header_path.display()
+                        )
+                    })?;
+            }
+            None => {
+                println!(
+                    "GetKeyResponse does not contain a store LUKS header; recovering it locally from {}",
+                    self.store_device_path.display()
+                );
+                self.crypto_ops
+                    .backup_luks_header(&self.store_device_path, &self.store_luks_header_path)
+                    .context("Local LUKS header backup failed")?;
+            }
+        }
+
+        tokio::fs::write(&self.previous_key_path, disk_encryption_key)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to write key to {}",
+                    self.previous_key_path.display()
+                )
+            })?;
 
         Ok(())
     }
@@ -255,7 +300,8 @@ impl DiskEncryptionKeyExchangeClientAgent {
             .context("Failed to connect to server")?;
 
         Ok((
-            DiskEncryptionKeyExchangeServiceClient::new(channel),
+            DiskEncryptionKeyExchangeServiceClient::new(channel)
+                .max_decoding_message_size(MAX_INCOMING_MESSAGE_SIZE),
             server_public_key_der,
         ))
     }
@@ -293,7 +339,7 @@ fn extract_server_public_key_der(conn: &MaybeHttpsStream<TokioIo<TcpStream>>) ->
 }
 
 pub fn create_nns_registry_client(guestos_config: &GuestOSConfig) -> Result<RegistryClientImpl> {
-    let nns_public_key = parse_threshold_sig_key(Path::new(NNS_PUBLIC_KEY_PATH))
+    let nns_public_key = parse_threshold_sig_key_from_pem_file(Path::new(NNS_PUBLIC_KEY_PATH))
         .context("Cannot read NNS public key")?;
 
     let client = RegistryClientImpl::new(

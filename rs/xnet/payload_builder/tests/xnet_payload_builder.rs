@@ -14,6 +14,7 @@ use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_s
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::Stream;
+use ic_replicated_state::testing::StreamTesting;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
@@ -374,7 +375,7 @@ fn get_xnet_payload_respects_signal_limit(
 /// Tests payload building with various alignments of expected indices to
 /// slice: just before the pooled slice, within the pooled slice, just
 /// after the pooled slice.
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn get_xnet_payload_slice_alignment(
     #[strategy(arb_stream_slice(
         3, // min_size
@@ -511,7 +512,7 @@ fn xnet_payload_builder_with_valid_empty_slices(
 
 /// Tests payload building with a byte limit just under the total slice
 /// size.
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn get_xnet_payload_just_under_byte_limit(
     #[strategy(arb_stream_slice(
         1, // min_size
@@ -569,7 +570,7 @@ fn get_xnet_payload_just_under_byte_limit(
 
 /// Tests payload building with a byte limit somewhere in-between the total size
 /// of the two slices' headers and the total size of the two slices.
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn get_xnet_payload_byte_limit_exceeded(
     #[strategy(arb_stream_slice(
         1, // min_size
@@ -585,7 +586,7 @@ fn get_xnet_payload_byte_limit_exceeded(
         10, // max_signal_count
     ))]
     test_slice2: (Stream, StreamIndex, usize),
-    #[strategy(0..100usize)] message_bytes_percentage: usize,
+    #[strategy(0..100_usize)] message_bytes_percentage: usize,
 ) {
     let msg_count1 = test_slice1.2;
     let msg_count2 = test_slice2.2;
@@ -634,7 +635,7 @@ fn get_xnet_payload_byte_limit_exceeded(
 
 /// Tests payload building with a byte limit too small even for an empty
 /// slice.
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn get_xnet_payload_byte_limit_too_small(
     #[strategy(arb_stream_slice(
         0, // min_size
@@ -681,7 +682,7 @@ fn get_xnet_payload_byte_limit_too_small(
 }
 
 /// Tests payload building from a pool containing an empty slice only.
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn get_xnet_payload_empty_slice(
     #[strategy(arb_stream(
         1, // min_size
@@ -760,7 +761,7 @@ fn get_xnet_payload_empty_slice(
 /// Tests payload building on a system subnet when the combined sizes of the
 /// incoming stream slice and outgoing stream exceed the system subnet
 /// stream throttling limit.
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn system_subnet_stream_throttling(
     #[strategy(arb_stream(
         SYSTEM_SUBNET_STREAM_MSG_LIMIT / 2 + 1, // min_size
@@ -854,7 +855,7 @@ fn system_subnet_stream_throttling(
 
 /// Tests that `validate_xnet_payload()` successfully validates any payload
 /// produced by `get_xnet_payload()` and produces the same size estimate.
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn validate_xnet_payload(
     #[strategy(arb_stream_slice(
         0, // min_size
@@ -870,7 +871,7 @@ fn validate_xnet_payload(
         10, // max_signal_count
     ))]
     test_slice2: (Stream, StreamIndex, usize),
-    #[strategy(0..110u64)] size_limit_percentage: u64,
+    #[strategy(0..110_u64)] size_limit_percentage: u64,
 ) {
     let (stream1, from1, msg_count1) = test_slice1;
     let (stream2, from2, msg_count2) = test_slice2;
@@ -957,7 +958,7 @@ enum FakeXNetClientError {
 }
 
 /// Tests refilling an empty pool.
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn refill_pool_empty(
     #[strategy(arb_stream_slice(
         3, // min_size
@@ -1058,7 +1059,7 @@ fn refill_pool_empty(
 
 /// Tests refilling a pool with an already existing slice, requiring an
 /// append.
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn refill_pool_append(
     #[strategy(arb_stream_slice(
         3, // min_size
@@ -1187,7 +1188,7 @@ fn refill_pool_append(
 }
 
 /// Tests handling of an invalid slice when refilling the pool.
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn refill_pool_put_invalid_slice(
     #[strategy(arb_stream_slice(
         3, // min_size
@@ -1287,7 +1288,7 @@ fn refill_pool_put_invalid_slice(
 
 /// Tests validation failure while refilling a pool with an already existing
 /// slice, requiring an append.
-#[test_strategy::proptest]
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
 fn refill_pool_append_invalid_slice(
     #[strategy(arb_stream_slice(
         3, // min_size

@@ -1,10 +1,12 @@
 use super::*;
 use crate::{
+    governance::max_dissolve_delay_seconds,
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
         self as pb, VotingPowerEconomics,
-        manage_neuron::{SetDissolveTimestamp, StartDissolving},
+        manage_neuron::{Configure, SetDissolveTimestamp, StartDissolving, configure::Operation},
     },
+    temporarily_disable_mission_70_voting_rewards, temporarily_enable_mission_70_voting_rewards,
 };
 use ic_cdk::println;
 use ic_nervous_system_common::{E8, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
@@ -40,13 +42,15 @@ fn test_neuron_into_api() {
     )
     .build();
 
+    original_neuron.eight_year_gang_bonus_base_e8s = 500_000_000;
+
     // Add ballots.
     for i in 0..10 {
         let proposal_id = Some(ProposalId { id: 123_000 + i });
 
         original_neuron.recent_ballots.push(pb::BallotInfo {
             proposal_id,
-            vote: Vote::No as i32,
+            vote: pb::Vote::No as i32,
         });
     }
     original_neuron.recent_ballots_next_entry_index = Some(3);
@@ -116,6 +120,7 @@ fn test_neuron_into_api() {
             neuron_type: None,
             potential_voting_power,
             deciding_voting_power,
+            eight_year_gang_bonus_base_e8s: Some(500_000_000),
             maturity_disbursements_in_progress: Some(vec![]),
         },
     );
@@ -134,10 +139,88 @@ fn test_neuron_into_api() {
 
                 api::BallotInfo {
                     proposal_id,
-                    vote: Vote::No as i32,
+                    vote: pb::Vote::No as i32,
                 }
             })
             .collect::<Vec<_>>(),
+    );
+}
+
+#[test]
+fn test_get_neuron_info() {
+    let controller = PrincipalId::new_user_test_id(42);
+    let dissolve_delay_seconds = TWELVE_MONTHS_SECONDS;
+    let aging_since = 100_000_000;
+    let dissolve_state_and_age = DissolveStateAndAge::NotDissolving {
+        dissolve_delay_seconds,
+        aging_since_timestamp_seconds: aging_since,
+    };
+
+    let recent_ballots = vec![
+        pb::BallotInfo {
+            proposal_id: Some(ProposalId { id: 1 }),
+            vote: pb::Vote::Yes as i32,
+        },
+        pb::BallotInfo {
+            proposal_id: Some(ProposalId { id: 2 }),
+            vote: pb::Vote::No as i32,
+        },
+    ];
+
+    let known_neuron_data = Some(pb::KnownNeuronData {
+        name: "test neuron".to_string(),
+        description: Some("a known neuron".to_string()),
+        ..Default::default()
+    });
+
+    let neuron = NeuronBuilder::new_for_test(99, dissolve_state_and_age)
+        .with_controller(controller)
+        .with_cached_neuron_stake_e8s(10 * E8)
+        .with_eight_year_gang_bonus_base_e8s(3 * E8)
+        .with_staked_maturity_e8s_equivalent(2 * E8)
+        .with_recent_ballots(recent_ballots)
+        .with_known_neuron_data(known_neuron_data.clone())
+        .with_joined_community_fund_timestamp_seconds(Some(50_000_000))
+        .with_neuron_type(Some(pb::NeuronType::Seed as i32))
+        .build();
+
+    let potential_voting_power = neuron.potential_voting_power(NOW);
+    let deciding_voting_power = neuron.deciding_voting_power(&VotingPowerEconomics::DEFAULT, NOW);
+
+    // multi_query=false so known_neuron_data is included; requester=controller so full info shown.
+    let observed = neuron.get_neuron_info(&VotingPowerEconomics::DEFAULT, NOW, controller, false);
+
+    assert_eq!(
+        observed,
+        NeuronInfo {
+            id: Some(NeuronId { id: 99 }),
+            retrieved_at_timestamp_seconds: NOW,
+            state: NeuronState::NotDissolving as i32,
+            age_seconds: NOW - aging_since,
+            dissolve_delay_seconds,
+            recent_ballots: vec![
+                api::BallotInfo {
+                    proposal_id: Some(ProposalId { id: 2 }),
+                    vote: pb::Vote::No as i32,
+                },
+                api::BallotInfo {
+                    proposal_id: Some(ProposalId { id: 1 }),
+                    vote: pb::Vote::Yes as i32,
+                },
+            ],
+            voting_power: potential_voting_power,
+            created_timestamp_seconds: 0,
+            stake_e8s: 10 * E8,
+            joined_community_fund_timestamp_seconds: Some(50_000_000),
+            known_neuron_data: known_neuron_data.map(api::KnownNeuronData::from),
+            neuron_type: Some(pb::NeuronType::Seed as i32),
+            visibility: Some(Visibility::Public as i32),
+            voting_power_refreshed_timestamp_seconds: Some(0),
+            deciding_voting_power: Some(deciding_voting_power),
+            potential_voting_power: Some(potential_voting_power),
+            eight_year_gang_bonus_base_e8s: Some(3 * E8),
+            staked_maturity_e8s_equivalent: Some(2 * E8),
+        },
     );
 }
 
@@ -230,7 +313,7 @@ fn create_neuron_with_stake_dissolve_state_and_age(
 ) -> Neuron {
     NeuronBuilder::new(
         NeuronId { id: 1 },
-        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
         PrincipalId::new_user_test_id(1),
         dissolve_state_and_age,
         123_456_789,
@@ -368,7 +451,7 @@ fn create_neuron_with_dissolve_state_and_age(
 ) -> Neuron {
     NeuronBuilder::new(
         NeuronId { id: 1 },
-        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
         PrincipalId::new_user_test_id(1),
         dissolve_state_and_age,
         123_456_789,
@@ -445,9 +528,7 @@ fn increase_dissolve_delay_does_not_set_age_for_non_dissolving_neurons() {
 
     // Test cases
     for current_aging_since_timestamp_seconds in [0, NOW - 1, NOW, NOW + 1, NOW + 2000] {
-        for current_dissolve_delay_seconds in
-            [1, 10, 100, NOW, NOW + 1000, (ONE_DAY_SECONDS * 365 * 8)]
-        {
+        for current_dissolve_delay_seconds in [1, 10, 100, 1000, max_dissolve_delay_seconds() - 1] {
             test_increase_dissolve_delay_by_1_for_non_dissolving_neuron(
                 current_aging_since_timestamp_seconds,
                 current_dissolve_delay_seconds,
@@ -522,7 +603,10 @@ fn test_neuron_configure_dissolve_delay() {
         )
         .unwrap();
     assert_eq!(neuron.state(now), NeuronState::NotDissolving);
-    assert_eq!(neuron.dissolve_delay_seconds(now), 8 * ONE_YEAR_SECONDS);
+    assert_eq!(
+        neuron.dissolve_delay_seconds(now),
+        max_dissolve_delay_seconds()
+    );
 
     // Step 5: start dissolving the neuron.
     neuron
@@ -537,7 +621,7 @@ fn test_neuron_configure_dissolve_delay() {
     assert_eq!(neuron.state(now), NeuronState::Dissolving);
 
     // Step 7: advance the time by 8 years - 1 second and see that the neuron is still dissolving.
-    let now = now + 8 * ONE_YEAR_SECONDS - 1;
+    let now = now + max_dissolve_delay_seconds() - 1;
     assert_eq!(neuron.state(now), NeuronState::Dissolving);
 
     // Step 8: advance the time by 1 second and see that the neuron is now dissolved.
@@ -553,7 +637,7 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
 
     let builder = NeuronBuilder::new(
         NeuronId { id: 42 },
-        Subaccount::try_from(vec![42u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![42_u8; 32].as_slice()).unwrap(),
         principal_id,
         DissolveStateAndAge::NotDissolving {
             dissolve_delay_seconds: 1_000_000,
@@ -619,7 +703,7 @@ fn test_adjust_voting_power() {
 
     let neuron = NeuronBuilder::new(
         NeuronId { id: 42 },
-        Subaccount::try_from(vec![42u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![42_u8; 32].as_slice()).unwrap(),
         principal_id,
         DissolveStateAndAge::NotDissolving {
             dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
@@ -711,7 +795,7 @@ fn test_ready_to_unstake_maturity() {
         |dissolve_state_and_age, staked_maturity| -> Neuron {
             NeuronBuilder::new(
                 NeuronId { id: 1 },
-                Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+                Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
                 PrincipalId::new_user_test_id(1),
                 dissolve_state_and_age,
                 123_456_789,
@@ -773,7 +857,7 @@ fn test_ready_to_spawn() {
     // Ready to spawn since it has a spawn timestamp in the past.
     let neuron_ready_to_spawn = NeuronBuilder::new(
         NeuronId { id: 1 },
-        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
         PrincipalId::new_user_test_id(1),
         DissolveStateAndAge::DissolvingOrDissolved {
             when_dissolved_timestamp_seconds: now - 1,
@@ -787,7 +871,7 @@ fn test_ready_to_spawn() {
     // Not ready to spawn since it has a spawn timestamp in the future.
     let neuron_not_ready_to_spawn = NeuronBuilder::new(
         NeuronId { id: 1 },
-        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
         PrincipalId::new_user_test_id(1),
         DissolveStateAndAge::DissolvingOrDissolved {
             when_dissolved_timestamp_seconds: now + 1,
@@ -801,7 +885,7 @@ fn test_ready_to_spawn() {
     // Not ready to spawn since it has no spawn timestamp.
     let neuron_no_spawn_timestamp = NeuronBuilder::new(
         NeuronId { id: 1 },
-        Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+        Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
         PrincipalId::new_user_test_id(1),
         DissolveStateAndAge::DissolvingOrDissolved {
             when_dissolved_timestamp_seconds: now - 1,
@@ -810,4 +894,92 @@ fn test_ready_to_spawn() {
     )
     .build();
     assert!(!neuron_no_spawn_timestamp.ready_to_spawn(now));
+}
+
+#[test]
+fn test_eight_year_gang_bonus_base_e8s_is_lost_after_dissolving() {
+    let now = 123_456_789;
+    let dissolve_delay_seconds = 8 * ONE_YEAR_SECONDS;
+    let mut neuron = NeuronBuilder::new(
+        NeuronId { id: 1 },
+        Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
+        PrincipalId::new_user_test_id(1),
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds,
+            aging_since_timestamp_seconds: now - 1000,
+        },
+        now - 2000,
+    )
+    .with_cached_neuron_stake_e8s(100 * E8)
+    .with_eight_year_gang_bonus_base_e8s(100 * E8)
+    .build();
+    let controller = neuron.controller();
+
+    // Verify the neuron is not dissolving and has a non-zero eight year gang bonus.
+    assert_eq!(neuron.state(now), NeuronState::NotDissolving);
+    assert_eq!(neuron.eight_year_gang_bonus_base_e8s, 100 * E8);
+
+    // Start dissolving.
+    neuron
+        .configure(
+            &controller,
+            now,
+            &Configure {
+                operation: Some(Operation::StartDissolving(StartDissolving {})),
+            },
+        )
+        .unwrap();
+
+    // Verify the neuron is dissolving and the eight year gang bonus has been set to 0.
+    assert_eq!(neuron.state(now), NeuronState::Dissolving);
+    assert_eq!(neuron.eight_year_gang_bonus_base_e8s, 0);
+}
+
+#[test]
+fn test_eight_year_gang_bonus_is_capped_to_stake_e8s() {
+    let _restore_on_drop = temporarily_enable_mission_70_voting_rewards();
+
+    let now = 123_456_789;
+
+    // 100 ICP stake, 100 ICP bonus base, 50 ICP in fees from rejected proposals.
+    // stake_e8s = 100 - 50 = 50 ICP, so bonus base is capped to 50 ICP.
+    // eight_year_gang_bonus = 50 / 10 = 5 ICP.
+    // With 0 dissolve delay and 0 age, both multipliers are 1.0.
+    // potential_voting_power = (50 + 5) * 1 * 1 = 55 ICP.
+    let neuron = NeuronBuilder::new_for_test(
+        1,
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 0,
+            aging_since_timestamp_seconds: now,
+        },
+    )
+    .with_cached_neuron_stake_e8s(100 * E8)
+    .with_eight_year_gang_bonus_base_e8s(100 * E8)
+    .with_neuron_fees_e8s(50 * E8)
+    .build();
+
+    assert_eq!(neuron.potential_voting_power(now), 55 * E8);
+}
+
+#[test]
+fn test_eight_year_gang_bonus_not_applied_when_mission_70_disabled() {
+    let _restore_on_drop = temporarily_disable_mission_70_voting_rewards();
+
+    let now = 123_456_789;
+
+    // 100 ICP stake with a tagged 8y-gang bonus base, but mission 70 is disabled
+    // so the bonus must not be applied. With 0 dissolve delay and 0 age, both
+    // multipliers are 1.0, so potential_voting_power = 100 * 1 * 1 = 100 ICP.
+    let neuron = NeuronBuilder::new_for_test(
+        1,
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 0,
+            aging_since_timestamp_seconds: now,
+        },
+    )
+    .with_cached_neuron_stake_e8s(100 * E8)
+    .with_eight_year_gang_bonus_base_e8s(100 * E8)
+    .build();
+
+    assert_eq!(neuron.potential_voting_power(now), 100 * E8);
 }

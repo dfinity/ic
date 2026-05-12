@@ -1,7 +1,14 @@
-use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
-    pb::v1::{GovernanceError, StopOrStartCanister, Topic, stop_or_start_canister::CanisterAction},
-    proposals::call_canister::CallCanister,
+    pb::v1::{
+        GovernanceError, SelfDescribingValue, StopOrStartCanister, Topic,
+        stop_or_start_canister::CanisterAction,
+    },
+    proposals::{
+        call_canister::CallCanister,
+        invalid_proposal_error,
+        self_describing::{DocumentedAction, SelfDescribingProstEnum, ValueBuilder},
+        topic_to_manage_canister,
+    },
 };
 
 use candid::Encode;
@@ -72,6 +79,8 @@ impl StopOrStartCanister {
 }
 
 impl CallCanister for StopOrStartCanister {
+    type Reply = ();
+
     fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
         Ok((ROOT_CANISTER_ID, "stop_or_start_nns_canister"))
     }
@@ -88,14 +97,39 @@ impl CallCanister for StopOrStartCanister {
     }
 }
 
+impl DocumentedAction for StopOrStartCanister {
+    const NAME: &'static str = "Stop or Start Canister";
+    const DESCRIPTION: &'static str = "Stop or start a canister controlled by the NNS.";
+}
+
+impl From<StopOrStartCanister> for SelfDescribingValue {
+    fn from(value: StopOrStartCanister) -> Self {
+        let StopOrStartCanister {
+            canister_id,
+            action,
+        } = value;
+
+        let action = action.map(SelfDescribingProstEnum::<CanisterAction>::new);
+
+        ValueBuilder::new()
+            .add_field("canister_id", canister_id)
+            .add_field("action", action)
+            .build()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::pb::v1::governance_error::ErrorType;
+    use crate::pb::v1::{
+        SelfDescribingValue as SelfDescribingValuePb, governance_error::ErrorType,
+    };
 
     use candid::Decode;
     use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
+    use ic_nns_governance_api::SelfDescribingValue;
+    use maplit::hashmap;
 
     #[test]
     fn test_invalid_stop_or_start_canister() {
@@ -267,5 +301,41 @@ mod tests {
             assert_eq!(stop_or_start_canister.validate(), Ok(()));
             assert_eq!(stop_or_start_canister.valid_topic(), Ok(expected_topic));
         }
+    }
+
+    #[test]
+    fn test_stop_or_start_canister_to_self_describing_stop() {
+        let stop_or_start_canister = StopOrStartCanister {
+            canister_id: Some(CYCLES_MINTING_CANISTER_ID.get()),
+            action: Some(CanisterAction::Stop as i32),
+        };
+
+        let value = SelfDescribingValue::from(SelfDescribingValuePb::from(stop_or_start_canister));
+
+        assert_eq!(
+            value,
+            SelfDescribingValue::Map(hashmap! {
+                "canister_id".to_string() => SelfDescribingValue::from(CYCLES_MINTING_CANISTER_ID.get().to_string()),
+                "action".to_string() => SelfDescribingValue::from("Stop"),
+            })
+        );
+    }
+
+    #[test]
+    fn test_stop_or_start_canister_to_self_describing_start() {
+        let stop_or_start_canister = StopOrStartCanister {
+            canister_id: Some(CYCLES_MINTING_CANISTER_ID.get()),
+            action: Some(CanisterAction::Start as i32),
+        };
+
+        let value = SelfDescribingValue::from(SelfDescribingValuePb::from(stop_or_start_canister));
+
+        assert_eq!(
+            value,
+            SelfDescribingValue::Map(hashmap! {
+                "canister_id".to_string() => SelfDescribingValue::from(CYCLES_MINTING_CANISTER_ID.get().to_string()),
+                "action".to_string() => SelfDescribingValue::from("Start"),
+            })
+        );
     }
 }

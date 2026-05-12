@@ -7,7 +7,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-http-types",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
     "//rs/crypto/sha2",
     "//rs/ledger_suite/common/ledger_canister_core",
     "//rs/ledger_suite/common/ledger_core",
@@ -94,6 +94,7 @@ rust_test(
         name = "index_ng_test" + conf["test_suffix"],
         timeout = "long",
         srcs = [
+            "tests/index_timer_backoff.rs",
             "tests/retrieve_blocks_from_ledger_interval.rs",
             "tests/tests.rs",
         ],
@@ -116,13 +117,14 @@ rust_test(
             # Keep sorted.
             ":index-ng",
             "//packages/ic-http-types",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
             "//rs/ledger_suite/icrc1/ledger",
             "//rs/ledger_suite/icrc1/test_utils",
             "//rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger",
+            "//rs/ledger_suite/icrc1/tokens_u256",
             "//rs/ledger_suite/icrc1/tokens_u64",
             "//rs/ledger_suite/test_utils/state_machine_helpers:ic-ledger-suite-state-machine-helpers",
             "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
@@ -130,6 +132,7 @@ rust_test(
             "//rs/state_machine_tests",
             "//rs/test_utilities/load_wasm",
             "//rs/types/base_types",
+            "//rs/types/cycles",
             "//rs/types/types",
             "@crate_index//:candid",
             "@crate_index//:ic-agent",
@@ -153,7 +156,7 @@ rust_test(
             "test_suffix": "",
         },
         {
-            "crate_features": [],
+            "crate_features": ["u256-tokens"],
             "index_wasm": ":index_ng_canister_u256.wasm.gz",
             "ledger_wasm": "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
             "test_suffix": "_u256",
@@ -166,7 +169,10 @@ rust_test(
             "test_suffix": "_wo_getblocks",
         },
         {
-            "crate_features": ["get_blocks_disabled"],
+            "crate_features": [
+                "get_blocks_disabled",
+                "u256-tokens",
+            ],
             "index_wasm": ":index_ng_canister_u256.wasm.gz",
             "ledger_wasm": "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256_getblocksdisabled.wasm.gz",
             "test_suffix": "_u256_wo_getblocks",
@@ -179,7 +185,10 @@ rust_test(
             "test_suffix": "_wo_icrc3",
         },
         {
-            "crate_features": ["icrc3_disabled"],
+            "crate_features": [
+                "icrc3_disabled",
+                "u256-tokens",
+            ],
             "index_wasm": ":index_ng_canister_u256.wasm.gz",
             "ledger_wasm": "@ic-icrc1-ledger-wo-icrc-3-u256.wasm.gz//file",
             "test_suffix": "_wo_icrc3_u256",
@@ -209,7 +218,7 @@ rust_ic_test_suite_with_extra_srcs(
         # Keep sorted.
         ":index-ng",
         "//packages/ic-http-types",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/ledger_suite/common/ledger_canister_core",
         "//rs/ledger_suite/icrc1/ledger",
         "//rs/ledger_suite/icrc1/test_utils",
@@ -217,6 +226,7 @@ rust_ic_test_suite_with_extra_srcs(
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:candid",
         "@crate_index//:ic-agent",

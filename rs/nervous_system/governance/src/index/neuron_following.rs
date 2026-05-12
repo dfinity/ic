@@ -368,7 +368,7 @@ mod tests {
 
     impl LowerBounded for TestNeuronId {
         fn min_value() -> Self {
-            TestNeuronId([0u8; 32])
+            TestNeuronId([0_u8; 32])
         }
     }
 
@@ -422,8 +422,8 @@ mod tests {
 
     // The following test helpers will be run by both implementations.
     fn test_add_single_followee_helper(mut index: impl NeuronFollowingIndex<TestNeuronId, Topic>) {
-        let follower_id = TestNeuronId([1u8; 32]);
-        let followee_id = TestNeuronId([2u8; 32]);
+        let follower_id = TestNeuronId([1_u8; 32]);
+        let followee_id = TestNeuronId([2_u8; 32]);
 
         // 1 -> 2
         assert_eq!(
@@ -452,9 +452,9 @@ mod tests {
     fn test_add_multiple_followees_helper(
         mut index: impl NeuronFollowingIndex<TestNeuronId, Topic>,
     ) {
-        let follower_id = TestNeuronId([1u8; 32]);
-        let followee_id_1 = TestNeuronId([2u8; 32]);
-        let followee_id_2 = TestNeuronId([3u8; 32]);
+        let follower_id = TestNeuronId([1_u8; 32]);
+        let followee_id_1 = TestNeuronId([2_u8; 32]);
+        let followee_id_2 = TestNeuronId([3_u8; 32]);
 
         assert_eq!(
             add_neuron_followees(
@@ -480,9 +480,9 @@ mod tests {
     }
 
     fn test_add_remove_followees_helper(mut index: impl NeuronFollowingIndex<TestNeuronId, Topic>) {
-        let neuron_id_1 = TestNeuronId([1u8; 32]);
-        let neuron_id_2 = TestNeuronId([2u8; 32]);
-        let neuron_id_3 = TestNeuronId([3u8; 32]);
+        let neuron_id_1 = TestNeuronId([1_u8; 32]);
+        let neuron_id_2 = TestNeuronId([2_u8; 32]);
+        let neuron_id_3 = TestNeuronId([3_u8; 32]);
 
         // Add: 1->3
         assert_eq!(
@@ -529,9 +529,9 @@ mod tests {
     fn test_update_single_topic_followees_helper(
         mut index: impl NeuronFollowingIndex<TestNeuronId, Topic>,
     ) {
-        let follower_id = TestNeuronId([1u8; 32]);
-        let followee_id_1 = TestNeuronId([2u8; 32]);
-        let followee_id_2 = TestNeuronId([3u8; 32]);
+        let follower_id = TestNeuronId([1_u8; 32]);
+        let followee_id_1 = TestNeuronId([2_u8; 32]);
+        let followee_id_2 = TestNeuronId([3_u8; 32]);
 
         // Topic1: follower->1.2
         // Topic2: follower->2
@@ -606,8 +606,8 @@ mod tests {
     fn test_add_existing_followee_helper(
         mut index: impl NeuronFollowingIndex<TestNeuronId, Topic>,
     ) {
-        let follower_id = TestNeuronId([1u8; 32]);
-        let followee_id = TestNeuronId([2u8; 32]);
+        let follower_id = TestNeuronId([1_u8; 32]);
+        let followee_id = TestNeuronId([2_u8; 32]);
 
         // First add is valid.
         assert_eq!(
@@ -632,8 +632,8 @@ mod tests {
     fn test_remove_absent_followee_helper(
         mut index: impl NeuronFollowingIndex<TestNeuronId, Topic>,
     ) {
-        let follower_id = TestNeuronId([1u8; 32]);
-        let followee_id = TestNeuronId([2u8; 32]);
+        let follower_id = TestNeuronId([1_u8; 32]);
+        let followee_id = TestNeuronId([2_u8; 32]);
 
         // Adding first.
         assert_eq!(
@@ -668,10 +668,10 @@ mod tests {
     fn test_update_followee_invalid_helper(
         mut index: impl NeuronFollowingIndex<TestNeuronId, Topic>,
     ) {
-        let follower_id = TestNeuronId([1u8; 32]);
-        let followee_id_1 = TestNeuronId([2u8; 32]);
-        let followee_id_2 = TestNeuronId([3u8; 32]);
-        let followee_id_3 = TestNeuronId([4u8; 32]);
+        let follower_id = TestNeuronId([1_u8; 32]);
+        let followee_id_1 = TestNeuronId([2_u8; 32]);
+        let followee_id_2 = TestNeuronId([3_u8; 32]);
+        let followee_id_3 = TestNeuronId([4_u8; 32]);
         // Adding follower->1,2.
         assert_eq!(
             add_neuron_followees(
@@ -771,8 +771,8 @@ mod tests {
 
     #[test]
     fn test_stable_neuron_index_num_entries() {
-        let follower_id = TestNeuronId([1u8; 32]);
-        let followee_id = TestNeuronId([2u8; 32]);
+        let follower_id = TestNeuronId([1_u8; 32]);
+        let followee_id = TestNeuronId([2_u8; 32]);
         let mut index = get_stable_index();
 
         assert_eq!(index.num_entries(), 0);
@@ -791,8 +791,8 @@ mod tests {
 
     #[test]
     fn test_stable_neuron_index_contains_entry() {
-        let follower_id = TestNeuronId([1u8; 32]);
-        let followee_id = TestNeuronId([2u8; 32]);
+        let follower_id = TestNeuronId([1_u8; 32]);
+        let followee_id = TestNeuronId([2_u8; 32]);
         let mut index = get_stable_index();
 
         assert_eq!(

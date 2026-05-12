@@ -17,7 +17,6 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tokio::sync::watch;
 
 fn stop_immediately(_: &ConsensusInstance<'_>) -> bool {
     true
@@ -153,7 +152,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.self_validating_payload_builder.clone(),
             deps.canister_http_payload_builder.clone(),
             deps.query_stats_payload_builder.clone(),
-            deps.vetkd_payload_builder.clone(),
+            deps.chain_key_payload_builder.clone(),
             deps.dkg_pool.clone(),
             deps.idkg_pool.clone(),
             dkg_key_manager.clone(),
@@ -172,6 +171,9 @@ impl<'a> ConsensusRunner<'a> {
         );
         let dkg = ic_consensus_dkg::DkgImpl::new(
             deps.replica_config.node_id,
+            deps.replica_config.subnet_id,
+            Arc::clone(&deps.registry_client),
+            deps.state_manager.clone(),
             Arc::clone(&consensus_crypto),
             deps.consensus_pool.read().unwrap().get_cache(),
             dkg_key_manager,
@@ -195,7 +197,6 @@ impl<'a> ConsensusRunner<'a> {
             deps.consensus_pool.read().unwrap().get_cache(),
             deps.metrics_registry.clone(),
             replica_logger.clone(),
-            watch::channel(Height::from(0)).0,
         );
         let now = self.time.get_relative_time();
         let in_queue: Queue<Input> = Default::default();

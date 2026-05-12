@@ -162,13 +162,7 @@ def main():
 
     tmpdir = tempfile.mkdtemp()
 
-    if args.dflate:
-        disk_image = os.path.join(tmpdir, "disk.img")
-    else:
-        # Disk optimization.  If no dflate program is specified, we can
-        # simply attack the target file (out_file) directly, saving gigabytes
-        # of writes to disk.
-        disk_image = out_file
+    disk_image = os.path.join(tmpdir, "disk.img")
     prepare_diskimage(gpt_entries, disk_image)
 
     for entry in gpt_entries:
@@ -198,17 +192,16 @@ def main():
     # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
     # If dflate is ever misbehaving, it can be replaced with:
     # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
-    if args.dflate:
-        subprocess.run(
-            [
-                args.dflate,
-                "--input",
-                disk_image,
-                "--output",
-                out_file,
-            ],
-            check=True,
-        )
+    subprocess.run(
+        [
+            args.dflate,
+            "--input",
+            disk_image,
+            "--output",
+            out_file,
+        ],
+        check=True,
+    )
 
     # tempfile cleanup is handled by proc_wrapper.sh
 

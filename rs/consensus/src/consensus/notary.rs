@@ -34,7 +34,7 @@ use ic_consensus_utils::{
     pool_reader::PoolReader,
 };
 use ic_interfaces::time_source::TimeSource;
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, error, trace, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::NotarizationDelaySettings;
@@ -60,12 +60,13 @@ const ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP: u64 = 1;
 /// for each height that the latest finalized block is ahead of the latest certified state.
 /// The value was chosen empirically.
 const BACKLOG_DELAY_MILLIS: u64 = 2_000;
+
 pub(crate) struct Notary {
     time_source: Arc<dyn TimeSource>,
     replica_config: ReplicaConfig,
     membership: Arc<Membership>,
     pub(crate) crypto: Arc<dyn ConsensusCrypto>,
-    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     log: ReplicaLogger,
     metrics: NotaryMetrics,
 }
@@ -76,7 +77,7 @@ impl Notary {
         replica_config: ReplicaConfig,
         membership: Arc<Membership>,
         crypto: Arc<dyn ConsensusCrypto>,
-        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
     ) -> Notary {
@@ -85,7 +86,7 @@ impl Notary {
             replica_config,
             membership,
             crypto,
-            state_manager,
+            state_reader,
             log,
             metrics: NotaryMetrics::new(metrics_registry),
         }
@@ -113,6 +114,7 @@ impl Notary {
                 }
             }
         }
+
         notarization_shares
     }
 
@@ -127,7 +129,7 @@ impl Notary {
         let adjusted_notary_delay = get_adjusted_notary_delay(
             self.membership.as_ref(),
             pool,
-            self.state_manager.as_ref(),
+            self.state_reader.as_ref(),
             &self.log,
             height,
             rank,
@@ -238,7 +240,7 @@ enum NotaryDelay {
 fn get_adjusted_notary_delay(
     membership: &Membership,
     pool: &PoolReader<'_>,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     log: &ReplicaLogger,
     height: Height,
     rank: Rank,
@@ -251,7 +253,7 @@ fn get_adjusted_notary_delay(
             pool.registry_version(height)?,
         ),
         pool,
-        state_manager,
+        state_reader,
         membership,
         rank,
         log,
@@ -293,7 +295,7 @@ fn get_adjusted_notary_delay(
 fn get_adjusted_notary_delay_from_settings(
     settings: NotarizationDelaySettings,
     pool: &PoolReader<'_>,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     membership: &Membership,
     rank: Rank,
     logger: &ReplicaLogger,
@@ -306,7 +308,7 @@ fn get_adjusted_notary_delay_from_settings(
 
     // We impose a hard limit on the gap between notarization and certification.
     let notarized_height = pool.get_notarized_height();
-    let certified_height = state_manager.latest_certified_height();
+    let certified_height = state_reader.latest_certified_height();
     if notarized_height
         .get()
         .saturating_sub(certified_height.get())
@@ -336,7 +338,7 @@ fn get_adjusted_notary_delay_from_settings(
     // finalized height, we increase the delay. More precisely, for every
     // round that certified height is behind finalized height, we add `unit_delay`.
     let certified_gap =
-        finalized_height.saturating_sub(state_manager.latest_certified_height().get());
+        finalized_height.saturating_sub(state_reader.latest_certified_height().get());
 
     // Determine if we are currently in the process of halting at the next CUP height, i.e.
     // due to a pending upgrade or registry flag. In this case, we should not adjust the
@@ -714,6 +716,13 @@ mod tests {
                 .get_mut()
                 .expect_latest_certified_height()
                 .return_const(gap_trigger_height);
+            state_manager
+                .get_mut()
+                .expect_get_state_at()
+                .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                    Height::new(0),
+                    Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
+                )));
 
             assert_matches!(
                 get_adjusted_notary_delay_from_settings(
@@ -732,6 +741,13 @@ mod tests {
                 .get_mut()
                 .expect_latest_certified_height()
                 .return_const(PoolReader::new(&pool).get_finalized_height());
+            state_manager
+                .get_mut()
+                .expect_get_state_at()
+                .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                    Height::new(0),
+                    Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
+                )));
 
             assert_eq!(
                 get_adjusted_notary_delay_from_settings(
@@ -750,6 +766,13 @@ mod tests {
                 .get_mut()
                 .expect_latest_certified_height()
                 .return_const(PoolReader::new(&pool).get_finalized_height());
+            state_manager
+                .get_mut()
+                .expect_get_state_at()
+                .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                    Height::new(0),
+                    Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
+                )));
 
             pool.advance_round_normal_operation_no_cup();
 

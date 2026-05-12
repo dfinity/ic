@@ -322,18 +322,20 @@ impl OngoingStateSync {
         download_cancel_token: CancellationToken,
         metrics: OngoingStateSyncMetrics,
     ) -> DownloadResult {
-        let _timer = metrics.chunk_download_duration.start_timer();
-        let response_result = select! {
-            () = download_cancel_token.cancelled() => {
-                return DownloadResult {
-                    peer_id,
-                    result: Err(DownloadChunkError::Cancelled)
+        let response_result = {
+            let _timer = metrics.chunk_download_duration.start_timer();
+            select! {
+                () = download_cancel_token.cancelled() => {
+                    return DownloadResult {
+                        peer_id,
+                        result: Err(DownloadChunkError::Cancelled)
+                    }
                 }
+                res = tokio::time::timeout(
+                    CHUNK_DOWNLOAD_TIMEOUT,
+                    client.rpc(&peer_id, build_chunk_handler_request(artifact_id, chunk_id)),
+                ) => res
             }
-            res = tokio::time::timeout(
-                CHUNK_DOWNLOAD_TIMEOUT,
-                client.rpc(&peer_id, build_chunk_handler_request(artifact_id, chunk_id)),
-            ) => res
         };
 
         let response = match response_result {

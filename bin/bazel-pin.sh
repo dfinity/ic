@@ -13,10 +13,11 @@ function title() {
 function usage() {
     cat <<EOF
 Usage:
-  $0 [--force] [PACKAGE...]
+  $0 [--force] [crate ...]
 
 Options:
   --force       will repin even if repin is not deemed necessary
+  crate         crate to repin (e.g. serde or serde@1.0.130)
 EOF
 }
 
@@ -25,17 +26,9 @@ function help() {
     All packages:
         $0                    # cargo update --workspace
 
-    Single package:
-        $0 package_name       # cargo upgrade --package package_name
-        $0 package_name@1.2.3 # cargo upgrade --package package_name --precise 1.2.3
-
-    Multiple packages:
-        You can provide multiple package names (separated by spaces) to repin several crates at once.
-        Package names can be followed by @version to specify a particular version.
-
-        Examples:
-            $0 package1 package2  # cargo upgrade --package package1 and package2
-            $0 package1@1.2.3 package2@1.3.4 # cargo upgrade --package package1 and package2 with specified versions
+    Specific packages:
+        $0 serde              # cargo update --package serde
+        $0 serde@1.0.130      # cargo update --package serde --precise 1.0.130
 
     Details: https://bazelbuild.github.io/rules_rust/crate_universe.html#repinning--updating-dependencies
 EOF
@@ -70,20 +63,16 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [ $FORCE_REPIN != "1" ] && bazel query @crate_index//:all >/dev/null; then
-    # If this isn't a forced repin and if rules_rust still evaluates successfully (using
-    # bazel query as a proxy) then we don't need to do anything
-    echo "Nothing to repin. Use '$0 --force' to force repin."
-    exit 0
-fi
-
-if [ "${CRATES:-}" == "" ]; then
+if [ ${#CRATES[@]} -eq 0 ]; then
+    if [ $FORCE_REPIN != "1" ] && bazel query @crate_index//:all >/dev/null; then
+        # If this isn't a forced repin and if rules_rust still evaluates successfully (using
+        # bazel query as a proxy) then we don't need to do anything
+        echo "Nothing to repin. Use '$0 --force' to force repin."
+        exit 0
+    fi
     echo "Repinning all crates"
-    CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
+    CARGO_BAZEL_REPIN=true bazel build @crate_index//...
 else
-    echo "Repinning ${#CRATES[@]} crates"
-    for crate in "${CRATES[@]}"; do
-        echo "Repinning crate: ${crate}"
-        CARGO_BAZEL_REPIN="${crate}" bazel sync --only=crate_index
-    done
+    echo "Repinning crates: ${CRATES[*]}"
+    CARGO_BAZEL_REPIN="${CRATES[*]}" bazel build @crate_index//...
 fi

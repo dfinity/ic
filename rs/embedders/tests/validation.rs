@@ -6,7 +6,9 @@ use ic_embedders::{
     WasmtimeEmbedder,
     wasm_utils::{
         Complexity, WasmImportsDetails, WasmValidationDetails, validate_and_instrument_for_testing,
-        validation::{RESERVED_SYMBOLS, extract_custom_section_name},
+        validation::{
+            MAX_WASM_FUNCTION_NAME_LENGTH, RESERVED_SYMBOLS, extract_custom_section_name,
+        },
     },
 };
 use ic_interfaces::execution_environment::HypervisorError;
@@ -19,7 +21,7 @@ use ic_replicated_state::canister_state::execution_state::{
 use ic_types::{NumBytes, NumInstructions};
 use maplit::btreemap;
 
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
+use ic_embedders::WASM_PAGE_SIZE;
 const KB: u32 = 1024;
 
 fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wat::Error> {
@@ -1260,7 +1262,7 @@ fn wasm_with_fixed_sizes(code_section_size: u32, data_section_size: u32) -> Bina
 
 #[test]
 fn large_code_section_rejected() {
-    let wasm = wasm_with_fixed_sizes(11 * KB * KB + 10, 0);
+    let wasm = wasm_with_fixed_sizes(12 * KB * KB + 10, 0);
     let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
     let result = validate_and_instrument_for_testing(&embedder, &wasm);
     assert_matches!(
@@ -1418,5 +1420,61 @@ fn test_validate_table64() {
     assert_eq!(
         validate_wasm_binary(&wasm, &embedders_config),
         Ok(WasmValidationDetails::default())
+    );
+}
+
+#[test]
+fn wasm_with_funcref_table_section_is_valid() {
+    let wasm = wat2wasm(r#"(module (table 1 funcref))"#).unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Ok(WasmValidationDetails::default())
+    );
+}
+
+#[test]
+fn wasm_with_externref_table_section_is_invalid() {
+    let wasm = wat2wasm(r#"(module (table 1 externref))"#).unwrap();
+    assert_matches!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidTableSection(_))
+    );
+}
+
+#[test]
+fn can_validate_table_section_with_mixed_tables() {
+    let wasm = wat2wasm(
+        r#"(module
+            (table 1 funcref)
+            (table 1 externref)
+        )"#,
+    )
+    .unwrap();
+    assert_matches!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidTableSection(_))
+    );
+}
+
+#[test]
+fn wasm_with_long_func_name_is_invalid() {
+    let wat = format!(
+        r#"
+        (module
+            (type (;0;) (func))
+            (func ${} (type 0))
+        )"#,
+        "A".repeat(MAX_WASM_FUNCTION_NAME_LENGTH + 10)
+    );
+
+    let wasm = wat2wasm(&wat).unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::FunctionNameTooLarge {
+            index: 0,
+            size: MAX_WASM_FUNCTION_NAME_LENGTH + 10,
+            allowed: MAX_WASM_FUNCTION_NAME_LENGTH,
+            name: format!("{}...", "A".repeat(100)),
+        })
     );
 }

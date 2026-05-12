@@ -2,6 +2,7 @@ use super::*;
 use crate::sign::tests::KEY_ID;
 use crate::sign::tests::KEY_ID_STRING;
 use crate::sign::threshold_sig::ThresholdSigDataStore;
+use assert_matches::assert_matches;
 use ic_crypto_internal_csp::types::{CspPublicCoefficients, ThresBls12_381_Signature};
 use ic_crypto_internal_csp_test_utils::types::{
     csp_sig_thres_bls12381_combined_from_array_of, csp_sig_thres_bls12381_indiv_from_array_of,
@@ -86,51 +87,62 @@ mod sign_threshold {
     }
 
     #[test]
-    #[should_panic(
-        expected = "Illegal state: The algorithm of the public key from the threshold signature data store is not supported: Placeholder"
-    )]
-    fn should_panic_with_correct_message_if_csp_returns_unsupported_algorithm_error() {
+    fn should_return_internal_error_if_csp_returns_unsupported_algorithm_error() {
         let csp = csp_with_sign_returning_once(Err(unsupported_algorithm()));
         let threshold_sig_data_store =
             threshold_sig_data_store_with_coeffs(pub_coeffs(), &NI_DKG_ID_1);
 
-        let _panic = ThresholdSignerInternal::sign_threshold(
+        let result = ThresholdSignerInternal::sign_threshold(
             &threshold_sig_data_store,
             &csp,
             &signable_mock(),
             &NI_DKG_ID_1,
         );
+
+        assert_matches!(
+            result,
+            Err(ThresholdSignError::InternalError(internal_error))
+            if internal_error.contains("not supported")
+        );
     }
 
     #[test]
-    #[should_panic(expected = "Illegal state: The secret key has a wrong type")]
-    fn should_panic_if_csp_returns_wrong_secret_key_type_error() {
+    fn should_return_internal_error_if_csp_returns_wrong_secret_key_type_error() {
         let csp = csp_with_sign_returning_once(Err(wrong_secret_key_type()));
         let threshold_sig_data_store =
             threshold_sig_data_store_with_coeffs(pub_coeffs(), &NI_DKG_ID_1);
 
-        let _panic = ThresholdSignerInternal::sign_threshold(
+        let result = ThresholdSignerInternal::sign_threshold(
             &threshold_sig_data_store,
             &csp,
             &signable_mock(),
             &NI_DKG_ID_1,
         );
+
+        assert_matches!(
+            result,
+            Err(ThresholdSignError::InternalError(internal_error))
+            if internal_error.contains("wrong type")
+        );
     }
 
     #[test]
-    #[should_panic(
-        expected = "Illegal state: Unable to parse the secret key with algorithm id Placeholder"
-    )]
-    fn should_panic_if_csp_returns_malformed_secret_key_error() {
+    fn should_return_internal_error_if_csp_returns_malformed_secret_key_error() {
         let csp = csp_with_sign_returning_once(Err(malformed_secret_key()));
         let threshold_sig_data_store =
             threshold_sig_data_store_with_coeffs(pub_coeffs(), &NI_DKG_ID_1);
 
-        let _panic = ThresholdSignerInternal::sign_threshold(
+        let result = ThresholdSignerInternal::sign_threshold(
             &threshold_sig_data_store,
             &csp,
             &signable_mock(),
             &NI_DKG_ID_1,
+        );
+
+        assert_matches!(
+            result,
+            Err(ThresholdSignError::InternalError(internal_error))
+            if internal_error.contains("Unable to parse the secret key")
         );
     }
 
@@ -151,7 +163,7 @@ mod sign_threshold {
             sig_share_result,
             Err(ThresholdSignError::SecretKeyNotFound {
                 dkg_id: NI_DKG_ID_1,
-                algorithm: AlgorithmId::Placeholder,
+                algorithm: AlgorithmId::Unspecified,
                 key_id: KEY_ID_STRING.to_string(),
             })
         )
@@ -198,13 +210,13 @@ mod sign_threshold {
 
     fn unsupported_algorithm() -> CspThresholdSignError {
         CspThresholdSignError::UnsupportedAlgorithm {
-            algorithm: AlgorithmId::Placeholder,
+            algorithm: AlgorithmId::Unspecified,
         }
     }
 
     fn secret_key_not_found() -> CspThresholdSignError {
         CspThresholdSignError::SecretKeyNotFound {
-            algorithm: AlgorithmId::Placeholder,
+            algorithm: AlgorithmId::Unspecified,
             key_id: KeyId::from(KEY_ID),
         }
     }
@@ -215,7 +227,7 @@ mod sign_threshold {
 
     fn malformed_secret_key() -> CspThresholdSignError {
         CspThresholdSignError::MalformedSecretKey {
-            algorithm: AlgorithmId::Placeholder,
+            algorithm: AlgorithmId::Unspecified,
         }
     }
 
@@ -558,18 +570,13 @@ mod verify_threshold_sig_share {
     }
 
     #[test]
-    #[should_panic(
-        expected = "Illegal state: the algorithm of the public key from the threshold \
-            signature data store (which is based on the algorithm of the public coefficients in \
-            the store) is not supported"
-    )]
-    fn should_panic_if_csp_returns_invalid_argument_error() {
+    fn should_forward_error_if_csp_returns_invalid_argument_error() {
         let (sig_share, message, csp_public_key) = (sig_share(), signable_mock(), csp_public_key());
         let threshold_sig_data_store =
             threshold_sig_data_store_with_coeffs_and_pubkey(&NI_DKG_ID_1, NODE_ID, csp_public_key);
         let csp = csp_with_verify_indiv_sig_returning_once(Err(invalid_argument()));
 
-        let _panic = ThresholdSigVerifierInternal::verify_threshold_sig_share(
+        let result = ThresholdSigVerifierInternal::verify_threshold_sig_share(
             &threshold_sig_data_store,
             &csp,
             &sig_share,
@@ -577,21 +584,18 @@ mod verify_threshold_sig_share {
             &NI_DKG_ID_1,
             NODE_ID,
         );
+
+        assert_matches!(result, Err(CryptoError::InvalidArgument { .. }));
     }
 
     #[test]
-    #[should_panic(
-        expected = "Illegal state: the algorithm of the public key from the threshold signature data \
-            store (which is based on the algorithm of the public coefficients in the store) is \
-            not supported"
-    )]
-    fn should_panic_if_csp_returns_malformed_public_key_error() {
+    fn should_forward_error_if_csp_returns_malformed_public_key_error() {
         let (sig_share, message, csp_public_key) = (sig_share(), signable_mock(), csp_public_key());
         let threshold_sig_data_store =
             threshold_sig_data_store_with_coeffs_and_pubkey(&NI_DKG_ID_1, NODE_ID, csp_public_key);
         let csp = csp_with_verify_indiv_sig_returning_once(Err(malformed_public_key()));
 
-        let _panic = ThresholdSigVerifierInternal::verify_threshold_sig_share(
+        let result = ThresholdSigVerifierInternal::verify_threshold_sig_share(
             &threshold_sig_data_store,
             &csp,
             &sig_share,
@@ -599,17 +603,18 @@ mod verify_threshold_sig_share {
             &NI_DKG_ID_1,
             NODE_ID,
         );
+
+        assert_eq!(result, Err(malformed_public_key()));
     }
 
     #[test]
-    #[should_panic(expected = "This case cannot occur")]
-    fn should_panic_if_csp_returns_malformed_signature_error() {
+    fn should_forward_error_if_csp_returns_malformed_signature_error() {
         let (sig_share, message, csp_public_key) = (sig_share(), signable_mock(), csp_public_key());
         let threshold_sig_data_store =
             threshold_sig_data_store_with_coeffs_and_pubkey(&NI_DKG_ID_1, NODE_ID, csp_public_key);
         let csp = csp_with_verify_indiv_sig_returning_once(Err(malformed_signature()));
 
-        let _panic = ThresholdSigVerifierInternal::verify_threshold_sig_share(
+        let result = ThresholdSigVerifierInternal::verify_threshold_sig_share(
             &threshold_sig_data_store,
             &csp,
             &sig_share,
@@ -617,6 +622,8 @@ mod verify_threshold_sig_share {
             &NI_DKG_ID_1,
             NODE_ID,
         );
+
+        assert_eq!(result, Err(malformed_signature()));
     }
 
     fn csp_with_indiv_pk_returning_once(
@@ -841,9 +848,7 @@ mod combine_threshold_sig_shares {
     }
 
     #[test]
-    #[should_panic(expected = "The CSP must return a signature of type \
-        `CspSignature::ThresBls12_381(ThresBls12_381_Signature::Combined)`.")]
-    fn should_panic_if_csp_returns_wrong_signature_type() {
+    fn should_return_malformed_signature_error_if_csp_returns_wrong_signature_type() {
         let shares = shares(vec![(
             NODE_1,
             threshold_sig_share(vec![1; IndividualSignatureBytes::SIZE]),
@@ -855,12 +860,14 @@ mod combine_threshold_sig_shares {
         let threshold_sig_data_store =
             threshold_sig_data_store_with(&NI_DKG_ID_1, pub_coeffs(), indices);
 
-        let _panic = ThresholdSigVerifierInternal::combine_threshold_sig_shares(
+        let result = ThresholdSigVerifierInternal::combine_threshold_sig_shares(
             &threshold_sig_data_store,
             &csp,
             shares,
             &NI_DKG_ID_1,
         );
+
+        assert_matches!(result, Err(CryptoError::MalformedSignature { .. }));
     }
 
     #[test]
@@ -1527,7 +1534,7 @@ fn combined_csp_threshold_sig(bytes: [u8; CombinedSignatureBytes::SIZE]) -> CspS
 
 fn secret_key_not_found() -> CryptoError {
     CryptoError::SecretKeyNotFound {
-        algorithm: AlgorithmId::Placeholder,
+        algorithm: AlgorithmId::Unspecified,
         key_id: KEY_ID_STRING.to_string(),
     }
 }
@@ -1540,7 +1547,7 @@ fn invalid_argument() -> CryptoError {
 
 fn malformed_public_key() -> CryptoError {
     CryptoError::MalformedPublicKey {
-        algorithm: AlgorithmId::Placeholder,
+        algorithm: AlgorithmId::Unspecified,
         key_bytes: None,
         internal_error: "some error".to_string(),
     }
@@ -1548,7 +1555,7 @@ fn malformed_public_key() -> CryptoError {
 
 fn malformed_signature() -> CryptoError {
     CryptoError::MalformedSignature {
-        algorithm: AlgorithmId::Placeholder,
+        algorithm: AlgorithmId::Unspecified,
         sig_bytes: vec![],
         internal_error: "some error".to_string(),
     }

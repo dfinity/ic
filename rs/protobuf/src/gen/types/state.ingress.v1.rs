@@ -111,6 +111,13 @@ pub struct IngressHistoryState {
     pub next_terminal_time: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SenderInfo {
+    #[prost(bytes = "vec", tag = "1")]
+    pub info: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "2")]
+    pub signer: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Ingress {
     #[prost(message, optional, tag = "1")]
     pub source: ::core::option::Option<super::super::super::types::v1::UserId>,
@@ -128,6 +135,8 @@ pub struct Ingress {
     /// Represents the id of the canister that the message is targeting.
     #[prost(message, optional, tag = "7")]
     pub effective_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+    #[prost(message, optional, tag = "8")]
+    pub sender_info: ::core::option::Option<SenderInfo>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
@@ -159,6 +168,7 @@ pub enum ErrorCode {
     UnknownManagementMessage = 407,
     InvalidManagementPayload = 408,
     CanisterSnapshotImmutable = 409,
+    InvalidSubnetAdmin = 410,
     CanisterTrapped = 502,
     CanisterCalledTrap = 503,
     CanisterContractViolation = 504,
@@ -193,6 +203,7 @@ pub enum ErrorCode {
     CanisterAlreadyInstalled = 538,
     CanisterWasmMemoryLimitExceeded = 539,
     ReservedCyclesLimitIsTooLow = 540,
+    CanisterInvalidControllerOrSubnetAdmin = 541,
     /// 6xx -- `RejectCode::SysUnknown`
     DeadlineExpired = 601,
     ResponseDropped = 602,
@@ -229,6 +240,7 @@ impl ErrorCode {
             Self::UnknownManagementMessage => "ERROR_CODE_UNKNOWN_MANAGEMENT_MESSAGE",
             Self::InvalidManagementPayload => "ERROR_CODE_INVALID_MANAGEMENT_PAYLOAD",
             Self::CanisterSnapshotImmutable => "ERROR_CODE_CANISTER_SNAPSHOT_IMMUTABLE",
+            Self::InvalidSubnetAdmin => "ERROR_CODE_INVALID_SUBNET_ADMIN",
             Self::CanisterTrapped => "ERROR_CODE_CANISTER_TRAPPED",
             Self::CanisterCalledTrap => "ERROR_CODE_CANISTER_CALLED_TRAP",
             Self::CanisterContractViolation => "ERROR_CODE_CANISTER_CONTRACT_VIOLATION",
@@ -283,6 +295,9 @@ impl ErrorCode {
                 "ERROR_CODE_CANISTER_WASM_MEMORY_LIMIT_EXCEEDED"
             }
             Self::ReservedCyclesLimitIsTooLow => "ERROR_CODE_RESERVED_CYCLES_LIMIT_IS_TOO_LOW",
+            Self::CanisterInvalidControllerOrSubnetAdmin => {
+                "ERROR_CODE_CANISTER_INVALID_CONTROLLER_OR_SUBNET_ADMIN"
+            }
             Self::DeadlineExpired => "ERROR_CODE_DEADLINE_EXPIRED",
             Self::ResponseDropped => "ERROR_CODE_RESPONSE_DROPPED",
         }
@@ -319,6 +334,7 @@ impl ErrorCode {
             "ERROR_CODE_UNKNOWN_MANAGEMENT_MESSAGE" => Some(Self::UnknownManagementMessage),
             "ERROR_CODE_INVALID_MANAGEMENT_PAYLOAD" => Some(Self::InvalidManagementPayload),
             "ERROR_CODE_CANISTER_SNAPSHOT_IMMUTABLE" => Some(Self::CanisterSnapshotImmutable),
+            "ERROR_CODE_INVALID_SUBNET_ADMIN" => Some(Self::InvalidSubnetAdmin),
             "ERROR_CODE_CANISTER_TRAPPED" => Some(Self::CanisterTrapped),
             "ERROR_CODE_CANISTER_CALLED_TRAP" => Some(Self::CanisterCalledTrap),
             "ERROR_CODE_CANISTER_CONTRACT_VIOLATION" => Some(Self::CanisterContractViolation),
@@ -376,6 +392,9 @@ impl ErrorCode {
             }
             "ERROR_CODE_RESERVED_CYCLES_LIMIT_IS_TOO_LOW" => {
                 Some(Self::ReservedCyclesLimitIsTooLow)
+            }
+            "ERROR_CODE_CANISTER_INVALID_CONTROLLER_OR_SUBNET_ADMIN" => {
+                Some(Self::CanisterInvalidControllerOrSubnetAdmin)
             }
             "ERROR_CODE_DEADLINE_EXPIRED" => Some(Self::DeadlineExpired),
             "ERROR_CODE_RESPONSE_DROPPED" => Some(Self::ResponseDropped),

@@ -14,17 +14,22 @@ use crate::driver::{
     log_events::LogEvent,
     nested::HasNestedVms,
     test_env::TestEnvAttribute,
-    test_env_api::{HasTopologySnapshot, HasVmName, IcNodeContainer, SshSession, scp_send_to},
+    test_env_api::{
+        HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo, SshSession, try_scp_send_to,
+    },
     test_setup::GroupSetup,
     universal_vm::UniversalVms,
 };
 
 use super::{
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources},
+    config::NODES_INFO,
+    ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResourceOverrides},
     test_env::TestEnv,
-    test_env_api::get_dependency_path,
+    test_env_api::get_dependency_path_from_env,
     universal_vm::UniversalVm,
 };
+
+use ic_types::NodeId;
 
 // Default labels
 const IC_NODE: &str = "ic_node";
@@ -61,10 +66,8 @@ impl VectorVm {
     pub fn new() -> Self {
         Self {
             universal_vm: UniversalVm::new("vector".to_string())
-                .with_config_img(get_dependency_path(
-                    std::env::var("VECTOR_VM_PATH").expect("VECTOR_VM_PATH not set"),
-                ))
-                .with_vm_resources(VmResources {
+                .with_config_img(get_dependency_path_from_env("VECTOR_VM_PATH"))
+                .with_resource_overrides(VmResourceOverrides {
                     vcpus: Some(NrOfVCPUs::new(2)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(16780000)), // 16GiB
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(30)),
@@ -75,8 +78,10 @@ impl VectorVm {
         }
     }
 
-    pub fn with_vm_resources(mut self, vm_resources: VmResources) -> Self {
-        self.universal_vm = self.universal_vm.with_vm_resources(vm_resources);
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        self.universal_vm = self
+            .universal_vm
+            .with_resource_overrides(vm_resource_overrides);
         self
     }
 
@@ -103,7 +108,12 @@ impl VectorVm {
         Ok(())
     }
 
-    fn hash_updated(&mut self, content: &str, logger: &Logger) -> bool {
+    /// Computes the hash of `content` and returns `Some(new_hash)` if it differs
+    /// from the currently stored `config_hash`, or `None` otherwise. The caller
+    /// is responsible for storing the returned hash in `self.config_hash` only
+    /// after the config has been successfully synced to the vector VM, so that
+    /// a failed sync is retried on the next call.
+    fn changed_hash(&self, content: &str, logger: &Logger) -> Option<u64> {
         let mut hasher = DefaultHasher::new();
         content.hash(&mut hasher);
 
@@ -114,12 +124,10 @@ impl VectorVm {
                 logger,
                 "Vector targets hash changed from {} to {new_hash}", self.config_hash
             );
-
-            self.config_hash = new_hash;
-            return true;
+            Some(new_hash)
+        } else {
+            None
         }
-
-        false
     }
 
     pub fn sync_with_vector(&mut self, env: &TestEnv) -> anyhow::Result<()> {
@@ -129,6 +137,10 @@ impl VectorVm {
         let log = env.logger();
         info!(log, "Syncing vector targets.");
 
+        let testnet_nodes = env
+            .read_json_object::<NodesInfo, _>(NODES_INFO)?
+            .into_keys()
+            .collect::<Vec<NodeId>>();
         match env.safe_topology_snapshot() {
             Err(e) => warn!(
                 log,
@@ -142,7 +154,14 @@ impl VectorVm {
                     .chain(snapshot.api_boundary_nodes());
 
                 for node in nodes {
-                    let node_id = node.node_id.get();
+                    let node_id = node.node_id;
+                    // Only consider nodes that are part of the testnet to make up for system tests
+                    // that use mainnet state, where the registry could contain nodes that are not
+                    // part of the testnet.
+                    if !testnet_nodes.contains(&node_id) {
+                        continue;
+                    }
+
                     let ip = node.get_ip_addr();
 
                     let labels = [
@@ -241,26 +260,24 @@ impl VectorVm {
 
         let generated_content = serde_json::to_string_pretty(&generated_config).unwrap();
 
-        if !self.hash_updated(&generated_content, &log) {
+        let Some(new_hash) = self.changed_hash(&generated_content, &log) else {
             debug!(log, "Skipping updating vector targets.");
             return Ok(());
-        }
-
-        std::fs::write(
-            vector_local_dir.join("generated_config.json"),
-            &generated_content,
-        )
-        .map_err(anyhow::Error::from)?;
-
-        std::fs::write(vector_local_dir.join("vector.toml"), get_vector_toml())
-            .map_err(anyhow::Error::from)?;
+        };
 
         let deployed_vm = env.get_deployed_universal_vm("vector").unwrap();
         let session = deployed_vm
             .block_on_ssh_session()
             .unwrap_or_else(|e| panic!("Failed to setup SSH session to vector because: {e:?}!",));
 
-        for file in vector_local_dir.read_dir().map_err(anyhow::Error::from)? {
+        std::fs::write(
+            vector_local_dir.join("generated_config.json"),
+            &generated_content,
+        )?;
+
+        std::fs::write(vector_local_dir.join("vector.toml"), get_vector_toml())?;
+
+        for file in vector_local_dir.read_dir()? {
             let file = match file {
                 Ok(f) => f,
                 Err(e) => {
@@ -271,7 +288,7 @@ impl VectorVm {
 
             let from = file.path();
             let to = Path::new("/etc/vector/config").join(file.path().file_name().unwrap());
-            scp_send_to(env.logger(), &session, &from, &to, 0o644);
+            try_scp_send_to(env.logger(), &session, &from, &to, 0o644)?;
         }
 
         if !self.container_running {
@@ -296,9 +313,18 @@ docker run -d --name vector \
             self.container_running = true;
 
             emit_kibana_url_event(&log, &infra_group_name, &self.start_time);
+        } else {
+            info!(log, "Issuing command to reload vector configuration.");
+            deployed_vm
+                .block_on_bash_script_from_session(&session, "docker kill --signal=HUP vector")
+                .unwrap();
         }
 
         info!(log, "Vector targets sync complete.");
+
+        // Only record the new hash now that the config has been successfully synced,
+        // so that any earlier failure causes the next call to retry the sync.
+        self.config_hash = new_hash;
 
         Ok(())
     }

@@ -36,7 +36,8 @@ use ic_nns_handler_root_interface::{
 use ic_sns_governance::pb::v1::governance::Version;
 use ic_sns_init::{SnsCanisterInitPayloads, pb::v1::SnsInitPayload};
 use ic_sns_root::GetSnsCanistersSummaryResponse;
-use ic_types::{Cycles, SubnetId};
+use ic_types::SubnetId;
+use ic_types_cycles::Cycles;
 use ic_wasm;
 use maplit::{btreemap, hashmap};
 use serde_json::{Value as JsonValue, json};
@@ -4377,9 +4378,8 @@ mod test {
         expected_response: DeployNewSnsResponse,
     ) {
         canister_wrapper.with(|c| {
-            if available_subnet.is_some() {
-                c.borrow_mut()
-                    .set_sns_subnets(vec![available_subnet.unwrap()]);
+            if let Some(available_subnet) = available_subnet {
+                c.borrow_mut().set_sns_subnets(vec![available_subnet]);
             }
             if wasm_available {
                 add_dummy_wasms(&mut c.borrow_mut(), None);

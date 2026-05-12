@@ -11,7 +11,7 @@ use ic_interfaces::{
     idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool},
 };
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
-use ic_logger::{ReplicaLogger, debug, warn};
+use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -125,10 +125,7 @@ impl IDkgComplaintHandlerImpl {
             if validated_complaints.contains(&key) {
                 self.metrics
                     .complaint_errors_inc("duplicate_complaints_in_batch");
-                ret.push(IDkgChangeAction::HandleInvalid(
-                    id,
-                    format!("Duplicate complaint in unvalidated batch: {signed_complaint}"),
-                ));
+                ret.push(IDkgChangeAction::RemoveUnvalidated(id));
                 continue;
             }
 
@@ -146,10 +143,7 @@ impl IDkgComplaintHandlerImpl {
                         &signed_complaint.signature.signer,
                     ) {
                         self.metrics.complaint_errors_inc("duplicate_complaint");
-                        ret.push(IDkgChangeAction::HandleInvalid(
-                            id,
-                            format!("Duplicate complaint: {signed_complaint}"),
-                        ));
+                        ret.push(IDkgChangeAction::RemoveUnvalidated(id));
                     } else {
                         let action = self.crypto_verify_complaint(id, transcript, signed_complaint);
                         if let Some(IDkgChangeAction::MoveToValidated(_)) = action {
@@ -222,10 +216,7 @@ impl IDkgComplaintHandlerImpl {
             if validated_openings.contains(&key) {
                 self.metrics
                     .complaint_errors_inc("duplicate_openings_in_batch");
-                ret.push(IDkgChangeAction::HandleInvalid(
-                    id,
-                    format!("Duplicate opening in unvalidated batch: {signed_opening}"),
-                ));
+                ret.push(IDkgChangeAction::RemoveUnvalidated(id));
                 continue;
             }
 
@@ -244,10 +235,7 @@ impl IDkgComplaintHandlerImpl {
                         &signed_opening.signature.signer,
                     ) {
                         self.metrics.complaint_errors_inc("duplicate_opening");
-                        ret.push(IDkgChangeAction::HandleInvalid(
-                            id,
-                            format!("Duplicate opening: {signed_opening}"),
-                        ));
+                        ret.push(IDkgChangeAction::RemoveUnvalidated(id));
                     } else if let Some(signed_complaint) =
                         self.get_complaint_for_opening(idkg_pool, &signed_opening)
                     {
@@ -411,7 +399,8 @@ impl IDkgComplaintHandlerImpl {
                 ));
             } else {
                 // Defer in case of transient errors
-                debug!(
+                warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Complaint signature validation(transient error): {}, error = {:?}",
                     signed_complaint,
@@ -439,7 +428,8 @@ impl IDkgComplaintHandlerImpl {
                 ))
             }
             Err(error) => {
-                debug!(
+                warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Complaint validation(transient error): {}, error = {:?}",
                     signed_complaint,
@@ -535,7 +525,8 @@ impl IDkgComplaintHandlerImpl {
                     ),
                 ));
             } else {
-                debug!(
+                warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Opening signature validation(transient error): {}, error = {:?}",
                     signed_opening,
@@ -565,7 +556,8 @@ impl IDkgComplaintHandlerImpl {
                 ))
             }
             Err(error) => {
-                debug!(
+                warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Opening validation(transient error): {}, error = {:?}", signed_opening, error
                 );
@@ -698,6 +690,7 @@ impl IDkgComplaintHandlerImpl {
             }
             Err(error) => {
                 warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Failed to resolve complaint ref: reason = {}, \
                      transcript_ref = {:?}, error = {:?}",
@@ -898,6 +891,7 @@ impl IDkgTranscriptLoader for IDkgComplaintHandlerImpl {
             }
             Err(err) => {
                 warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Failed to load transcript: transcript_id: {:?}, error = {:?}",
                     transcript.transcript_id,
@@ -948,6 +942,7 @@ impl IDkgTranscriptLoader for IDkgComplaintHandlerImpl {
             }
             Err(err) => {
                 warn!(
+                    every_n_seconds => 10,
                     self.log,
                     "Failed to load transcript with openings: transcript_id: {:?}, error = {:?}",
                     transcript.transcript_id,
@@ -1016,13 +1011,14 @@ mod tests {
     use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
+    use ic_interfaces_mocks::crypto::MockCrypto;
     use ic_test_utilities_consensus::idkg::*;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_types::{
         Height,
         consensus::idkg::{IDkgMasterPublicKeyId, IDkgObject, PreSigId, RequestId, TranscriptRef},
-        crypto::AlgorithmId,
+        crypto::{AlgorithmId, CryptoError},
         messages::CallbackId,
         time::UNIX_EPOCH,
     };
@@ -1232,7 +1228,11 @@ mod tests {
                     .into_iter()
                     .collect();
                 // assert that the mock complaint does not pass real crypto check
-                assert!(is_handle_invalid(&changeset, &complaint.message_id()));
+                assert!(is_handle_invalid(
+                    &changeset,
+                    &complaint.message_id(),
+                    "Complaint signature validation(permanent error)"
+                ));
             })
         })
     }
@@ -1401,7 +1401,7 @@ mod tests {
                     &active_transcripts,
                 );
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id));
             })
         })
     }
@@ -1498,7 +1498,7 @@ mod tests {
                 );
                 assert_eq!(change_set.len(), 2);
                 // One is considered duplicate
-                assert!(is_handle_invalid(&change_set, &msg_id_1));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_1));
                 // One is considered valid
                 assert!(is_moved_to_validated(&change_set, &msg_id_2));
             })
@@ -1622,7 +1622,11 @@ mod tests {
                     .into_iter()
                     .collect();
                 // assert that the mock opening does not pass real crypto check
-                assert!(is_handle_invalid(&changeset, &opening.message_id()));
+                assert!(is_handle_invalid(
+                    &changeset,
+                    &opening.message_id(),
+                    "Opening signature validation(permanent error)"
+                ));
             })
         })
     }
@@ -1808,7 +1812,7 @@ mod tests {
                     &active_transcripts,
                 );
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id));
             })
         })
     }
@@ -1869,7 +1873,7 @@ mod tests {
                 );
                 assert_eq!(change_set.len(), 2);
                 // One is considered duplicate
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
                 // One is considered valid
                 assert!(is_moved_to_validated(&change_set, &msg_id_1));
             })
@@ -2174,24 +2178,36 @@ mod tests {
     }
 
     fn test_load_transcript_failure_to_create_complaint(key_id: IDkgMasterPublicKeyId) {
-        let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-                let (_, _, transcript) =
-                    create_corrupted_transcript(&env, &mut rng, AlgorithmId::from(key_id.inner()));
+                let mut mock = MockCrypto::new();
 
-                let crypto = env
-                    .nodes
-                    .filter_by_receivers(&transcript)
-                    .next()
-                    .unwrap()
-                    .crypto();
-                let (idkg_pool, complaint_handler) =
-                    create_complaint_dependencies_with_crypto(pool_config, logger, Some(crypto));
+                let transcript_id = create_transcript_id(1);
+                mock.expect_idkg_load_transcript().returning(move |_| {
+                    Ok(vec![IDkgComplaint {
+                        transcript_id,
+                        dealer_id: NODE_2,
+                        internal_complaint_raw: vec![],
+                    }])
+                });
 
-                // Will attempt to create a complaint but fail since node ID of crypto and
-                // complaint_handler are different
+                mock.expect_sign_basic_idkg_complaint().returning(|_| {
+                    Err(CryptoError::TransientInternalError {
+                        internal_error: "boom!".to_string(),
+                    })
+                });
+
+                let mock_crypto: Arc<dyn ConsensusCrypto> = Arc::new(mock);
+                let (idkg_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
+                    pool_config,
+                    logger,
+                    Some(mock_crypto),
+                );
+
+                let transcript =
+                    create_transcript(&key_id, transcript_id, &[NODE_1, NODE_2, NODE_3]);
+
+                // Will attempt to create a complaint but fail because basic signing fails
                 let status = complaint_handler.load_transcript(&idkg_pool, &transcript);
                 assert_matches!(status, TranscriptLoadStatus::Failure);
             })

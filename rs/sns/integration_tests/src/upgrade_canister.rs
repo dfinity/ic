@@ -37,7 +37,6 @@ use ic_state_machine_tests::StateMachine;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::Duration;
 
 // The minimum WASM payload.
@@ -440,26 +439,38 @@ fn test_upgrade_canister_proposal_execution_fail() {
             }
             action => panic!("Proposal action was not UpgradeSnsControlledCanister: {action:?}"),
         };
-        fn age_s(t: u64) -> u64 {
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs()
-                .saturating_sub(t)
-        }
-        let decision_age_s = age_s(proposal.decided_timestamp_seconds);
+        // Use the proposal's own timestamps to verify timing consistency,
+        // rather than comparing against wall-clock time (SystemTime::now()),
+        // because the state machine's internal time does not advance during
+        // the SNS setup phase (which compiles WASMs and can take 60-100+
+        // seconds of wall-clock time).
+        let creation_ts = proposal.proposal_creation_timestamp_seconds;
+        assert_ne!(creation_ts, 0, "proposal: {proposal:?}");
+        assert_ne!(
+            proposal.decided_timestamp_seconds, 0,
+            "proposal: {proposal:?}"
+        );
+        let decision_delay_s = proposal
+            .decided_timestamp_seconds
+            .saturating_sub(creation_ts);
         assert!(
-            decision_age_s < EXPECTED_SNS_DAPP_CANISTER_UPGRADE_TIME_SECONDS,
-            "decision_age_s: {decision_age_s}, proposal: {proposal:?}"
+            decision_delay_s < EXPECTED_SNS_DAPP_CANISTER_UPGRADE_TIME_SECONDS,
+            "decision_delay_s: {decision_delay_s}, proposal: {proposal:?}"
         );
         assert_eq!(
             proposal.executed_timestamp_seconds, 0,
             "proposal: {proposal:?}"
         );
-        let failure_age_s = age_s(proposal.failed_timestamp_seconds);
+        assert_ne!(
+            proposal.failed_timestamp_seconds, 0,
+            "proposal: {proposal:?}"
+        );
+        let failure_delay_s = proposal
+            .failed_timestamp_seconds
+            .saturating_sub(creation_ts);
         assert!(
-            failure_age_s < EXPECTED_SNS_DAPP_CANISTER_UPGRADE_TIME_SECONDS,
-            "failure_age_s: {failure_age_s}, proposal: {proposal:?}"
+            failure_delay_s < EXPECTED_SNS_DAPP_CANISTER_UPGRADE_TIME_SECONDS,
+            "failure_delay_s: {failure_delay_s}, proposal: {proposal:?}"
         );
         assert_eq!(
             proposal.failure_reason.as_ref().unwrap().error_type,

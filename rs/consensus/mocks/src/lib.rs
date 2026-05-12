@@ -135,8 +135,10 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
     let dkg_pool = Arc::new(RwLock::new(DkgPoolImpl::new(
         ic_metrics::MetricsRegistry::new(),
         log.clone(),
+        Height::from(0),
     )));
     let idkg_pool = Arc::new(RwLock::new(IDkgPoolImpl::new(
+        replica_config.node_id,
         pool_config.clone(),
         log.clone(),
         ic_metrics::MetricsRegistry::new(),

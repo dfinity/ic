@@ -5,6 +5,7 @@ use crate::{
         CanisterHttpPayloadValidationError, CanisterHttpPayloadValidationFailure,
         InvalidCanisterHttpPayloadReason,
     },
+    chain_key::{ChainKeyPayloadValidationFailure, InvalidChainKeyPayloadReason},
     ingress_manager::{
         IngressPayloadValidationError, IngressPayloadValidationFailure, InvalidIngressPayloadReason,
     },
@@ -15,7 +16,6 @@ use crate::{
         SelfValidatingPayloadValidationFailure,
     },
     validation::{ValidationError, ValidationResult},
-    vetkd::{InvalidVetKdPayloadReason, VetKdPayloadValidationFailure},
 };
 use ic_base_types::{NumBytes, SubnetId};
 use ic_types::{
@@ -26,6 +26,15 @@ use ic_types::{
 };
 
 pub mod errors;
+
+#[derive(Debug, Default)]
+/// Contains a payload together with an estimate how many bytes the payload would take when sent
+/// over wire. This is not necessarily the same as, or even close to, the size of the structure
+/// in the memory.
+pub struct PayloadWithSizeEstimate<T> {
+    pub payload: T,
+    pub wire_size_estimate: NumBytes,
+}
 
 /// The [`PayloadBuilder`] is responsible for creating and validating payload that
 /// is included in consensus blocks.
@@ -65,7 +74,7 @@ pub enum InvalidPayloadReason {
     InvalidSelfValidatingPayload(InvalidSelfValidatingPayloadReason),
     InvalidCanisterHttpPayload(InvalidCanisterHttpPayloadReason),
     InvalidQueryStatsPayload(InvalidQueryStatsPayloadReason),
-    InvalidVetKdPayload(InvalidVetKdPayloadReason),
+    InvalidChainKeyPayload(InvalidChainKeyPayloadReason),
     /// The overall block size is too large, even though the individual payloads are valid
     PayloadTooBig {
         expected: NumBytes,
@@ -80,7 +89,7 @@ pub enum PayloadValidationFailure {
     SelfValidatingPayloadValidationFailed(SelfValidatingPayloadValidationFailure),
     CanisterHttpPayloadValidationFailed(CanisterHttpPayloadValidationFailure),
     QueryStatsPayloadValidationFailed(QueryStatsPayloadValidationFailure),
-    VetKdPayloadValidationFailed(VetKdPayloadValidationFailure),
+    ChainKeyPayloadValidationFailed(ChainKeyPayloadValidationFailure),
     RegistryUnavailable(RegistryClientError),
     SubnetNotFound(SubnetId),
 }

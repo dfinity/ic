@@ -25,7 +25,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},
     driver::{
-        farm::HostFeature,
+        farm::{HostFeature, VmAllocationMode},
         group::SystemTestGroup,
         ic::ImageSizeGiB,
         test_env::TestEnv,
@@ -38,7 +38,6 @@ use slog::{Logger, debug, info};
 use std::process::Command;
 use std::time::Duration;
 
-const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 const CANISTER_METHOD: &str = "read";
 // Size of the payload sent to the counter canister in query("write") call.
 const PAYLOAD_SIZE_BYTES: usize = 1024;
@@ -98,7 +97,10 @@ pub fn test(env: TestEnv, rps: usize, runtime: Duration) {
         "Node with id={} from the Application subnet will be used as a target for the workload.",
         app_node.node_id
     );
-    let app_canister = app_node.create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+    let app_canister = app_node.create_and_install_canister_with_arg(
+        &std::env::var("COUNTER_CANISTER_WAT_PATH").unwrap(),
+        None,
+    );
     info!(&log, "Installation of counter canister has succeeded.");
     info!(
         &log,
@@ -151,6 +153,7 @@ fn main() -> Result<()> {
     let overall_timeout: Duration = per_task_timeout + OVERALL_TIMEOUT_DELTA; // This should be a bit larger than the per_task_timeout.
     let test = |env| test(env, RPS, WORKLOAD_RUNTIME);
     SystemTestGroup::new()
+        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(|env| {
             setup(
                 env,

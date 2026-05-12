@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
 use ic_base_types::{NumSeconds, PrincipalId};
+use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
@@ -16,9 +17,9 @@ use ic_state_machine_tests::StateMachine;
 use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig, WasmResult};
 use ic_test_utilities_execution_environment::{ExecutionTestBuilder, wat_compilation_cost};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
-use ic_types::Cycles;
 use ic_types::messages::CanisterTask;
 use ic_types::{CanisterId, NumBytes};
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
 use std::time::{Duration, UNIX_EPOCH};
@@ -122,7 +123,10 @@ fn heartbeat_fails_gracefully_if_not_exported() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     test.canister_task(canister_id, CanisterTask::Heartbeat);
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
-    assert_eq!(wat_compilation_cost(wat), test.executed_instructions());
+    assert_eq!(
+        DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + wat_compilation_cost(wat),
+        test.executed_instructions()
+    );
 }
 
 #[test]
@@ -132,7 +136,10 @@ fn global_timer_fails_gracefully_if_not_exported() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     test.canister_task(canister_id, CanisterTask::GlobalTimer);
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
-    assert_eq!(wat_compilation_cost(wat), test.executed_instructions());
+    assert_eq!(
+        DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + wat_compilation_cost(wat),
+        test.executed_instructions()
+    );
 }
 
 #[test]
@@ -246,7 +253,7 @@ fn global_timer_can_be_cancelled() {
     let result = env
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
 
     let get_global_counter = wasm().get_global_counter().reply_int64().build();
 
@@ -254,7 +261,7 @@ fn global_timer_can_be_cancelled() {
     let result = env
         .execute_ingress(canister_id, "update", get_global_counter.clone())
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
 
     let cancel_global_timer = wasm().api_global_timer_set(0).reply_int64().build();
 
@@ -272,7 +279,7 @@ fn global_timer_can_be_cancelled() {
         let result = env
             .execute_ingress(canister_id, "update", get_global_counter.clone())
             .unwrap();
-        assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+        assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
     }
 }
 
@@ -307,7 +314,7 @@ fn global_timer_can_be_immediately_cancelled() {
         let result = env
             .execute_ingress(canister_id, "update", get_global_counter.clone())
             .unwrap();
-        assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+        assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
     }
 }
 
@@ -331,7 +338,7 @@ fn global_timer_is_one_off() {
     let result = env
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
 
     let get_global_counter = wasm().get_global_counter().reply_int64().build();
 
@@ -339,14 +346,14 @@ fn global_timer_is_one_off() {
     let result = env
         .execute_ingress(canister_id, "update", get_global_counter.clone())
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
 
     // The timer should reach the deadline now
     env.tick();
     let result = env
         .execute_ingress(canister_id, "update", get_global_counter.clone())
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(1_u64.to_le_bytes().into()));
 
     // The timer should be called just once
     // We execute rounds to exercise all possible next scheduled method types (to ensure a canister task would run if scheduled).
@@ -356,7 +363,7 @@ fn global_timer_is_one_off() {
         let result = env
             .execute_ingress(canister_id, "update", get_global_counter.clone())
             .unwrap();
-        assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
+        assert_eq!(result, WasmResult::Reply(1_u64.to_le_bytes().into()));
     }
 }
 
@@ -380,7 +387,7 @@ fn global_timer_in_far_future_does_not_run() {
     let result = env
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
 
     let get_global_counter = wasm().get_global_counter().reply_int64().build();
 
@@ -390,7 +397,7 @@ fn global_timer_in_far_future_does_not_run() {
         let result = env
             .execute_ingress(canister_id, "update", get_global_counter.clone())
             .unwrap();
-        assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+        assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
     }
 }
 
@@ -411,7 +418,7 @@ fn global_timer_can_be_reactivated() {
     let result = env
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
 
     let get_global_counter = wasm().get_global_counter().reply_int64().build();
 
@@ -419,7 +426,7 @@ fn global_timer_can_be_reactivated() {
     let result = env
         .execute_ingress(canister_id, "update", get_global_counter.clone())
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(1_u64.to_le_bytes().into()));
 
     // The timer should be called just once
     env.advance_time(Duration::from_secs(1));
@@ -428,7 +435,7 @@ fn global_timer_can_be_reactivated() {
         let result = env
             .execute_ingress(canister_id, "update", get_global_counter.clone())
             .unwrap();
-        assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
+        assert_eq!(result, WasmResult::Reply(1_u64.to_le_bytes().into()));
     }
 
     let set_global_timer = wasm()
@@ -442,14 +449,14 @@ fn global_timer_can_be_reactivated() {
     let result = env
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(1u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(1_u64.to_le_bytes().into()));
 
     // The timer should be called again
     env.advance_time(Duration::from_secs(1));
     let result = env
         .execute_ingress(canister_id, "update", get_global_counter)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(2u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(2_u64.to_le_bytes().into()));
 }
 
 #[test]
@@ -469,11 +476,11 @@ fn global_timer_can_be_reactivated_in_canister_global_timer_method() {
     let result = env
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
 
     let get_global_counter = wasm().get_global_counter().reply_int64().build();
 
-    for i in 1..20u64 {
+    for i in 1..20_u64 {
         // In every third execution, NextScheduledMethod is Message, hence in such
         // executions only the message will be executed.
         // While in the other executions, NextScheduledMethod is either GlobalTimer
@@ -538,7 +545,7 @@ fn system_task_metrics_are_observable() {
     let result = env
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
 
     // The timer should be triggered and reactivated each round.
     for _ in 0..5 {
@@ -585,7 +592,7 @@ fn global_timer_is_not_set_if_execution_traps() {
     let result = env
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
-    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
 
     // The timer should trap and never reactivated again.
     for _ in 0..5 {
@@ -1131,7 +1138,16 @@ fn global_timer_produces_transient_error_on_out_of_cycles() {
         .build();
     // The canister has no enough cycles for the install.
     let err = env
-        .install_canister_with_cycles(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None, 0_u64.into())
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_log_memory_limit(0)
+                    .build(),
+            ),
+            0_u64.into(),
+        )
         .unwrap_err();
 
     assert_eq!(RejectCode::SysTransient, err.code().into());
@@ -1225,8 +1241,7 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
     // Hence hook should be executed next.
     assert_eq!(
         test.state()
-            .canister_states
-            .get(&canister_id)
+            .canister_state(&canister_id)
             .unwrap()
             .system_state
             .task_queue
@@ -1248,8 +1263,7 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
     // The hook status is still `Ready`.
     assert_eq!(
         test.state()
-            .canister_states
-            .get(&canister_id)
+            .canister_state(&canister_id)
             .unwrap()
             .system_state
             .task_queue
@@ -1270,8 +1284,7 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
 
     assert_eq!(
         test.state()
-            .canister_states
-            .get(&canister_id)
+            .canister_state(&canister_id)
             .unwrap()
             .system_state
             .task_queue
@@ -2023,8 +2036,7 @@ fn low_wasm_memory_hook_is_run_when_memory_limit_is_exceeded() {
     // The update will also satisfy condition for `low_wasm_memory` hook.
     assert_eq!(
         test.state()
-            .canister_states
-            .get(&canister_id)
+            .canister_state(&canister_id)
             .unwrap()
             .system_state
             .task_queue
@@ -2042,8 +2054,7 @@ fn low_wasm_memory_hook_is_run_when_memory_limit_is_exceeded() {
 
     assert_eq!(
         test.state()
-            .canister_states
-            .get(&canister_id)
+            .canister_state(&canister_id)
             .unwrap()
             .system_state
             .task_queue

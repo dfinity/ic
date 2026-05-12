@@ -1,7 +1,13 @@
-use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
-    pb::v1::{GovernanceError, InstallCode, Topic, install_code::CanisterInstallMode},
-    proposals::call_canister::CallCanister,
+    pb::v1::{
+        GovernanceError, InstallCode, SelfDescribingValue, Topic, install_code::CanisterInstallMode,
+    },
+    proposals::{
+        call_canister::CallCanister,
+        invalid_proposal_error,
+        self_describing::{DocumentedAction, SelfDescribingProstEnum, ValueBuilder},
+        topic_to_manage_canister,
+    },
 };
 
 use candid::{CandidType, Deserialize, Encode};
@@ -75,6 +81,32 @@ impl InstallCode {
             .ok_or(invalid_proposal_error("Argument is required"))
     }
 
+    /// Returns a copy with potentially large fields (wasm_module, arg) elided.
+    /// (Hashes are preserved.)
+    pub fn abridge(&self) -> Self {
+        let Self {
+            canister_id,
+            install_mode,
+            wasm_module_hash,
+            arg_hash,
+            skip_stopping_before_installing,
+
+            // Elided.
+            wasm_module: _,
+            arg: _,
+        } = self;
+
+        Self {
+            canister_id: *canister_id,
+            install_mode: *install_mode,
+            wasm_module: None,
+            wasm_module_hash: wasm_module_hash.clone(),
+            arg: None,
+            arg_hash: arg_hash.clone(),
+            skip_stopping_before_installing: *skip_stopping_before_installing,
+        }
+    }
+
     pub fn valid_topic(&self) -> Result<Topic, GovernanceError> {
         let canister_id = self.valid_canister_id()?;
         Ok(topic_to_manage_canister(&canister_id))
@@ -120,6 +152,8 @@ impl InstallCode {
 }
 
 impl CallCanister for InstallCode {
+    type Reply = ();
+
     fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
         let canister_id = self.valid_canister_id()?;
         // Most canisters are upgraded indirectly via root. In such cases, we call root's
@@ -160,16 +194,53 @@ impl CallCanister for InstallCode {
     }
 }
 
+impl DocumentedAction for InstallCode {
+    const NAME: &'static str = "Install Code";
+    const DESCRIPTION: &'static str = "Install, reinstall or upgrade code of a canister \
+        controlled by the NNS.";
+}
+
+impl From<InstallCode> for SelfDescribingValue {
+    fn from(value: InstallCode) -> Self {
+        let InstallCode {
+            canister_id,
+            install_mode,
+            wasm_module_hash,
+            arg_hash,
+            skip_stopping_before_installing,
+            wasm_module: _,
+            arg: _,
+        } = value;
+
+        let install_mode = install_mode.map(SelfDescribingProstEnum::<CanisterInstallMode>::new);
+
+        ValueBuilder::new()
+            .add_field("canister_id", canister_id)
+            .add_field("install_mode", install_mode)
+            .add_field("wasm_module_hash", wasm_module_hash)
+            .add_field("arg_hash", arg_hash)
+            .add_field(
+                "skip_stopping_before_installing",
+                skip_stopping_before_installing.unwrap_or_default(),
+            )
+            .build()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::pb::v1::governance_error::ErrorType;
+    use crate::pb::v1::{
+        SelfDescribingValue as SelfDescribingValuePb, governance_error::ErrorType,
+    };
 
     use candid::Decode;
     use ic_base_types::CanisterId;
     use ic_crypto_sha2::Sha256;
     use ic_nns_constants::{REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID};
+    use ic_nns_governance_api::SelfDescribingValue;
+    use maplit::hashmap;
 
     #[test]
     fn test_invalid_install_code_proposal() {
@@ -405,5 +476,60 @@ mod tests {
             assert_eq!(install_code.validate(), Ok(()));
             assert_eq!(install_code.valid_topic(), Ok(expected_topic));
         }
+    }
+
+    #[test]
+    fn test_install_code_to_self_describing() {
+        let wasm_hash = Sha256::hash(&[1, 2, 3]).to_vec();
+        let arg_hash = Sha256::hash(&[4, 5, 6]).to_vec();
+
+        let install_code = InstallCode {
+            canister_id: Some(REGISTRY_CANISTER_ID.get()),
+            wasm_module: Some(vec![1, 2, 3]),
+            install_mode: Some(CanisterInstallMode::Upgrade as i32),
+            arg: Some(vec![4, 5, 6]),
+            skip_stopping_before_installing: Some(true),
+            wasm_module_hash: Some(wasm_hash.clone()),
+            arg_hash: Some(arg_hash.clone()),
+        };
+
+        let value = SelfDescribingValue::from(SelfDescribingValuePb::from(install_code));
+
+        assert_eq!(
+            value,
+            SelfDescribingValue::Map(hashmap! {
+                "canister_id".to_string() => SelfDescribingValue::from(REGISTRY_CANISTER_ID.get().to_string()),
+                "install_mode".to_string() => SelfDescribingValue::from("Upgrade"),
+                "wasm_module_hash".to_string() => SelfDescribingValue::from(wasm_hash),
+                "arg_hash".to_string() => SelfDescribingValue::from(arg_hash),
+                "skip_stopping_before_installing".to_string() => SelfDescribingValue::from(true),
+            })
+        );
+    }
+
+    #[test]
+    fn test_install_code_to_self_describing_install_mode() {
+        let install_code = InstallCode {
+            canister_id: Some(REGISTRY_CANISTER_ID.get()),
+            wasm_module: Some(vec![1, 2, 3]),
+            install_mode: Some(CanisterInstallMode::Install as i32),
+            arg: Some(vec![]),
+            skip_stopping_before_installing: Some(false),
+            wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+            arg_hash: Some(Sha256::hash(&[]).to_vec()),
+        };
+
+        let value = SelfDescribingValue::from(SelfDescribingValuePb::from(install_code));
+
+        assert_eq!(
+            value,
+            SelfDescribingValue::Map(hashmap! {
+                "canister_id".to_string() => SelfDescribingValue::from(REGISTRY_CANISTER_ID.get().to_string()),
+                "install_mode".to_string() => SelfDescribingValue::from("Install"),
+                "wasm_module_hash".to_string() => SelfDescribingValue::from(Sha256::hash(&[1, 2, 3]).to_vec()),
+                "arg_hash".to_string() => SelfDescribingValue::from(Sha256::hash(&[]).to_vec()),
+                "skip_stopping_before_installing".to_string() => SelfDescribingValue::from(false),
+            })
+        );
     }
 }

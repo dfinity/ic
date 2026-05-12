@@ -11,6 +11,267 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-05-08: Proposal 141738
+
+http://dashboard.internetcomputer.org/proposal/141738
+
+## Added
+
+* Daily timer task that fetches ICP/XDR rates from the Exchange Rate Canister, maintains a 365-day price history in Governance state, and computes Mission 70 maturity modulation locally. The computed value is not yet consumed by spawning or disbursement; that switchover will happen in a follow-up PR.
+
+* `get_maturity_modulation` query endpoint that returns the current Mission 70 maturity modulation value, including `current_value_permyriad` and `updated_at_timestamp_seconds`.
+
+* Expose `staked_maturity_e8s_equivalent` on `NeuronInfo`, so external callers
+  can read staked maturity from `get_neuron_info` / `list_neurons` responses.
+
+## Changed
+
+* The first Mission 70 maturity modulation calculation skips the daily speed limit, so the initial
+  value reflects the target directly (subject to global bounds) instead of being clamped to a tiny
+  step away from zero.
+
+
+# 2026-04-25: Proposal 141565
+
+http://dashboard.internetcomputer.org/proposal/141565
+
+## Added
+
+* `TakeCanisterSnapshot` proposals now store the new snapshot ID in the
+  `success_value` field.
+
+## Changed
+
+* Relax eight year gang membership requirement(s): Instead of needing to have dissolve
+  delay >= 8 * 365.25 days (8 "years"), which is exactly 252_460_800 seconds, a second
+  round of induction requires only that neurons had dissolve delay >= 8 * 365 days,
+  which is exactly 252_288_000 seconds. This is less than a 0.07% difference.
+  Additionally, to avoid bonusing newly staked ICP, the neuron must currently be aging
+  since before March 30 (midnight UTC). (Furthermore, neurons that are already members
+  will not have their eight year gang bonus base re-assessed.)
+
+
+# 2026-04-17: Proposal 141441
+
+http://dashboard.internetcomputer.org/proposal/141441
+
+## Added
+
+* Enabled CreateCanisterAndInstallCode proposals.
+
+## Changed
+
+* The minimum dissolve delay required to submit non-manage-neuron proposals is now
+  a fixed 6 months, decoupled from the voting eligibility threshold which can be lower.
+
+* Enable Mission 70 voting rewards changes. This includes the following:
+  1. Reduce max dissolve delay from 8 years to 2 years. This includes capping existing neurons via data migration.
+  2. Reduce voting rewards pool by approximately 36.71% (equivalently, scale by 0.6329 times).
+  3. Dissolve delay bonus: quadratic instead of linear, with a maximum of 3x instead of 2x.
+  4. Reduce the minimum dissolve delay needed to vote to 2 weeks instead of 6 months.
+  5. 8 year gang 10% bonus.
+
+
+# 2026-04-14: Proposal 141380
+
+http://dashboard.internetcomputer.org/proposal/141380
+
+## Fixed
+
+* When result in `get_node_providers_rewards_cached` is `Err`,
+  release INFLIGHT (i.e. set it to `false`).
+
+
+# 2026-04-11: Proposal 141331
+
+http://dashboard.internetcomputer.org/proposal/141331
+
+Maintenance release. New code is disabled by flags.
+
+
+# 2026-04-06: Proposal 141242
+
+http://dashboard.internetcomputer.org/proposal/141242
+
+## Added
+
+- Proposal type `DeleteSubnet`, currently limited to CloudEngine subnets.
+- Tag neurons that have the maximum dissolve delay of 8 years with their bonus base
+  (`eight_year_gang_bonus_base_e8s`), in preparation for the dissolve delay bonus
+  grandfathering when the maximum dissolve delay is reduced to 2 years.
+- Expose data that will be used to determine the bonus that "8 year gang" neurons
+  will receive, starting in the near future. This data consists of the staked amount
+  in neurons with 8 year dissolve delay at the beginning of Mission 70. This will be
+  used in the near future to determine voting power (and consequently, voting rewards),
+  once other aspects of voting power/rewards are in production.
+
+
+# 2026-03-27: Proposal 141090
+
+http://dashboard.internetcomputer.org/proposal/141090
+
+## Added
+
+- Support for `snapshot_visibility` in `UpdateCanisterSettings` proposals.
+- Tag neurons that have the maximum dissolve delay of 8 years with their bonus base
+  (`eight_year_gang_bonus_base_e8s`), in preparation for the dissolve delay bonus
+  grandfathering when the maximum dissolve delay is reduced to 2 years.
+
+
+# 2026-03-20: Proposal 140958
+
+http://dashboard.internetcomputer.org/proposal/140958
+
+## Changed
+
+- `CreateServiceNervousSystem` proposals no longer reject SNS configurations
+  where the sum of developer-allocated tokens exceeds
+  `swap_distribution.total_e8s`. With the Neurons' Fund discontinued, this
+  validation is no longer needed.
+
+
+# 2026-03-13: Proposal 140859
+
+http://dashboard.internetcomputer.org/proposal/140859
+
+## Added
+
+* Add a `total_maturity_disbursements_in_progress_e8s_equivalent` metric (calculated daily).
+* Added a new `do_split_subnet` method interface, the implementation of the method will be done in the next PR.
+* Added `cup_type` field to `CatchUpPackageContents` denoting the type of a `CUP`.
+
+
+# 2026-03-07: Proposal 140776
+
+http://dashboard.internetcomputer.org/proposal/140776
+
+### Fixed
+
+* Fix a bug in create_neuron where a neuron cannot be created with exactly minimum stake.
+
+
+# 2026-02-27: Proposal 140597
+
+http://dashboard.internetcomputer.org/proposal/140597
+
+## Added
+
+* A `create_neuron` method to create neurons through staking ICPs using the ICRC2 standard.
+
+## Changed
+
+* Lowered the maximum page size of list_neurons to 50. The vast majority (> 95%)
+  have no more than 50 neurons, so for them, this has no noticeable impact.
+
+## Fixed
+
+* The Bitcoin and Dogecoin Watchdog canisters are now considered "protocol"
+  canisters; thus, proposals to upgrade these canisters now fall into the
+  "Protocol Canister Management" topic, instead of the "Application Canister
+  Management" topic.
+
+
+# 2026-02-20: Proposal 140509
+
+http://dashboard.internetcomputer.org/proposal/140509
+
+* Populate the new subnet_admins field in SubnetRecord when creating a rented subnet.
+
+
+# 2026-02-10: Proposal 140314
+
+http://dashboard.internetcomputer.org/proposal/140314
+
+## Added
+
+
+* Enabled BlessAlternativeGuestOsVersion, which would generally be used to
+  recover a subnet where a) orchestrator is not working for whatever reason, and
+  b) SEV is enabled and/or there is no DFINITY node in the subnet.
+
+* Proposal types for taking and loading a snapshot of a canister controlled by the NNS Root canister.
+
+* Enabled self-describing proposals:
+
+- A `self_describing_action` field is added to `Proposal` when it's created, to describe the
+  proposal in a generic way, which can be parsed by a client without having to constantly adapt to
+  the new proposal types.
+- APIs like `get_proposal_info`, `list_proposals` and `get_pending_proposals` returns this new field
+  (`list_proposals` and `get_pending_proposals` require passing an additional boolean flag in order
+  to get this new behavior).
+- This field is backfilled for existing proposals.
+
+## Changed
+
+- Change the minimum requirement for maturity disbursement from ~1.06 to 1 (ICP equivalent).
+
+
+# 2026-01-23: Proposal 140099
+
+http://dashboard.internetcomputer.org/proposal/140099
+
+## Added
+
+* Enabled BlessAlternativeGuestOsVersion, which would generally be used to
+  recover a subnet where a) orchestrator is not working for whatever reason, and
+  b) SEV is enabled and/or there is no DFINITY node in the subnet.
+
+* Proposal types for taking and loading a snapshot of a canister controlled by the NNS Root canister.
+
+## Changed
+
+* Allow creating a service nervous system with up to 100 dapp canisters, instead of just 25.
+
+
+# 2026-01-16: Proposal 140012
+
+http://dashboard.internetcomputer.org/proposal/140012
+
+A "maintenance" release. That is, new code for upcoming features, but no new
+(enabled) behaviors.
+
+
+# 2026-01-05: Proposal 139940
+
+http://dashboard.internetcomputer.org/proposal/139940
+
+Just a maintenance release. That is, no new features, and no bug fixes.
+Just newer code, much of which is inactive now, but will be active later.
+
+
+# 2026-01-05: Proposal 139922
+
+http://dashboard.internetcomputer.org/proposal/139922
+
+## Added
+
+* Enabled performance-based node provider rewards. See the motion proposal
+  [NNS Proposal 135054](https://dashboard.internetcomputer.org/proposal/135054)
+  for details about how the performance-based algorithm works. More details can also be found in the forum post
+  [Performance Based Node Rewards](https://forum.dfinity.org/t/performance-based-node-rewards/35208)
+
+
+# 2025-12-05: Proposal 139678
+
+http://dashboard.internetcomputer.org/proposal/139678
+
+## Fixed
+
+- Typo in error message about obsolete proposal type SetDefaultFollowees.
+
+
+# 2025-11-28: Proposal 139575
+
+http://dashboard.internetcomputer.org/proposal/139575
+
+##  Fixed
+
+- Add default case for start_date fetching in Performance Based Rewards. This is done to ensure that a valid start date
+  is always returned, even when no previous rewards exist.
+  
+- Added `algorithm_version` field to node provider rewards.
+
+
 # 2025-11-07: Proposal 139313
 
 http://dashboard.internetcomputer.org/proposal/139313

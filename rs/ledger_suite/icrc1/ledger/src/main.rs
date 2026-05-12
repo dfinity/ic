@@ -6,21 +6,17 @@ use candid::Principal;
 use candid::types::number::Nat;
 use ic_canister_log::{declare_log_buffer, export, log};
 use ic_cdk::api::stable::StableReader;
-use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-
-use ic_cdk::api::instruction_counter;
 #[cfg(not(feature = "canbench-rs"))]
 use ic_cdk::init;
 use ic_cdk::{post_upgrade, pre_upgrade, query, update};
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icrc1::{
     Operation, Transaction,
     endpoints::{StandardRecord, convert_transfer_error},
 };
-use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
 use ic_icrc1_ledger::{
-    LEDGER_VERSION, UPGRADES_MEMORY, balances_len, clear_stable_allowance_data,
-    clear_stable_balances_data, clear_stable_blocks_data, get_allowances, is_ready, ledger_state,
-    panic_if_not_ready, read_first_balance, set_ledger_state, wasm_token_type,
+    InitArgs, LEDGER_VERSION, Ledger, LedgerArgument, UPGRADES_MEMORY, balances_len,
+    get_allowances, read_first_balance, wasm_token_type,
 };
 use ic_ledger_canister_core::ledger::{
     LedgerAccess, LedgerContext, LedgerData, TransferError as CoreTransferError, apply_transaction,
@@ -45,8 +41,13 @@ use icrc_ledger_types::icrc103::get_allowances::{
     Allowances, GetAllowancesArgs, GetAllowancesError,
 };
 use icrc_ledger_types::icrc106::errors::Icrc106Error;
+use icrc_ledger_types::icrc122::schema::{MTHD_152_BURN, MTHD_152_MINT};
+use icrc_ledger_types::icrc152::{
+    Icrc152BurnArgs, Icrc152BurnError, Icrc152MintArgs, Icrc152MintError,
+};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
+    icrc::metadata_key::MetadataKey,
     icrc3::{
         archive::ArchiveInfo,
         blocks::GetBlocksRequest,
@@ -73,10 +74,10 @@ use serde_bytes::ByteBuf;
 use std::{
     cell::RefCell,
     io::{Read, Write},
-    time::Duration,
 };
 
 const MAX_MESSAGE_SIZE: u64 = 1024 * 1024;
+const MAX_REASON_LENGTH: usize = 1024;
 
 #[cfg(not(feature = "u256-tokens"))]
 pub type Tokens = ic_icrc1_tokens_u64::U64;
@@ -88,10 +89,9 @@ thread_local! {
     static LEDGER: RefCell<Option<Ledger>> = const { RefCell::new(None) };
     static PRE_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
     static POST_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
-    static STABLE_UPGRADE_MIGRATION_STEPS: RefCell<u64> = const { RefCell::new(0) };
-    static TOTAL_VOLUME: RefCell<f64> = const { RefCell::new(0f64) };
-    static TOTAL_VOLUME_DENOMINATOR: RefCell<f64> = const { RefCell::new(1f64) };
-    static TOTAL_VOLUME_FEE_IN_DECIMALS: RefCell<f64> = const { RefCell::new(0f64) };
+    static TOTAL_VOLUME: RefCell<f64> = const { RefCell::new(0_f64) };
+    static TOTAL_VOLUME_DENOMINATOR: RefCell<f64> = const { RefCell::new(1_f64) };
+    static TOTAL_VOLUME_FEE_IN_DECIMALS: RefCell<f64> = const { RefCell::new(0_f64) };
 }
 
 declare_log_buffer!(name = LOG, capacity = 1000);
@@ -150,12 +150,6 @@ fn pre_upgrade() {
     let start = ic_cdk::api::instruction_counter();
     UPGRADES_MEMORY.with_borrow_mut(|bs| {
         Access::with_ledger(|ledger| {
-            if !is_ready() {
-                // This means that migration did not complete and the correct state
-                // of the ledger is still in UPGRADES_MEMORY.
-                log_message("Ledger not ready, skipping write to UPGRADES_MEMORY.");
-                return;
-            }
             let writer = Writer::new(bs, 0);
             let mut buffered_writer = BufferedWriter::new(BUFFER_SIZE, writer);
             ciborium::ser::into_writer(ledger, &mut buffered_writer)
@@ -170,26 +164,14 @@ fn pre_upgrade() {
     });
 }
 
-#[cfg(not(feature = "low-upgrade-instruction-limits"))]
-const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 199_950_000_000;
-#[cfg(not(feature = "low-upgrade-instruction-limits"))]
-const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 1_950_000_000;
-
-#[cfg(feature = "low-upgrade-instruction-limits")]
-const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 13_000_000;
-#[cfg(feature = "low-upgrade-instruction-limits")]
-const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 500_000;
-
 #[post_upgrade]
 fn post_upgrade(args: Option<LedgerArgument>) {
     post_upgrade_internal(args);
-    if is_ready() {
-        // Set the certified data to the root hash of the ledger state, using the correct ICRC-3 labels.
-        // This cannot be called in `post_upgrade_internal`, since that is benchmarked using
-        // canbench, and canbench calls functions as non-replicated queries, and `set_certified_data`
-        // cannot be called in non-replicated queries.
-        ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
-    }
+    // Set the certified data to the root hash of the ledger state, using the correct ICRC-3 labels.
+    // This cannot be called in `post_upgrade_internal`, since that is benchmarked using
+    // canbench, and canbench calls functions as non-replicated queries, and `set_certified_data`
+    // cannot be called in non-replicated queries.
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
 }
 
 fn post_upgrade_internal(args: Option<LedgerArgument>) {
@@ -200,7 +182,7 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
 
     let mut magic_bytes_reader = StableReader::default();
     const MAGIC_BYTES: &[u8; 3] = b"MGR";
-    let mut first_bytes = [0u8; 3];
+    let mut first_bytes = [0_u8; 3];
     let memory_manager_found = match magic_bytes_reader.read_exact(&mut first_bytes) {
         Ok(_) => first_bytes == *MAGIC_BYTES,
         Err(_) => false,
@@ -209,8 +191,7 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
     let mut pre_upgrade_instructions_consumed = 0;
 
     if !memory_manager_found {
-        let msg =
-            "Cannot upgrade from scratch stable memory, please upgrade to memory manager first.";
+        let msg = "Cannot upgrade from scratch stable memory, please perform the following upgrades first:\n1. Git revision e54d3fa34ded227c885d04e64505fa4b5d564743 https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2024-10-17\n2. Git revision e446c64d99a97e38166be23ff2bfade997d15ff7 https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2025-10-27";
         log_message(msg);
         panic!("{msg}");
     }
@@ -221,13 +202,13 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
         let state = ciborium::de::from_reader(&mut buffered_reader).expect(
             "Failed to read the Ledger state from memory manager managed stable structures",
         );
-        let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
+        let mut pre_upgrade_instructions_counter_bytes = [0_u8; 8];
         pre_upgrade_instructions_consumed =
             match buffered_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
                 Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
                 Err(_) => {
                     // If upgrading from a version that didn't write the instructions counter to stable memory
-                    0u64
+                    0_u64
                 }
             };
         state
@@ -274,33 +255,9 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
     initialize_total_volume();
 
     if upgrade_from_version < 3 {
-        set_ledger_state(LedgerState::Migrating(LedgerField::Blocks));
-        log_message(format!("Upgrading from version {upgrade_from_version} which does not store blocks in stable structures, clearing stable blocks data.").as_str());
-        clear_stable_blocks_data();
-    }
-    if upgrade_from_version < 2 {
-        set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
-        log_message(format!("Upgrading from version {upgrade_from_version} which does not store balances in stable structures, clearing stable balances data.").as_str());
-        clear_stable_balances_data();
-        Access::with_ledger_mut(|ledger| {
-            ledger.copy_token_pool();
-        });
-    }
-    if upgrade_from_version == 0 {
-        set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
-        log_message(
-            "Upgrading from version 0 which does not use stable structures, clearing stable allowance data.",
-        );
-        clear_stable_allowance_data();
-        Access::with_ledger_mut(|ledger| {
-            ledger.clear_arrivals();
-        });
-    }
-    if !is_ready() {
-        log_message("Migration started.");
-        migrate_next_part(
-            MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
-        );
+        let msg = "Migration to stable structures not supported, please upgrade first to git revision e446c64d99a97e38166be23ff2bfade997d15ff7 https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2025-10-27";
+        log_message(msg);
+        panic!("{msg}");
     }
 
     // This will fail if we try to upgrade a u64 ledger with a u256 wasm and at least one balance is present.
@@ -315,81 +272,12 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
 }
 
 fn initialize_total_volume() {
-    let denominator = 10f64.powf(Access::with_ledger(|ledger| ledger.decimals()) as f64);
+    let denominator = 10_f64.powf(Access::with_ledger(|ledger| ledger.decimals()) as f64);
     let fee = Access::with_ledger(|ledger| ledger.transfer_fee());
     TOTAL_VOLUME_DENOMINATOR.with(|n| *n.borrow_mut() = denominator);
     if fee != Tokens::ZERO {
         TOTAL_VOLUME_FEE_IN_DECIMALS.with(|n| *n.borrow_mut() = tokens_to_f64(fee) / denominator);
     }
-}
-
-fn migrate_next_part(instruction_limit: u64) {
-    let instructions_migration_start = instruction_counter();
-    STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow_mut() += 1);
-    let mut migrated_allowances = 0;
-    let mut migrated_expirations = 0;
-    let mut migrated_balances = 0;
-    let mut migrated_blocks = 0;
-
-    log_message("Migrating part of the ledger state.");
-
-    Access::with_ledger_mut(|ledger| {
-        while instruction_counter() < instruction_limit {
-            let field = match ledger_state() {
-                LedgerState::Migrating(ledger_field) => ledger_field,
-                LedgerState::Ready => break,
-            };
-            match field {
-                LedgerField::Allowances => {
-                    if ledger.migrate_one_allowance() {
-                        migrated_allowances += 1;
-                    } else {
-                        set_ledger_state(LedgerState::Migrating(
-                            LedgerField::AllowancesExpirations,
-                        ));
-                    }
-                }
-                LedgerField::AllowancesExpirations => {
-                    if ledger.migrate_one_expiration() {
-                        migrated_expirations += 1;
-                    } else {
-                        set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
-                    }
-                }
-                LedgerField::Balances => {
-                    if ledger.migrate_one_balance() {
-                        migrated_balances += 1;
-                    } else {
-                        set_ledger_state(LedgerState::Migrating(LedgerField::Blocks));
-                    }
-                }
-                LedgerField::Blocks => {
-                    if ledger.migrate_one_block() {
-                        migrated_blocks += 1;
-                    } else {
-                        set_ledger_state(LedgerState::Ready);
-                    }
-                }
-            }
-        }
-        let instructions_migration = instruction_counter() - instructions_migration_start;
-        let msg = format!(
-            "Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances} blocks: {migrated_blocks}. Migration step instructions: {instructions_migration}, total instructions used in message: {}.",
-            instruction_counter()
-        );
-        if !is_ready() {
-            log_message(
-                format!("Migration partially done. Scheduling the next part. {msg}").as_str(),
-            );
-            ic_cdk_timers::set_timer(Duration::from_secs(0), || {
-                migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
-            });
-        } else {
-            log_message(format!("Migration completed! {msg}").as_str());
-            // Set the certified data to the root hash of the ledger state, using the correct ICRC-3 labels.
-            ic_cdk::api::set_certified_data(&ledger.root_hash());
-        }
-    });
 }
 
 fn log_message(msg: &str) {
@@ -424,7 +312,6 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         .value(&[("canister", "icrc1-ledger")], cycle_balance)?;
     let pre_upgrade_instructions = PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow());
     let post_upgrade_instructions = POST_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow());
-    let stable_upgrade_migration_steps = STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow());
     w.encode_gauge(
         "ledger_pre_upgrade_instructions_consumed",
         pre_upgrade_instructions as f64,
@@ -439,11 +326,6 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "ledger_total_upgrade_instructions_consumed",
         pre_upgrade_instructions.saturating_add(post_upgrade_instructions) as f64,
         "Total number of instructions consumed during the last upgrade.",
-    )?;
-    w.encode_counter(
-        "ledger_stable_upgrade_migration_steps",
-        stable_upgrade_migration_steps as f64,
-        "Number of steps used to migrate data to stable structures.",
     )?;
     w.encode_counter(
         "total_volume",
@@ -479,25 +361,23 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             ledger.blockchain().num_archived_blocks.saturating_add(ledger.blockchain().num_unarchived_blocks()) as f64,
             "Total number of transactions stored in the main memory, plus total number of transactions sent to the archive.",
         )?;
-        if is_ready() {
-            let token_pool: Nat = ledger.balances().token_pool.into();
-            w.encode_gauge(
-                "ledger_balances_token_pool",
-                token_pool.0.to_f64().unwrap_or(f64::INFINITY),
-                "Total number of Tokens in the pool.",
-            )?;
-            let total_supply: Nat = ledger.balances().total_supply().into();
-            w.encode_gauge(
-                "ledger_total_supply",
-                total_supply.0.to_f64().unwrap_or(f64::INFINITY),
-                "Total number of tokens in circulation.",
-            )?;
-            w.encode_gauge(
-                "ledger_balance_store_entries",
-                balances_len() as f64,
-                "Total number of accounts in the balance store.",
-            )?;
-        }
+        let token_pool: Nat = ledger.balances().token_pool.into();
+        w.encode_gauge(
+            "ledger_balances_token_pool",
+            token_pool.0.to_f64().unwrap_or(f64::INFINITY),
+            "Total number of Tokens in the pool.",
+        )?;
+        let total_supply: Nat = ledger.balances().total_supply().into();
+        w.encode_gauge(
+            "ledger_total_supply",
+            total_supply.0.to_f64().unwrap_or(f64::INFINITY),
+            "Total number of tokens in circulation.",
+        )?;
+        w.encode_gauge(
+            "ledger_balance_store_entries",
+            balances_len() as f64,
+            "Total number of accounts in the balance store.",
+        )?;
         w.encode_gauge(
             "ledger_most_recent_block_time_seconds",
             (ledger
@@ -528,13 +408,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
                 "Failed to read number of archives: {err}"
             )))?,
         }
-        if is_ready() {
-            w.encode_gauge(
-                "ledger_num_approvals",
-                ledger.approvals().get_num_approvals() as f64,
-                "Total number of approvals.",
-            )?;
-        }
+        w.encode_gauge(
+            "ledger_num_approvals",
+            ledger.approvals().get_num_approvals() as f64,
+            "Total number of approvals.",
+        )?;
         Ok(())
     })
 }
@@ -644,7 +522,7 @@ fn icrc1_fee() -> Nat {
 }
 
 #[query]
-fn icrc1_metadata() -> Vec<(String, Value)> {
+fn icrc1_metadata() -> Vec<(MetadataKey, Value)> {
     Access::with_ledger(|ledger| ledger.metadata())
 }
 
@@ -797,7 +675,6 @@ fn execute_transfer_not_async(
 
 #[update]
 async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
-    panic_if_not_ready();
     let from_account = Account {
         owner: ic_cdk::api::caller(),
         subaccount: arg.from_subaccount,
@@ -824,7 +701,6 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
 
 #[update]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
-    panic_if_not_ready();
     let spender_account = Account {
         owner: ic_cdk::api::caller(),
         subaccount: arg.spender_subaccount,
@@ -875,7 +751,7 @@ fn archives() -> Vec<ArchiveInfo> {
 
 #[query(name = "icrc1_supported_standards")]
 fn supported_standards() -> Vec<StandardRecord> {
-    let standards = vec![
+    let mut standards = vec![
         StandardRecord {
             name: "ICRC-1".to_string(),
             url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1".to_string(),
@@ -894,7 +770,7 @@ fn supported_standards() -> Vec<StandardRecord> {
         },
         StandardRecord {
             name: "ICRC-21".to_string(),
-            url: "https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-21/ICRC-21.md".to_string(),
         },
         StandardRecord {
             name: "ICRC-103".to_string(),
@@ -905,12 +781,17 @@ fn supported_standards() -> Vec<StandardRecord> {
             url: "https://github.com/dfinity/ICRC/pull/106".to_string(),
         },
     ];
+    if Access::with_ledger(|ledger| ledger.feature_flags().icrc152) {
+        standards.push(StandardRecord {
+            name: "ICRC-152".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-152.md".to_string(),
+        });
+    }
     standards
 }
 
 #[query]
 fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
-    panic_if_not_ready();
     let (start, length) = req
         .as_start_and_length()
         .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
@@ -920,7 +801,6 @@ fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
 #[cfg(not(feature = "get-blocks-disabled"))]
 #[query]
 fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
-    panic_if_not_ready();
     let (start, length) = req
         .as_start_and_length()
         .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
@@ -929,7 +809,6 @@ fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
 
 #[query]
 fn get_data_certificate() -> DataCertificate {
-    panic_if_not_ready();
     let hash_tree = Access::with_ledger(|ledger| ledger.construct_hash_tree());
     let mut tree_buf = vec![];
     ciborium::ser::into_writer(&hash_tree, &mut tree_buf).unwrap();
@@ -940,7 +819,6 @@ fn get_data_certificate() -> DataCertificate {
 }
 
 fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, ApproveError> {
-    panic_if_not_ready();
     let block_idx = Access::with_ledger_mut(|ledger| {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
 
@@ -1025,6 +903,197 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     Ok(Nat::from(block_idx))
 }
 
+fn icrc152_mint_not_async(
+    caller: Principal,
+    args: Icrc152MintArgs,
+) -> Result<u64, Icrc152MintError> {
+    let block_idx = Access::with_ledger_mut(|ledger| {
+        if !ledger.feature_flags().icrc152 {
+            return Err(Icrc152MintError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: "ICRC-152 is not enabled".to_string(),
+            });
+        }
+        if !ic_cdk::api::is_controller(&caller) {
+            return Err(Icrc152MintError::Unauthorized(
+                "caller is not a controller".to_string(),
+            ));
+        }
+        if args.amount == 0_u64 {
+            return Err(Icrc152MintError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: "amount must be greater than 0".to_string(),
+            });
+        }
+        let amount =
+            Tokens::try_from(args.amount.clone()).map_err(|_| Icrc152MintError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: "amount is too large".to_string(),
+            })?;
+        if args.to.owner == Principal::anonymous() {
+            return Err(Icrc152MintError::InvalidAccount(
+                "anonymous principal is not allowed".to_string(),
+            ));
+        }
+        if &args.to == ledger.minting_account() {
+            return Err(Icrc152MintError::InvalidAccount(
+                "cannot mint to the minting account".to_string(),
+            ));
+        }
+        if let Some(ref reason) = args.reason
+            && reason.len() > MAX_REASON_LENGTH
+        {
+            return Err(Icrc152MintError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: format!("reason must be at most {} bytes", MAX_REASON_LENGTH),
+            });
+        }
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let tx = Transaction {
+            operation: Operation::AuthorizedMint {
+                to: args.to,
+                amount,
+                caller: Some(caller),
+                mthd: Some(MTHD_152_MINT.to_string()),
+                reason: args.reason,
+            },
+            created_at_time: Some(args.created_at_time),
+            memo: None,
+        };
+        let (block_idx, _) =
+            apply_transaction(ledger, tx, now, Tokens::zero()).map_err(|err| match err {
+                CoreTransferError::TxDuplicate { duplicate_of } => Icrc152MintError::Duplicate {
+                    duplicate_of: Nat::from(duplicate_of),
+                },
+                CoreTransferError::TxTooOld { .. } => Icrc152MintError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: "transaction too old".to_string(),
+                },
+                CoreTransferError::TxCreatedInFuture { .. } => Icrc152MintError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: "transaction created in the future".to_string(),
+                },
+                CoreTransferError::TxThrottled => Icrc152MintError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: "temporarily unavailable".to_string(),
+                },
+                other => Icrc152MintError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: format!("unexpected error: {:?}", other),
+                },
+            })?;
+        update_total_volume(amount, false);
+        Ok(block_idx)
+    })?;
+    Ok(block_idx)
+}
+
+#[update]
+async fn icrc152_mint(args: Icrc152MintArgs) -> Result<Nat, Icrc152MintError> {
+    let block_idx = icrc152_mint_not_async(ic_cdk::api::caller(), args)?;
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
+}
+
+fn icrc152_burn_not_async(
+    caller: Principal,
+    args: Icrc152BurnArgs,
+) -> Result<u64, Icrc152BurnError> {
+    let block_idx = Access::with_ledger_mut(|ledger| {
+        if !ledger.feature_flags().icrc152 {
+            return Err(Icrc152BurnError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: "ICRC-152 is not enabled".to_string(),
+            });
+        }
+        if !ic_cdk::api::is_controller(&caller) {
+            return Err(Icrc152BurnError::Unauthorized(
+                "caller is not a controller".to_string(),
+            ));
+        }
+        if args.amount == 0_u64 {
+            return Err(Icrc152BurnError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: "amount must be greater than 0".to_string(),
+            });
+        }
+        let amount =
+            Tokens::try_from(args.amount.clone()).map_err(|_| Icrc152BurnError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: "amount is too large".to_string(),
+            })?;
+        if args.from.owner == Principal::anonymous() {
+            return Err(Icrc152BurnError::InvalidAccount(
+                "anonymous principal is not allowed".to_string(),
+            ));
+        }
+        if &args.from == ledger.minting_account() {
+            return Err(Icrc152BurnError::InvalidAccount(
+                "cannot burn from the minting account".to_string(),
+            ));
+        }
+        if let Some(ref reason) = args.reason
+            && reason.len() > MAX_REASON_LENGTH
+        {
+            return Err(Icrc152BurnError::GenericError {
+                error_code: Nat::from(0_u64),
+                message: format!("reason must be at most {} bytes", MAX_REASON_LENGTH),
+            });
+        }
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let tx = Transaction {
+            operation: Operation::AuthorizedBurn {
+                from: args.from,
+                amount,
+                caller: Some(caller),
+                mthd: Some(MTHD_152_BURN.to_string()),
+                reason: args.reason,
+            },
+            created_at_time: Some(args.created_at_time),
+            memo: None,
+        };
+        let (block_idx, _) =
+            apply_transaction(ledger, tx, now, Tokens::zero()).map_err(|err| match err {
+                CoreTransferError::TxDuplicate { duplicate_of } => Icrc152BurnError::Duplicate {
+                    duplicate_of: Nat::from(duplicate_of),
+                },
+                CoreTransferError::InsufficientFunds { balance } => {
+                    Icrc152BurnError::InsufficientBalance {
+                        balance: balance.into(),
+                    }
+                }
+                CoreTransferError::TxTooOld { .. } => Icrc152BurnError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: "transaction too old".to_string(),
+                },
+                CoreTransferError::TxCreatedInFuture { .. } => Icrc152BurnError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: "transaction created in the future".to_string(),
+                },
+                CoreTransferError::TxThrottled => Icrc152BurnError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: "temporarily unavailable".to_string(),
+                },
+                other => Icrc152BurnError::GenericError {
+                    error_code: Nat::from(0_u64),
+                    message: format!("unexpected error: {:?}", other),
+                },
+            })?;
+        update_total_volume(amount, false);
+        Ok(block_idx)
+    })?;
+    Ok(block_idx)
+}
+
+#[update]
+async fn icrc152_burn(args: Icrc152BurnArgs) -> Result<Nat, Icrc152BurnError> {
+    let block_idx = icrc152_burn_not_async(ic_cdk::api::caller(), args)?;
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
+}
+
 #[query]
 fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
     Access::with_ledger(|ledger| {
@@ -1046,7 +1115,6 @@ fn icrc3_get_archives(args: GetArchivesArgs) -> GetArchivesResult {
 
 #[query]
 fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
-    panic_if_not_ready();
     let certificate = ByteBuf::from(ic_cdk::api::data_certificate()?);
     let hash_tree = Access::with_ledger(|ledger| ledger.construct_hash_tree());
     let mut tree_buf = vec![];
@@ -1061,7 +1129,7 @@ fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
 fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::SupportedBlockType> {
     use icrc_ledger_types::icrc3::blocks::SupportedBlockType;
 
-    vec![
+    let mut types = vec![
         SupportedBlockType {
             block_type: "1burn".to_string(),
             url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md"
@@ -1087,12 +1155,22 @@ fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::Suppor
             url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md"
                 .to_string(),
         },
-    ]
+    ];
+    if Access::with_ledger(|ledger| ledger.feature_flags().icrc152) {
+        types.push(SupportedBlockType {
+            block_type: "122mint".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-122.md".to_string(),
+        });
+        types.push(SupportedBlockType {
+            block_type: "122burn".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-122.md".to_string(),
+        });
+    }
+    types
 }
 
 #[query]
 fn icrc3_get_blocks(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
-    panic_if_not_ready();
     Access::with_ledger(|ledger| ledger.icrc3_get_blocks(args))
 }
 
@@ -1131,7 +1209,7 @@ fn icrc21_canister_call_consent_message(
 
 #[query]
 fn is_ledger_ready() -> bool {
-    is_ready()
+    true
 }
 
 #[query]

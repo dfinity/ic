@@ -1,10 +1,11 @@
 use crate::{lifecycle::EthereumNetwork, logs::INFO, state::State};
-use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient, IcRuntime};
+use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient};
 use evm_rpc_types::{
     ConsensusStrategy, EthSepoliaService, HttpOutcallError, MultiRpcResult as EvmMultiRpcResult,
     RpcError, RpcService as EvmRpcService, RpcServices as EvmRpcServices,
 };
 use ic_canister_log::log;
+use ic_canister_runtime::{IcError, IcRuntime};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Debug,
@@ -52,7 +53,7 @@ pub fn rpc_client(state: &State) -> EvmRpcClient<IcRuntime, CandidResponseConver
         "BUG: min_threshold too high"
     );
 
-    EvmRpcClient::builder(IcRuntime, evm_rpc_id)
+    EvmRpcClient::builder(IcRuntime::new(), evm_rpc_id)
         .with_rpc_sources(providers)
         .with_consensus_strategy(ConsensusStrategy::Threshold {
             total: Some(TOTAL_NUMBER_OF_PROVIDERS),
@@ -139,9 +140,9 @@ impl<T: PartialEq> MultiCallResults<T> {
         let distinct_errors: BTreeSet<_> = self.errors.values().collect();
         match distinct_errors.len() {
             0 => panic!("BUG: expect errors should be non-empty"),
-            1 => {
-                MultiCallError::ConsistentError(distinct_errors.into_iter().next().unwrap().clone())
-            }
+            1 => MultiCallError::ConsistentError(ConsistentError::EvmRpc(
+                distinct_errors.into_iter().next().unwrap().clone(),
+            )),
             _ => MultiCallError::InconsistentResults(self),
         }
     }
@@ -149,8 +150,22 @@ impl<T: PartialEq> MultiCallResults<T> {
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum MultiCallError<T> {
-    ConsistentError(RpcError),
+    ConsistentError(ConsistentError),
     InconsistentResults(MultiCallResults<T>),
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub enum ConsistentError {
+    /// Error coming from the client talking to the EVM RPC canister
+    Client(IcError),
+    /// Error coming from the EVM RPC canister itself.
+    EvmRpc(RpcError),
+}
+
+impl From<RpcError> for ConsistentError {
+    fn from(error: RpcError) -> Self {
+        Self::EvmRpc(error)
+    }
 }
 
 pub trait ReductionStrategy<T> {
@@ -234,7 +249,9 @@ where
     F: Fn(MultiCallResults<T>) -> Result<T, MultiCallError<T>>,
 {
     match result {
-        EvmMultiRpcResult::Consistent(result) => result.map_err(MultiCallError::ConsistentError),
+        EvmMultiRpcResult::Consistent(result) => {
+            result.map_err(|e| MultiCallError::ConsistentError(e.into()))
+        }
         EvmMultiRpcResult::Inconsistent(results) => {
             reduce(MultiCallResults::from_non_empty_iter(results))
         }
@@ -248,25 +265,41 @@ pub trait ToReducedWithStrategy<T> {
     ) -> Result<T, MultiCallError<T>>;
 }
 
-impl<T> ToReducedWithStrategy<T> for EvmMultiRpcResult<T> {
+impl<T> ToReducedWithStrategy<T> for Result<EvmMultiRpcResult<T>, IcError> {
     fn reduce_with_strategy(
         self,
         strategy: impl ReductionStrategy<T>,
     ) -> Result<T, MultiCallError<T>> {
-        strategy.reduce(self)
+        match self {
+            Ok(result) => strategy.reduce(result),
+            Err(error) => Err(MultiCallError::from_client_error(error)),
+        }
     }
 }
 
 impl<T> MultiCallError<T> {
+    pub fn from_client_error(error: IcError) -> Self {
+        MultiCallError::ConsistentError(ConsistentError::Client(error))
+    }
+
     pub fn has_http_outcall_error_matching<P: Fn(&HttpOutcallError) -> bool>(
         &self,
         predicate: P,
     ) -> bool {
         match self {
-            MultiCallError::ConsistentError(RpcError::HttpOutcallError(error)) => predicate(error),
-            MultiCallError::ConsistentError(RpcError::JsonRpcError { .. }) => false,
-            MultiCallError::ConsistentError(RpcError::ProviderError(_)) => false,
-            MultiCallError::ConsistentError(RpcError::ValidationError(_)) => false,
+            MultiCallError::ConsistentError(ConsistentError::Client(_)) => false,
+            MultiCallError::ConsistentError(ConsistentError::EvmRpc(
+                RpcError::HttpOutcallError(error),
+            )) => predicate(error),
+            MultiCallError::ConsistentError(ConsistentError::EvmRpc(RpcError::JsonRpcError {
+                ..
+            })) => false,
+            MultiCallError::ConsistentError(ConsistentError::EvmRpc(RpcError::ProviderError(
+                _,
+            ))) => false,
+            MultiCallError::ConsistentError(ConsistentError::EvmRpc(
+                RpcError::ValidationError(_),
+            )) => false,
             MultiCallError::InconsistentResults(results) => {
                 results
                     .errors

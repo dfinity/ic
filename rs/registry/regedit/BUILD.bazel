@@ -14,7 +14,6 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/types",
     "@crate_index//:anyhow",
-    "@crate_index//:base64",
     "@crate_index//:clap",
     "@crate_index//:prost",
     "@crate_index//:serde",

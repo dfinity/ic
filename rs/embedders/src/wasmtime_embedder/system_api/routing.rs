@@ -8,15 +8,15 @@ use ic_logger::{ReplicaLogger, info};
 use ic_management_canister_types_private::{
     BitcoinGetBalanceArgs, BitcoinGetBlockHeadersArgs, BitcoinGetCurrentFeePercentilesArgs,
     BitcoinGetUtxosArgs, BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterMetadataRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs,
-    FetchCanisterLogsRequest, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
-    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
-    Payload, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
+    CanisterMetadataRequest, CanisterMetricsArgs, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
+    ECDSAPublicKeyArgs, FetchCanisterLogsRequest, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method,
+    NodeMetricsHistoryArgs, Payload, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
     ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs, ReshareChainKeyArgs,
-    SchnorrPublicKeyArgs, SignWithECDSAArgs, SignWithSchnorrArgs, StoredChunksArgs, SubnetInfoArgs,
-    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
-    VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
+    SchnorrPublicKeyArgs, SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs,
+    StoredChunksArgs, SubnetInfoArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadChunkArgs, VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
 };
 use ic_replicated_state::NetworkTopology;
 use itertools::Itertools;
@@ -69,15 +69,19 @@ pub(super) fn resolve_destination(
         | Ok(Ic00Method::RawRand)
         | Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
         | Ok(Ic00Method::HttpRequest)
+        | Ok(Ic00Method::FlexibleHttpRequest)
         | Ok(Ic00Method::BitcoinSendTransactionInternal)
         | Ok(Ic00Method::BitcoinGetSuccessors) => Ok(own_subnet.get()),
-        // This message needs to be routed to the NNS subnet.  We assume that
-        // this message can only be sent by canisters on the NNS subnet hence
-        // returning `own_subnet` here is fine.
-        //
-        // It might be cleaner to pipe in the actual NNS subnet id to this
-        // function and return that instead.
-        Ok(Ic00Method::SetupInitialDKG) => Ok(own_subnet.get()),
+        Ok(Ic00Method::SetupInitialDKG) => {
+            let args = SetupInitialDKGArgs::decode(payload)?;
+            // This message should be routed to the NNS subnet by default. We assume that
+            // this message can only be sent by canisters on the NNS subnet hence
+            // defaulting to `own_subnet` here is fine.
+            //
+            // It might be cleaner to pipe in the actual NNS subnet id to this
+            // function and return that instead.
+            Ok(args.get_subnet_id().unwrap_or(own_subnet).get())
+        }
         Ok(Ic00Method::UpdateSettings) => {
             // Find the destination canister from the payload.
             let args = UpdateSettingsArgs::decode(payload)?;
@@ -363,6 +367,11 @@ pub(super) fn resolve_destination(
             let canister_id = args.get_canister_id();
             route_canister_id(canister_id, Ic00Method::RenameCanister, network_topology)
         }
+        Ok(Ic00Method::CanisterMetrics) => {
+            let args = CanisterMetricsArgs::decode(payload)?;
+            let canister_id = args.get_canister_id();
+            route_canister_id(canister_id, Ic00Method::CanisterMetrics, network_topology)
+        }
         Err(_) => Err(ResolveDestinationError::MethodNotFound(
             method_name.to_string(),
         )),
@@ -389,7 +398,7 @@ fn route_chain_key_message(
     }
 
     match requested_subnet {
-        Some(subnet_id) => match network_topology.subnets.get(subnet_id) {
+        Some(subnet_id) => match network_topology.subnets().get(subnet_id) {
             None => Err(ResolveDestinationError::ChainKeyError(format!(
                 "Requested threshold key {key_id} from unknown subnet {subnet_id}"
             ))),
@@ -436,7 +445,7 @@ fn route_chain_key_message(
                 }
                 ChainKeySubnetKind::OnlyHoldsKey => {
                     let mut keys = BTreeSet::new();
-                    for (subnet_id, topology) in &network_topology.subnets {
+                    for (subnet_id, topology) in network_topology.subnets() {
                         if topology.chain_keys_held.contains(key_id) {
                             return Ok((*subnet_id).get());
                         }
@@ -495,7 +504,7 @@ mod tests {
         DerivationPath, EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, SignWithECDSAArgs,
         VetKdCurve, VetKdKeyId,
     };
-    use ic_replicated_state::SubnetTopology;
+    use ic_replicated_state::{SubnetTopology, metadata_state::testing::NetworkTopologyTesting};
     use ic_test_utilities_types::ids::{canister_test_id, node_test_id, subnet_test_id};
     use maplit::btreemap;
     use serde_bytes::ByteBuf;
@@ -542,26 +551,24 @@ mod tests {
         key_id2: MasterPublicKeyId,
     ) -> NetworkTopology {
         let subnet_id0 = subnet_test_id(0);
-        NetworkTopology {
-            // The first key is enabled only on subnet 0.
-            chain_key_enabled_subnets: btreemap! {
-                key_id1.clone() => vec![subnet_id0],
+        let mut network_topology = NetworkTopology::default();
+        network_topology.chain_key_enabled_subnets = btreemap! {
+            key_id1.clone() => vec![subnet_id0],
+        };
+        network_topology.set_subnets(btreemap! {
+            // Subnet 0 holds both keys
+            subnet_id0 => SubnetTopology {
+                chain_keys_held: vec![key_id1.clone(), key_id2].into_iter().collect(),
+                ..SubnetTopology::default()
             },
-            subnets: btreemap! {
-                // Subnet 0 holds both keys
-                subnet_id0 => SubnetTopology {
-                    chain_keys_held: vec![key_id1.clone(), key_id2].into_iter().collect(),
-                    ..SubnetTopology::default()
-                },
-                // Subnet 1 holds only the first key.
-                subnet_test_id(1) => SubnetTopology {
-                    chain_keys_held: vec![key_id1].into_iter().collect(),
-                    ..SubnetTopology::default()
-                },
-                subnet_test_id(2) => SubnetTopology::default(),
+            // Subnet 1 holds only the first key.
+            subnet_test_id(1) => SubnetTopology {
+                chain_keys_held: vec![key_id1].into_iter().collect(),
+                ..SubnetTopology::default()
             },
-            ..NetworkTopology::default()
-        }
+            subnet_test_id(2) => SubnetTopology::default(),
+        });
+        network_topology
     }
 
     fn network_with_ecdsa_subnets() -> NetworkTopology {
@@ -587,6 +594,12 @@ mod tests {
             vec![node_test_id(0)].into_iter().collect(),
             RegistryVersion::from(100),
         );
+        Encode!(&args).unwrap()
+    }
+
+    fn setup_initial_dkg_request(subnet_id: Option<SubnetId>) -> Vec<u8> {
+        let args =
+            SetupInitialDKGArgs::new(vec![node_test_id(0)], RegistryVersion::from(100), subnet_id);
         Encode!(&args).unwrap()
     }
 
@@ -668,6 +681,45 @@ mod tests {
                 PrincipalId::new_subnet_test_id(1)
             );
         }
+    }
+
+    #[test]
+    fn resolve_setup_initial_dkg_defaults_to_own_subnet() {
+        let logger = no_op_logger();
+        let own_subnet = subnet_test_id(2);
+        assert_eq!(
+            resolve_destination(
+                &network_with_ecdsa_subnets(),
+                &Ic00Method::SetupInitialDKG.to_string(),
+                &setup_initial_dkg_request(None),
+                own_subnet,
+                canister_test_id(1),
+                false,
+                &logger,
+            )
+            .unwrap(),
+            own_subnet.get()
+        );
+    }
+
+    #[test]
+    fn resolve_setup_initial_dkg_routes_to_requested_subnet() {
+        let logger = no_op_logger();
+        let own_subnet = subnet_test_id(2);
+        let requested_subnet = subnet_test_id(1);
+        assert_eq!(
+            resolve_destination(
+                &network_with_ecdsa_subnets(),
+                &Ic00Method::SetupInitialDKG.to_string(),
+                &setup_initial_dkg_request(Some(requested_subnet)),
+                own_subnet,
+                canister_test_id(1),
+                false,
+                &logger,
+            )
+            .unwrap(),
+            requested_subnet.get()
+        );
     }
 
     #[test]

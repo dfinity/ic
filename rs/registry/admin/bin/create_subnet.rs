@@ -11,10 +11,12 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_common::types::NeuronId;
 use ic_prep_lib::subnet_configuration::get_default_config_params;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures as SubnetFeaturesPb;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{NodeId, PrincipalId, ReplicaVersion};
+use ic_types::{NodeId, PrincipalId, ReplicaVersion, SubnetId};
 use registry_canister::mutations::do_create_subnet;
+use registry_canister::mutations::do_create_subnet::CanisterCyclesCostSchedule;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use url::Url;
@@ -37,6 +39,11 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     pub subnet_id_override: Option<PrincipalId>,
 
     #[clap(long)]
+    /// Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+    /// If not set, handling defaults to the NNS subnet.
+    pub initial_dkg_subnet_id: Option<PrincipalId>,
+
+    #[clap(long)]
     /// Maximum amount of bytes per message. This is a hard cap.
     pub max_ingress_bytes_per_message: Option<u64>,
 
@@ -45,7 +52,20 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     pub max_ingress_messages_per_block: Option<u64>,
 
     #[clap(long)]
-    /// Maximum size in bytes ingress and xnet messages can occupy in a block.
+    /// How big an ingress payload can be *when stored in memory*. Setting this value too large could lead to
+    /// large memory usage of replicas.
+    /// Note that with hashes-in-blocks feature enabled, increasing this value doesn't necessarily mean
+    /// that we would send more data to peers when transmitting a block, because ingress messages are
+    /// stripped before disseminating blocks.
+    pub max_ingress_bytes_per_block: Option<u64>,
+
+    #[clap(long)]
+    /// Maximum size, in bytes, a [`BatchPayload`] can have *when sent over wire*.
+    /// Setting this value too high could result in longer delivery times of blocks to peers, which
+    /// could lead to forks as higher rank blocks could be proposed meanwhile.
+    /// Note that with hashes-in-blocks feature enabled, the blocks sent over wire are typically smaller
+    /// than their representation in memory, because we strip some of the data before broadcasting them
+    /// to peers.
     pub max_block_payload_size: Option<u64>,
 
     // the default is from subnet_configuration.rs from ic-prep
@@ -77,7 +97,7 @@ pub(crate) struct ProposeToCreateSubnetCmd {
 
     #[clap(long)]
     /// The type of the subnet.
-    /// Can be either "application" or "system".
+    /// Can be "application", "system", "verified_application", or "cloud_engine".
     pub subnet_type: SubnetType,
 
     /// If set, the created subnet will be halted: it will not create or execute
@@ -91,6 +111,7 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     ///
     /// key_id: Master public key ID formatted as "Scheme:AlgorithmID:KeyName".
     /// pre_signatures_to_create_in_advance: Non-negative integer value.
+    ///     Omit this for keys without pre-signatures (e.g., vetKD).
     /// max_queue_size: Integer value greater than or equal 1.
     /// subnet_id: Principal ID of a subnet holding the requested key.
     ///
@@ -109,7 +130,12 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     ///         "pre_signatures_to_create_in_advance": "98",
     ///         "max_queue_size": "154",
     ///         "subnet_id": "gxevo-lhkam-aaaaa-aaaap-yai"
-    ///     }
+    ///     },
+    ///     {
+    ///         "key_id": "vetkd:Bls12_381_G2:some_key_name_3",
+    ///         "max_queue_size": "154",
+    ///         "subnet_id": "gxevo-lhkam-aaaaa-aaaap-yai"
+    ///     },
     /// ]'
     /// ```
     #[clap(long)]
@@ -146,9 +172,22 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     #[clap(long)]
     pub max_number_of_canisters: Option<u64>,
 
+    /// The canister cycles cost schedule for this subnet.
+    /// Can be "Normal" (default) or "Free" (used by cloud engine subnets).
+    #[clap(long)]
+    pub canister_cycles_cost_schedule: Option<CanisterCyclesCostSchedule>,
+
     /// The features that are enabled and disabled on the subnet.
     #[clap(long)]
     pub features: Option<SubnetFeatures>,
+
+    /// The list of principals that are subnet admins.
+    #[clap(long, num_args(1..))]
+    pub subnet_admins: Vec<PrincipalId>,
+
+    /// Limits on resource consumption (e.g., memory usage) of the subnet.
+    #[command(flatten)]
+    pub resource_limits: Option<ResourceLimits>,
 }
 
 fn parse_key_config_requests_option(
@@ -171,18 +210,23 @@ fn parse_key_config_requests_option(
                 })
                 .expect("Each element of the JSON object must specify a 'subnet_id'."));
 
-            let key_id = Some(btree
+            let key_id = btree
                 .get("key_id")
                 .map(|key| {
                     key.parse::<MasterPublicKeyId>()
                         .unwrap_or_else(|_| panic!("Could not parse key_id: '{key}'"))
                 })
-                .expect("Each element of the JSON object must specify a 'key_id'."));
+                .expect("Each element of the JSON object must specify a 'key_id'.");
 
-            let pre_signatures_to_create_in_advance = Some(btree
+            let pre_signatures_to_create_in_advance = btree
                 .get("pre_signatures_to_create_in_advance")
-                .map(|x| x.parse::<u32>().expect("pre_signatures_to_create_in_advance must be a u32."))
-                .expect("Each element of the JSON object must specify a 'pre_signatures_to_create_in_advance'."));
+                .map(|x| x.parse::<u32>().expect("pre_signatures_to_create_in_advance must be a u32."));
+            if key_id.requires_pre_signatures() && pre_signatures_to_create_in_advance.is_none() {
+                panic!("JSON object must specify 'pre_signatures_to_create_in_advance' for key {key_id}.");
+            }
+            if !key_id.requires_pre_signatures() && pre_signatures_to_create_in_advance.is_some() {
+                panic!("JSON object must not specify 'pre_signatures_to_create_in_advance' for key {key_id}.");
+            }
 
             let max_queue_size = Some(btree
                 .get("max_queue_size")
@@ -190,7 +234,7 @@ fn parse_key_config_requests_option(
                 .expect("Each element of the JSON object must specify a 'max_queue_size'."));
 
             let key_config = Some(do_create_subnet::KeyConfig {
-                key_id,
+                key_id: Some(key_id),
                 pre_signatures_to_create_in_advance,
                 max_queue_size
             });
@@ -239,6 +283,8 @@ impl ProposeToCreateSubnetCmd {
                 .get_or_insert(ReplicaVersion::default());
             self.max_number_of_canisters.get_or_insert(0);
             self.features.get_or_insert(SubnetFeatures::default());
+            self.canister_cycles_cost_schedule
+                .get_or_insert(CanisterCyclesCostSchedule::Normal);
         }
     }
 
@@ -273,8 +319,10 @@ impl ProposeToCreateSubnetCmd {
         do_create_subnet::CreateSubnetPayload {
             node_ids,
             subnet_id_override: self.subnet_id_override,
+            initial_dkg_subnet_id: self.initial_dkg_subnet_id.map(SubnetId::from),
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message.unwrap_or_default(),
             max_ingress_messages_per_block: self.max_ingress_messages_per_block.unwrap_or_default(),
+            max_ingress_bytes_per_block: self.max_ingress_bytes_per_block,
             max_block_payload_size: self.max_block_payload_size.unwrap_or_default(),
             replica_version_id: self
                 .replica_version_id
@@ -295,8 +343,11 @@ impl ProposeToCreateSubnetCmd {
             max_number_of_canisters: self.max_number_of_canisters.unwrap_or_default(),
             chain_key_config,
             canister_cycles_cost_schedule: Some(
-                do_create_subnet::CanisterCyclesCostSchedule::Normal,
+                self.canister_cycles_cost_schedule
+                    .expect("canister_cycles_cost_schedule must be specified."),
             ),
+            subnet_admins: Some(self.subnet_admins.clone()),
+            resource_limits: self.resource_limits,
 
             // Deprecated fields.
             ingress_bytes_per_block_soft_cap: Default::default(),
@@ -332,9 +383,8 @@ mod tests {
 
     fn minimal_create_payload() -> do_create_subnet::CreateSubnetPayload {
         do_create_subnet::CreateSubnetPayload {
-            canister_cycles_cost_schedule: Some(
-                do_create_subnet::CanisterCyclesCostSchedule::Normal,
-            ),
+            canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
+            subnet_admins: Some(vec![]),
             ..Default::default()
         }
     }
@@ -357,8 +407,10 @@ mod tests {
             summary_file: None,
             subnet_handler_id: None,
             subnet_id_override: None,
+            initial_dkg_subnet_id: None,
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
+            max_ingress_bytes_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: None,
             initial_notary_delay_millis: None,
@@ -371,6 +423,9 @@ mod tests {
             max_parallel_pre_signature_transcripts_in_creation: None,
             max_number_of_canisters: None,
             features: None,
+            subnet_admins: vec![],
+            resource_limits: None,
+            canister_cycles_cost_schedule: None,
         }
     }
 
@@ -394,7 +449,6 @@ mod tests {
             },
             {
                 "key_id": "vetkd:Bls12_381_G2:some_key_name_3",
-                "pre_signatures_to_create_in_advance": "0",
                 "max_queue_size": "154",
                 "subnet_id": "gxevo-lhkam-aaaaa-aaaap-yai"
             }]"#
@@ -413,6 +467,7 @@ mod tests {
 
             replica_version_id: Some(replica_version_id.clone()),
             features: Some(features),
+            canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
             ..empty_propose_to_create_subnet_cmd()
         };
         assert_eq!(
@@ -452,7 +507,7 @@ mod tests {
                                     curve: VetKdCurve::Bls12_381_G2,
                                     name: "some_key_name_3".to_string(),
                                 })),
-                                pre_signatures_to_create_in_advance: Some(0),
+                                pre_signatures_to_create_in_advance: None,
                                 max_queue_size: Some(154),
                             }),
                             subnet_id: Some(
@@ -469,5 +524,52 @@ mod tests {
                 ..minimal_create_payload()
             },
         );
+    }
+
+    #[test]
+    fn cli_to_payload_conversion_includes_initial_dkg_subnet_id() {
+        let initial_dkg_subnet_id = PrincipalId::from_str("gxevo-lhkam-aaaaa-aaaap-yai").unwrap();
+        let mut cmd = ProposeToCreateSubnetCmd {
+            initial_dkg_subnet_id: Some(initial_dkg_subnet_id),
+            ..empty_propose_to_create_subnet_cmd()
+        };
+        cmd.apply_defaults_for_unset_fields();
+        assert_eq!(
+            cmd.new_payload().initial_dkg_subnet_id,
+            Some(SubnetId::from(initial_dkg_subnet_id))
+        );
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "must specify 'pre_signatures_to_create_in_advance' for key ecdsa:Secp256k1:some_key_name"
+    )]
+    fn should_panic_when_key_requiring_pre_signatures_is_missing_pre_signatures_to_create() {
+        let initial_chain_key_configs_to_request = r#"[{
+                "key_id": "ecdsa:Secp256k1:some_key_name",
+                "max_queue_size": "155",
+                "subnet_id": "gxevo-lhkam-aaaaa-aaaap-yai"
+            }]"#
+        .to_string();
+
+        // This should panic when parsing the key config
+        let _ = parse_key_config_requests_option(&Some(initial_chain_key_configs_to_request));
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "must not specify 'pre_signatures_to_create_in_advance' for key vetkd:Bls12_381_G2:some_key_name"
+    )]
+    fn should_panic_when_key_not_requiring_pre_signatures_has_pre_signatures_to_create() {
+        let initial_chain_key_configs_to_request = r#"[{
+                "key_id": "vetkd:Bls12_381_G2:some_key_name",
+                "pre_signatures_to_create_in_advance": "99",
+                "max_queue_size": "155",
+                "subnet_id": "gxevo-lhkam-aaaaa-aaaap-yai"
+            }]"#
+        .to_string();
+
+        // This should panic when parsing the key config
+        let _ = parse_key_config_requests_option(&Some(initial_chain_key_configs_to_request));
     }
 }

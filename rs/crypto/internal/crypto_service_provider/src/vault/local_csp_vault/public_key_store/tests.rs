@@ -173,6 +173,83 @@ mod current_node_public_keys_with_timestamps {
     }
 
     #[test]
+    fn should_retrieve_timestamp_of_generated_node_signing_public_key() {
+        let vault = LocalCspVault::builder_for_test()
+            .with_time_source(genesis_time_source())
+            .build();
+        let generated_node_signing_pk = vault
+            .gen_node_signing_key_pair()
+            .expect("Failed to generate node signing key pair");
+
+        let retrieved_node_signing_pk_with_timestamp = vault
+            .current_node_public_keys_with_timestamps()
+            .expect("Failed to retrieve current node public keys")
+            .node_signing_public_key
+            .expect("missing node signing public key");
+
+        assert!(
+            retrieved_node_signing_pk_with_timestamp
+                .equal_ignoring_timestamp(&node_signing_pk_to_proto(generated_node_signing_pk))
+        );
+        assert_matches!(
+            retrieved_node_signing_pk_with_timestamp.timestamp,
+            Some(time) if time == GENESIS.as_millis_since_unix_epoch()
+        );
+    }
+
+    #[test]
+    fn should_retrieve_timestamp_of_generated_committee_signing_public_key() {
+        let vault = LocalCspVault::builder_for_test()
+            .with_time_source(genesis_time_source())
+            .build();
+        let (generated_committee_signing_pk, pop) = vault
+            .gen_committee_signing_key_pair()
+            .expect("Failed to generate committee signing key pair");
+
+        let retrieved_committee_signing_pk_with_timestamp = vault
+            .current_node_public_keys_with_timestamps()
+            .expect("Failed to retrieve current node public keys")
+            .committee_signing_public_key
+            .expect("missing committee signing public key");
+
+        assert!(
+            retrieved_committee_signing_pk_with_timestamp.equal_ignoring_timestamp(
+                &committee_signing_pk_to_proto((generated_committee_signing_pk, pop))
+            )
+        );
+        assert_matches!(
+            retrieved_committee_signing_pk_with_timestamp.timestamp,
+            Some(time) if time == GENESIS.as_millis_since_unix_epoch()
+        );
+    }
+
+    #[test]
+    fn should_retrieve_timestamp_of_generated_dkg_dealing_encryption_public_key() {
+        let vault = LocalCspVault::builder_for_test()
+            .with_time_source(genesis_time_source())
+            .build();
+        let (generated_dkg_pk, pop) = vault
+            .gen_dealing_encryption_key_pair(node_test_id(NODE_1))
+            .expect("Failed to generate DKG dealing encryption key pair");
+
+        let retrieved_dkg_pk_with_timestamp = vault
+            .current_node_public_keys_with_timestamps()
+            .expect("Failed to retrieve current node public keys")
+            .dkg_dealing_encryption_public_key
+            .expect("missing DKG dealing encryption public key");
+
+        assert!(
+            retrieved_dkg_pk_with_timestamp.equal_ignoring_timestamp(
+                &dkg_dealing_encryption_pk_to_proto(generated_dkg_pk, pop)
+            )
+        );
+        assert_matches!(
+            retrieved_dkg_pk_with_timestamp.timestamp,
+            Some(time) if time == GENESIS.as_millis_since_unix_epoch()
+        );
+    }
+
+    #[test]
     fn should_retrieve_timestamp_of_generated_idkg_public_key() {
         let vault = LocalCspVault::builder_for_test()
             .with_time_source(genesis_time_source())
@@ -193,21 +270,6 @@ mod current_node_public_keys_with_timestamps {
             retrieved_idkg_pk_with_timestamp.timestamp,
             Some(time) if time == GENESIS.as_millis_since_unix_epoch()
         );
-    }
-
-    //TODO CRP-1857: modify this test as needed when timestamp are introduced upon key generation for non-IDKG keys
-    #[test]
-    fn should_not_retrieve_timestamps_of_other_generated_keys_because_they_are_not_set_yet() {
-        let csp_vault = LocalCspVault::builder_for_test().build();
-        let _ = generate_all_keys(&csp_vault);
-
-        let pks_with_timestamps = csp_vault
-            .current_node_public_keys_with_timestamps()
-            .expect("Failed to retrieve current node public keys");
-
-        assert_matches!(pks_with_timestamps.node_signing_public_key, Some(pk) if pk.timestamp.is_none());
-        assert_matches!(pks_with_timestamps.committee_signing_public_key, Some(pk) if pk.timestamp.is_none());
-        assert_matches!(pks_with_timestamps.dkg_dealing_encryption_public_key, Some(pk) if pk.timestamp.is_none());
     }
 
     #[test]

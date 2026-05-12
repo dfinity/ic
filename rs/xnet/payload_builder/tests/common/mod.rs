@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 use ic_config::state_manager::Config;
+use ic_crypto_tree_hash::{Digest, Witness};
 use ic_interfaces::certification::Verifier;
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_state_manager::*;
@@ -40,6 +41,7 @@ pub struct StateManagerFixture {
     pub metrics: MetricsRegistry,
     pub temp_dir: TempDir,
     pub log: ReplicaLogger,
+    pub subnet_type: SubnetType,
 }
 
 impl StateManagerFixture {
@@ -69,6 +71,7 @@ impl StateManagerFixture {
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
+            tokio::sync::watch::channel(ic_types::Height::from(0)).0,
         );
 
         Self {
@@ -77,6 +80,7 @@ impl StateManagerFixture {
             metrics,
             temp_dir,
             log,
+            subnet_type,
         }
     }
 
@@ -91,7 +95,8 @@ impl StateManagerFixture {
 
         height.inc_assign();
         self.state_manager
-            .commit_and_certify(state, height, CertificationScope::Metadata, None);
+            .commit_and_certify(state, CertificationScope::Metadata, None);
+        self.state_manager.flush_hash_channel();
         certify_height(&self.state_manager, height);
         self.certified_height = height;
 
@@ -163,11 +168,18 @@ fn certify_height(state_manager: &impl StateManager, h: Height) -> Certification
     let hash = state_manager
         .list_state_hashes_to_certify()
         .into_iter()
-        .find_map(|(height, hash)| if height == h { Some(hash) } else { None })
+        .find_map(|state_hash_metadata| {
+            if state_hash_metadata.height == h {
+                Some(state_hash_metadata.hash)
+            } else {
+                None
+            }
+        })
         .expect("no hash to certify");
 
     let certification = Certification {
         height: h,
+        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
         signed: Signed {
             content: CertificationContent::new(hash),
             signature: ThresholdSignature::fake(),

@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use candid::Principal;
 use ic_consensus_system_test_utils::{
     rw_message::{can_read_msg, cannot_store_msg},
@@ -11,71 +10,50 @@ use ic_recovery::{
 };
 use ic_system_test_driver::{
     driver::{
-        constants::SSH_USERNAME,
         driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
         test_env::{SshKeyGen, TestEnv},
-        test_env_api::{
-            IcNodeContainer, IcNodeSnapshot, SshSession, SubnetSnapshot, scp_send_to, secs,
-        },
+        test_env_api::{IcNodeContainer, IcNodeSnapshot, SshSession, SubnetSnapshot, scp_send_to},
     },
-    util::block_on,
+    util::{JournalStreamer, block_on},
 };
 use ic_types::SubnetId;
-use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
-use std::{fmt::Debug, path::PathBuf};
+use std::{collections::BTreeMap, fmt::Debug, path::PathBuf};
 use url::Url;
 
 pub const READONLY_USERNAME: &str = "readonly";
 pub const BACKUP_USERNAME: &str = "backup";
+pub const RECOVERY_USERNAME: &str = "recovery";
 
-pub struct AdminAndUserKeys {
-    pub ssh_admin_priv_key_path: PathBuf,
-    pub admin_auth: AuthMean,
-    pub ssh_user_priv_key_path: PathBuf,
-    pub user_auth: AuthMean,
-    pub ssh_user_pub_key_path: PathBuf,
-    pub ssh_user_pub_key: String,
+pub struct SshKeys {
+    pub ssh_priv_key_path: PathBuf,
+    pub auth: AuthMean,
+    pub ssh_pub_key: String,
 }
 
-pub fn get_admin_keys_and_generate_readonly_keys(env: &TestEnv) -> AdminAndUserKeys {
-    get_admin_keys_and_generate_keys_for_user(env, READONLY_USERNAME)
-}
+pub fn get_ssh_keys_for_user(env: &TestEnv, username: &str) -> SshKeys {
+    // Generate a new keypair for the given username if it doesn't exist
+    env.ssh_keygen_for_user(username)
+        .unwrap_or_else(|_| panic!("ssh-keygen failed for {username} key"));
 
-pub fn get_admin_keys_and_generate_backup_keys(env: &TestEnv) -> AdminAndUserKeys {
-    get_admin_keys_and_generate_keys_for_user(env, BACKUP_USERNAME)
-}
-
-fn get_admin_keys_and_generate_keys_for_user(env: &TestEnv, username: &str) -> AdminAndUserKeys {
     let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
 
-    let ssh_admin_priv_key_path = ssh_authorized_priv_keys_dir.join(SSH_USERNAME);
-    let ssh_admin_priv_key = std::fs::read_to_string(&ssh_admin_priv_key_path)
-        .expect("Failed to read admin SSH private key");
-    let admin_auth = AuthMean::PrivateKey(ssh_admin_priv_key);
-
-    // Generate a new keypair for the given username
-    env.ssh_keygen_for_user(username)
-        .unwrap_or_else(|_| panic!("ssh-keygen failed for {username} key"));
-    let ssh_user_priv_key_path = ssh_authorized_priv_keys_dir.join(username);
-    let ssh_user_priv_key = std::fs::read_to_string(&ssh_user_priv_key_path)
+    let ssh_priv_key_path = ssh_authorized_priv_keys_dir.join(username);
+    let ssh_priv_key = std::fs::read_to_string(&ssh_priv_key_path)
         .unwrap_or_else(|_| panic!("Failed to read {username} SSH private key"));
-    let user_auth = AuthMean::PrivateKey(ssh_user_priv_key);
+    let auth = AuthMean::PrivateKey(ssh_priv_key);
 
-    let ssh_user_pub_key_path = ssh_authorized_pub_keys_dir.join(username);
-    let ssh_user_pub_key = std::fs::read_to_string(&ssh_user_pub_key_path)
+    let ssh_pub_key_path = ssh_authorized_pub_keys_dir.join(username);
+    let ssh_pub_key = std::fs::read_to_string(&ssh_pub_key_path)
         .unwrap_or_else(|_| panic!("Failed to read {username} SSH public key"))
         .trim()
         .to_string();
 
-    AdminAndUserKeys {
-        ssh_admin_priv_key_path,
-        admin_auth,
-        ssh_user_priv_key_path,
-        user_auth,
-        ssh_user_pub_key_path,
-        ssh_user_pub_key,
+    SshKeys {
+        ssh_priv_key_path,
+        auth,
+        ssh_pub_key,
     }
 }
 
@@ -102,75 +80,50 @@ where
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Cursor {
-    #[serde(alias = "__CURSOR")]
-    pub cursor: String,
-}
-
-// Halt the given subnet by executing the corresponding ic-admin command through the given NNS URL.
-// This function waits until it detects in the subnet node's journal that consensus is halted.
+/// Halt the given subnet by executing the corresponding ic-admin command through the given NNS URL.
+/// This function waits until it detects in the subnet node's journal that consensus is halted.
 pub fn halt_subnet(
     admin_helper: &AdminHelper,
     subnet_node: &IcNodeSnapshot,
     subnet_id: SubnetId,
-    keys: &[String],
     logger: &Logger,
 ) {
     info!(logger, "Halting subnet {subnet_id}...");
-    let session = subnet_node.block_on_ssh_session().unwrap();
-    let message_str = subnet_node
-        .block_on_bash_script_from_session(
-            &session,
-            "journalctl -n1 -o json --output-fields='__CURSOR'",
-        )
-        .expect("Failed to get journal cursor");
-    let message: Cursor = serde_json::from_str(&message_str).expect("JSON journal message");
+    let journal_streamer = JournalStreamer::new(subnet_node.block_on_ssh_session().unwrap())
+        .from_now()
+        .expect("Failed to create journal streamer");
 
     AdminStep {
         logger: logger.clone(),
-        ic_admin_cmd: admin_helper.get_halt_subnet_command(subnet_id, true, keys),
+        ic_admin_cmd: admin_helper.get_propose_to_take_subnet_offline_for_repairs_command(
+            subnet_id,
+            &[],
+            &BTreeMap::new(),
+        ),
     }
     .exec()
     .expect("Failed to halt subnet");
 
-    ic_system_test_driver::retry_with_msg!(
-        "check if consensus is halted",
-        logger.clone(),
-        secs(120),
-        secs(10),
-        || {
-            let res = subnet_node.block_on_bash_script_from_session(
-                &session,
-                &format!(
-                    "journalctl --after-cursor='{}' | grep -c 'is halted'",
-                    message.cursor
-                ),
-            );
-            if res.is_ok_and(|r| r.trim().parse::<i32>().unwrap() > 0) {
-                Ok(())
-            } else {
-                Err(anyhow!("Did not find log entry that consensus is halted"))
-            }
-        }
-    )
-    .expect("Failed to detect halted subnet");
+    assert!(
+        journal_streamer
+            .follow()
+            .max_lines(1)
+            .contains("is halted")
+            .unwrap_or_default(),
+        "Did not find log entry that consensus is halted"
+    );
 
     info!(logger, "Subnet {subnet_id} halted.");
 }
 
-// Unhalt the given subnet by executing the corresponding ic-admin command through the given NNS
-// URL.
-pub fn unhalt_subnet(
-    admin_helper: &AdminHelper,
-    subnet_id: SubnetId,
-    keys: &[String],
-    logger: &Logger,
-) {
+/// Unhalt the given subnet by executing the corresponding ic-admin command through the given NNS
+/// URL.
+pub fn unhalt_subnet(admin_helper: &AdminHelper, subnet_id: SubnetId, logger: &Logger) {
     info!(logger, "Unhalting subnet {subnet_id}...");
     AdminStep {
         logger: logger.clone(),
-        ic_admin_cmd: admin_helper.get_halt_subnet_command(subnet_id, false, keys),
+        ic_admin_cmd: admin_helper
+            .get_propose_to_bring_subnet_back_online_after_repairs_command(subnet_id),
     }
     .exec()
     .expect("Failed to unhalt subnet");
@@ -209,15 +162,33 @@ pub fn get_node_certification_share_height(node: &IcNodeSnapshot, logger: &Logge
         .map(|m| m.certification_share_height.get())
 }
 
-/// Select a node with highest certification share height in the given subnet snapshot
-pub fn node_with_highest_certification_share_height(
+pub struct NodeHeights {
+    pub node: IcNodeSnapshot,
+    pub cup: u64,
+    pub cert_share: u64,
+}
+
+/// Select a node with highest certification share height among the nodes with highest CUP height
+pub fn node_with_highest_cup_and_cert_share_heights(
     subnet: &SubnetSnapshot,
     logger: &Logger,
-) -> (IcNodeSnapshot, u64) {
+) -> NodeHeights {
     subnet
         .nodes()
-        .filter_map(|n| get_node_certification_share_height(&n, logger).map(|h| (n, h)))
-        .max_by_key(|&(_, cert_height)| cert_height)
+        .filter_map(|node| {
+            block_on(get_node_metrics(logger, &node.get_ip_addr())).map(|m| NodeHeights {
+                node,
+                cup: m.catch_up_package_height.get(),
+                cert_share: m.certification_share_height.get(),
+            })
+        })
+        .max_by_key(
+            |NodeHeights {
+                 node: _,
+                 cup,
+                 cert_share,
+             }| (*cup, *cert_share),
+        )
         .expect("No healthy node found")
 }
 
@@ -257,6 +228,9 @@ pub mod local {
 
     // Remote path where SSH keys will be uploaded
     const ADMIN_HOME: &str = "/var/lib/admin";
+    // Remote path where guest launch measurements will be uploaded
+    const GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH: &str =
+        "/var/lib/ic/data/recovery/guest_launch_measurements.json";
     // Remote path where recovery output will be stored in case of a NNS recovery on same nodes
     pub const NNS_RECOVERY_OUTPUT_DIR_REMOTE_PATH: &str = "/var/lib/ic/data/recovery/output";
 
@@ -388,7 +362,6 @@ pub mod local {
             admin_key_file,
             test_mode,
             skip_prompts,
-            use_local_binaries,
         } = recovery_args;
 
         // Iterate through all fields of RecoveryArgs and generate the CLI arg for each
@@ -404,15 +377,13 @@ pub mod local {
         );
         let test_mode_cli = bool_cli_arg!(test_mode);
         let skip_prompts_cli = bool_cli_arg!(skip_prompts);
-        let use_local_binaries_cli = bool_cli_arg!(use_local_binaries);
 
         format!(
             r#"{nns_url_cli} \
             {replica_version_cli} \
             {admin_key_file_cli} \
             {test_mode_cli} \
-            {skip_prompts_cli} \
-            {use_local_binaries_cli}"#
+            {skip_prompts_cli}"#
         )
     }
 
@@ -443,16 +414,21 @@ pub mod local {
             upgrade_version,
             upgrade_image_url,
             upgrade_image_hash,
+            upgrade_image_launch_measurements_path,
             replacement_nodes,
             replay_until_height,
             readonly_pub_key,
             readonly_key_file,
+            write_node_id_and_pub_key,
+            recovery_key_file,
             download_pool_node,
             download_state_method: _, // ignored to choose "local" in local recoveries, see below
             keep_downloaded_state,
+            download_state_height,
             upload_method: _, // ignored to choose "local" in local recoveries, see below
             wait_for_cup_node,
             chain_key_subnet_id,
+            initial_dkg_subnet_id,
             next_step,
             skip,
         } = &subnet_recovery.params;
@@ -462,6 +438,22 @@ pub mod local {
         let upgrade_version_cli = opt_cli_arg!(upgrade_version);
         let upgrade_image_url_cli = opt_cli_arg!(upgrade_image_url);
         let upgrade_image_hash_cli = opt_cli_arg!(upgrade_image_hash);
+        let upgrade_image_launch_measurements_path =
+            if let Some(measurements_path) = &upgrade_image_launch_measurements_path {
+                scp_send_to(
+                    logger.clone(),
+                    session,
+                    measurements_path.as_ref(),
+                    &PathBuf::from(GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH),
+                    0o400,
+                );
+
+                Some(GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH)
+            } else {
+                None
+            };
+        let upgrade_image_launch_measurements_path_cli =
+            opt_cli_arg!(upgrade_image_launch_measurements_path);
         let replacement_nodes_cli = opt_vec_cli_arg!(replacement_nodes);
         let replay_until_height_cli = opt_cli_arg!(replay_until_height);
         let readonly_pub_key_cli = opt_cli_arg!(readonly_pub_key);
@@ -473,14 +465,28 @@ pub mod local {
             readonly_key_file.as_deref(),
             logger,
         );
+        let write_node_id_and_pub_key = write_node_id_and_pub_key
+            .as_ref()
+            .map(|(node_id, pub_key)| format!("{}:{}", node_id, pub_key));
+        let write_node_id_and_pub_key_cli = opt_cli_arg!(write_node_id_and_pub_key);
+        let recovery_key_file_cli = upload_ssh_key_and_return_cli_arg(
+            session,
+            &node_id,
+            &node_ip,
+            RECOVERY_USERNAME,
+            recovery_key_file.as_deref(),
+            logger,
+        );
         let download_pool_node_cli = opt_cli_arg!(download_pool_node);
         // We are doing a local recovery, so we override the download method to "local"
         let download_state_method_cli = r#"--download-state-method "local" "#.to_string();
         let keep_downloaded_state_cli = opt_cli_arg!(keep_downloaded_state);
+        let download_state_height_cli = opt_cli_arg!(download_state_height);
         // We are doing a local recovery, so we override the upload method to "local"
         let upload_method_cli = r#"--upload-method "local" "#.to_string();
         let wait_for_cup_node_cli = opt_cli_arg!(wait_for_cup_node);
         let chain_key_subnet_id_cli = opt_cli_arg!(chain_key_subnet_id);
+        let initial_dkg_subnet_id_cli = opt_cli_arg!(initial_dkg_subnet_id);
         let next_step_cli = opt_cli_arg!(next_step);
         let skip_cli = opt_vec_cli_arg!(skip);
 
@@ -491,16 +497,21 @@ pub mod local {
             {upgrade_version_cli} \
             {upgrade_image_url_cli} \
             {upgrade_image_hash_cli} \
+            {upgrade_image_launch_measurements_path_cli} \
             {replacement_nodes_cli} \
             {replay_until_height_cli} \
             {readonly_pub_key_cli} \
             {readonly_key_file_cli} \
+            {write_node_id_and_pub_key_cli} \
+            {recovery_key_file_cli} \
             {download_pool_node_cli} \
             {download_state_method_cli} \
             {keep_downloaded_state_cli} \
+            {download_state_height_cli} \
             {upload_method_cli} \
             {wait_for_cup_node_cli} \
             {chain_key_subnet_id_cli} \
+            {initial_dkg_subnet_id_cli} \
             {next_step_cli} \
             {skip_cli}"#
         )
@@ -533,11 +544,13 @@ pub mod local {
             upgrade_version,
             upgrade_image_url,
             upgrade_image_hash,
+            upgrade_image_launch_measurements_path,
             add_and_bless_upgrade_version,
             replay_until_height,
             download_pool_node,
             admin_access_location: _, // ignored to choose "local" in local recoveries, see below
             keep_downloaded_state,
+            download_state_height,
             wait_for_cup_node,
             backup_key_file,
             output_dir: _, // ignored to choose a different directory in local recoveries, see below
@@ -550,12 +563,29 @@ pub mod local {
         let upgrade_version_cli = opt_cli_arg!(upgrade_version);
         let upgrade_image_url_cli = opt_cli_arg!(upgrade_image_url);
         let upgrade_image_hash_cli = opt_cli_arg!(upgrade_image_hash);
+        let upgrade_image_launch_measurements_path =
+            if let Some(measurements_path) = &upgrade_image_launch_measurements_path {
+                scp_send_to(
+                    logger.clone(),
+                    session,
+                    measurements_path.as_ref(),
+                    &PathBuf::from(GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH),
+                    0o400,
+                );
+
+                Some(GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH)
+            } else {
+                None
+            };
+        let upgrade_image_launch_measurements_path_cli =
+            opt_cli_arg!(upgrade_image_launch_measurements_path);
         let add_and_bless_upgrade_version_cli = opt_cli_arg!(add_and_bless_upgrade_version);
         let replay_until_height_cli = opt_cli_arg!(replay_until_height);
         let download_pool_node_cli = opt_cli_arg!(download_pool_node);
         // We are doing a local recovery, so we override the admin access location to "local"
         let admin_access_location_cli = r#"--admin-access-location "local" "#.to_string();
         let keep_downloaded_state_cli = opt_cli_arg!(keep_downloaded_state);
+        let download_state_height_cli = opt_cli_arg!(download_state_height);
         let wait_for_cup_node_cli = opt_cli_arg!(wait_for_cup_node);
         let backup_key_file_cli = upload_ssh_key_and_return_cli_arg(
             session,
@@ -577,11 +607,13 @@ pub mod local {
             {upgrade_version_cli} \
             {upgrade_image_url_cli} \
             {upgrade_image_hash_cli} \
+            {upgrade_image_launch_measurements_path_cli} \
             {add_and_bless_upgrade_version_cli} \
             {replay_until_height_cli} \
             {download_pool_node_cli} \
             {admin_access_location_cli} \
             {keep_downloaded_state_cli} \
+            {download_state_height_cli} \
             {wait_for_cup_node_cli} \
             {backup_key_file_cli} \
             {output_dir_cli} \

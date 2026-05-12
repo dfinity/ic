@@ -4,15 +4,18 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},
     driver::{
-        farm::HostFeature,
+        farm::{HostFeature, VmAllocationMode},
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
+        ic::{
+            AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet,
+            VmResourceOverrides,
+        },
+        prometheus_vm::HasPrometheus,
         simulate_network::{ProductionSubnetTopology, SimulateNetwork},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-            READY_WAIT_TIMEOUT, RETRY_BACKOFF, SubnetSnapshot, get_dependency_path,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF, SubnetSnapshot, get_dependency_path_from_env,
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
@@ -38,7 +41,6 @@ const OVERALL_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 // Network topology
 const NETWORK_SIMULATION: Option<ProductionSubnetTopology> = Some(ProductionSubnetTopology::IO67);
 
-const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 const CANISTER_METHOD: &str = "write";
 // Duration of each request is placed into one of the two categories - below or above this threshold.
 const APP_DURATION_THRESHOLD: Duration = Duration::from_secs(60);
@@ -58,16 +60,12 @@ pub fn setup(
     boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
 ) {
     let logger = env.logger();
-    PrometheusVm::default()
-        .with_required_host_features(vec![HostFeature::Performance])
-        .start(&env)
-        .expect("failed to start prometheus VM");
 
-    let path = get_dependency_path("rs/tests/jaeger_uvm_config_image.zst");
+    let path = get_dependency_path_from_env("JAEGER_UVM_CONFIG_IMAGE_ZST");
 
     UniversalVm::new(JAEGER_VM_NAME.to_string())
         .with_required_host_features(vec![HostFeature::Performance])
-        .with_vm_resources(VmResources {
+        .with_resource_overrides(VmResourceOverrides {
             vcpus: Some(NrOfVCPUs::new(16)),
             memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
             boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
@@ -85,27 +83,18 @@ pub fn setup(
         "Jaeger frontend available at: http://[{}]:16686", jaeger_ipv6
     );
 
-    let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(16)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
-        boot_image_minimal_size_gibibytes,
-    };
     InternetComputer::new()
         .with_required_host_features(vec![HostFeature::Performance])
         .with_jaeger_addr(SocketAddr::new(IpAddr::V6(jaeger_ipv6), 4317))
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_default_vm_resources(vm_resources)
-                .add_nodes(nodes_nns_subnet),
-        )
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(vm_resources)
-                .add_nodes(nodes_app_subnet),
-        )
+        .with_resource_overrides(VmResourceOverrides {
+            vcpus: Some(NrOfVCPUs::new(16)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
+            boot_image_minimal_size_gibibytes,
+        })
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(nodes_nns_subnet))
+        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(nodes_app_subnet))
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
-    env.sync_with_prometheus();
     info!(logger, "Step 1: Installing NNS canisters ...");
     let nns_node = env
         .topology_snapshot()
@@ -170,7 +159,10 @@ pub fn test(
         .nodes()
         .next()
         .unwrap()
-        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+        .create_and_install_canister_with_arg(
+            &std::env::var("COUNTER_CANISTER_WAT_PATH").unwrap(),
+            None,
+        );
     info!(
         &log,
         "Installation of counter canisters on both subnets has succeeded."
@@ -295,6 +287,7 @@ fn main() -> Result<()> {
         )
     };
     SystemTestGroup::new()
+        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(setup)
         .add_test(systest!(test))
         .with_timeout_per_test(per_task_timeout) // each task (including the setup function) may take up to `per_task_timeout`.

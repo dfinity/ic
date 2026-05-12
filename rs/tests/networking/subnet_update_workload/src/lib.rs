@@ -25,8 +25,7 @@ use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},
     driver::{
         farm::HostFeature,
-        ic::{ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
+        ic::{ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
@@ -46,7 +45,6 @@ use ic_agent::Agent;
 use ic_registry_subnet_type::SubnetType;
 use slog::{Logger, debug, info};
 
-const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 const CANISTER_METHOD: &str = "write";
 // Duration of each request is placed into one of the two categories - below or above this threshold.
 const APP_DURATION_THRESHOLD: Duration = Duration::from_secs(30);
@@ -66,24 +64,15 @@ pub fn setup(
     required_host_features: Vec<HostFeature>,
 ) {
     let logger = env.logger();
-    PrometheusVm::default()
-        .with_required_host_features(required_host_features.clone())
-        .start(&env)
-        .expect("failed to start prometheus VM");
-    let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(16)),
-        memory_kibibytes: None,
-        boot_image_minimal_size_gibibytes,
-    };
     InternetComputer::new()
         .with_required_host_features(required_host_features)
         .add_fast_single_node_subnet(SubnetType::System)
-        .with_default_vm_resources(vm_resources)
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(vm_resources)
-                .add_nodes(nodes_app_subnet),
-        )
+        .with_resource_overrides(VmResourceOverrides {
+            vcpus: Some(NrOfVCPUs::new(16)),
+            boot_image_minimal_size_gibibytes,
+            ..VmResourceOverrides::default()
+        })
+        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(nodes_app_subnet))
         .with_api_boundary_nodes(1)
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
@@ -114,8 +103,6 @@ pub fn setup(
             .await_status_is_healthy()
             .expect("API boundary node did not come up healthy.");
     }
-
-    env.sync_with_prometheus();
 }
 
 // Run a test with configurable number of update requests per second,
@@ -148,12 +135,18 @@ pub fn test(
         .nodes()
         .next()
         .unwrap()
-        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+        .create_and_install_canister_with_arg(
+            &std::env::var("COUNTER_CANISTER_WAT_PATH").unwrap(),
+            None,
+        );
     let nns_canister = nns_subnet
         .nodes()
         .next()
         .unwrap()
-        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+        .create_and_install_canister_with_arg(
+            &std::env::var("COUNTER_CANISTER_WAT_PATH").unwrap(),
+            None,
+        );
     info!(
         &log,
         "Installation of counter canisters on both subnets has succeeded."

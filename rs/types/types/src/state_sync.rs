@@ -46,4 +46,4 @@ impl Display for StateSyncVersion {
 }
 
 /// The version of StateSync protocol that should be used for all newly created manifests.
-pub const CURRENT_STATE_SYNC_VERSION: StateSyncVersion = StateSyncVersion::V3;
+pub const CURRENT_STATE_SYNC_VERSION: StateSyncVersion = StateSyncVersion::V4;

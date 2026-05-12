@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -7,28 +7,29 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_sha2",
     version = "0.9.0",
-    deps = ["//rs/crypto/internal/crypto_lib/sha2"],
-)
-
-rust_doc_test(
-    name = "sha2_doc_test",
-    crate = ":sha2",
-)
-
-rust_test(
-    name = "sha224_test",
-    srcs = ["tests/sha224.rs"],
     deps = [
         # Keep sorted.
-        ":sha2",
+        "@crate_index//:sha2",
     ],
 )
 
 rust_test(
-    name = "sha256_test",
-    srcs = ["tests/sha256.rs"],
+    name = "sha2_test",
+    crate = ":sha2",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:hex",
+        "@crate_index//:sha2",
+    ],
+)
+
+rust_test_suite(
+    name = "sha2_integration",
+    srcs = glob(["tests/**/*.rs"]),
     deps = [
         # Keep sorted.
         ":sha2",
+        "@crate_index//:hex",
+        "@crate_index//:sha2",
     ],
 )

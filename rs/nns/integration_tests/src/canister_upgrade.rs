@@ -45,6 +45,7 @@ fn test_upgrade_canister(canister_id: CanisterId, canister_wasm: Wasm) {
         canister_id,
         &Sha256::hash(&modified_wasm),
         controller_canister_id,
+        false,
     );
 
     let proposal_info =

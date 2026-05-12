@@ -1,8 +1,12 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, atomic::Ordering},
+};
 
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
+use derive_new::new;
 use ethnum::u256;
 use tracing::{debug, error};
 
@@ -51,21 +55,22 @@ pub struct Route {
     pub range_end: u256,
 }
 
+/// Routing table for fast canister_id -> subnet lookups
 #[derive(Eq, PartialEq, Debug)]
 pub struct Routes {
     pub node_count: u32,
     pub range_count: u32,
 
-    // Routes should be sorted by `range_start` field for the binary search to work
+    /// Routes should be sorted by `range_start` field for the binary search to work
     pub routes: Vec<Route>,
-    // Direct mapping from the Canister ID to the subnet for faster lookups
+    /// Direct mapping from the Canister ID to the subnet for faster lookups
     pub direct: HashMap<u256, Arc<Subnet>>,
-    // Mapping from Subnet ID to subnet
+    /// Mapping from Subnet ID to subnet
     pub subnet_map: HashMap<Principal, Arc<Subnet>>,
 }
 
 impl Routes {
-    // Look up the subnet by canister_id
+    /// Look up the subnet by canister_id
     pub fn lookup_by_canister_id(&self, canister_id: Principal) -> Option<Arc<Subnet>> {
         let canister_id_u256 = principal_to_u256(&canister_id);
 
@@ -74,6 +79,7 @@ impl Routes {
             return Some(v.clone());
         }
 
+        // Then do the binary search
         let idx = match self
             .routes
             .binary_search_by_key(&canister_id_u256, |x| x.range_start)
@@ -104,29 +110,25 @@ impl Routes {
         Some(route.subnet.clone())
     }
 
-    // Look up the subnet by subnet_id
+    /// Look up the subnet by subnet_id
     pub fn lookup_by_id(&self, subnet_id: Principal) -> Option<Arc<Subnet>> {
         self.subnet_map.get(&subnet_id).cloned()
     }
 }
 
+/// Persist the new routing table
 pub trait Persist: Send + Sync {
     fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus;
 }
 
+#[derive(new)]
 pub struct Persister {
     published_routes: Arc<ArcSwapOption<Routes>>,
 }
 
-impl Persister {
-    pub fn new(published_routes: Arc<ArcSwapOption<Routes>>) -> Self {
-        Self { published_routes }
-    }
-}
-
 #[async_trait]
 impl Persist for Persister {
-    // Construct a lookup table based on the provided subnet list
+    /// Construct & store a routing table based on the provided subnet list
     fn persist(&self, subnets: Vec<Subnet>) -> PersistStatus {
         if subnets.is_empty() {
             return PersistStatus::SkippedEmpty;
@@ -141,9 +143,11 @@ impl Persist for Persister {
 
         for mut subnet in subnets {
             // Sort nodes by an average latency before publishing
-            subnet
-                .nodes
-                .sort_by(|a, b| a.avg_latency_secs.total_cmp(&b.avg_latency_secs));
+            subnet.nodes.sort_by(|a, b| {
+                a.avg_latency_us
+                    .load(Ordering::SeqCst)
+                    .cmp(&b.avg_latency_us.load(Ordering::SeqCst))
+            });
 
             let subnet = Arc::new(subnet);
             subnet_map.insert(subnet.id, subnet.clone());
@@ -240,7 +244,7 @@ pub(crate) mod test {
     use arc_swap::ArcSwapOption;
     use candid::Principal;
     use ethnum::u256;
-    use ic_bn_lib::principal;
+    use ic_bn_lib_common::principal;
     use ic_registry_subnet_type::SubnetType;
 
     use crate::{
@@ -283,17 +287,19 @@ pub(crate) mod test {
     }
 
     pub fn node(i: u64, subnet_id: Principal) -> Arc<Node> {
-        Arc::new(Node {
-            id: node_test_id(1001 + i).get().0,
-            subnet_id,
-            subnet_type: SubnetType::Application,
-            addr: IpAddr::V4(Ipv4Addr::new(192, 168, 0, i as u8)),
-            port: 8080,
-            tls_certificate: valid_tls_certificate_and_validation_time()
-                .0
-                .certificate_der,
-            avg_latency_secs: f64::MAX,
-        })
+        Arc::new(
+            Node::new(
+                node_test_id(1001 + i).get().0,
+                subnet_id,
+                SubnetType::Application,
+                IpAddr::V4(Ipv4Addr::new(192, 168, 0, i as u8)),
+                8080,
+                valid_tls_certificate_and_validation_time()
+                    .0
+                    .certificate_der,
+            )
+            .unwrap(),
+        )
     }
 
     pub fn generate_test_subnets(offset: u64) -> Vec<Subnet> {

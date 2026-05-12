@@ -1,6 +1,6 @@
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{api::time, trap};
-use ic_ledger_canister_core::archive::ArchiveCanisterWasm;
+use ic_ledger_canister_core::archive::{Archive, ArchiveCanisterWasm};
 use ic_ledger_canister_core::blockchain::{BlockDataContainer, Blockchain};
 use ic_ledger_canister_core::ledger::{
     self as core_ledger, LedgerContext, LedgerData, TransactionInfo,
@@ -29,10 +29,10 @@ use lazy_static::lazy_static;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
-use std::sync::RwLock;
-use std::sync::atomic::AtomicU64;
+use std::ops::DerefMut;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 #[cfg(test)]
@@ -42,8 +42,6 @@ lazy_static! {
     pub static ref LEDGER: RwLock<Ledger> = RwLock::new(Ledger::default());
     // Maximum inter-canister message size in bytes.
     pub static ref MAX_MESSAGE_SIZE_BYTES: RwLock<usize> = RwLock::new(1024 * 1024);
-
-    static ref ARCHIVING_FAILURES: AtomicU64 = AtomicU64::new(0);
 }
 
 // Wasm bytecode of an Archive Node.
@@ -150,6 +148,8 @@ thread_local! {
     // block_index -> block
     pub static BLOCKS_MEMORY: RefCell<StableBTreeMap<u64, Vec<u8>, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID))));
+
+    static ARCHIVING_FAILURES: Cell<u64> = Cell::default();
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
@@ -327,11 +327,11 @@ impl LedgerData for Ledger {
     }
 
     fn increment_archiving_failure_metric(&mut self) {
-        ARCHIVING_FAILURES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        ARCHIVING_FAILURES.with(|cell| cell.set(cell.get() + 1));
     }
 
     fn get_archiving_failure_metric(&self) -> u64 {
-        ARCHIVING_FAILURES.load(std::sync::atomic::Ordering::Relaxed)
+        ARCHIVING_FAILURES.get()
     }
 }
 
@@ -569,6 +569,37 @@ impl Ledger {
         if let Some(feature_flags) = args.feature_flags {
             self.feature_flags = feature_flags;
         }
+        if let Some(change_archive_options) = args.change_archive_options {
+            let new_archive = {
+                let mut maybe_archive = self.blockchain.archive.write().expect(
+                    "BUG: should be unreachable since upgrade has exclusive write access to the ledger",
+                );
+                match maybe_archive.deref_mut() {
+                    Some(archive) => {
+                        change_archive_options.apply(archive);
+                        None
+                    }
+                    None => {
+                        // Need to first create the Archive instance in order to apply the options.
+                        // The options also need to have all the required fields set, otherwise the Archive instance won't be created.
+                        let archive_options =
+                            ic_ledger_canister_core::archive::ArchiveOptions::try_from(
+                                change_archive_options,
+                            )
+                            .unwrap_or_else(|e| {
+                                panic!(
+                                    "No archive configured, and ChangeArchiveOptions did not specify all mandatory fields: {}",
+                                    e
+                                )
+                            });
+                        Some(Arc::new(RwLock::new(Some(Archive::new(archive_options)))))
+                    }
+                }
+            };
+            if let Some(archive) = new_archive {
+                self.blockchain.archive = archive;
+            }
+        }
     }
 
     pub fn max_take_allowances(&self) -> u64 {
@@ -612,7 +643,7 @@ pub fn get_allowances_list(
     now: u64,
 ) -> Allowances {
     let mut result = vec![];
-    let start_spender = spender.unwrap_or(AccountIdentifier { hash: [0u8; 28] });
+    let start_spender = spender.unwrap_or(AccountIdentifier { hash: [0_u8; 28] });
     ALLOWANCES_MEMORY.with_borrow(|allowances| {
         for ((from_account_id, to_spender_id), storable_allowance) in
             allowances.range((from, start_spender)..)
@@ -698,12 +729,6 @@ impl AllowancesData for StableAllowancesData {
     fn pop_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
         ALLOWANCES_EXPIRATIONS_MEMORY
             .with_borrow_mut(|expirations| expirations.pop_first().map(|kv| kv.0))
-    }
-
-    fn pop_first_allowance(
-        &mut self,
-    ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)> {
-        panic!("The method `pop_first_allowance` should not be called for StableAllowancesData")
     }
 
     fn len_allowances(&self) -> usize {

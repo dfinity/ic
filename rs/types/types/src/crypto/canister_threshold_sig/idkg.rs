@@ -6,7 +6,7 @@ use crate::crypto::canister_threshold_sig::error::{
 use crate::crypto::impl_display_using_debug;
 use crate::crypto::{AlgorithmId, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator};
 use crate::signature::{BasicSignature, BasicSignatureBatch};
-use crate::{Height, NodeId, NumberOfNodes, RegistryVersion};
+use crate::{CountBytes, Height, NodeId, NumberOfNodes, RegistryVersion};
 use ic_base_types::SubnetId;
 use ic_crypto_internal_types::NodeIndex;
 #[cfg(test)]
@@ -84,6 +84,17 @@ impl IDkgTranscriptId {
             source_subnet: self.source_subnet,
             source_height: height,
         })
+    }
+}
+
+impl CountBytes for IDkgTranscriptId {
+    fn count_bytes(&self) -> usize {
+        let IDkgTranscriptId {
+            id,
+            source_height,
+            source_subnet,
+        } = self;
+        size_of_val(id) + size_of_val(source_height) + size_of_val(source_subnet)
     }
 }
 
@@ -1039,6 +1050,16 @@ impl SignedBytesWithoutDomainSeparator for IDkgDealing {
     }
 }
 
+impl CountBytes for IDkgDealing {
+    fn count_bytes(&self) -> usize {
+        let IDkgDealing {
+            transcript_id,
+            internal_dealing_raw,
+        } = self;
+        transcript_id.count_bytes() + internal_dealing_raw.len()
+    }
+}
+
 /// The signed dealing sent by dealers
 ///
 /// The iDKG protocol requires `IDkgDealing` to be signed with non-malleable
@@ -1342,7 +1363,7 @@ fn should_fail_deserializing_invalid_initial_idkg_dealings() {
         let invalid_serialization = InitialIDkgDealingsProto::from(&initial_dealings);
 
         assert_matches::assert_matches!(
-            InitialIDkgDealings::try_from(&invalid_serialization),
+            InitialIDkgDealings::try_from(invalid_serialization),
             Err(ProxyDecodeError::Other(s))
             if s == "InvalidTranscriptOperation" || s == "Unspecified transcript operation in IDkgTranscriptParams"
         );

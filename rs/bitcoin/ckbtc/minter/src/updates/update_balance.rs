@@ -13,6 +13,7 @@ use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use num_traits::ToPrimitive;
 use serde::Serialize;
+use std::collections::BTreeSet;
 
 // Max number of times of calling check_transaction with cycle payment, to avoid spending too
 // many cycles.
@@ -185,6 +186,29 @@ pub async fn update_balance<R: CanisterRuntime>(
     let (processable_utxos, suspended_utxos) =
         state::read_state(|s| s.processable_utxos_for_account(utxos, &caller_account, &now));
 
+    let (processable_utxos, duplicated_utxos): (BTreeSet<_>, BTreeSet<_>) = read_state(|s| {
+        processable_utxos
+            .into_iter()
+            .partition(|utxo| !s.minted_outpoints.contains(&utxo.outpoint))
+    });
+    if !duplicated_utxos.is_empty() {
+        log!(
+            Priority::Info,
+            "Found {} duplicated UTXOs: {}",
+            duplicated_utxos.len(),
+            duplicated_utxos
+                .iter()
+                .map(|utxo| format!("{}", DisplayOutpoint(&utxo.outpoint),))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        state::mutate_state(|s| {
+            for utxo in &duplicated_utxos {
+                s.duplicated_outpoints.insert(utxo.outpoint.clone());
+            }
+        });
+    }
+
     // Remove pending finalized transactions for the affected account.
     state::mutate_state(|s| s.finalized_utxos.remove(&caller_account));
 
@@ -245,20 +269,33 @@ pub async fn update_balance<R: CanisterRuntime>(
         _ => "ckTESTBTC",
     };
 
-    let check_fee = read_state(|s| s.check_fee);
+    let (deposit_btc_min_amount, check_fee) =
+        read_state(|s| (s.deposit_btc_min_amount, s.check_fee));
     let mut utxo_statuses: Vec<UtxoStatus> = vec![];
+
     for utxo in processable_utxos {
-        if utxo.value <= check_fee {
+        let ignored_reason = if utxo.value < deposit_btc_min_amount {
+            Some(format!(
+                "Ignored UTXO {} for account {caller_account} because UTXO value {} is lower than the minimum deposit amount {}",
+                DisplayOutpoint(&utxo.outpoint),
+                DisplayAmount(utxo.value),
+                DisplayAmount(deposit_btc_min_amount)
+            ))
+        } else if utxo.value <= check_fee {
+            Some(format!(
+                "Ignored UTXO {} for account {caller_account} because UTXO value {} is not higher than the check fee {}",
+                DisplayOutpoint(&utxo.outpoint),
+                DisplayAmount(utxo.value),
+                DisplayAmount(check_fee)
+            ))
+        } else {
+            None
+        };
+        if let Some(ignored_reason) = ignored_reason {
             mutate_state(|s| {
                 state::audit::ignore_utxo(s, utxo.clone(), caller_account, now, runtime)
             });
-            log!(
-                Priority::Debug,
-                "Ignored UTXO {} for account {caller_account} because UTXO value {} is lower than the check fee {}",
-                DisplayOutpoint(&utxo.outpoint),
-                DisplayAmount(utxo.value),
-                DisplayAmount(check_fee),
-            );
+            log!(Priority::Debug, "{ignored_reason}");
             utxo_statuses.push(UtxoStatus::ValueTooSmall(utxo));
             continue;
         }
@@ -341,7 +378,7 @@ pub async fn update_balance<R: CanisterRuntime>(
         scopeguard::ScopeGuard::into_inner(guard);
     }
 
-    schedule_now(TaskType::ProcessLogic(false), runtime);
+    schedule_now(TaskType::ProcessLogic, runtime);
 
     observe_update_call_latency(utxo_statuses.len(), start_time, runtime.time());
 

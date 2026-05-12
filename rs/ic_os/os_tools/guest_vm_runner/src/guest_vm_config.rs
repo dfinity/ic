@@ -1,15 +1,14 @@
 use crate::GuestVMType;
+use crate::metrics::GuestVmMetrics;
 use anyhow::{Context, Result, ensure};
 use askama::Template;
-use config::hostos::guestos_bootstrap_image::BootstrapOptions;
-use config::hostos::guestos_config::generate_guestos_config;
+use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
+use config_tool::hostos::guestos_config::generate_guestos_config;
 use config_types::{GuestOSConfig, HostOSConfig};
+use deterministic_ips::calculate_deterministic_mac;
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{IpVariant, calculate_deterministic_mac};
 use std::path::{Path, PathBuf};
-
-// See build.rs
-include!(concat!(env!("OUT_DIR"), "/guestos_vm_template.rs"));
+use tracing::info;
 
 const DEFAULT_GUEST_VM_DOMAIN_NAME: &str = "guestos";
 const UPGRADE_GUEST_VM_DOMAIN_NAME: &str = "upgrade-guestos";
@@ -18,10 +17,27 @@ const DEFAULT_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/guestos-serial.log"
 const UPGRADE_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/upgrade-guestos-serial.log";
 
 #[cfg(not(feature = "dev"))]
-const DEFAULT_VM_MEMORY_GB: u32 = 490;
+const DEFAULT_VM_MEMORY_GIB: u32 = 480;
 #[cfg(not(feature = "dev"))]
 const DEFAULT_VM_VCPUS: u32 = 64;
-const UPGRADE_VM_MEMORY_GB: u32 = 4;
+const UPGRADE_VM_MEMORY_GIB: u32 = 4;
+
+#[derive(Template)]
+#[template(path = "guestos_vm_template.xml", escape = "xml")]
+pub struct GuestOSTemplateProps {
+    pub domain_name: String,
+    pub domain_uuid: String,
+    pub cpu_domain: String,
+    pub console_log_path: String,
+    pub vm_memory: u32,
+    pub nr_of_vcpus: u32,
+    pub mac_address: macaddr::MacAddr6,
+    pub disk_device: PathBuf,
+    pub config_media_path: PathBuf,
+    pub enable_sev: bool,
+    pub direct_boot: Option<DirectBootConfig>,
+    pub use_hugepages: bool,
+}
 
 #[derive(Debug)]
 pub struct DirectBootConfig {
@@ -49,10 +65,9 @@ pub fn assemble_config_media(
     .context("Failed to generate GuestOS config")?;
 
     let bootstrap_options = make_bootstrap_options(hostos_config, guestos_config)?;
-
     bootstrap_options.build_bootstrap_config_image(media_path)?;
 
-    println!(
+    info!(
         "Assembling config media for GuestOS: {}",
         media_path.display()
     );
@@ -60,12 +75,14 @@ pub fn assemble_config_media(
     Ok(())
 }
 
+#[allow(unused_variables)]
 fn make_bootstrap_options(
     hostos_config: &HostOSConfig,
     guestos_config: GuestOSConfig,
 ) -> Result<BootstrapOptions> {
+    #[allow(unused_mut)]
     let mut bootstrap_options = BootstrapOptions {
-        guestos_config: Some(guestos_config),
+        guestos_config: Some(guestos_config.clone()),
         ..Default::default()
     };
 
@@ -75,22 +92,13 @@ fn make_bootstrap_options(
             bootstrap_options.accounts_ssh_authorized_keys =
                 Some(PathBuf::from("/boot/config/ssh_authorized_keys"));
         }
-
-        let nns_key_override_path = PathBuf::from("/boot/config/nns_public_key_override.pem");
-        if nns_key_override_path.exists() {
-            bootstrap_options.nns_public_key_override = Some(nns_key_override_path);
-        }
-    }
-
-    if hostos_config.icos_settings.use_node_operator_private_key {
-        bootstrap_options.node_operator_private_key =
-            Some(PathBuf::from("/boot/config/node_operator_private_key.pem"));
     }
 
     Ok(bootstrap_options)
 }
 
 /// Generate the GuestOS VM libvirt XML configuration and return it as String.
+/// Writes a metric indicating whether hugepages are enabled.
 pub fn generate_vm_config(
     config: &HostOSConfig,
     media_path: &Path,
@@ -98,6 +106,8 @@ pub fn generate_vm_config(
     disk_device: &Path,
     serial_log_path: &Path,
     guest_vm_type: GuestVMType,
+    available_hugepages_gib: u64,
+    metrics: &GuestVmMetrics,
 ) -> Result<String> {
     let node_type = match guest_vm_type {
         GuestVMType::Default => NodeType::GuestOS,
@@ -106,7 +116,6 @@ pub fn generate_vm_config(
     let mac_address = calculate_deterministic_mac(
         &config.icos_settings.mgmt_mac,
         config.icos_settings.deployment_environment,
-        IpVariant::V6,
         node_type,
     );
 
@@ -117,13 +126,20 @@ pub fn generate_vm_config(
     // contain nodes with and without SEV should have the same memory settings for consistency
     // across nodes.
     ensure!(
-        total_vm_memory >= UPGRADE_VM_MEMORY_GB,
-        "GuestOS VM memory must be at least {UPGRADE_VM_MEMORY_GB}GB but is {total_vm_memory}GB."
+        total_vm_memory >= UPGRADE_VM_MEMORY_GIB,
+        "GuestOS VM memory must be at least {UPGRADE_VM_MEMORY_GIB}GiB but is {total_vm_memory}GiB."
     );
-    let vm_memory = match guest_vm_type {
-        GuestVMType::Default => total_vm_memory - UPGRADE_VM_MEMORY_GB,
-        GuestVMType::Upgrade => UPGRADE_VM_MEMORY_GB,
+    let vm_memory_gib = match guest_vm_type {
+        GuestVMType::Default => total_vm_memory - UPGRADE_VM_MEMORY_GIB,
+        GuestVMType::Upgrade => UPGRADE_VM_MEMORY_GIB,
     };
+
+    // Enable hugepages if enough are available for this VM and TEE is disabled (hugepages are not
+    // supported by the kernel for confidential VMs)
+    let use_hugepages = available_hugepages_gib >= vm_memory_gib as u64
+        && !config.icos_settings.enable_trusted_execution_environment;
+
+    metrics.set_hugepages_enabled(guest_vm_type, use_hugepages);
 
     GuestOSTemplateProps {
         domain_name: vm_domain_name(guest_vm_type).to_string(),
@@ -131,19 +147,20 @@ pub fn generate_vm_config(
         disk_device: disk_device.to_path_buf(),
         cpu_domain,
         console_log_path: serial_log_path.display().to_string(),
-        vm_memory,
+        vm_memory: vm_memory_gib,
         nr_of_vcpus,
         mac_address,
         config_media_path: media_path.to_path_buf(),
         direct_boot,
         enable_sev: config.icos_settings.enable_trusted_execution_environment,
+        use_hugepages,
     }
     .render()
     .context("Failed to render GuestOS VM XML template")
 }
 
 #[cfg(feature = "dev")]
-fn vm_resources(config: &HostOSConfig) -> (String, u32, u32) {
+pub(crate) fn vm_resources(config: &HostOSConfig) -> (String, u32, u32) {
     let cpu_domain = if config.hostos_settings.hostos_dev_settings.vm_cpu == "qemu" {
         "qemu".to_string()
     } else {
@@ -157,8 +174,8 @@ fn vm_resources(config: &HostOSConfig) -> (String, u32, u32) {
 }
 
 #[cfg(not(feature = "dev"))]
-fn vm_resources(_config: &HostOSConfig) -> (String, u32, u32) {
-    ("kvm".to_string(), DEFAULT_VM_MEMORY_GB, DEFAULT_VM_VCPUS)
+pub(crate) fn vm_resources(_config: &HostOSConfig) -> (String, u32, u32) {
+    ("kvm".to_string(), DEFAULT_VM_MEMORY_GIB, DEFAULT_VM_VCPUS)
 }
 
 pub fn vm_domain_name(guest_vm_type: GuestVMType) -> &'static str {
@@ -186,54 +203,29 @@ pub fn serial_log_path(guest_vm_type: GuestVMType) -> &'static Path {
 mod tests {
     use super::*;
     use config_types::{
-        DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, HostOSDevSettings,
-        HostOSSettings, ICOSSettings, Ipv4Config, Ipv6Config, NetworkSettings,
+        DeterministicIpv6Config, HostOSConfig, HostOSDevSettings, HostOSSettings, ICOSSettings,
+        Ipv6Config, NetworkSettings,
     };
     use goldenfile::Mint;
     use std::env;
     use std::os::unix::prelude::MetadataExt;
-    use tempfile::tempdir;
+    use tempfile::{NamedTempFile, tempdir};
 
     fn create_test_hostos_config() -> HostOSConfig {
         HostOSConfig {
-            config_version: "1.0".to_string(),
             network_settings: NetworkSettings {
                 ipv6_config: Ipv6Config::Deterministic(DeterministicIpv6Config {
                     prefix: "2001:db8::".to_string(),
                     prefix_length: 64,
                     gateway: "2001:db8::ffff".parse().unwrap(),
                 }),
-                ipv4_config: Some(Ipv4Config {
-                    address: "192.168.1.2".parse().unwrap(),
-                    gateway: "192.168.1.1".parse().unwrap(),
-                    prefix_length: 24,
-                }),
-                domain_name: Some("test.domain".to_string()),
+                ..Default::default()
             },
             icos_settings: ICOSSettings {
-                node_reward_type: Some("type3.1".to_string()),
                 mgmt_mac: "00:11:22:33:44:55".parse().unwrap(),
-                deployment_environment: DeploymentEnvironment::Testnet,
-                use_nns_public_key: false,
-                nns_urls: vec![url::Url::parse("https://example.com").unwrap()],
-                use_node_operator_private_key: false,
-                enable_trusted_execution_environment: false,
-                use_ssh_authorized_keys: false,
-                icos_dev_settings: Default::default(),
+                ..Default::default()
             },
-            #[allow(deprecated)]
-            hostos_settings: HostOSSettings {
-                vm_memory: 16,
-                vm_cpu: "qemu".to_string(),
-                vm_nr_of_vcpus: 56,
-                verbose: false,
-                hostos_dev_settings: HostOSDevSettings {
-                    vm_memory: 16,
-                    vm_cpu: "qemu".to_string(),
-                    vm_nr_of_vcpus: 56,
-                },
-            },
-            guestos_settings: Default::default(),
+            ..HostOSConfig::default()
         }
     }
 
@@ -241,7 +233,6 @@ mod tests {
     fn test_make_bootstrap_options() {
         let mut config = create_test_hostos_config();
         config.icos_settings.use_ssh_authorized_keys = true;
-        config.icos_settings.use_node_operator_private_key = true;
 
         let guestos_config =
             generate_guestos_config(&config, config_types::GuestVMType::Default, None).unwrap();
@@ -252,10 +243,29 @@ mod tests {
             options,
             BootstrapOptions {
                 guestos_config: Some(guestos_config),
-                nns_public_key_override: None,
-                node_operator_private_key: Some(PathBuf::from(
-                    "/boot/config/node_operator_private_key.pem"
+                #[cfg(feature = "dev")]
+                accounts_ssh_authorized_keys: Some(PathBuf::from(
+                    "/boot/config/ssh_authorized_keys"
                 )),
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn test_make_bootstrap_options_operator_key_from_file() {
+        let mut config = create_test_hostos_config();
+        config.icos_settings.use_ssh_authorized_keys = true;
+
+        let guestos_config =
+            generate_guestos_config(&config, config_types::GuestVMType::Default, None).unwrap();
+
+        let options = make_bootstrap_options(&config, guestos_config.clone()).unwrap();
+
+        assert_eq!(
+            options,
+            BootstrapOptions {
+                guestos_config: Some(guestos_config),
                 #[cfg(feature = "dev")]
                 accounts_ssh_authorized_keys: Some(PathBuf::from(
                     "/boot/config/ssh_authorized_keys"
@@ -277,6 +287,7 @@ mod tests {
         enable_trusted_execution_environment: bool,
         enable_direct_boot: bool,
         guest_vm_type: GuestVMType,
+        available_hugepages_gib: u64,
     ) {
         let mut mint = Mint::new(goldenfiles_path());
         let mut config = create_test_hostos_config();
@@ -296,6 +307,9 @@ mod tests {
             None
         };
 
+        let temp_metrics = NamedTempFile::new().unwrap();
+        let metrics = GuestVmMetrics::new(temp_metrics.path().to_path_buf()).unwrap();
+
         let vm_config = generate_vm_config(
             &config,
             Path::new("/tmp/config.img"),
@@ -303,6 +317,8 @@ mod tests {
             Path::new("/dev/guest_disk"),
             Path::new("/var/serial/console.txt"),
             guest_vm_type,
+            available_hugepages_gib,
+            &metrics,
         )
         .unwrap();
         std::fs::write(mint.new_goldenpath(filename).unwrap(), vm_config).unwrap();
@@ -312,11 +328,7 @@ mod tests {
     fn test_generate_vm_config_qemu() {
         test_vm_config(
             "guestos_vm_qemu.xml",
-            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 16,
-                vm_cpu: "qemu".to_string(),
-                vm_nr_of_vcpus: 56,
                 hostos_dev_settings: HostOSDevSettings {
                     vm_memory: 16,
                     vm_cpu: "qemu".to_string(),
@@ -327,6 +339,7 @@ mod tests {
             /*enable_trusted_execution_environment=*/ false,
             /*enable_direct_boot=*/ true,
             GuestVMType::Default,
+            16,
         );
     }
 
@@ -334,11 +347,7 @@ mod tests {
     fn test_generate_vm_config_upgrade_guestos() {
         test_vm_config(
             "upgrade_guestos.xml",
-            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 16,
-                vm_cpu: "qemu".to_string(),
-                vm_nr_of_vcpus: 64,
                 hostos_dev_settings: HostOSDevSettings {
                     vm_memory: 16,
                     vm_cpu: "qemu".to_string(),
@@ -349,6 +358,7 @@ mod tests {
             /*enable_trusted_execution_environment=*/ true,
             /*enable_direct_boot=*/ true,
             GuestVMType::Upgrade,
+            4,
         );
     }
 
@@ -356,11 +366,7 @@ mod tests {
     fn test_generate_vm_config_kvm() {
         test_vm_config(
             "guestos_vm_kvm.xml",
-            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 16,
-                vm_cpu: "kvm".to_string(),
-                vm_nr_of_vcpus: 56,
                 hostos_dev_settings: HostOSDevSettings {
                     vm_memory: 16,
                     vm_cpu: "kvm".to_string(),
@@ -371,18 +377,15 @@ mod tests {
             /*enable_trusted_execution_environment=*/ false,
             /*enable_direct_boot=*/ false,
             GuestVMType::Default,
+            0,
         );
     }
 
     #[test]
-    fn test_generate_vm_config_sev() {
+    fn test_generate_vm_config_sev_hugepages() {
         test_vm_config(
             "guestos_vm_sev.xml",
-            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 16,
-                vm_cpu: "kvm".to_string(),
-                vm_nr_of_vcpus: 56,
                 hostos_dev_settings: HostOSDevSettings {
                     vm_memory: 16,
                     vm_cpu: "kvm".to_string(),
@@ -393,6 +396,7 @@ mod tests {
             /*enable_trusted_execution_environment=*/ true,
             /*enable_direct_boot=*/ true,
             GuestVMType::Default,
+            470,
         );
     }
 
@@ -419,6 +423,8 @@ mod tests {
     #[test]
     fn ensure_tested_with_dev() {
         // Ensure that the test is run with the dev feature enabled.
-        assert!(cfg!(feature = "dev"));
+        const {
+            assert!(cfg!(feature = "dev"));
+        };
     }
 }

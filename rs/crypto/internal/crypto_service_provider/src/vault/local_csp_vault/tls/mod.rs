@@ -68,8 +68,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
         let common_name = &node.get().to_string()[..];
 
+        let seed = self.generate_seed();
         let (cert, secret_key) = generate_tls_key_pair_der(
-            &mut *self.rng_write_lock(),
+            seed,
             common_name,
             issuance_time.as_secs_since_unix_epoch(),
             RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE as u64,

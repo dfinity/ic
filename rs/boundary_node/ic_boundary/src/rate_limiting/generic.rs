@@ -24,7 +24,7 @@ use ic_bn_lib::prometheus::{
     IntCounterVec, IntGauge, Registry, register_int_counter_vec_with_registry,
     register_int_gauge_with_registry,
 };
-use ic_bn_lib::{http::ConnInfo, tasks::Run};
+use ic_bn_lib_common::{traits::Run, types::http::ConnInfo};
 use ic_types::CanisterId;
 use ipnet::IpNet;
 use rate_limits_api::v1::{Action, IpPrefixes, RateLimitRule, RequestType as RequestTypeRule};
@@ -109,11 +109,16 @@ impl Bucket {
             return None;
         }
 
-        if let Some(v) = self.rule.canister_id
-            && let Some(x) = ctx.canister_id
-            && x != v
-        {
-            return None;
+        if let Some(v) = self.rule.canister_id {
+            if let Some(x) = ctx.canister_id {
+                // If we have a canister id - compare it
+                if x != v {
+                    return None;
+                }
+            } else {
+                // Otherwise ignore this rule
+                return None;
+            }
         }
 
         if let Some(v) = &self.rule.request_types
@@ -506,7 +511,7 @@ pub async fn middleware(
 mod test {
     use super::*;
     use anyhow::bail;
-    use ic_bn_lib::principal;
+    use ic_bn_lib_common::principal;
     use indoc::indoc;
     use std::str::FromStr;
 
@@ -659,6 +664,34 @@ mod test {
                 _port: 31337,
             },
         ];
+
+        // Check that blocked canister is blocked
+        for _ in 0..100 {
+            assert_eq!(
+                limiter.evaluate(Context {
+                    subnet_id,
+                    canister_id: Some(id0),
+                    method: None,
+                    request_type: RequestType::QueryV2,
+                    ip: ip1,
+                }),
+                Decision::Block
+            );
+        }
+
+        // Check that the request w/o canister id is allowed
+        for _ in 0..100 {
+            assert_eq!(
+                limiter.evaluate(Context {
+                    subnet_id,
+                    canister_id: None,
+                    method: None,
+                    request_type: RequestType::QueryV2,
+                    ip: ip1,
+                }),
+                Decision::Pass
+            );
+        }
 
         // Check that blocked canister always works from localhost even if there's a block rule present
         for _ in 0..100 {

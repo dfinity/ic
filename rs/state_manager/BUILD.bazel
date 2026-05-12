@@ -23,12 +23,12 @@ DEPENDENCIES = [
     "//rs/sys",
     "//rs/tree_deserializer",
     "//rs/types/base_types",
+    "//rs/types/cycles",
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/utils",
     "//rs/utils/thread",
     "//rs/utils/validate_eq",
-    "@crate_index//:bit-vec",
     "@crate_index//:crossbeam-channel",
     "@crate_index//:hex",
     "@crate_index//:nix",
@@ -42,12 +42,12 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:slog",
     "@crate_index//:tempfile",
+    "@crate_index//:tokio",
     "@crate_index//:uuid",
 ]
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:strum_macros",
 ]
 
 DEV_DEPENDENCIES = [
@@ -84,6 +84,7 @@ BIN_DEPENDENCIES = [
     "//rs/test_utilities/state",
     "//rs/test_utilities/types",
     "//rs/types/base_types",
+    "//rs/types/cycles",
     "//rs/types/types",
     "@crate_index//:criterion",
     "@crate_index//:maplit",

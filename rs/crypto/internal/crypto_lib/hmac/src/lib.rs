@@ -14,7 +14,7 @@
 //! let mac = hmac.finish();
 //! ```
 
-pub use ic_crypto_internal_sha2::{Sha224, Sha256, Sha512};
+pub use ic_crypto_sha2::{Sha224, Sha256, Sha512};
 
 const IPAD: u8 = 0x36;
 const OPAD: u8 = 0x5C;
@@ -185,7 +185,7 @@ pub fn hkdf<H: HmacHashFunction>(
 
     let mut prev_t: Option<Vec<u8>> = None;
 
-    let mut output = vec![0u8; output_len];
+    let mut output = vec![0_u8; output_len];
 
     for i in 0..blocks {
         let mut hmac = Hmac::<H>::new(&prk);

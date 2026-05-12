@@ -3,7 +3,7 @@ use crate::{
     neuron_store::NeuronStoreError,
     pb::v1::{
         AbridgedNeuron, BallotInfo, Followees, KnownNeuronData, MaturityDisbursement,
-        NeuronStakeTransfer, Topic,
+        NeuronDissolveStateSnapshot, NeuronStakeTransfer, Topic,
     },
     storage::validate_stable_btree_map,
 };
@@ -582,6 +582,14 @@ where
         }
     }
 
+    /// Returns the total amount of maturity disbursements in progress in e8s equivalent.
+    pub fn total_maturity_disbursements_in_progress_e8s_equivalent(&self) -> u64 {
+        self.maturity_disbursements_map
+            .values()
+            .map(|maturity_disbursement| maturity_disbursement.amount_e8s)
+            .fold(0, |acc, x| acc.saturating_add(x))
+    }
+
     /// Validates that some of the data in stable storage can be read, in order to prevent broken
     /// schema. Should only be called in post_upgrade.
     pub fn validate(&self) {
@@ -747,6 +755,26 @@ where
 
     pub fn is_known_neuron(&self, neuron_id: NeuronId) -> bool {
         self.known_neuron_data_map.contains_key(&neuron_id)
+    }
+
+    pub fn clamp_dissolve_delay_for_all_neurons_or_panic(
+        &mut self,
+        now_seconds: u64,
+    ) -> HashMap<u64, NeuronDissolveStateSnapshot> {
+        let neuron_ids = self.main.keys().collect::<Vec<NeuronId>>();
+        let mut pre_clamp_dissolve_states = HashMap::new();
+        for neuron_id in neuron_ids {
+            let mut snapshot = None;
+            self.with_main_part_mut(neuron_id, |abridged_neuron| {
+                snapshot = Some(abridged_neuron.clamp_dissolve_delay_or_panic(now_seconds));
+            })
+            .expect("Failed to clamp dissolve delay for neuron");
+            pre_clamp_dissolve_states.insert(
+                neuron_id.id,
+                snapshot.expect("snapshot must be set inside with_main_part_mut"),
+            );
+        }
+        pre_clamp_dissolve_states
     }
 }
 

@@ -24,7 +24,6 @@ ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
 ic_consensus_system_test_utils = { path = "../utils" }
 prost = { workspace = true }
-serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
 ssh2 = { workspace = true }
@@ -40,6 +39,10 @@ path = "sr_nns_failover_nodes_test.rs"
 [[bin]]
 name = "ic-systest-subnet-recovery-app-same-nodes"
 path = "sr_app_same_nodes_test.rs"
+
+[[bin]]
+name = "ic-systest-subnet-recovery-app-no-upgrade-provision-write-access"
+path = "sr_app_no_upgrade_provision_write_access_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-failover-nodes"
@@ -78,5 +81,5 @@ name = "ic-systest-subnet-recovery-app-no-upgrade-with-chain-keys"
 path = "sr_app_no_upgrade_with_chain_keys_test.rs"
 
 [[bin]]
-name = "ic-systest-subnet-recovery-app-large-with-chain-keys"
-path = "sr_app_large_with_chain_keys_test.rs"
+name = "ic-systest-subnet-recovery-app-large-no-upgrade-with-chain-keys"
+path = "sr_app_large_no_upgrade_with_chain_keys_test.rs"

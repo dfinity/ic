@@ -5,8 +5,8 @@ use ic_metrics::{
     buckets::{decimal_buckets, linear_buckets},
 };
 use ic_types::consensus::idkg::{
-    CompletedReshareRequest, CompletedSignature, HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId,
-    IDkgPayload, KeyTranscriptCreation,
+    CompletedReshareRequest, HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgPayload,
+    KeyTranscriptCreation,
 };
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use std::collections::BTreeMap;
@@ -85,6 +85,12 @@ impl IDkgPreSignerMetrics {
         }
     }
 
+    pub fn pre_sign_metrics_inc_by(&self, value: u64, label: &str) {
+        self.pre_sign_metrics
+            .with_label_values(&[label])
+            .inc_by(value);
+    }
+
     pub fn pre_sign_metrics_inc(&self, label: &str) {
         self.pre_sign_metrics.with_label_values(&[label]).inc();
     }
@@ -137,9 +143,6 @@ pub struct IDkgPayloadMetrics {
     payload_metrics: IntGaugeVec,
     payload_errors: IntCounterVec,
     pub(crate) payload_duration: HistogramVec,
-    transcript_builder_metrics: IntCounterVec,
-    transcript_builder_errors: IntCounterVec,
-    pub(crate) transcript_builder_duration: HistogramVec,
     /// Critical error for failure to create/reshare key transcript
     pub(crate) critical_error_master_key_transcript_missing: IntCounter,
 }
@@ -165,24 +168,6 @@ impl IDkgPayloadMetrics {
                 decimal_buckets(-4, 2),
                 &["type"],
             ),
-            transcript_builder_metrics: metrics_registry.int_counter_vec(
-                "idkg_transcript_builder_metrics",
-                "IDkg transcript builder metrics",
-                &["type"],
-            ),
-            transcript_builder_errors: metrics_registry.int_counter_vec(
-                "idkg_transcript_builder_errors",
-                "IDkg transcript builder related errors",
-                &["type"],
-            ),
-            transcript_builder_duration: metrics_registry.histogram_vec(
-                "idkg_transcript_builder_duration_seconds",
-                "Time taken by transcript builder, in seconds",
-                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
-                // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
-                decimal_buckets(-4, 2),
-                &["sub_component"],
-            ),
             critical_error_master_key_transcript_missing: metrics_registry
                 .error_counter(CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING),
         }
@@ -192,8 +177,8 @@ impl IDkgPayloadMetrics {
         let expected_keys = expected_keys(payload);
 
         self.payload_metrics_set_without_key_id_label(
-            "signature_agreements",
-            payload.signature_agreements.len(),
+            "signature_agreements_flag",
+            payload.empty_signature_agreements_flag as usize,
         );
         self.payload_metrics_set(
             "available_pre_signatures",
@@ -243,26 +228,20 @@ impl IDkgPayloadMetrics {
             .inc();
     }
 
-    pub(crate) fn payload_errors_inc(&self, label: &str) {
+    pub fn payload_errors_inc(&self, label: &str) {
         self.payload_errors.with_label_values(&[label]).inc();
     }
+}
 
-    pub(crate) fn transcript_builder_metrics_inc(&self, label: &str) {
-        self.transcript_builder_metrics
-            .with_label_values(&[label])
-            .inc();
-    }
+pub(crate) trait IDkgPayloadMetricsOptionExt {
+    fn payload_errors_inc(self, label: &str);
+}
 
-    pub(crate) fn transcript_builder_metrics_inc_by(&self, value: u64, label: &str) {
-        self.transcript_builder_metrics
-            .with_label_values(&[label])
-            .inc_by(value);
-    }
-
-    pub(crate) fn transcript_builder_errors_inc(&self, label: &str) {
-        self.transcript_builder_errors
-            .with_label_values(&[label])
-            .inc();
+impl IDkgPayloadMetricsOptionExt for Option<&IDkgPayloadMetrics> {
+    fn payload_errors_inc(self, label: &str) {
+        if let Some(metrics) = self {
+            metrics.payload_errors_inc(label);
+        }
     }
 }
 
@@ -442,7 +421,6 @@ impl ThresholdSignatureMetrics {
 /// IDkg payload stats
 #[derive(Default)]
 pub struct IDkgPayloadStats {
-    pub signature_agreements: usize,
     pub key_transcripts_created: CounterPerMasterPublicKeyId,
     pub available_pre_signatures: CounterPerMasterPublicKeyId,
     pub pre_signatures_in_creation: CounterPerMasterPublicKeyId,
@@ -474,11 +452,6 @@ impl From<&IDkgPayload> for IDkgPayloadStats {
 
         Self {
             key_transcripts_created,
-            signature_agreements: payload
-                .signature_agreements
-                .values()
-                .filter(|status| matches!(status, CompletedSignature::Unreported(_)))
-                .count(),
             available_pre_signatures: count_by_master_public_key_id(
                 payload.available_pre_signatures.values(),
                 &keys,

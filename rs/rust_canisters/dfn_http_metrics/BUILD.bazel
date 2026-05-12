@@ -5,6 +5,7 @@ package(default_visibility = [
     "//rs/ledger_suite/icp:__subpackages__",
     "//rs/ledger_suite/icrc1:__pkg__",
     "//rs/ledger_suite/icrc1/ledger:__pkg__",
+    "//rs/migration_canister:__pkg__",
     "//rs/nns:__subpackages__",
     "//rs/registry/canister:__pkg__",
     "//rs/rust_canisters:__subpackages__",

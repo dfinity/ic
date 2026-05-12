@@ -1,6 +1,6 @@
 use crate::invariants::common::{
     InvariantCheckError, RegistrySnapshot, assert_valid_urls_and_hash,
-    get_all_hostos_version_records, get_node_records_from_snapshot, get_value_from_snapshot,
+    get_all_hostos_version_records, get_all_node_records, get_value_from_snapshot,
 };
 
 use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
@@ -35,9 +35,8 @@ pub(crate) fn check_hostos_version_invariants(
         // Node's version to one that has already been added to the registry.
         let r = get_hostos_version_record(snapshot, version);
 
-        // Check whether release package URL (iso image) and corresponding hash
-        // are well-formed. As file-based URLs are only used in
-        // test-deployments, we disallow file:/// URLs.
+        // Check whether release package URLs (update image) and corresponding hash are well-formed.
+        // As file-based URLs are only used in test-deployments, we disallow file:/// URLs.
         assert_valid_urls_and_hash(
             &r.release_package_urls,
             &r.release_package_sha256_hex,
@@ -56,8 +55,8 @@ fn get_hostos_version_record(snapshot: &RegistrySnapshot, version: String) -> Ho
 /// Returns the list of HostOS versions where each version is referred to
 /// by at least one node.
 fn get_all_hostos_versions_of_nodes(snapshot: &RegistrySnapshot) -> Vec<String> {
-    get_node_records_from_snapshot(snapshot)
-        .values()
-        .filter_map(|node_record| node_record.hostos_version_id.clone())
+    get_all_node_records(snapshot)
+        .into_values()
+        .filter_map(|node_record| node_record.hostos_version_id)
         .collect()
 }

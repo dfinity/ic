@@ -3,6 +3,7 @@ use std::{convert::TryFrom, rc::Rc};
 
 use ic_base_types::NumBytes;
 use ic_config::execution_environment::Config as HypervisorConfig;
+use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
@@ -26,11 +27,13 @@ use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages, PageMap};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
-use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{ComputeAllocation, MemoryAllocation, NumInstructions, time::UNIX_EPOCH};
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use ic_wasm_types::BinaryEncodedWasm;
 
 pub const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
+
+const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * 1024; // 4 KiB
 
 pub struct WasmtimeInstanceBuilder {
     wasm: Vec<u8>,
@@ -124,6 +127,15 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
+    pub fn with_deterministic_memory_tracker_enabled(mut self, enabled: bool) -> Self {
+        self.config.feature_flags.deterministic_memory_tracker = if enabled {
+            FlagStatus::Enabled
+        } else {
+            FlagStatus::Disabled
+        };
+        self
+    }
+
     #[allow(clippy::result_large_err)]
     pub fn try_build(self) -> Result<WasmtimeInstance, (HypervisorError, SystemApiImpl)> {
         let log = no_op_logger();
@@ -140,11 +152,13 @@ impl WasmtimeInstanceBuilder {
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
         let system_state = SystemStateBuilder::default()
             .environment_variables(self.environment_variables)
+            .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
             .build();
         let dirty_page_overhead = match self.subnet_type {
             SubnetType::Application => SchedulerConfig::application_subnet(),
             SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
             SubnetType::System => SchedulerConfig::system_subnet(),
+            SubnetType::CloudEngine => SchedulerConfig::cloud_engine(),
         }
         .dirty_page_overhead;
         let subnet_available_callbacks =

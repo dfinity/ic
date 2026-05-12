@@ -9,7 +9,7 @@ use ic_system_test_driver::{
     },
     util::*,
 };
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm};
 
 pub fn can_transfer_cycles_from_a_canister_to_another(env: TestEnv) {
@@ -23,7 +23,7 @@ pub fn can_transfer_cycles_from_a_canister_to_another(env: TestEnv) {
             let alice = UniversalCanister::new_with_cycles_with_retries(
                 &agent,
                 nns_node.effective_canister_id(),
-                100_000_000u64,
+                100_000_000_u64,
                 &logger,
             )
             .await;
@@ -74,7 +74,7 @@ pub fn trapping_with_large_blob_does_not_cause_cycles_underflow(env: TestEnv) {
     let logger = env.logger();
     let ver_app_node = env.get_first_healthy_verified_application_node_snapshot();
     let agent = ver_app_node.build_default_agent();
-    let initial_balance = 123_000_000_000_000u64;
+    let initial_balance = 123_000_000_000_000_u64;
     block_on({
         async move {
             let canister = UniversalCanister::new_with_cycles_with_retries(
@@ -107,7 +107,7 @@ pub fn rejecting_with_large_blob_does_not_cause_cycles_underflow(env: TestEnv) {
     let ver_app_node = env.get_first_healthy_verified_application_node_snapshot();
     let agent = ver_app_node.build_default_agent();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    let initial_balance = 123_000_000_000_000u64;
+    let initial_balance = 123_000_000_000_000_u64;
     rt.block_on({
         async move {
             let canister = UniversalCanister::new_with_cycles_with_retries(

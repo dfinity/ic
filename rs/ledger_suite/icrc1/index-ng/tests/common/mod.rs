@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{GetBlocksResponse, IndexArg, InitArg as IndexInitArg, Log, Status};
@@ -34,7 +36,6 @@ const NAT_META_VALUE: u128 = u128::MAX;
 const INT_META_KEY: &str = "test:int";
 const INT_META_VALUE: i128 = i128::MIN;
 
-#[allow(dead_code)]
 pub fn account(owner: u64, subaccount: u128) -> Account {
     let mut sub: [u8; 32] = [0; 32];
     sub[..16].copy_from_slice(&subaccount.to_be_bytes());
@@ -57,13 +58,16 @@ pub fn default_archive_options() -> ArchiveOptions {
     }
 }
 
-#[allow(dead_code)]
 pub fn index_ng_wasm() -> Vec<u8> {
-    ic_test_utilities_load_wasm::load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ic-icrc1-index-ng",
-        &[],
-    )
+    let index_ng_wasm_path = std::env::var("IC_ICRC1_INDEX_NG_WASM_PATH").expect(
+        "The Index-ng wasm path must be set using the env variable IC_ICRC1_INDEX_NG_WASM_PATH",
+    );
+    std::fs::read(&index_ng_wasm_path).unwrap_or_else(|e| {
+        panic!(
+            "failed to load Wasm file from path {} (env var IC_ICRC1_INDEX_NG_WASM_PATH): {}",
+            index_ng_wasm_path, e
+        )
+    })
 }
 
 pub fn install_ledger(
@@ -81,7 +85,10 @@ pub fn install_ledger(
         .with_metadata_entry(TEXT_META_KEY, TEXT_META_VALUE)
         .with_metadata_entry(BLOB_META_KEY, BLOB_META_VALUE)
         .with_archive_options(archive_options)
-        .with_feature_flags(FeatureFlags { icrc2: true });
+        .with_feature_flags(FeatureFlags {
+            icrc2: true,
+            icrc152: false,
+        });
     if let Some(fee_collector_account) = fee_collector_account {
         builder = builder.with_fee_collector_account(fee_collector_account);
     }
@@ -92,7 +99,7 @@ pub fn install_ledger(
         ledger_wasm(),
         Encode!(&LedgerArgument::Init(builder.build())).unwrap(),
         None,
-        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_types_cycles::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }
@@ -109,25 +116,23 @@ fn icrc3_test_ledger() -> Vec<u8> {
     })
 }
 
-#[allow(dead_code)]
 pub fn install_icrc3_test_ledger(env: &StateMachine) -> CanisterId {
     env.install_canister_with_cycles(
         icrc3_test_ledger(),
         Encode!(&()).unwrap(),
         None,
-        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_types_cycles::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }
 
-#[allow(dead_code)]
 pub fn install_index_ng(env: &StateMachine, init_arg: IndexInitArg) -> CanisterId {
     let args = IndexArg::Init(init_arg);
     env.install_canister_with_cycles(
         index_ng_wasm(),
         Encode!(&args).unwrap(),
         None,
-        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_types_cycles::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }
@@ -223,6 +228,16 @@ pub fn wait_until_sync_is_completed(
     index_id: CanisterId,
     ledger_id: CanisterId,
 ) {
+    wait_until_sync_is_completed_or_error(env, index_id, ledger_id).unwrap()
+}
+
+/// Wait for the index to sync with the ledger.
+/// Return the index error logs in case it is not able to sync.
+pub fn wait_until_sync_is_completed_or_error(
+    env: &StateMachine,
+    index_id: CanisterId,
+    ledger_id: CanisterId,
+) -> Result<(), String> {
     let mut num_blocks_synced = u64::MAX;
     let mut chain_length = u64::MAX;
     for _i in 0..MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT {
@@ -231,7 +246,7 @@ pub fn wait_until_sync_is_completed(
         num_blocks_synced = status(env, index_id).num_blocks_synced.0.to_u64().unwrap();
         chain_length = ledger_get_all_blocks(env, ledger_id, 0, 1).chain_length;
         if num_blocks_synced == chain_length {
-            return;
+            return Ok(());
         }
     }
     let log = parse_index_logs(&get_logs(env, index_id));
@@ -242,10 +257,10 @@ pub fn wait_until_sync_is_completed(
             entry.timestamp, entry.file, entry.line, entry.message
         ));
     }
-    panic!(
+    Err(format!(
         "The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}.\nLogs:\n{}",
         num_blocks_synced, chain_length, log_lines
-    );
+    ))
 }
 
 #[cfg(feature = "icrc3_disabled")]

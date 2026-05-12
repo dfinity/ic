@@ -1,9 +1,10 @@
 //! This module contains async functions for interacting with the management canister.
 use crate::metrics::{observe_get_utxos_latency, observe_sign_with_ecdsa_latency};
+use crate::tx::FeeRate;
 use crate::{CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, Network, tx};
 use candid::Principal;
 use ic_btc_checker::{CheckTransactionArgs, CheckTransactionResponse};
-use ic_btc_interface::{Address, MillisatoshiPerByte, Utxo};
+use ic_btc_interface::{Address, Utxo};
 use ic_cdk::bitcoin_canister;
 use ic_cdk::bitcoin_canister::GetCurrentFeePercentilesRequest;
 use ic_cdk::management_canister::SignCallError;
@@ -144,7 +145,13 @@ pub async fn get_utxos<R: CanisterRuntime>(
             crate::metrics::GET_UTXOS_CACHE_MISSES.with(|cell| cell.set(cell.get() + 1));
             runtime.get_utxos(&req).await.inspect(|res| {
                 *now = runtime.time();
-                crate::state::mutate_state(|s| s.get_utxos_cache.insert(req, res.clone(), *now))
+                crate::state::mutate_state(|s| {
+                    if s.last_get_utxos_tip_height != Some(res.tip_height) {
+                        s.get_utxos_cache.clear();
+                        s.last_get_utxos_tip_height = Some(res.tip_height)
+                    }
+                    s.get_utxos_cache.insert(req, res.clone(), *now)
+                })
             })
         }
     }
@@ -193,9 +200,14 @@ pub async fn bitcoin_get_utxos(request: &GetUtxosRequest) -> Result<GetUtxosResp
 /// Returns the current fee percentiles on the Bitcoin network.
 pub async fn bitcoin_get_current_fee_percentiles(
     request: &GetCurrentFeePercentilesRequest,
-) -> Result<Vec<MillisatoshiPerByte>, CallError> {
+) -> Result<Vec<FeeRate>, CallError> {
     bitcoin_canister::bitcoin_get_current_fee_percentiles(request)
         .await
+        .map(|fees| {
+            fees.into_iter()
+                .map(FeeRate::from_millis_per_byte)
+                .collect()
+        })
         .map_err(|err| CallError::from_cdk_call_error("bitcoin_get_current_fee_percentiles", err))
 }
 
@@ -238,14 +250,14 @@ pub async fn ecdsa_public_key(
 /// Signs a message hash using the tECDSA API.
 pub async fn sign_with_ecdsa<R: CanisterRuntime>(
     key_name: String,
-    derivation_path: DerivationPath,
+    derivation_path: Vec<Vec<u8>>,
     message_hash: [u8; 32],
     runtime: &R,
 ) -> Result<Vec<u8>, CallError> {
     let start_time = runtime.time();
 
     let result = runtime
-        .sign_with_ecdsa(key_name, derivation_path.into_inner(), message_hash)
+        .sign_with_ecdsa(key_name, derivation_path, message_hash)
         .await;
 
     observe_sign_with_ecdsa_latency(&result, start_time, runtime.time());

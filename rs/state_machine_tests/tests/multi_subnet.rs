@@ -1,9 +1,7 @@
 use ic_state_machine_tests::two_subnets_simple;
 use ic_test_utilities_types::ids::user_test_id;
-use ic_types::{
-    Cycles,
-    ingress::{IngressStatus, WasmResult},
-};
+use ic_types::ingress::{IngressStatus, WasmResult};
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
@@ -233,18 +231,11 @@ fn counter_canister_call_test() {
     // This time we need to execute multiple rounds on the 1st subnet
     // to induct all ingress messages with large payloads.
     env1.execute_round();
-    assert!(matches!(
-        (
-            env1.ingress_status(&msg10_id),
-            env1.ingress_status(&msg11_id),
-            env1.ingress_status(&msg12_id)
-        ),
-        (
-            IngressStatus::Unknown,
-            IngressStatus::Known { .. },
-            IngressStatus::Known { .. },
-        )
-    ));
+    let known_count = [&msg10_id, &msg11_id, &msg12_id]
+        .into_iter()
+        .filter(|&msg_id| matches!(env1.ingress_status(msg_id), IngressStatus::Known { .. }))
+        .count();
+    assert_eq!(2, known_count);
 
     // The third ingress message is only inducted after a repeated
     // call to execute a round.

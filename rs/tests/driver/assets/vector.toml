@@ -13,7 +13,7 @@ for_each(["address", "ic_node", "job", "ic_subnet", "is_api_bn", "is_malicious",
 }
 
 preserved_fields_message = {}
-for_each(["__CURSOR", "_HOSTNAME", "MESSAGE", "__REALTIME_TIMESTAMP", "_EXE"]) -> |_, k| {
+for_each(["__CURSOR", "_HOSTNAME", "MESSAGE", "__REALTIME_TIMESTAMP", "_EXE", "SYSLOG_IDENTIFIER"]) -> |_, k| {
   v = get!(message_parsed, [k])
   if v != null {
     preserved_fields_message = set!(preserved_fields_message, [k], v)

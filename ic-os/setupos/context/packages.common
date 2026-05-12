@@ -3,7 +3,7 @@
 # operation for the "prod" image.
 
 # Need kernel to boot anything
-linux-image-generic-hwe-24.04
+linux-image-generic-hwe-26.04
 initramfs-tools
 
 # Need systemd for boot process
@@ -22,7 +22,6 @@ ca-certificates
 curl
 ethtool
 efibootmgr
-faketime
 gdisk
 ipmitool
 iproute2
@@ -33,7 +32,6 @@ less
 locales
 lshw
 lvm2
-net-tools
 parted
 python-is-python3
 smartmontools

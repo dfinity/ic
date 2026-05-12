@@ -11,19 +11,15 @@ use ic_nns_constants::{
     NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID, PROTOCOL_CANISTER_IDS, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance_api::{
-    MonthlyNodeProviderRewards, NetworkEconomics, Vote, VotingPowerEconomics,
-};
+use ic_nns_governance_api::{MonthlyNodeProviderRewards, Vote};
 use ic_nns_test_utils::state_test_helpers::{
-    nns_get_most_recent_monthly_node_provider_rewards, nns_wait_for_proposal_execution,
-    scrape_metrics,
+    nns_get_most_recent_monthly_node_provider_rewards, scrape_metrics,
 };
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
     state_test_helpers::{
-        get_canister_status, manage_network_economics, nns_cast_vote,
-        nns_create_super_powerful_neuron, nns_propose_upgrade_nns_canister,
-        wait_for_canister_upgrade_to_succeed,
+        get_canister_status, nns_cast_vote, nns_create_super_powerful_neuron,
+        nns_propose_upgrade_nns_canister, wait_for_canister_upgrade_to_succeed,
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
@@ -61,7 +57,12 @@ impl NnsCanisterUpgrade {
             "registry"       => (REGISTRY_CANISTER_ID, "REGISTRY_CANISTER_WASM_PATH"),
             "root"           => (ROOT_CANISTER_ID, "ROOT_CANISTER_WASM_PATH"),
             "sns-wasm"       => (SNS_WASM_CANISTER_ID, "SNS_WASM_CANISTER_WASM_PATH"),
-            "node-rewards"   => (NODE_REWARDS_CANISTER_ID, "NODE_REWARDS_CANISTER_WASM_PATH"),
+
+            // The Node Rewards canister is updated with test feature that simulates
+            // calls to the management canister in order to retrieve blockmaker statistics for each node.
+            // This is necessary because state_machine tests run only with an NNS subnet, where real
+            // management canister calls are not possible (Just NNS subnet is present).
+            "node-rewards"   => (NODE_REWARDS_CANISTER_ID, "NODE_REWARDS_CANISTER_TEST_WASM_PATH"),
             _ => panic!("Not a known NNS canister type: {nns_canister_name}",),
         };
 
@@ -216,8 +217,8 @@ fn test_upgrade_canisters_with_golden_nns_state() {
         "ledger",
         "lifeline",
         "migration",
-        "node-rewards",
         "registry",
+        "node-rewards",
         "root",
         "sns-wasm",
     ]
@@ -240,6 +241,17 @@ fn test_upgrade_canisters_with_golden_nns_state() {
         nns_canister_upgrade_sequence = all_canisters;
     }
 
+    // TODO: The node-rewards canister must always be upgraded because its test WASM
+    // simulates management canister calls for blockmaker statistics, which are not
+    // possible in state_machine tests (only the NNS subnet is present). Without this
+    // forced upgrade, the canister would run production code that fails in this environment.
+    if !nns_canister_upgrade_sequence
+        .split(',')
+        .any(|canister_name| canister_name == "node-rewards")
+    {
+        nns_canister_upgrade_sequence.push_str(",node-rewards");
+    }
+
     let mut nns_canister_upgrade_sequence = nns_canister_upgrade_sequence
         .split(',')
         .map(NnsCanisterUpgrade::new)
@@ -250,6 +262,8 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     // Step 1.1: Load golden nns state into a StateMachine.
     // TODO: Use PocketIc instead of StateMachine.
     let state_machine = new_state_machine_with_golden_nns_state_or_panic();
+
+    state_machine.reject_remote_callbacks();
 
     // Step 1.2: Create a super powerful Neuron.
     println!("Creating super powerful Neuron.");
@@ -330,6 +344,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
                     *canister_id,
                     wasm_hash,
                     nns_canister_upgrade.controller_principal_id(),
+                    true,
                 );
                 println!(
                     "Attempt {repetition_number} to upgrade {nns_canister_name} was successful."
@@ -338,25 +353,6 @@ fn test_upgrade_canisters_with_golden_nns_state() {
 
             repetition_number += 1;
         };
-
-    // TODO[NNS1-3790]: Remove this once the mainnet NNS has initialized the
-    // TODO[NNS1-3790]: `neuron_minimum_dissolve_delay_to_vote_seconds` field.
-    let proposal_id = manage_network_economics(
-        &state_machine,
-        NetworkEconomics {
-            voting_power_economics: Some(VotingPowerEconomics {
-                neuron_minimum_dissolve_delay_to_vote_seconds: Some(
-                    VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS,
-                ),
-                ..Default::default()
-            }),
-            ..Default::default()
-        },
-        neuron_controller,
-        neuron_id,
-    );
-    vote_yes_with_well_known_public_neurons(&state_machine, proposal_id.id);
-    nns_wait_for_proposal_execution(&state_machine, proposal_id.id);
 
     let metrics_before = sanity_check::fetch_metrics(&state_machine);
 
@@ -398,6 +394,8 @@ fn check_canisters_are_all_protocol_canisters(state_machine: &StateMachine) {
 
 mod sanity_check {
     use super::*;
+    use ic_nns_governance::governance::NODE_PROVIDER_REWARD_PERIOD_SECONDS;
+    use ic_nns_governance_api::DateUtc;
 
     /// Metrics fetched from canisters either before or after testing.
     pub struct Metrics {
@@ -423,14 +421,50 @@ mod sanity_check {
         state_machine: &StateMachine,
         before: Metrics,
     ) {
-        advance_time(state_machine);
+        let before_timestamp = before
+            .governance_most_recent_monthly_node_provider_rewards
+            .timestamp;
+        advance_time_to_allow_for_voting_and_node_rewards(state_machine, before_timestamp);
         let after = fetch_metrics(state_machine);
+        let after_start_date = after
+            .governance_most_recent_monthly_node_provider_rewards
+            .start_date
+            .clone()
+            .unwrap();
+        let after_end_date = after
+            .governance_most_recent_monthly_node_provider_rewards
+            .end_date
+            .clone()
+            .unwrap();
+
+        println!("node provider rewards start_date {:?}", after_start_date);
+        println!("node provider rewards end_date {:?}", after_end_date);
         MetricsBeforeAndAfter { before, after }.check_all();
     }
 
-    fn advance_time(state_machine: &StateMachine) {
-        // This duration is picked so that node rewards will definitely be distributed.
-        state_machine.advance_time(std::time::Duration::from_secs(ONE_MONTH_SECONDS));
+    fn advance_time_to_allow_for_voting_and_node_rewards(
+        state_machine: &StateMachine,
+        before_timestamp: u64,
+    ) {
+        // Advance time in the state machine to just before the next node provider
+        // rewards distribution time.
+        // Important to reach the exact moment when node provider rewards are distributed!
+        let seconds_to_node_provider_reward_distribution = before_timestamp
+            + NODE_PROVIDER_REWARD_PERIOD_SECONDS
+            - state_machine.get_time().as_secs_since_unix_epoch();
+        state_machine.advance_time(std::time::Duration::from_secs(
+            seconds_to_node_provider_reward_distribution - 1,
+        ));
+        for _ in 0..100 {
+            state_machine.advance_time(std::time::Duration::from_secs(1));
+            state_machine.tick();
+        }
+
+        // Advance time in the state machine by one month to ensure that voting rewards
+        // are also distributed.
+        state_machine.advance_time(std::time::Duration::from_secs(
+            ONE_MONTH_SECONDS - seconds_to_node_provider_reward_distribution,
+        ));
         for _ in 0..100 {
             state_machine.advance_time(std::time::Duration::from_secs(1));
             state_machine.tick();
@@ -474,7 +508,7 @@ mod sanity_check {
                     )
                 },
                 |before, after| {
-                    assert_increased(before, after, "latest reward event timestamp");
+                    assert_increased(before, after, "latest voting reward event timestamp");
                 },
             );
             self.check_metric(
@@ -501,13 +535,13 @@ mod sanity_check {
                         before,
                         after,
                         "total minted node provider rewards",
-                        0.2,
+                        0.30,
                     );
                     assert_not_decreased_too_much(
                         before,
                         after,
                         "total minted node provider rewards",
-                        0.2,
+                        0.30,
                     );
                 },
             );
@@ -521,6 +555,25 @@ mod sanity_check {
                 |before, after| {
                     assert_increased(before, after, "node provider rewards timestamp");
                 },
+            );
+
+            // Check node provider rewards cover contiguous periods.
+            let before_end_date = self
+                .before
+                .governance_most_recent_monthly_node_provider_rewards
+                .end_date
+                .clone()
+                .unwrap();
+            let expected_after_start_date = DateUtc {
+                year: before_end_date.year,
+                month: before_end_date.month,
+                day: before_end_date.day + 1,
+            };
+            assert_eq!(
+                self.after
+                    .governance_most_recent_monthly_node_provider_rewards
+                    .start_date,
+                Some(expected_after_start_date)
             );
         }
 
@@ -560,9 +613,10 @@ mod sanity_check {
             .xdr_permyriad_per_icp
             .as_ref()
             .unwrap();
-        total_rewards * (xdr_permyriad_per_icp as f64) / 10_000f64
+        total_rewards * (xdr_permyriad_per_icp as f64) / 10_000_f64
     }
 
+    #[track_caller]
     fn assert_not_increased_too_much(before: f64, after: f64, name: &str, diff: f64) {
         assert!(
             after < before * (1.0 + diff),
@@ -570,6 +624,7 @@ mod sanity_check {
         );
     }
 
+    #[track_caller]
     fn assert_not_decreased_too_much(before: f64, after: f64, name: &str, diff: f64) {
         assert!(
             after > before * (1.0 - diff),
@@ -577,6 +632,7 @@ mod sanity_check {
         );
     }
 
+    #[track_caller]
     fn assert_increased<T>(before: T, after: T, name: &str)
     where
         T: PartialOrd + std::fmt::Display,

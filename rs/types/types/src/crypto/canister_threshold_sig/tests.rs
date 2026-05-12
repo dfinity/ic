@@ -1,10 +1,13 @@
 use super::*;
-use crate::crypto::ExtendedDerivationPath;
 use crate::crypto::canister_threshold_sig::error::{
     EcdsaPresignatureQuadrupleCreationError, ThresholdEcdsaSigInputsCreationError,
 };
-use crate::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
-use crate::{Height, NodeId, RegistryVersion, SubnetId};
+use crate::crypto::canister_threshold_sig::idkg::{
+    IDkgDealing, IDkgTranscriptId, SignedIDkgDealing,
+};
+use crate::crypto::{BasicSig, BasicSigOf, ExtendedDerivationPath};
+use crate::signature::BasicSignature;
+use crate::{CountBytes, Height, NodeId, RegistryVersion, SubnetId};
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_crypto_test_utils_canister_threshold_sigs::{ordered_node_id, set_of_nodes};
@@ -348,7 +351,7 @@ fn should_not_create_ecdsa_inputs_with_invalid_hash_length() {
     let rng = &mut reproducible_rng();
     let mut inputs_owned = valid_tecdsa_inputs(rng);
 
-    let hashed_message_invalid_length = vec![1u8; 33];
+    let hashed_message_invalid_length = vec![1_u8; 33];
     inputs_owned.hashed_message = hashed_message_invalid_length;
 
     let ecdsa_inputs: Result<ThresholdEcdsaSigInputs, _> = inputs_owned.to_ref();
@@ -804,7 +807,7 @@ fn derivation_path() -> ExtendedDerivationPath {
 }
 
 fn nonce() -> [u8; 32] {
-    [42u8; 32]
+    [42_u8; 32]
 }
 
 fn hashed_message() -> Vec<u8> {
@@ -948,4 +951,23 @@ fn valid_tschnorr_inputs_with_receivers(
         presig_transcript,
         key_transcript,
     }
+}
+
+#[test]
+fn test_signed_idkg_dealing_count_bytes() {
+    let signed_dealing = SignedIDkgDealing {
+        content: IDkgDealing {
+            transcript_id: IDkgTranscriptId::new(
+                SubnetId::from(PrincipalId::new_subnet_test_id(1)), // 30 bytes
+                10,                                                 // 8 bytes
+                Height::new(100),                                   // 8 bytes
+            ),
+            internal_dealing_raw: vec![1; 104], // 104 bytes
+        },
+        signature: BasicSignature {
+            signature: BasicSigOf::new(BasicSig(vec![2; 220])), // 220 bytes
+            signer: NodeId::from(PrincipalId::new_node_test_id(1)), // 30 bytes
+        },
+    };
+    assert_eq!(signed_dealing.count_bytes(), 400);
 }

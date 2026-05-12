@@ -33,13 +33,17 @@ use ic_nns_governance::{
         manage_neuron::{Command, Merge, MergeMaturity, NeuronIdOrSubaccount},
         proposal,
     },
+    proposals::execute_nns_function::ValidExecuteNnsFunction,
     storage::reset_stable_memory,
 };
 use ic_nns_governance_api::{
     self as api, ManageNeuronResponse, Visibility, manage_neuron_response,
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
-use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
+use icrc_ledger_types::{
+    icrc1::account::Account,
+    icrc3::blocks::{GetBlocksRequest, GetBlocksResult},
+};
 use rand::{RngCore, SeedableRng, prelude::StdRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
@@ -182,7 +186,7 @@ impl Default for EnvironmentBuilder {
         EnvironmentBuilder {
             environment_fixture_state: EnvironmentFixtureState {
                 now: 0,
-                rng: Some(ChaCha20Rng::from_seed([1u8; 32])),
+                rng: Some(ChaCha20Rng::from_seed([1_u8; 32])),
                 observed_canister_calls: VecDeque::new(),
                 mocked_canister_replies: VecDeque::new(),
             },
@@ -502,6 +506,17 @@ impl IcpLedger for NNSFixture {
         Ok(0)
     }
 
+    async fn icrc2_transfer_from(
+        &self,
+        _from: Account,
+        _to: Account,
+        _amount_e8s: u64,
+        _fee_e8s: u64,
+        _memo: u64,
+    ) -> Result<u64, NervousSystemError> {
+        unimplemented!()
+    }
+
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         Ok(self.nns_state.try_lock().unwrap().ledger.get_supply())
     }
@@ -582,7 +597,7 @@ impl Environment for NNSFixture {
     fn execute_nns_function(
         &self,
         proposal_id: u64,
-        update: &ExecuteNnsFunction,
+        update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         self.nns_state
             .try_lock()
@@ -931,6 +946,17 @@ impl IcpLedger for NNS {
             .await
     }
 
+    async fn icrc2_transfer_from(
+        &self,
+        _from: Account,
+        _to: Account,
+        _amount_e8s: u64,
+        _fee_e8s: u64,
+        _memo: u64,
+    ) -> Result<u64, NervousSystemError> {
+        unimplemented!()
+    }
+
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         self.fixture.total_supply().await
     }
@@ -996,7 +1022,7 @@ impl Environment for NNS {
     fn execute_nns_function(
         &self,
         proposal_id: u64,
-        update: &ExecuteNnsFunction,
+        update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         self.fixture.execute_nns_function(proposal_id, update)
     }

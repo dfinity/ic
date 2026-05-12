@@ -1,0 +1,98 @@
+use crate::{
+    pb::v1::{GovernanceError, TakeCanisterSnapshot, Topic, governance_error::ErrorType},
+    proposals::{
+        call_canister::{CallCanister, CallCanisterReply},
+        invalid_proposal_error,
+        self_describing::DocumentedAction,
+        topic_to_manage_canister,
+    },
+};
+use candid::{Decode, Encode};
+use ic_base_types::{CanisterId, PrincipalId};
+use ic_nns_constants::ROOT_CANISTER_ID;
+use ic_nns_handler_root_interface::{
+    TakeCanisterSnapshotOk, TakeCanisterSnapshotRequest, TakeCanisterSnapshotResponse,
+};
+
+impl TakeCanisterSnapshot {
+    pub fn validate(&self) -> Result<(), GovernanceError> {
+        self.valid_canister_id()?;
+        Ok(())
+    }
+
+    pub fn valid_topic(&self) -> Result<Topic, GovernanceError> {
+        let canister_id = self.valid_canister_id()?;
+        Ok(topic_to_manage_canister(&canister_id))
+    }
+
+    fn valid_canister_id(&self) -> Result<CanisterId, GovernanceError> {
+        let canister_principal_id = self
+            .canister_id
+            .ok_or(invalid_proposal_error("Canister ID is required"))?;
+        let canister_id = CanisterId::try_from(canister_principal_id)
+            .map_err(|_| invalid_proposal_error("Invalid canister ID"))?;
+
+        Ok(canister_id)
+    }
+}
+
+impl CallCanister for TakeCanisterSnapshot {
+    type Reply = TakeCanisterSnapshotOk;
+
+    fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
+        Ok((ROOT_CANISTER_ID, "take_canister_snapshot"))
+    }
+
+    fn payload(&self) -> Result<Vec<u8>, GovernanceError> {
+        let args = convert_take_canister_snapshot_from_proposal_to_root_request(self)?;
+        Encode!(&args)
+            .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {e}")))
+    }
+}
+
+impl CallCanisterReply for TakeCanisterSnapshotOk {
+    fn try_decode(encoded_reply: &[u8]) -> Result<Option<Self>, GovernanceError> {
+        let response = Decode!(encoded_reply, TakeCanisterSnapshotResponse).map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Failed to decode TakeCanisterSnapshotResponse: {err}"),
+            )
+        })?;
+
+        match response {
+            TakeCanisterSnapshotResponse::Ok(ok) => Ok(Some(ok)),
+            TakeCanisterSnapshotResponse::Err(err) => Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Root returned error for TakeCanisterSnapshot: {:?}", err),
+            )),
+        }
+    }
+}
+
+pub fn convert_take_canister_snapshot_from_proposal_to_root_request(
+    original: &TakeCanisterSnapshot,
+) -> Result<TakeCanisterSnapshotRequest, GovernanceError> {
+    let TakeCanisterSnapshot {
+        replace_snapshot,
+        canister_id: _,
+    } = original.clone();
+
+    let canister_id = PrincipalId::from(original.valid_canister_id()?);
+
+    Ok(TakeCanisterSnapshotRequest {
+        canister_id,
+        replace_snapshot,
+    })
+}
+
+impl DocumentedAction for TakeCanisterSnapshot {
+    const NAME: &'static str = "Take Canister Snapshot";
+    const DESCRIPTION: &'static str = "Create a snapshot of a canister controlled by the \
+        NNS. The snapshot saves the canister's current stable memory, heap memory, data, and \
+        Wasm module. The snapshot can be loaded later using a Load Canister Snapshot proposal, \
+        rolling the canister back to the state saved within the snapshot.";
+}
+
+#[cfg(test)]
+#[path = "take_canister_snapshot_tests.rs"]
+mod tests;

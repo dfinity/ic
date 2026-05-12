@@ -30,7 +30,7 @@ impl FieldElementConfig {
 
         let m_inv_m64 = modulus.clone().mod_inverse(m64).unwrap().to_u64().unwrap();
         // Montgomery param (-p)^-1 mod 2^64
-        let p_dash = 0u64.wrapping_sub(m_inv_m64);
+        let p_dash = 0_u64.wrapping_sub(m_inv_m64);
         // Montgomery R value: 2^(64*limbs) mod p
         let monty_r1 = (BigUint::one() << (64 * limbs)) % &modulus;
         // Montgomery R2 value: (R*R) % p
@@ -115,7 +115,7 @@ impl syn::parse::Parse for FieldElementConfig {
         let _comma: syn::token::Comma = input.parse()?;
 
         let params: syn::punctuated::Punctuated<NameAndValue, syn::token::Comma> =
-            input.parse_terminated(NameAndValue::parse)?;
+            syn::punctuated::Punctuated::parse_terminated(input)?;
 
         let modulus = parse_integer(&m_val.value());
 

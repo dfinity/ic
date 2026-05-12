@@ -847,7 +847,7 @@ impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
         self.validated.get(id)
     }
 
-    fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
+    fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
         let node_id = self.node_id;
         let max_catch_up_height = self
             .validated
@@ -1080,7 +1080,7 @@ mod tests {
         ConsensusPoolImpl::new(
             node_id,
             subnet_id,
-            (&catch_up_package).into(),
+            catch_up_package.into(),
             config,
             registry,
             log,
@@ -1493,7 +1493,7 @@ mod tests {
                 _ => panic!("No signer for aggregate artifacts"),
             };
 
-            pool.get_all_for_broadcast().for_each(|m| {
+            pool.get_all_for_initial_broadcast().for_each(|m| {
                 if m.height().get() <= height_offset + 15 {
                     assert!(!m.is_share());
                 }
@@ -1503,7 +1503,7 @@ mod tests {
             });
 
             assert_eq!(
-                pool.get_all_for_broadcast().count(),
+                pool.get_all_for_initial_broadcast().count(),
                 // 1 CUP, 15 heights of aggregates, 5 heights of shares, 20 heights of proposals
                 1 + 15 * 4 + 5 * 4 + 20 * 5
             );
@@ -1561,16 +1561,16 @@ mod tests {
                 prometheus::default_registry()
                 .gather()
                 .iter()
-                .find(|m| m.get_name() == "artifact_pool_consensus_count_per_height")
+                .find(|m| m.name() == "artifact_pool_consensus_count_per_height")
                 .expect("articact_pool_consensus_count_per_heigfht metric not registered")
                 .get_metric()
                 .iter()
                 .find(|m|
                     m.get_label().iter().any(|label| {
-                        label.get_name() == "pool_type" && label.get_value() == "validated"
+                        label.name() == "pool_type" && label.value() == "validated"
                     }) &&
                     m.get_label().iter().any(|label| {
-                        label.get_name() == "type" && label.get_value() == "notarization"
+                        label.name() == "type" && label.value() == "notarization"
                     }))
                 .expect(
                     "metric with pool_type = unvalidated and type = notarization not registered",

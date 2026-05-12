@@ -36,17 +36,15 @@ pub struct UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
 
 #[cfg(test)]
 mod tests {
-    use ic_protobuf::registry::replica_version::v1::{
-        BlessedReplicaVersions, ReplicaVersionRecord,
-    };
-    use ic_registry_keys::{make_blessed_replica_versions_key, make_replica_version_key};
-    use ic_registry_transport::{insert, upsert};
+    use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
+    use ic_registry_keys::make_replica_version_key;
+    use ic_registry_transport::insert;
     use prost::Message;
 
     use crate::{
         common::test_helpers::invariant_compliant_registry,
         mutations::{
-            common::{get_blessed_replica_versions, get_unassigned_nodes_record},
+            common::{get_elected_replica_version_ids, get_unassigned_nodes_record},
             do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
         },
     };
@@ -54,8 +52,8 @@ mod tests {
     use super::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload;
 
     #[test]
-    #[should_panic(expected = "version is NOT blessed")]
-    fn should_panic_if_version_not_blessed() {
+    #[should_panic(expected = "'version' is NOT elected")]
+    fn should_panic_if_version_not_approved() {
         let mut registry = invariant_compliant_registry(0);
 
         // Make a proposal to upgrade all unassigned nodes to a new version
@@ -70,16 +68,7 @@ mod tests {
     fn should_succeed_if_upgrade_proposal_is_valid() {
         let mut registry = invariant_compliant_registry(0);
 
-        // Create and bless version
-        let blessed_versions = registry
-            .get(
-                make_blessed_replica_versions_key().as_bytes(), // key
-                registry.latest_version(),                      // version
-            )
-            .map(|v| BlessedReplicaVersions::decode(v.value.as_slice()).unwrap())
-            .expect("failed to decode blessed versions");
-        let blessed_versions = blessed_versions.blessed_version_ids;
-
+        // Create and approve version
         registry.maybe_apply_mutation_internal(vec![
             // Mutation to insert new replica version
             insert(
@@ -91,17 +80,9 @@ mod tests {
                 }
                 .encode_to_vec(),
             ),
-            // Mutation to insert BlessedReplicaVersions
-            upsert(
-                make_blessed_replica_versions_key(), // key
-                BlessedReplicaVersions {
-                    blessed_version_ids: [blessed_versions, vec!["version".into()]].concat(),
-                }
-                .encode_to_vec(),
-            ),
         ]);
 
-        // Make a proposal to upgrade all unassigned nodes to a new blessed version
+        // Make a proposal to upgrade all unassigned nodes to a new version
         let payload = DeployGuestosToAllUnassignedNodesPayload {
             elected_replica_version: "version".into(),
         };
@@ -117,14 +98,12 @@ mod tests {
     fn should_succeed_adding_and_removing_readonly_ssh_keys() {
         let mut registry = invariant_compliant_registry(0);
 
-        // first we need to make sure that the unassigned nodes record has blessed replica version
-        let blessed_versions = get_blessed_replica_versions(&registry)
-            .expect("failed to get the blessed replica versions");
+        // first we need to make sure that the unassigned nodes record has an approved replica version
+        let approved_versions = get_elected_replica_version_ids(&registry);
         let payload = DeployGuestosToAllUnassignedNodesPayload {
-            elected_replica_version: blessed_versions
-                .blessed_version_ids
+            elected_replica_version: approved_versions
                 .first()
-                .expect("there is no blessed replica version")
+                .expect("there is no approved replica version")
                 .to_string(),
         };
         registry.do_deploy_guestos_to_all_unassigned_nodes(payload);

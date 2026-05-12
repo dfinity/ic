@@ -16,16 +16,13 @@ async fn main() {
         None,
         &config,
         args.get_metrics_addr(),
-    );
-
-    let (nns_urls, nns_pub_key) =
-        registry_replicator.parse_registry_access_info_from_config(&config);
+    )
+    .await;
 
     let cancellation_token = CancellationToken::new();
     info!(logger, "Initializing registry replicator.");
     let future = registry_replicator
-        .start_polling(nns_urls, nns_pub_key, cancellation_token.clone())
-        .await
+        .start_polling(cancellation_token.clone())
         .expect("Failed to start registry replicator");
 
     info!(logger, "Start polling registry.");

@@ -14,15 +14,18 @@ use ic_registry_routing_table::CanisterIdRanges;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        farm::HostFeature,
+        farm::{HostFeature, VmAllocationMode},
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
+        ic::{
+            AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet,
+            VmResourceOverrides,
+        },
+        prometheus_vm::HasPrometheus,
         simulate_network::{ProductionSubnetTopology, SimulateNetwork},
         test_env::TestEnv,
         test_env_api::{
             GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            get_dependency_path,
+            get_dependency_path_from_env,
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
@@ -76,6 +79,7 @@ fn main() -> Result<()> {
         )
     };
     SystemTestGroup::new()
+        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(setup)
         .add_test(systest!(test))
         .with_timeout_per_test(per_task_timeout) // each task (including the setup function) may take up to `per_task_timeout`.
@@ -90,16 +94,11 @@ const MAX_CANISTERS_INSTALLING_IN_PARALLEL: usize = 10;
 
 pub fn setup(env: TestEnv, subnet_size: usize, initial_notary_delay: Duration) {
     let logger = env.logger();
-    PrometheusVm::default()
-        .with_required_host_features(vec![HostFeature::Performance])
-        .start(&env)
-        .expect("failed to start prometheus VM");
-
-    let path = get_dependency_path("rs/tests/jaeger_uvm_config_image.zst");
+    let path = get_dependency_path_from_env("JAEGER_UVM_CONFIG_IMAGE_ZST");
 
     UniversalVm::new(JAEGER_VM_NAME.to_string())
         .with_required_host_features(vec![HostFeature::Performance])
-        .with_vm_resources(VmResources {
+        .with_resource_overrides(VmResourceOverrides {
             vcpus: Some(NrOfVCPUs::new(16)),
             memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
             boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(1024)),
@@ -117,23 +116,21 @@ pub fn setup(env: TestEnv, subnet_size: usize, initial_notary_delay: Duration) {
         "Jaeger frontend available at: http://[{}]:16686", jaeger_ipv6
     );
 
-    let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(16)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
-        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-    };
     InternetComputer::new()
         .with_required_host_features(vec![HostFeature::Performance])
         .with_jaeger_addr(SocketAddr::new(IpAddr::V6(jaeger_ipv6), 4317))
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(vm_resources)
+                .with_resource_overrides(VmResourceOverrides {
+                    vcpus: Some(NrOfVCPUs::new(16)),
+                    memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
+                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+                })
                 .with_initial_notary_delay(initial_notary_delay)
                 .add_nodes(subnet_size),
         )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
-    env.sync_with_prometheus();
 
     // Await Replicas
     info!(&logger, "Checking readiness of all replica nodes...");
@@ -203,7 +200,7 @@ pub fn fill_execution_rounds(
             &log,
         ));
         canister_id = canister_id_ranges
-            .generate_canister_id(Some(canister_id))
+            .next_canister_id(Some(canister_id))
             .expect("Canister ID can be generated");
 
         currently_installing_canisters += 1;
@@ -223,7 +220,7 @@ pub fn fill_execution_rounds(
                     &log,
                 ));
                 canister_id = canister_id_ranges
-                    .generate_canister_id(Some(canister_id))
+                    .next_canister_id(Some(canister_id))
                     .expect("Canister ID can be generated");
 
                 currently_installing_canisters += 1;

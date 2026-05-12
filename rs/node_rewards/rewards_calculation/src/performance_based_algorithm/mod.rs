@@ -1,7 +1,10 @@
 use crate::AlgorithmVersion;
+use crate::REWARDS_TABLE_DAYS;
+#[cfg(test)]
+use crate::performance_based_algorithm::results::RewardsCalculatorResults;
 use crate::performance_based_algorithm::results::{
     DailyNodeFailureRate, DailyNodeProviderRewards, DailyNodeRewards, DailyResults,
-    NodeMetricsDaily, NodeTypeRegionBaseRewards, RewardsCalculatorResults, Type3RegionBaseRewards,
+    NodeMetricsDaily, NodeTypeRegionBaseRewards, Type3RegionBaseRewards,
 };
 use crate::types::{NodeMetricsDailyRaw, Region, RewardableNode};
 use chrono::NaiveDate;
@@ -10,7 +13,7 @@ use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use itertools::Itertools;
 use rust_decimal::Decimal;
-use rust_decimal::prelude::{ToPrimitive, Zero};
+use rust_decimal::prelude::{FromPrimitive, ToPrimitive, Zero};
 use rust_decimal_macros::dec;
 use std::cmp::max;
 use std::collections::{BTreeMap, HashMap};
@@ -18,6 +21,7 @@ use std::collections::{BTreeMap, HashMap};
 pub mod results;
 pub mod test_utils;
 pub mod v1;
+pub mod v2;
 
 // ================================================================================================
 // VERSIONING SAFETY WARNING
@@ -103,49 +107,7 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
     /// The maximum rewards reduction for a node.
     const MAX_REWARDS_REDUCTION: Decimal;
 
-    /// From constant [NODE_PROVIDER_REWARD_PERIOD_SECONDS]
-    /// const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
-    /// const SECONDS_IN_DAY: u64 = 86400;
-    /// 2629800 / 86400 = 30.4375 days of rewards
-    const REWARDS_TABLE_DAYS: Decimal = dec!(30.4375);
-
-    fn calculate_rewards(
-        from_date: NaiveDate,
-        to_date: NaiveDate,
-        input_provider: impl PerformanceBasedAlgorithmInputProvider,
-    ) -> Result<RewardsCalculatorResults, String> {
-        if from_date > to_date {
-            return Err("from_day must be before to_day".to_string());
-        }
-
-        let reward_period = from_date.iter_days().take_while(|d| *d <= to_date);
-        let mut total_rewards_xdr_permyriad = BTreeMap::new();
-        let mut daily_results = BTreeMap::new();
-
-        // Process each day in the reward period
-        for day in reward_period {
-            let result_for_day = Self::calculate_daily_rewards(&input_provider, &day)?;
-
-            // Accumulate total rewards per provider across all days
-            for (provider_id, provider_rewards) in &result_for_day.provider_results {
-                total_rewards_xdr_permyriad
-                    .entry(*provider_id)
-                    .and_modify(|total| {
-                        *total += provider_rewards.total_adjusted_rewards_xdr_permyriad
-                    })
-                    .or_insert(provider_rewards.total_adjusted_rewards_xdr_permyriad);
-            }
-            daily_results.insert(day, result_for_day);
-        }
-
-        Ok(RewardsCalculatorResults {
-            algorithm_version: Self::VERSION,
-            total_rewards_xdr_permyriad,
-            daily_results,
-        })
-    }
-
-    fn calculate_daily_rewards(
+    fn calculate_rewards_for_date(
         data_provider: &impl PerformanceBasedAlgorithmInputProvider,
         date: &NaiveDate,
     ) -> Result<DailyResults, String> {
@@ -173,6 +135,41 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
         Ok(DailyResults {
             subnets_failure_rate,
             provider_results: results_per_provider,
+        })
+    }
+
+    #[cfg(test)]
+    fn calculate_rewards(
+        from_day: NaiveDate,
+        to_day: NaiveDate,
+        input_provider: impl PerformanceBasedAlgorithmInputProvider,
+    ) -> Result<RewardsCalculatorResults, String> {
+        if from_day > to_day {
+            return Err("from_day must be before to_day".to_string());
+        }
+
+        let mut total_rewards_xdr_permyriad: BTreeMap<PrincipalId, u64> = BTreeMap::new();
+        let mut daily_results = BTreeMap::new();
+
+        for day in from_day.iter_days().take_while(|d| *d <= to_day) {
+            let result_for_day = Self::calculate_rewards_for_date(&input_provider, &day)?;
+
+            for (provider_id, provider_rewards) in &result_for_day.provider_results {
+                total_rewards_xdr_permyriad
+                    .entry(*provider_id)
+                    .and_modify(|total| {
+                        *total += provider_rewards.total_adjusted_rewards_xdr_permyriad
+                    })
+                    .or_insert(provider_rewards.total_adjusted_rewards_xdr_permyriad);
+            }
+
+            daily_results.insert(day, result_for_day);
+        }
+
+        Ok(RewardsCalculatorResults {
+            algorithm_version: Self::VERSION,
+            total_rewards_xdr_permyriad,
+            daily_results,
         })
     }
 
@@ -410,7 +407,7 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
 
                     (base_rewards_monthly, reward_coefficient)
                 })
-                .unwrap_or((dec!(1), dec!(1)))
+                .unwrap_or((dec!(0), dec!(1)))
         }
 
         fn is_type3(node_type: &NodeRewardType) -> bool {
@@ -432,7 +429,8 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
         for node in rewardable_nodes {
             let (base_rewards_monthly, coefficient) =
                 get_monthly_rate(node_rewards_table, &node.region, &node.node_reward_type);
-            let base_rewards_daily = base_rewards_monthly / Self::REWARDS_TABLE_DAYS;
+            let base_rewards_daily =
+                base_rewards_monthly / Decimal::from_f64(REWARDS_TABLE_DAYS).unwrap();
 
             base_rewards
                 .entry((node.node_reward_type, node.region.clone()))
@@ -450,35 +448,63 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
 
                 base_rewards_type3
                     .entry(region_key.clone())
-                    .and_modify(
-                        |(rates, coeffs): &mut (Vec<Decimal>, Vec<RewardsCoefficientPercent>)| {
-                            rates.push(base_rewards_daily);
-                            coeffs.push(coefficient);
-                        },
-                    )
-                    .or_insert((vec![base_rewards_daily], vec![coefficient]));
+                    .and_modify(|entries: &mut Vec<(Decimal, RewardsCoefficientPercent)>| {
+                        entries.push((base_rewards_daily, coefficient));
+                    })
+                    .or_insert(vec![(base_rewards_daily, coefficient)]);
             }
         }
 
         let base_rewards_type3 = base_rewards_type3
             .into_iter()
-            .map(|(region, (rates, coeff))| {
-                let nodes_count = rates.len();
-                let avg_rate = avg(rates.as_slice()).unwrap_or_default();
-                let avg_coeff = avg(coeff.as_slice()).unwrap_or_default();
+            .map(|(region, mut entries)| {
+                let nodes_count = entries.len();
 
-                let mut running_coefficient = dec!(1);
-                let mut region_rewards = Vec::new();
-                for _ in 0..nodes_count {
-                    region_rewards.push(avg_rate * running_coefficient);
-                    running_coefficient *= avg_coeff;
+                if Self::VERSION == 1 {
+                    let (rates, coeff): (Vec<Decimal>, Vec<RewardsCoefficientPercent>) =
+                        entries.into_iter().unzip();
+                    let avg_rate = avg(rates.as_slice()).unwrap_or_default();
+                    let avg_coeff = avg(coeff.as_slice()).unwrap_or_default();
+
+                    let mut running_coefficient = dec!(1);
+                    let mut region_rewards = Vec::new();
+                    for _ in 0..nodes_count {
+                        region_rewards.push(avg_rate * running_coefficient);
+                        running_coefficient *= avg_coeff;
+                    }
+                    let region_rewards_avg = avg(&region_rewards).unwrap_or_default();
+
+                    (
+                        region,
+                        (region_rewards_avg, nodes_count, avg_rate, avg_coeff),
+                    )
+                } else {
+                    // Sort entries first by Base Reward (Desc) then by Coefficient (Desc) to process high-value nodes first.
+                    entries.sort_by(|(r1, c1), (r2, c2)| r2.cmp(r1).then_with(|| c2.cmp(c1)));
+
+                    let mut total_rewards = Decimal::ZERO;
+                    let mut running_coeff = dec!(1);
+
+                    // We also need averages for the reporting/Result struct later.
+                    let mut total_rate_sum = Decimal::ZERO;
+                    let mut total_coeff_sum = Decimal::ZERO;
+
+                    for (rate, coeff) in &entries {
+                        total_rewards += rate * running_coeff;
+                        running_coeff *= coeff;
+
+                        total_rate_sum += rate;
+                        total_coeff_sum += coeff;
+                    }
+                    let avg_rate = total_rate_sum / Decimal::from(nodes_count);
+                    let avg_coeff = total_coeff_sum / Decimal::from(nodes_count);
+                    let region_rewards_avg = total_rewards / Decimal::from(nodes_count);
+
+                    (
+                        region,
+                        (region_rewards_avg, nodes_count, avg_rate, avg_coeff),
+                    )
                 }
-                let region_rewards_avg = avg(&region_rewards).unwrap_or_default();
-
-                (
-                    region,
-                    (region_rewards_avg, nodes_count, avg_rate, avg_coeff),
-                )
             })
             .collect::<BTreeMap<_, _>>();
 

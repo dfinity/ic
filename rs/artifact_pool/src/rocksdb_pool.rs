@@ -442,7 +442,7 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
                         }
                         ConsensusMessage::CatchUpPackage(cup) => {
                             let artifact = ValidatedArtifact {
-                                msg: pb::CatchUpPackage::from(&cup),
+                                msg: pb::CatchUpPackage::from(cup),
                                 timestamp: artifact.timestamp,
                             };
                             batch.put_cf(cf_handle, key, check_ok_uw!(serialize(&artifact)));

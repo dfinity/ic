@@ -340,6 +340,17 @@ impl IcpLedger for SpyLedger {
         }
     }
 
+    async fn icrc2_transfer_from(
+        &self,
+        _from: Account,
+        _to: Account,
+        _amount_e8s: u64,
+        _fee_e8s: u64,
+        _memo: u64,
+    ) -> Result<u64, NervousSystemError> {
+        unimplemented!()
+    }
+
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         unimplemented!()
     }
@@ -389,5 +400,17 @@ impl IcpLedger for SpyLedger {
         _args: Vec<icrc_ledger_types::icrc3::blocks::GetBlocksRequest>,
     ) -> Result<icrc_ledger_types::icrc3::blocks::GetBlocksResult, NervousSystemError> {
         unimplemented!()
+    }
+}
+
+/// Assert that the error message contains all the key words.
+pub fn assert_contains_all_key_words(error_message: &str, key_words: &[&str]) {
+    for key_word in key_words {
+        assert!(
+            error_message.contains(key_word),
+            "Key word '{}' not found in error message: '{}'",
+            key_word,
+            error_message
+        );
     }
 }

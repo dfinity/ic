@@ -18,7 +18,8 @@ use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
 use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResponse};
 use icrc_ledger_types::{
-    icrc::generic_metadata_value::MetadataValue as Value, icrc3::blocks::BlockRange,
+    icrc::generic_metadata_value::MetadataValue as Value, icrc::metadata_key::MetadataKey,
+    icrc3::blocks::BlockRange,
 };
 
 #[derive(Debug)]
@@ -126,15 +127,18 @@ impl Icrc1Agent {
     }
 
     /// Returns the list of metadata entries for this ledger
-    pub async fn metadata(&self, mode: CallMode) -> Result<Vec<(String, Value)>, Icrc1AgentError> {
+    pub async fn metadata(
+        &self,
+        mode: CallMode,
+    ) -> Result<Vec<(MetadataKey, Value)>, Icrc1AgentError> {
         Ok(match mode {
             CallMode::Query => Decode!(
                 &self.query("icrc1_metadata", &Encode!()?).await?,
-                Vec<(String, Value)>
+                Vec<(MetadataKey, Value)>
             )?,
             CallMode::Update => Decode!(
                 &self.update("icrc1_metadata", &Encode!()?).await?,
-                Vec<(String, Value)>
+                Vec<(MetadataKey, Value)>
             )?,
         })
     }

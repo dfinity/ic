@@ -18,7 +18,7 @@
 # First build stage:
 # - Download 3rd party tools
 #
-FROM ubuntu:24.04 as download
+FROM ubuntu:26.04 as download
 
 USER root:root
 
@@ -31,17 +31,17 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
 
 # Download and verify node_exporter
 RUN cd /tmp/ && \
-    curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.8.1/node_exporter-1.8.1.linux-amd64.tar.gz && \
-    echo "fbadb376afa7c883f87f70795700a8a200f7fd45412532cc1938a24d41078011  node_exporter-1.8.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
+    curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.10.2/node_exporter-1.10.2.linux-amd64.tar.gz && \
+    echo "c46e5b6f53948477ff3a19d97c58307394a29fe64a01905646f026ddc32cb65b  node_exporter-1.10.2.linux-amd64.tar.gz" > node_exporter.sha256 && \
     sha256sum -c node_exporter.sha256
 
 #
 # Second build stage:
-# - Download and cache minimal Ubuntu Server 24.04 LTS Docker image
+# - Download and cache minimal Ubuntu Server 26.04 LTS Docker image
 # - Install and cache upstream packages from built-in Ubuntu repositories
 # - Copy downloaded archives from first build stage into the target image
 #
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 USER root:root
 
@@ -56,19 +56,19 @@ ARG PACKAGE_FILES=packages.common
 # The kernel is installed here to keep the extra modules in sync.
 # Unfortunately, there is no metapackage to track the extra modules that does
 # not also include firmware.
-ARG _KERNEL_PACKAGE=linux-image-virtual-hwe-24.04
+ARG _KERNEL_PACKAGE=linux-image-virtual-hwe-26.04
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY packages.* /tmp/
 RUN apt-get -y update && \
     apt-get -y upgrade && \
     apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) \
         ${_KERNEL_PACKAGE} \
-        linux-modules-extra-$(apt-cache depends ${_KERNEL_PACKAGE} | sed -n -e 's/  Depends: linux-image-\(.*\)-generic/\1/p')-generic && \
+        linux-modules-$(apt-cache depends ${_KERNEL_PACKAGE} | sed -n -e 's/  Depends: linux-image-\(.*\)-generic/\1/p')-generic && \
     rm /tmp/packages.*
 
 # Install node_exporter
-COPY --from=download /tmp/node_exporter-1.8.1.linux-amd64.tar.gz /tmp/node_exporter-1.8.1.linux-amd64.tar.gz
+COPY --from=download /tmp/node_exporter-1.10.2.linux-amd64.tar.gz /tmp/node_exporter-1.10.2.linux-amd64.tar.gz
 RUN cd /tmp/ && \
     mkdir -p /etc/node_exporter && \
-    tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.8.1.linux-amd64.tar.gz node_exporter-1.8.1.linux-amd64/node_exporter && \
-    rm /tmp/node_exporter-1.8.1.linux-amd64.tar.gz
+    tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.10.2.linux-amd64.tar.gz node_exporter-1.10.2.linux-amd64/node_exporter && \
+    rm /tmp/node_exporter-1.10.2.linux-amd64.tar.gz

@@ -1,37 +1,43 @@
 use super::*;
 use crate::message_routing::CRITICAL_ERROR_NON_INCREASING_BATCH_TIME;
-use crate::{
-    routing::demux::MockDemux, routing::stream_builder::MockStreamBuilder,
-    state_machine::StateMachineImpl,
-};
+use crate::routing::demux::MockDemux;
+use crate::routing::stream_builder::MockStreamBuilder;
+use crate::state_machine::StateMachineImpl;
 use ic_interfaces::execution_environment::Scheduler;
-use ic_interfaces_state_manager::StateManager;
 use ic_metrics::MetricsRegistry;
+use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{ReplicatedState, SubnetTopology};
-use ic_test_utilities::state_manager::FakeStateManager;
+use ic_replicated_state::{
+    ReplicatedState, SubnetTopology, metadata_state::testing::NetworkTopologyTesting,
+};
 use ic_test_utilities_execution_environment::test_registry_settings;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_metrics::fetch_int_counter_vec;
-use ic_test_utilities_types::{
-    batch::BatchBuilder, ids::subnet_test_id, messages::SignedIngressBuilder,
-};
-use ic_types::batch::{BatchMessages, CanisterCyclesCostSchedule, ChainKeyData};
+use ic_test_utilities_metrics::{fetch_int_counter_vec, nonzero_values};
+use ic_test_utilities_state::new_canister_state;
+use ic_test_utilities_types::batch::BatchBuilder;
+use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, SUBNET_2};
+use ic_test_utilities_types::messages::SignedIngressBuilder;
+use ic_types::batch::{BatchMessages, BlockmakerMetrics, ChainKeyData};
 use ic_types::messages::SignedIngress;
-use ic_types::{Height, PrincipalId, ReplicaVersion, SubnetId, Time};
+use ic_types::{
+    CanisterId, Height, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, Time,
+};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use maplit::btreemap;
 use mockall::{Sequence, mock, predicate::*};
 use std::collections::{BTreeMap, BTreeSet};
+use std::time::Duration;
 
 mock! {
     pub Scheduler {}
+
     impl Scheduler for Scheduler {
         type State = ReplicatedState;
         fn execute_round(
             &self,
-            state: ic_replicated_state::ReplicatedState,
-            randomness: ic_types::Randomness,
+            state: ReplicatedState,
+            randomness: Randomness,
             chain_key_data: ChainKeyData,
             replica_version: &ReplicaVersion,
             current_round: ExecutionRound,
@@ -39,6 +45,8 @@ mock! {
             current_round_type: ExecutionRoundType,
             registry_settings: &RegistryExecutionSettings,
         ) -> ReplicatedState;
+
+        fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState);
     }
 }
 
@@ -57,14 +65,12 @@ struct StateMachineTestFixture {
 /// occurs if they are called in the wrong order.
 fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
     // Initial state provided by the state manager.
-    let initial_height = Height::from(provided_batch.batch_number.get() - 1);
-    let state_manager = FakeStateManager::new();
-    let (_height, initial_state) = state_manager.take_tip();
+    let initial_state = ReplicatedState::new(SUBNET_1, SubnetType::Application);
     let metrics_registry = MetricsRegistry::new();
     let metrics = MessageRoutingMetrics::new(&metrics_registry);
 
-    let round = ExecutionRound::from(initial_height.get() + 1);
-    let round_type = if provided_batch.requires_full_state_hash {
+    let round = ExecutionRound::from(provided_batch.batch_number.get());
+    let round_type = if provided_batch.requires_full_state_hash() {
         ExecutionRoundType::CheckpointRound
     } else {
         ExecutionRoundType::OrdinaryRound
@@ -72,13 +78,22 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
 
     let mut seq = Sequence::new();
 
+    let (messages, chain_key_data) = match &provided_batch.content {
+        BatchContent::Data {
+            batch_messages,
+            chain_key_data,
+            ..
+        } => (batch_messages.clone(), chain_key_data.clone()),
+        BatchContent::Splitting { .. } => unimplemented!(),
+    };
+
     let mut demux = Box::new(MockDemux::new());
     demux
         .expect_process_payload()
         .times(1)
         .in_sequence(&mut seq)
-        .with(always(), eq(provided_batch.messages.clone()))
-        .returning(|state, _| state);
+        .with(always(), eq(round), eq(messages))
+        .returning(|state, _, _| state);
 
     let mut scheduler = Box::new(MockScheduler::new());
     scheduler
@@ -88,7 +103,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         .with(
             always(),
             eq(provided_batch.randomness),
-            eq(provided_batch.chain_key_data.clone()),
+            eq(chain_key_data.clone()),
             eq(provided_batch.replica_version.clone()),
             eq(round),
             eq(None),
@@ -107,7 +122,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
 
     let mut subnets = BTreeMap::new();
     subnets.insert(
-        subnet_test_id(0),
+        SUBNET_0,
         SubnetTopology {
             public_key: vec![0, 1, 2, 3],
             nodes: BTreeSet::new(),
@@ -115,16 +130,13 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
             subnet_features: SubnetFeatures::default(),
             chain_keys_held: BTreeSet::new(),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
+            subnet_admins: BTreeSet::new(),
         },
     );
 
-    let network_topology = NetworkTopology {
-        subnets,
-        routing_table: Default::default(),
-        nns_subnet_id: SubnetId::from(PrincipalId::new_subnet_test_id(0)),
-        canister_migrations: Default::default(),
-        ..Default::default()
-    };
+    let mut network_topology = NetworkTopology::default();
+    network_topology.nns_subnet_id = SUBNET_0;
+    network_topology.set_subnets(subnets);
 
     StateMachineTestFixture {
         scheduler,
@@ -161,8 +173,8 @@ fn state_machine_populates_network_topology() {
         ));
 
         assert_ne!(
-            fixture.initial_state.metadata.network_topology,
-            fixture.network_topology.clone()
+            &fixture.initial_state.metadata.network_topology,
+            &fixture.network_topology
         );
 
         let state = state_machine.execute_round(
@@ -170,12 +182,13 @@ fn state_machine_populates_network_topology() {
             fixture.network_topology.clone(),
             provided_batch,
             Default::default(),
+            Default::default(),
             &test_registry_settings(),
             Default::default(),
             Default::default(),
         );
 
-        assert_eq!(state.metadata.network_topology, fixture.network_topology);
+        assert_eq!(&state.metadata.network_topology, &fixture.network_topology);
     });
 }
 
@@ -197,8 +210,9 @@ fn test_delivered_batch(provided_batch: Batch) -> ReplicatedState {
 
         state_machine.execute_round(
             fixture.initial_state,
-            NetworkTopology::default(),
+            fixture.network_topology.clone(),
             provided_batch,
+            Default::default(),
             Default::default(),
             &test_registry_settings(),
             Default::default(),
@@ -233,6 +247,164 @@ fn test_delivered_batch_interface() {
     for i in 0..2 {
         param_batch_test(Height::from(27), i);
     }
+}
+
+const NNS_SUBNET_ID: SubnetId = SUBNET_0;
+const SUBNET_A: SubnetId = SUBNET_1;
+const SUBNET_B: SubnetId = SUBNET_2;
+const CANISTER_RANGE_NNS: CanisterIdRange = CanisterIdRange {
+    start: CanisterId::from_u64(0),
+    end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1),
+};
+const CANISTER_RANGE_A: CanisterIdRange = CanisterIdRange {
+    start: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET),
+    end: CanisterId::from_u64(2 * CANISTER_IDS_PER_SUBNET - 1),
+};
+const CANISTER_RANGE_B: CanisterIdRange = CanisterIdRange {
+    start: CanisterId::from_u64(2 * CANISTER_IDS_PER_SUBNET),
+    end: CanisterId::from_u64(3 * CANISTER_IDS_PER_SUBNET - 1),
+};
+
+/// Returns a test fixture for subnet splitting tests with mocks for Demux,
+/// Scheduler, and StreamBuilder. The mocks ensure that only expected calls are
+/// made, and they are made in the expected order.
+fn split_fixture() -> StateMachineTestFixture {
+    // Initial state, with 2 canisters.
+    let mut initial_state = ReplicatedState::new(SUBNET_A, SubnetType::Application);
+    initial_state.put_canister_state(new_canister_state(
+        CANISTER_RANGE_A.start,
+        PrincipalId::new_anonymous(),
+        Cycles::new(1_000_000_000_000),
+        3600.into(),
+    ));
+    initial_state.put_canister_state(new_canister_state(
+        CANISTER_RANGE_B.start,
+        PrincipalId::new_anonymous(),
+        Cycles::new(1_000_000_000_000),
+        3600.into(),
+    ));
+
+    let mut scheduler = Box::new(MockScheduler::new());
+    let demux = Box::new(MockDemux::new());
+    let stream_builder = Box::new(MockStreamBuilder::new());
+    let mut seq = Sequence::new();
+    scheduler
+        .expect_checkpoint_round_with_no_execution()
+        .times(1)
+        .in_sequence(&mut seq)
+        .with(always())
+        .return_const(());
+
+    let subnets = btreemap! {
+        SUBNET_A => SubnetTopology::default(),
+        SUBNET_B => SubnetTopology::default(),
+    };
+    let mut network_topology = NetworkTopology::default();
+    network_topology.nns_subnet_id = NNS_SUBNET_ID;
+    network_topology.set_subnets(subnets);
+    network_topology.set_routing_table(
+        RoutingTable::try_from(btreemap! {
+            CANISTER_RANGE_NNS => NNS_SUBNET_ID,
+            CANISTER_RANGE_A => SUBNET_A,
+            CANISTER_RANGE_B => SUBNET_B,
+        })
+        .unwrap(),
+    );
+
+    let metrics_registry = MetricsRegistry::new();
+    let metrics = MessageRoutingMetrics::new(&metrics_registry);
+
+    StateMachineTestFixture {
+        scheduler,
+        demux,
+        stream_builder,
+        initial_state,
+        network_topology,
+        metrics,
+        metrics_registry,
+    }
+}
+
+fn test_online_split(new_subnet_id: SubnetId, other_subnet_id: SubnetId) -> ReplicatedState {
+    let fixture = split_fixture();
+    let split_batch = Batch {
+        batch_number: Height::from(0),
+        batch_summary: None,
+        content: BatchContent::Splitting {
+            new_subnet_id,
+            other_subnet_id,
+        },
+        randomness: Randomness::from([0; 32]),
+        registry_version: RegistryVersion::from(1),
+        time: fixture
+            .initial_state
+            .metadata
+            .batch_time
+            .checked_add(Duration::from_secs(1))
+            .unwrap(),
+        blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+        replica_version: ReplicaVersion::default(),
+    };
+
+    let state_after_split = with_test_replica_logger(|log| {
+        let state_machine = Box::new(StateMachineImpl::new(
+            fixture.scheduler,
+            fixture.demux,
+            fixture.stream_builder,
+            Default::default(),
+            log,
+            fixture.metrics,
+        ));
+
+        state_machine.execute_round(
+            fixture.initial_state,
+            fixture.network_topology.clone(),
+            split_batch,
+            Default::default(),
+            Default::default(),
+            &test_registry_settings(),
+            Default::default(),
+            Default::default(),
+        )
+    });
+
+    assert_eq!(
+        BTreeMap::new(),
+        nonzero_values(fetch_int_counter_vec(
+            &fixture.metrics_registry,
+            "critical_errors"
+        ))
+    );
+
+    state_after_split
+}
+
+/// Tests a *subnet A* -> *subnet A'* online split.
+#[test]
+fn test_online_split_subnet_a() {
+    let state_after_split = test_online_split(SUBNET_A, SUBNET_B);
+    // Only hosting canister `CANISTER_RANGE_0.start`.
+    assert_eq!(
+        vec![&CANISTER_RANGE_A.start],
+        state_after_split
+            .canister_states()
+            .keys()
+            .collect::<Vec<_>>()
+    );
+}
+
+/// Tests a *subnet A* -> *subnet B* online split.
+#[test]
+fn test_online_split_subnet_b() {
+    let state_after_split = test_online_split(SUBNET_B, SUBNET_A);
+    // Only hosting canister `CANISTER_RANGE_1.start`.
+    assert_eq!(
+        vec![&CANISTER_RANGE_B.start],
+        state_after_split
+            .canister_states()
+            .keys()
+            .collect::<Vec<_>>()
+    );
 }
 
 #[test]
@@ -307,6 +479,7 @@ fn test_batch_time_impl(
             fixture.network_topology.clone(),
             provided_batch,
             Default::default(),
+            Default::default(),
             &test_registry_settings(),
             Default::default(),
             Default::default(),
@@ -316,7 +489,7 @@ fn test_batch_time_impl(
             Some(expected_regression_count),
             fetch_critical_error_non_increasing_batch_time_count(&fixture.metrics_registry)
         );
-        assert_eq!(expected_batch_time, state.metadata.batch_time,);
+        assert_eq!(expected_batch_time, state.metadata.batch_time);
     });
 }
 

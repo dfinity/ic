@@ -1,11 +1,18 @@
 use crate::canister::{NodeRewardsCanister, current_time};
 use crate::telemetry;
+use async_trait::async_trait;
 use chrono::{DateTime, Days, NaiveDate};
+#[cfg(not(target_arch = "wasm32"))]
+use futures::FutureExt;
+#[cfg(target_arch = "wasm32")]
+use ic_cdk::futures::spawn;
+use ic_cdk_timers::clear_timer;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
-use ic_nervous_system_timer_task::RecurringSyncTask;
+use ic_nervous_system_timer_task::set_timer;
 use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::providers_rewards::GetNodeProvidersRewardsRequest;
 use std::cell::RefCell;
+use std::future::Future;
 use std::thread::LocalKey;
 use std::time::Duration;
 
@@ -14,6 +21,60 @@ const SECS_PER_HOUR: u64 = 3600;
 // This offset makes sure that the first sync of the day happens at 00:05, times that guarantees
 // All the subnets have collected metrics for the previous day
 const SYNC_OFFSET: u64 = 5 * 60; // 5 minutes in seconds
+
+const RETRY_FAILED_SYNC_SECS: u64 = 5 * 60; // 5 minutes in seconds
+
+fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        spawn(future);
+    }
+    // This is needed for tests
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        future
+            .now_or_never()
+            .expect("Future could not execute in non-WASM environment");
+    }
+}
+
+#[async_trait(?Send)]
+pub trait RecurringAsyncTaskNonSend: Clone + Sized + 'static {
+    async fn execute(self) -> (Duration, Self);
+    fn initial_delay(&self) -> Duration;
+    fn recovery_delay(&self) -> Duration;
+
+    fn schedule_with_delay(self, delay: Duration) {
+        set_timer(delay, async move {
+            // Set a recovery timer before spawning the task. The timer callback
+            // and the spawned future run in different IC messages, so if the
+            // spawned future traps, the recovery timer survives and will reschedule the task.
+            let recovery = self.clone();
+            let recovery_delay = recovery.recovery_delay();
+            let recovery_timer_id = set_timer(recovery_delay, async move {
+                ic_cdk::println!(
+                    "Task {} recovery timer fired — rescheduling after suspected trap.",
+                    Self::NAME,
+                );
+                recovery.schedule_with_delay(recovery_delay);
+            });
+
+            spawn_in_canister_env(async move {
+                let (new_delay, new_task) = self.execute().await;
+
+                clear_timer(recovery_timer_id);
+                new_task.schedule_with_delay(new_delay);
+            });
+        });
+    }
+
+    fn schedule(self) {
+        let initial_delay = self.initial_delay();
+        self.schedule_with_delay(initial_delay);
+    }
+
+    const NAME: &'static str;
+}
 
 #[derive(Copy, Clone)]
 pub struct HourlySyncTask {
@@ -40,37 +101,35 @@ impl HourlySyncTask {
     }
 }
 
-impl RecurringSyncTask for HourlySyncTask {
-    fn execute(self) -> (Duration, Self) {
+// TODO: Make this task Send once MetricsManager and StableCanisterRegistryClient are Send.
+#[async_trait(?Send)]
+impl RecurringAsyncTaskNonSend for HourlySyncTask {
+    async fn execute(self) -> (Duration, Self) {
         let instruction_counter = telemetry::InstructionCounter::default();
-
         telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_start());
-        ic_cdk::futures::spawn_017_compat(async move {
-            match NodeRewardsCanister::schedule_registry_sync(self.canister).await {
-                Ok(_) => {
-                    ic_cdk::println!("Successfully synced local registry");
-                    match NodeRewardsCanister::schedule_metrics_sync(self.canister).await {
-                        Ok(_) => {
-                            telemetry::PROMETHEUS_METRICS
-                                .with_borrow_mut(|m| m.mark_last_sync_success());
-                            ic_cdk::println!("Successfully synced subnets metrics")
-                        }
-                        Err(e) => {
-                            telemetry::PROMETHEUS_METRICS
-                                .with_borrow_mut(|m| m.mark_last_sync_failure());
-                            ic_cdk::println!("Failed to sync subnets metrics: {:?}", e)
-                        }
-                    }
-                }
-                Err(e) => {
-                    telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_failure());
-                    ic_cdk::println!("Failed to sync local registry: {:?}", e)
-                }
-            };
+
+        // First sync the local registry
+        if let Err(e) = NodeRewardsCanister::schedule_registry_sync(self.canister).await {
+            telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_failure());
+            ic_cdk::println!("Failed to sync local registry: {:?}", e);
+
+            return (Duration::from_secs(RETRY_FAILED_SYNC_SECS), self);
+        }
+
+        // Then sync the subnets metrics
+        if let Err(e) = NodeRewardsCanister::schedule_metrics_sync(self.canister).await {
+            telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_failure());
+            ic_cdk::println!("Failed to sync subnets metrics: {:?}", e);
+
+            return (Duration::from_secs(RETRY_FAILED_SYNC_SECS), self);
+        }
+
+        telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| {
+            m.mark_last_sync_success();
+            m.record_last_sync_instructions(instruction_counter.sum());
         });
 
-        telemetry::PROMETHEUS_METRICS
-            .with_borrow_mut(|m| m.record_last_sync_instructions(instruction_counter.sum()));
+        ic_cdk::println!("Successfully synced registry and subnets metrics");
 
         (Self::default_delay(), self)
     }
@@ -78,6 +137,11 @@ impl RecurringSyncTask for HourlySyncTask {
     fn initial_delay(&self) -> Duration {
         Duration::from_secs(0)
     }
+
+    fn recovery_delay(&self) -> Duration {
+        Duration::from_secs(RETRY_FAILED_SYNC_SECS)
+    }
+
     const NAME: &'static str = "hourly_sync";
 }
 
@@ -104,11 +168,10 @@ impl GetNodeProvidersRewardsInstructionsExporter {
         Duration::from_secs(next_sync_target_secs - now_secs)
     }
 }
-impl RecurringSyncTask for GetNodeProvidersRewardsInstructionsExporter {
-    fn execute(self) -> (Duration, Self) {
-        // Yesterday
+#[async_trait(?Send)]
+impl RecurringAsyncTaskNonSend for GetNodeProvidersRewardsInstructionsExporter {
+    async fn execute(self) -> (Duration, Self) {
         let to_day = yesterday().pred_opt().unwrap();
-        // Yesterday - 35 days
         let from_day = to_day.checked_sub_days(Days::new(35)).unwrap();
 
         let request = GetNodeProvidersRewardsRequest {
@@ -118,7 +181,9 @@ impl RecurringSyncTask for GetNodeProvidersRewardsInstructionsExporter {
         };
 
         let instruction_counter = telemetry::InstructionCounter::default();
-        if let Err(e) = NodeRewardsCanister::get_node_providers_rewards(self.canister, request) {
+        if let Err(e) =
+            NodeRewardsCanister::get_node_providers_rewards(self.canister, request).await
+        {
             ic_cdk::println!("Failed to get node providers rewards: {:?}", e);
         }
 
@@ -132,6 +197,9 @@ impl RecurringSyncTask for GetNodeProvidersRewardsInstructionsExporter {
     fn initial_delay(&self) -> Duration {
         Duration::from_secs(0)
     }
+    fn recovery_delay(&self) -> Duration {
+        Duration::from_secs(RETRY_FAILED_SYNC_SECS)
+    }
     const NAME: &'static str = "get_node_providers_rewards_metrics";
 }
 
@@ -140,4 +208,78 @@ pub fn yesterday() -> NaiveDate {
         .date_naive()
         .pred_opt()
         .unwrap()
+}
+
+#[cfg(feature = "test")]
+pub mod test_tasks {
+    use super::*;
+    use std::cell::Cell;
+
+    const RECOVERY_DELAY_SECS: u64 = 10;
+    const SUCCESS_TASK_DELAY_SECS: u64 = 5;
+
+    thread_local! {
+        static PANIC_TASK_COUNTER: Cell<u64> = const { Cell::new(0) };
+        static SUCCESS_TASK_COUNTER: Cell<u64> = const { Cell::new(0) };
+    }
+
+    pub fn get_panic_task_counter() -> u64 {
+        PANIC_TASK_COUNTER.with(|c| c.get())
+    }
+
+    pub fn get_success_task_counter() -> u64 {
+        SUCCESS_TASK_COUNTER.with(|c| c.get())
+    }
+
+    #[derive(Clone)]
+    pub struct PanickingRecoveryTask;
+
+    #[async_trait(?Send)]
+    impl RecurringAsyncTaskNonSend for PanickingRecoveryTask {
+        async fn execute(self) -> (Duration, Self) {
+            PANIC_TASK_COUNTER.with(|c| c.set(c.get() + 1));
+
+            ic_cdk::call::Call::unbounded_wait(ic_cdk::api::canister_self(), "__self_call")
+                .await
+                .unwrap();
+
+            panic!("intentional panic for recovery timer test");
+        }
+
+        fn initial_delay(&self) -> Duration {
+            Duration::from_secs(0)
+        }
+
+        fn recovery_delay(&self) -> Duration {
+            Duration::from_secs(RECOVERY_DELAY_SECS)
+        }
+
+        const NAME: &'static str = "panicking_recovery_task";
+    }
+
+    #[derive(Clone)]
+    pub struct SuccessRecoveryTask;
+
+    #[async_trait(?Send)]
+    impl RecurringAsyncTaskNonSend for SuccessRecoveryTask {
+        async fn execute(self) -> (Duration, Self) {
+            SUCCESS_TASK_COUNTER.with(|c| c.set(c.get() + 1));
+
+            ic_cdk::call::Call::unbounded_wait(ic_cdk::api::canister_self(), "__self_call")
+                .await
+                .unwrap();
+
+            (Duration::from_secs(SUCCESS_TASK_DELAY_SECS), self)
+        }
+
+        fn initial_delay(&self) -> Duration {
+            Duration::from_secs(0)
+        }
+
+        fn recovery_delay(&self) -> Duration {
+            Duration::from_secs(RECOVERY_DELAY_SECS)
+        }
+
+        const NAME: &'static str = "success_recovery_task";
+    }
 }

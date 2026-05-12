@@ -2,6 +2,8 @@ use super::*;
 use crate::api::CspSigner;
 use crate::imported_test_utils::ed25519::csp_testvec;
 use crate::key_id::KeyId;
+use crate::public_key_store::PublicKeyStore;
+use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
@@ -19,21 +21,23 @@ use ic_crypto_internal_test_vectors::test_data;
 use ic_crypto_secrets_containers::SecretArray;
 use ic_crypto_standalone_sig_verifier::user_public_key_from_bytes;
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use rand::Rng;
 use std::collections::HashSet;
 use strum::IntoEnumIterator;
 
-const KEY_ID: [u8; 32] = [0u8; 32];
+const KEY_ID: [u8; 32] = [0_u8; 32];
 
 mod sign_common {
     use super::*;
 
     #[test]
-    fn should_fail_with_secret_key_not_found_if_secret_key_not_found_in_key_store() {
+    fn should_fail_with_internal_error_if_secret_key_not_found_in_key_store() {
         let csp = Csp::builder_for_test()
             .with_vault(
                 LocalCspVault::builder_for_test()
                     .with_mock_stores()
+                    .with_public_key_store(public_key_store_returning_some_node_signing_pubkey())
                     .with_node_secret_key_store(secret_key_store_returning_none())
                     .build(),
             )
@@ -41,16 +45,17 @@ mod sign_common {
 
         let result = csp.sign(AlgorithmId::Ed25519, b"msg".to_vec(), KeyId::from(KEY_ID));
 
-        assert!(result.unwrap_err().is_secret_key_not_found());
+        assert!(result.unwrap_err().is_internal_error());
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "MockSecretKeyStore")]
     fn should_panic_when_secret_key_store_panics() {
         let csp = Csp::builder_for_test()
             .with_vault(
                 LocalCspVault::builder_for_test()
                     .with_mock_stores()
+                    .with_public_key_store(public_key_store_returning_some_node_signing_pubkey())
                     .with_node_secret_key_store(secret_key_store_panicking_on_usage())
                     .build(),
             )
@@ -72,7 +77,8 @@ mod sign_ed25519 {
             .with_vault(
                 LocalCspVault::builder_for_test()
                     .with_mock_stores()
-                    .with_node_secret_key_store(secret_key_store_with(KeyId::from(KEY_ID), sk))
+                    .with_public_key_store(public_key_store_returning_some_node_signing_pubkey())
+                    .with_node_secret_key_store(secret_key_store_always_returning(sk))
                     .build(),
             )
             .build();
@@ -87,14 +93,14 @@ mod sign_ed25519 {
     #[test]
     fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
         let sk_with_wrong_type = CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes::new(
-            SecretArray::new_and_dont_zeroize_argument(&[0u8; multi_types::SecretKeyBytes::SIZE]),
+            SecretArray::new_and_dont_zeroize_argument(&[0_u8; multi_types::SecretKeyBytes::SIZE]),
         ));
         let csp = Csp::builder_for_test()
             .with_vault(
                 LocalCspVault::builder_for_test()
                     .with_mock_stores()
-                    .with_node_secret_key_store(secret_key_store_with(
-                        KeyId::from(KEY_ID),
+                    .with_public_key_store(public_key_store_returning_some_node_signing_pubkey())
+                    .with_node_secret_key_store(secret_key_store_always_returning(
                         sk_with_wrong_type,
                     ))
                     .build(),
@@ -103,7 +109,7 @@ mod sign_ed25519 {
 
         let result = csp.sign(AlgorithmId::Ed25519, b"msg".to_vec(), KeyId::from(KEY_ID));
 
-        assert!(result.unwrap_err().is_invalid_argument());
+        assert!(result.unwrap_err().is_internal_error());
     }
 }
 
@@ -452,7 +458,7 @@ mod verify_ed25519 {
         }
 
         pub fn random_message<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
-            let mut msg = vec![0u8; rng.gen_range(0..RANDOM_MSG_MAX_LEN)];
+            let mut msg = vec![0_u8; rng.gen_range(0..RANDOM_MSG_MAX_LEN)];
             rng.fill_bytes(&mut msg[..]);
             msg
         }
@@ -478,7 +484,7 @@ mod verify_ed25519 {
             let sig = csp
                 .csp_vault
                 .as_ref()
-                .sign(AlgorithmId::Ed25519, msg.to_vec(), KeyId::from(&pk))
+                .sign(msg.to_vec())
                 .expect("Failed to generate a signature");
 
             Self { csp, pk, sig }
@@ -492,11 +498,11 @@ fn secret_key_store_returning_none() -> impl SecretKeyStore {
     sks
 }
 
-fn secret_key_store_with(key_id: KeyId, secret_key: CspSecretKey) -> impl SecretKeyStore {
-    let mut temp_store = TempSecretKeyStore::new();
-    let scope = None;
-    temp_store.insert(key_id, secret_key, scope).unwrap();
-    temp_store
+fn secret_key_store_always_returning(secret_key: CspSecretKey) -> impl SecretKeyStore {
+    let mut sks = MockSecretKeyStore::new();
+    sks.expect_get()
+        .returning(move |_key_id| Some(secret_key.clone()));
+    sks
 }
 
 fn secret_key_store_panicking_on_usage() -> MockSecretKeyStore {
@@ -506,6 +512,18 @@ fn secret_key_store_panicking_on_usage() -> MockSecretKeyStore {
     sks.expect_contains().never();
     sks.expect_remove().never();
     sks
+}
+
+fn public_key_store_returning_some_node_signing_pubkey() -> impl PublicKeyStore {
+    let pk_proto = PublicKeyProto {
+        algorithm: AlgorithmId::Ed25519 as i32,
+        key_value: vec![42; 32],
+        ..Default::default()
+    };
+    let mut pks = MockPublicKeyStore::new();
+    pks.expect_node_signing_pubkey()
+        .returning(move || Some(pk_proto.clone()));
+    pks
 }
 
 #[test]

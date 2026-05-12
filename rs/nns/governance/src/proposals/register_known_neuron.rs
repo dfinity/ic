@@ -1,10 +1,14 @@
 use crate::{
     neuron_store::NeuronStore,
-    pb::v1::{GovernanceError, KnownNeuron, governance_error::ErrorType},
+    pb::v1::{
+        GovernanceError, KnownNeuron, KnownNeuronData, SelfDescribingValue, Topic,
+        governance_error::ErrorType,
+    },
+    proposals::self_describing::{DocumentedAction, SelfDescribingProstEnum, ValueBuilder},
 };
-use std::collections::HashSet;
 
 use ic_nervous_system_common_validation::validate_url;
+use std::collections::HashSet;
 
 /// Maximum size in bytes for a neuron's name, in KnownNeuronData.
 pub const KNOWN_NEURON_NAME_MAX_LEN: usize = 200;
@@ -169,6 +173,44 @@ impl KnownNeuron {
         })?;
 
         Ok(())
+    }
+}
+
+impl DocumentedAction for KnownNeuron {
+    const NAME: &'static str = "Register Known Neuron";
+    const DESCRIPTION: &'static str = "Register an existing neuron as a \"known neuron,\" \
+        giving it a name and an optional description, and adding it to the list of known neurons.";
+}
+
+impl From<KnownNeuron> for SelfDescribingValue {
+    fn from(value: KnownNeuron) -> Self {
+        ValueBuilder::new()
+            .add_field("neuron_id", value.id.map(|id| id.id))
+            .add_field("known_neuron_data", value.known_neuron_data)
+            .build()
+    }
+}
+
+impl From<KnownNeuronData> for SelfDescribingValue {
+    fn from(data: KnownNeuronData) -> Self {
+        let KnownNeuronData {
+            name,
+            description,
+            links,
+            committed_topics,
+        } = data;
+
+        let committed_topics: Vec<_> = committed_topics
+            .into_iter()
+            .map(SelfDescribingProstEnum::<Topic>::new)
+            .collect();
+
+        ValueBuilder::new()
+            .add_field("name", name)
+            .add_field("description", description)
+            .add_field("links", links)
+            .add_field("committed_topics", committed_topics)
+            .build()
     }
 }
 

@@ -125,7 +125,7 @@ fn test_total_minting_amount_tokens() {
             }
         };
 
-    let proposals = vec![
+    let proposals = [
         // Skip because not of type MintSnsTokens.
         ProposalData {
             proposal: Some(Proposal {

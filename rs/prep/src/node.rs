@@ -227,10 +227,11 @@ impl InitializedNode {
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
+            tokio::sync::watch::channel(ic_types::Height::from(0)).0,
         );
 
         let (_height, state) = state_manager.take_tip();
-        state_manager.commit_and_certify(state, Height::new(1), CertificationScope::Full, None);
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
 
         loop {
             match state_manager.get_state_hash_at(Height::new(1)) {

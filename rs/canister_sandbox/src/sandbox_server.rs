@@ -145,13 +145,14 @@ mod tests {
     use ic_replicated_state::{NetworkTopology, NumWasmPages, PageIndex, PageMap};
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
-        CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-        batch::CanisterCyclesCostSchedule,
+        CanisterTimer, ComputeAllocation, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, MemoryAllocation,
+        NumBytes, NumInstructions,
         ingress::WasmResult,
         messages::{CallContextId, RequestMetadata},
         methods::{FuncRef, WasmMethod},
         time::Time,
     };
+    use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
     use ic_wasm_types::BinaryEncodedWasm;
     use mockall::*;
     use std::sync::{Arc, Condvar, Mutex};
@@ -222,6 +223,7 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             caller,
             0,
+            DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
             IS_WASM64_EXECUTION,
             NetworkTopology::default(),
         )
@@ -254,6 +256,7 @@ mod tests {
             Cycles::zero(),
             PrincipalId::try_from([0].as_ref()).unwrap(),
             CallContextId::from(0),
+            None,
         );
         let caller = api_type.caller();
         let call_context_id = api_type.call_context_id();
@@ -286,6 +289,7 @@ mod tests {
             incoming_payload.to_vec(),
             PrincipalId::try_from([0].as_ref()).unwrap(),
             CallContextId::from(0),
+            None,
         );
         let caller = api_type.caller();
         let call_context_id = api_type.call_context_id();

@@ -12,13 +12,11 @@ use async_trait::async_trait;
 use axum::{body::Body, extract::State, middleware::Next, response::IntoResponse};
 use dashmap::DashMap;
 use http::Request;
-use ic_bn_lib::{
-    http::ConnInfo,
-    prometheus::{
-        Histogram, IntGaugeVec, Registry, register_histogram_with_registry,
-        register_int_gauge_vec_with_registry,
-    },
+use ic_bn_lib::prometheus::{
+    Histogram, IntGaugeVec, Registry, register_histogram_with_registry,
+    register_int_gauge_vec_with_registry,
 };
+use ic_bn_lib_common::types::http::ConnInfo;
 use tracing::{debug, error, info, warn};
 
 use crate::{
@@ -238,7 +236,7 @@ impl Bouncer {
 
 pub fn setup(cli: &cli::Bouncer, registry: &Registry) -> Result<Arc<Bouncer>, Error> {
     let executor = Arc::new(exec::Executor::new(
-        cli.bouncer_sudo,
+        !cli.bouncer_bypass_sudo,
         cli.bouncer_sudo_path.clone(),
         cli.bouncer_nft_path.clone(),
     ));

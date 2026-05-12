@@ -22,7 +22,7 @@ pub use storage::{
 };
 use storage::{OverlayFile, OverlayVersion, Storage};
 
-use ic_types::{Height, MAX_STABLE_MEMORY_IN_BYTES, NumOsPages};
+use ic_types::Height;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use int_map::{Bounds, IntMap};
@@ -34,6 +34,9 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::os::unix::io::RawFd;
 use std::sync::Arc;
+
+#[cfg(test)]
+use ic_types::{MAX_STABLE_MEMORY_IN_BYTES, NumOsPages};
 
 const LABEL_OP: &str = "op";
 const LABEL_TYPE: &str = "type";
@@ -407,30 +410,30 @@ pub struct PageMap {
     #[validate_eq(Ignore)]
     storage: Storage,
 
-    /// The height of the checkpoint that backs the page map.
-    #[validate_eq(Ignore)]
-    pub base_height: Option<Height>,
-
     /// The map containing pages overriding pages from `storage`.
     /// We need these pages to be able to reconstruct the full heap.
-    /// It is reset when `strip_all_deltas()` method is called.
     #[validate_eq(Ignore)]
     page_delta: PageDelta,
 
     /// The map containing deltas accumulated since the last flush to disk.
-    /// It is reset when `strip_unflushed_delta()` or `strip_all_deltas()` methods are called.
+    /// Cleared every time `strip_unflushed_delta()` is called.
     ///
     /// Invariant: unflushed_delta ⊆ page_delta
     #[validate_eq(Ignore)]
     unflushed_delta: PageDelta,
 
-    #[validate_eq(Ignore)]
-    has_stripped_unflushed_deltas: bool,
-
     /// The allocator for PageDelta pages.
-    /// It is reset when `strip_all_deltas()` method is called.
     #[validate_eq(Ignore)]
     page_allocator: PageAllocator,
+
+    /// Whether this page map is backed by a checkpoint (e.g. via `PageMap::open()`)
+    /// or any of its pages have already been flushed to disk.
+    ///
+    /// If `false` (e.g. created with `PageMap::new()` and never flushed), then any
+    /// pre-existing checkpoint files must be deleted / truncated before its next
+    /// flush.
+    #[validate_eq(Ignore)]
+    has_files_in_tip: bool,
 }
 
 impl PageMap {
@@ -444,11 +447,10 @@ impl PageMap {
     pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
         Self {
             storage: Default::default(),
-            base_height: Default::default(),
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
-            has_stripped_unflushed_deltas: false,
             page_allocator: PageAllocator::new(fd_factory),
+            has_files_in_tip: false,
         }
     }
 
@@ -456,11 +458,10 @@ impl PageMap {
     pub fn new_for_testing() -> Self {
         Self {
             storage: Default::default(),
-            base_height: Default::default(),
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
-            has_stripped_unflushed_deltas: false,
             page_allocator: PageAllocator::new_for_testing(),
+            has_files_in_tip: false,
         }
     }
 
@@ -469,16 +470,14 @@ impl PageMap {
     /// Note that the file is assumed to be read-only.
     pub fn open(
         storage_layout: Box<dyn StorageLayout + Send + Sync>,
-        base_height: Height,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Result<Self, PersistenceError> {
         Ok(Self {
             storage: Storage::lazy_load(storage_layout)?,
-            base_height: Some(base_height),
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
-            has_stripped_unflushed_deltas: false,
             page_allocator: PageAllocator::new(fd_factory),
+            has_files_in_tip: true,
         })
     }
 
@@ -486,15 +485,14 @@ impl PageMap {
     pub fn serialize(&self) -> PageMapSerialization {
         PageMapSerialization {
             storage: self.storage.serialize(),
-            base_height: self.base_height,
             page_delta: self
                 .page_allocator
                 .serialize_page_delta(self.page_delta.iter()),
             unflushed_delta: self
                 .page_allocator
                 .serialize_page_delta(self.unflushed_delta.iter()),
-            has_stripped_unflushed_deltas: self.has_stripped_unflushed_deltas,
             page_allocator: self.page_allocator.serialize(),
+            has_files_in_tip: self.has_files_in_tip,
         }
     }
 
@@ -515,11 +513,10 @@ impl PageMap {
             PageDelta::from(page_allocator.deserialize_page_delta(page_map.unflushed_delta));
         Ok(Self {
             storage,
-            base_height: page_map.base_height,
             page_delta,
             unflushed_delta,
-            has_stripped_unflushed_deltas: page_map.has_stripped_unflushed_deltas,
             page_allocator,
+            has_files_in_tip: page_map.has_files_in_tip,
         })
     }
 
@@ -547,24 +544,6 @@ impl PageMap {
         let page_delta = self.page_allocator.allocate(pages);
         self.apply(page_delta);
         pages.iter().map(|(index, _)| *index).collect()
-    }
-
-    /// Persists the heap delta contained in this page map to the specified
-    /// destination.
-    pub fn persist_delta(
-        &self,
-        storage_layout: &dyn StorageLayout,
-        height: Height,
-        lsmt_config: &LsmtConfig,
-        metrics: &StorageMetrics,
-    ) -> Result<(), PersistenceError> {
-        self.persist_to_overlay(
-            &self.page_delta,
-            storage_layout,
-            height,
-            lsmt_config,
-            metrics,
-        )
     }
 
     /// Persists the unflushed delta contained in this page map to the specified
@@ -786,24 +765,21 @@ impl PageMap {
         self.storage.get_base_memory_instructions()
     }
 
-    /// Removes the page delta from this page map.
-    pub fn strip_all_deltas(&mut self, fd_factory: Arc<dyn PageAllocatorFileDescriptor>) {
-        // Ensure that all pages are dropped before we drop the page allocator.
-        // This is not necessary for correctness in the current implementation,
-        // because page destructors are currently trivial. Nevertheless, it is
-        // a good property to maintain.
-        {
-            std::mem::take(&mut self.page_delta);
-            std::mem::take(&mut self.unflushed_delta);
-        }
-        self.page_allocator = PageAllocator::new(Arc::clone(&fd_factory));
-    }
-
-    /// Removes the unflushed delta from this page map.
+    /// Resets the unflushed delta, as it is being flushed to disk.
     pub fn strip_unflushed_delta(&mut self) {
-        self.has_stripped_unflushed_deltas = true;
+        // Pages have been flushed to disk, so the page map is now consistent with tip.
+        self.has_files_in_tip = true;
 
         std::mem::take(&mut self.unflushed_delta);
+    }
+
+    /// Returns `true` if flushing the page map would result in truncating the
+    /// underlying files and/or persisting (non-empty) unflushed delta.
+    ///
+    /// If `true`, calling `strip_unflushed_delta()` will actually mutate the
+    /// `PageMap`; if `false`, the call would be a no-op.
+    pub fn should_flush(&self) -> bool {
+        !self.has_files_in_tip || !self.unflushed_delta.is_empty()
     }
 
     pub fn get_page_delta_indices(&self) -> Vec<PageIndex> {
@@ -820,9 +796,10 @@ impl PageMap {
         self.unflushed_delta.is_empty()
     }
 
-    /// Whether strip_unflushed_deltas has been called before
-    pub fn has_stripped_unflushed_deltas(&self) -> bool {
-        self.has_stripped_unflushed_deltas
+    /// Whether the page map is consistent with tip (i.e. is based on a checkpoint
+    /// or has had pages flushed to tip).
+    pub fn has_files_in_tip(&self) -> bool {
+        self.has_files_in_tip
     }
 
     /// Returns the length of the modified prefix in host pages.
@@ -838,18 +815,19 @@ impl PageMap {
             .max(self.page_delta.max_page_index().map_or(0, |i| i.get() + 1) as usize)
     }
 
-    /// Switches the checkpoint file of the current page map to the one provided
-    /// by the given page map. Page deltas of both page maps must be empty.
-    pub fn switch_to_checkpoint(&mut self, checkpointed_page_map: &PageMap) {
-        self.storage = checkpointed_page_map.storage.clone();
-        // Also copy the base height to reflect the height of the new checkpoint.
-        self.base_height = checkpointed_page_map.base_height;
-        assert!(self.page_delta.is_empty());
+    /// Resets this page map to a clean one backed by `storage_layout`.
+    ///
+    /// Precondition: page deltas must have been flushed to disk.
+    pub fn switch_to_checkpoint(
+        &mut self,
+        storage_layout: Box<dyn StorageLayout + Send + Sync>,
+        fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
+    ) -> Result<(), PersistenceError> {
+        // All deltas must have been flushed to disk.
         assert!(self.unflushed_delta.is_empty());
-        assert!(checkpointed_page_map.page_delta.is_empty());
-        assert!(checkpointed_page_map.unflushed_delta.is_empty());
-        assert!(!checkpointed_page_map.is_loaded());
-        // Keep the page allocators of the states disjoint.
+
+        *self = PageMap::open(storage_layout, Arc::clone(fd_factory))?;
+        Ok(())
     }
 
     // Modifies this page map by applying the given page delta to it.
@@ -883,11 +861,10 @@ impl PageMap {
         }
         Ok(Self {
             storage: self.storage.clone(),
-            base_height: self.base_height,
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
-            has_stripped_unflushed_deltas: self.has_stripped_unflushed_deltas,
             page_allocator: PageAllocator::new(fd_factory),
+            has_files_in_tip: self.has_files_in_tip,
         })
     }
 }
@@ -979,7 +956,8 @@ impl Buffer {
     ///
     /// This function assumes the write doesn't extend beyond the maximum stable
     /// memory size (in which case the memory would fail anyway).
-    pub fn dirty_pages_from_write(&self, offset: u64, size: u64) -> NumOsPages {
+    #[cfg(test)]
+    fn dirty_pages_from_write(&self, offset: u64, size: u64) -> NumOsPages {
         if size == 0 {
             return NumOsPages::from(0);
         }
@@ -998,7 +976,7 @@ impl Buffer {
         self.dirty_pages.iter().map(|(i, p)| (*i, p))
     }
 
-    pub fn into_page_map(&self) -> PageMap {
+    pub fn to_page_map(&self) -> PageMap {
         let mut page_map = self.page_map.clone();
         page_map.update(&self.dirty_pages().collect::<Vec<_>>());
         page_map
@@ -1046,11 +1024,10 @@ impl std::fmt::Debug for PageMap {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct PageMapSerialization {
     pub storage: StorageSerialization,
-    pub base_height: Option<Height>,
     pub page_delta: PageDeltaSerialization,
     pub unflushed_delta: PageDeltaSerialization,
-    pub has_stripped_unflushed_deltas: bool,
     pub page_allocator: PageAllocatorSerialization,
+    pub has_files_in_tip: bool,
 }
 
 /// Interface for generating unique file descriptors

@@ -46,18 +46,6 @@ function update_config_version_metric() {
         "gauge"
 }
 
-function update_node_operator_private_key_metric() {
-    node_operator_private_key_exists=0
-    if [ -f "${STATE_ROOT_PATH}/data/node_operator_private_key.pem" ]; then
-        node_operator_private_key_exists=1
-    fi
-
-    write_metric "guestos_node_operator_private_key_exists" \
-        "${node_operator_private_key_exists}" \
-        "Existence of a Node Operator private key indicates the node deployment method" \
-        "gauge"
-}
-
 function update_tee_metrics() {
     # Define the metric metadata once.
     local metric_family="guestos_tee"
@@ -84,14 +72,13 @@ function update_tee_metrics() {
         "guestos_tee_active" \
         "Indicates whether the virtual machine is running in a Trusted Execution Environment (1 = TEE enabled, 0 = not in TEE)" \
         "gauge"
-    append_metric "$metric_family" "guestos_tee_active" "" "$SEV_ACTIVE"
+    append_metric "$metric_family" "guestos_tee_active" "" "$TEE_ENABLED"
 }
 
 function main() {
     update_guestos_version_metric
     update_guestos_boot_action_metric
     update_config_version_metric
-    update_node_operator_private_key_metric
     update_tee_metrics
 }
 

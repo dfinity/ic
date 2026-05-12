@@ -5,7 +5,7 @@ use rand::Rng;
 
 // Returns a random element of Gt
 fn gt_rand<R: Rng>(rng: &mut R) -> Gt {
-    let g1 = G1Affine::hash(b"ic-crypto-test-gt-random", &rng.r#gen::<[u8; 32]>());
+    let g1 = G1Affine::hash("ic-crypto-test-gt-random", &rng.r#gen::<[u8; 32]>());
     let g2 = G2Affine::generator();
     Gt::pairing(&g1, g2)
 }
@@ -123,33 +123,6 @@ fn baby_giant_big_range() {
             Scalar::from_isize((rng.r#gen::<u64>() % upper_bound as u64) as isize + lower_bound);
         let tgt = &base * &x;
         assert_eq!(baby_giant.solve(&tgt), Some(x));
-    }
-}
-
-// Exhaustive test for honest dealer
-//
-// This takes ~20 seconds in release mode or ~hours in debug
-#[test]
-#[ignore]
-fn honest_dealer_search_works_exhaustive_test() {
-    let search = HonestDealerDlogLookupTable::new();
-
-    let mut accum = Gt::identity();
-
-    let mut dlogs = vec![];
-    let mut targets = vec![];
-    for i in 0..=0xFFFF {
-        dlogs.push(i);
-        targets.push(accum.clone());
-        accum += Gt::generator();
-    }
-
-    let recovered_dlogs = search.solve_several(&targets);
-
-    assert_eq!(recovered_dlogs.len(), dlogs.len());
-
-    for i in 0..dlogs.len() {
-        assert_eq!(recovered_dlogs[i], Some(Scalar::from_usize(dlogs[i])));
     }
 }
 

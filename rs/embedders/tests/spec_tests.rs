@@ -53,6 +53,11 @@ mod convert {
                     )
                 }
             },
+            HeapType::Exact(_) => {
+                panic!(
+                    "Unable to handle heap type {heap_type:?}. The custom descriptors proposal isn't supported"
+                )
+            }
             HeapType::Concrete(_) => {
                 panic!("Unable to handle heap type {heap_type:?}. The GC proposal isn't supported")
             }
@@ -369,7 +374,7 @@ impl<'a> TestState<'a> {
         }
     }
 
-    fn try_create_instance(&mut self, wasm: &[u8]) -> Result<Instance, anyhow::Error> {
+    fn try_create_instance(&mut self, wasm: &[u8]) -> Result<Instance, wasmtime::Error> {
         let module = wasmtime::Module::new(&self.engine, wasm).unwrap();
         self.linker.instantiate(&mut self.store, &module)
     }
@@ -493,9 +498,11 @@ fn parse_and_encode(
             location(wat, text, path)
         )
     })?;
-    let mut module = wirm::Module::parse(&wasm, enable_multi_memory)
+    let module = wirm::Module::parse(&wasm, enable_multi_memory, false)
         .map_err(|e| format!("Parsing error: {:?} in {}", e, location(wat, text, path)))?;
-    module.encode();
+    module
+        .encode()
+        .map_err(|e| format!("Encoding error: {:?} in {}", e, location(wat, text, path)))?;
     Ok(wasm)
 }
 
@@ -699,7 +706,9 @@ fn run_directive<'a>(
         | WastDirective::Wait { .. }
         | WastDirective::ModuleDefinition(_)
         | WastDirective::ModuleInstance { .. }
-        | WastDirective::AssertSuspension { .. } => todo!(),
+        | WastDirective::AssertSuspension { .. }
+        | WastDirective::AssertInvalidCustom { .. }
+        | WastDirective::AssertMalformedCustom { .. } => todo!(),
     }
 }
 
@@ -779,13 +788,12 @@ fn default_config() -> Config {
 /// Returns the full text representation of the error.
 /// Note that `e.to_string()` returns only the first level error,
 /// which is not sufficient in many cases.
-fn error_to_string(e: anyhow::Error) -> String {
+fn error_to_string(e: wasmtime::Error) -> String {
     format!("{e:?}")
 }
 
 /// These tests run on data from the WebAssembly spec testsuite. The suite is not
-/// included in our repo, but is imported by Bazel using the `new_git_repository`
-/// rule in `WORKSPACE.bazel`.
+/// included in our repo, but is imported by Bazel.
 ///
 /// See BUILD.bazel for inspecting the `wast` files.
 #[test]

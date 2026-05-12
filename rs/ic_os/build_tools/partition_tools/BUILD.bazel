@@ -9,13 +9,10 @@ DEPENDENCIES = [
     "@crate_index//:itertools",
     "@crate_index//:pcre2",
     "@crate_index//:tempfile",
-    "@crate_index//:tokio",
-    "@crate_index//:which",
 ]
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:async-trait",
     "@crate_index//:indoc",
 ]
 

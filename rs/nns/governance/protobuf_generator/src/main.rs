@@ -7,14 +7,8 @@ fn main() {
             .expect("CARGO_MANIFEST_DIR env variable is not defined"),
     );
     let out = manifest_dir.join("../src/gen");
-    let governance_proto = manifest_dir.join("../proto");
-    let base_types_proto = manifest_dir.join("../../../types/base_types/proto");
-    let ledger_proto = manifest_dir.join("../../../ledger_suite/icp/proto");
-    let nervous_system_proto = manifest_dir.join("../../../nervous_system/proto/proto");
-    let nns_common_proto = manifest_dir.join("../../common/proto");
-    let sns_root_proto = manifest_dir.join("../../../sns/root/proto");
-    let sns_swap_proto = manifest_dir.join("../../../sns/swap/proto");
 
+    // Delete the output directory.
     match std::fs::remove_dir_all(&out) {
         Ok(_) => (),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
@@ -24,11 +18,24 @@ fn main() {
             e
         ),
     }
+
+    let repo_root = manifest_dir.join("../../../..");
+
+    let base_types_proto = repo_root.join("rs/types/base_types/proto");
+    let governance_proto = repo_root.join("rs/nns/governance/proto");
+    let ic_protobuf_proto = repo_root.join("rs/protobuf/def");
+    let ledger_proto = repo_root.join("rs/ledger_suite/icp/proto");
+    let nervous_system_proto = repo_root.join("rs/nervous_system/proto/proto");
+    let nns_common_proto = repo_root.join("rs/nns/common/proto");
+    let sns_root_proto = repo_root.join("rs/sns/root/proto");
+    let sns_swap_proto = repo_root.join("rs/sns/swap/proto");
+
     generate_prost_files(
         ProtoPaths {
-            governance: &governance_proto,
-            ledger: &ledger_proto,
             base_types: &base_types_proto,
+            governance: &governance_proto,
+            ic_protobuf: &ic_protobuf_proto,
+            ledger: &ledger_proto,
             nervous_system: &nervous_system_proto,
             nns_common: &nns_common_proto,
             sns_root: &sns_root_proto,

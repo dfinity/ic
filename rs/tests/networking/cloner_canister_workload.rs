@@ -24,10 +24,13 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     canister_agent::{CanisterAgent, HasCanisterAgentCapability},
     driver::{
-        farm::HostFeature,
+        farm::{HostFeature, VmAllocationMode},
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
+        ic::{
+            AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet,
+            VmResourceOverrides,
+        },
+        prometheus_vm::HasPrometheus,
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, load_wasm},
     },
@@ -40,8 +43,6 @@ const TEST_TIMEOUT: Duration = Duration::from_secs(4 * 60 * 60); // 4 hours
 
 /// Time to keep the testnet alive once all canisters are installed
 const TESTNET_LIFETIME_AFTER_SETUP: Duration = Duration::from_secs(60 * 60); // 1 hour
-
-const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 
 const SUBNET_SIZE: usize = 13;
 const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(200);
@@ -56,6 +57,7 @@ const AMOUNT_OF_CLONER_CANISTERS: u64 =
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
+        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(setup)
         .add_test(systest!(install_cloner_canisters))
         .with_timeout_per_test(TEST_TIMEOUT)
@@ -65,24 +67,18 @@ fn main() -> Result<()> {
 
 pub fn setup(env: TestEnv) {
     let logger = env.logger();
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
-
     info!(
         &logger,
         "Step 1: Starting the IC with a subnet of size {SUBNET_SIZE}.",
     );
 
-    // Production-like resources
-    let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(64)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)), //  512 GB
-        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-    };
-
     InternetComputer::new()
-        .with_default_vm_resources(vm_resources)
+        // Production-like resources
+        .with_resource_overrides(VmResourceOverrides {
+            vcpus: Some(NrOfVCPUs::new(64)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)), //  512 GB
+            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+        })
         .with_required_host_features(vec![HostFeature::Performance])
         .add_subnet(
             Subnet::new(SubnetType::Application)
@@ -91,7 +87,6 @@ pub fn setup(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
-    env.sync_with_prometheus();
 
     // Await Replicas
     info!(
@@ -119,7 +114,7 @@ pub fn install_cloner_canisters(env: TestEnv) {
         .find(|s| s.subnet_type() == SubnetType::Application)
         .unwrap();
     let app_node = app_subnet.nodes().next().unwrap();
-    let counter_canister_bytes = load_wasm(COUNTER_CANISTER_WAT);
+    let counter_canister_bytes = load_wasm(std::env::var("COUNTER_CANISTER_WAT_PATH").unwrap());
 
     info!(
         &logger,
@@ -133,11 +128,11 @@ pub fn install_cloner_canisters(env: TestEnv) {
             &logger,
             "{i}/{AMOUNT_OF_CLONER_CANISTERS}: Installing cloner canister."
         );
-        let cloner_canister_id = app_node.create_and_install_canister_with_arg_and_cycles(
-            &std::env::var("CLONER_CANISTER_WASM_PATH").expect("CLONER_CANISTER_WASM_PATH not set"),
-            None,
-            Some(1_001_000_000_000_000), // 1001T cycles is enough to spin up 500 canisters
-        );
+        let cloner_canister_id = app_node
+            .canister_installer_from_env("CLONER_CANISTER_WASM_PATH")
+            .with_cycles_amount(1_001_000_000_000_000) // 1001T cycles is enough to spin up 500 canisters
+            .block_on_install()
+            .expect("Failed to install the canister");
         info!(
             &logger,
             "{i}/{AMOUNT_OF_CLONER_CANISTERS}: Succeeded installing cloner canister, {}.",

@@ -1,12 +1,13 @@
-use crate::{crypto_validate_dealing, payload_builder, utils};
+use super::{crypto_validate_dealing, payload_builder, utils};
+use crate::remote::{build_callback_id_config_map, merge_configs};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{
     dkg::{DkgPayloadValidationError, DkgPool},
     validation::ValidationResult,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManager;
-use ic_logger::{ReplicaLogger, warn};
+use ic_interfaces_state_manager::StateReader;
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -14,7 +15,10 @@ use ic_types::{
     batch::ValidationContext,
     consensus::{
         Block, BlockPayload,
-        dkg::{DkgDataPayload, DkgPayloadValidationFailure, DkgSummary, InvalidDkgPayloadReason},
+        dkg::{
+            DkgDataPayload, DkgPayloadCreationError, DkgPayloadValidationFailure, DkgSummary,
+            InvalidDkgPayloadReason,
+        },
     },
 };
 use prometheus::IntCounterVec;
@@ -31,7 +35,7 @@ pub fn validate_payload(
     dkg_pool: &dyn DkgPool,
     parent: Block,
     payload: &BlockPayload,
-    state_manager: &dyn StateManager<State = ReplicatedState>,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
     validation_context: &ValidationContext,
     metrics: &IntCounterVec,
     log: &ReplicaLogger,
@@ -65,9 +69,10 @@ pub fn validate_payload(
                 last_dkg_summary,
                 &parent,
                 registry_version,
-                state_manager,
+                state_reader,
                 validation_context,
-                ic_logger::replica_logger::no_op_logger(),
+                log.clone(),
+                None,
             )?;
             if summary_payload.dkg != expected_summary {
                 return Err(InvalidDkgPayloadReason::MismatchedDkgSummary(
@@ -116,6 +121,8 @@ pub fn validate_payload(
                 });
 
             validate_dealings_payload(
+                subnet_id,
+                registry_client,
                 crypto,
                 pool_reader,
                 dkg_pool,
@@ -123,6 +130,9 @@ pub fn validate_payload(
                 &data_payload.dkg,
                 max_dealings_per_block,
                 &parent,
+                state_reader,
+                validation_context,
+                log,
                 metrics,
             )
         }
@@ -130,8 +140,11 @@ pub fn validate_payload(
 }
 
 // Validates the payload containing dealings.
+#[allow(clippy::too_many_arguments)]
 #[allow(clippy::result_large_err)]
 fn validate_dealings_payload(
+    subnet_id: SubnetId,
+    registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
     pool_reader: &PoolReader<'_>,
     dkg_pool: &dyn DkgPool,
@@ -139,6 +152,9 @@ fn validate_dealings_payload(
     dealings: &DkgDataPayload,
     max_dealings_per_payload: usize,
     parent: &Block,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
+    validation_context: &ValidationContext,
+    log: &ReplicaLogger,
     metrics: &IntCounterVec,
 ) -> ValidationResult<DkgPayloadValidationError> {
     if dealings.start_height != parent.payload.as_ref().dkg_interval_start_height() {
@@ -174,6 +190,20 @@ fn validate_dealings_payload(
         return Err(InvalidDkgPayloadReason::DealerAlreadyDealt(dealer_id).into());
     }
 
+    let state = state_reader
+        .get_state_at(validation_context.certified_height)
+        .map_err(DkgPayloadCreationError::StateManagerError)?;
+
+    let remote_config_results = build_callback_id_config_map(
+        subnet_id,
+        registry_client,
+        state.get_ref(),
+        validation_context.registry_version,
+        last_summary,
+        log,
+    )?;
+    let configs = merge_configs(&last_summary.configs, &remote_config_results);
+
     // Check that all messages have a valid DKG config from the summary and the
     // dealer is valid, then verify each dealing.
     for message in &dealings.messages {
@@ -185,12 +215,41 @@ fn validate_dealings_payload(
             continue;
         }
 
-        let Some(config) = last_summary.configs.get(&message.content.dkg_id) else {
+        let Some(config) = configs.get(&message.content.dkg_id) else {
             return Err(InvalidDkgPayloadReason::MissingDkgConfigForDealing.into());
         };
 
         // Verify the signature and dealing.
         crypto_validate_dealing(crypto, config, message)?;
+    }
+
+    // If we have early transcripts, we compare them
+    if !dealings.transcripts_for_remote_subnets.is_empty() {
+        let expected_transcripts = payload_builder::create_early_remote_transcripts(
+            pool_reader,
+            crypto,
+            parent,
+            remote_config_results,
+            log,
+            None,
+        )?;
+
+        if dealings.transcripts_for_remote_subnets != expected_transcripts {
+            warn!(
+                log,
+                "Failed to validate {} early remote DKG transcripts in data block payload at height {}",
+                dealings.transcripts_for_remote_subnets.len(),
+                parent.height.increment(),
+            );
+            return Err(InvalidDkgPayloadReason::InvalidEarlyNiDkgTranscripts.into());
+        }
+
+        info!(
+            log,
+            "Validated {} early remote DKG transcripts in data block payload at height {}",
+            dealings.transcripts_for_remote_subnets.len(),
+            parent.height.increment(),
+        );
     }
 
     Ok(())
@@ -203,16 +262,19 @@ mod tests {
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
     use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
+    use ic_crypto_test_utils_ni_dkg::{dummy_dealing, dummy_transcript_for_tests};
     use ic_interfaces::{
         consensus_pool::ConsensusPool,
         dkg::ChangeAction,
         p2p::consensus::{MutablePool, PoolMutationsProducer},
     };
+    use ic_interfaces_state_manager::Labeled;
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_keys::make_subnet_record_key;
     use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_state::get_initial_state;
     use ic_test_utilities_types::ids::{
         NODE_1, NODE_2, NODE_3, SUBNET_1, SUBNET_2, node_test_id, subnet_test_id,
     };
@@ -224,7 +286,8 @@ mod tests {
             dkg::{DealingContent, Message},
             idkg,
         },
-        crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        messages::CallbackId,
         time::UNIX_EPOCH,
     };
     use std::{
@@ -442,6 +505,101 @@ mod tests {
         );
     }
 
+    #[test]
+    fn validate_dealings_payload_when_invalid_early_remote_transcripts_present_fails_test() {
+        // Data payloads with invalid early/remote transcripts are rejected.
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let registry_version = 1;
+            let committee = [NODE_1, NODE_2, NODE_3];
+
+            let Dependencies {
+                crypto,
+                pool,
+                dkg_pool,
+                registry,
+                state_manager,
+                ..
+            } = dependencies_with_subnet_params(
+                pool_config.clone(),
+                SUBNET_1,
+                vec![(
+                    registry_version,
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_dealings_per_block(1)
+                        .build(),
+                )],
+            );
+
+            let mut parent = Block::from(pool.make_next_block());
+            parent.payload = Payload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Data(DataPayload {
+                    batch: BatchPayload::default(),
+                    dkg: DkgDataPayload::new(Height::from(0), vec![]),
+                    idkg: idkg::Payload::default(),
+                }),
+            );
+
+            let context = ValidationContext {
+                registry_version: RegistryVersion::from(registry_version),
+                certified_height: Height::from(0),
+                time: ic_types::time::UNIX_EPOCH,
+            };
+
+            let dkg_data_with_remote_transcripts = DkgDataPayload {
+                start_height: Height::from(0),
+                messages: vec![],
+                transcripts_for_remote_subnets: vec![
+                    (
+                        NiDkgId {
+                            start_block_height: Height::from(0),
+                            dealer_subnet: SUBNET_1,
+                            target_subnet: NiDkgTargetSubnet::Local,
+                            dkg_tag: NiDkgTag::HighThreshold,
+                        },
+                        CallbackId::from(0),
+                        Err("dummy".to_string()),
+                    ),
+                    (
+                        NiDkgId {
+                            start_block_height: Height::from(0),
+                            dealer_subnet: SUBNET_1,
+                            target_subnet: NiDkgTargetSubnet::Local,
+                            dkg_tag: NiDkgTag::LowThreshold,
+                        },
+                        CallbackId::from(1),
+                        Ok(dummy_transcript_for_tests()),
+                    ),
+                ],
+            };
+
+            let block_payload = BlockPayload::Data(DataPayload {
+                batch: BatchPayload::default(),
+                dkg: dkg_data_with_remote_transcripts,
+                idkg: idkg::Payload::default(),
+            });
+
+            assert_eq!(
+                validate_payload(
+                    SUBNET_1,
+                    registry.as_ref(),
+                    crypto.as_ref(),
+                    &PoolReader::new(&pool),
+                    dkg_pool.read().unwrap().deref(),
+                    parent,
+                    &block_payload,
+                    state_manager.as_ref(),
+                    &context,
+                    &mock_metrics(),
+                    &no_op_logger(),
+                ),
+                Err(DkgPayloadValidationError::InvalidArtifact(
+                    InvalidDkgPayloadReason::InvalidEarlyNiDkgTranscripts
+                ))
+            );
+        })
+    }
+
     /// Configures all the dependencies and calls [`validate_payload`] with
     /// `dealings_to_validate` as an argument.
     #[allow(clippy::result_large_err)]
@@ -521,7 +679,7 @@ mod tests {
         dkg_tag: NiDkgTag,
     ) -> Message {
         let content = DealingContent::new(
-            NiDkgDealing::dummy_dealing_for_tests(0),
+            dummy_dealing(0),
             NiDkgId {
                 start_block_height: Height::from(0),
                 dealer_subnet: subnet_id,
@@ -573,6 +731,13 @@ mod tests {
                         .build(),
                 )],
             );
+            state_manager
+                .get_mut()
+                .expect_get_latest_certified_state()
+                .return_const(Some(Labeled::new(
+                    Height::new(0),
+                    Arc::new(get_initial_state(0, 0)),
+                )));
 
             // Both summary registry versions should be 1 initially
             let summary_block = pool.as_cache().summary_block();
@@ -624,13 +789,17 @@ mod tests {
             let key_manager = Arc::new(Mutex::new(key_manager));
             let dkg_impl = DkgImpl::new(
                 node_id,
+                subnet_id,
+                registry.clone(),
+                state_manager.clone(),
                 crypto.clone(),
                 pool.get_cache(),
                 key_manager,
                 MetricsRegistry::new(),
                 no_op_logger(),
             );
-            let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+            let mut dkg_pool =
+                DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger(), dkg_summary.height);
             // Update start height
             let start_height = Height::new(10);
             dkg_pool.apply(vec![ChangeAction::Purge(start_height)]);
@@ -643,11 +812,12 @@ mod tests {
             };
 
             // It should be possible to validate the dealing
+            let configs = dkg_summary.configs.iter().collect();
             let result = dkg_impl.validate_dealings_for_dealer(
                 &dkg_pool,
-                &dkg_summary.configs,
+                &configs,
                 start_height,
-                vec![dealing],
+                &[dealing],
             );
             let first = result.first().unwrap();
             let ChangeAction::MoveToValidated(dealing_validated) = first else {

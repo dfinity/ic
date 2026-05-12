@@ -16,7 +16,8 @@ use std::fmt::Debug;
 ///
 /// # Examples
 ///
-/// ```rust
+#[cfg_attr(feature = "pocket_ic", doc = "```rust")]
+#[cfg_attr(not(feature = "pocket_ic"), doc = "```ignore")]
 /// use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 /// use pocket_ic::PocketIc;
 /// use ic_management_canister_types::CanisterId;
@@ -113,7 +114,8 @@ impl<T> MetricsAssert<T> {
         self
     }
 
-    fn find_metrics_matching(&self, pattern: &str) -> Vec<String> {
+    /// Find metrics matching the given pattern.
+    pub fn find_metrics_matching(&self, pattern: &str) -> Vec<String> {
         let regex = Regex::new(pattern).unwrap_or_else(|_| panic!("Invalid regex: {pattern}"));
         self.metrics
             .iter()

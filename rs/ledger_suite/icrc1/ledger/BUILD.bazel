@@ -26,7 +26,7 @@ package(default_visibility = ["//visibility:public"])
         deps = [
             # Keep sorted.
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
@@ -119,7 +119,7 @@ package(default_visibility = ["//visibility:public"])
         deps = [
             # Keep sorted.
             "//packages/ic-http-types",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
@@ -133,6 +133,7 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
             "@crate_index//:num-traits",
+            "@crate_index//:serde",
             "@crate_index//:serde_bytes",
         ] + extra_deps,
     )
@@ -213,25 +214,6 @@ package(default_visibility = ["//visibility:public"])
                 "//rs/ledger_suite/icrc1/tokens_u256",
             ],
         ),
-        (
-            "_lowupgradeinstructionlimits",
-            ["low-upgrade-instruction-limits"],
-            [
-                ":ledger",
-                "//rs/ledger_suite/icrc1/tokens_u64",
-            ],
-        ),
-        (
-            "_u256_lowupgradeinstructionlimits",
-            [
-                "low-upgrade-instruction-limits",
-                "u256-tokens",
-            ],
-            [
-                ":ledger_u256",
-                "//rs/ledger_suite/icrc1/tokens_u256",
-            ],
-        ),
     ]
 ]
 
@@ -275,19 +257,14 @@ package(default_visibility = ["//visibility:public"])
         data = [
             ":block.cddl",
             ":ledger_canister" + name_suffix + ".wasm.gz",
-            ":ledger_canister" + name_suffix + "_lowupgradeinstructionlimits.wasm.gz",
             ":ledger_canister" + name_suffix + "_nextledgerversion.wasm.gz",
             "//rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
             "//rs/universal_canister/impl:universal_canister.wasm.gz",
             "@mainnet_canisters//:ck_btc_ledger.wasm.gz",
             "@mainnet_canisters//:ck_btc_ledger_v1.wasm.gz",
-            "@mainnet_canisters//:ck_btc_ledger_v2.wasm.gz",
-            "@mainnet_canisters//:ck_btc_ledger_v2_noledgerversion.wasm.gz",
             "@mainnet_canisters//:ck_btc_ledger_v3.wasm.gz",
             "@mainnet_canisters//:ck_eth_ledger.wasm.gz",
             "@mainnet_canisters//:ck_eth_ledger_v1.wasm.gz",
-            "@mainnet_canisters//:ck_eth_ledger_v2.wasm.gz",
-            "@mainnet_canisters//:ck_eth_ledger_v2_noledgerversion.wasm.gz",
             "@mainnet_canisters//:ck_eth_ledger_v3.wasm.gz",
             "@mainnet_canisters//:sns_ledger.wasm.gz",
         ],
@@ -295,18 +272,13 @@ package(default_visibility = ["//visibility:public"])
             "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/ledger",
             "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ck_btc_ledger.wasm.gz)",
             "CKBTC_IC_ICRC1_LEDGER_V1_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ck_btc_ledger_v1.wasm.gz)",
-            "CKBTC_IC_ICRC1_LEDGER_V2_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ck_btc_ledger_v2.wasm.gz)",
-            "CKBTC_IC_ICRC1_LEDGER_V2_NOLEDGERLEVRION_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ck_btc_ledger_v2_noledgerversion.wasm.gz)",
             "CKBTC_IC_ICRC1_LEDGER_V3_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ck_btc_ledger_v3.wasm.gz)",
             "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ck_eth_ledger.wasm.gz)",
             "CKETH_IC_ICRC1_LEDGER_V1_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ck_eth_ledger_v1.wasm.gz)",
-            "CKETH_IC_ICRC1_LEDGER_V2_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ck_eth_ledger_v2.wasm.gz)",
-            "CKETH_IC_ICRC1_LEDGER_V2_NOLEDGERLEVRION_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ck_eth_ledger_v2_noledgerversion.wasm.gz)",
             "CKETH_IC_ICRC1_LEDGER_V3_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ck_eth_ledger_v3.wasm.gz)",
             "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz)",
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:sns_ledger.wasm.gz)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + ".wasm.gz)",
-            "IC_ICRC1_LEDGER_WASM_INSTR_LIMITS_PATH": "$(rootpath :ledger_canister" + name_suffix + "_lowupgradeinstructionlimits.wasm.gz)",
             "IC_ICRC1_LEDGER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + "_nextledgerversion.wasm.gz)",
             "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
         },
@@ -314,7 +286,7 @@ package(default_visibility = ["//visibility:public"])
             # Keep sorted.
             ":ledger",
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/icrc1",
             "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests" + name_suffix,
             "//rs/ledger_suite/common/ledger_canister_core",
@@ -368,7 +340,7 @@ package(default_visibility = ["//visibility:public"])
         deps = [
             # Keep sorted.
             ":ledger" + name_suffix,
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
@@ -407,7 +379,6 @@ package(default_visibility = ["//visibility:public"])
     rust_canbench(
         name = "canbench" + name_suffix,
         srcs = glob(["src/**/*.rs"]),
-        add_test = True,
         crate_features = features,
         proc_macro_deps = [
             # Keep sorted.
@@ -416,7 +387,7 @@ package(default_visibility = ["//visibility:public"])
         deps = [
             # Keep sorted.
             "//packages/ic-http-types",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
@@ -430,6 +401,7 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
             "@crate_index//:num-traits",
+            "@crate_index//:serde",
             "@crate_index//:serde_bytes",
         ] + extra_deps,
     )
@@ -477,7 +449,7 @@ rust_ic_test(
     deps = [
         # Keep sorted.
         ":ledger",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/ledger_suite/common/ledger_canister_core",
         "//rs/ledger_suite/icrc1/test_utils",
         "//rs/state_machine_tests",

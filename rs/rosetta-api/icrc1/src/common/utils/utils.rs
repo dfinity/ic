@@ -1,5 +1,5 @@
 use crate::common::storage::types::{IcrcOperation, RosettaBlock};
-use crate::common::types::{FeeMetadata, FeeSetter};
+use crate::common::types::{FeeCollectorMetadata, FeeMetadata, FeeSetter};
 use crate::{
     AppState, MultiTokenAppState,
     common::{
@@ -9,7 +9,8 @@ use crate::{
     },
 };
 use anyhow::{Context, bail};
-use candid::Nat;
+use candid::{Nat, Principal};
+use icrc_ledger_types::icrc1::account::Account;
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use num_bigint::BigInt;
 use rosetta_core::identifiers::*;
@@ -61,7 +62,7 @@ pub fn convert_timestamp_to_millis(timestamp_nanos: u64) -> anyhow::Result<u64> 
     ))
 }
 
-pub fn get_rosetta_block_from_block_identifier(
+pub async fn get_rosetta_block_from_block_identifier(
     block_identifier: BlockIdentifier,
     storage_client: &StorageClient,
 ) -> anyhow::Result<RosettaBlock> {
@@ -69,9 +70,10 @@ pub fn get_rosetta_block_from_block_identifier(
         &PartialBlockIdentifier::from(block_identifier),
         storage_client,
     )
+    .await
 }
 
-pub fn get_rosetta_block_from_partial_block_identifier(
+pub async fn get_rosetta_block_from_partial_block_identifier(
     partial_block_identifier: &PartialBlockIdentifier,
     storage_client: &StorageClient,
 ) -> anyhow::Result<RosettaBlock> {
@@ -86,17 +88,20 @@ pub fn get_rosetta_block_from_partial_block_identifier(
                 let hash_buf = ByteBuf::from(hash_bytes);
                 storage_client
                     .get_block_by_hash(hash_buf.clone())
+                    .await
                     .with_context(|| format!("Unable to retrieve block with hash: {hash_buf:?}"))?
                     .with_context(|| format!("Block with hash {hash} could not be found"))?
             }
 
             (Some(block_idx), None) => storage_client
                 .get_block_at_idx(block_idx)
+                .await
                 .with_context(|| format!("Unable to retrieve block with idx: {block_idx}"))?
                 .with_context(|| format!("Block at index {block_idx} could not be found"))?,
             (Some(block_idx), Some(hash)) => {
                 let rosetta_block = storage_client
                     .get_block_at_idx(block_idx)
+                    .await
                     .with_context(|| format!("Unable to retrieve block with idx: {block_idx}"))?
                     .with_context(|| format!("Block at index {block_idx} could not be found"))?;
                 if &hex::encode(rosetta_block.clone().get_block_hash()) != hash {
@@ -112,6 +117,7 @@ pub fn get_rosetta_block_from_partial_block_identifier(
             }
             (None, None) => storage_client
                 .get_block_with_highest_block_idx()
+                .await
                 .with_context(|| "Unable to retrieve the latest block".to_string())?
                 .with_context(|| {
                     "Latest block could not be found, the blockchain is empty".to_string()
@@ -149,6 +155,9 @@ pub fn rosetta_core_operations_to_icrc1_operation(
         Burn,
         Transfer,
         Approve,
+        FeeCollector,
+        AuthorizedMint,
+        AuthorizedBurn,
     }
 
     // A builder which helps depict the icrc1 Operation and allows for an arbitrary order of rosetta_core Operations
@@ -162,6 +171,10 @@ pub fn rosetta_core_operations_to_icrc1_operation(
         expected_allowance: Option<Nat>,
         expires_at: Option<u64>,
         allowance: Option<Nat>,
+        fee_collector: Option<Account>,
+        caller: Option<Principal>,
+        mthd: Option<String>,
+        reason: Option<String>,
     }
 
     impl IcrcOperationBuilder {
@@ -176,6 +189,10 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                 expected_allowance: None,
                 expires_at: None,
                 allowance: None,
+                fee_collector: None,
+                caller: None,
+                mthd: None,
+                reason: None,
             }
         }
 
@@ -224,8 +241,28 @@ pub fn rosetta_core_operations_to_icrc1_operation(
             self
         }
 
+        pub fn with_fee_collector(mut self, fee_collector: Option<Account>) -> Self {
+            self.fee_collector = fee_collector;
+            self
+        }
+
+        pub fn with_caller(mut self, caller: Option<Principal>) -> Self {
+            self.caller = caller;
+            self
+        }
+
+        pub fn with_mthd(mut self, mthd: Option<String>) -> Self {
+            self.mthd = mthd;
+            self
+        }
+
+        pub fn with_reason(mut self, reason: Option<String>) -> Self {
+            self.reason = reason;
+            self
+        }
+
         pub fn build(self) -> anyhow::Result<crate::common::storage::types::IcrcOperation> {
-            Ok(match self.icrc_operation.context("Icrc Operation type needs to be of type Mint, Burn, Transfer or Approve")? {
+            Ok(match self.icrc_operation.context("Icrc Operation type needs to be of type Mint, Burn, Transfer, Approve, FeeCollector, AuthorizedMint or AuthorizedBurn")? {
                 IcrcOperation::Mint => {
                     if self.from.is_some() {
                         bail!("From AccountIdentifier field is not allowed for Mint operation")
@@ -267,6 +304,41 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                     expected_allowance: self.expected_allowance,
                     expires_at: self.expires_at,
                 }},
+                IcrcOperation::FeeCollector => crate::common::storage::types::IcrcOperation::FeeCollector{
+                    fee_collector: self.fee_collector,
+                    caller: self.caller,
+                    mthd: self.mthd,
+                },
+                IcrcOperation::AuthorizedMint => {
+                    if self.from.is_some() {
+                        bail!("From AccountIdentifier field is not allowed for AuthorizedMint operation")
+                    }
+                    if self.spender.is_some() {
+                        bail!("Spender AccountIdentifier field is not allowed for AuthorizedMint operation")
+                    }
+                    crate::common::storage::types::IcrcOperation::AuthorizedMint {
+                        to: self.to.context("Account field needs to be populated for AuthorizedMint operation")?.try_into()?,
+                        amount: self.amount.context("Amount field needs to be populated for AuthorizedMint operation")?,
+                        caller: self.caller,
+                        mthd: self.mthd,
+                        reason: self.reason,
+                    }
+                },
+                IcrcOperation::AuthorizedBurn => {
+                    if self.to.is_some() {
+                        bail!("To AccountIdentifier field is not allowed for AuthorizedBurn operation")
+                    }
+                    if self.spender.is_some() {
+                        bail!("Spender AccountIdentifier field is not allowed for AuthorizedBurn operation")
+                    }
+                    crate::common::storage::types::IcrcOperation::AuthorizedBurn {
+                        from: self.from.context("From AccountIdentifier field needs to be populated for AuthorizedBurn operation")?.try_into()?,
+                        amount: self.amount.context("Amount field needs to be populated for AuthorizedBurn operation")?,
+                        caller: self.caller,
+                        mthd: self.mthd,
+                        reason: self.reason,
+                    }
+                },
             })
         }
     }
@@ -348,7 +420,6 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                 let fee = operation
                     .amount
                     .context("Amount field needs to be populated for Approve operation")?;
-
                 // The fee inside of icrc1 operation is always the fee set by the user
                 let icrc1_operation_fee_set = match operation.metadata {
                     Some(metadata) => {
@@ -374,8 +445,69 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                 )?;
                 icrc1_operation_builder.with_spender_accountidentifier(spender)
             }
-            // We do not have to convert this Operation on the icrc1 side as the crate::common::storage::types::IcrcOperation does not know anything about the FeeCollector
-            OperationType::FeeCollector => icrc1_operation_builder,
+            OperationType::FeeCollector => {
+                let metadata = operation
+                    .metadata
+                    .context("metadata should be set for fee collector operations")?;
+                let fc_metadata = FeeCollectorMetadata::try_from(metadata)?;
+                icrc1_operation_builder
+                    .with_icrc_operation(IcrcOperation::FeeCollector)
+                    .with_fee_collector(fc_metadata.fee_collector)
+                    .with_caller(fc_metadata.caller)
+                    .with_mthd(fc_metadata.mthd)
+            }
+            OperationType::AuthorizedMint => {
+                let amount = operation
+                    .amount
+                    .context("Amount field needs to be populated for AuthorizedMint operation")?;
+                let to_account = operation.account.context(
+                    "To AccountIdentifier field needs to be populated for AuthorizedMint operation",
+                )?;
+                let metadata = crate::common::types::AuthorizedOperationMetadata::try_from(
+                    operation.metadata,
+                )?;
+                icrc1_operation_builder
+                    .with_icrc_operation(IcrcOperation::AuthorizedMint)
+                    .with_to_accountidentifier(to_account)
+                    .with_amount(Nat::try_from(amount)?)
+                    .with_caller(
+                        metadata
+                            .caller
+                            .map(|c| {
+                                let bytes = hex::decode(&c)?;
+                                Ok::<_, anyhow::Error>(Principal::from_slice(&bytes))
+                            })
+                            .transpose()?,
+                    )
+                    .with_mthd(metadata.mthd)
+                    .with_reason(metadata.reason)
+            }
+            OperationType::AuthorizedBurn => {
+                let amount = operation
+                    .amount
+                    .context("Amount field needs to be populated for AuthorizedBurn operation")?;
+                let from_account = operation.account.context(
+                    "From AccountIdentifier field needs to be populated for AuthorizedBurn operation",
+                )?;
+                let metadata = crate::common::types::AuthorizedOperationMetadata::try_from(
+                    operation.metadata,
+                )?;
+                icrc1_operation_builder
+                    .with_icrc_operation(IcrcOperation::AuthorizedBurn)
+                    .with_from_accountidentifier(from_account)
+                    .with_amount(Nat::try_from(amount)?)
+                    .with_caller(
+                        metadata
+                            .caller
+                            .map(|c| {
+                                let bytes = hex::decode(&c)?;
+                                Ok::<_, anyhow::Error>(Principal::from_slice(&bytes))
+                            })
+                            .transpose()?,
+                    )
+                    .with_mthd(metadata.mthd)
+                    .with_reason(metadata.reason)
+            }
         };
     }
     icrc1_operation_builder.build()
@@ -608,6 +740,79 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 ));
             }
         }
+        crate::common::storage::types::IcrcOperation::FeeCollector {
+            fee_collector,
+            caller,
+            mthd,
+        } => {
+            operations.push(rosetta_core::objects::Operation::new(
+                0,
+                OperationType::FeeCollector.to_string(),
+                None,
+                None,
+                None,
+                Some(
+                    FeeCollectorMetadata {
+                        fee_collector,
+                        caller,
+                        mthd,
+                    }
+                    .try_into()?,
+                ),
+            ));
+        }
+        crate::common::storage::types::IcrcOperation::AuthorizedMint {
+            to,
+            amount,
+            caller,
+            mthd,
+            reason,
+        } => {
+            operations.push(rosetta_core::objects::Operation::new(
+                0,
+                OperationType::AuthorizedMint.to_string(),
+                Some(to.into()),
+                Some(rosetta_core::objects::Amount::new(
+                    BigInt::from(amount.0),
+                    currency.clone(),
+                )),
+                None,
+                Some(
+                    crate::common::types::AuthorizedOperationMetadata {
+                        caller: caller.map(|c| hex::encode(c.as_slice())),
+                        mthd,
+                        reason,
+                    }
+                    .try_into()?,
+                ),
+            ));
+        }
+        crate::common::storage::types::IcrcOperation::AuthorizedBurn {
+            from,
+            amount,
+            caller,
+            mthd,
+            reason,
+        } => {
+            operations.push(rosetta_core::objects::Operation::new(
+                0,
+                OperationType::AuthorizedBurn.to_string(),
+                Some(from.into()),
+                Some(rosetta_core::objects::Amount::new(
+                    BigInt::from_biguint(num_bigint::Sign::Minus, amount.0),
+                    currency.clone(),
+                )),
+                None,
+                Some(
+                    crate::common::types::AuthorizedOperationMetadata {
+                        caller: caller.map(|c| hex::encode(c.as_slice())),
+                        mthd,
+                        reason,
+                    }
+                    .try_into()?,
+                ),
+            ));
+        }
     };
 
     Ok(operations)
@@ -622,32 +827,12 @@ pub fn icrc1_rosetta_block_to_rosetta_core_operations(
 ) -> anyhow::Result<Vec<rosetta_core::objects::Operation>> {
     let icrc1_transaction = rosetta_block.get_transaction();
 
-    let mut operations = icrc1_operation_to_rosetta_core_operations(
+    let operations = icrc1_operation_to_rosetta_core_operations(
         icrc1_transaction.operation,
         currency.clone(),
         rosetta_block.get_fee_paid()?,
     )?;
 
-    if let Some(fee_collector) = rosetta_block.get_fee_collector()
-        && let Some(_fee_payed) = rosetta_block.get_fee_paid()?
-    {
-        operations.push(rosetta_core::objects::Operation::new(
-            operations.len().try_into().unwrap(),
-            OperationType::FeeCollector.to_string(),
-            Some(fee_collector.into()),
-            Some(rosetta_core::objects::Amount::new(
-                BigInt::from(
-                    rosetta_block
-                        .get_fee_paid()?
-                        .context("Fee payed needs to be populated for FeeCollector operation")?
-                        .0,
-                ),
-                currency.clone(),
-            )),
-            None,
-            None,
-        ));
-    }
     Ok(operations)
 }
 
@@ -714,6 +899,7 @@ pub fn rosetta_core_block_to_icrc1_block(
             )
         },
         fee_collector_block_index: block_metadata.fee_collector_block_index,
+        btype: block_metadata.btype,
     })
 }
 
@@ -794,5 +980,77 @@ mod tests {
             fn test_block_conversions_u256(block in blocks_strategy::<U256>(arb_amount())){
                 test_block_conversion::<U256>(block)
             }
+    }
+
+    fn test_account() -> AccountIdentifier {
+        icrc_ledger_types::icrc1::account::Account {
+            owner: candid::Principal::management_canister(),
+            subaccount: None,
+        }
+        .into()
+    }
+
+    fn test_account_2() -> AccountIdentifier {
+        icrc_ledger_types::icrc1::account::Account {
+            owner: candid::Principal::anonymous(),
+            subaccount: None,
+        }
+        .into()
+    }
+
+    fn make_op(
+        index: u64,
+        op_type: OperationType,
+        account: AccountIdentifier,
+        amount: Option<&str>,
+    ) -> rosetta_core::objects::Operation {
+        rosetta_core::objects::Operation::new(
+            index,
+            op_type.to_string(),
+            Some(account),
+            amount.map(|a| {
+                rosetta_core::objects::Amount::new(a.parse().unwrap(), Currency::default())
+            }),
+            None,
+            None,
+        )
+    }
+
+    #[test]
+    fn test_authorized_mint_with_spender_is_rejected() {
+        // AuthorizedMint followed by a Spender op → builder has spender set → build() rejects
+        let result = rosetta_core_operations_to_icrc1_operation(vec![
+            make_op(
+                0,
+                OperationType::AuthorizedMint,
+                test_account(),
+                Some("1000"),
+            ),
+            make_op(1, OperationType::Spender, test_account_2(), None),
+        ]);
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().to_string().contains("Spender"),
+            "Expected error about Spender not being allowed for AuthorizedMint"
+        );
+    }
+
+    #[test]
+    fn test_authorized_burn_with_spender_is_rejected() {
+        // AuthorizedBurn followed by a Spender op → builder has spender set → build() rejects
+        let result = rosetta_core_operations_to_icrc1_operation(vec![
+            make_op(
+                0,
+                OperationType::AuthorizedBurn,
+                test_account(),
+                Some("-1000"),
+            ),
+            make_op(1, OperationType::Spender, test_account_2(), None),
+        ]);
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().to_string().contains("Spender"),
+            "Expected error about Spender not being allowed for AuthorizedBurn"
+        );
     }
 }

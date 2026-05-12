@@ -6,7 +6,7 @@ use crate::logs::export_logs_as_http_response;
 use crate::metrics::{METRICS, export_metrics_as_http_response};
 use crate::storage::SALT;
 use ic_cdk::api::call::{accept_message, method_name};
-use ic_cdk::{api::time, spawn};
+use ic_cdk::api::time;
 use ic_cdk::{caller, trap};
 use ic_cdk::{init, inspect_message, post_upgrade, query};
 use ic_cdk_timers::set_timer;
@@ -32,9 +32,7 @@ fn inspect_message() {
 // Runs when canister is first installed
 #[init]
 fn init(init_arg: InitArg) {
-    set_timer(Duration::ZERO, || {
-        spawn(async { init_async(init_arg).await });
-    });
+    set_timer(Duration::ZERO, async { init_async(init_arg).await });
     // Update metric.
     let current_time = time() as i64;
     METRICS.with(|cell| {

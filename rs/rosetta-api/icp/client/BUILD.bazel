@@ -6,7 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ed25519",
     "//packages/ic-secp256k1",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nns/governance/api",
     "//rs/rosetta-api/common/rosetta_core:rosetta-core",

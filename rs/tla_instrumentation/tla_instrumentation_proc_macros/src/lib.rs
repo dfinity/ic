@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{AttributeArgs, ItemFn, Lit, Meta, NestedMeta, parse_macro_input};
+use syn::{ItemFn, Lit, LitBool, parse_macro_input};
 
 use syn::parse::{Parse, ParseStream};
 use syn::{Expr, Ident, Token};
@@ -219,7 +219,6 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn tla_function(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Parse the input tokens of the attribute and the function
     let input_fn = parse_macro_input!(item as ItemFn);
-    let args = parse_macro_input!(attr as AttributeArgs);
     let mut modified_fn = input_fn.clone();
 
     // Deconstruct the function elements
@@ -236,30 +235,16 @@ pub fn tla_function(attr: TokenStream, item: TokenStream) -> TokenStream {
     let asyncness = sig.asyncness;
     let mut force_async_fn = false;
 
-    // Examine each attribute argument
-    for arg in args {
-        if let NestedMeta::Meta(Meta::NameValue(name_value)) = arg {
-            if name_value.path.is_ident("force_async_fn") {
-                if let Lit::Bool(lit_bool) = name_value.lit {
-                    force_async_fn = lit_bool.value();
-                } else {
-                    return syn::Error::new_spanned(
-                        name_value.path,
-                        "Expected a boolean literal for 'force_async_fn'",
-                    )
-                    .to_compile_error()
-                    .into();
-                }
-            } else {
-                return syn::Error::new_spanned(
-                    name_value.path,
-                    "The only supported argument is 'force_async_fn'",
-                )
-                .to_compile_error()
-                .into();
-            }
+    let tla_function_parser = syn::meta::parser(|meta| {
+        if meta.path.is_ident("force_async_fn") {
+            force_async_fn = meta.value()?.parse::<LitBool>()?.value;
+            Ok(())
+        } else {
+            Err(meta.error("unsupported tla_function property"))
         }
-    }
+    });
+
+    parse_macro_input!(attr with tla_function_parser);
 
     // We need three different ways to invoke the wrapped function.
     // One is when the function is in an async_trait, as this will get desugared

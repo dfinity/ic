@@ -7,12 +7,12 @@ use ic_management_canister_types_private as ic00;
 use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
+use ic_types::CanisterId;
 use ic_types::canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES};
 use ic_types::messages::Response;
-use ic_types::{CanisterId, Cycles};
+use ic_types_cycles::NominalCycles;
 use prometheus::{Histogram, HistogramVec, IntCounter};
 use std::str::FromStr;
-use std::sync::Arc;
 
 pub const FINISHED_OUTCOME_LABEL: &str = "finished";
 pub const SUBMITTED_OUTCOME_LABEL: &str = "submitted";
@@ -25,6 +25,7 @@ pub const CRITICAL_ERROR_CALL_ID_WITHOUT_INSTALL_CODE_CALL: &str =
 /// Metrics used to monitor the performance of the execution environment.
 pub(crate) struct ExecutionEnvironmentMetrics {
     subnet_messages: HistogramVec,
+    pub(crate) canister_log_resize_duration: Histogram,
     pub executions_aborted: IntCounter,
     pub(crate) call_durations: Histogram,
 
@@ -60,9 +61,9 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     /// Critical error for attempting to execute new message
     /// while already in progress a long-running message.
     pub(crate) long_execution_already_in_progress: IntCounter,
-    /// Critical error for attempting to load a canister snapshot
-    /// when the snapshot exists but there is no associated canister.
-    pub(crate) snapshot_exists_without_associated_canister: IntCounter,
+    /// Critical error cycles for instructions used by
+    /// a failed subnet message (management canister operation) cannot be charged.
+    pub(crate) failed_subnet_message_charge: IntCounter,
 
     /// Metrics for HTTP outcalls costs.
     /// This is
@@ -92,6 +93,12 @@ impl ExecutionEnvironmentMetrics {
                 decimal_buckets(-3, 2),
                 // The `outcome` label is deprecated and should be replaced by `status` eventually.
                 &["method_name", "outcome", "status", "speed"],
+            ),
+            canister_log_resize_duration: metrics_registry.histogram(
+                "canister_log_resize_duration_seconds",
+                "Duration of `log_memory_limit` resize operations on the canister log memory store, in seconds.",
+                // Buckets: 1ms, 2ms, 5ms, ..., 10s, 20s, 50s.
+                decimal_buckets(-3, 1),
             ),
             executions_aborted: metrics_registry
                 .int_counter("executions_aborted", "Total number of aborted executions"),
@@ -130,7 +137,7 @@ impl ExecutionEnvironmentMetrics {
                 "Total number of intra-subnet messages that exceed the 2 MiB limit for inter-subnet messages."
             ),
             long_execution_already_in_progress: metrics_registry.error_counter("execution_environment_long_execution_already_in_progress"),
-            snapshot_exists_without_associated_canister: metrics_registry.error_counter("execution_environment_snapshot_exists_without_associated_canister"),
+            failed_subnet_message_charge: metrics_registry.error_counter("execution_environment_failed_subnet_message_charge"),
             // The minimum price of an outcall is ~50 million cycles, while the maximum price is ~30 billion.
             http_outcalls_metrics: HttpOutcallMetrics {
                 old_price: metrics_registry.histogram(
@@ -225,7 +232,7 @@ impl ExecutionEnvironmentMetrics {
     pub(crate) fn observe_http_outcall_request(
         &self,
         context: &CanisterHttpRequestContext,
-        response: &Arc<Response>,
+        response: &Response,
     ) {
         self.http_outcalls_metrics
             .request_size
@@ -246,7 +253,11 @@ impl ExecutionEnvironmentMetrics {
             .observe(response.payload_size_bytes().get() as f64);
     }
 
-    pub(crate) fn observe_http_outcall_price_change(&self, old_price: Cycles, new_price: Cycles) {
+    pub(crate) fn observe_http_outcall_price_change(
+        &self,
+        old_price: NominalCycles,
+        new_price: NominalCycles,
+    ) {
         self.http_outcalls_metrics
             .old_price
             .observe(old_price.get() as f64 / 1_000_000_000.0);
@@ -316,7 +327,8 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::ReadCanisterSnapshotData
                     | ic00::Method::UploadCanisterSnapshotMetadata
                     | ic00::Method::UploadCanisterSnapshotData
-                    | ic00::Method::RenameCanister => String::from("fast"),
+                    | ic00::Method::RenameCanister
+                    | ic00::Method::CanisterMetrics => String::from("fast"),
 
                     // "Slow" management methods that might require several execution
                     // rounds to be completed, either due to using DTS or due to
@@ -327,6 +339,7 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::InstallChunkedCode
                     | ic00::Method::StopCanister
                     | ic00::Method::HttpRequest
+                    | ic00::Method::FlexibleHttpRequest
                     | ic00::Method::SignWithECDSA
                     | ic00::Method::SignWithSchnorr
                     | ic00::Method::VetKdDeriveKey

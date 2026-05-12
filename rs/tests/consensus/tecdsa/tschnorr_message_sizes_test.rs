@@ -36,7 +36,8 @@ use ic_system_test_driver::driver::test_env_api::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::*;
-use ic_types::{CanisterId, Cycles, Height};
+use ic_types::{CanisterId, Height};
+use ic_types_cycles::Cycles;
 use slog::{Logger, info};
 
 const KIB: usize = 1024;
@@ -78,7 +79,7 @@ fn setup(env: TestEnv) {
                         .into_iter()
                         .map(|key_id| KeyConfig {
                             key_id,
-                            pre_signatures_to_create_in_advance: 5,
+                            pre_signatures_to_create_in_advance: Some(5),
                             max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
                         })
                         .collect(),

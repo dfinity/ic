@@ -1,27 +1,31 @@
 use std::{
-    fmt,
-    str::FromStr,
-    sync::Arc,
+    collections::HashSet,
+    fmt::Display,
+    sync::{Arc, atomic::Ordering},
     time::{Duration, Instant},
 };
 
 use anyhow::Error;
 use async_trait::async_trait;
 use bytes::Buf;
+use candid::Principal;
+use derive_new::new;
 use http::Method;
-use ic_bn_lib::{http::Client, tasks::Run};
+use ic_agent::Agent;
+use ic_bn_lib_common::traits::{Run, http::Client};
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
 use simple_moving_average::{SMA, SumTreeSMA};
+use strum::IntoStaticStr;
 #[allow(clippy::disallowed_types)]
 use tokio::sync::Mutex;
 use tokio::{
     select,
     sync::{mpsc, watch},
+    time::MissedTickBehavior,
 };
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tracing::{debug, warn};
-use url::Url;
 
 use crate::{
     metrics::{MetricParamsCheck, WithMetricsCheck},
@@ -31,56 +35,37 @@ use crate::{
 };
 
 /// An error that can occur during check
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, IntoStaticStr, thiserror::Error)]
+#[strum(serialize_all = "snake_case")]
 pub enum CheckError {
     /// Generic error
+    #[error("Generic error: {0}")]
     Generic(String),
     /// Unable to make HTTP request
+    #[error("Network error: {0}")]
     Network(String),
     /// Got non-200 status code
+    #[error("Got non-2xx response code: {0}")]
     Http(u16),
     /// Cannot read response body
+    #[error("Unable to read body: {0}")]
     ReadBody(String),
     /// Cannot parse CBOR payload
+    #[error("Unable to decode CBOR: {0}")]
     Cbor(String),
     /// Node reported itself as un-healthy
+    #[error("Node reported itself as unhealthy")]
     Health,
 }
 
-impl CheckError {
-    pub fn short(&self) -> &str {
-        match self {
-            Self::Generic(_) => "generic",
-            Self::Network(_) => "network",
-            Self::Http(_) => "http",
-            Self::ReadBody(_) => "read_body",
-            Self::Cbor(_) => "cbor",
-            Self::Health => "health",
-        }
-    }
-}
-
-impl fmt::Display for CheckError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Generic(e) => write!(f, "Error: {e}"),
-            Self::Network(e) => write!(f, "Network error: {e}"),
-            Self::Http(code) => write!(f, "Got non-2xx response code: {code}"),
-            Self::ReadBody(e) => write!(f, "Unable to read body: {e}"),
-            Self::Cbor(e) => write!(f, "Unable to decode CBOR: {e}"),
-            Self::Health => write!(f, "Node reported itself as unhealthy"),
-        }
-    }
-}
-
 const WINDOW_SIZE: usize = 10;
-type LatencyMovAvg = SumTreeSMA<f64, f64, WINDOW_SIZE>;
+type LatencyMovAvg = SumTreeSMA<u64, u64, WINDOW_SIZE>;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 struct NodeState {
     healthy: bool,
     height: u64,
-    avg_latency_secs: f64,
+    avg_latency_us: u64,
 }
 
 /// Send node's state message to the SubnetActor after this number of health checks have passed.
@@ -99,6 +84,12 @@ struct NodeActor {
     state: Option<NodeState>,
     avg_mov_latency: LatencyMovAvg,
     checks_counter: usize,
+}
+
+impl Display for NodeActor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "NodeActor({})", self.node)
+    }
 }
 
 impl NodeActor {
@@ -130,12 +121,13 @@ impl NodeActor {
 
         let (healthy, height, latency_change) = match &res {
             Ok(res) => {
-                let latency = start.elapsed().as_secs_f64();
+                let latency = start.elapsed().as_micros() as u64;
                 let current_avg = self.avg_mov_latency.get_average();
                 self.avg_mov_latency.add_sample(latency);
-                let latency_change = (latency - current_avg).abs() / current_avg;
+                let latency_change = (latency.abs_diff(current_avg) as f64) / (current_avg as f64);
                 (true, res.height, latency_change)
             }
+
             // Note: we don't add latency to the moving average in case of an error.
             Err(_) => (false, 0, 0.0),
         };
@@ -144,7 +136,7 @@ impl NodeActor {
         let mut new_state = self.state.unwrap_or_else(|| NodeState {
             healthy,
             height,
-            avg_latency_secs: self.avg_mov_latency.get_average(),
+            avg_latency_us: self.avg_mov_latency.get_average(),
         });
         new_state.healthy = healthy;
 
@@ -154,7 +146,7 @@ impl NodeActor {
         {
             // reset the counter
             self.checks_counter = 0;
-            new_state.avg_latency_secs = self.avg_mov_latency.get_average();
+            new_state.avg_latency_us = self.avg_mov_latency.get_average();
             new_state.height = height;
         }
 
@@ -163,6 +155,8 @@ impl NodeActor {
         // - conditionally updated height has changed
         // - conditionally updated avg latency has changed
         if Some(new_state) != self.state {
+            debug!("{self}: new state: {new_state:?}");
+
             self.state = Some(new_state);
             // It can never fail in our case
             let _ = self.channel.send((self.idx, new_state)).await;
@@ -170,19 +164,72 @@ impl NodeActor {
     }
 
     async fn run(&mut self, check_interval: Duration) {
-        debug!("Healthcheck actor for node {} started", self.node);
+        debug!("{self}: started");
 
         let mut interval = tokio::time::interval(check_interval);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
         loop {
             select! {
                 // Check if we need to shut down
                 _ = self.token.cancelled() => {
-                    debug!("Healthcheck actor for node {} stopped", self.node);
+                    debug!("{self}: stopped");
                     return;
                 }
 
                 // Run the check with given interval
                 _ = interval.tick() => self.check().await,
+            }
+        }
+    }
+}
+
+/// MembershipActor periodically fetches the certified membership set for a subnet
+/// via a [CertifiedMembershipFetcher] and sends updates over a watch channel.
+struct MembershipActor {
+    subnet_id: Principal,
+    membership_fetcher: Arc<dyn CertifiedMembershipFetcher>,
+    membership_tx: watch::Sender<Option<Arc<HashSet<Principal>>>>,
+    token: CancellationToken,
+}
+
+impl Display for MembershipActor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "MembershipActor({})", self.subnet_id)
+    }
+}
+
+impl MembershipActor {
+    async fn fetch(&self) {
+        match self
+            .membership_fetcher
+            .fetch_certified_members(self.subnet_id)
+            .await
+        {
+            Ok(members) => {
+                debug!("{self}: certified membership: {} nodes", members.len());
+                let _ = self.membership_tx.send(Some(Arc::new(members)));
+            }
+            Err(e) => {
+                warn!("{self}: certified membership fetch failed: {e}");
+            }
+        }
+    }
+
+    async fn run(&self, fetch_interval: Duration) {
+        debug!("{self}: started");
+
+        let mut interval = tokio::time::interval(fetch_interval);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
+        loop {
+            select! {
+                _ = self.token.cancelled() => {
+                    debug!("{self}: stopped");
+                    return;
+                }
+
+                _ = interval.tick() => self.fetch().await,
             }
         }
     }
@@ -203,6 +250,14 @@ struct SubnetActor {
     healthy_nodes: Option<Vec<Arc<Node>>>,
     state_changed: bool,
     init_done: bool,
+    certified_members: Option<Arc<HashSet<Principal>>>,
+    membership_recv: watch::Receiver<Option<Arc<HashSet<Principal>>>>,
+}
+
+impl Display for SubnetActor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SubnetActor({})", self.subnet)
+    }
 }
 
 impl SubnetActor {
@@ -210,10 +265,12 @@ impl SubnetActor {
         idx: usize,
         subnet: Subnet,
         check_interval: Duration,
+        membership_fetch_interval: Duration,
         token: CancellationToken,
         checker: Arc<dyn Check>,
         channel_out: mpsc::Sender<(usize, Subnet)>,
         max_height_lag: u64,
+        membership_fetcher: Arc<dyn CertifiedMembershipFetcher>,
     ) -> Self {
         let (channel_send, channel_recv) = mpsc::channel(128);
         let tracker = TaskTracker::new();
@@ -233,6 +290,19 @@ impl SubnetActor {
             });
         }
 
+        let (membership_tx, membership_recv) = watch::channel(None);
+
+        let membership_actor = MembershipActor {
+            subnet_id: subnet.id,
+            membership_fetcher,
+            membership_tx,
+            token: token_nodes.child_token(),
+        };
+
+        tracker.spawn(async move {
+            membership_actor.run(membership_fetch_interval).await;
+        });
+
         Self {
             idx,
             states: vec![None; subnet.nodes.len()],
@@ -246,6 +316,8 @@ impl SubnetActor {
             healthy_nodes: None,
             state_changed: false,
             init_done: false,
+            certified_members: None,
+            membership_recv,
         }
     }
 
@@ -291,37 +363,59 @@ impl SubnetActor {
             return;
         }
 
-        // Calc the minimum height
+        // Calculate the minimum height across this subnet
         let min_height = self.calc_min_height();
 
-        // Generate a list of healthy nodes
-        let nodes = self
+        // Ignore the certified set if it doesn't reach the subnet bft_threshold
+        // since the subnet cannot make progress below that threshold anyway.
+        let bft_threshold = (self.subnet.nodes.len() * 2) / 3 + 1;
+        let certified_set_sufficient = self
+            .certified_members
+            .as_deref()
+            .is_some_and(|m| m.len() >= bft_threshold);
+
+        let healthy_nodes: Vec<Arc<Node>> = self
             .states
             .iter()
-            // All states are Some() - it's checked above
-            .map(|x| x.as_ref().unwrap())
+            // All states are Some() - it's checked above in self.init_done()
+            .map(|x| *x.as_ref().unwrap())
             .enumerate()
-            // Map from idx to a node
             .map(|(idx, state)| (self.subnet.nodes[idx].clone(), state))
             // Discard unhealthy & lagging behind
             .filter(|(_, state)| state.healthy && state.height >= min_height)
-            .map(|(node, state)| {
-                let mut node = (*node).clone();
-                node.avg_latency_secs = state.avg_latency_secs;
-                Arc::new(node)
+            // Discard nodes not in the certified membership set
+            .filter(|(node, _)| {
+                if let Some(members) = self.certified_members.as_deref()
+                    && certified_set_sufficient
+                {
+                    return members.contains(&node.id);
+                }
+                true
             })
-            .collect::<Vec<_>>();
+            // Update the latency on the node
+            .map(|(node, state)| {
+                node.avg_latency_us
+                    .store(state.avg_latency_us, Ordering::SeqCst);
+                node
+            })
+            .collect();
 
         // See if the healthy nodes set changed
-        if self.healthy_nodes.is_none() || &nodes != self.healthy_nodes.as_ref().unwrap() {
-            self.healthy_nodes = Some(nodes.clone());
+        if self.healthy_nodes.is_none() || &healthy_nodes != self.healthy_nodes.as_ref().unwrap() {
+            warn!(
+                "{self}: healthy nodes now {}/{}",
+                healthy_nodes.len(),
+                self.subnet.nodes.len()
+            );
+
+            self.healthy_nodes = Some(healthy_nodes.clone());
 
             // Publish the new subnet
             let subnet = Subnet {
                 id: self.subnet.id,
                 subnet_type: self.subnet.subnet_type,
                 ranges: self.subnet.ranges.clone(),
-                nodes,
+                nodes: healthy_nodes,
                 replica_version: self.subnet.replica_version.clone(),
             };
 
@@ -331,9 +425,11 @@ impl SubnetActor {
     }
 
     async fn run(&mut self, update_interval: Duration) {
-        debug!("Healthcheck actor for subnet {} started", self.subnet);
+        debug!("{self}: started");
 
         let mut interval = tokio::time::interval(update_interval);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
         loop {
             select! {
                 // Check if we need to shut down
@@ -344,7 +440,7 @@ impl SubnetActor {
                     self.tracker.close();
                     self.tracker.wait().await;
                     self.channel_recv.close();
-                    debug!("Healthcheck actor for subnet {} stopped", self.subnet);
+                    debug!("{self}: stopped");
                     return;
                 }
 
@@ -364,6 +460,15 @@ impl SubnetActor {
                     } else {
                         // Otherwise it'll be handled by a periodic job
                         self.state_changed = true;
+                    }
+                }
+
+                // Refresh healthy nodes when membership changes
+                Ok(()) = self.membership_recv.changed() => {
+                    let new_members = self.membership_recv.borrow_and_update().clone();
+                    if new_members != self.certified_members {
+                        self.certified_members = new_members;
+                        self.update().await;
                     }
                 }
 
@@ -391,15 +496,23 @@ struct GlobalActor {
     init_done: bool,
 }
 
+impl Display for GlobalActor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "GlobalActor")
+    }
+}
+
 impl GlobalActor {
     fn new(
         subnets: Vec<Subnet>,
         check_interval: Duration,
         update_interval: Duration,
+        membership_fetch_interval: Duration,
         max_height_lag: u64,
         checker: Arc<dyn Check>,
         persister: Arc<dyn Persist>,
         token: CancellationToken,
+        membership_fetcher: Arc<dyn CertifiedMembershipFetcher>,
     ) -> Self {
         let tracker = TaskTracker::new();
         let token_subnets = CancellationToken::new();
@@ -411,10 +524,12 @@ impl GlobalActor {
                 idx,
                 subnet.clone(),
                 check_interval,
+                membership_fetch_interval,
                 token_subnets.child_token(),
                 checker.clone(),
                 channel_send.clone(),
                 max_height_lag,
+                membership_fetcher.clone(),
             );
 
             tracker.spawn(async move {
@@ -453,7 +568,7 @@ impl GlobalActor {
             .subnets
             .clone()
             .into_iter()
-            // Subnets are Some() at this stage - this is checked above
+            // Subnets are Some() at this stage - this is checked above in self.init_done()
             .map(|x| x.unwrap())
             .collect::<Vec<_>>();
 
@@ -461,7 +576,7 @@ impl GlobalActor {
     }
 
     async fn run(&mut self) {
-        debug!("Healthcheck global actor started");
+        debug!("{self}: started");
 
         loop {
             select! {
@@ -473,7 +588,7 @@ impl GlobalActor {
                     self.tracker.close();
                     self.tracker.wait().await;
                     self.channel_recv.close();
-                    debug!("Healthcheck global actor stopped");
+                    debug!("{self}: stopped");
                     return;
                 }
 
@@ -492,31 +607,35 @@ impl GlobalActor {
     }
 }
 
-// Runner receives new registry snapshots and restarts GlobalActor
+/// Runner receives new registry snapshots and restarts GlobalActor
 #[derive(derive_new::new)]
 #[allow(clippy::disallowed_types)]
 pub struct Runner {
     max_height_lag: u64,
     check_interval: Duration,
     update_interval: Duration,
+    membership_fetch_interval: Duration,
     checker: Arc<dyn Check>,
     persister: Arc<dyn Persist>,
     // Tokio mutex is used because its MutexGuard is Send
     channel_snapshot: Mutex<watch::Receiver<Option<Arc<RegistrySnapshot>>>>,
+    membership_fetcher: Arc<dyn CertifiedMembershipFetcher>,
 }
 
 impl Runner {
-    // Start global actor
+    /// Start global actor
     fn start(&self, tracker: &TaskTracker, token: &CancellationToken, subnets: Vec<Subnet>) {
         // Create & spawn new global actor
         let mut actor = GlobalActor::new(
             subnets,
             self.check_interval,
             self.update_interval,
+            self.membership_fetch_interval,
             self.max_height_lag,
             self.checker.clone(),
             self.persister.clone(),
             token.child_token(),
+            self.membership_fetcher.clone(),
         );
 
         tracker.spawn(async move {
@@ -576,28 +695,16 @@ pub trait Check: Send + Sync {
 }
 
 /// Checks the node's health
+#[derive(new)]
 pub struct Checker {
     http_client: Arc<dyn Client>,
     timeout: Duration,
 }
 
-impl Checker {
-    pub fn new(http_client: Arc<dyn Client>, timeout: Duration) -> Self {
-        Self {
-            http_client,
-            timeout,
-        }
-    }
-}
-
 #[async_trait]
 impl Check for Checker {
     async fn check(&self, node: &Node) -> Result<CheckResult, CheckError> {
-        // Create request
-        let u = Url::from_str(&format!("https://{}:{}/api/v2/status", node.id, node.port))
-            .map_err(|err| CheckError::Generic(err.to_string()))?;
-
-        let mut request = reqwest::Request::new(Method::GET, u);
+        let mut request = reqwest::Request::new(Method::GET, node.health_check_url.clone());
         *request.timeout_mut() = Some(self.timeout);
 
         // Execute request
@@ -650,7 +757,10 @@ impl<T: Check> Check for WithMetricsCheck<T> {
 
         let result = match &out {
             Ok(_) => "ok".to_string(),
-            Err(e) => format!("error_{}", e.short()),
+            Err(e) => {
+                let error_str: &'static str = e.into();
+                format!("error_{error_str}")
+            }
         };
 
         let (block_height, replica_version) = out.as_ref().map_or((-1, "unknown"), |out| {
@@ -695,6 +805,45 @@ impl<T: Check> Check for WithMetricsCheck<T> {
         }
 
         out
+    }
+}
+
+/// Fetches the certified subnet membership via the IC Agent's read_state API.
+#[automock]
+#[async_trait]
+pub trait CertifiedMembershipFetcher: Send + Sync {
+    async fn fetch_certified_members(
+        &self,
+        subnet_id: Principal,
+    ) -> Result<HashSet<Principal>, Error>;
+}
+
+/// Implementation that uses the IC Agent's `fetch_subnet_by_id` to retrieve
+/// the certified node membership from the subnet's state tree.
+#[derive(new)]
+pub struct CertifiedMembershipFetcherImpl {
+    agent: Agent,
+}
+
+#[async_trait]
+impl CertifiedMembershipFetcher for CertifiedMembershipFetcherImpl {
+    async fn fetch_certified_members(
+        &self,
+        subnet_id: Principal,
+    ) -> Result<HashSet<Principal>, Error> {
+        let subnet = self
+            .agent
+            .fetch_subnet_by_id(&subnet_id)
+            .await
+            .map_err(|e| anyhow::anyhow!("fetch_subnet_by_id failed: {e}"))?;
+
+        let members: HashSet<Principal> = subnet.iter_nodes().collect();
+
+        if members.is_empty() {
+            anyhow::bail!("Subnet contained no node members");
+        }
+
+        Ok(members)
     }
 }
 
@@ -747,17 +896,17 @@ pub(crate) mod test {
 
             let mut nodes = Vec::new();
             for j in 0..nodes_per_subnet {
-                let node = Node {
-                    id: node_test_id(NODE_ID_OFFSET + offset + i * 100 + j).get().0,
+                let node = Node::new(
+                    node_test_id(NODE_ID_OFFSET + offset + i * 100 + j).get().0,
                     subnet_id,
-                    subnet_type: SubnetType::Application,
-                    addr: IpAddr::V4(Ipv4Addr::new(192, 168, i as u8, j as u8)),
-                    port: 8080,
-                    tls_certificate: valid_tls_certificate_and_validation_time()
+                    SubnetType::Application,
+                    IpAddr::V4(Ipv4Addr::new(192, 168, i as u8, j as u8)),
+                    8080,
+                    valid_tls_certificate_and_validation_time()
                         .0
                         .certificate_der,
-                    avg_latency_secs: f64::MAX,
-                };
+                )
+                .unwrap();
                 let node = Arc::new(node);
 
                 nodes.push(node.clone());
@@ -799,6 +948,22 @@ pub(crate) mod test {
         }
     }
 
+    fn noop_membership_fetcher() -> Arc<dyn CertifiedMembershipFetcher> {
+        let mut fetcher = MockCertifiedMembershipFetcher::new();
+        fetcher
+            .expect_fetch_certified_members()
+            .returning(|_| Err(anyhow::anyhow!("test: not implemented")));
+        Arc::new(fetcher)
+    }
+
+    #[test]
+    fn test_checkerror() {
+        let error_str: &'static str = CheckError::Cbor("foo".into()).into();
+        assert_eq!(error_str, "cbor");
+        let error_str: &'static str = CheckError::ReadBody("foo".into()).into();
+        assert_eq!(error_str, "read_body");
+    }
+
     // Ensure that nodes that have failed healthcheck or lag behind are excluded
     #[tokio::test]
     async fn test_check_some_unhealthy() -> Result<(), Error> {
@@ -831,10 +996,12 @@ pub(crate) mod test {
             10,
             Duration::from_millis(100),
             Duration::from_millis(1),
+            Duration::from_millis(1),
             Arc::new(checker),
             persister,
             #[allow(clippy::disallowed_types)]
             Mutex::new(channel_recv),
+            noop_membership_fetcher(),
         );
         tokio::spawn(async move {
             let _ = runner.run(CancellationToken::new()).await;
@@ -880,10 +1047,12 @@ pub(crate) mod test {
             10,
             Duration::from_millis(100),
             Duration::from_millis(1),
+            Duration::from_millis(1),
             Arc::new(checker),
             persister,
             #[allow(clippy::disallowed_types)]
             Mutex::new(channel_recv),
+            noop_membership_fetcher(),
         );
         tokio::spawn(async move {
             let _ = runner.run(CancellationToken::new()).await;
@@ -966,10 +1135,12 @@ pub(crate) mod test {
             10,
             Duration::from_millis(100),
             Duration::from_millis(1),
+            Duration::from_millis(1),
             Arc::new(checker),
             persister,
             #[allow(clippy::disallowed_types)]
             Mutex::new(channel_recv),
+            noop_membership_fetcher(),
         );
 
         tokio::spawn(async move {
@@ -998,6 +1169,109 @@ pub(crate) mod test {
             nodes_right.sort_by_key(|n| n.id);
             assert_eq!(nodes_left, nodes_right);
         }
+
+        Ok(())
+    }
+
+    // Ensure that when the membership fetcher fails, all healthy nodes are
+    // included (fail-open behavior).
+    #[tokio::test]
+    async fn test_membership_fetch_failure_includes_all_nodes() -> Result<(), Error> {
+        let routes = Arc::new(ArcSwapOption::empty());
+        let persister = Arc::new(Persister::new(routes.clone()));
+
+        let mut checker = MockCheck::new();
+        checker.expect_check().returning(|_| Ok(check_result(1000)));
+
+        let (channel_send, channel_recv) = watch::channel(None);
+        let runner = Runner::new(
+            10,
+            Duration::from_millis(100),
+            Duration::from_millis(1),
+            Duration::from_millis(1),
+            Arc::new(checker),
+            persister,
+            #[allow(clippy::disallowed_types)]
+            Mutex::new(channel_recv),
+            noop_membership_fetcher(), // always returns Err → fail-open
+        );
+        tokio::spawn(async move {
+            let _ = runner.run(CancellationToken::new()).await;
+        });
+
+        let snapshot = generate_custom_registry_snapshot(2, 2, 0);
+        channel_send.send(Some(Arc::new(snapshot))).unwrap();
+
+        for _ in 1..10 {
+            if routes.load().is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        let rt = routes.load_full().unwrap();
+        assert_eq!(rt.node_count, 4);
+        assert!(rt.node_exists(node_id(0)));
+        assert!(rt.node_exists(node_id(1)));
+        assert!(rt.node_exists(node_id(100)));
+        assert!(rt.node_exists(node_id(101)));
+
+        Ok(())
+    }
+
+    // Ensure that when the membership fetcher returns a subset of nodes,
+    // only those nodes appear in the final routes (membership filtering).
+    #[tokio::test]
+    async fn test_membership_filters_non_members() -> Result<(), Error> {
+        let routes = Arc::new(ArcSwapOption::empty());
+        let persister = Arc::new(Persister::new(routes.clone()));
+
+        let mut checker = MockCheck::new();
+        checker.expect_check().returning(|_| Ok(check_result(1000)));
+
+        // 1 subnet with 4 nodes: node_id(0), node_id(1), node_id(2), node_id(3)
+        let snapshot = generate_custom_registry_snapshot(1, 4, 0);
+        let subnet_id = subnet_test_id(0).get().0;
+
+        // Return 3 out of 4 as certified members
+        let certified = HashSet::from([node_id(0), node_id(1), node_id(2)]);
+        let mut fetcher = MockCertifiedMembershipFetcher::new();
+        fetcher
+            .expect_fetch_certified_members()
+            .withf(move |id| *id == subnet_id)
+            .returning(move |_| Ok(certified.clone()));
+
+        let (channel_send, channel_recv) = watch::channel(None);
+        let runner = Runner::new(
+            10,
+            Duration::from_millis(100),
+            Duration::from_millis(1),
+            Duration::from_millis(1),
+            Arc::new(checker),
+            persister,
+            #[allow(clippy::disallowed_types)]
+            Mutex::new(channel_recv),
+            Arc::new(fetcher),
+        );
+        tokio::spawn(async move {
+            let _ = runner.run(CancellationToken::new()).await;
+        });
+
+        channel_send.send(Some(Arc::new(snapshot))).unwrap();
+
+        for _ in 1..10 {
+            if routes.load().is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        let rt = routes.load_full().unwrap();
+        assert_eq!(rt.node_count, 3);
+        assert!(rt.node_exists(node_id(0)));
+        assert!(rt.node_exists(node_id(1)));
+        assert!(rt.node_exists(node_id(2)));
+        assert!(!rt.node_exists(node_id(3)));
 
         Ok(())
     }

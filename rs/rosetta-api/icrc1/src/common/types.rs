@@ -1,6 +1,8 @@
 use anyhow::Context;
 use axum::{Json, http::StatusCode, response::IntoResponse};
 use candid::Deserialize;
+use candid::Principal;
+use icrc_ledger_types::icrc1::account::Account;
 use num_bigint::BigInt;
 use rosetta_core::identifiers::*;
 use rosetta_core::objects::*;
@@ -199,6 +201,8 @@ pub enum OperationType {
     Approve,
     Fee,
     FeeCollector,
+    AuthorizedMint,
+    AuthorizedBurn,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -241,6 +245,52 @@ impl TryFrom<Option<ObjectMap>> for ApproveMetadata {
     fn try_from(o: Option<ObjectMap>) -> anyhow::Result<Self> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default()))
             .context("Could not parse ApproveMetadata from JSON object")
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct AuthorizedOperationMetadata {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub caller: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mthd: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+impl TryFrom<AuthorizedOperationMetadata> for ObjectMap {
+    type Error = anyhow::Error;
+    fn try_from(d: AuthorizedOperationMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(serde_json::Value::Object(ob)) => Ok(ob),
+            Ok(v) => anyhow::bail!(
+                "Could not convert AuthorizedOperationMetadata to ObjectMap. Expected Object but received: {:?}",
+                v
+            ),
+            Err(err) => anyhow::bail!(
+                "Could not convert AuthorizedOperationMetadata to ObjectMap: {:?}",
+                err
+            ),
+        }
+    }
+}
+
+impl TryFrom<ObjectMap> for AuthorizedOperationMetadata {
+    type Error = anyhow::Error;
+    fn try_from(o: ObjectMap) -> anyhow::Result<Self> {
+        serde_json::from_value(serde_json::Value::Object(o.clone())).with_context(|| {
+            format!("Could not parse AuthorizedOperationMetadata from Object: {o:?}")
+        })
+    }
+}
+
+impl TryFrom<Option<ObjectMap>> for AuthorizedOperationMetadata {
+    type Error = anyhow::Error;
+    fn try_from(o: Option<ObjectMap>) -> anyhow::Result<Self> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default()))
+            .context("Could not parse AuthorizedOperationMetadata from JSON object")
     }
 }
 
@@ -308,6 +358,9 @@ pub struct BlockMetadata {
     // The Rosetta API standard field for timestamp is required in milliseconds
     // To ensure a lossless conversion we need to store the nano seconds for the timestamp
     pub block_created_at_nano_seconds: u64,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub btype: Option<String>,
 }
 
 impl TryFrom<BlockMetadata> for ObjectMap {
@@ -346,6 +399,7 @@ impl BlockMetadata {
             effective_fee: block
                 .effective_fee
                 .map(|fee| Amount::new(BigInt::from(fee), currency)),
+            btype: block.btype,
         })
     }
 }
@@ -385,5 +439,39 @@ impl TryFrom<ObjectMap> for FeeMetadata {
     fn try_from(o: ObjectMap) -> anyhow::Result<Self> {
         serde_json::from_value(serde_json::Value::Object(o))
             .context("Could not parse FeeMetadata from JSON object")
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct FeeCollectorMetadata {
+    pub fee_collector: Option<Account>,
+    pub caller: Option<Principal>,
+    pub mthd: Option<String>,
+}
+
+impl TryFrom<FeeCollectorMetadata> for ObjectMap {
+    type Error = anyhow::Error;
+    fn try_from(d: FeeCollectorMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(v) => match v {
+                serde_json::Value::Object(ob) => Ok(ob),
+                _ => anyhow::bail!(
+                    "Could not convert FeeCollectorMetadata to ObjectMap. Expected type Object but received: {:?}",
+                    v
+                ),
+            },
+            Err(err) => anyhow::bail!(
+                "Could not convert FeeCollectorMetadata to ObjectMap: {:?}",
+                err
+            ),
+        }
+    }
+}
+
+impl TryFrom<ObjectMap> for FeeCollectorMetadata {
+    type Error = anyhow::Error;
+    fn try_from(o: ObjectMap) -> anyhow::Result<Self> {
+        serde_json::from_value(serde_json::Value::Object(o))
+            .context("Could not parse FeeCollectorMetadata from JSON object")
     }
 }

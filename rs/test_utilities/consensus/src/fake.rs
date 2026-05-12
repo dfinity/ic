@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
+use ic_crypto_tree_hash::{Digest, Witness};
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
     validation::ValidationResult,
@@ -60,7 +61,6 @@ impl Fake for DkgSummary {
             /*current_transcripts=*/
             empty_ni_dkg_transcripts_with_committee(registry_version),
             /*next_transcripts=*/ BTreeMap::default(),
-            /*transcript_for_new_subnets=*/ Vec::default(),
             RegistryVersion::from(registry_version),
             /*interval_length=*/ Height::new(59),
             /*next_interval_length=*/ Height::new(59),
@@ -74,6 +74,7 @@ impl Fake for Certification {
     fn fake() -> Self {
         Certification {
             height: Height::new(0),
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
                     vec![],

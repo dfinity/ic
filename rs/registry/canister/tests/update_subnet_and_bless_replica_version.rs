@@ -3,8 +3,8 @@ use dfn_candid::candid;
 
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
@@ -36,15 +36,15 @@ fn guest_launch_measurements_for_test() -> Option<GuestLaunchMeasurements> {
     Some(GuestLaunchMeasurements {
         guest_launch_measurements: vec![
             GuestLaunchMeasurement {
-                measurement: vec![0x01, 0x02, 0x03],
+                measurement: vec![0x42; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
-                    kernel_cmdline: "foo=bar".into(),
+                    kernel_cmdline: Some("foo=bar".into()),
                 }),
             },
             GuestLaunchMeasurement {
-                measurement: vec![0x04, 0x05, 0x06],
+                measurement: vec![0x42; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
-                    kernel_cmdline: "hello=world".into(),
+                    kernel_cmdline: Some("hello=world".into()),
                 }),
             },
         ],
@@ -53,7 +53,7 @@ fn guest_launch_measurements_for_test() -> Option<GuestLaunchMeasurements> {
 
 #[test]
 fn test_the_anonymous_user_cannot_elect_a_version() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let mut registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
@@ -120,7 +120,7 @@ fn test_the_anonymous_user_cannot_elect_a_version() {
 
 #[test]
 fn test_a_canister_other_than_the_governance_canister_cannot_bless_a_version() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // An attacker got a canister that is trying to pass for the governance
         // canister...
         let attacker_canister = set_up_universal_canister(&runtime).await;
@@ -172,7 +172,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_bless_a_version() {
 
 #[test]
 fn test_accepted_proposal_mutates_the_registry() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         // Add an empty routing table to the registry
         let init_payload = RegistryCanisterInitPayloadBuilder::new()
             .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))

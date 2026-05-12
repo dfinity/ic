@@ -5,17 +5,17 @@ use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_metrics::MetricsRegistry;
 use ic_query_stats::QueryStatsCollector;
 use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::metrics::duration_histogram;
 use ic_types::{
-    Cycles, DiskBytes, Time, UserId,
+    DiskBytes, Time, UserId,
     batch::QueryStats,
     ingress::WasmResult,
-    messages::{CertificateDelegationFormat, CertificateDelegationMetadata, Query},
+    messages::{CertificateDelegationFormat, CertificateDelegationMetadata, Query, SenderInfo},
 };
+use ic_types_cycles::Cycles;
 use ic_utils_lru_cache::LruCache;
 use prometheus::{Histogram, IntCounter, IntGauge};
 use std::{collections::BTreeMap, sync::Mutex, time::Duration};
-
-use crate::metrics::duration_histogram;
 
 #[cfg(test)]
 mod tests;
@@ -130,7 +130,7 @@ impl QueryCacheMetrics {
 ///
 /// The key is to distinguish query cache entries, i.e. entries with different
 /// keys are (almost) completely independent from each other.
-#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, DeterministicHeapBytes)]
 pub(crate) struct EntryKey {
     /// Query source.
     pub source: UserId,
@@ -142,6 +142,8 @@ pub(crate) struct EntryKey {
     pub method_payload: Vec<u8>,
     /// Format of the certificate delegation.
     pub certificate_delegation_format: Option<CertificateDelegationFormat>,
+    /// Sender info attached to the query (info blob and signer canister).
+    pub sender_info: Option<SenderInfo>,
 }
 
 impl EntryKey {
@@ -156,6 +158,7 @@ impl EntryKey {
             method_payload: query.method_payload.clone(),
             certificate_delegation_format: certificate_delegation_metadata
                 .map(|metadata| metadata.format),
+            sender_info: query.sender_info(),
         }
     }
 }
@@ -167,7 +170,7 @@ impl DiskBytes for EntryKey {}
 ///
 /// The cache entry is valid as long as the metadata is unchanged,
 /// or it can be proven that the query does not depend on the change.
-#[derive(DeterministicHeapBytes, PartialEq)]
+#[derive(PartialEq, DeterministicHeapBytes)]
 pub(crate) struct EntryEnv {
     /// The consensus-determined time when the query is executed.
     pub batch_time: Time,
@@ -186,7 +189,7 @@ impl EntryEnv {
             let canister = state.get_active_canister(id)?;
             canisters_versions_balances_stats.push((
                 *id,
-                canister.system_state.canister_version,
+                canister.system_state.canister_version(),
                 canister.system_state.balance(),
                 stats.clone(),
             ));
@@ -258,7 +261,7 @@ impl EntryValue {
             };
             canisters_stats.push((id, stats));
 
-            if &canister.system_state.canister_version != version {
+            if &canister.system_state.canister_version() != version {
                 all_canister_versions_are_valid = false;
             }
             if &canister.system_state.balance() != balance {

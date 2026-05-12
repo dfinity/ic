@@ -9,7 +9,7 @@ use crate::{
 };
 use candid::Principal;
 use ic_canister_log::log;
-use ic_cdk::{api::time, call, spawn};
+use ic_cdk::{api::time, call};
 use ic_cdk_timers::{set_timer, set_timer_interval};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use salt_sharing_api::{
@@ -31,20 +31,18 @@ pub async fn init_async(init_arg: InitArg) {
     }
     // Set up periodical job to get all API boundary node IDs from the registry.
     let period = Duration::from_secs(init_arg.registry_polling_interval_secs);
-    set_timer_interval(period, || spawn(poll_api_boundary_nodes()));
+    set_timer_interval(period, async || poll_api_boundary_nodes().await);
 }
 
 // Sets an execution timer (delayed future task) and returns immediately.
 pub fn schedule_monthly_salt_generation() {
     let delay = delay_till_next_month(time());
-    set_timer(delay, || {
-        spawn(async {
-            if let Err(err) = try_regenerate_salt().await {
-                log!(P0, "[scheduled_regenerate_salt_failed]: {err}");
-            }
-            // Function is called recursively to schedule next execution
-            schedule_monthly_salt_generation();
-        });
+    set_timer(delay, async {
+        if let Err(err) = try_regenerate_salt().await {
+            log!(P0, "[scheduled_regenerate_salt_failed]: {err}");
+        }
+        // Function is called recursively to schedule next execution
+        schedule_monthly_salt_generation();
     });
 }
 

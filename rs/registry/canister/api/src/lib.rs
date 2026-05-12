@@ -1,10 +1,28 @@
+use attestation::SevAttestationPackage;
+use attestation::custom_data::{DerEncodedCustomData, SevCustomDataNamespace};
 use candid::{CandidType, Deserialize};
+use der::asn1::OctetStringRef;
 use ic_base_types::NodeId;
 use serde::Serialize;
 use std::{collections::HashSet, fmt, net::Ipv4Addr, str::FromStr};
 use thiserror::Error;
 
 pub mod mutate_test_high_capacity_records;
+
+/// Custom data embedded in the SEV attestation report for node registration.
+///
+/// This struct binds the attestation to the node by including [`AddNodePayload::node_signing_pk`].
+/// It is used both to construct and verify [`AddNodePayload::node_registration_attestation`].
+#[derive(der::Sequence, Debug, Eq, PartialEq, Clone)]
+pub struct NodeRegistrationAttestationCustomData<'a> {
+    pub node_signing_pk: OctetStringRef<'a>,
+}
+
+impl DerEncodedCustomData for NodeRegistrationAttestationCustomData<'_> {
+    fn namespace(&self) -> SevCustomDataNamespace {
+        SevCustomDataNamespace::NodeRegistration
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum IPv4ConfigError {
@@ -168,7 +186,7 @@ pub struct GetNodeProvidersMonthlyXdrRewardsRequest {
 }
 
 /// The payload of an update request to add a new node.
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct AddNodePayload {
     // Raw bytes of the protobuf, but these should be PublicKey
     pub node_signing_pk: Vec<u8>,
@@ -182,7 +200,10 @@ pub struct AddNodePayload {
     pub xnet_endpoint: String,
     pub http_endpoint: String,
 
-    pub chip_id: Option<Vec<u8>>,
+    /// SEV-SNP attestation package for node registration. When provided, the registry canister
+    /// will verify the attestation and extract the chip_id from the attestation report.
+    #[serde(default)]
+    pub node_registration_attestation: Option<SevAttestationPackage>,
 
     pub public_ipv4_config: Option<IPv4Config>,
     pub domain: Option<String>,
@@ -228,6 +249,26 @@ pub struct Chunk {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use attestation::custom_data::EncodeSevCustomData;
+
+    #[test]
+    fn test_node_registration_attestation_custom_data_is_stable() {
+        let node_signing_pk = OctetStringRef::new(&[1, 2, 3, 4]).unwrap();
+        let custom_data = NodeRegistrationAttestationCustomData { node_signing_pk };
+
+        assert_eq!(
+            &custom_data.encode_for_sev().unwrap().to_bytes(),
+            // These bytes must remain stable across versions.
+            &[
+                // namespace (NodeRegistration = 3)
+                3, 0, 0, 0, // padding (unused)
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                // SHA-256 hash of DER-encoded struct
+                208, 107, 21, 199, 109, 65, 223, 91, 162, 193, 177, 234, 169, 40, 88, 62, 244, 183,
+                111, 165, 157, 180, 157, 22, 132, 139, 138, 165, 242, 61, 38, 134,
+            ]
+        );
+    }
 
     #[test]
     fn succeeds_if_ipv4_config_is_valid() {

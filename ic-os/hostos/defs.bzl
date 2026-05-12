@@ -33,7 +33,7 @@ def image_deps(mode, _malicious = False):
             "//rs/ic_os/release:hostos_tool": "/opt/ic/bin/hostos_tool:0755",
             "//rs/ic_os/release:guest_vm_runner": "/opt/ic/bin/guest_vm_runner:0755",
             "//rs/ic_os/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
-            "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",
+            "//rs/ic_os/release:config_tool": "/opt/ic/bin/config_tool:0755",
             "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",
 
             # additional libraries to install
@@ -74,8 +74,8 @@ def image_deps(mode, _malicious = False):
 
     # Update dev rootfs
     if "dev" in mode:
-        deps["rootfs"].pop("//rs/ic_os/release:config", None)
-        deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
+        deps["rootfs"].pop("//rs/ic_os/release:config_tool", None)
+        deps["rootfs"].update({"//rs/ic_os/release:config_tool_dev": "/opt/ic/bin/config_tool:0755"})
 
         deps["rootfs"].pop("//rs/ic_os/release:hostos_tool", None)
         deps["rootfs"].update({"//rs/ic_os/release:hostos_tool_dev": "/opt/ic/bin/hostos_tool:0755"})
@@ -84,18 +84,18 @@ def image_deps(mode, _malicious = False):
         deps["rootfs"].update({"//rs/ic_os/release:guest_vm_runner_dev": "/opt/ic/bin/guest_vm_runner:0755"})
 
         # Allow root console access on dev
-        console_override_label = Label("//ic-os/components:misc/console-getty@/hostos-dev/override.conf")
+        console_override_label_1 = Label("//ic-os/hostos:console-override-dev")
+        console_override_label_2 = Label("//ic-os/hostos:console-override-dev-alias")
     else:
         # Allow limited-console access on prod
-        console_override_label = Label("//ic-os/components:misc/console-getty@/hostos-prod/override.conf")
+        console_override_label_1 = Label("//ic-os/hostos:console-override-prod")
+        console_override_label_2 = Label("//ic-os/hostos:console-override-prod-alias")
 
     # Note: We install the same override file to both serial-getty@ and getty@ service directories
     # because HostOS needs infogetty for both serial consoles (ttyS0, etc.) and VGA consoles (tty1, etc.)
     deps["component_files"].update({
-        console_override_label: "/etc/systemd/system/serial-getty@.service.d/override.conf",
-    })
-    deps["component_files"].update({
-        console_override_label: "/etc/systemd/system/getty@.service.d/override.conf",
+        console_override_label_1: "/etc/systemd/system/serial-getty@.service.d/override.conf",
+        console_override_label_2: "/etc/systemd/system/getty@.service.d/override.conf",
     })
 
     return deps

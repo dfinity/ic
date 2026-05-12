@@ -4,7 +4,8 @@ use dfn_core::println;
 use ic_base_types::{SubnetId, subnet_id_into_protobuf};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::registry::subnet::v1::{
-    SubnetFeatures as SubnetFeaturesPb, SubnetRecord as SubnetRecordPb,
+    ResourceLimits as ResourceLimitsPb, SubnetFeatures as SubnetFeaturesPb,
+    SubnetRecord as SubnetRecordPb,
 };
 use ic_registry_keys::{make_chain_key_enabled_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
@@ -142,24 +143,27 @@ impl Registry {
         }
     }
 
-    /// Validates that the SEV (AMD Secure Encrypted Virtualization) feature is not changed on
-    /// an existing subnet.
+    /// Validates that AMD Secure Encrypted Virtualization (SEV) is never disabled on a subnet.
     ///
-    /// Panics if the SEV feature is attempted to be changed.
+    /// Panics when attempting to turn off SEV for an SEV-enabled subnet
     fn validate_update_sev_feature(&self, payload: &UpdateSubnetPayload) {
         let subnet_id = payload.subnet_id;
 
-        // Ensure the subnet record exists for this subnet ID.
-        let _subnet_record = self.get_subnet_or_panic(subnet_id);
-
-        let Some(features) = payload.features else {
+        let Some(subnet_features) = self.get_subnet_or_panic(subnet_id).features else {
             return;
         };
 
-        if let Some(sev_enabled) = features.sev_enabled {
+        let Some(update_features) = payload.features else {
+            return;
+        };
+
+        // panic if SEV is enable and the update tries to disable it
+        let attempting_to_disable =
+            subnet_features.sev_enabled == Some(true) && update_features.sev_enabled == Some(false);
+        if attempting_to_disable {
             panic!(
-                "{LOG_PREFIX}Proposal attempts to change sev_enabled for Subnet '{subnet_id}' to {sev_enabled}, \
-                 but sev_enabled can only be set during subnet creation.",
+                "{LOG_PREFIX}Proposal attempts to disable SEV for Subnet '{subnet_id}', \
+                but SEV cannot be turned off once enabled.",
             );
         }
     }
@@ -205,16 +209,22 @@ impl Registry {
 ///
 /// Setting a field to `None` means that its value should not be changed. The
 /// rest of the fields will be overwritten in the SubnetRecord.
+/// In particular, this means that nested optional fields are unconditionally
+/// assigned in the subnet record instead of treating a nested `None` as a no-op.
+/// This is inconsistent to top-level optional fields and could be confusing.
+/// Tooling like `ic-admin` deals with that by filling unset nested fields with
+/// values from the current subnet record.
 ///
 /// Note that `replica_version_id` and `membership`
 /// are intentionally left out as they are updated via other proposals and/or
 /// handlers because they are subject to invariants, e.g. the replica version
-/// must be "blessed".
+/// must be "elected".
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct UpdateSubnetPayload {
     pub subnet_id: SubnetId,
 
     pub max_ingress_bytes_per_message: Option<u64>,
+    pub max_ingress_bytes_per_block: Option<u64>,
     pub max_ingress_messages_per_block: Option<u64>,
     pub max_block_payload_size: Option<u64>,
     pub unit_delay_millis: Option<u64>,
@@ -230,6 +240,7 @@ pub struct UpdateSubnetPayload {
     pub halt_at_cup_height: Option<bool>,
 
     pub features: Option<SubnetFeaturesPb>,
+    pub resource_limits: Option<ResourceLimitsPb>,
 
     pub chain_key_config: Option<ChainKeyConfig>,
     pub chain_key_signing_enable: Option<Vec<MasterPublicKeyId>>,
@@ -278,7 +289,7 @@ impl From<ChainKeyConfigInternal> for ChainKeyConfig {
                      max_queue_size,
                  }| KeyConfig {
                     key_id: Some(key_id),
-                    pre_signatures_to_create_in_advance: Some(pre_signatures_to_create_in_advance),
+                    pre_signatures_to_create_in_advance,
                     max_queue_size: Some(max_queue_size),
                 },
             )
@@ -349,7 +360,7 @@ impl From<KeyConfigInternal> for KeyConfig {
 
         Self {
             key_id: Some(key_id),
-            pre_signatures_to_create_in_advance: Some(pre_signatures_to_create_in_advance),
+            pre_signatures_to_create_in_advance,
             max_queue_size: Some(max_queue_size),
         }
     }
@@ -368,11 +379,21 @@ impl TryFrom<KeyConfig> for KeyConfigInternal {
         let Some(key_id) = key_id else {
             return Err("KeyConfig.key_id must be specified.".to_string());
         };
-        let Some(pre_signatures_to_create_in_advance) = pre_signatures_to_create_in_advance else {
-            return Err(
-                "KeyConfig.pre_signatures_to_create_in_advance must be specified.".to_string(),
-            );
+
+        // Ensure presence of `pre_signatures_to_create_in_advance` for keys that require pre-signatures.
+        // Note that an invariant ensures that this field is not zero for keys that require pre-signatures.
+        if key_id.requires_pre_signatures() && pre_signatures_to_create_in_advance.is_none() {
+            return Err(format!(
+                "KeyConfig.pre_signatures_to_create_in_advance must be specified for key {key_id}."
+            ));
         };
+        // Ensure absence of `pre_signatures_to_create_in_advance` for keys that do not require it.
+        if !key_id.requires_pre_signatures() && pre_signatures_to_create_in_advance.is_some() {
+            return Err(format!(
+                "KeyConfig.pre_signatures_to_create_in_advance must not be specified for key {key_id} because it does not require pre-signatures."
+            ));
+        };
+
         let Some(max_queue_size) = max_queue_size else {
             return Err("KeyConfig.max_queue_size must be specified.".to_string());
         };
@@ -418,6 +439,7 @@ fn merge_subnet_record(
     let UpdateSubnetPayload {
         subnet_id: _subnet_id,
         max_ingress_bytes_per_message,
+        max_ingress_bytes_per_block,
         max_ingress_messages_per_block,
         max_block_payload_size,
         unit_delay_millis,
@@ -429,6 +451,7 @@ fn merge_subnet_record(
         is_halted,
         halt_at_cup_height,
         features,
+        resource_limits,
         chain_key_config,
         chain_key_signing_enable: _,
         chain_key_signing_disable: _,
@@ -450,6 +473,7 @@ fn merge_subnet_record(
     let features: Option<SubnetFeaturesPb> = features.map(|v| SubnetFeatures::from(v).into());
 
     maybe_set!(subnet_record, max_ingress_bytes_per_message);
+    maybe_set!(subnet_record, max_ingress_bytes_per_block);
     maybe_set!(subnet_record, max_ingress_messages_per_block);
     maybe_set!(subnet_record, max_block_payload_size);
     maybe_set!(subnet_record, unit_delay_millis);
@@ -468,6 +492,7 @@ fn merge_subnet_record(
     maybe_set!(subnet_record, halt_at_cup_height);
 
     maybe_set_option!(subnet_record, features);
+    maybe_set_option!(subnet_record, resource_limits);
 
     let chain_key_config = chain_key_config.map(|chain_key_config| {
         ChainKeyConfigInternal::try_from(chain_key_config)
@@ -488,10 +513,10 @@ mod tests {
     use super::*;
     use crate::common::test_helpers::{
         add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
-        prepare_registry_with_nodes,
+        prepare_registry_with_nodes, prepare_registry_with_nodes_and_chip_id,
     };
     use ic_management_canister_types_private::{
-        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId,
+        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
     };
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::{
@@ -499,10 +524,11 @@ mod tests {
         SubnetRecord as SubnetRecordPb,
     };
     use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
+    use ic_registry_resource_limits::ResourceLimits;
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
+    use ic_types::{NumBytes, PrincipalId, ReplicaVersion, SubnetId};
     use maplit::btreemap;
     use std::str::FromStr;
 
@@ -511,6 +537,7 @@ mod tests {
             subnet_id,
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
+            max_ingress_bytes_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: None,
             initial_notary_delay_millis: None,
@@ -521,6 +548,7 @@ mod tests {
             is_halted: None,
             halt_at_cup_height: None,
             features: None,
+            resource_limits: None,
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -545,6 +573,7 @@ mod tests {
         let subnet_record = SubnetRecordPb {
             membership: vec![],
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
+            max_ingress_bytes_per_block: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
@@ -562,6 +591,9 @@ mod tests {
             ssh_backup_access: vec![],
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+            subnet_admins: vec![],
+            resource_limits: Default::default(),
+            recalled_replica_version_ids: vec![],
         };
 
         let key_id = EcdsaKeyId {
@@ -588,6 +620,7 @@ mod tests {
             ),
             max_ingress_bytes_per_message: Some(256),
             max_ingress_messages_per_block: Some(256),
+            max_ingress_bytes_per_block: Some(257),
             max_block_payload_size: Some(200),
             unit_delay_millis: Some(300),
             initial_notary_delay_millis: Some(200),
@@ -602,6 +635,13 @@ mod tests {
                     canister_sandboxing: false,
                     http_requests: false,
                     sev_enabled: false,
+                }
+                .into(),
+            ),
+            resource_limits: Some(
+                ResourceLimits {
+                    maximum_state_size: Some(NumBytes::new(42)),
+                    maximum_state_delta: Some(NumBytes::new(64)),
                 }
                 .into(),
             ),
@@ -629,6 +669,7 @@ mod tests {
                 membership: vec![],
                 max_ingress_bytes_per_message: 256,
                 max_ingress_messages_per_block: 256,
+                max_ingress_bytes_per_block: 257,
                 max_block_payload_size: 200,
                 unit_delay_millis: 300,
                 initial_notary_delay_millis: 200,
@@ -654,6 +695,15 @@ mod tests {
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
                 ssh_backup_access: vec!["pub_key_1".to_string()],
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+                subnet_admins: vec![],
+                resource_limits: Some(
+                    ResourceLimits {
+                        maximum_state_size: Some(NumBytes::new(42)),
+                        maximum_state_delta: Some(NumBytes::new(64)),
+                    }
+                    .into()
+                ),
+                recalled_replica_version_ids: vec![],
             }
         );
     }
@@ -663,6 +713,7 @@ mod tests {
         let subnet_record = SubnetRecordPb {
             membership: vec![],
             max_ingress_bytes_per_message: 60 * 1024 * 1024,
+            max_ingress_bytes_per_block: 4 * 1024 * 1024,
             max_ingress_messages_per_block: 1000,
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
@@ -680,6 +731,15 @@ mod tests {
             ssh_backup_access: vec![],
             chain_key_config: None,
             canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+            subnet_admins: vec![],
+            resource_limits: Some(
+                ResourceLimits {
+                    maximum_state_size: Some(NumBytes::new(42)),
+                    maximum_state_delta: Some(NumBytes::new(64)),
+                }
+                .into(),
+            ),
+            recalled_replica_version_ids: vec![],
         };
 
         let payload = UpdateSubnetPayload {
@@ -691,6 +751,7 @@ mod tests {
             ),
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
+            max_ingress_bytes_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: Some(100),
             initial_notary_delay_millis: None,
@@ -701,6 +762,7 @@ mod tests {
             is_halted: None,
             halt_at_cup_height: Some(true),
             features: None,
+            resource_limits: None,
             max_number_of_canisters: Some(50),
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -723,6 +785,7 @@ mod tests {
             SubnetRecordPb {
                 membership: vec![],
                 max_ingress_bytes_per_message: 60 * 1024 * 1024,
+                max_ingress_bytes_per_block: 4 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
                 max_block_payload_size: 4 * 1024 * 1024,
                 unit_delay_millis: 100,
@@ -740,6 +803,59 @@ mod tests {
                 ssh_backup_access: vec![],
                 chain_key_config: None,
                 canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+                subnet_admins: vec![],
+                resource_limits: Some(
+                    ResourceLimits {
+                        maximum_state_size: Some(NumBytes::new(42)),
+                        maximum_state_delta: Some(NumBytes::new(64)),
+                    }
+                    .into()
+                ),
+                recalled_replica_version_ids: vec![],
+            }
+        );
+    }
+
+    #[test]
+    fn resource_limits_resets_all_fields() {
+        let subnet_record = SubnetRecordPb {
+            resource_limits: Some(
+                ResourceLimits {
+                    maximum_state_size: Some(NumBytes::new(42)),
+                    maximum_state_delta: Some(NumBytes::new(64)),
+                }
+                .into(),
+            ),
+            ..Default::default()
+        };
+
+        let subnet_id = SubnetId::from(
+            PrincipalId::from_str(
+                "bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae",
+            )
+            .unwrap(),
+        );
+        let payload = UpdateSubnetPayload {
+            resource_limits: Some(
+                ResourceLimits {
+                    maximum_state_size: Some(NumBytes::new(128)),
+                    maximum_state_delta: None,
+                }
+                .into(),
+            ),
+            ..make_empty_update_payload(subnet_id)
+        };
+        assert_eq!(
+            merge_subnet_record(subnet_record, payload),
+            SubnetRecordPb {
+                resource_limits: Some(
+                    ResourceLimits {
+                        maximum_state_size: Some(NumBytes::new(128)),
+                        maximum_state_delta: None,
+                    }
+                    .into()
+                ),
+                ..Default::default()
             }
         );
     }
@@ -948,7 +1064,7 @@ mod tests {
     fn make_registry_for_update_subnet_tests() -> (Registry, SubnetId) {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_chip_id(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -971,40 +1087,69 @@ mod tests {
         (registry, subnet_id)
     }
 
-    #[test]
-    #[should_panic(expected = "Proposal attempts to change sev_enabled for Subnet \
-                    'ge6io-epiam-aaaaa-aaaap-yai' to true, but sev_enabled can only be set during \
-                    subnet creation.")]
-    fn test_sev_enabled_cannot_be_changed_to_true() {
-        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
-
+    fn update_sev(subnet_id: SubnetId, enabled: bool) -> UpdateSubnetPayload {
         let mut payload = make_empty_update_payload(subnet_id);
         payload.features = Some(SubnetFeaturesPb {
             canister_sandboxing: false,
             http_requests: false,
-            sev_enabled: Some(true),
+            sev_enabled: Some(enabled),
         });
-
-        registry.do_update_subnet(payload);
+        payload
     }
 
     #[test]
-    #[should_panic(expected = "Proposal attempts to change sev_enabled for Subnet \
-                    'ge6io-epiam-aaaaa-aaaap-yai' to false, but sev_enabled can only be set during \
-                    subnet creation.")]
-    fn test_sev_enabled_cannot_be_changed_to_false() {
+    fn test_can_enable_sev_if_disabled() {
         let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
 
-        let mut payload = make_empty_update_payload(subnet_id);
-        payload.features = Some(SubnetFeaturesPb {
-            canister_sandboxing: false,
-            http_requests: false,
-            // The only difference compared to test_sev_enabled_cannot_be_changed_to_true
-            sev_enabled: Some(false),
-        });
+        // transition from unset -> false -> true
+        registry.do_update_subnet(update_sev(subnet_id, false));
+        registry.do_update_subnet(update_sev(subnet_id, true));
 
-        // Should panic because we are changing SEV-related subnet features.
-        registry.do_update_subnet(payload);
+        let subnet_features = registry
+            .get_subnet_or_panic(subnet_id)
+            .features
+            .expect("failed to get subnet features");
+
+        assert_eq!(
+            subnet_features.sev_enabled,
+            Some(true),
+            "Expected SEV enabled to be Some(true), but was {:?}",
+            subnet_features.sev_enabled
+        );
+    }
+
+    #[test]
+    fn test_can_enable_sev_if_unset() {
+        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+
+        // transition from unset (implicitly) -> true
+        registry.do_update_subnet(update_sev(subnet_id, true));
+
+        let subnet_features = registry
+            .get_subnet_or_panic(subnet_id)
+            .features
+            .expect("failed to get subnet features");
+
+        assert_eq!(
+            subnet_features.sev_enabled,
+            Some(true),
+            "Expected SEV enabled to be Some(true), but was {:?}",
+            subnet_features.sev_enabled
+        );
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Proposal attempts to disable SEV for Subnet 'ge6io-epiam-aaaaa-aaaap-yai', \
+        but SEV cannot be turned off once enabled."
+    )]
+    fn test_cannot_disable_sev_if_enabled() {
+        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+
+        // Enable SEV first as it is initially unset.
+        registry.do_update_subnet(update_sev(subnet_id, true));
+        // This should trigger the panic
+        registry.do_update_subnet(update_sev(subnet_id, false));
     }
 
     #[test]
@@ -1308,5 +1453,64 @@ mod tests {
 
         // Should panic because we are trying to delete an existing key
         registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "KeyConfig.pre_signatures_to_create_in_advance must be specified for key ecdsa:Secp256k1:some_key_name"
+    )]
+    fn should_panic_when_key_requiring_pre_signatures_is_missing_pre_signatures_to_create() {
+        let mut registry = invariant_compliant_registry(0);
+        let subnet_id = subnet_test_id(1000);
+
+        let payload = update_subnet_payload_with_key_config(
+            subnet_id,
+            MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: "some_key_name".to_string(),
+            }),
+            None,
+        );
+
+        registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "KeyConfig.pre_signatures_to_create_in_advance must not be specified for key vetkd:Bls12_381_G2:some_key_name"
+    )]
+    fn should_panic_when_key_not_requiring_pre_signatures_has_pre_signatures_to_create() {
+        let mut registry = invariant_compliant_registry(0);
+        let subnet_id = subnet_test_id(1000);
+
+        let payload = update_subnet_payload_with_key_config(
+            subnet_id,
+            MasterPublicKeyId::VetKd(VetKdKeyId {
+                curve: VetKdCurve::Bls12_381_G2,
+                name: "some_key_name".to_string(),
+            }),
+            Some(99),
+        );
+
+        registry.do_update_subnet(payload);
+    }
+
+    fn update_subnet_payload_with_key_config(
+        subnet_id: SubnetId,
+        key_id: MasterPublicKeyId,
+        pre_signatures_to_create_in_advance: Option<u32>,
+    ) -> UpdateSubnetPayload {
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.chain_key_config = Some(ChainKeyConfig {
+            key_configs: vec![KeyConfig {
+                key_id: Some(key_id),
+                pre_signatures_to_create_in_advance,
+                max_queue_size: Some(155),
+            }],
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
+        });
+        payload
     }
 }

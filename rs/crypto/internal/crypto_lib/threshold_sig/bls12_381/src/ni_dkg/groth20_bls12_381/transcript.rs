@@ -8,6 +8,7 @@ use super::encryption::decrypt;
 use crate::api::ni_dkg_errors;
 use crate::ni_dkg::fs_ni_dkg::forward_secure::SecretKey as ForwardSecureSecretKey;
 use crate::types as threshold_types;
+use ic_crypto_internal_bls12_381_type::{G2Projective, LagrangeCoefficients, NodeIndices};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381 as g20;
 use ic_types::{NodeIndex, NumberOfNodes};
 use std::collections::BTreeMap;
@@ -182,9 +183,7 @@ fn compute_transcript(
         .iter()
         .map(|(dealer_index, dealing)| {
             // Type conversion from crypto internal type.
-            // The dealings have already been verified,
-            // so we can trust the serialized coefficients.
-            threshold_types::PublicCoefficients::from_trusted_bytes(&dealing.public_coefficients)
+            threshold_types::PublicCoefficients::deserialize_cached(&dealing.public_coefficients)
                 .map(|public_coefficients| (*dealer_index, public_coefficients))
                 .map_err(|crypto_error| {
                     let error = InvalidArgumentError {
@@ -201,23 +200,29 @@ fn compute_transcript(
 
     // Combine the dealings
     let public_coefficients: g20::PublicCoefficientsBytes = {
-        let lagrange_coefficients = {
+        let coefficients = {
             let reshare_x: Vec<NodeIndex> = csp_dealings.keys().copied().collect();
 
-            threshold_types::PublicCoefficients::lagrange_coefficients_at_zero(&reshare_x)
-                .expect("Cannot fail because all x are distinct.")
+            let indices = NodeIndices::from_slice(&reshare_x)
+                .expect("Cannot fail because all x are distinct.");
+
+            LagrangeCoefficients::at_zero(&indices).into_coefficients()
         };
 
-        let mut combined_public_coefficients = threshold_types::PublicCoefficients::zero();
+        let mut combined = Vec::with_capacity(threshold.get() as usize);
 
-        for ((_dealer_index, individual), factor) in individual_public_coefficients
-            .into_iter()
-            .zip(lagrange_coefficients)
-        {
-            // Aggregate the public coefficients:
-            combined_public_coefficients += individual * factor;
+        // TODO(CRP-2550) this loop can run in parallel
+        for i in 0..threshold.get() as usize {
+            let points: Vec<_> = individual_public_coefficients
+                .values()
+                .map(|pc| &pc.coefficients[i].0)
+                .collect();
+            combined.push(crate::types::PublicKey(
+                G2Projective::muln_affine_vartime_ref(&points, &coefficients).to_affine(),
+            ));
         }
 
+        let combined_public_coefficients = threshold_types::PublicCoefficients::new(combined);
         // This type conversion is needed because of the internal/CSP type duplication.
         g20::PublicCoefficientsBytes::from(&combined_public_coefficients)
     };
@@ -252,6 +257,8 @@ pub fn compute_threshold_signing_key(
     epoch: g20::Epoch,
 ) -> Result<threshold_types::SecretKeyBytes, ni_dkg_errors::CspDkgLoadPrivateKeyError> {
     // Get my shares
+
+    // TODO(CRP-2550) this loop can run in parallel
     let shares_from_each_dealer: Result<BTreeMap<NodeIndex, threshold_types::SecretKey>, _> =
         transcript
             .receiver_data

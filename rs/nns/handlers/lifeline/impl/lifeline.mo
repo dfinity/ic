@@ -59,7 +59,7 @@ persistent actor {
         debug { Prim.debugPrint ("upgrade_root: stopping the root canister " # debug_show root) };
         try {
              await ic00.stop_canister({canister_id = root});
-        } catch (err) {
+        } catch _ {
              debug { Prim.debugPrint ("upgrade_root: failed to stop the root canister") };
              await ic00.start_canister({canister_id = root});
              return ();

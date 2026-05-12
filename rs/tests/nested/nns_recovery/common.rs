@@ -1,81 +1,98 @@
-use std::path::Path;
-
 use anyhow::bail;
+use candid::Principal;
+use ic_agent::Agent;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    AdminAndUserKeys, BACKUP_USERNAME, assert_subnet_is_broken, break_nodes,
-    get_admin_keys_and_generate_backup_keys,
+    BACKUP_USERNAME, NodeHeights, SshKeys, assert_subnet_is_broken, break_nodes,
+    get_ssh_keys_for_user,
     local::{NNS_RECOVERY_OUTPUT_DIR_REMOTE_PATH, nns_subnet_recovery_same_nodes_local_cli_args},
-    node_with_highest_certification_share_height, remote_recovery,
+    node_with_highest_cup_and_cert_share_heights, remote_recovery,
 };
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
-    node::await_subnet_earliest_topology_version_with_retries,
-    rw_message::store_message,
-    set_sandbox_env_vars,
+    node::await_subnet_earliest_topology_version_with_retries_async,
+    rw_message::{cert_state_makes_progress_with_retries, store_message_with_retries},
     ssh_access::{
-        AuthMean, disable_ssh_access_to_node, get_updatesubnetpayload_with_keys,
+        AuthMean, disable_ssh_access_to_node, get_update_subnet_payload_with_keys,
         update_subnet_record, wait_until_authentication_is_granted,
     },
     subnet::assert_subnet_is_healthy,
-    upgrade::bless_replica_version,
+    upgrade::{assert_assigned_replica_version, bless_replica_version},
 };
+use ic_nervous_system_root::change_canister::AddCanisterRequest;
 use ic_recovery::{
-    RecoveryArgs,
+    IC_DATA_PATH, IC_REGISTRY_LOCAL_STORE, RECOVERY_DIRECTORY_NAME, RecoveryArgs,
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs, StepType},
+    ssh_helper::SshHelper as RecoverySshHelper,
     steps::CreateNNSRecoveryTarStep,
-    util::DataLocation,
+    util::{DataLocation, SshUser as RecoverySshUser},
 };
 use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
-        ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResources},
+        ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResourceOverrides},
         nested::{HasNestedVms, NestedNodes, NestedVm},
         test_env::TestEnv,
         test_env_api::*,
     },
     nns::change_subnet_membership,
     retry_with_msg_async,
-    util::block_on,
+    util::{MESSAGE_CANISTER_WASM, MessageCanister, assert_create_agent, block_on},
+};
+use ic_testnet_mainnet_nns::{
+    MAINNET_NODE_VM_RESOURCE_OVERRIDES, mainnet_node_required_host_features,
+    proposals::ProposalWithMainnetState, setup as setup_with_mainnet_state,
 };
 use ic_types::ReplicaVersion;
-use nested::util::{get_host_boot_id_async, setup_ic_infrastructure};
+use manual_guestos_recovery::recovery_utils::build_recovery_upgrader_run_command;
+use nested::util::{NODE_REGISTRATION_TIMEOUT, setup_ic_infrastructure};
 use rand::seq::SliceRandom;
-use sha2::{Digest, Sha256};
 use slog::{Logger, info};
+use std::{
+    net::IpAddr,
+    path::{Path, PathBuf},
+};
 use tokio::task::JoinSet;
 
-pub const NNS_RECOVERY_VM_RESOURCES: VmResources = VmResources {
-    vcpus: Some(NrOfVCPUs::new(8)),
-    memory_kibibytes: Some(AmountOfMemoryKiB::new(25165824)), // 24GiB
-    boot_image_minimal_size_gibibytes: None,
+pub const NNS_RECOVERY_VM_RESOURCE_OVERRIDES: VmResourceOverrides = VmResourceOverrides {
+    vcpus: Some(NrOfVCPUs::new(40)), // 36 GuestOS CPU + 4 HostOS
+    memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
+    ..VmResourceOverrides::const_default()
 };
 
 /// 4 nodes is the minimum subnet size that satisfies 3f+1 for f=1
 pub const SUBNET_SIZE: usize = 4;
-/// DKG interval of 9 is large enough for a subnet of that size and as small as possible to keep the
-/// test runtime low
-pub const DKG_INTERVAL: u64 = 9;
+/// f is the maximum number of faulty nodes that can be tolerated in the subnet
+pub const F: usize = (SUBNET_SIZE - 1) / 3;
+/// DKG interval as small as possible to keep the test runtime low
+pub const DKG_INTERVAL: u64 = 4 * SUBNET_SIZE as u64 + 13;
 
 /// 40 nodes and DKG interval of 499 are the production values for the NNS but 49 was chosen for
 /// the DKG interval to make the test faster
 pub const LARGE_SUBNET_SIZE: usize = 40;
+pub const LARGE_F: usize = (LARGE_SUBNET_SIZE - 1) / 3;
 pub const LARGE_DKG_INTERVAL: u64 = 49;
 
 /// RECOVERY_GUESTOS_IMG_VERSION variable is a placeholder for the actual version of the recovery
 /// GuestOS image, that Node Providers would use as input to guestos-recovery-upgrader.
 pub const RECOVERY_GUESTOS_IMG_VERSION: &str = "RECOVERY_VERSION";
 
+const GUEST_LAUNCH_MEASUREMENTS_PATH: &str = "guest_launch_measurements.json";
+
 pub struct SetupConfig {
     pub impersonate_upstreams: bool,
+    pub use_mainnet_state: bool,
     pub subnet_size: usize,
     pub dkg_interval: u64,
+    pub nested_nodes_vm_resource_overrides: VmResourceOverrides,
 }
 
 #[derive(Debug)]
 pub struct TestConfig {
+    pub use_mainnet_state: bool,
     pub local_recovery: bool,
     pub break_dfinity_owned_node: bool,
-    pub add_and_bless_upgrade_version: bool,
+    pub num_broken_nodes: usize,
+    pub add_upgrade_version: bool,
     pub fix_dfinity_owned_node_like_np: bool,
     pub sequential_np_actions: bool,
 }
@@ -84,30 +101,62 @@ fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
     (1..=num_hosts).map(|i| format!("host-{i}")).collect()
 }
 
-pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
+async fn replace_nns_with_nested_vms(env: &TestEnv, use_mainnet_state: bool) {
     let logger = env.logger();
 
-    info!(logger, "Adding all unassigned nodes to the NNS subnet...");
+    info!(logger, "Adding all nested VMs to the NNS subnet...");
     let topology = env.topology_snapshot();
     let nns_subnet = topology.root_subnet();
     let original_node = nns_subnet.nodes().next().unwrap();
 
-    let new_node_ids: Vec<_> = topology.unassigned_nodes().map(|n| n.node_id).collect();
-    block_on(change_subnet_membership(
-        original_node.get_public_url(),
-        nns_subnet.subnet_id,
-        &new_node_ids,
-        &[original_node.node_id],
-    ))
+    let nested_vm_ips: Vec<IpAddr> = env
+        .get_all_nested_vms()
+        .unwrap()
+        .iter()
+        .map(|vm| vm.get_nested_network().unwrap().guest_ip.into())
+        .collect();
+    let new_node_ids = topology
+        .unassigned_nodes()
+        .filter(|n| nested_vm_ips.contains(&n.get_ip_addr()))
+        .map(|n| n.node_id)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        new_node_ids.len(),
+        nested_vm_ips.len(),
+        "Not all nested VMs have registered as IC nodes"
+    );
+    assert!(
+        !new_node_ids.is_empty(),
+        "No nested VMs found to add to the NNS subnet"
+    );
+
+    if use_mainnet_state {
+        ProposalWithMainnetState::change_subnet_membership(
+            original_node.get_public_url(),
+            nns_subnet.subnet_id,
+            &new_node_ids,
+            &[original_node.node_id],
+        )
+        .await
+    } else {
+        change_subnet_membership(
+            original_node.get_public_url(),
+            nns_subnet.subnet_id,
+            &new_node_ids,
+            &[original_node.node_id],
+        )
+        .await
+    }
     .expect("Failed to change subnet membership");
 
     info!(
         logger,
         "Waiting for new nodes to take over the NNS subnet..."
     );
-    let new_topology =
-        block_on(topology.block_for_newer_registry_version_within_duration(secs(60), secs(2)))
-            .unwrap();
+    let new_topology = topology
+        .block_for_newer_registry_version_within_duration(secs(60), secs(2))
+        .await
+        .unwrap();
 
     let nns_subnet = new_topology.root_subnet();
     let num_nns_nodes = nns_subnet.nodes().count();
@@ -119,27 +168,35 @@ pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
         num_nns_nodes
     );
 
-    // Readiness wait: ensure the NNS subnet is healthy and making progress
-    for node in nns_subnet.nodes() {
-        node.await_status_is_healthy().unwrap();
-    }
-    await_subnet_earliest_topology_version_with_retries(
+    // Readiness wait: ensure the NNS subnet is driven by the new nodes
+    let state_sync_timeout = if use_mainnet_state {
+        // Large subnet with large state takes longer to sync
+        secs(60 * 60)
+    } else {
+        secs(15 * 60)
+    };
+    await_subnet_earliest_topology_version_with_retries_async(
         &nns_subnet,
         new_topology.get_registry_version(),
         &logger,
-        secs(15 * 60),
+        state_sync_timeout,
         secs(15),
-    );
+    )
+    .await;
+    for node in nns_subnet.nodes() {
+        node.await_status_is_healthy_async().await.unwrap();
+    }
     info!(logger, "Success: New nodes have taken over the NNS subnet");
 }
 
 // Mirror production setup by granting backup access to all NNS nodes to a specific SSH key.
 // This is necessary as part of the `DownloadCertifications` step of the recovery to determine
 // the latest certified height of the subnet.
-pub fn grant_backup_access_to_all_nns_nodes(
+async fn grant_backup_access_to_all_nns_nodes(
     env: &TestEnv,
     backup_auth: &AuthMean,
     ssh_backup_pub_key: &str,
+    use_mainnet_state: bool,
 ) {
     let logger = env.logger();
     let topology = env.topology_snapshot();
@@ -147,12 +204,16 @@ pub fn grant_backup_access_to_all_nns_nodes(
     let nns_node = nns_subnet.nodes().next().unwrap();
 
     info!(logger, "Update the registry with the backup key");
-    let payload = get_updatesubnetpayload_with_keys(
+    let payload = get_update_subnet_payload_with_keys(
         nns_subnet.subnet_id,
         None,
         Some(vec![ssh_backup_pub_key.to_string()]),
     );
-    block_on(update_subnet_record(nns_node.get_public_url(), payload));
+    if use_mainnet_state {
+        ProposalWithMainnetState::update_subnet_record(nns_node.get_public_url(), payload).await;
+    } else {
+        update_subnet_record(nns_node.get_public_url(), payload).await;
+    }
 
     for node in nns_subnet.nodes() {
         info!(
@@ -177,37 +238,75 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
         impersonate_upstreams::setup_upstreams_uvm(&env);
     }
 
-    setup_ic_infrastructure(&env, Some(cfg.dkg_interval), /*is_fast=*/ false);
+    if cfg.use_mainnet_state {
+        setup_with_mainnet_state(env.clone(), Some(cfg.dkg_interval));
+    } else {
+        setup_ic_infrastructure(&env, Some(cfg.dkg_interval), /*is_fast=*/ false);
+    }
 
-    let host_vm_names = get_host_vm_names(cfg.subnet_size);
-    NestedNodes::new_with_resources(&host_vm_names, NNS_RECOVERY_VM_RESOURCES)
-        .setup_and_start(&env)
-        .unwrap();
+    if cfg.subnet_size > 0 {
+        let host_vm_names = get_host_vm_names(cfg.subnet_size);
+        let vm_resource_overrides = if cfg.use_mainnet_state {
+            cfg.nested_nodes_vm_resource_overrides
+                .layer(&MAINNET_NODE_VM_RESOURCE_OVERRIDES)
+                .layer(&NNS_RECOVERY_VM_RESOURCE_OVERRIDES)
+        } else {
+            cfg.nested_nodes_vm_resource_overrides
+                .layer(&NNS_RECOVERY_VM_RESOURCE_OVERRIDES)
+        };
+        let required_host_features = if cfg.use_mainnet_state {
+            mainnet_node_required_host_features()
+        } else {
+            Default::default()
+        };
+        NestedNodes::new(&host_vm_names)
+            .with_resource_overrides(vm_resource_overrides)
+            .with_required_host_features(required_host_features)
+            .setup_and_start(&env)
+            .unwrap();
+
+        let registration_timeout = if cfg.use_mainnet_state {
+            // Using mainnet state requires nodes to first sync their local store, which takes time
+            NODE_REGISTRATION_TIMEOUT.saturating_add(secs(10 * 60))
+        } else {
+            NODE_REGISTRATION_TIMEOUT
+        };
+        nested::registration_with_timeout(env.clone(), registration_timeout);
+        block_on(replace_nns_with_nested_vms(&env, cfg.use_mainnet_state));
+    }
+
+    let SshKeys {
+        ssh_priv_key_path: _,
+        auth: backup_auth,
+        ssh_pub_key: ssh_backup_pub_key,
+    } = get_ssh_keys_for_user(&env, BACKUP_USERNAME);
+    block_on(grant_backup_access_to_all_nns_nodes(
+        &env,
+        &backup_auth,
+        &ssh_backup_pub_key,
+        cfg.use_mainnet_state,
+    ));
 }
 
 pub fn test(env: TestEnv, cfg: TestConfig) {
+    if cfg.use_mainnet_state {
+        ProposalWithMainnetState::read_dictator_neuron_identity_from_env(&env);
+    }
+
     let logger = env.logger();
 
     let recovery_img_path = get_dependency_path_from_env("RECOVERY_GUESTOS_IMG_PATH");
-    let recovery_img =
-        std::fs::read(&recovery_img_path).expect("Failed to read recovery GuestOS image");
-    let recovery_img_hash = Sha256::digest(&recovery_img)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect::<String>();
 
-    let AdminAndUserKeys {
-        ssh_admin_priv_key_path,
-        admin_auth,
-        ssh_user_priv_key_path: ssh_backup_priv_key_path,
-        user_auth: backup_auth,
-        ssh_user_pub_key: ssh_backup_pub_key,
-        ..
-    } = get_admin_keys_and_generate_backup_keys(&env);
-
-    nested::registration(env.clone());
-    replace_nns_with_unassigned_nodes(&env);
-    grant_backup_access_to_all_nns_nodes(&env, &backup_auth, &ssh_backup_pub_key);
+    let SshKeys {
+        ssh_priv_key_path: ssh_admin_priv_key_path,
+        auth: admin_auth,
+        ssh_pub_key: _,
+    } = get_ssh_keys_for_user(&env, SSH_USERNAME);
+    let SshKeys {
+        ssh_priv_key_path: ssh_backup_priv_key_path,
+        auth: _,
+        ssh_pub_key: _,
+    } = get_ssh_keys_for_user(&env, BACKUP_USERNAME);
 
     let current_version = get_guestos_img_version();
     info!(logger, "Current GuestOS version: {:?}", current_version);
@@ -218,61 +317,126 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let nns_node = nns_subnet.nodes().next().unwrap();
 
     info!(logger, "Ensure NNS subnet is functional");
-    let init_msg = "subnet recovery works!";
-    let app_can_id = store_message(
-        &nns_node.get_public_url(),
-        nns_node.effective_canister_id(),
-        init_msg,
-        &logger,
-    );
-    let msg = "subnet recovery works again!";
-    assert_subnet_is_healthy(
-        &nns_subnet.nodes().collect::<Vec<_>>(),
-        &current_version,
-        app_can_id,
-        init_msg,
-        msg,
-        &logger,
-    );
+    let init_msg = "subnet recovery initially works!";
+    let app_can_id = if cfg.use_mainnet_state {
+        block_on(async {
+            let nns_url = nns_node.get_public_url();
+            let agent = assert_create_agent(nns_url.as_str()).await;
+
+            let canister_principal = ProposalWithMainnetState::add_nns_canister(
+                nns_url.clone(),
+                AddCanisterRequest {
+                    name: "message_canister".to_string(),
+                    wasm_module: MESSAGE_CANISTER_WASM.to_vec(),
+                    arg: vec![],
+                    memory_allocation: None,
+                    compute_allocation: None,
+                    initial_cycles: 1 << 45,
+                },
+            )
+            .await
+            .into();
+
+            let mcan = MessageCanister::from_canister_id(&agent, canister_principal);
+
+            info!(
+                logger,
+                "Storing a message in canister with id {} at {}", canister_principal, nns_url
+            );
+            mcan.store_msg(init_msg.to_string()).await;
+
+            canister_principal
+        })
+    } else {
+        store_message_with_retries(
+            &nns_node.get_public_url(),
+            nns_node.effective_canister_id(),
+            init_msg,
+            &logger,
+        )
+    };
+
+    let msg = "subnet recovery works!";
+    if cfg.use_mainnet_state {
+        assert_subnet_is_healthy_without_signature_verification(
+            &nns_subnet.nodes().collect::<Vec<_>>(),
+            &current_version,
+            app_can_id,
+            init_msg,
+            msg,
+            &logger,
+        );
+    } else {
+        assert_subnet_is_healthy(
+            &nns_subnet.nodes().collect::<Vec<_>>(),
+            &current_version,
+            app_can_id,
+            init_msg,
+            msg,
+            &logger,
+        );
+    }
 
     // identifies the version of the replica after the recovery
     let upgrade_version = get_guestos_update_img_version();
     let upgrade_image_url = get_guestos_update_img_url();
     let upgrade_image_hash = get_guestos_update_img_sha256();
-    let guest_launch_measurements = get_guestos_launch_measurements();
-    if !cfg.add_and_bless_upgrade_version {
-        // If ic-recovery does not add/bless the new version to the registry, then we must bless it now.
-        block_on(bless_replica_version(
-            &nns_node,
-            &upgrade_version,
-            &logger,
-            upgrade_image_hash.clone(),
-            Some(guest_launch_measurements),
-            vec![upgrade_image_url.to_string()],
-        ));
+    let guest_launch_measurements = get_guestos_update_launch_measurements();
+    std::fs::write(
+        env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH),
+        serde_json::to_string(&guest_launch_measurements).unwrap(),
+    )
+    .expect("Could not write guest launch measurements to file");
+    if !cfg.add_upgrade_version {
+        // If ic-recovery does not add the new version to the registry, then we must elect it now.
+        if cfg.use_mainnet_state {
+            block_on(ProposalWithMainnetState::bless_replica_version(
+                &nns_node,
+                &upgrade_version,
+                &logger,
+                upgrade_image_hash.clone(),
+                Some(guest_launch_measurements),
+                vec![upgrade_image_url.to_string()],
+            ))
+        } else {
+            block_on(bless_replica_version(
+                &nns_node,
+                &upgrade_version,
+                &logger,
+                upgrade_image_hash.clone(),
+                Some(guest_launch_measurements),
+                vec![upgrade_image_url.to_string()],
+            ))
+        }
     }
 
-    let recovery_dir = get_dependency_path("rs/tests");
     let output_dir = env.get_path("recovery_output");
-    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
-    // Choose f+1 faulty nodes to break
+    // Define faulty and healthy nodes
     let nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
     let f = (subnet_size - 1) / 3;
-    let faulty_nodes = &nns_nodes[..(f + 1)];
-    let healthy_nodes = &nns_nodes[(f + 1)..];
-    // TODO(CON-1587): Consider breaking all nodes.
-    let healthy_node = healthy_nodes.first().unwrap();
+    assert!(
+        f < cfg.num_broken_nodes && cfg.num_broken_nodes <= subnet_size,
+        "Number of broken nodes must be between f+1 and the subnet size, but got {} broken nodes with f={}",
+        cfg.num_broken_nodes,
+        f
+    );
+    let faulty_nodes = &nns_nodes[..cfg.num_broken_nodes];
+    let healthy_nodes = &nns_nodes[cfg.num_broken_nodes..];
+    let maybe_healthy_node = healthy_nodes.first();
     info!(
         logger,
         "Selected faulty nodes: {:?}. Selected healthy nodes: {:?}",
         faulty_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
         healthy_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
     );
+    assert!(
+        cfg.break_dfinity_owned_node || cfg.num_broken_nodes < subnet_size,
+        "Cannot break all nodes if the DFINITY-owned node is not broken"
+    );
     let dfinity_owned_node = if cfg.break_dfinity_owned_node {
         faulty_nodes.last().unwrap()
     } else {
-        // TODO(CON-1587): Consider breaking all nodes.
         healthy_nodes.first().unwrap()
     };
     info!(
@@ -282,18 +446,48 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         dfinity_owned_node.get_ip_addr()
     );
 
-    break_nodes(faulty_nodes, &logger);
-    assert_subnet_is_broken(
-        &healthy_node.get_public_url(),
-        app_can_id,
-        msg,
-        true,
-        &logger,
-    );
+    // We could break all faulty nodes now. But if all nodes are broken, then the later call to
+    // fetch nodes' metrics to determine which node to download the consensus pool from will fail,
+    // since no nodes will answer.
+    // To avoid that, in case all nodes are faulty, we break only `subnet_size - 1` nodes first,
+    // effectively breaking the subnet, then fetch the metrics and determine the download pool, and
+    // finally break the remaining node. Otherwise, we can break all faulty nodes at once.
+    let (nodes_to_break_first, nodes_to_break_after) = if faulty_nodes.len() == subnet_size {
+        faulty_nodes.split_at(subnet_size - 1)
+    } else {
+        (faulty_nodes, &[] as &[_])
+    };
+    break_nodes(nodes_to_break_first, &logger);
 
-    // Download pool from the node with the highest certification share height
-    let (download_pool_node, highest_cert_share) =
-        node_with_highest_certification_share_height(&nns_subnet, &logger);
+    if let Some(healthy_node) = maybe_healthy_node {
+        assert_subnet_is_broken(
+            &healthy_node.get_public_url(),
+            app_can_id,
+            msg,
+            // When using mainnet state, queries (reading) will also fail because the root key has
+            // changed. Thus, we do not check that the subnet works for reading in that case.
+            /*can_read=*/
+            !cfg.use_mainnet_state,
+            &logger,
+        );
+    } else {
+        // Special case if all nodes are broken: the subnet is broken even in read mode, see the
+        // `false` parameter below.
+        assert_subnet_is_broken(
+            &dfinity_owned_node.get_public_url(), // This URL is not expected to be responsive
+            app_can_id,
+            msg,
+            /*can_read=*/ false,
+            &logger,
+        );
+    }
+
+    // Download pool from the node with the highest certification share and CUP heights
+    let NodeHeights {
+        node: download_pool_node,
+        cup: highest_cup,
+        cert_share: highest_cert_share,
+    } = node_with_highest_cup_and_cert_share_heights(&nns_subnet, &logger);
     info!(
         logger,
         "Selected node {} ({:?}) as download pool with certification share height {}",
@@ -301,6 +495,8 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         download_pool_node.get_ip_addr(),
         highest_cert_share,
     );
+
+    break_nodes(nodes_to_break_after, &logger);
 
     // Mirror production setup by removing admin SSH access from all nodes except the DFINITY-owned node
     info!(
@@ -329,14 +525,59 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         &admin_auth,
     );
 
+    let recovery_dir = tempdir().unwrap().path().to_path_buf();
+    let mut skipped_steps = vec![StepType::Cleanup]; // Skip Cleanup to keep the output directory
+    if faulty_nodes.len() == subnet_size {
+        // If all nodes are broken, the registry canister will not be able to respond to
+        // `get_certified_changes_since` calls to initialize the local store of `ic-recovery`.
+        // Thus, we need to manually download the local store of one of the nodes to pre-populate
+        // the local store of `ic-recovery`.
+        let local_store_path_src = PathBuf::from(IC_DATA_PATH)
+            .join(IC_REGISTRY_LOCAL_STORE)
+            .join("");
+        let local_store_path_dest = recovery_dir
+            .join(RECOVERY_DIRECTORY_NAME)
+            .join("working_dir")
+            .join("data")
+            .join(IC_REGISTRY_LOCAL_STORE);
+
+        std::fs::create_dir_all(&local_store_path_dest).unwrap();
+        let ssh_helper = RecoverySshHelper::new(
+            logger.clone(),
+            RecoverySshUser::Backup,
+            dfinity_owned_node.get_ip_addr(),
+            false,
+            Some(ssh_backup_priv_key_path.clone()),
+        );
+
+        info!(
+            logger,
+            "All nodes are broken, manually initialize the local store of ic-recovery by downloading it from node {}",
+            dfinity_owned_node.node_id,
+        );
+        ssh_helper
+            .rsync(
+                ssh_helper.remote_path(&local_store_path_src),
+                &local_store_path_dest,
+            )
+            .expect("Failed to initialize the local store of ic-recovery");
+
+        // Skip validating the output if all nodes are broken, as in this case no replica will be
+        // running to compare the heights to.
+        skipped_steps.push(StepType::ValidateReplayOutput);
+    }
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
-        nns_url: healthy_node.get_public_url(),
-        replica_version: Some(current_version),
+        // If `maybe_healthy_node` is `None`, it means all nodes are broken, and the local store was
+        // initialized above. In that case `ic-recovery` will not use `nns_url` and we can pass the
+        // URL of whatever node.
+        nns_url: maybe_healthy_node
+            .unwrap_or(dfinity_owned_node)
+            .get_public_url(),
+        replica_version: None,
         admin_key_file: Some(ssh_admin_priv_key_path),
         test_mode: true,
         skip_prompts: true,
-        use_local_binaries: false,
     };
 
     // Unlike during a production recovery using the CLI, here we already know all parameters ahead
@@ -346,17 +587,22 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         upgrade_version: Some(upgrade_version.clone()),
         upgrade_image_url: Some(upgrade_image_url),
         upgrade_image_hash: Some(upgrade_image_hash),
-        add_and_bless_upgrade_version: Some(cfg.add_and_bless_upgrade_version),
+        upgrade_image_launch_measurements_path: Some(env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH)),
+        add_and_bless_upgrade_version: Some(cfg.add_upgrade_version),
         replay_until_height: Some(highest_cert_share),
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         admin_access_location: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
         keep_downloaded_state: Some(false),
+        // If the state height to download was computed to be 0 (i.e. the subnet stalled in its
+        // first DKG interval), there is no checkpoint yet and we should actually not provide a
+        // height to the recovery tool
+        download_state_height: (highest_cup != 0).then_some(highest_cup),
         wait_for_cup_node: (!cfg.fix_dfinity_owned_node_like_np)
             .then_some(dfinity_owned_node.get_ip_addr()),
         backup_key_file: Some(ssh_backup_priv_key_path),
         output_dir: Some(output_dir.clone()),
         next_step: None,
-        skip: Some(vec![StepType::Cleanup]), // Skip Cleanup to keep the output directory
+        skip: Some(skipped_steps),
     };
 
     info!(
@@ -385,8 +631,13 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             .unwrap()
             .trim()
             .to_string();
-    impersonate_upstreams::uvm_serve_recovery_artifacts(&env, &artifacts_path, &artifacts_hash)
-        .expect("Failed to serve recovery artifacts from UVM");
+    let recovery_hash_prefix = &artifacts_hash[..6.min(artifacts_hash.len())];
+    impersonate_upstreams::uvm_serve_recovery_artifacts(
+        &env,
+        &artifacts_path,
+        recovery_hash_prefix,
+    )
+    .expect("Failed to serve recovery artifacts from UVM");
 
     info!(logger, "Setup UVM to serve recovery-dev GuestOS image");
     impersonate_upstreams::uvm_serve_recovery_image(
@@ -431,8 +682,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             let logger = logger.clone();
             let env = env.clone();
             let vm = vm.clone();
-            let recovery_img_hash = recovery_img_hash.clone();
-            let artifacts_hash = artifacts_hash.clone();
+            let recovery_hash_prefix = recovery_hash_prefix.to_string();
             let upgrade_version = upgrade_version.clone();
 
             handles.spawn(async move {
@@ -441,15 +691,18 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                     &env,
                     &vm,
                     RECOVERY_GUESTOS_IMG_VERSION,
-                    &recovery_img_hash,
-                    &artifacts_hash,
+                    &recovery_hash_prefix,
                     &upgrade_version,
                 )
                 .await
             });
 
             if cfg.sequential_np_actions {
-                handles.join_next().await;
+                handles
+                    .join_next()
+                    .await
+                    .unwrap()
+                    .expect("Node provider action failed");
             }
         }
 
@@ -458,14 +711,25 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
 
     info!(logger, "Ensure the subnet is healthy after the recovery");
     let new_msg = "subnet recovery still works!";
-    assert_subnet_is_healthy(
-        &nns_subnet.nodes().collect::<Vec<_>>(),
-        &upgrade_version,
-        app_can_id,
-        msg,
-        new_msg,
-        &logger,
-    );
+    if cfg.use_mainnet_state {
+        assert_subnet_is_healthy_without_signature_verification(
+            &nns_subnet.nodes().collect::<Vec<_>>(),
+            &upgrade_version,
+            app_can_id,
+            msg,
+            new_msg,
+            &logger,
+        );
+    } else {
+        assert_subnet_is_healthy(
+            &nns_subnet.nodes().collect::<Vec<_>>(),
+            &upgrade_version,
+            app_can_id,
+            msg,
+            new_msg,
+            &logger,
+        );
+    }
 }
 
 async fn simulate_node_provider_action(
@@ -473,52 +737,10 @@ async fn simulate_node_provider_action(
     env: &TestEnv,
     host: &NestedVm,
     img_version: &str,
-    img_version_hash: &str,
-    artifacts_hash: &str,
+    recovery_hash_prefix: &str,
     upgrade_version: &ReplicaVersion,
 ) {
-    let host_boot_id_pre_reboot = get_host_boot_id_async(host).await;
-
-    // Trigger HostOS reboot and run guestos-recovery-upgrader
-    info!(
-        logger,
-        "Remounting /boot as read-write, updating boot_args file and rebooting host {}",
-        host.vm_name(),
-    );
-    let boot_args_command = format!(
-        "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} version-hash={} recovery-hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot && sudo reboot",
-        &img_version, &img_version_hash, &artifacts_hash
-    );
-    host.block_on_bash_script_async(&boot_args_command)
-        .await
-        .expect("Failed to update boot_args file and reboot host");
-
-    // Wait for HostOS to reboot by checking that its boot ID changes
-    retry_with_msg_async!(
-        format!(
-            "Waiting until the host's boot ID changes from its pre reboot value of '{}'",
-            host_boot_id_pre_reboot
-        ),
-        &logger,
-        secs(5 * 60),
-        secs(5),
-        || async {
-            let host_boot_id = get_host_boot_id_async(host).await;
-            if host_boot_id != host_boot_id_pre_reboot {
-                info!(
-                    logger,
-                    "Host boot ID changed from '{}' to '{}'", host_boot_id_pre_reboot, host_boot_id
-                );
-                Ok(())
-            } else {
-                bail!("Host boot ID is still '{}'", host_boot_id_pre_reboot)
-            }
-        }
-    )
-    .await
-    .unwrap();
-
-    // Once HostOS is back up, spoof its DNS such that it downloads the GuestOS image from the UVM
+    // Spoof the HostOS DNS such that it downloads the GuestOS image from the UVM
     let server_ipv6 = impersonate_upstreams::get_upstreams_uvm_ipv6(env);
     info!(
         logger,
@@ -530,7 +752,33 @@ async fn simulate_node_provider_action(
         .await
         .expect("Failed to spoof HostOS DNS");
 
-    // Once GuestOS is launched, we still need to spoof its DNS for the same reason as HostOS
+    // Run guestos-recovery-upgrader via limited-console's rbash-console
+    // This tests the backup recovery path that node providers can use if the recovery TUI fails.
+    //
+    // Flow: SSH as admin → su to limited-console user → rbash-console → sudo recovery-launcher
+    info!(
+        logger,
+        "Running guestos-recovery-upgrader via rbash-console on HostOS {} with version={}, recovery-hash-prefix={}",
+        host.vm_name(),
+        img_version,
+        recovery_hash_prefix,
+    );
+
+    let recovery_upgrader_cmd =
+        build_recovery_upgrader_run_command(img_version, recovery_hash_prefix).to_shell_string();
+
+    // Note: keep in sync with the limited-console invocation in cpp/infogetty-cpp/infogetty.cc.
+    // We need TWO "exit" commands: one to exit rbash, and one to exit limited-console's main loop.
+    let script = format!(
+        r#"echo -e "rbash-console\n{}\nexit\nexit" | sudo env -i TERM=linux su -s /opt/ic/bin/limited-console limited-console 2>&1"#,
+        recovery_upgrader_cmd
+    );
+
+    host.block_on_bash_script_async(&script)
+        .await
+        .expect("Failed to run guestos-recovery-upgrader via rbash-console");
+
+    // Spoof the GuestOS DNS such that it downloads the recovery artifacts from the UVM
     let guest = host.get_guest_ssh().unwrap();
     info!(
         logger,
@@ -545,7 +793,7 @@ async fn simulate_node_provider_action(
     // Wait until the node has booted the expected GuestOS version
     retry_with_msg_async!(
         format!(
-            "Waiting until GuestOS {} reboots on the upgrade version {}",
+            "Waiting until GuestOS {} boots on the upgrade version {}",
             host.vm_name(),
             upgrade_version
         ),
@@ -593,8 +841,12 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, 
 
     // The command is expected to reboot the node as part of the recovery, so if it returns
     // successfully, it means something went wrong.
+    // Set a 15-minute SSH timeout to detect when the node reboots and the TCP connection
+    // hangs (e.g. abrupt reboot without clean TCP FIN). Without this, the SSH channel
+    // can hang indefinitely waiting for data from the rebooted node.
+    session.set_timeout(15 * 60 * 1000);
     info!(logger, "Executing local recovery command: \n{command}");
-    node.block_on_bash_script_from_session(&session, &command)
+    node.block_on_bash_script_from_session(&session, &format!("{command} > /dev/null 2>&1"))
         .expect_err("Local recovery command completed without rebooting");
 
     info!(logger, "Node rebooted as part of the recovery");
@@ -602,7 +854,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, 
     // Resume the recovery by re-executing the command starting from WaitForCUP. The command should
     // succeed this time.
     let session = node.block_on_ssh_session().unwrap(); // New session after reboot
-    let command = command + r#"--resume WaitForCUP \"#;
+    let command = command + r#"--resume WaitForCUP"#;
     info!(logger, "Resuming local recovery command: \n{command}");
     node.block_on_bash_script_from_session(&session, &command)
         .expect("Local recovery failed to complete");
@@ -629,5 +881,103 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, 
                 .join(CreateNNSRecoveryTarStep::get_sha_name()),
             &local_output_dir.join(CreateNNSRecoveryTarStep::get_sha_name()),
         );
+    }
+}
+
+/// Code duplicate of rs/tests/consensus/utils/src/subnet.rs:assert_subnet_is_healthy
+/// The difference is that we create an agent that does not verify query signatures.
+/// To verify query response signatures from the root subnet, the agent requires the root subnet_id.
+/// This is needed to retrieve the public keys of nodes within the root subnet.
+/// Typically, the agent derives the root subnet_id from the root key. However, when using mainnet
+/// state, the root key is different from the original one, but the subnet_id is reused.
+/// So we create a new agent that does not verify the query response signatures for the time being.
+/// A long-term solution involves modifying the agent to fetch the root subnet_id from the HTTP
+/// status endpoint.
+fn assert_subnet_is_healthy_without_signature_verification(
+    subnet: &[IcNodeSnapshot],
+    target_version: &ReplicaVersion,
+    can_id: Principal,
+    old_msg: &str,
+    new_msg: &str,
+    logger: &Logger,
+) {
+    info!(
+        logger,
+        "Confirm that ALL nodes are healthy and running on version {target_version}"
+    );
+    for node in subnet {
+        assert_assigned_replica_version(node, target_version, logger.clone());
+        info!(
+            logger,
+            "Healthy upgrade of assigned node {} to {}", node.node_id, target_version
+        );
+    }
+
+    let node = &subnet[0];
+    node.await_status_is_healthy().unwrap();
+    // make sure that state sync is completed
+    cert_state_makes_progress_with_retries(
+        &node.get_public_url(),
+        node.effective_canister_id(),
+        logger,
+        secs(600),
+        secs(10),
+    );
+
+    let agent_bypass_signature = Agent::builder()
+        .with_url(node.get_public_url())
+        .with_verify_query_signatures(false)
+        .build()
+        .expect("Failed to create agent");
+    block_on(agent_bypass_signature.fetch_root_key()).unwrap();
+
+    let mcan = MessageCanister::from_canister_id(&agent_bypass_signature, can_id);
+
+    info!(logger, "Ensure the old message is still readable");
+    assert_eq!(
+        block_on(mcan.read_msg()).expect("Received an empty message"),
+        old_msg,
+    );
+
+    info!(logger, "Ensure that the subnet is accepting updates");
+    block_on(mcan.store_msg(new_msg));
+
+    // Wait until all nodes answer with the new message
+    for node in subnet {
+        let agent_bypass_signature = Agent::builder()
+            .with_url(node.get_public_url())
+            .with_verify_query_signatures(false)
+            .build()
+            .expect("Failed to create agent");
+        let mcan = MessageCanister::from_canister_id(&agent_bypass_signature, can_id);
+
+        block_on(retry_with_msg_async!(
+            format!(
+                "Waiting for node {} to have the new message readable",
+                node.node_id
+            ),
+            &logger,
+            secs(30),
+            secs(5),
+            || async {
+                match mcan.try_read_msg().await {
+                    Ok(Some(msg)) if msg == new_msg => Ok(()),
+                    Ok(Some(msg)) => {
+                        bail!(
+                            "Received unexpected message: '{}', expected: '{}'",
+                            msg,
+                            new_msg
+                        )
+                    }
+                    Ok(None) => {
+                        bail!("Received an empty message")
+                    }
+                    Err(err) => {
+                        bail!("Failed reading a message. Error: {}", err)
+                    }
+                }
+            }
+        ))
+        .expect("Failed to read the new message from the node");
     }
 }

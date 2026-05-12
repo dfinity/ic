@@ -6,8 +6,6 @@ use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes};
 use serde::{Deserialize, Serialize};
 
-// These are the base error types used by ni_dkg
-// TODO(CRP-574): Move these up, out of dkg.
 pub use super::dkg_errors::{
     InternalError, InvalidArgumentError, KeyNotFoundError, MalformedDataError, MalformedPopError,
     MalformedPublicKeyError, MalformedSecretKeyError, SizeError,
@@ -113,7 +111,7 @@ pub enum DecryptError {
 }
 
 /// Creation of a DKG dealing failed.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CspDkgCreateDealingError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -234,48 +232,6 @@ impl From<CspDkgCreateDealingError> for CspDkgCreateReshareDealingError {
             }
             CspDkgCreateDealingError::TransientInternalError(error) => {
                 CspDkgCreateReshareDealingError::TransientInternalError(error)
-            }
-        }
-    }
-}
-
-impl From<CspDkgCreateReshareDealingError> for CspDkgCreateDealingError {
-    fn from(error: CspDkgCreateReshareDealingError) -> Self {
-        match error {
-            CspDkgCreateReshareDealingError::UnsupportedAlgorithmId(error) => {
-                CspDkgCreateDealingError::UnsupportedAlgorithmId(error)
-            }
-            CspDkgCreateReshareDealingError::InvalidThresholdError(error) => {
-                CspDkgCreateDealingError::InvalidThresholdError(error)
-            }
-            CspDkgCreateReshareDealingError::ReshareKeyNotInSecretKeyStoreError(_) => {
-                panic!("This error cannot be converted")
-            }
-            CspDkgCreateReshareDealingError::MalformedReshareSecretKeyError(_) => {
-                panic!("This error cannot be converted")
-            }
-            CspDkgCreateReshareDealingError::MisnumberedReceiverError {
-                receiver_index,
-                number_of_receivers,
-            } => CspDkgCreateDealingError::MisnumberedReceiverError {
-                receiver_index,
-                number_of_receivers,
-            },
-            CspDkgCreateReshareDealingError::MalformedFsPublicKeyError {
-                receiver_index,
-                error,
-            } => CspDkgCreateDealingError::MalformedFsPublicKeyError {
-                receiver_index,
-                error,
-            },
-            CspDkgCreateReshareDealingError::SizeError(error) => {
-                CspDkgCreateDealingError::SizeError(error)
-            }
-            CspDkgCreateReshareDealingError::TransientInternalError(error) => {
-                CspDkgCreateDealingError::TransientInternalError(error)
-            }
-            CspDkgCreateReshareDealingError::ReshareKeyIdComputationError(_) => {
-                panic!("This error cannot be converted")
             }
         }
     }

@@ -93,7 +93,7 @@ impl DerivationPath {
 
         // If iL >= order, try again with the "next" index
         if key_offset.serialize() != hmac_output[..32] {
-            let mut next_input = [0u8; 33];
+            let mut next_input = [0_u8; 33];
             next_input[0] = 0x01;
             next_input[1..].copy_from_slice(&new_chain_key);
             Self::bip32_ckd(&next_input, curve_type, chain_key, index)
@@ -175,7 +175,7 @@ impl DerivationPath {
         &self,
         master_public_key: &EccPoint,
     ) -> CanisterThresholdResult<(EccScalar, Vec<u8>)> {
-        let zeros = [0u8; 32];
+        let zeros = [0_u8; 32];
         self.derive_tweak_with_chain_code(master_public_key, &zeros)
     }
 

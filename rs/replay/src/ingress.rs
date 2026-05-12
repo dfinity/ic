@@ -12,21 +12,23 @@ use ic_nervous_system_common::ledger;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_governance_api::{
-    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Topic,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Topic, Visibility,
     manage_neuron::{
-        ClaimOrRefresh, Configure, Follow, IncreaseDissolveDelay, NeuronIdOrSubaccount,
+        self, ClaimOrRefresh, Configure, IncreaseDissolveDelay, NeuronIdOrSubaccount, SetFollowing,
         claim_or_refresh::{By, MemoAndController},
-        configure::Operation,
+        configure::{self, Operation},
+        set_following::FolloweesForTopic,
     },
     manage_neuron_response,
 };
 use ic_protobuf::registry::{
     replica_version::v1::ReplicaVersionRecord,
-    subnet::v1::{SubnetRecord, SubnetType},
+    subnet::v1::{SubnetListRecord, SubnetRecord, SubnetType},
 };
 use ic_registry_client_helpers::subnet::get_node_ids_from_subnet_record;
 use ic_registry_keys::{
-    make_blessed_replica_versions_key, make_replica_version_key, make_subnet_record_key,
+    make_blessed_replica_versions_key, make_replica_version_key, make_subnet_list_record_key,
+    make_subnet_record_key,
 };
 use ic_registry_transport::{
     pb::v1::{Precondition, RegistryMutation, registry_mutation},
@@ -39,7 +41,13 @@ use ic_types::{
 use icp_ledger::{AccountIdentifier, Memo, SendArgs, Tokens};
 use prost::Message;
 use std::{convert::TryFrom, str::FromStr, time::Duration};
+use strum::IntoEnumIterator;
 use time::OffsetDateTime;
+
+// This is the buffer time added to the expiry time of added ingress messages to make sure those
+// messages do not expire too early, in particular in case the original expiry time was chosen to be
+// the current time.
+const INGRESS_EXPIRY_BUFFER_SECS: u64 = 180;
 
 pub struct IngressWithPrinter {
     pub ingress: SignedIngress,
@@ -89,8 +97,12 @@ fn make_signed_ingress(
         .update(&Principal::from(canister_id), method)
         .with_arg(payload)
         .expire_at(
-            OffsetDateTime::from_unix_timestamp_nanos(expiry.as_nanos_since_unix_epoch().into())
-                .map_err(|err| format!("Error preparing update message: {err:?}"))?,
+            OffsetDateTime::from_unix_timestamp_nanos(
+                (expiry + Duration::from_secs(INGRESS_EXPIRY_BUFFER_SECS))
+                    .as_nanos_since_unix_epoch()
+                    .into(),
+            )
+            .map_err(|err| format!("Error preparing update message: {err:?}"))?,
         )
         .sign()
         .map_err(|err| format!("Error preparing update message: {err:?}"))?;
@@ -109,7 +121,10 @@ pub(crate) fn agent_with_principal_as_sender(principal: &PrincipalId) -> Result<
         .map_err(|err| err.to_string())
 }
 
-pub fn cmd_add_neuron(time: Time, cmd: &WithNeuronCmd) -> Result<Vec<IngressWithPrinter>, String> {
+pub(crate) fn cmd_add_neuron(
+    time: Time,
+    cmd: &WithNeuronCmd,
+) -> Result<Vec<IngressWithPrinter>, String> {
     let mut msgs = vec![];
 
     let controller = cmd.neuron_controller;
@@ -182,49 +197,61 @@ pub fn cmd_add_neuron(time: Time, cmd: &WithNeuronCmd) -> Result<Vec<IngressWith
     Ok(msgs)
 }
 
-pub fn cmd_make_trusted_neurons_follow_neuron(
+pub(crate) fn cmd_make_trusted_neurons_follow_neuron(
     time: Time,
     cmd: &WithTrustedNeuronsFollowingNeuronCmd,
 ) -> Result<Vec<SignedIngress>, String> {
     let mut msgs = Vec::new();
 
-    let trusted_neurons: &[(&str, u64)] = &[
-        (
-            "pkjng-fnb6a-zzirr-kykal-ghbjs-ndmj2-tfoma-bzski-wtbsl-2fgbu-hae",
-            16,
-        ),
-        (
-            "ilqei-ofqjz-v7jbw-usmzf-jtdss-6mvzv-puesh-3kfga-nhr3v-zmgig-eqe",
-            15,
-        ),
-        (
-            "2q5kv-5vcol-eh2je-udy6s-j74gx-djqza-siucy-2jxyq-u5kw6-imugq-uae",
-            18,
-        ),
-        (
-            "wyzjx-3pde2-wzr4k-fblse-7hzgm-v2kkx-lcuhl-dftmv-5ywr7-gsszf-6ae",
-            1_947_868_782_075_274_250,
-        ),
-        (
-            "j2xaq-c6ph5-e4oa7-nleph-joz7b-nvv4r-if4ol-ilz7w-mzetf-jof6l-mae",
-            5_091_612_375_828_828_066,
-        ),
-        (
-            "2yjpj-uumzi-wnefi-5tum7-qt6yq-7gtxo-i4jt5-enll5-pma6q-2gild-mqe",
-            12_262_067_573_992_506_876,
-        ),
-    ];
+    // It is enough to be followed only by Neuron 27 to pass all proposals as of December 2025.
+    let trusted_neurons = [(
+        "4vnki-cqaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aae",
+        27,
+    )];
+
+    let user_agent = &agent_with_principal_as_sender(&cmd.neuron_controller)?;
+    let make_public_payload = Encode!(&ManageNeuronRequest {
+        id: None,
+        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+            id: cmd.neuron_id,
+        })),
+        command: Some(ManageNeuronCommandRequest::Configure(Configure {
+            operation: Some(configure::Operation::SetVisibility(
+                manage_neuron::SetVisibility {
+                    visibility: Some(Visibility::Public as i32),
+                }
+            ))
+        })),
+    })
+    .expect("Couldn't encode payload for manage neuron command");
+    msgs.push(
+        make_signed_ingress(
+            user_agent,
+            GOVERNANCE_CANISTER_ID,
+            "manage_neuron",
+            make_public_payload,
+            time,
+        )
+        .expect("Couldn't create message to make the neuron public"),
+    );
 
     for (principal, neuron_id) in trusted_neurons {
         let principal = PrincipalId::from_str(principal).expect("Invalid principal");
-        let follow_payload = Encode!(&ManageNeuronRequest {
+        let set_following_payload = Encode!(&ManageNeuronRequest {
             id: None,
             neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
-                id: *neuron_id,
+                id: neuron_id,
             })),
-            command: Some(ManageNeuronCommandRequest::Follow(Follow {
-                topic: Topic::Unspecified as i32,
-                followees: [NeuronId { id: cmd.neuron_id }].to_vec(),
+            // Make trusted neuron follow the test neuron on all topics
+            command: Some(ManageNeuronCommandRequest::SetFollowing(SetFollowing {
+                topic_following: Some(
+                    Topic::iter()
+                        .map(|topic| FolloweesForTopic {
+                            topic: Some(topic as i32),
+                            followees: Some(vec![NeuronId { id: cmd.neuron_id }]),
+                        })
+                        .collect()
+                ),
             })),
         })
         .expect("Couldn't encode payload for manage neuron command");
@@ -234,7 +261,7 @@ pub fn cmd_make_trusted_neurons_follow_neuron(
                 user_agent,
                 GOVERNANCE_CANISTER_ID,
                 "manage_neuron",
-                follow_payload,
+                set_following_payload,
                 time,
             )
             .expect("Couldn't create message to make trusted neurons follow test neuron"),
@@ -266,7 +293,7 @@ pub fn cmd_make_trusted_neurons_follow_neuron(
     Ok(msgs)
 }
 
-pub fn cmd_add_ledger_account(
+pub(crate) fn cmd_add_ledger_account(
     time: Time,
     cmd: &WithLedgerAccountCmd,
 ) -> Result<Vec<SignedIngress>, String> {
@@ -296,6 +323,21 @@ pub fn cmd_add_ledger_account(
     ])
 }
 
+/// Creates an ingress message that updates the subnet list record in the registry to contain only
+/// the player's subnet id.
+pub(crate) fn cmd_overwrite_subnet_list_with_singleton(
+    agent: &Agent,
+    player: &crate::player::Player,
+    time: Time,
+) -> Result<Vec<SignedIngress>, String> {
+    let subnet_list_record = SubnetListRecord {
+        subnets: vec![player.subnet_id.get().into_vec()],
+    };
+
+    let msg = update_subnet_list_record(agent, subnet_list_record, time)?;
+    Ok(vec![msg])
+}
+
 /// Creates signed ingress messages to potentially add a new blessed replica
 /// version and updates the subnet record with this replica version.
 pub(crate) fn cmd_upgrade_subnet_to_replica_version(
@@ -305,9 +347,7 @@ pub(crate) fn cmd_upgrade_subnet_to_replica_version(
     context_time: Time,
 ) -> Result<Vec<SignedIngress>, String> {
     let replica_version_id = cmd.replica_version_id.clone();
-    let replica_version_record =
-        serde_json::from_str::<ReplicaVersionRecord>(&cmd.replica_version_value)
-            .unwrap_or_else(|err| panic!("Error parsing replica version JSON value: {err:?}"));
+    let replica_version_record = cmd.replica_version_record.clone();
 
     let mut msgs = Vec::new();
 
@@ -339,7 +379,7 @@ pub(crate) fn cmd_upgrade_subnet_to_replica_version(
 
 /// Read the registry from the specified local store and send them to the
 /// registry canister with slight modifications.
-pub fn cmd_add_registry_content(
+pub(crate) fn cmd_add_registry_content(
     agent: &Agent,
     cmd: &AddRegistryContentCmd,
     subnet_id: SubnetId,
@@ -399,7 +439,7 @@ pub fn cmd_add_registry_content(
                     REGISTRY_CANISTER_ID,
                     mutations,
                     req.preconditions,
-                    context_time + Duration::from_secs(60),
+                    context_time,
                 ))
             } else {
                 None
@@ -439,7 +479,7 @@ fn show_mutation_type(mutation_type: i32) -> &'static str {
 }
 
 /// Applies 'mutations' to the registry.
-pub fn atomic_mutate(
+fn atomic_mutate(
     agent: &Agent,
     canister_id: CanisterId,
     mutations: Vec<RegistryMutation>,
@@ -476,12 +516,12 @@ pub(crate) fn bless_replica_version(
         REGISTRY_CANISTER_ID,
         vec![mutation],
         vec![],
-        context_time + Duration::from_secs(60),
+        context_time,
     )
 }
 
 /// Add a new replica version by mutating the registry canister.
-pub fn add_replica_version(
+fn add_replica_version(
     agent: &Agent,
     replica_version_id: String,
     record: ReplicaVersionRecord,
@@ -501,12 +541,12 @@ pub fn add_replica_version(
         REGISTRY_CANISTER_ID,
         vec![mutation],
         vec![],
-        context_time + Duration::from_secs(60),
+        context_time,
     )
 }
 
 /// Update subnet record.
-pub fn update_subnet_record(
+fn update_subnet_record(
     agent: &Agent,
     subnet_id: SubnetId,
     record: SubnetRecord,
@@ -526,6 +566,30 @@ pub fn update_subnet_record(
         REGISTRY_CANISTER_ID,
         vec![mutation],
         vec![],
-        context_time + Duration::from_secs(60),
+        context_time,
+    )
+}
+
+/// Update subnet list record.
+fn update_subnet_list_record(
+    agent: &Agent,
+    record: SubnetListRecord,
+    context_time: Time,
+) -> Result<SignedIngress, String> {
+    let mut mutation = RegistryMutation::default();
+    mutation.set_mutation_type(registry_mutation::Type::Update);
+    mutation.key = make_subnet_list_record_key().as_bytes().to_vec();
+
+    let mut buf = Vec::new();
+    match record.encode(&mut buf) {
+        Ok(_) => mutation.value = buf,
+        Err(error) => panic!("Error encoding the value to protobuf: {error:?}"),
+    }
+    atomic_mutate(
+        agent,
+        REGISTRY_CANISTER_ID,
+        vec![mutation],
+        vec![],
+        context_time,
     )
 }

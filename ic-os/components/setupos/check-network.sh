@@ -119,12 +119,12 @@ function print_network_settings() {
     echo "  IPv6 Prefix : ${ipv6_prefix}"
     echo "  IPv6 Gateway: ${ipv6_gateway}"
 
-    if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
+    if [[ -n "${ipv4_address}" && -n "${ipv4_prefix_length}" && -n "${ipv4_gateway}" ]]; then
         echo "  IPv4 Address: ${ipv4_address}"
         echo "  IPv4 Prefix Length: ${ipv4_prefix_length}"
         echo "  IPv4 Gateway: ${ipv4_gateway}"
     fi
-    if [[ -n ${domain_name} ]]; then
+    if [[ -n "${domain_name}" ]]; then
         echo "  Domain name: ${domain_name}"
     fi
     echo " "
@@ -179,8 +179,9 @@ function setup_ipv4_network() {
 
 function ping_ipv4_gateway() {
     echo "* Pinging IPv4 gateway..."
-    # wait 20 seconds maximum for any network changes to settle.
-    ping4 -c 2 -w 20 ${ipv4_gateway} >/dev/null 2>&1
+
+    # Wait for up 1m for the gateway to become reachable, exit as soon as we get a reply
+    ping4 -w 60 ${ipv4_gateway} | grep -qm1 'bytes from'
     log_and_halt_installation_on_error "${?}" "Unable to ping IPv4 gateway."
 
     echo "  success"
@@ -189,7 +190,8 @@ function ping_ipv4_gateway() {
 function ping_ipv6_gateway() {
     echo "* Pinging IPv6 gateway..."
 
-    ping6 -c 4 ${ipv6_gateway_system} >/dev/null 2>&1
+    # Wait for up 1m for the gateway to become reachable, exit as soon as we get a reply
+    ping6 -w 60 ${ipv6_gateway_system} | grep -qm1 'bytes from'
     log_and_halt_installation_on_error "${?}" "Unable to ping IPv6 gateway."
 
     echo "  success"
@@ -225,17 +227,17 @@ function query_nns_nodes() {
 # Establish run order
 main() {
     log_start "$(basename $0)"
-    if kernel_cmdline_bool_default_true ic.setupos.check_network; then
+    if check_cmdline_var ic.setupos.run_checks; then
         check_generate_network_config
         read_config_variables
         get_network_settings
         print_network_settings
 
-        if [[ -n ${domain_name} ]]; then
+        if [[ -n "${domain_name}" ]]; then
             validate_domain_name
         fi
 
-        if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
+        if [[ -n "${ipv4_address}" && -n "${ipv4_prefix_length}" && -n "${ipv4_gateway}" ]]; then
             setup_ipv4_network
             ping_ipv4_gateway
         fi

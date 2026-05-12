@@ -3,7 +3,6 @@
 // We disable clippy warnings for the whole module because they apply to
 // generated code, meaning we can't locally disable the warnings (the code is
 // defined in another module).
-// (cf. DFN-467).
 #![allow(clippy::unit_arg)]
 
 pub use conversions::CspSecretKeyConversionError;
@@ -144,28 +143,6 @@ impl CspPublicKey {
         match self {
             CspPublicKey::MultiBls12_381(bytes) => Some(&bytes.0),
             _ => None,
-        }
-    }
-
-    /// Return the algorithm identifier of this public key
-    pub fn algorithm_id(&self) -> AlgorithmId {
-        match self {
-            CspPublicKey::EcdsaSecp256k1(_) => AlgorithmId::EcdsaSecp256k1,
-            CspPublicKey::EcdsaP256(_) => AlgorithmId::EcdsaP256,
-            CspPublicKey::Ed25519(_) => AlgorithmId::Ed25519,
-            CspPublicKey::MultiBls12_381(_) => AlgorithmId::MultiBls12_381,
-            CspPublicKey::RsaSha256(_) => AlgorithmId::RsaSha256,
-        }
-    }
-
-    /// Return the binary encoding of this public key
-    pub fn pk_bytes(&self) -> &[u8] {
-        match self {
-            CspPublicKey::EcdsaSecp256k1(pk_bytes) => &pk_bytes.0,
-            CspPublicKey::EcdsaP256(pk_bytes) => &pk_bytes.0,
-            CspPublicKey::Ed25519(pk_bytes) => &pk_bytes.0,
-            CspPublicKey::MultiBls12_381(pk_bytes) => &pk_bytes.0,
-            CspPublicKey::RsaSha256(pk_bytes) => pk_bytes.as_der(),
         }
     }
 }

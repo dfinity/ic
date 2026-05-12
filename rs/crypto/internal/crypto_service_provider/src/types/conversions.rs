@@ -55,8 +55,6 @@ impl TryFrom<CspPublicKey> for UserPublicKey {
 
 impl TryFrom<PublicKeyProto> for CspPublicKey {
     type Error = CryptoError;
-    // TODO (CRP-540): move the key bytes from pk_proto.key_value to the
-    //   resulting csp_pk (instead of copying/cloning them).
     fn try_from(pk_proto: PublicKeyProto) -> Result<Self, Self::Error> {
         Self::try_from(&pk_proto)
     }
@@ -169,7 +167,6 @@ impl From<PopBytesFromProtoError> for CspPopFromPublicKeyProtoError {
 // we have consolidated the key/signatures types which will likely involve
 // removing the CspPublicKey type. Because this impl is temporary, there are
 // no associated tests.
-// TODO (CRP-218): Remove as part of CRP-218
 impl AsRef<[u8]> for CspPublicKey {
     fn as_ref(&self) -> &[u8] {
         match self {
@@ -186,7 +183,6 @@ impl AsRef<[u8]> for CspPublicKey {
 // we have consolidated the key/signatures types which will likely involve
 // removing the CspPop type. Because this impl is temporary, there are
 // no associated tests.
-// TODO (CRP-218): Remove as part of CRP-218
 impl AsRef<[u8]> for CspPop {
     fn as_ref(&self) -> &[u8] {
         match self {
@@ -199,7 +195,6 @@ impl AsRef<[u8]> for CspPop {
 // we have consolidated the key/signatures types which will likely involve
 // removing the CspSignature type. Because this impl is temporary, there are
 // no associated tests.
-// TODO (CRP-218): Remove as part of CRP-218
 impl AsRef<[u8]> for CspSignature {
     fn as_ref(&self) -> &[u8] {
         match self {
@@ -265,7 +260,6 @@ impl TryFrom<CspSecretKey> for threshold_types::SecretKeyBytes {
         if let CspSecretKey::ThresBls12_381(key) = &value {
             Ok(key.clone())
         } else {
-            // TODO (CRP-822): Add the error type to the error message.
             Err(CspSecretKeyConversionError::WrongSecretKeyType {})
         }
     }

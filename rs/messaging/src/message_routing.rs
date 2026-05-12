@@ -1,6 +1,8 @@
 use crate::state_machine::{StateMachine, StateMachineImpl};
 use crate::{routing, scheduling};
-use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig};
+use ic_config::execution_environment::{
+    BitcoinConfig, Config as HypervisorConfig, DEFAULT_MAX_NUMBER_OF_CANISTERS,
+};
 use ic_config::message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::{
@@ -11,7 +13,7 @@ use ic_interfaces::{crypto::ErrorReproducibility, execution_environment::ChainKe
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
-use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_limits::{SMALL_APP_SUBNET_MAX_SIZE, SYSTEM_SUBNET_STREAM_MSG_LIMIT};
 use ic_logger::{ReplicaLogger, debug, fatal, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
@@ -28,21 +30,24 @@ use ic_registry_client_helpers::subnet::{
     SubnetListRegistry, SubnetRegistry, get_node_ids_from_subnet_record,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::ApiBoundaryNodeEntry;
 use ic_replicated_state::{
-    DroppedMessageMetrics, NetworkTopology, ReplicatedState, SubnetTopology,
+    DroppedMessageMetrics, FullTopology, NetworkTopology, ReplicatedState, SubnetTopology,
 };
-use ic_types::batch::{Batch, BatchSummary, CanisterCyclesCostSchedule};
+use ic_types::batch::{Batch, BatchContent, BatchSummary};
 use ic_types::crypto::{KeyPurpose, threshold_sig::ThresholdSigPublicKey};
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::registry::RegistryClientError;
 use ic_types::state_manager::StateManagerError;
 use ic_types::xnet::{StreamHeader, StreamIndex};
 use ic_types::{
-    Height, NodeId, NumBytes, PrincipalIdBlobParseError, RegistryVersion, SubnetId, Time,
+    ExecutionRound, Height, NodeId, NumBytes, PrincipalId, PrincipalIdBlobParseError,
+    RegistryVersion, SubnetId, Time,
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use ic_utils_thread::JoinOnDrop;
 #[cfg(test)]
 use mockall::automock;
@@ -101,6 +106,7 @@ const METRIC_SHED_MESSAGE_BYTES_TOTAL: &str = "mr_shed_message_bytes_total";
 const METRIC_SUBNET_SPLIT_HEIGHT: &str = "mr_subnet_split_height";
 const BLOCKS_PROPOSED_TOTAL: &str = "mr_blocks_proposed_total";
 const BLOCKS_NOT_PROPOSED_TOTAL: &str = "mr_blocks_not_proposed_total";
+const BLOCKS_NOT_PROPOSED_BY_BLOCKMAKER_TOTAL: &str = "mr_blocks_not_proposed_by_blockmaker_total";
 const METRIC_NEXT_CHECKPOINT_HEIGHT: &str = "mr_next_checkpoint_height";
 const METRIC_REMOTE_CERTIFIED_HEIGHTS: &str = "mr_remote_certified_heights";
 
@@ -114,6 +120,7 @@ const METRIC_SUBNET_SIZE: &str = "mr_subnet_size";
 const METRIC_MAX_CANISTERS: &str = "mr_subnet_max_canisters";
 const METRIC_INITIAL_NOTARY_DELAY: &str = "mr_subnet_initial_notary_delay_seconds";
 const METRIC_MAX_BLOCK_PAYLOAD_SIZE: &str = "mr_subnet_max_block_payload_size_bytes";
+const METRIC_CANISTER_RANGES_COUNT: &str = "mr_canister_ranges_count";
 const METRIC_SUBNET_FEATURES: &str = "mr_subnet_features";
 
 const CRITICAL_ERROR_MISSING_SUBNET_SIZE: &str = "cycles_account_manager_missing_subnet_size_error";
@@ -125,6 +132,7 @@ const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_all
 const CRITICAL_ERROR_FAILED_TO_READ_REGISTRY: &str = "mr_failed_to_read_registry_error";
 pub const CRITICAL_ERROR_NON_INCREASING_BATCH_TIME: &str = "mr_non_increasing_batch_time";
 pub const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "mr_induct_response_failed";
+const CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS: &str = "mr_illegal_non_empty_subnet_admins";
 
 /// Records the timestamp when all messages before the given index (down to the
 /// previous `MessageTime`) were first added to / learned about in a stream.
@@ -312,6 +320,8 @@ pub(crate) struct MessageRoutingMetrics {
     pub(crate) blocks_proposed_total: IntCounter,
     /// Number of blocks not proposed.
     pub(crate) blocks_not_proposed_total: IntCounter,
+    /// Number of blocks not proposed by blockmaker ID.
+    pub(crate) blocks_not_proposed_by_blockmaker_total: IntCounterVec,
 
     /// The memory footprint of all the canisters on this subnet. Note that this
     /// counter is from the perspective of the canisters and does not account
@@ -336,6 +346,7 @@ pub(crate) struct MessageRoutingMetrics {
     max_canisters: IntGauge,
     initial_notary_delay: Gauge,
     max_block_payload_size: IntGauge,
+    canister_ranges_count: IntGauge,
     subnet_features: IntGaugeVec,
 
     /// Critical error for not being able to calculate a subnet size.
@@ -356,6 +367,8 @@ pub(crate) struct MessageRoutingMetrics {
     /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
     /// failures to induct responses.
     pub critical_error_induct_response_failed: IntCounter,
+    /// Critical error: a non-rental subnet has a non-empty subnet admins list.
+    critical_error_illegal_non_empty_subnet_admins: IntCounter,
 
     /// Metrics for query stats aggregator
     pub query_stats_metrics: QueryStatsAggregatorMetrics,
@@ -446,6 +459,11 @@ impl MessageRoutingMetrics {
                 BLOCKS_NOT_PROPOSED_TOTAL,
                 "Failures to propose a block (when the node was block maker rank R but the subnet accepted the block from the block maker with rank S > R)."
             ),
+            blocks_not_proposed_by_blockmaker_total: metrics_registry.int_counter_vec(
+                BLOCKS_NOT_PROPOSED_BY_BLOCKMAKER_TOTAL,
+                "Failures to propose a block (when the node was block maker rank R but the subnet accepted the block from the block maker with rank S > R).",
+                &["blockmaker_id"],
+            ),
             canisters_memory_usage_bytes: metrics_registry.int_gauge(
                 "canister_memory_usage_bytes",
                 "Total memory footprint of all canisters on this subnet.",
@@ -486,6 +504,10 @@ impl MessageRoutingMetrics {
                 METRIC_MAX_BLOCK_PAYLOAD_SIZE,
                 "Maximum size of a block payload, in bytes.",
             ),
+            canister_ranges_count: metrics_registry.int_gauge(
+                METRIC_CANISTER_RANGES_COUNT,
+                "Number of canister ranges for the own subnet.",
+            ),
             subnet_features: metrics_registry.int_gauge_vec(
                 METRIC_SUBNET_FEATURES,
                 "Subnet features and their status (enabled or disabled).",
@@ -506,6 +528,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_NON_INCREASING_BATCH_TIME),
             critical_error_induct_response_failed: metrics_registry
                 .error_counter(CRITICAL_ERROR_INDUCT_RESPONSE_FAILED),
+            critical_error_illegal_non_empty_subnet_admins: metrics_registry
+                .error_counter(CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS),
 
             query_stats_metrics: QueryStatsAggregatorMetrics::new(metrics_registry),
 
@@ -690,6 +714,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             subnet_id,
             max_stream_messages,
             target_stream_size_bytes,
+            SYSTEM_SUBNET_STREAM_MSG_LIMIT,
             metrics_registry,
             &metrics,
             time_in_stream_metrics,
@@ -734,7 +759,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         let mut total_memory_usage = NumBytes::new(0);
         let mut wasm_custom_sections_memory_usage = NumBytes::new(0);
         let mut canister_history_memory_usage = NumBytes::new(0);
-        for canister in state.canister_states.values() {
+        for canister in state.canisters_iter() {
             // Export the total canister memory usage; execution and wasm custom section
             // memory are included in `memory_usage()`; message memory is added separately.
             total_memory_usage += canister.memory_usage() + canister.message_memory_usage().total();
@@ -776,6 +801,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
     ) -> (
         NetworkTopology,
         SubnetFeatures,
+        ResourceLimits,
         RegistryExecutionSettings,
         NodePublicKeys,
         ApiBoundaryNodes,
@@ -813,6 +839,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
     /// All of the above are required for deterministic processing, so if any
     /// entry is missing or cannot be decoded; or reading the registry fails; the
     /// call fails and returns an error.
+    #[allow(clippy::type_complexity)]
     fn try_to_read_registry(
         &self,
         registry_version: RegistryVersion,
@@ -821,26 +848,36 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         (
             NetworkTopology,
             SubnetFeatures,
+            ResourceLimits,
             RegistryExecutionSettings,
             NodePublicKeys,
             ApiBoundaryNodes,
         ),
         ReadRegistryError,
     > {
+        let subnet_record = self
+            .registry
+            .get_subnet_record(own_subnet_id, registry_version)
+            .map_err(|err| registry_error("subnet record", Some(own_subnet_id), err))?
+            .ok_or_else(|| not_found_error("subnet record", Some(own_subnet_id)))?;
+        // In case of version mismatch the default is cloud engine, as this is the most restrictive.
+        let own_subnet_type: SubnetType = subnet_record
+            .subnet_type
+            .try_into()
+            .unwrap_or(SubnetType::CloudEngine);
+
         let api_boundary_nodes = self.try_to_populate_api_boundary_nodes(registry_version)?;
-        let network_topology = self.try_to_populate_network_topology(registry_version)?;
+        let network_topology = self.try_to_populate_network_topology(
+            registry_version,
+            own_subnet_id,
+            own_subnet_type,
+        )?;
 
         let provisional_whitelist = self
             .registry
             .get_provisional_whitelist(registry_version)
             .map_err(|err| registry_error("provisional_whitelist", None, err))?
             .unwrap_or_else(|| ProvisionalWhitelist::Set(BTreeSet::new()));
-
-        let subnet_record = self
-            .registry
-            .get_subnet_record(own_subnet_id, registry_version)
-            .map_err(|err| registry_error("subnet record", Some(own_subnet_id), err))?
-            .ok_or_else(|| not_found_error("subnet record", Some(own_subnet_id)))?;
 
         let nodes = get_node_ids_from_subnet_record(&subnet_record)
             .map_err(|err| {
@@ -854,7 +891,12 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         let node_public_keys = self.try_to_populate_node_public_keys(&nodes, registry_version)?;
 
         let subnet_features = subnet_record.features.unwrap_or_default().into();
-        let max_number_of_canisters = subnet_record.max_number_of_canisters;
+        let resource_limits = subnet_record.resource_limits.unwrap_or_default().into();
+        let max_number_of_canisters = if subnet_record.max_number_of_canisters == 0 {
+            DEFAULT_MAX_NUMBER_OF_CANISTERS
+        } else {
+            subnet_record.max_number_of_canisters
+        };
 
         let chain_key_settings = if let Some(chain_key_config) = subnet_record.chain_key_config {
             let chain_key_config = ChainKeyConfig::try_from(chain_key_config).map_err(|err| {
@@ -896,15 +938,10 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 .collect::<BTreeSet<_>>()
                 .len()
         };
-        let canister_cycles_cost_schedule = CanisterCyclesCostSchedule::from(
-            CanisterCyclesCostScheduleProto::try_from(subnet_record.canister_cycles_cost_schedule)
-                .unwrap_or(CanisterCyclesCostScheduleProto::Normal),
-        );
 
-        let own_subnet_type: SubnetType = subnet_record.subnet_type.try_into().unwrap_or_default();
         self.metrics
             .subnet_info
-            .with_label_values(&[&own_subnet_id.to_string(), own_subnet_type.as_ref()])
+            .with_label_values(&[own_subnet_id.to_string().as_str(), own_subnet_type.as_ref()])
             .set(1);
         self.metrics.subnet_size.set(subnet_size as i64);
         self.metrics
@@ -916,6 +953,9 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         self.metrics
             .max_block_payload_size
             .set(subnet_record.max_block_payload_size as i64);
+        self.metrics
+            .canister_ranges_count
+            .set(network_topology.routing_table().ranges(own_subnet_id).len() as i64);
         // Please export any new features via the `subnet_features` metric below.
         let SubnetFeatures {
             canister_sandboxing,
@@ -938,6 +978,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         Ok((
             network_topology,
             subnet_features,
+            resource_limits,
             RegistryExecutionSettings {
                 max_number_of_canisters,
                 provisional_whitelist,
@@ -945,7 +986,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 subnet_size,
                 node_ids: nodes,
                 registry_version,
-                canister_cycles_cost_schedule,
             },
             node_public_keys,
             api_boundary_nodes,
@@ -956,6 +996,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
     fn try_to_populate_network_topology(
         &self,
         registry_version: RegistryVersion,
+        own_subnet_id: SubnetId,
+        own_subnet_type: SubnetType,
     ) -> Result<NetworkTopology, ReadRegistryError> {
         use ReadRegistryError::Persistent;
 
@@ -967,8 +1009,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .map_err(|err| registry_error("subnet IDs", None, err))?;
         let subnet_ids = subnet_ids_record.unwrap_or_default();
 
-        // Populate subnet topologies.
-        let mut subnets = BTreeMap::new();
+        // Populate subnet topologies for all subnets.
+        let mut all_subnets = BTreeMap::new();
 
         for subnet_id in &subnet_ids {
             let public_key = self
@@ -1054,7 +1096,42 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                     ))
                 })?,
             );
-            subnets.insert(
+            let mut subnet_admins = BTreeSet::new();
+            // Only rented subnets, i.e., application subnets on a "free" cost
+            // schedule, and cloud engines on a "free" cost schedule can have a non-empty subnet admins list. In this case,
+            // parse the protobuf field to populate the list.
+            #[allow(clippy::nonminimal_bool)]
+            if (subnet_type == SubnetType::Application
+                && cost_schedule == CanisterCyclesCostSchedule::Free)
+                || (subnet_type == SubnetType::CloudEngine
+                    && cost_schedule == CanisterCyclesCostSchedule::Free)
+            {
+                for p in subnet_record.subnet_admins.into_iter() {
+                    let subnet_admin = PrincipalId::try_from(p).map_err(|err| {
+                        ReadRegistryError::Persistent(format!(
+                            "'failed to read subnet admins from subnet record', err: {err:?}"
+                        ))
+                    })?;
+                    subnet_admins.insert(subnet_admin);
+                }
+            } else if !subnet_record.subnet_admins.is_empty() {
+                // If the subnet is not rented and it has a non-empty subnet
+                // admins list, it indicates a bug and a critical error is
+                // raised. No admins are parsed out in that case and the list
+                // remains empty.
+                self.metrics
+                    .critical_error_illegal_non_empty_subnet_admins
+                    .inc();
+                warn!(
+                    self.log,
+                    "{}: subnet {} is a non-rental subnet, but has a non-empty list of subnet admins {:?}.",
+                    CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS,
+                    subnet_id,
+                    subnet_admins,
+                );
+            }
+
+            all_subnets.insert(
                 *subnet_id,
                 SubnetTopology {
                     public_key,
@@ -1063,15 +1140,54 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                     subnet_features,
                     chain_keys_held,
                     cost_schedule,
+                    subnet_admins,
                 },
             );
         }
 
-        let routing_table = self
+        let full_routing_table = self
             .registry
             .get_routing_table(registry_version)
             .map_err(|err| registry_error("routing table", None, err))?
             .unwrap_or_default();
+
+        // Derive filtered subnets and routing table.
+        let (subnets, routing_table) = if own_subnet_type == SubnetType::CloudEngine {
+            // CloudEngine subnets only see themselves.
+            let subnets = all_subnets
+                .iter()
+                .filter(|(id, _)| **id == own_subnet_id)
+                .map(|(id, topo)| (*id, topo.clone()))
+                .collect();
+            let routing_table = full_routing_table
+                .iter()
+                .filter(|(_, id)| **id == own_subnet_id)
+                .map(|(range, id)| (*range, *id))
+                .collect::<BTreeMap<_, _>>()
+                .try_into()
+                .map_err(|err| {
+                    Persistent(format!(
+                        "'filtered routing table for CloudEngine subnet {}', err: {:?}",
+                        own_subnet_id, err
+                    ))
+                })?;
+            (subnets, routing_table)
+        } else {
+            // Non-engine subnets see every subnet that is *not* a CloudEngine.
+            let subnets: BTreeMap<_, _> = all_subnets
+                .iter()
+                .filter(|(_, topo)| topo.subnet_type != SubnetType::CloudEngine)
+                .map(|(id, topo)| (*id, topo.clone()))
+                .collect();
+            let routing_table = full_routing_table
+                .iter()
+                .filter(|(_, id)| subnets.contains_key(id))
+                .map(|(range, id)| (*range, *id))
+                .collect::<BTreeMap<_, _>>()
+                .try_into()
+                .map_err(|err| Persistent(format!("'filtered routing table', err: {:?}", err)))?;
+            (subnets, routing_table)
+        };
         let canister_migrations = self
             .registry
             .get_canister_migrations(registry_version)
@@ -1084,21 +1200,47 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .map_err(|err| registry_error("NNS subnet ID", None, err))?
             .ok_or_else(|| not_found_error("NNS subnet ID", None))?;
 
-        let chain_key_enabled_subnets = self
+        let chain_key_enabled_subnets: BTreeMap<_, _> = self
             .registry
             .get_chain_key_enabled_subnets(registry_version)
             .map_err(|err| registry_error("chain key signing subnets", None, err))?
-            .unwrap_or_default();
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|(key, subnet_ids)| {
+                let filtered: Vec<_> = subnet_ids
+                    .into_iter()
+                    .filter(|id| subnets.contains_key(id))
+                    .collect();
+                if filtered.is_empty() {
+                    None
+                } else {
+                    Some((key, filtered))
+                }
+            })
+            .collect();
 
-        Ok(NetworkTopology {
+        // Only the NNS subnet needs the full (unfiltered) topology so that its
+        // certified state tree contains entries for every subnet (including
+        // cloud engines).
+        let full_topology = if own_subnet_id == nns_subnet_id {
+            Some(FullTopology {
+                subnets: all_subnets,
+                routing_table: Arc::new(full_routing_table),
+            })
+        } else {
+            None
+        };
+
+        Ok(NetworkTopology::new(
             subnets,
-            routing_table: Arc::new(routing_table),
+            Arc::new(routing_table),
+            Arc::new(canister_migrations),
             nns_subnet_id,
-            canister_migrations: Arc::new(canister_migrations),
             chain_key_enabled_subnets,
-            bitcoin_testnet_canister_id: self.bitcoin_config.testnet_canister_id,
-            bitcoin_mainnet_canister_id: self.bitcoin_config.mainnet_canister_id,
-        })
+            self.bitcoin_config.testnet_canister_id,
+            self.bitcoin_config.mainnet_canister_id,
+            full_topology,
+        ))
     }
 
     /// Tries to populate node public keys from the registry at a specific version.
@@ -1247,8 +1389,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
 impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<RegistryClient_> {
     #[instrument(skip_all)]
     fn process_batch(&self, batch: Batch) {
-        let _process_batch_start = Instant::now();
         let since = Instant::now();
+        let _process_batch_start = since;
 
         // Fetch the mutable tip from StateManager
         let mut state = match self
@@ -1284,6 +1426,9 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         }
 
         // If the subnet is starting up after a split, execute splitting phase 2.
+        //
+        // TODO(DSM-57): Drop the `split_from` field and the `split()` and
+        // `after_split()` methods once online splitting is fully rolled out.
         if let Some(split_from) = state.metadata.split_from {
             info!(
                 self.log,
@@ -1296,12 +1441,19 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
                 .set(batch.batch_number.get() as i64);
             state.after_split();
         }
+        // If this is the round after an online subnet split, record the split height.
+        if let Some(split_from) = state.metadata.subnet_split_from {
+            self.metrics
+                .subnet_split_height
+                .with_label_values(&[&split_from.to_string()])
+                .set(batch.batch_number.get() as i64);
+            state.metadata.subnet_split_from = None;
+        }
         self.observe_phase_duration(PHASE_LOAD_STATE, &since);
 
         debug!(self.log, "Processing batch {}", batch.batch_number);
-        let commit_height = Height::from(batch.batch_number.get());
 
-        let certification_scope = if batch.requires_full_state_hash {
+        let certification_scope = if batch.requires_full_state_hash() {
             CertificationScope::Full
         } else {
             CertificationScope::Metadata
@@ -1313,6 +1465,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         let (
             network_topology,
             subnet_features,
+            resource_limits,
             registry_execution_settings,
             node_public_keys,
             api_boundary_nodes,
@@ -1322,6 +1475,13 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         self.metrics
             .blocks_not_proposed_total
             .inc_by(batch.blockmaker_metrics.failed_blockmakers.len() as u64);
+        for failed_blockmaker in &batch.blockmaker_metrics.failed_blockmakers {
+            self.metrics
+                .blocks_not_proposed_by_blockmaker_total
+                .with_label_values(&[&failed_blockmaker.to_string()])
+                .inc();
+        }
+
         state
             .metadata
             .blockmaker_metrics_time_series
@@ -1334,14 +1494,19 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
             network_topology,
             batch,
             subnet_features,
+            resource_limits,
             &registry_execution_settings,
             node_public_keys,
             api_boundary_nodes,
         );
+        // Prune any orphaned canister priorities.
+        state_after_round.garbage_collect_subnet_schedule();
         // Garbage collect empty canister queue pairs before checkpointing.
         if certification_scope == CertificationScope::Full {
             state_after_round.garbage_collect_canister_queues();
         }
+        state_after_round.metadata.subnet_metrics.num_canisters =
+            state_after_round.canister_states().len() as u64;
         let total_memory_usage = self.observe_canisters_memory_usage(&state_after_round);
         state_after_round
             .metadata
@@ -1357,7 +1522,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
 
         self.state_manager.commit_and_certify(
             state_after_round,
-            commit_height,
             certification_scope,
             batch_summary,
         );
@@ -1421,13 +1585,21 @@ impl BatchProcessor for FakeBatchProcessorImpl {
         };
 
         debug!(self.log, "Processing batch {}", batch.batch_number);
-        let commit_height = Height::from(batch.batch_number.get());
 
         let time = batch.time;
         state.metadata.batch_time = time;
 
+        let certification_scope = if batch.requires_full_state_hash() {
+            CertificationScope::Full
+        } else {
+            CertificationScope::Metadata
+        };
+
         // Get only ingress out of the batch_messages
-        let signed_ingress_msgs = batch.messages.signed_ingress_msgs;
+        let signed_ingress_msgs = match batch.content {
+            BatchContent::Data { batch_messages, .. } => batch_messages.signed_ingress_msgs,
+            BatchContent::Splitting { .. } => unimplemented!("Subnet splitting is not yet enabled"),
+        };
 
         // Treat all ingress messages as already executed.
         let all_ingress_execution_results = signed_ingress_msgs.into_iter().map(|ingress| {
@@ -1446,9 +1618,10 @@ impl BatchProcessor for FakeBatchProcessorImpl {
             )
         });
 
+        let current_round = ExecutionRound::from(batch.batch_number.get());
         for (msg_id, status) in all_ingress_execution_results {
             self.ingress_history_writer
-                .set_status(&mut state, msg_id, status);
+                .set_status(&mut state, msg_id, status, current_round);
         }
 
         state.prune_ingress_history();
@@ -1456,15 +1629,8 @@ impl BatchProcessor for FakeBatchProcessorImpl {
         // Postprocess the state and consolidate the Streams.
         let state_after_stream_builder = self.stream_builder.build_streams(state);
 
-        let certification_scope = if batch.requires_full_state_hash {
-            CertificationScope::Full
-        } else {
-            CertificationScope::Metadata
-        };
-
         self.state_manager.commit_and_certify(
             state_after_stream_builder,
-            commit_height,
             certification_scope,
             batch.batch_summary,
         );
@@ -1560,6 +1726,7 @@ impl MessageRoutingImpl {
             subnet_id,
             MAX_STREAM_MESSAGES,
             TARGET_STREAM_SIZE_BYTES,
+            SYSTEM_SUBNET_STREAM_MSG_LIMIT,
             metrics_registry,
             &MessageRoutingMetrics::new(metrics_registry),
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
@@ -1715,6 +1882,9 @@ impl SyncMessageRouting {
     }
 
     pub fn expected_batch_height(&self) -> Height {
-        self.state_manager.latest_state_height().increment()
+        self.state_manager
+            .latest_state_height()
+            .increment()
+            .max(self.state_manager.tip_height().increment())
     }
 }

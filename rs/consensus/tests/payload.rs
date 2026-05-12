@@ -2,6 +2,7 @@
 mod framework;
 
 use crate::framework::ConsensusDriver;
+use assert_matches::assert_matches;
 use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool};
 use ic_consensus::consensus::{MAX_CONSENSUS_THREADS, build_thread_pool};
 use ic_consensus_certification::CertifierImpl;
@@ -30,14 +31,13 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
-    CryptoHashOfState, Height, crypto::CryptoHash, malicious_flags::MaliciousFlags,
-    replica_config::ReplicaConfig,
+    CryptoHashOfState, Height, batch::BatchContent, crypto::CryptoHash,
+    malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
 };
 use std::{
     sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
-use tokio::sync::watch;
 
 /// Test that the batches that Consensus produces contain expected batch
 /// numbers and payloads
@@ -64,13 +64,16 @@ fn consensus_produces_expected_batches() {
         let query_stats_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
         let query_stats_payload_builder = Arc::new(query_stats_payload_builder);
 
-        let vetkd_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
-        let vetkd_payload_builder = Arc::new(vetkd_payload_builder);
+        let chain_key_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
+        let chain_key_payload_builder = Arc::new(chain_key_payload_builder);
 
         let mut state_manager = MockStateManager::new();
         state_manager.expect_remove_states_below().return_const(());
         state_manager
             .expect_list_state_hashes_to_certify()
+            .return_const(vec![]);
+        state_manager
+            .expect_list_state_heights_to_certify()
             .return_const(vec![]);
         state_manager
             .expect_latest_certified_height()
@@ -84,6 +87,12 @@ fn consensus_produces_expected_batches() {
         state_manager
             .expect_get_state_at()
             .return_const(Ok(Labeled::new(
+                Height::new(0),
+                Arc::new(get_initial_state(0, 0)),
+            )));
+        state_manager
+            .expect_get_latest_certified_state()
+            .return_const(Some(Labeled::new(
                 Height::new(0),
                 Arc::new(get_initial_state(0, 0)),
             )));
@@ -103,11 +112,8 @@ fn consensus_produces_expected_batches() {
         let fake_crypto = Arc::new(fake_crypto);
         let metrics_registry = MetricsRegistry::new();
         let time_source = FastForwardTimeSource::new();
-        let dkg_pool = Arc::new(RwLock::new(dkg_pool::DkgPoolImpl::new(
-            metrics_registry.clone(),
-            no_op_logger(),
-        )));
         let idkg_pool = Arc::new(RwLock::new(idkg_pool::IDkgPoolImpl::new(
+            replica_config.node_id,
             pool_config.clone(),
             no_op_logger(),
             metrics_registry.clone(),
@@ -133,10 +139,15 @@ fn consensus_produces_expected_batches() {
             cup_contents.version,
         )
         .expect("Failed to get DKG summary from CUP contents");
+        let dkg_pool = Arc::new(RwLock::new(dkg_pool::DkgPoolImpl::new(
+            metrics_registry.clone(),
+            no_op_logger(),
+            summary.height,
+        )));
         let consensus_pool = Arc::new(RwLock::new(consensus_pool::ConsensusPoolImpl::new(
             node_id,
             subnet_id,
-            (&make_genesis(summary)).into(),
+            make_genesis(summary).into(),
             pool_config.clone(),
             MetricsRegistry::new(),
             no_op_logger(),
@@ -150,8 +161,6 @@ fn consensus_produces_expected_batches() {
             &PoolReader::new(&*consensus_pool.read().unwrap()),
         )));
 
-        let (dummy_watcher, _) = watch::channel(Height::from(0));
-
         let consensus = ic_consensus::consensus::ConsensusImpl::new(
             replica_config.clone(),
             Arc::clone(&registry_client) as Arc<_>,
@@ -162,7 +171,7 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&self_validating_payload_builder) as Arc<_>,
             Arc::clone(&canister_http_payload_builder) as Arc<_>,
             query_stats_payload_builder,
-            vetkd_payload_builder,
+            chain_key_payload_builder,
             Arc::clone(&dkg_pool) as Arc<_>,
             Arc::clone(&idkg_pool) as Arc<_>,
             dkg_key_manager.clone(),
@@ -179,6 +188,9 @@ fn consensus_produces_expected_batches() {
             ic_consensus::consensus::ConsensusBouncer::new(&metrics_registry, router.clone());
         let dkg = ic_consensus_dkg::DkgImpl::new(
             replica_config.node_id,
+            replica_config.subnet_id,
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&consensus_cache),
             dkg_key_manager,
@@ -202,7 +214,6 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&consensus_cache),
             metrics_registry.clone(),
             no_op_logger(),
-            dummy_watcher,
         );
 
         let driver = ConsensusDriver::new(
@@ -275,9 +286,21 @@ fn consensus_produces_expected_batches() {
             (DKG_INTERVAL_LENGTH + 1) * 2
         );
         assert_eq!(batches[0].batch_summary, batches[1].batch_summary);
-        let mut msgs: Vec<_> = batches[0].messages.signed_ingress_msgs.clone();
-        assert_eq!(msgs.pop(), Some(ingress0));
-        let mut msgs: Vec<_> = batches[1].messages.signed_ingress_msgs.clone();
-        assert_eq!(msgs.pop(), Some(ingress1));
+
+        assert_matches!(
+            &batches[0].content,
+            BatchContent::Data {
+                batch_messages,
+                ..
+            } if batch_messages.signed_ingress_msgs.last() == Some(&ingress0)
+        );
+
+        assert_matches!(
+            &batches[1].content,
+            BatchContent::Data{
+                batch_messages,
+                ..
+            } if batch_messages.signed_ingress_msgs.last() == Some(&ingress1)
+        );
     })
 }

@@ -10,7 +10,7 @@ proptest! {
     ) {
         let mut task_queue: TaskQueue = Default::default();
         for (i, ts) in timestamps.iter().enumerate() {
-            task_queue.schedule_at(*ts, TaskType::ProcessLogic(false));
+            task_queue.schedule_at(*ts, TaskType::ProcessLogic);
             prop_assert_eq!(task_queue.len(), 1, "queue: {:?}", task_queue);
 
             let task = task_queue.pop_if_ready(u64::MAX).unwrap();
@@ -19,7 +19,7 @@ proptest! {
 
             prop_assert_eq!(&task, &Task{
                 execute_at: timestamps[0..=i].iter().cloned().min().unwrap(),
-                task_type: TaskType::ProcessLogic(false)
+                task_type: TaskType::ProcessLogic
             });
             task_queue.schedule_at(task.execute_at, task.task_type);
 
@@ -31,7 +31,7 @@ proptest! {
 #[tokio::test]
 async fn should_reschedule_process_logic() {
     test_reschedule(
-        TaskType::ProcessLogic(false),
+        TaskType::ProcessLogic,
         || crate::guard::TimerLogicGuard::new().unwrap(),
         Duration::from_secs(5),
     )

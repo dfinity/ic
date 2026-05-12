@@ -21,6 +21,10 @@ type Action = variant {
   AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
   Motion : Motion;
   FulfillSubnetRentalRequest : FulfillSubnetRentalRequest;
+  BlessAlternativeGuestOsVersion : BlessAlternativeGuestOsVersion;
+  TakeCanisterSnapshot : TakeCanisterSnapshot;
+  LoadCanisterSnapshot : LoadCanisterSnapshot;
+  CreateCanisterAndInstallCode : CreateCanisterAndInstallCode;
 };
 
 type AddHotKey = record {
@@ -63,6 +67,7 @@ type CanisterSettings = record {
   freezing_threshold : opt nat64;
   controllers : opt Controllers;
   log_visibility : opt int32;
+  snapshot_visibility : opt int32;
   wasm_memory_limit : opt nat64;
   memory_allocation : opt nat64;
   compute_allocation : opt nat64;
@@ -228,6 +233,33 @@ type Countries = record {
   iso_codes : vec text;
 };
 
+type CreateCanisterAndInstallCode = record {
+  host_subnet_id : opt principal;
+  canister_settings : opt CanisterSettings;
+  wasm_module_hash : opt blob;
+  install_arg_hash : opt blob;
+};
+
+type CreateCanisterAndInstallCodeRequest = record {
+  host_subnet_id : opt principal;
+  canister_settings : opt CanisterSettings;
+  wasm_module : opt WasmModule;
+  install_arg : opt blob;
+};
+
+type CreateCanisterAndInstallCodeOk = record {
+  canister_id : opt principal;
+};
+
+type TakeCanisterSnapshotOk = record {
+  snapshot_id : blob;
+};
+
+type SuccessfulProposalExecutionValue = variant {
+  CreateCanisterAndInstallCode : CreateCanisterAndInstallCodeOk;
+  TakeCanisterSnapshot : TakeCanisterSnapshotOk;
+};
+
 type CreateServiceNervousSystem = record {
   url : opt text;
   governance_parameters : opt GovernanceParameters;
@@ -300,6 +332,17 @@ type Followees = record {
 
 type GetNeuronsFundAuditInfoRequest = record {
   nns_proposal_id : opt ProposalId;
+};
+
+type MaturityModulation = record {
+  current_value_permyriad : opt int32;
+  updated_at_timestamp_seconds : opt nat64;
+};
+
+type GetMaturityModulationRequest = record {};
+
+type GetMaturityModulationResponse = record {
+  maturity_modulation : opt MaturityModulation;
 };
 
 type GetNeuronsFundAuditInfoResponse = record {
@@ -377,6 +420,7 @@ type GovernanceCachedMetrics = record {
   timestamp_seconds : nat64;
   seed_neuron_count : nat64;
   spawning_neurons_count : nat64;
+  total_maturity_disbursements_in_progress_e8s_equivalent : nat64;
 
   non_self_authenticating_controller_neuron_subset_metrics : opt NeuronSubsetMetrics;
   public_neuron_subset_metrics : opt NeuronSubsetMetrics;
@@ -400,6 +444,7 @@ type GovernanceParameters = record {
   proposal_initial_voting_period : opt Duration;
   proposal_rejection_fee : opt Tokens;
   voting_reward_parameters : opt VotingRewardParameters;
+  custom_proposal_criticality : opt CustomProposalCriticality;
 };
 
 type IdealMatchedParticipationFunction = record {
@@ -430,6 +475,9 @@ type InstallCode = record {
 
 type InstallCodeRequest = record {
   arg : opt blob;
+  // If we add support for chunked WASMs later, the WasmModule type should
+  // probably be used in place of this field in order to be consistent with
+  // CreateCanisterAndInstallCodeRequest.
   wasm_module : opt blob;
   skip_stopping_before_installing : opt bool;
   canister_id : opt principal;
@@ -448,10 +496,12 @@ type DeregisterKnownNeuron = record {
 type KnownNeuronData = record {
   name : text;
   description : opt text;
+  // Links related to the known neuron. Can be links to social URLs (OpenChat, X, etc.), or a homepage.
   links : opt vec text;
-  // The first `opt` makes it so that the field can be renamed/deprecated in the future, and
-  // the second `opt` makes it so that an older client not recognizing a new variant can still
-  // get the rest of the `vec`.
+  // Topics that the known neuron is committed to always vote on.
+  // Note regarding the type: the first `opt` makes it so that the field can be renamed/deprecated
+  // in the future, and the second `opt` makes it so that an older client not recognizing a new
+  // variant can still get the rest of the `vec`.
   committed_topics : opt vec opt TopicToFollow;
 };
 
@@ -464,6 +514,11 @@ type LedgerParameters = record {
 
 type ListKnownNeuronsResponse = record {
   known_neurons : vec KnownNeuron;
+};
+
+type LoadCanisterSnapshot = record {
+  canister_id : opt principal;
+  snapshot_id : opt blob;
 };
 
 // Parameters of the list_neurons method.
@@ -525,6 +580,7 @@ type ListProposalInfoRequest = record {
   exclude_topic : vec int32;
   include_all_manage_neuron_proposals : opt bool;
   include_status : vec int32;
+  return_self_describing_action : opt bool;
 };
 
 type ListProposalInfoResponse = record {
@@ -763,6 +819,12 @@ type Neuron = record {
   // Per NNS policy, this is opt. Nevertheless, it will never be null.
   potential_voting_power : opt nat64;
 
+  // Base value (in e8s) used for the "8-year gang" dissolve delay bonus. For neurons that had the
+  // maximum dissolve delay of 8 years before the maximum was reduced, this is set to the total
+  // staked value net of fees (including staked maturity) captured at the time of migration.
+  // For all other neurons, this is 0.
+  eight_year_gang_bonus_base_e8s : opt nat64;
+
   // The maturity disbursements in progress, i.e. the disbursements that are initiated but not
   // finalized. The finalization happens 7 days after the disbursement is initiated.
   maturity_disbursements_in_progress : opt vec MaturityDisbursement;
@@ -857,6 +919,10 @@ type NeuronInfo = record {
   voting_power_refreshed_timestamp_seconds : opt nat64;
   deciding_voting_power : opt nat64;
   potential_voting_power : opt nat64;
+  // See analogous field in Neuron.
+  eight_year_gang_bonus_base_e8s : opt nat64;
+  // See analogous field in Neuron.
+  staked_maturity_e8s_equivalent : opt nat64;
 };
 
 type NeuronStakeTransfer = record {
@@ -1007,6 +1073,7 @@ type Proposal = record {
   title : opt text;
   action : opt Action;
   summary : text;
+  self_describing_action : opt SelfDescribingProposalAction;
 };
 
 type ProposalActionRequest = variant {
@@ -1025,6 +1092,10 @@ type ProposalActionRequest = variant {
   AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
   Motion : Motion;
   FulfillSubnetRentalRequest : FulfillSubnetRentalRequest;
+  BlessAlternativeGuestOsVersion : BlessAlternativeGuestOsVersion;
+  TakeCanisterSnapshot : TakeCanisterSnapshot;
+  LoadCanisterSnapshot : LoadCanisterSnapshot;
+  CreateCanisterAndInstallCode : CreateCanisterAndInstallCodeRequest;
 };
 
 // Creates a rented subnet from a rental request (in the Subnet Rental
@@ -1057,6 +1128,49 @@ type FulfillSubnetRentalRequest = record {
   //
   //     https://github.com/dfinity/ic/releases/latest
   replica_version_id : opt text;
+
+  // Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+  // If not set, handling defaults to the NNS subnet.
+  initial_dkg_subnet_id : opt principal;
+};
+
+// Declares an approved set of alternative replica virtual machine software for
+// disaster recovery purposes.
+type BlessAlternativeGuestOsVersion = record {
+  // AMD Secure Processor chip IDs that are allowed to run this software.
+  // Each chip ID must be exactly 64 bytes.
+  chip_ids : opt vec blob;
+
+  // Hexadecimal fingerprint of the recovery rootfs.
+  // Must contain only hexadecimal characters (0-9, A-F, a-f).
+  rootfs_hash : opt text;
+
+  // The version being replaced by this (alternative version) must match this
+  // field (or one of the possibilities therein).
+  //
+  // (Here, we refer to the version being replaced as the "base" version.)
+  base_guest_launch_measurements : opt GuestLaunchMeasurements; };
+
+type GuestLaunchMeasurements = record {
+  guest_launch_measurements : opt vec GuestLaunchMeasurement;
+};
+
+type GuestLaunchMeasurement = record {
+  // SEV-SNP measurement (48 bytes).
+  measurement : opt blob;
+
+  // Metadata associated with the measurement.
+  metadata : opt GuestLaunchMeasurementMetadata;
+};
+
+type GuestLaunchMeasurementMetadata = record {
+  // Kernel command line used for this measurement.
+  kernel_cmdline : opt text;
+};
+
+type TakeCanisterSnapshot = record {
+  canister_id : opt principal;
+  replace_snapshot : opt blob;
 };
 
 type ProposalData = record {
@@ -1079,6 +1193,7 @@ type ProposalData = record {
   original_total_community_fund_maturity_e8s_equivalent : opt nat64;
   total_potential_voting_power : opt nat64;
   topic: opt int32;
+  success_value : opt SuccessfulProposalExecutionValue;
 };
 
 type ProposalInfo = record {
@@ -1100,6 +1215,7 @@ type ProposalInfo = record {
   proposer : opt NeuronId;
   executed_timestamp_seconds : nat64;
   total_potential_voting_power : opt nat64;
+  success_value : opt SuccessfulProposalExecutionValue;
 };
 
 type RegisterVote = record {
@@ -1344,6 +1460,14 @@ type VotingRewardParameters = record {
   final_reward_rate : opt Percentage;
 };
 
+type CustomProposalCriticality = record {
+  additional_critical_native_action_ids : opt vec nat64;
+};
+
+type WasmModule = variant {
+  Inlined : blob;
+};
+
 type WaitForQuietState = record {
   current_deadline_timestamp_seconds : nat64;
 };
@@ -1426,6 +1550,55 @@ type Vote = variant {
   No;
 };
 
+type SelfDescribingProposalAction = record {
+  type_name : opt text;
+  type_description : opt text;
+  value : opt SelfDescribingValue;
+};
+
+type SelfDescribingValue = variant {
+  Blob : blob;
+  Text : text;
+  Bool : bool;
+  Nat : nat;
+  Int : int;
+  Array : vec SelfDescribingValue;
+  Map : vec record { text; SelfDescribingValue };
+  Null;
+};
+
+type GetPendingProposalsRequest = record {
+  return_self_describing_action : opt bool;
+};
+
+// Request to create a new neuron using ICRC-2 transfer_from.
+// The caller must have previously approved the governance canister to spend the specified amount.
+type CreateNeuronRequest = record {
+  // Required. The amount of ICP to stake in e8s.
+  amount_e8s : opt nat64;
+  // The subaccount of the caller to transfer ICP from. Defaults to the default subaccount.
+  source_subaccount: opt blob;
+  // The controller of the new neuron. Defaults to the caller.
+  controller : opt principal;
+  // The followees to set for the new neuron. Defaults to the network's default followees.
+  followees : opt SetFollowing;
+  // The dissolve delay in seconds. Defaults to 7 days. Clamped to [0, 8 years].
+  dissolve_delay_seconds : opt nat64;
+  // Whether the neuron should start dissolving immediately. Defaults to false.
+  dissolving : opt bool;
+  // Whether to automatically stake maturity. Defaults to false.
+  auto_stake_maturity : opt bool;
+};
+
+type CreatedNeuron = record {
+  neuron_id : opt NeuronId;
+};
+
+type CreateNeuronResponse = variant {
+  Ok : CreatedNeuron;
+  Err : GovernanceError;
+};
+
 service : (Governance) -> {
   claim_gtc_neurons : (principal, vec NeuronId) -> (Result);
   claim_or_refresh_neuron_from_account : (ClaimOrRefreshNeuronFromAccount) -> (
@@ -1437,6 +1610,9 @@ service : (Governance) -> {
       Result_2,
     ) query;
   get_latest_reward_event : () -> (RewardEvent) query;
+  get_maturity_modulation : (GetMaturityModulationRequest) -> (
+      GetMaturityModulationResponse,
+    ) query;
   get_metrics : () -> (Result_3) query;
   get_monthly_node_provider_rewards : () -> (Result_4);
   get_most_recent_monthly_node_provider_rewards : () -> (
@@ -1453,7 +1629,7 @@ service : (Governance) -> {
       GetNeuronsFundAuditInfoResponse,
     ) query;
   get_node_provider_by_caller : (null) -> (Result_7) query;
-  get_pending_proposals : () -> (vec ProposalInfo) query;
+  get_pending_proposals : (opt GetPendingProposalsRequest) -> (vec ProposalInfo) query;
   get_proposal_info : (nat64) -> (opt ProposalInfo) query;
   get_restore_aging_summary : () -> (RestoreAgingSummary) query;
   list_known_neurons : () -> (ListKnownNeuronsResponse) query;
@@ -1465,6 +1641,7 @@ service : (Governance) -> {
   list_proposals : (ListProposalInfoRequest) -> (ListProposalInfoResponse) query;
   list_neuron_votes : (ListNeuronVotesRequest) -> (ListNeuronVotesResponse) query;
   manage_neuron : (ManageNeuronRequest) -> (ManageNeuronResponse);
+  create_neuron : (CreateNeuronRequest) -> (CreateNeuronResponse);
   settle_community_fund_participation : (SettleCommunityFundParticipation) -> (
       Result,
     );

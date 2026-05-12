@@ -15,13 +15,13 @@ fn should_have_correct_content_when_creating_topic_for_multiple_proposals() {
     assert_eq!(
         request,
         CreateTopicRequest {
-            title: "Proposals (137359, 137360, 137361) to upgrade the (ckBTC index, ckBTC ledger, ckBTC archive)".to_string(),
+            title: "Proposals (137359, 137360, 137361) to upgrade the (ckBTC index, ckBTC ledger, ckBTC archive) canisters".to_string(),
             raw: "\
             Hi everyone :waving_hand:\n\n\
             Please use this forum thread to discuss the following proposals:\n\
-            * Proposal [137359](https://dashboard.internetcomputer.org/proposal/137359): upgrade the ckBTC index\n\
-            * Proposal [137360](https://dashboard.internetcomputer.org/proposal/137360): upgrade the ckBTC ledger\n\
-            * Proposal [137361](https://dashboard.internetcomputer.org/proposal/137361): upgrade the ckBTC archive\n\n\
+            * Proposal [137359](https://dashboard.internetcomputer.org/proposal/137359): upgrade the ckBTC index canister\n\
+            * Proposal [137360](https://dashboard.internetcomputer.org/proposal/137360): upgrade the ckBTC ledger canister\n\
+            * Proposal [137361](https://dashboard.internetcomputer.org/proposal/137361): upgrade the ckBTC archive canister\n\n\
             :information_source: All listed proposals should contain the necessary information to verify them.\
             ".to_string(),
             category:76,
@@ -39,17 +39,49 @@ fn should_have_correct_content_when_creating_topic_for_single_proposals() {
     assert_eq!(
         request,
         CreateTopicRequest {
-            title: "Proposal 137360 to upgrade the ckBTC ledger".to_string(),
+            title: "Proposal 137360 to upgrade the ckBTC ledger canister".to_string(),
             raw: "\
             Hi everyone :waving_hand:\n\n\
             Please use this forum thread to discuss the following proposal:\n\
-            * Proposal [137360](https://dashboard.internetcomputer.org/proposal/137360): upgrade the ckBTC ledger\n\n\
+            * Proposal [137360](https://dashboard.internetcomputer.org/proposal/137360): upgrade the ckBTC ledger canister\n\n\
             :information_source: All listed proposals should contain the necessary information to verify them.\
             ".to_string(),
             category: 76,
             tags: vec!["Application-canister-mgmt".to_string()],
         }
     );
+}
+
+#[test]
+fn should_use_protocol_canister_mgmt_tag_when_canister_mapped_to_protocol() {
+    let topic = ForumTopic::for_upgrade_proposals(vec![bitcoin_canister_proposal()]).unwrap();
+
+    let request = CreateTopicRequest::from(topic);
+
+    assert_eq!(
+        request.tags,
+        vec!["Protocol-canister-management".to_string()],
+        "topic should use protocol canister management tag when canister is mapped to protocol in forum_topic_kind"
+    );
+}
+
+fn bitcoin_canister_proposal() -> ProposalInfo {
+    ProposalInfo {
+        proposal_id: 99,
+        payload: ProposalPayloadInfo {
+            canister_id: "ghsi2-tqaaa-aaaan-aaaca-cai".to_string(),
+            install_mode_name: "CANISTER_INSTALL_MODE_UPGRADE".to_string(),
+        },
+    }
+}
+
+#[test]
+#[should_panic(expected = "mixing application and protocol canister topics")]
+fn should_not_mix_protocol_and_application_canister_topics() {
+    let _ = ForumTopic::for_upgrade_proposals(vec![
+        bitcoin_canister_proposal(),
+        ckbtc_ledger_proposal(),
+    ]);
 }
 
 fn ckbtc_ledger_proposal() -> ProposalInfo {

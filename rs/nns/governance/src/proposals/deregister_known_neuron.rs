@@ -1,6 +1,9 @@
 use crate::{
     neuron_store::NeuronStore,
-    pb::v1::{DeregisterKnownNeuron, GovernanceError, governance_error::ErrorType},
+    pb::v1::{
+        DeregisterKnownNeuron, GovernanceError, SelfDescribingValue, governance_error::ErrorType,
+    },
+    proposals::self_describing::{DocumentedAction, ValueBuilder},
 };
 
 impl DeregisterKnownNeuron {
@@ -47,6 +50,20 @@ impl DeregisterKnownNeuron {
         neuron_store.with_neuron_mut(neuron_id, |neuron| neuron.clear_known_neuron_data())?;
 
         Ok(())
+    }
+}
+
+impl DocumentedAction for DeregisterKnownNeuron {
+    const NAME: &'static str = "Deregister Known Neuron";
+    const DESCRIPTION: &'static str = "Deregister an existing neuron as a \"known neuron\" \
+        and remove it from the list of known neurons.";
+}
+
+impl From<DeregisterKnownNeuron> for SelfDescribingValue {
+    fn from(value: DeregisterKnownNeuron) -> Self {
+        ValueBuilder::new()
+            .add_field("neuron_id", value.id.map(|id| id.id))
+            .build()
     }
 }
 

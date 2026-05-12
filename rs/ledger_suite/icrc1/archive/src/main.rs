@@ -14,6 +14,7 @@ use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest, GetBlocksRe
 use icrc_ledger_types::icrc3::blocks::{
     GenericBlock as IcrcBlock, ICRC3DataCertificate, SupportedBlockType,
 };
+use icrc_ledger_types::icrc107::schema::BTYPE_107;
 use icrc_ledger_types::{icrc::generic_value::ICRC3Value, icrc3::blocks::BlockWithId};
 
 use icrc_ledger_types::icrc3::transactions::Transaction;
@@ -348,6 +349,10 @@ fn icrc3_supported_block_types() -> Vec<SupportedBlockType> {
             url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md"
                 .to_string(),
         },
+        SupportedBlockType {
+            block_type: BTYPE_107.to_string(),
+            url: "https://github.com/dfinity/ICRC/pull/117".to_string(),
+        },
     ]
 }
 
@@ -372,7 +377,7 @@ fn icrc3_get_blocks(reqs: Vec<GetBlocksRequest>) -> GetBlocksResult {
                 id: id.clone(),
                 block: ICRC3Value::from(block),
             });
-            id += 1u64;
+            id += 1_u64;
         }
     }
     GetBlocksResult {
@@ -397,7 +402,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "stable_memory_bytes",
-        ic_cdk::stable::stable_size() as f64 * 65536f64,
+        ic_cdk::stable::stable_size() as f64 * 65536_f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(

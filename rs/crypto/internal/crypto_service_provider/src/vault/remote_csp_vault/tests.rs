@@ -1,7 +1,3 @@
-// TODO(CRP-1240): remove the clippy-exception above.
-// TODO(CRP-1255): add tests with multiple clients.
-// TODO(CRP-1259): add tests with timeouts.
-
 use crate::LocalCspVault;
 use crate::RemoteCspVault;
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
@@ -75,7 +71,7 @@ mod timeout {
         let tokio_rt = new_tokio_runtime();
         let csp_vault =
             new_csp_vault_for_test_with_timeout(Duration::from_millis(1), tokio_rt.handle());
-        let node_id = NodeId::from(PrincipalId::new_node_test_id(1u64));
+        let node_id = NodeId::from(PrincipalId::new_node_test_id(1_u64));
         let gen_key_result = csp_vault.gen_dealing_encryption_key_pair(node_id);
 
         assert_matches!(gen_key_result,
@@ -103,7 +99,6 @@ mod ni_dkg {
         test_utils::ni_dkg::test_retention(|| new_remote_csp_vault(tokio_rt.handle()));
     }
 
-    // TODO(CRP-1286): make a proptest instead of the manual repetition.
     #[test]
     fn ni_dkg_should_work_with_all_players_acting_correctly_1() {
         let tokio_rt = new_tokio_runtime();
@@ -136,7 +131,6 @@ mod ni_dkg {
         );
     }
 
-    // TODO(CRP-1286): make a proptest instead of the manual repetition.
     #[test]
     fn create_dealing_should_detect_errors_1() {
         let tokio_rt = new_tokio_runtime();

@@ -13,8 +13,7 @@ clap = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../types/base_types/" }
 ic-canister-client = { path = "../canister_client" }
-ic-config = { path = "../config" }
-ic-crypto = { path = "../crypto" }
+ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-interfaces = { path = "../interfaces" }
@@ -27,9 +26,6 @@ ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
 ic-types = { path = "../types/types" }
 prost = { workspace = true }
 serde = { workspace = true }
-slog = { workspace = true }
-slog-async = { workspace = true }
-slog-term = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }

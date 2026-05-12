@@ -6,7 +6,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError, WasmResult,
 };
-use ic_types::Cycles;
+use ic_types_cycles::Cycles;
 use serde::Deserialize;
 
 /// This number should not exceed the length of the canister output queue,
@@ -34,8 +34,6 @@ pub fn env() -> StateMachine {
         )))
         .with_checkpoints_enabled(false)
         .with_subnet_type(SubnetType::Application)
-        .with_snapshot_download_enabled(true)
-        .with_snapshot_upload_enabled(true)
         .build()
 }
 

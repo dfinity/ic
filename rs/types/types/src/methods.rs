@@ -1,7 +1,7 @@
 //! This module contains a collection of types and structs that define the
 //! various types of methods in the IC.
 
-use crate::{Cycles, messages::CallContextId, time::CoarseTime};
+use crate::{messages::CallContextId, time::CoarseTime};
 use ic_base_types::{CanisterId, PrincipalId};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -9,6 +9,7 @@ use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::{canister_state_bits::v1 as pb, queues::v1::Cycles as PbCycles};
 use ic_protobuf::types::v1 as pb_types;
+use ic_types_cycles::{CompoundCycles, Cycles, Instructions, RequestAndResponseTransmission};
 use serde::{Deserialize, Serialize};
 use std::{
     convert::{From, TryFrom},
@@ -268,8 +269,6 @@ pub const UNKNOWN_CANISTER_ID: CanisterId =
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Callback {
     pub call_context_id: CallContextId,
-    /// The request sender's ID.
-    pub originator: CanisterId,
     /// The ID of the principal that the request was addressed to.
     pub respondent: CanisterId,
     /// The number of cycles that were sent in the original request.
@@ -277,11 +276,15 @@ pub struct Callback {
     /// Cycles prepaid by the caller for response execution.
     ///
     /// `Cycles::zero()` if the `Callback` was created before February 2022.
-    pub prepayment_for_response_execution: Cycles,
-    /// Cycles prepaid by the caller for response transimission.
+    pub prepayment_for_response_execution: CompoundCycles<Instructions>,
+    /// Cycles prepaid by the caller for response transmission.
     ///
-    /// `Cycles::zero()` if the `Callback` was created before February 2022.
-    pub prepayment_for_response_transmission: Cycles,
+    /// `CompoundCycles::zero()` if the `Callback` was created before February 2022.
+    pub prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+    /// Cycles prepaid by the caller for call transmission (includes both request and response transmission).
+    ///
+    /// `CompoundCycles::zero()` if the `Callback` was created before April 2026.
+    pub prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
     /// A closure to be executed if the call succeeded.
     pub on_reply: WasmClosure,
     /// A closure to be executed if the call was rejected.
@@ -296,11 +299,11 @@ pub struct Callback {
 impl Callback {
     pub fn new(
         call_context_id: CallContextId,
-        originator: CanisterId,
         respondent: CanisterId,
         cycles_sent: Cycles,
-        prepayment_for_response_execution: Cycles,
-        prepayment_for_response_transmission: Cycles,
+        prepayment_for_response_execution: CompoundCycles<Instructions>,
+        prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+        prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
         on_reply: WasmClosure,
         on_reject: WasmClosure,
         on_cleanup: Option<WasmClosure>,
@@ -308,11 +311,11 @@ impl Callback {
     ) -> Self {
         Self {
             call_context_id,
-            originator,
             respondent,
             cycles_sent,
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
+            prepayment_for_call_transmission,
             on_reply,
             on_reject,
             on_cleanup,
@@ -325,13 +328,15 @@ impl From<&Callback> for pb::Callback {
     fn from(item: &Callback) -> Self {
         Self {
             call_context_id: item.call_context_id.get(),
-            originator: Some(pb_types::CanisterId::from(item.originator)),
             respondent: Some(pb_types::CanisterId::from(item.respondent)),
             cycles_sent: Some(item.cycles_sent.into()),
-            prepayment_for_response_execution: Some(item.prepayment_for_response_execution.into()),
-            prepayment_for_response_transmission: Some(
+            prepayment_for_response_execution_compound: Some(
+                item.prepayment_for_response_execution.into(),
+            ),
+            prepayment_for_response_transmission_compound: Some(
                 item.prepayment_for_response_transmission.into(),
             ),
+            prepayment_for_call_transmission: Some(item.prepayment_for_call_transmission.into()),
             on_reply: Some(pb::WasmClosure {
                 func_idx: item.on_reply.func_idx,
                 env: item.on_reply.env,
@@ -361,21 +366,25 @@ impl TryFrom<pb::Callback> for Callback {
             try_from_option_field(value.cycles_sent, "Callback::cycles_sent")?;
 
         let prepayment_for_response_execution = try_from_option_field(
-            value.prepayment_for_response_execution,
+            value.prepayment_for_response_execution_compound,
             "Callback::prepayment_for_response_execution",
         )?;
         let prepayment_for_response_transmission = try_from_option_field(
-            value.prepayment_for_response_transmission,
+            value.prepayment_for_response_transmission_compound,
             "Callback::prepayment_for_response_transmission",
+        )?;
+        let prepayment_for_call_transmission = try_from_option_field(
+            value.prepayment_for_call_transmission,
+            "Callback::prepayment_for_call_transmission",
         )?;
 
         Ok(Self {
             call_context_id: CallContextId::from(value.call_context_id),
-            originator: try_from_option_field(value.originator, "Callback::originator")?,
             respondent: try_from_option_field(value.respondent, "Callback::respondent")?,
             cycles_sent: Cycles::from(cycles_sent),
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
+            prepayment_for_call_transmission,
             on_reply: WasmClosure {
                 func_idx: on_reply.func_idx,
                 env: on_reply.env,

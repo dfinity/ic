@@ -28,7 +28,7 @@ fn find_validate_eq_attr(field: &syn::Field) -> syn::Result<Option<&syn::Attribu
     let matching_attrs = field
         .attrs
         .iter()
-        .filter(|attr| attr.path.is_ident("validate_eq"))
+        .filter(|attr| attr.path().is_ident("validate_eq"))
         .collect::<Vec<_>>();
     if matching_attrs.len() == 1 {
         Ok(Some(matching_attrs[0]))

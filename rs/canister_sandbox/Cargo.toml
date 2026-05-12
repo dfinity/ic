@@ -54,6 +54,7 @@ ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 # allows the binary to reuse most of the build artifacts
 # produced by `cargo test`.
 ic-test-utilities-types = { path = "../test_utilities/types" }
+ic-types-cycles = { path = "../types/cycles" }
 mockall = { workspace = true }
 rand = { workspace = true }
 rstest = { workspace = true }

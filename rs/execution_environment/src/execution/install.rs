@@ -22,9 +22,9 @@ use ic_logger::{ReplicaLogger, info, warn};
 use ic_replicated_state::{
     CanisterState, metadata_state::subnet_call_context_manager::InstallCodeCallId,
 };
-use ic_types::funds::Cycles;
 use ic_types::messages::{CanisterCall, RequestMetadata};
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
+use ic_types_cycles::{CompoundCycles, Instructions};
 
 /// Installs a new code in canister. The algorithm consists of five stages:
 /// - Stage 0: validate input.
@@ -122,8 +122,8 @@ pub(crate) fn execute_install(
         round_limits,
         original.compilation_cost_handling,
     );
+    helper.charge_for_compilation(instructions_from_compilation);
     if let Err(err) = helper.replace_execution_state_and_allocations(
-        instructions_from_compilation,
         result,
         CanisterMemoryHandling {
             stable_memory_handling: MemoryHandling::Replace,
@@ -455,7 +455,14 @@ impl PausedInstallCodeExecution for PausedInitExecution {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles) {
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (
+        CanisterCall,
+        InstallCodeCallId,
+        CompoundCycles<Instructions>,
+    ) {
         info!(
             log,
             "[DTS] Aborting (canister_init) execution of canister {}.", self.original.canister_id
@@ -558,7 +565,14 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, InstallCodeCallId, Cycles) {
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (
+        CanisterCall,
+        InstallCodeCallId,
+        CompoundCycles<Instructions>,
+    ) {
         info!(
             log,
             "[DTS] Aborting (start) execution of canister {}.", self.original.canister_id,

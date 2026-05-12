@@ -15,7 +15,7 @@ load("//bazel:defs.bzl", "zstd_compress")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:defs.bzl", "tree_hash")
 load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
-load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "disk_image_no_tar", "ext4_image", "upgrade_image")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "upgrade_image")
 
 def icos_build(
         name,
@@ -158,11 +158,15 @@ def icos_build(
         "/run",
         "/boot",
         "/var",
+        "/usr/lib/python3/dist-packages/setuptools/_vendor/jaraco/text/Lorem ipsum.txt",
+        "/usr/lib/python3/dist-packages/setuptools/command/launcher manifest.xml",
+        "usr/lib/python3/dist-packages/setuptools/script (dev).tmpl",
         "/usr/lib/firmware/brcm/brcmfmac43241b4-sdio.Intel Corp.-VALLEYVIEW C0 PLATFORM.txt.zst",
         "/usr/lib/firmware/brcm/brcmfmac43340-sdio.ASUSTeK COMPUTER INC.-TF103CE.txt.zst",
         "/usr/lib/firmware/brcm/brcmfmac43362-sdio.ASUSTeK COMPUTER INC.-ME176C.txt.zst",
         "/usr/lib/firmware/brcm/brcmfmac43430a0-sdio.ONDA-V80 PLUS.txt.zst",
         "/usr/lib/firmware/brcm/brcmfmac43455-sdio.MINIX-NEO Z83-4.txt.zst",
+        "/usr/lib/firmware/brcm/brcmfmac43455-sdio.Radxa-ROCK Pi X.txt.zst",
         "/usr/lib/firmware/brcm/brcmfmac43455-sdio.Raspberry Pi Foundation-Raspberry Pi 4 Model B.txt.zst",
         "/usr/lib/firmware/brcm/brcmfmac43455-sdio.Raspberry Pi Foundation-Raspberry Pi Compute Module 4.txt.zst",
         "/usr/lib/firmware/brcm/brcmfmac4356-pcie.Intel Corporation-CHERRYVIEW D1 PLATFORM.txt.zst",
@@ -243,6 +247,7 @@ def icos_build(
                     "//rs/ic_os/build_tools/dflate",
                 ],
                 tags = ["manual", "no-cache"],
+                visibility = ["//rs/tests:__subpackages__", "//ic-os:__subpackages__"],
             )
             native.genrule(
                 name = "generate-" + boot_args,
@@ -262,6 +267,23 @@ def icos_build(
             )
 
         if image_deps.get("generate_launch_measurements", False):
+            # The vCPU count in the launch measurement must match the GuestOS VM configuration.
+            #
+            # For dev images, we generate measurements for multiple vCPU configurations to support
+            # different common deployment scenarios:
+            # - 16 vCPUs: local dev testing (per deployment.json.template dev_vm_resources.nr_of_vcpus)
+            # - 64 vCPUs: production-like environments
+            vcpu_configs = "16 64" if "dev" in mode else "64"
+
+            # CPU type flags for sev-snp-measure, one per AMD EPYC generation.
+            # TODO(NODE-1924): Once sev-snp-measure adds EPYC-Turin as a named --vcpu-type,
+            # bump the version and replace --vcpu-sig=0xB00F00 with
+            # --vcpu-type=EPYC-Turin for consistency.
+            # Turin CPUID signature 0xB00F00 = family=26, model=0, stepping=0 encoded
+            # per the AMD CPUID spec. See QEMU EPYC-Turin patch:
+            # https://lists.gnu.org/archive/html/qemu-devel/2025-05/msg02060.html
+            vcpu_type_flags = "--vcpu-type=EPYC-v4 --vcpu-type=EPYC-Genoa --vcpu-sig=0xB00F00"
+
             native.genrule(
                 name = "generate-" + launch_measurements,
                 outs = [launch_measurements],
@@ -271,15 +293,21 @@ def icos_build(
                 tags = ["manual"],
                 cmd = r"""
                     source $(execpath """ + boot_args + """)
-                    # Create GuestLaunchMeasurements JSON
-                    (for cmdline in "$$BOOT_ARGS_A" "$$BOOT_ARGS_B"; do
-                        hex=$$($(execpath //ic-os:sev-snp-measure) --mode snp --vcpus 64 --ovmf "$(execpath //ic-os/components/ovmf:ovmf_sev)" --vcpu-type=EPYC-v4 --append "$$cmdline" --initrd "$(location extracted_initrd.img)" --kernel "$(location extracted_vmlinuz)")
-                        # Convert hex string to decimal list, e.g. "abcd" ->  171\\n205
-                        measurement=$$(echo -n "$$hex" | fold -w2 | sed "s/^/0x/" | xargs printf "%d\n")
-                        jq -na --arg cmd "$$cmdline" --arg m "$$measurement" '{
-                          measurement: ($$m | split("\n") | map(tonumber)),
-                          metadata: {kernel_cmdline: $$cmd}
-                        }'
+                    # Create GuestLaunchMeasurements JSON for each CPU generation, vCPU count, and boot slot
+                    (for vcpu_flag in """ + vcpu_type_flags + """; do
+                        for vcpus in """ + vcpu_configs + """; do
+                            # Note: We only create launch measurements for the TEE boot arg variants
+                            # (BOOT_ARGS_TEE_A and BOOT_ARGS_TEE_B)
+                            for cmdline in "$$BOOT_ARGS_TEE_A" "$$BOOT_ARGS_TEE_B"; do
+                                hex=$$($(execpath //ic-os:sev-snp-measure) --mode snp --vcpus $$vcpus --ovmf "$(execpath //ic-os/components/ovmf:ovmf_sev)" $$vcpu_flag --append "$$cmdline" --initrd "$(location extracted_initrd.img)" --kernel "$(location extracted_vmlinuz)")
+                                # Convert hex string to decimal list, e.g. "abcd" ->  171\\n205
+                                measurement=$$(echo -n "$$hex" | fold -w2 | sed "s/^/0x/" | xargs printf "%d\n")
+                                jq -na --arg cmd "$$cmdline" --arg m "$$measurement" '{
+                                  measurement: ($$m | split("\n") | map(tonumber)),
+                                  metadata: {kernel_cmdline: $$cmd}
+                                }'
+                            done
+                        done
                     done) | jq -sc "{guest_launch_measurements: .}" > $@
                 """,
             )
@@ -334,17 +362,6 @@ def icos_build(
             "//ic-os:__subpackages__",
             "//rs/ic_os:__subpackages__",
         ],
-    )
-
-    # Disk images just for testing.
-    disk_image_no_tar(
-        name = "disk.img",
-        layout = image_deps["partition_table"],
-        partitions = partitions,
-        expanded_size = image_deps.get("expanded_size", default = None),
-        tags = ["manual", "no-cache"],
-        target_compatible_with = ["@platforms//os:linux"],
-        visibility = visibility,
     )
 
     zstd_compress(

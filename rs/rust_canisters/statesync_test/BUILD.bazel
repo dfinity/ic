@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test")
 
@@ -7,11 +7,11 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:candid",
+    "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:lazy_static",
     "@crate_index//:rand",
     "@crate_index//:serde",
-    "@crate_index//:serde_json",
 ]
 
 DEV_DEPENDENCIES = [
@@ -21,18 +21,17 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/types/management_canister_types",
     "//rs/types/types",
+    "@crate_index//:candid_parser",
 ]
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
 ]
 
-rust_binary(
+rust_library(
     name = "statesync_test",
     srcs = glob(["src/**/*.rs"]),
-    crate_name = "statesync_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -41,11 +40,12 @@ rust_canister(
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":statesync_test.did",
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + [":statesync_test"],
 )
 
 rust_test(
     name = "statesync_test_test",
+    compile_data = [":statesync_test.did"],
     crate = ":statesync_test",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -61,5 +61,5 @@ rust_ic_test(
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath :statesync-test-canister)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":statesync_test"],
 )

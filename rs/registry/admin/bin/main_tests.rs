@@ -111,6 +111,10 @@ fn convert_from_flags_to_create_service_nervous_system() {
         "5.25%",
         "--voting-reward-rate-transition-duration",
         "4383d", // 12 years (including leap days).
+        "--additional-critical-native-action-id",
+        "3",
+        "--additional-critical-native-action-id",
+        "5",
     ]);
 
     let result = CreateServiceNervousSystem::try_from(flags).unwrap();
@@ -215,6 +219,10 @@ fn convert_from_flags_to_create_service_nervous_system() {
                         seconds: Some(4383 * ONE_DAY_SECONDS),
                     }),
                 }),
+
+                custom_proposal_criticality: Some(CustomProposalCriticality {
+                    additional_critical_native_action_ids: Some(vec![3, 5]),
+                }),
             }),
 
             initial_token_distribution: None,
@@ -265,6 +273,41 @@ fn convert_from_flags_to_create_service_nervous_system() {
                 })
             }),
         }
+    );
+}
+
+#[test]
+fn bless_alternative_guest_os_title_shortens_rootfs_hash_for_subnet_targets() {
+    let cmd = ProposeToBlessAlternativeGuestOsVersionCmd::parse_from([
+        "propose-to-bless-alternative-guest-os-version",
+        "--subnet",
+        "42",
+        "--rootfs-hash",
+        "0123456789abcdef0123456789abcdef",
+    ]);
+
+    assert_eq!(
+        cmd.title(),
+        "Bless alternative Guest OS with rootfs hash 0123456 on subnet 42"
+    );
+}
+
+#[test]
+fn bless_alternative_guest_os_title_shortens_rootfs_hash_for_explicit_nodes() {
+    let node_id = PrincipalId::new_user_test_id(1).to_string();
+    let cmd = ProposeToBlessAlternativeGuestOsVersionCmd::parse_from([
+        "propose-to-bless-alternative-guest-os-version",
+        "--node-ids",
+        &node_id,
+        "--base-launch-measurements",
+        "measurements.json",
+        "--rootfs-hash",
+        "fedcba9876543210fedcba9876543210",
+    ]);
+
+    assert_eq!(
+        cmd.title(),
+        "Bless alternative Guest OS with rootfs hash fedcba9 for 1 nodes"
     );
 }
 

@@ -64,7 +64,7 @@ pub fn make_registry_cup_from_cup_contents(
     let cup_height = Height::new(cup_contents.height);
 
     let idkg_summary = match bootstrap_idkg_summary(
-        &cup_contents,
+        cup_contents.clone(),
         subnet_id,
         registry_version,
         registry,
@@ -190,13 +190,13 @@ pub fn make_registry_cup(
 }
 
 fn bootstrap_idkg_summary_from_cup_contents(
-    cup_contents: &CatchUpPackageContents,
+    cup_contents: CatchUpPackageContents,
     subnet_id: SubnetId,
     logger: &ReplicaLogger,
 ) -> Result<idkg::Summary, String> {
     let initial_dealings = inspect_idkg_chain_key_initializations(
-        &cup_contents.ecdsa_initializations,
-        &cup_contents.chain_key_initializations,
+        cup_contents.ecdsa_initializations,
+        cup_contents.chain_key_initializations,
     )?;
     if initial_dealings.is_empty() {
         return Ok(None);
@@ -212,12 +212,13 @@ fn bootstrap_idkg_summary_from_cup_contents(
 }
 
 fn bootstrap_idkg_summary(
-    cup_contents: &CatchUpPackageContents,
+    cup_contents: CatchUpPackageContents,
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
     registry_client: &dyn RegistryClient,
     logger: &ReplicaLogger,
 ) -> Result<idkg::Summary, String> {
+    let height = Height::new(cup_contents.height);
     if let Some(summary) =
         bootstrap_idkg_summary_from_cup_contents(cup_contents, subnet_id, logger)?
     {
@@ -235,7 +236,7 @@ fn bootstrap_idkg_summary(
                 .map(|key_config| key_config.key_id.clone())
                 .filter_map(|key_id| key_id.try_into().ok())
                 .collect(),
-            Height::new(cup_contents.height),
+            height,
         )),
         None => Ok(None),
     }
@@ -248,7 +249,9 @@ mod tests {
     use ic_crypto_test_utils_ni_dkg::dummy_initial_dkg_transcript;
     use ic_interfaces_registry::{RegistryClient, RegistryVersionedRecord};
     use ic_logger::no_op_logger;
-    use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetRecord};
+    use ic_protobuf::registry::subnet::v1::{
+        CatchUpPackageContents, RecoveryArgs, SubnetRecord, catch_up_package_contents::CupType,
+    };
     use ic_types::{
         Height, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, Time,
         consensus::HasVersion,
@@ -278,6 +281,11 @@ mod tests {
                         registry_store_uri: None,
                         ecdsa_initializations: vec![],
                         chain_key_initializations: vec![],
+                        cup_type: Some(CupType::Recovery(RecoveryArgs {
+                            height: 54321,
+                            time: 1,
+                            state_hash: vec![1, 2, 3, 4, 5],
+                        })),
                     };
 
                 // Encode the cup to protobuf

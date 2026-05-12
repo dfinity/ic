@@ -1,4 +1,5 @@
 use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
+use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_embedders::wasm_utils;
 use ic_embedders::{
@@ -174,7 +175,7 @@ fn test_get_data() {
     assert_eq!((2, b"a tree".to_vec()), data[0]);
     assert_eq!((11, b"is known".to_vec()), data[1]);
     assert_eq!((23, b"by its fruit".to_vec()), data[2]);
-    let module = Module::parse(output.binary.as_slice(), false).unwrap();
+    let module = Module::parse(output.binary.as_slice(), false, false).unwrap();
     if !module.data.is_empty() {
         panic!("instrumentation should have removed data sections");
     }
@@ -211,7 +212,7 @@ fn test_mixed_data_segments() {
     assert_eq!((32, b"active 4".to_vec()), data[2]);
     assert_eq!((48, b"active 6".to_vec()), data[3]);
     assert_eq!((64, b"active 7".to_vec()), data[4]);
-    let module = Module::parse(output.binary.as_slice(), false).unwrap();
+    let module = Module::parse(output.binary.as_slice(), false, false).unwrap();
     assert_eq!(module.data.len(), 6);
     assert_eq!(&module.data[0].data, &b"passive 0");
     assert_eq!(module.data[1].data.len(), 0);
@@ -265,7 +266,7 @@ fn test_exports_only_reserved_symbols() {
         &wasm,
     )
     .unwrap();
-    let module = Module::parse(instrumentation_details.binary.as_slice(), true).unwrap();
+    let module = Module::parse(instrumentation_details.binary.as_slice(), true, false).unwrap();
 
     for export in module.exports.iter() {
         assert!(RESERVED_SYMBOLS.contains(&&export.name[..]))
@@ -278,6 +279,31 @@ fn instr_used(instance: &mut WasmtimeInstance) -> u64 {
     system_api
         .slice_instructions_executed(instruction_counter)
         .get()
+}
+
+/// Returns the instruction overhead charged in-band by the deterministic memory
+/// tracker for the first access to Wasm pages.
+///
+/// - `n_heap_wasm_pages`: pages first *written* on the heap.
+///   Each triggers `mark_wasm_page_accessed` + `mark_wasm_page_dirty`:
+///   2 × (WASM_PAGE_SIZE / OS_PAGE_SIZE) = 2 × 16 = 32 instructions.
+/// - `n_stable_wasm_pages`: pages first *accessed* in stable memory.
+///   Stable memory uses `DirtyPageTracking::Ignore`, so only
+///   `mark_wasm_page_accessed` fires: 16 instructions per page.
+///
+/// Returns 0 when the deterministic memory tracker is disabled.
+fn deterministic_tracker_overhead(n_heap_wasm_pages: u64, n_stable_wasm_pages: u64) -> u64 {
+    if EmbeddersConfig::default()
+        .feature_flags
+        .deterministic_memory_tracker
+        == FlagStatus::Enabled
+    {
+        let os_pages_per_wasm_page = (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as u64;
+        n_heap_wasm_pages * 2 * os_pages_per_wasm_page
+            + n_stable_wasm_pages * os_pages_per_wasm_page
+    } else {
+        0
+    }
 }
 
 #[allow(clippy::field_reassign_with_default)]
@@ -795,9 +821,16 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
         cd *= EmbeddersConfig::default().wasm64_dirty_page_overhead_multiplier;
     }
 
+    // Both stores target Wasm page 0 (bytes 0 and 4096 are within the 64KB page),
+    // so only one heap page-first-write event occurs.
+    let overhead = deterministic_tracker_overhead(1, 0);
+
     let instructions_used = instr_used(&mut instance);
     // Function is 1 instruction.
-    assert_eq!(instructions_used, 1 + 5 * cc + cg + 2 * cs + cl + 2 * cd);
+    assert_eq!(
+        instructions_used,
+        1 + 5 * cc + cg + 2 * cs + cl + 2 * cd + overhead
+    );
 
     // Now run the same with insufficient instructions
     // We should still succeed (to avoid potentially failing pre-upgrades
@@ -898,12 +931,26 @@ fn run_charge_for_dirty_stable64_test() {
             .get_num_instructions_from_bytes(NumBytes::from(1))
             .get();
 
+    // Both i64.stores hit heap Wasm page 0; the first stable64_write hits stable
+    // Wasm page 0 (bytes 0 and 4096 are both within the 64KB page).
+    let overhead = deterministic_tracker_overhead(1, 1);
+
     let instructions_used = instr_used(&mut instance);
     // 2 dirty stable pages and one heap
     assert_eq!(
         instructions_used,
         // Function is 1 instruction.
-        1 + cdrop + ccall * 4 + csg + cc * 15 + cs * 2 + cd * 3 + csw * 2 + csr + cl + cg
+        1 + cdrop
+            + ccall * 4
+            + csg
+            + cc * 15
+            + cs * 2
+            + cd * 3
+            + csw * 2
+            + csr
+            + cl
+            + cg
+            + overhead
     );
 
     // Now run the same with insufficient instructions
@@ -1001,12 +1048,26 @@ fn run_charge_for_dirty_stable_test() {
             .get_num_instructions_from_bytes(NumBytes::from(1))
             .get();
 
+    // Both i32.stores hit heap Wasm page 0; the first stable_write hits stable
+    // Wasm page 0 (bytes 0 and 4096 are both within the 64KB page).
+    let overhead = deterministic_tracker_overhead(1, 1);
+
     let instructions_used = instr_used(&mut instance);
     // 2 dirty stable pages and one heap
     assert_eq!(
         instructions_used,
         // Function is 1 instruction.
-        1 + cdrop + ccall * 4 + csg + cc * 15 + cs * 2 + cd * 3 + csw * 2 + csr + cl + cg
+        1 + cdrop
+            + ccall * 4
+            + csg
+            + cc * 15
+            + cs * 2
+            + cd * 3
+            + csw * 2
+            + csr
+            + cl
+            + cg
+            + overhead
     );
 
     // Now run the same with insufficient instructions
@@ -1160,7 +1221,11 @@ fn metering_wasm64_load_store_canister() {
         WasmMemoryType::Wasm64,
     );
     let drop = instruction_to_cost(&wasmparser::Operator::Drop, WasmMemoryType::Wasm64);
-    let total_cost = 1 + 2 * const_0 + const_17 + const_117 + const_4096 + 2 * store + load + drop;
+    // Both stores hit Wasm page 0 (bytes 0 and 4096 are within the 64KB page),
+    // so only one heap page-first-write event occurs.
+    let overhead = deterministic_tracker_overhead(1, 0);
+    let total_cost =
+        1 + 2 * const_0 + const_17 + const_117 + const_4096 + 2 * store + load + drop + overhead;
     assert_eq!(instr_used_wasm64, total_cost);
 
     // Compute cost in Wasm32 mode and compare.
@@ -1229,7 +1294,8 @@ fn metering_wasm64_load_store_canister() {
         + const_4096_wasm32
         + 2 * store_wasm32
         + load_wasm32
-        + drop_wasm32;
+        + drop_wasm32
+        + overhead;
     assert_eq!(wasm_32_instructions, total_cost_wasm32);
 
     // Check that the cost in Wasm64 mode is higher than in Wasm32 mode.
@@ -1354,12 +1420,19 @@ fn assert_memories_have_max_limit(wat: &str) {
     {
         let wasm = BinaryEncodedWasm::new(wat::parse_str(wat).unwrap());
 
+        let config = EmbeddersConfig {
+            max_wasm_memory_size: NumBytes::new(heap_limit),
+            max_wasm64_memory_size: NumBytes::new(heap64_limit),
+            max_stable_memory_size: NumBytes::new(stable_limit),
+            ..EmbeddersConfig::default()
+        };
+
         let (_, instrumentation_details) = validate_and_instrument_for_testing(
-            &WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger()),
+            &WasmtimeEmbedder::new(config, no_op_logger()),
             &wasm,
         )
         .unwrap();
-        let module = Module::parse(instrumentation_details.binary.as_slice(), true).unwrap();
+        let module = Module::parse(instrumentation_details.binary.as_slice(), true, false).unwrap();
         assert!(
             module.memories.iter().count() >= 2,
             "Module should have at least a heap and stable memory"
@@ -1368,26 +1441,31 @@ fn assert_memories_have_max_limit(wat: &str) {
         let mut memories = module.memories.iter();
         let heap_memory = memories.next().unwrap();
         let stable_memory = memories.next().unwrap();
+
+        let heap_memory_bytes = heap_memory.ty.maximum.unwrap() * WASM_PAGE_SIZE_IN_BYTES as u64;
+        let stable_memory_bytes =
+            stable_memory.ty.maximum.unwrap() * WASM_PAGE_SIZE_IN_BYTES as u64;
+
         if heap_memory.ty.memory64 {
             assert!(
-                heap_memory.ty.maximum.unwrap() < heap64_limit,
+                heap_memory_bytes <= heap64_limit,
                 "memory limit {} exceeds expected {}",
-                heap_memory.ty.maximum.unwrap(),
+                heap_memory_bytes,
                 heap64_limit
             );
         } else {
             assert!(
-                heap_memory.ty.maximum.unwrap() < heap_limit,
+                heap_memory_bytes <= heap_limit,
                 "memory limit {} exceeds expected {}",
-                heap_memory.ty.maximum.unwrap(),
+                heap_memory_bytes,
                 heap_limit
             );
         }
 
         assert!(
-            stable_memory.ty.maximum.unwrap() < stable_limit,
+            stable_memory_bytes <= stable_limit,
             "memory limit {} exceeds expected {}",
-            stable_memory.ty.maximum.unwrap(),
+            stable_memory_bytes,
             stable_limit
         );
     }

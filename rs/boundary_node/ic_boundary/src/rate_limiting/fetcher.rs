@@ -135,7 +135,7 @@ mod test {
     use std::time::Duration;
 
     use candid::Encode;
-    use ic_bn_lib::principal;
+    use ic_bn_lib_common::principal;
     use indoc::indoc;
     use rate_limits_api::*;
     use regex::Regex;

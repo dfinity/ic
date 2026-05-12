@@ -2,7 +2,7 @@ use candid::{CandidType, Decode, Encode, Principal};
 use serde::{Deserialize, Serialize};
 
 /// Includes all the information for a call to this canister.
-#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, CandidType)]
+#[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Serialize)]
 pub struct Call {
     /// The receiver canister of this call.
     pub receiver: Principal,
@@ -42,13 +42,13 @@ impl std::fmt::Debug for Call {
             .field("reply_bytes", &self.reply_bytes)
             .field("cycles", &self.cycles)
             .field("timeout_secs", &self.timeout_secs)
-            .field("downstream_calls_count", &self.downstream_calls.len())
+            .field("downstream_calls", &self.downstream_calls)
             .finish()
     }
 }
 
 /// The message sent to this canister by an ingress or an inter canister message.
-#[derive(Serialize, Deserialize, CandidType, Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct CallMessage {
     /// The call index for this call, i.e. a strictly increasing integer (with each call).
     pub call_index: u32,
@@ -59,7 +59,7 @@ pub struct CallMessage {
 }
 
 /// Includes all the information for a reply from this canister.
-#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, CandidType)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum Reply {
     /// The call to `respondent` was successful.
     Success {
@@ -105,7 +105,7 @@ impl Reply {
 }
 
 /// The reply message received from this canister to an ingress or an inter canister message.
-#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, CandidType)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct ReplyMessage {
     pub bytes_received_on_call: u32,
     pub downstream_replies: Vec<Reply>,

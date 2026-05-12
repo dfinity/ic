@@ -1,9 +1,12 @@
 use crate::{
     CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS, Clock, IcClock,
     governance::{LOG_PREFIX, TimeWarp},
-    neuron::types::Neuron,
+    neuron::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
-    pb::v1::{GovernanceError, Topic, VotingPowerEconomics, governance_error::ErrorType},
+    pb::v1::{
+        GovernanceError, NeuronDissolveStateSnapshot, Topic, VotingPowerEconomics,
+        governance_error::ErrorType,
+    },
     storage::{
         neuron_indexes::CorruptedNeuronIndexes, neurons::NeuronSections,
         with_stable_neuron_indexes, with_stable_neuron_indexes_mut, with_stable_neuron_store,
@@ -65,6 +68,7 @@ pub enum NeuronStoreError {
         neuron_id: NeuronId,
     },
     NeuronIdGenerationUnavailable,
+    NeuronSubaccountGenerationUnavailable,
     InvalidOperation {
         reason: String,
     },
@@ -169,6 +173,13 @@ impl Display for NeuronStoreError {
                     Likely due to uninitialized RNG."
                 )
             }
+            NeuronStoreError::NeuronSubaccountGenerationUnavailable => {
+                write!(
+                    f,
+                    "Neuron subaccount generation is not available currently. \
+                    Likely due to uninitialized RNG."
+                )
+            }
             NeuronStoreError::InvalidOperation { reason } => {
                 write!(f, "Invalid operation: {reason}")
             }
@@ -195,6 +206,7 @@ impl From<NeuronStoreError> for GovernanceError {
             NeuronStoreError::InvalidData { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::NotAuthorizedToGetFullNeuron { .. } => ErrorType::NotAuthorized,
             NeuronStoreError::NeuronIdGenerationUnavailable => ErrorType::Unavailable,
+            NeuronStoreError::NeuronSubaccountGenerationUnavailable => ErrorType::Unavailable,
             NeuronStoreError::InvalidOperation { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::TotalPotentialVotingPowerOverflow => ErrorType::PreconditionFailed,
             NeuronStoreError::TotalDecidingVotingPowerOverflow => ErrorType::PreconditionFailed,
@@ -297,6 +309,32 @@ impl NeuronStore {
                  {:?}. Trying again...",
                 LOG_PREFIX,
                 neuron_id,
+            );
+        }
+    }
+
+    /// Generates a unique random neuron subaccount, retrying on collision.
+    pub fn new_neuron_subaccount(
+        &self,
+        random: &mut dyn RandomnessGenerator,
+    ) -> Result<Subaccount, NeuronStoreError> {
+        loop {
+            let subaccount = Subaccount(
+                random
+                    .random_byte_array()
+                    .map_err(|_| NeuronStoreError::NeuronSubaccountGenerationUnavailable)?,
+            );
+
+            if !self.has_neuron_with_subaccount(subaccount) {
+                return Ok(subaccount);
+            }
+
+            ic_cdk::println!(
+                "{}WARNING: A suspiciously near-impossible event has just occurred: \
+                 we randomly picked a neuron subaccount, but it's already used: \
+                 {:?}. Trying again...",
+                LOG_PREFIX,
+                subaccount,
             );
         }
     }
@@ -771,6 +809,15 @@ impl NeuronStore {
                 })?
                 .map_err(|e| NeuronStoreError::InvalidData { reason: e })?;
             Ok(())
+        })
+    }
+
+    pub fn clamp_dissolve_delay_for_all_neurons_or_panic(
+        &mut self,
+        now_seconds: u64,
+    ) -> HashMap<u64, NeuronDissolveStateSnapshot> {
+        with_stable_neuron_store_mut(|stable_neuron_store| {
+            stable_neuron_store.clamp_dissolve_delay_for_all_neurons_or_panic(now_seconds)
         })
     }
 

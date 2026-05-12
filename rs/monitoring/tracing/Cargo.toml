@@ -7,5 +7,4 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

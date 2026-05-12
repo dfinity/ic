@@ -8,6 +8,9 @@ pub const PUBLIC_KEY_SIZE: usize = 96;
 /// See [the Interface Spec](https://internetcomputer.org/docs/current/references/ic-interface-spec#certificate)
 /// and [RFC 5480](https://tools.ietf.org/html/rfc5480).
 pub fn public_key_to_der(key: &[u8]) -> Result<Vec<u8>, String> {
+    if key.len() != PUBLIC_KEY_SIZE {
+        return Err(format!("key length is not {PUBLIC_KEY_SIZE} bytes"));
+    }
     simple_asn1::to_der(&ASN1Block::Sequence(
         2,
         vec![
@@ -51,7 +54,7 @@ pub fn public_key_from_der(bytes: &[u8]) -> Result<[u8; PUBLIC_KEY_SIZE], String
                 }
 
                 if ids[0] == bls_algorithm_id() && ids[1] == bls_curve_id() {
-                    let mut key_bytes = [0u8; PUBLIC_KEY_SIZE];
+                    let mut key_bytes = [0_u8; PUBLIC_KEY_SIZE];
                     key_bytes.copy_from_slice(key.as_slice());
                     Ok(key_bytes)
                 } else {

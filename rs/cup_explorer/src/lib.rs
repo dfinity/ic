@@ -4,8 +4,6 @@ use std::{
 };
 
 use ic_canister_client::{Agent, Sender};
-use ic_config::crypto::CryptoConfig;
-use ic_crypto::CryptoComponent;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::types::v1 as pb;
@@ -19,12 +17,12 @@ use ic_types::{
     },
 };
 use prost::Message;
-use tokio::{fs, runtime::Handle, task};
+use tokio::{fs, task};
 use url::Url;
 
 use crate::{
     registry::{RegistryCanisterClient, get_nodes},
-    util::{http_url, make_logger},
+    util::http_url,
 };
 
 pub mod registry;
@@ -151,27 +149,17 @@ pub enum SubnetStatus {
 /// 4. Search for a subsequent recover proposal that restarted the subnet, and confirm that the
 ///    correct parameters were used.
 pub fn verify(
-    handle: Handle,
     nns_url: Url,
     nns_pem: Option<PathBuf>,
     cup_path: &Path,
-) -> SubnetStatus {
+) -> Result<SubnetStatus, String> {
     let client = Arc::new(RegistryCanisterClient::new(nns_url, nns_pem));
     let latest_version = client.get_latest_version();
     println!("Registry client created. Latest registry version: {latest_version}",);
 
     println!("\nCreating crypto component...");
-    let (crypto_config, _tmp) = CryptoConfig::new_in_temp_dir();
-    ic_crypto_node_key_generation::generate_node_keys_once(&crypto_config, Some(handle.clone()))
-        .expect("error generating node public keys");
     let client_clone = Arc::clone(&client);
-    let crypto = Arc::new(CryptoComponent::new(
-        &crypto_config,
-        Some(handle),
-        client_clone,
-        make_logger().into(),
-        None,
-    ));
+    let crypto = Arc::new(ic_crypto_for_verification_only::new(client_clone));
 
     println!("\nReading CUP file at {cup_path:?}");
     let bytes = std::fs::read(cup_path).expect("Failed to read file");
@@ -179,15 +167,14 @@ pub fn verify(
     let cup = CatchUpPackage::try_from(&proto_cup).expect("Failed to deserialize CUP content");
 
     if !cup.content.check_integrity() {
-        panic!(
+        return Err(format!(
             "Integrity check of file {cup_path:?} failed. Payload: {:?}",
             cup.content.block.as_ref().payload.as_ref()
-        );
-    } else {
-        println!("CUP integrity verified!");
+        ));
     }
+    println!("CUP integrity verified!");
 
-    let subnet_id = get_subnet_id(&cup).unwrap();
+    let subnet_id = get_subnet_id(&cup)?;
     println!("\nChecking CUP signature for subnet {subnet_id}...");
 
     let block = cup.content.block.get_value();
@@ -198,8 +185,7 @@ pub fn verify(
             subnet_id,
             block.context.registry_version,
         )
-        .map_err(|e| format!("Failed to verify CUP signature at: {cup_path:?} with: {e:?}"))
-        .unwrap();
+        .map_err(|e| format!("Failed to verify CUP signature at: {cup_path:?} with: {e:?}"))?;
     println!("CUP signature verification successful!");
 
     let summary = block.payload.as_ref().as_summary();
@@ -223,10 +209,10 @@ pub fn verify(
     println!("\nVerifying that the subnet was halted on this CUP...");
     let halted = client
         .get_halt_at_cup_height(subnet_id, dkg_version)
-        .unwrap()
-        .unwrap();
+        .map_err(|e| format!("Failed to get halt_at_cup_height: {e}"))?
+        .ok_or("halt_at_cup_height not found in registry")?;
     if !halted {
-        return SubnetStatus::Running;
+        return Ok(SubnetStatus::Running);
     }
     println!(
         "\nConfirmed that subnet {} was halted on this CUP as of {}.",
@@ -244,8 +230,9 @@ pub fn verify(
         let version = RegistryVersion::new(version);
         match client.get_cup_contents(subnet_id, version) {
             Ok(contents) => {
-                if contents.value.is_some() && contents.version == version {
-                    let cup_contents = contents.value.unwrap();
+                if let Some(cup_contents) = contents.value
+                    && contents.version == version
+                {
                     println!("Found Recovery proposal at version {version}:");
                     println!("{:>20}: {}", "TIME", cup_contents.time);
                     println!("{:>20}: {}", "HEIGHT", cup_contents.height);
@@ -269,7 +256,7 @@ pub fn verify(
                     println!(
                         "The subnet was correctly recovered without modifications to the state!"
                     );
-                    return SubnetStatus::Recovered;
+                    return Ok(SubnetStatus::Recovered);
                 } else {
                     println!("No Recovery proposal found at version {version}");
                 }
@@ -287,5 +274,5 @@ pub fn verify(
     println!(
         "Additionally, the proposed state hash should be equal to the one in the provided CUP, to ensure there were no modifications to the state."
     );
-    SubnetStatus::Halted
+    Ok(SubnetStatus::Halted)
 }

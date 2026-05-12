@@ -8,16 +8,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
+- The function `PocketIcBuilder::disable_ingress_validation` to specify that ingress validation
+  should be disabled for mainnet-like endpoints `/instances/<instance_id>/api/...` of the instance.
+- The functions `PocketIc::submit_call_with_effective_principal_and_sender_info`, `PocketIc::submit_call_with_sender_info`,
+  `PocketIc::update_call_with_effective_principal_and_sender_info`, `PocketIc::update_call_with_sender_info`,
+  `PocketIc::query_call_with_effective_principal_and_sender_info`, and `PocketIc::query_call_with_sender_info`
+  to make canister calls with sender info (additional information provided by the canister with which the sender principal is associated).
+- The function `PocketIcBuilder::with_test_threshold_keys_subnet` to create a test threshold keys subnet.
+
+
+
+## 13.0.0 - 2026-03-23
+
+### Added
+- The function `PocketIcBuilder::with_mainnet_nns_subnet_id` to specify that the NNS subnet should be created with the mainnet NNS subnet ID.
+- The parameter `hard_ttl` to `StartServerParams` to specify that the PocketIC server should perform a hard exit after the provided duration since its launch.
+  If the library starts the server implicitly, then a default value of 10 minutes is used.
+  To override that default value, use the function `start_server` passing a custom value of the hard TTL (passing `None` sets no hard TTL).
+- Reexport `ic_management_canister_types::{CanisterId, CanisterInstallMode, CanisterLogRecord, CanisterSettings, CanisterStatusResult, Snapshot}`
+  and `ic_transport_types::SubnetMetrics`.
+
+
+
+## 12.0.0 - 2026-01-23
+
+### Added
+- The types `TickConfigs` and `SubnetBlockmakers` used as argument of `PocketIc::tick_with_configs`
+  instead of the server REST API types `RawTickConfigs` and `RawSubnetBlockmakers`.
+
+
+
+## 11.0.0 - 2025-12-05
+
+### Added
 - The function `PocketIcBuilder::with_initial_time` to specify the initial timestamp of the newly created PocketIC instance.
 - The parameter `ttl` to `StartServerParams` to specify the TTL of the PocketIC server.
 - The constant `LATEST_SERVER_VERSION` to facilitate downloading the PocketIC server.
 - The function `PocketIcBuilder::with_dogecoind_addrs` to specify a list of addresses at which a `dogecoind` process is listening
   for Dogecoin support in PocketIC.
+- The function `PocketIc::canister_snapshot_download` to download a canister snapshot to a given snapshot directory.
+- The function `PocketIc::canister_snapshot_upload` to upload a canister snapshot from a given snapshot directory.
 
 ### Changed
 - Deprecated `PocketIcBuilder::with_initial_timestamp`, use `PocketIcBuilder::with_initial_time` instead.
 - The function `start_server` only downloads the PocketIC server binary
   if no path to the PocketIC server binary is provided explicitly.
+
+### Fixed
+- The function `PocketIc::make_live_with_params` is only async in the `nonblocking` module.
 
 ### Removed
 - The constant `EXPECTED_SERVER_VERSION`: semantic version is now used instead of a fixed expected PocketIC server version.

@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use axum::Router;
 use clap::Parser;
 use ic_base_types::NodeId;
-use ic_bn_lib::http::{Client as HttpClient, ConnInfo};
 use ic_bn_lib::prometheus::Registry;
+use ic_bn_lib_common::{traits::http::Client as HttpClient, types::http::ConnInfo};
 use ic_certification_test_utils::CertificateBuilder;
 use ic_certification_test_utils::CertificateData::*;
 use ic_crypto_tree_hash::Digest;
@@ -101,10 +101,12 @@ pub fn new_threshold_key() -> ThresholdSigPublicKey {
     pk
 }
 
+/// Generate test subnet record
 pub fn test_subnet_record() -> SubnetRecord {
     SubnetRecord {
         membership: vec![],
         max_ingress_bytes_per_message: 2 * 1024 * 1024,
+        max_ingress_bytes_per_block: 4 * 1024 * 1024,
         max_ingress_messages_per_block: 1000,
         max_block_payload_size: 4 * 1024 * 1024,
         unit_delay_millis: 500,
@@ -122,10 +124,13 @@ pub fn test_subnet_record() -> SubnetRecord {
         ssh_backup_access: vec![],
         chain_key_config: None,
         canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
+        subnet_admins: vec![],
+        resource_limits: None,
+        recalled_replica_version_ids: vec![],
     }
 }
 
-// Generate a fake registry client with some data
+/// Generate a fake registry client with some data
 #[allow(clippy::type_complexity)]
 pub fn create_fake_registry_client(
     subnet_count: usize,
@@ -247,6 +252,7 @@ pub fn create_fake_registry_client(
     (registry_client, nodes, ranges)
 }
 
+/// Inject some dummy ConnInfo
 async fn add_conninfo(
     mut request: axum::extract::Request,
     next: axum::middleware::Next,
@@ -257,6 +263,7 @@ async fn add_conninfo(
     next.run(request).await
 }
 
+/// Create a test router using some bogus data
 pub fn setup_test_router(
     enable_cache: bool,
     enable_logging: bool,
@@ -267,6 +274,8 @@ pub fn setup_test_router(
 ) -> (Router, Vec<Subnet>) {
     let mut args = vec![
         "",
+        "--listen-http-port",
+        "111",
         "--registry-local-store-path",
         "/tmp",
         "--obs-log-null",
@@ -331,6 +340,7 @@ pub fn setup_test_router(
         &cli,
         &metrics_registry,
         enable_cache.then(|| Arc::new(CacheState::new(&cli.cache, &Registry::new()).unwrap())),
+        None,
         salt,
         proxy_router,
     );

@@ -1,16 +1,16 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
 use crate::artifact::IngressMessageId;
-use crate::batch::VetKdAgreement;
+use crate::batch::ChainKeyAgreement;
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::IDkgMasterPublicKeyId;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::QuadrupleInCreation;
 use crate::consensus::idkg::{
-    CompletedReshareRequest, CompletedSignature, HasIDkgMasterPublicKeyId, IDkgPayload,
-    IDkgReshareRequest, IDkgUIDGenerator, MaskedTranscript, MasterKeyTranscript, PreSigId,
-    PseudoRandomId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, ReshareOfMaskedParams,
-    ReshareOfUnmaskedParams, UnmaskedTimesMaskedParams, UnmaskedTranscript,
+    CompletedReshareRequest, HasIDkgMasterPublicKeyId, IDkgPayload, IDkgReshareRequest,
+    IDkgUIDGenerator, MaskedTranscript, MasterKeyTranscript, PreSigId, RandomTranscriptParams,
+    RandomUnmaskedTranscriptParams, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
+    UnmaskedTimesMaskedParams, UnmaskedTranscript,
 };
 use crate::consensus::{
     Block, BlockPayload, CatchUpShareContent, ConsensusMessageHashable, Payload, SummaryPayload,
@@ -43,6 +43,7 @@ use ic_btc_replica_types::{
     GetSuccessorsResponseComplete, SendTransactionResponse,
 };
 use ic_crypto_internal_types::NodeIndex;
+use ic_crypto_tree_hash::{Digest, Witness};
 use ic_error_types::RejectCode;
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{
@@ -50,6 +51,7 @@ use ic_management_canister_types_private::{
     VetKdKeyId,
 };
 use ic_protobuf::types::v1 as pb;
+use ic_types_cycles::Cycles;
 use phantom_newtype::{AmountOf, Id};
 use prost::Message;
 use rand::{CryptoRng, RngCore};
@@ -301,7 +303,7 @@ impl ExhaustiveSet for RejectCode {
 
 impl ExhaustiveSet for PrincipalId {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        let mut data = [0u8; Self::MAX_LENGTH_IN_BYTES];
+        let mut data = [0_u8; Self::MAX_LENGTH_IN_BYTES];
         rng.fill_bytes(&mut data);
         vec![Self::new(data.len(), data)]
     }
@@ -496,6 +498,15 @@ impl ExhaustiveSet for CatchUpShareContent {
     }
 }
 
+impl ExhaustiveSet for Cycles {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        <u128>::exhaustive_set(rng)
+            .into_iter()
+            .map(Cycles::from)
+            .collect()
+    }
+}
+
 /*
  * Below implementations are outside of the scope of consensus, and thus not
  * required to be "exhaustive". We could replace much of this with the #[derive],
@@ -669,6 +680,14 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, MultiSignature<T>> {
                 },
             })
             .collect()
+    }
+}
+
+impl ExhaustiveSet for Witness {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        let mut digest = [0_u8; 32];
+        rng.fill_bytes(&mut digest);
+        vec![Witness::new_for_testing(Digest(digest))]
     }
 }
 
@@ -884,7 +903,6 @@ impl ExhaustiveSet for QuadrupleInCreation {
 #[derive(Clone)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DerivedIDkgPayload {
-    pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
     pub available_pre_signatures: BTreeMap<PreSigId, PreSignatureRef>,
     pub pre_signatures_in_creation: BTreeMap<PreSigId, PreSignatureInCreation>,
     pub uid_generator: IDkgUIDGenerator,
@@ -899,7 +917,7 @@ impl ExhaustiveSet for IDkgPayload {
         DerivedIDkgPayload::exhaustive_set(rng)
             .into_iter()
             .map(|payload| IDkgPayload {
-                signature_agreements: payload.signature_agreements,
+                empty_signature_agreements_flag: false,
                 available_pre_signatures: payload.available_pre_signatures,
                 pre_signatures_in_creation: payload.pre_signatures_in_creation,
                 uid_generator: payload.uid_generator,
@@ -1002,10 +1020,9 @@ impl HasId<IDkgMasterPublicKeyId> for MasterKeyTranscript {
     }
 }
 
-impl HasId<CallbackId> for VetKdAgreement {}
+impl HasId<CallbackId> for ChainKeyAgreement {}
 impl HasId<IngressMessageId> for SignedRequestBytes {}
 impl HasId<IDkgReshareRequest> for ReshareOfUnmaskedParams {}
-impl HasId<PseudoRandomId> for CompletedSignature {}
 impl HasId<IDkgReshareRequest> for CompletedReshareRequest {}
 impl HasId<NodeIndex> for BatchSignedIDkgDealing {}
 impl HasId<SubnetId> for CertifiedStreamSlice {}
@@ -1037,7 +1054,7 @@ mod tests {
 
         for (i, cup) in set.into_iter().enumerate() {
             assert!(cup.check_integrity(), "Integrity check failed");
-            let bytes = pb::CatchUpContent::from(&cup).encode_to_vec();
+            let bytes = pb::CatchUpContent::from(cup).encode_to_vec();
             let file_path = directory.join(format!("{i}.pb"));
             fs::write(file_path, bytes).expect("Failed to write bytes");
         }
@@ -1076,7 +1093,7 @@ mod tests {
         for cup in &set {
             assert!(cup.check_integrity());
             // serialize -> deserialize round-trip
-            let bytes = pb::CatchUpPackage::from(cup).encode_to_vec();
+            let bytes = pb::CatchUpPackage::from(cup.clone()).encode_to_vec();
             let proto_cup = pb::CatchUpPackage::decode(bytes.as_slice()).unwrap();
             let new_cup = CatchUpPackage::try_from(&proto_cup).unwrap();
 

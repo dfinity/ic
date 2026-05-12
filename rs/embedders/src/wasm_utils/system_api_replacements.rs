@@ -12,7 +12,7 @@
 //!
 
 use crate::{
-    InternalErrorCode,
+    InternalErrorCode, WASM_PAGE_SIZE,
     wasm_utils::instrumentation::{InjectedCounters, InjectedFunctions, WasmMemoryType},
     wasmtime_embedder::system_api_complexity::overhead_native,
 };
@@ -26,17 +26,18 @@ use ic_types::NumBytes;
 use super::SystemApiFunc;
 
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: i64 = 64 * 1024; // 4GiB
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 fn make_body(
     locals: Vec<(u32, DataType)>,
     instructions: Vec<wirm::wasmparser::Operator>,
 ) -> wirm::ir::types::Body {
+    let num_instructions = instructions.len();
+    let instructions_with_offsets = instructions.into_iter().map(|op| (op, 0)).collect();
     wirm::ir::types::Body {
         num_locals: locals.len() as u32,
-        num_instructions: instructions.len(),
+        num_instructions,
         locals,
-        instructions: Instructions::new(instructions),
+        instructions: Instructions::new(instructions_with_offsets, 0, false),
         name: None,
     }
 }

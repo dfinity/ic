@@ -4,13 +4,81 @@
 //   hexdump -ve '1/1 "%.2x"' ecpubkey.der
 const ECDSA_P256_PK_1_DER_HEX: &str = "3059301306072a8648ce3d020106082a8648ce3d03010703420004485c32997ce7c6d38ca82c821185c689d424fac7c9695bb97786c4248aab6428949bcd163e2bcf3eeeac4f200b38fbd053f82c4e1776dc9c6dc8db9b7c35e06f";
 
-const SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX: &str = "3045022100c69c75c6d6c449ea936094476e8bfcad90d831a6437a87117615add6d6a5168802201e2e4535976794286fa264eb81d7b14b3f168ab7f62ad5c0b9d6ebfc64eb0c8c";
-
 // A DER-encoded Ed25519 public key, to test that parsing non-ECDSA keys
 // gracefully fails.
 const ED25519_PK_DER_BASE64: &str = "MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE";
 
+mod test_utils {
+    use ic_crypto_internal_basic_sig_ecdsa_secp256r1::types;
+    use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
+
+    /// Create a new secp256r1 keypair. This function should only be used for
+    /// testing.
+    ///
+    /// # Errors
+    /// * `AlgorithmNotSupported` if an error occurs while generating the key
+    /// * `MalformedPublicKey` if the public key could not be parsed
+    /// * `MalformedSecretKey` if the secret key does not correspond with the public
+    ///   key
+    /// # Returns
+    /// A tuple of the secret key bytes and public key bytes
+    pub(crate) fn new_keypair(
+        rng: &mut (impl rand::RngCore + rand::CryptoRng),
+    ) -> CryptoResult<(types::SecretKeyBytes, types::PublicKeyBytes)> {
+        let (sk, pk) = {
+            let sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);
+            let encoded_pk = sk.public_key().serialize_sec1(false);
+            let serialized_pk: [u8; 65] = encoded_pk
+                .try_into()
+                .expect("public key with incorrect length");
+            (sk.serialize_sec1(), serialized_pk)
+        };
+
+        let pk_bytes = types::PublicKeyBytes::from(pk.to_vec());
+        let sk_bytes = secret_key_from_components(&sk, &pk_bytes)?;
+
+        Ok((sk_bytes, pk_bytes))
+    }
+
+    /// Create a secp256r1 secret key from raw bytes
+    ///
+    /// # Arguments
+    /// * `sk_raw_bytes` is the big-endian encoding of unsigned integer
+    /// * `pk` is the public key associated with this secret key
+    /// # Errors
+    /// * `MalformedPublicKey` if the public key could not be parsed
+    /// * `MalformedSecretKey` if the secret key does not correspond with the public
+    ///   key
+    fn secret_key_from_components(
+        sk_raw_bytes: &[u8],
+        pk: &types::PublicKeyBytes,
+    ) -> CryptoResult<types::SecretKeyBytes> {
+        use ic_crypto_secrets_containers::SecretVec;
+
+        let sk = ic_secp256r1::PrivateKey::deserialize_sec1(sk_raw_bytes).map_err(|e| {
+            CryptoError::MalformedSecretKey {
+                algorithm: AlgorithmId::EcdsaP256,
+                internal_error: format!("{e:?}"),
+            }
+        })?;
+
+        if pk.0 != sk.public_key().serialize_sec1(false) {
+            return Err(CryptoError::MalformedPublicKey {
+                algorithm: AlgorithmId::EcdsaP256,
+                key_bytes: Some(pk.0.to_vec()),
+                internal_error: "Public key does not match secret key".to_string(),
+            });
+        }
+
+        let mut sk_rfc5915 = sk.serialize_rfc5915_der();
+
+        Ok(types::SecretKeyBytes(SecretVec::new_and_zeroize_argument(
+            &mut sk_rfc5915,
+        )))
+    }
+}
 mod keygen {
+    use crate::test_utils;
     use assert_matches::assert_matches;
     use ic_crypto_internal_basic_sig_ecdsa_secp256r1::*;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -58,13 +126,14 @@ mod keygen {
         assert_matches!(pk_result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes: _, internal_error})
              if algorithm == AlgorithmId::EcdsaP256
              && internal_error.contains(
-                 "non-canonical encoding"
+                 "Non-canonical encoding"
              )
         );
     }
 }
 
 mod sign {
+    use crate::test_utils;
     use ic_crypto_internal_basic_sig_ecdsa_secp256r1::{types, *};
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
@@ -76,21 +145,6 @@ mod sign {
         let signature = sign(msg, &sk).unwrap();
         assert_eq!(signature.0.len(), types::SignatureBytes::SIZE);
         verify(&signature, msg, &pk).unwrap();
-    }
-
-    #[test]
-    fn should_correctly_parse_der_encoded_signature() {
-        let sig_der = hex::decode(crate::SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX).unwrap();
-        let _sig = signature_from_der(&sig_der).unwrap();
-    }
-
-    #[test]
-    fn should_fail_parsing_a_corrupted_der_encoded_signature() {
-        let mut sig_der = hex::decode(crate::SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX).unwrap();
-        sig_der[0] += 1;
-        let sig_result = signature_from_der(&sig_der);
-        assert!(sig_result.is_err());
-        assert!(sig_result.unwrap_err().is_malformed_signature());
     }
 
     // An ECDSA signature consists of two 32-byte randomized numbers,
@@ -118,6 +172,7 @@ mod sign {
 }
 
 mod verify {
+    use crate::test_utils;
     use assert_matches::assert_matches;
     use ic_crypto_internal_basic_sig_ecdsa_secp256r1::{types, *};
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;

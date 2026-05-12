@@ -23,10 +23,9 @@ path = "tests/interleaving_tests.rs"
 
 [dependencies]
 build-info = { workspace = true }
-
 async-trait = { workspace = true }
-bytes = { workspace = true }
 candid = { workspace = true }
+candid_parser = { workspace = true }
 chrono = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
 dyn-clone = "1.0.14"
@@ -44,12 +43,14 @@ ic-metrics-encoder = "1"
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-string = { path = "../../nervous_system/string" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-common-validation = { path = "../../nervous_system/common/validation" }
 ic-nervous-system-governance = { path = "../../nervous_system/governance" }
 ic-nervous-system-linear-map = { path = "../../nervous_system/linear_map" }
 ic-nervous-system-lock = { path = "../../nervous_system/lock" }
 ic-nervous-system-long-message = { path = "../../nervous_system/long_message" }
+ic-nervous-system-query-instruction-logger = { path = "../../nervous_system/query_instruction_logger" }
 ic-nervous-system-timer-task = { path = "../../nervous_system/timer_task" }
 ic-nervous-system-rate-limits = { path = "../../nervous_system/rate_limits" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
@@ -61,9 +62,12 @@ ic-nervous-system-timers = { path = "../../nervous_system/timers" }
 ic-neurons-fund = { path = "../../nervous_system/neurons_fund" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
-ic-nns-gtc-accounts = { path = "../gtc_accounts" }
+ic-xrc-types = "1.0.0"
 ic-nns-governance-api = { path = "./api" }
+ic-nns-governance-conversions = { path = "./conversions" }
+ic-nns-governance-derive-self-describing = { path = "./derive_self_describing" }
 ic-nns-governance-init = { path = "./init" }
+ic-nns-handler-lifeline-interface = { path = "../handlers/lifeline/interface" }
 ic-nns-handler-root-interface = { path = "../handlers/root/interface" }
 ic-node-rewards-canister-api = { path = "../../node_rewards/canister/api" }
 ic-protobuf = { path = "../../protobuf" }
@@ -82,15 +86,12 @@ lazy_static = { workspace = true }
 maplit = "1.0.2"
 mockall = { workspace = true }
 num-traits = { workspace = true }
-on_wire = { path = "../../rust_canisters/on_wire" }
-pretty_assertions = { workspace = true }
 prometheus-parse = { workspace = true }
 prost = { workspace = true }
 rust_decimal = "1.36.0"
 rust_decimal_macros = "1.36.0"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
-serde_json = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
@@ -123,6 +124,7 @@ ic-nns-governance = { path = ".", features = ["test"] }
 ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 local_key = { path = "../../tla_instrumentation/local_key" }
+pretty_assertions = { workspace = true }
 proptest = { workspace = true }
 tempfile = { workspace = true }
 tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation" }
@@ -131,5 +133,6 @@ tokio-test = { workspace = true }
 
 [features]
 test = ["ic-sns-swap/test"]
+performance-based-rewards = []
 canbench-rs = ["dep:canbench-rs"]
 tla = ["local_key", "tla_instrumentation", "tla_instrumentation_proc_macros"]

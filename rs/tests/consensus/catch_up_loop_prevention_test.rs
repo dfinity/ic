@@ -25,7 +25,6 @@ use ic_consensus_system_test_catch_up_test_common::test_catch_up_possible;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::systest;
 
@@ -34,7 +33,6 @@ use ic_types::Height;
 use ic_types::malicious_behavior::MaliciousBehavior;
 use std::time::Duration;
 
-const PROMETHEUS_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
 const TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 const EXECUTION_DELAY_FACTOR: f64 = 1.2;
@@ -46,11 +44,6 @@ const DKG_INTERVAL: u64 = 150;
 fn setup(env: TestEnv) {
     let execution_delay_ms = (EXECUTION_DELAY_FACTOR * TARGET_FR_MS as f64) as u64;
     let state_sync_delay_ms = (STATE_SYNC_DELAY_FACTOR * DKG_INTERVAL_TIME_MS as f64) as u64;
-
-    PrometheusVm::default()
-        .with_scrape_interval(PROMETHEUS_SCRAPE_INTERVAL)
-        .start(&env)
-        .expect("failed to start prometheus VM");
 
     InternetComputer::new()
         .add_subnet(
@@ -70,8 +63,6 @@ fn setup(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
-
-    env.sync_with_prometheus();
 }
 
 fn main() -> Result<()> {

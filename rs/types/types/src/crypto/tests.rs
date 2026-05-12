@@ -7,7 +7,7 @@ fn should_correctly_convert_i32_to_algorithm_id() {
     // ensure _all_ algorithm IDs are compared (i.e., no algorithm was forgotten)
     assert_eq!(AlgorithmId::iter().count(), 21);
 
-    assert_eq!(AlgorithmId::from(0), AlgorithmId::Placeholder);
+    assert_eq!(AlgorithmId::from(0), AlgorithmId::Unspecified);
     assert_eq!(AlgorithmId::from(1), AlgorithmId::MultiBls12_381);
     assert_eq!(AlgorithmId::from(2), AlgorithmId::ThresBls12_381);
     assert_eq!(AlgorithmId::from(3), AlgorithmId::SchnorrSecp256k1);
@@ -30,10 +30,10 @@ fn should_correctly_convert_i32_to_algorithm_id() {
     assert_eq!(AlgorithmId::from(20), AlgorithmId::VetKD);
 
     // Verify that an unknown i32 maps onto Placeholder
-    assert_eq!(AlgorithmId::from(42), AlgorithmId::Placeholder);
+    assert_eq!(AlgorithmId::from(42), AlgorithmId::Unspecified);
 
     // Verify that an i32 that doesn't fit into a u8 maps onto Placeholder
-    assert_eq!(AlgorithmId::from(420), AlgorithmId::Placeholder);
+    assert_eq!(AlgorithmId::from(420), AlgorithmId::Unspecified);
 }
 
 #[test]
@@ -41,7 +41,7 @@ fn should_correctly_convert_algorithm_id_to_i32() {
     // ensure _all_ algorithm IDs are compared (i.e., no algorithm was forgotten)
     assert_eq!(AlgorithmId::iter().count(), 21);
 
-    assert_eq!(AlgorithmId::Placeholder as i32, 0);
+    assert_eq!(AlgorithmId::Unspecified as i32, 0);
     assert_eq!(AlgorithmId::MultiBls12_381 as i32, 1);
     assert_eq!(AlgorithmId::ThresBls12_381 as i32, 2);
     assert_eq!(AlgorithmId::SchnorrSecp256k1 as i32, 3);
@@ -70,7 +70,7 @@ fn should_correctly_convert_algorithm_id_to_u8() {
     assert_eq!(AlgorithmId::iter().count(), 21);
 
     let tests: Vec<(AlgorithmId, u8)> = vec![
-        (AlgorithmId::Placeholder, 0),
+        (AlgorithmId::Unspecified, 0),
         (AlgorithmId::MultiBls12_381, 1),
         (AlgorithmId::ThresBls12_381, 2),
         (AlgorithmId::SchnorrSecp256k1, 3),
@@ -111,7 +111,7 @@ fn should_correctly_convert_usize_to_key_purpose() {
     assert_eq!(KeyPurpose::from(5), KeyPurpose::IDkgMEGaEncryption);
 
     // Verify that an unknown usize maps onto Placeholder
-    assert_eq!(AlgorithmId::from(42), AlgorithmId::Placeholder);
+    assert_eq!(AlgorithmId::from(42), AlgorithmId::Unspecified);
 }
 
 #[test]
@@ -227,8 +227,8 @@ mod current_node_public_keys {
         PublicKey {
             version: 0,
             algorithm: AlgorithmId::MultiBls12_381 as i32,
-            key_value: [0u8; bls12_381::G2Bytes::SIZE].to_vec(),
-            proof_data: Some([0u8; bls12_381::G1Bytes::SIZE].to_vec()),
+            key_value: [0_u8; bls12_381::G2Bytes::SIZE].to_vec(),
+            proof_data: Some([0_u8; bls12_381::G1Bytes::SIZE].to_vec()),
             timestamp: None,
         }
     }
@@ -243,7 +243,7 @@ mod current_node_public_keys {
         PublicKey {
             version: 0,
             algorithm: AlgorithmId::Groth20_Bls12_381 as i32,
-            key_value: [0u8; bls12_381::G1Bytes::SIZE].to_vec(),
+            key_value: [0_u8; bls12_381::G1Bytes::SIZE].to_vec(),
             proof_data: None,
             timestamp: None,
         }

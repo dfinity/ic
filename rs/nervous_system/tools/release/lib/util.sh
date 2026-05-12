@@ -106,10 +106,8 @@ latest_commit_with_prebuilt_artifacts() {
         GZ=$(_download_canister_gz "governance-canister" "$HASH")
 
         if ungzip "$GZ" >/dev/null 2>&1; then
-            if disk_image_exists "$HASH"; then
-                echo "$HASH"
-                return 0
-            fi
+            echo "$HASH"
+            return 0
         fi
     done
 

@@ -61,9 +61,12 @@ fn should_contain_transcript_data_after_insertion_with_nidkg_id() {
 
 #[test]
 fn should_not_contain_nonexistent_transcript_data() {
-    let store = ThresholdSigDataStoreImpl::new();
+    for tag in all_tags() {
+        let store = ThresholdSigDataStoreImpl::new();
+        let dkg_id = ni_dkg_id_with_tag(tag, 1);
 
-    assert!(store.transcript_data(&NI_DKG_ID_1).is_none());
+        assert!(store.transcript_data(&dkg_id).is_none());
+    }
 }
 
 #[test]
@@ -113,12 +116,15 @@ fn should_insert_multiple_individual_public_keys() {
 
 #[test]
 fn should_not_contain_nonexistent_individual_public_key() {
-    let store = ThresholdSigDataStoreImpl::new();
+    for tag in all_tags() {
+        let store = ThresholdSigDataStoreImpl::new();
+        let dkg_id = ni_dkg_id_with_tag(tag, 1);
 
-    assert_eq!(
-        store.individual_public_key(&NI_DKG_ID_1, node_test_id(NODE_1)),
-        None
-    );
+        assert_eq!(
+            store.individual_public_key(&dkg_id, node_test_id(NODE_1)),
+            None
+        );
+    }
 }
 
 #[test]

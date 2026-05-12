@@ -16,7 +16,7 @@ use ic_nns_governance::{
         Environment, Governance, HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES, HeapGrowthPotential,
     },
     pb::v1::{
-        ExecuteNnsFunction, GovernanceError, InstallCode, ManageNeuron, Motion, Proposal,
+        GovernanceError, InstallCode, ManageNeuron, Motion, Proposal,
         governance_error::ErrorType,
         install_code::CanisterInstallMode,
         manage_neuron::{
@@ -25,11 +25,13 @@ use ic_nns_governance::{
         },
         proposal,
     },
+    proposals::execute_nns_function::ValidExecuteNnsFunction,
 };
 use ic_nns_governance_api::{
     self as api, ManageNeuronResponse, manage_neuron_response::Command as CommandResponse,
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
+use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use maplit::btreemap;
 use std::convert::TryFrom;
@@ -42,7 +44,11 @@ impl Environment for DegradedEnv {
         111000222
     }
 
-    fn execute_nns_function(&self, _: u64, _: &ExecuteNnsFunction) -> Result<(), GovernanceError> {
+    fn execute_nns_function(
+        &self,
+        _: u64,
+        _: &ValidExecuteNnsFunction,
+    ) -> Result<(), GovernanceError> {
         unimplemented!()
     }
 
@@ -69,6 +75,17 @@ impl IcpLedger for DegradedEnv {
         _: Option<Subaccount>,
         _: AccountIdentifier,
         _: u64,
+    ) -> Result<u64, NervousSystemError> {
+        unimplemented!()
+    }
+
+    async fn icrc2_transfer_from(
+        &self,
+        _from: Account,
+        _to: Account,
+        _amount_e8s: u64,
+        _fee_e8s: u64,
+        _memo: u64,
     ) -> Result<u64, NervousSystemError> {
         unimplemented!()
     }

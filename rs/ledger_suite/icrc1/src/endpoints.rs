@@ -6,7 +6,11 @@ use ic_ledger_core::tokens::TokensType;
 use icrc_ledger_types::icrc1::transfer::TransferError;
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
-use icrc_ledger_types::icrc3::transactions::{Approve, Burn, Mint, Transaction, Transfer};
+use icrc_ledger_types::icrc3::transactions::{
+    Approve, AuthorizedBurn, AuthorizedMint, Burn, FeeCollector, Mint, TRANSACTION_APPROVE,
+    TRANSACTION_AUTHORIZED_BURN, TRANSACTION_AUTHORIZED_MINT, TRANSACTION_BURN,
+    TRANSACTION_FEE_COLLECTOR, TRANSACTION_MINT, TRANSACTION_TRANSFER, Transaction, Transfer,
+};
 use serde::Deserialize;
 
 pub fn convert_transfer_error<Tokens: TokensType>(
@@ -159,6 +163,9 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
             burn: None,
             transfer: None,
             approve: None,
+            fee_collector: None,
+            authorized_mint: None,
+            authorized_burn: None,
             timestamp: b.timestamp,
         };
         let created_at_time = b.transaction.created_at_time;
@@ -166,7 +173,7 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
 
         match b.transaction.operation {
             Operation::Mint { to, amount, fee } => {
-                tx.kind = "mint".to_string();
+                tx.kind = TRANSACTION_MINT.to_string();
                 tx.mint = Some(Mint {
                     to,
                     amount: amount.into(),
@@ -181,7 +188,7 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                 amount,
                 fee,
             } => {
-                tx.kind = "burn".to_string();
+                tx.kind = TRANSACTION_BURN.to_string();
                 tx.burn = Some(Burn {
                     from,
                     spender,
@@ -198,7 +205,7 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                 amount,
                 fee,
             } => {
-                tx.kind = "transfer".to_string();
+                tx.kind = TRANSACTION_TRANSFER.to_string();
                 tx.transfer = Some(Transfer {
                     from,
                     to,
@@ -217,7 +224,7 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                 expires_at,
                 fee,
             } => {
-                tx.kind = "approve".to_string();
+                tx.kind = TRANSACTION_APPROVE.to_string();
                 tx.approve = Some(Approve {
                     from,
                     spender,
@@ -229,6 +236,53 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                         .or_else(|| b.effective_fee.map(Into::into)),
                     created_at_time,
                     memo,
+                });
+            }
+            Operation::FeeCollector {
+                fee_collector,
+                caller,
+                mthd,
+            } => {
+                tx.kind = TRANSACTION_FEE_COLLECTOR.to_string();
+                tx.fee_collector = Some(FeeCollector {
+                    fee_collector,
+                    caller,
+                    ts: created_at_time,
+                    mthd,
+                });
+            }
+            Operation::AuthorizedMint {
+                to,
+                amount,
+                caller,
+                mthd,
+                reason,
+            } => {
+                tx.kind = TRANSACTION_AUTHORIZED_MINT.to_string();
+                tx.authorized_mint = Some(AuthorizedMint {
+                    to,
+                    amount: amount.into(),
+                    created_at_time,
+                    caller,
+                    mthd,
+                    reason,
+                });
+            }
+            Operation::AuthorizedBurn {
+                from,
+                amount,
+                caller,
+                mthd,
+                reason,
+            } => {
+                tx.kind = TRANSACTION_AUTHORIZED_BURN.to_string();
+                tx.authorized_burn = Some(AuthorizedBurn {
+                    from,
+                    amount: amount.into(),
+                    created_at_time,
+                    caller,
+                    mthd,
+                    reason,
                 });
             }
         }

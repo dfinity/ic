@@ -3,23 +3,6 @@ load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
 
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/test_utils/canister_threshold_sigs",
-    "//rs/crypto/test_utils/crypto_returning_ok",
-    "//rs/limits",
-    "//rs/test_utilities",
-    "//rs/test_utilities/artifact_pool",
-    "//rs/test_utilities/consensus",
-    "//rs/test_utilities/logger",
-    "//rs/test_utilities/registry",
-    "//rs/test_utilities/time",
-    "//rs/test_utilities/types",
-    "@crate_index//:rand",
-    "@crate_index//:slog-async",
-    "@crate_index//:slog-term",
-]
-
 rust_library(
     name = "artifact_pool",
     srcs = glob(["src/**"]),
@@ -36,8 +19,8 @@ rust_library(
         "//rs/types/types",
         "@crate_index//:bincode",
         "@crate_index//:byteorder",
-        "@crate_index//:lmdb-rkv",
-        "@crate_index//:lmdb-rkv-sys",
+        "@crate_index//:lmdb_rkv",
+        "@crate_index//:lmdb_rkv_sys",
         "@crate_index//:nix",
         "@crate_index//:prometheus",
         "@crate_index//:prost",
@@ -69,8 +52,8 @@ rust_binary(
         "//rs/types/types",
         "@crate_index//:bincode",
         "@crate_index//:byteorder",
-        "@crate_index//:lmdb-rkv",
-        "@crate_index//:lmdb-rkv-sys",
+        "@crate_index//:lmdb_rkv",
+        "@crate_index//:lmdb_rkv_sys",
         "@crate_index//:nix",
         "@crate_index//:prometheus",
         "@crate_index//:prost",
@@ -96,13 +79,27 @@ rust_binary(
 rust_test(
     name = "artifact_pool_test",
     crate = ":artifact_pool",
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/test_utils/canister_threshold_sigs",
+        "//rs/crypto/test_utils/crypto_returning_ok",
+        "//rs/crypto/test_utils/ni-dkg",
+        "//rs/crypto/tree_hash",
+        "//rs/interfaces/state_manager",
+        "//rs/limits",
+        "//rs/test_utilities",
+        "//rs/test_utilities/artifact_pool",
+        "//rs/test_utilities/consensus",
+        "//rs/test_utilities/logger",
+        "//rs/test_utilities/registry",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/time",
+        "//rs/test_utilities/types",
+        "@crate_index//:rand",
+        "@crate_index//:slog-async",
+        "@crate_index//:slog-term",
+    ],
 )
-
-BENCH_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:criterion",
-]
 
 rust_bench(
     name = "load_blocks_bench",
@@ -119,8 +116,8 @@ rust_bench(
         "//rs/types/types",
         "@crate_index//:bincode",
         "@crate_index//:byteorder",
-        "@crate_index//:lmdb-rkv",
-        "@crate_index//:lmdb-rkv-sys",
+        "@crate_index//:lmdb_rkv",
+        "@crate_index//:lmdb_rkv_sys",
         "@crate_index//:nix",
         "@crate_index//:prometheus",
         "@crate_index//:prost",
@@ -135,5 +132,26 @@ rust_bench(
         ],
         "//conditions:default": [
         ],
-    }) + DEV_DEPENDENCIES + BENCH_DEPENDENCIES + [":artifact_pool"],
+    }) + [
+        # Keep sorted.
+        ":artifact_pool",
+        "//rs/crypto/test_utils/canister_threshold_sigs",
+        "//rs/crypto/test_utils/crypto_returning_ok",
+        "//rs/crypto/test_utils/ni-dkg",
+        "//rs/crypto/tree_hash",
+        "//rs/interfaces/state_manager",
+        "//rs/limits",
+        "//rs/test_utilities",
+        "//rs/test_utilities/artifact_pool",
+        "//rs/test_utilities/consensus",
+        "//rs/test_utilities/logger",
+        "//rs/test_utilities/registry",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/time",
+        "//rs/test_utilities/types",
+        "@crate_index//:criterion",
+        "@crate_index//:rand",
+        "@crate_index//:slog-async",
+        "@crate_index//:slog-term",
+    ],
 )

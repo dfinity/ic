@@ -11,6 +11,194 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-05-08: Proposal 141739
+
+http://dashboard.internetcomputer.org/proposal/141739
+
+## Added
+* Added an optional field `initial_dkg_subnet_id` to `SplitSubnetPayload` and `FulfillSubnetRentalRequest`,
+  which allows the proposer to choose which subnet should be responsible for generating the initial key
+  material of the split or rented subnet.
+
+## Changed
+* Updated the response text of some failed registry mutations. "Blessed" -> "Elected".
+
+
+# 2026-04-25: Proposal 141566
+
+http://dashboard.internetcomputer.org/proposal/141566
+
+## Added
+
+* Added an optional field `initial_dkg_subnet_id` to `CreateSubnetPayload` and `RecoverSubnetPayload`
+  which, when present, determines the subnet to which the resulting `SetupInitialDKG` management
+  canister call should be routed.
+* Added type4.1 through type4.5 node reward types for cloud-engine sub-variants.
+
+
+# 2026-04-06: Proposal 141243
+
+http://dashboard.internetcomputer.org/proposal/141243
+
+## Added
+
+* New invariant ensuring that cloud engines contain only nodes with `type4` reward type and that
+  non-cloud engines do not contain any nodes with `type4` reward type.
+
+
+# 2026-03-27: Proposal 141091
+
+http://dashboard.internetcomputer.org/proposal/141091
+
+## Added
+
+* Subnet deletion endpoint. Limited to CloudEngine subnets. 
+* Implemented the `do_split_subnet` method
+* Added an optional field `maximum_state_delta` to `ResourceLimits` in `CreateSubnetPayload` which, when present,
+  sets a soft limit on the maximum (replicated) state *delta* (kept in main memory) in bytes.
+* Added an optional field `resource_limits` to `UpdateSubnetPayload` which, when present,
+  sets all subnet resource limits to the provided values.
+
+
+# 2026-03-20: Proposal 140960
+
+http://dashboard.internetcomputer.org/proposal/140960
+
+## Added
+* Added an optional field `resource_limits` to `CreateSubnetPayload` which, when present,
+  sets limits on resource usage (e.g., disk usage) of the created subnet.
+
+* Rate limit the number of subnet admin updates that can happen for a subnet.
+
+### Node operator migration
+
+Node providers can now migrate nodes from one node operator to another within the same data center without reinstalling nodes or disrupting subnet membership. The source and destination node operators must belong to the same node provider.
+
+If the destination node operator does not yet exist, it is created automatically, effectively allowing a node provider to rotate to a fresh node operator identity.
+
+## Changed
+
+* During node registration, IDKG keys now must be generated and provided by the replica. Previously these keys were optional.
+
+
+# 2026-03-13: Proposal 140861
+
+http://dashboard.internetcomputer.org/proposal/140861
+
+## Added
+
+* Adding support for recalling replica versions for subnets.
+* CloudEngines can have a Free cycles cost schedule. 
+* **SEV invariant:** Enforced that SEV-enabled subnets contain only SEV-enabled nodes (i.e., nodes with a chip ID in their node record).
+* New invariant to check that subnet admins can be non-empty only for rented subnets.
+* New endpoint to update the subnet admins field in the SubnetRecord.
+
+## Changed
+
+* **SEV on existing subnets:** Enabled SEV activation for existing subnets. Once enabled, SEV cannot be disabled.
+
+
+# 2026-03-07: Proposal 140777
+
+http://dashboard.internetcomputer.org/proposal/140777
+
+## Added
+
+* Adding support for recalling replica versions for subnets.
+
+
+# 2026-02-27: Proposal 140599
+
+http://dashboard.internetcomputer.org/proposal/140599
+
+## Added
+
+* Added an optional field `max_ingress_bytes_per_block` to `CreateSubnetPayload` and
+`UpdateSubnetPayload` which, when present, will set a limit on how big the ingress payload can be in
+blocks produced by the created/updated subnet.
+
+
+# 2026-02-20: Proposal 140510
+
+http://dashboard.internetcomputer.org/proposal/140510
+
+## Added
+
+* Add type4 node reward type for Cloud Engine nodes.
+* Invariant about cycles cost schedule and subnet types allowing only application subnets to be put on "Free" schedule.
+* New subnet admins field in the SubnetRecord.
+
+
+# 2026-02-11: Proposal 140316
+
+http://dashboard.internetcomputer.org/proposal/140316
+
+## Added
+
+* Enabling direct node swapping feature on all subnets for all node operators.
+
+## Fixed
+
+* When performing `RemoveNodes`, generate 1 update mutation per node operator key. Before this change, a single node operator record would be changed multiple times in a single version if the remove nodes proposal removed multiple nodes from the same node operator, which caused confusion. This bug resulted in incorrect tracking of node operator allowance depending on how they are fetched from the registry (given the different implementations in the registry utility functions).
+
+
+# 2026-01-16: Proposal 140014
+
+http://dashboard.internetcomputer.org/proposal/140014
+
+## Changed
+
+* Promoted the check for empty SEV measurements in replica versions from a check on proposals, to an invariant of the registry.
+
+* When performing subnet creation, subnet update, or subnet recovery, it is now mandatory to omit the `KeyConfig`'s `pre_signatures_to_create_in_advance` field for keys that do not have pre-signatures. Currently only vetKD keys do not have pre-signatures (unlike Ecdsa/Schnorr keys).
+
+  This is a *breaking* change because setting the `pre_signatures_to_create_in_advance` field for vetKD keys is no longer allowed. However, only governance proposals are affected, which are typically constructed via ic-admin, which was adapted to behave correctly.
+
+## Fixed
+
+* Migrate vetKD chain keys in specific subnets: change the chain key config's `pre_signatures_to_create_in_advance` field from `Some(0)` to `None` to align with the correct representation for keys that do not have pre-signatures
+
+
+# 2026-01-09: Proposal 139941
+
+http://dashboard.internetcomputer.org/proposal/139941
+
+## Fixed
+
+* Display correct error message for node swaps in case of rate limit errors
+
+
+# 2025-12-05: Proposal 139679
+
+http://dashboard.internetcomputer.org/proposal/139679
+
+## Changed
+
+* When performing subnet creation, subnet update, or subnet recovery, it is now allowed to omit the `KeyConfig`'s `pre_signatures_to_create_in_advance` field for keys that do not have pre-signatures. Currently only vetKD keys do not have pre-signatures (unlike Ecdsa/Schnorr keys). When the field is omitted, it is automatically set to zero.
+
+### Fixed
+
+* Repair a handful or so of broken node operator records.
+
+
+# 2025-11-28: Proposal 139576
+
+http://dashboard.internetcomputer.org/proposal/139576
+
+## Added
+
+### Node Swaps
+
+All node operators can now swap nodes on non-system subnets; later, swapping will be enabled on all subnets.
+
+### Other
+
+* Temporary logging for when add_node traps.
+
+* Migration Swiss subnet Node Operators max_rewardable_nodes to btreemap! {"type3.1" => 1} as requested by
+  Alexander Ufimtsev.
+
+
 # 2025-11-14: Proposal 139405
 
 http://dashboard.internetcomputer.org/proposal/139405

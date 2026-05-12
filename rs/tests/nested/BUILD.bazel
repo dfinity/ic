@@ -13,6 +13,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/canister_client",
+        "//rs/ic_os/dev_test_tools/bare_metal_deployment",
         "//rs/nervous_system/common/test_keys",
         "//rs/nns/common",
         "//rs/protobuf",
@@ -47,10 +48,9 @@ genrule(
 system_test_nns(
     name = "registration",
     env = MAINNET_ENV,
-    flaky = True,  # flakiness rate of over 2% over the month from 2025-02-11 till 2025-03-11.
+    setupos = True,
     tags = ["long_test"],  # since it takes longer than 5 minutes.
     test_timeout = "eternal",
-    uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -69,6 +69,7 @@ rust_binary(
         ":nested",
         "//rs/registry/nns_data_provider",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:reqwest",
         "@crate_index//:slog",
@@ -79,31 +80,68 @@ rust_binary(
 system_test_nns(
     name = "guestos_upgrade_smoke_test",
     env = MAINNET_ENV,
-    flaky = True,
+    guestos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_driver_target = ":guestos_upgrade_test_bin",
     test_timeout = "eternal",
-    uses_guestos_test_update = True,
-    uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
+)
+
+# Tests if the current GuestOS version on a bare-metal SEV-enabled node can successfully
+# upgrade to the current test image.
+# This test requires manually injecting the baremetal configuration.
+# ict test //rs/tests/nested:guestos_upgrade_from_current_to_current_test_sev -- --test_env=BARE_METAL_HOST_SECRETS="$(realpath zh2-dll01.ini)"
+# zh2-dll01.ini can be retrieved from our 1password
+system_test_nns(
+    name = "guestos_upgrade_from_current_to_current_test_sev",
+    env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
+    guestos = True,
+    guestos_update = "test",
+    hostos = True,
+    tags = [
+        "manual",
+    ],
+    test_driver_target = ":guestos_upgrade_test_bin",
+    test_timeout = "eternal",
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
+    },
 )
 
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully guestos upgrade to current commit
 system_test_nns(
     name = "guestos_upgrade_from_latest_release_to_current",
-    env = MAINNET_ENV | {
-        "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
-    },
-    flaky = True,
+    guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
+    guestos_update = True,
+    setupos = "mainnet_latest_dev",
     tags = ["long_test"],
     test_driver_target = ":guestos_upgrade_test_bin",
     test_timeout = "eternal",
-    uses_dev_mainnet = True,  # necessary for configuring NNS public key
-    uses_guestos_img = False,
-    uses_guestos_mainnet_latest_img = True,
-    uses_guestos_update = True,
-    uses_setupos_mainnet_latest_img = True,
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
+    },
+)
+
+# Tests if "latest_release" in mainnet-icos-revisions.json can successfully guestos upgrade to current commit
+# on SEV-enabled nodes
+# This test requires manually injecting the baremetal configuration
+# ict test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev -- --test_env=BARE_METAL_HOST_SECRETS="$(realpath zh2-dll01.ini)"
+# zh2-dll01.ini can be retrieved from our 1password
+system_test_nns(
+    name = "guestos_upgrade_from_latest_release_to_current_sev",
+    env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
+    guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
+    guestos_update = True,
+    hostos = "mainnet_latest_dev",
+    tags = [
+        "manual",
+    ],
+    test_driver_target = ":guestos_upgrade_test_bin",
+    test_timeout = "eternal",
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
+    },
 )
 
 rust_binary(
@@ -124,29 +162,86 @@ rust_binary(
 system_test_nns(
     name = "hostos_upgrade_smoke_test",
     env = MAINNET_ENV,
-    flaky = True,
+    hostos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_driver_target = ":hostos_upgrade_test_bin",
     test_timeout = "eternal",
-    uses_hostos_test_update = True,
-    uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
 )
 
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully hostos upgrade to current commit
 system_test_nns(
     name = "hostos_upgrade_from_latest_release_to_current",
-    env = MAINNET_ENV | {
-        "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
-    },
-    flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
+    guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
+    hostos_update = True,
+    setupos = "mainnet_latest_dev",
     tags = ["long_test"],
     test_driver_target = ":hostos_upgrade_test_bin",
     test_timeout = "eternal",
-    uses_dev_mainnet = True,  # necessary for configuring NNS public key
-    uses_guestos_img = False,
-    uses_guestos_mainnet_latest_img = True,
-    uses_hostos_update = True,
-    uses_setupos_mainnet_latest_img = True,
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
+    },
+)
+
+# Tests if "latest_release" in mainnet-icos-revisions.json can successfully hostos upgrade to current commit on
+# SEV-enabled nodes
+# This test requires manually injecting the baremetal configuration
+# ict test //rs/tests/nested:hostos_upgrade_from_latest_release_to_current_sev -- --test_env=BARE_METAL_HOST_SECRETS="$(realpath zh2-dll01.ini)"
+# zh2-dll01.ini can be retrieved from our 1password
+system_test_nns(
+    name = "hostos_upgrade_from_latest_release_to_current_sev",
+    env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
+    hostos = "mainnet_latest_dev",
+    hostos_update = True,
+    tags = [
+        "manual",
+    ],
+    test_driver_target = ":hostos_upgrade_test_bin",
+    test_timeout = "eternal",
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
+    },
+)
+
+# Tests if SEV-enabled nodes can be recovered using a recovery GuestOS image
+# This test requires manually injecting the baremetal configuration
+# ict test //rs/tests/nested:sev_recovery -- --test_env=BARE_METAL_HOST_SECRETS="$(realpath zh2-dll01.ini)"
+# zh2-dll01.ini can be retrieved from our 1password
+system_test_nns(
+    name = "sev_recovery",
+    env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
+    guestos = {
+        "default": True,
+        "recovery": "sev_recovery_dev",
+    },
+    hostos = True,
+    tags = [
+        "manual",
+    ],
+    test_timeout = "eternal",
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
+    },
+    deps = [
+        # Keep sorted.
+        ":nested",
+        "//rs/canister_client",
+        "//rs/crypto/tree_hash",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/common",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
+        "//rs/protobuf",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:ic-agent",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:slog",
+        "@crate_index//:tempfile",
+    ],
 )

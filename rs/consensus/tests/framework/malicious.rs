@@ -32,7 +32,7 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for InvalidNotaryShareSignature 
                 let timestamp = msg.timestamp;
                 if let Some(share) = NotarizationShare::assert(&msg.msg)
                     .map(|share| {
-                        let mut share = pb::NotarizationShare::from(share);
+                        let mut share = pb::NotarizationShare::from(share.clone());
                         let len = share.signature.len();
                         share.signature[len / 2] = share.signature[len / 2].wrapping_add(1);
                         share

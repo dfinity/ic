@@ -831,7 +831,7 @@ unsafe fn truncate_file(fd: RawFd, offset: FileOffset) -> c_int {
 }
 #[cfg(not(target_os = "linux"))]
 unsafe fn truncate_file(fd: RawFd, offset: FileOffset) -> c_int {
-    libc::ftruncate(fd, offset)
+    unsafe { libc::ftruncate(fd, offset) }
 }
 
 // A platform-specific function to get the length of a file.
@@ -849,14 +849,16 @@ unsafe fn get_file_length(fd: RawFd) -> FileOffset {
 }
 #[cfg(not(target_os = "linux"))]
 unsafe fn get_file_length(fd: RawFd) -> FileOffset {
-    let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
-    cvt(libc::fstat(fd, stat.as_mut_ptr())).unwrap_or_else(|err| {
-        panic!(
-            "MmapPageAllocator failed get the length of the file #{}: {}",
-            fd, err
-        )
-    });
-    stat.assume_init().st_size
+    unsafe {
+        let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+        cvt(libc::fstat(fd, stat.as_mut_ptr())).unwrap_or_else(|err| {
+            panic!(
+                "MmapPageAllocator failed get the length of the file #{}: {}",
+                fd, err
+            )
+        });
+        stat.assume_init().st_size
+    }
 }
 
 #[cfg(test)]

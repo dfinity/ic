@@ -392,8 +392,8 @@ mod test {
         assert!(rewards_distribution_state_machine.distributions.is_empty());
     }
 
-    #[test]
-    fn test_distribute_pending_rewards() {
+    #[tokio::test]
+    async fn test_distribute_pending_rewards() {
         // We are testing recoverability of the system (i.e. it got stalled, but we didnt' lose data, and now
         // it is able to finish processing)
         let mut governance = Governance::new(
@@ -425,7 +425,7 @@ mod test {
 
         // We have to run this more times b/c the test version of is_over_instructions_limit returns true every
         // other time it's called.
-        run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(2), 10);
+        run_pending_timers_every_interval_for_count(std::time::Duration::from_secs(2), 10).await;
 
         with_rewards_distribution_state_machine_mut(|rewards_distribution_state_machine| {
             assert!(rewards_distribution_state_machine.distributions.is_empty())

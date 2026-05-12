@@ -59,7 +59,7 @@ proptest! {
         let init_args = InitArgsBuilder::for_tests()
             .with_minting_account(MINTER_IDENTITY.clone().sender().unwrap())
             .with_transfer_fee(DEFAULT_TRANSFER_FEE)
-            .with_feature_flags(FeatureFlags {icrc2:true})
+            .with_feature_flags(FeatureFlags { icrc2: true, icrc152: false })
             .with_archive_options(ArchiveOptions {
                 // Create archive after every ten blocks
                 trigger_threshold: 10,
@@ -85,10 +85,10 @@ proptest! {
             });
 
             // Create the storage client where blocks will be stored
-            let storage_client = Arc::new(StorageClient::new_in_memory().unwrap());
+            let storage_client = Arc::new(StorageClient::new_in_memory().await.unwrap());
 
             // No blocks have been synched. The update should succeed with no accounts being updated
-            storage_client.update_account_balances().unwrap();
+            storage_client.update_account_balances().await.unwrap();
 
             // A mapping between accounts, block indices and their respective balances
             let mut account_balance_at_block_idx = HashMap::new();
@@ -141,7 +141,7 @@ proptest! {
             }
 
             blocks_synchronizer::start_synching_blocks(agent.clone(), storage_client.clone(), 10,Arc::new(AsyncMutex::new(vec![])), RecurrencyMode::OneShot, Box::new(|| {})).await.unwrap();
-            storage_client.update_account_balances().unwrap();
+            storage_client.update_account_balances().await.unwrap();
 
             let mut block_indices_iter = block_indices.into_iter().collect::<Vec<u64>>();
             block_indices_iter.sort();
@@ -150,14 +150,14 @@ proptest! {
             for idx in block_indices_iter.into_iter(){
                 for account in accounts.clone().into_iter(){
                     account_balance_at_block_idx.contains_key(&(account,idx)).then(|| current_balances.entry(account).and_modify(|balance| *balance = account_balance_at_block_idx.get(&(account,idx)).unwrap().clone()));
-                    assert_eq!(*current_balances.get(&account).unwrap(),storage_client.get_account_balance_at_block_idx(&account,idx).unwrap().unwrap_or(Nat(BigUint::zero())));
+                    assert_eq!(*current_balances.get(&account).unwrap(),storage_client.get_account_balance_at_block_idx(&account,idx).await.unwrap().unwrap_or(Nat(BigUint::zero())));
                 }
             }
 
             // Check that the current balances of the ledger and rosetta storage match up
             for account  in accounts.clone().into_iter(){
                 let balance_ledger = agent.balance_of(account,CallMode::Query).await.unwrap();
-                let balance_rosetta = storage_client.get_account_balance(&account).unwrap().unwrap_or(Nat(BigUint::zero()));
+                let balance_rosetta = storage_client.get_account_balance(&account).await.unwrap().unwrap_or(Nat(BigUint::zero()));
                 assert_eq!(balance_ledger,balance_rosetta);
             }
         });
@@ -177,7 +177,10 @@ fn test_self_transfer() {
     let init_args = InitArgsBuilder::for_tests()
         .with_minting_account(MINTER_IDENTITY.clone().sender().unwrap())
         .with_transfer_fee(DEFAULT_TRANSFER_FEE)
-        .with_feature_flags(FeatureFlags { icrc2: true })
+        .with_feature_flags(FeatureFlags {
+            icrc2: true,
+            icrc152: false,
+        })
         .with_initial_balance(account, Nat::from(100_000_000_u64))
         .build();
 
@@ -190,7 +193,7 @@ fn test_self_transfer() {
             agent: local_replica::get_testing_agent(port).await,
             ledger_canister_id: icrc_ledger_canister_id,
         });
-        let storage_client = Arc::new(StorageClient::new_in_memory().unwrap());
+        let storage_client = Arc::new(StorageClient::new_in_memory().await.unwrap());
 
         blocks_synchronizer::start_synching_blocks(
             agent.clone(),
@@ -202,13 +205,14 @@ fn test_self_transfer() {
         )
         .await
         .unwrap();
-        storage_client.update_account_balances().unwrap();
+        storage_client.update_account_balances().await.unwrap();
 
         let balance = agent.balance_of(account, CallMode::Query).await.unwrap();
         assert_eq!(balance, Nat::from(100_000_000_u64));
         assert_eq!(
             storage_client
                 .get_account_balance(&account)
+                .await
                 .unwrap()
                 .unwrap(),
             Nat::from(100_000_000_u64)
@@ -217,7 +221,7 @@ fn test_self_transfer() {
         agent
             .transfer(TransferArg {
                 to: account,
-                amount: 1000u64.into(),
+                amount: 1000_u64.into(),
                 fee: Some(DEFAULT_TRANSFER_FEE.into()),
                 from_subaccount: None,
                 created_at_time: None,
@@ -237,13 +241,14 @@ fn test_self_transfer() {
         )
         .await
         .unwrap();
-        storage_client.update_account_balances().unwrap();
+        storage_client.update_account_balances().await.unwrap();
 
         let balance = agent.balance_of(account, CallMode::Query).await.unwrap();
         assert_eq!(balance, Nat::from(100_000_000 - DEFAULT_TRANSFER_FEE));
         assert_eq!(
             storage_client
                 .get_account_balance(&account)
+                .await
                 .unwrap()
                 .unwrap(),
             Nat::from(100_000_000 - DEFAULT_TRANSFER_FEE)
@@ -289,7 +294,7 @@ fn test_burn_and_mint_fee() {
             agent: local_replica::get_testing_agent(port).await,
             ledger_canister_id: icrc_ledger_canister_id,
         });
-        let storage_client = Arc::new(StorageClient::new_in_memory().unwrap());
+        let storage_client = Arc::new(StorageClient::new_in_memory().await.unwrap());
 
         const FEE_COLLECTOR: Account = Account {
             owner: PrincipalId::new_user_test_id(2).0,
@@ -298,18 +303,18 @@ fn test_burn_and_mint_fee() {
 
         // Create mint and burn blocks with fees, and add them to the ledger
         let block0 = BlockBuilder::new(0, 1000)
-            .with_fee(Tokens::from(50u64))
-            .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
+            .with_fee(Tokens::from(50_u64))
+            .mint(*TEST_ACCOUNT, Tokens::from(1_000_u64))
             .build();
         let block1 = BlockBuilder::new(1, 2000)
             .with_parent_hash(block0.clone().hash().to_vec())
-            .with_fee(Tokens::from(50u64))
-            .burn(*TEST_ACCOUNT, Tokens::from(50u64))
+            .with_fee(Tokens::from(50_u64))
+            .burn(*TEST_ACCOUNT, Tokens::from(50_u64))
             .build();
         let result0 = add_block(&agent, &block0).await.unwrap();
-        assert_eq!(result0, Nat::from(0u64));
+        assert_eq!(result0, Nat::from(0_u64));
         let result1 = add_block(&agent, &block1).await.unwrap();
-        assert_eq!(result1, Nat::from(1u64));
+        assert_eq!(result1, Nat::from(1_u64));
 
         blocks_synchronizer::start_synching_blocks(
             agent.clone(),
@@ -321,18 +326,20 @@ fn test_burn_and_mint_fee() {
         )
         .await
         .unwrap();
-        storage_client.update_account_balances().unwrap();
+        storage_client.update_account_balances().await.unwrap();
 
         assert_eq!(
             storage_client
                 .get_account_balance(&TEST_ACCOUNT)
+                .await
                 .unwrap()
                 .unwrap(),
-            Nat::from(850u64) // mint 1000 - mint fee 50 - burn 50 - burn fee 50
+            Nat::from(850_u64) // mint 1000 - mint fee 50 - burn 50 - burn fee 50
         );
         assert!(
             storage_client
                 .get_account_balance(&FEE_COLLECTOR)
+                .await
                 .unwrap()
                 .is_none()
         ); // no fee collector in the first 2 blocks
@@ -340,20 +347,20 @@ fn test_burn_and_mint_fee() {
         // Create mint and burn blocks with fees and fee collector, and add them to the ledger
         let block2 = BlockBuilder::new(2, 3000)
             .with_parent_hash(block1.clone().hash().to_vec())
-            .with_fee(Tokens::from(50u64))
+            .with_fee(Tokens::from(50_u64))
             .with_fee_collector(FEE_COLLECTOR)
-            .mint(*TEST_ACCOUNT, Tokens::from(100u64))
+            .mint(*TEST_ACCOUNT, Tokens::from(100_u64))
             .build();
         let block3 = BlockBuilder::new(3, 4000)
             .with_parent_hash(block2.clone().hash().to_vec())
             .with_fee_collector_block(2)
-            .with_fee(Tokens::from(50u64))
-            .burn(*TEST_ACCOUNT, Tokens::from(50u64))
+            .with_fee(Tokens::from(50_u64))
+            .burn(*TEST_ACCOUNT, Tokens::from(50_u64))
             .build();
         let result2 = add_block(&agent, &block2).await.unwrap();
-        assert_eq!(result2, Nat::from(2u64));
+        assert_eq!(result2, Nat::from(2_u64));
         let result3 = add_block(&agent, &block3).await.unwrap();
-        assert_eq!(result3, Nat::from(3u64));
+        assert_eq!(result3, Nat::from(3_u64));
 
         blocks_synchronizer::start_synching_blocks(
             agent.clone(),
@@ -365,21 +372,23 @@ fn test_burn_and_mint_fee() {
         )
         .await
         .unwrap();
-        storage_client.update_account_balances().unwrap();
+        storage_client.update_account_balances().await.unwrap();
 
         assert_eq!(
             storage_client
                 .get_account_balance(&TEST_ACCOUNT)
+                .await
                 .unwrap()
                 .unwrap(),
-            Nat::from(800u64) // 850 + mint 100 - mint fee 50 - burn 50 - burn fee 50
+            Nat::from(800_u64) // 850 + mint 100 - mint fee 50 - burn 50 - burn fee 50
         );
         assert_eq!(
             storage_client
                 .get_account_balance(&FEE_COLLECTOR)
+                .await
                 .unwrap()
                 .unwrap(),
-            Nat::from(100u64) // mint fee 50 + burn fee 50
+            Nat::from(100_u64) // mint fee 50 + burn fee 50
         );
     });
 }

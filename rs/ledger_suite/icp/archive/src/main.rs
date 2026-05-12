@@ -6,7 +6,7 @@ use ic_cdk::{
         call::{arg_data_raw, reply, reply_raw},
         caller, print,
     },
-    futures::{in_executor_context, in_query_executor_context},
+    futures::internals::{in_executor_context, in_query_executor_context},
     post_upgrade, query,
 };
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};

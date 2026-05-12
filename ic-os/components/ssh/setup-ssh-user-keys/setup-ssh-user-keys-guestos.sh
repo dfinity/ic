@@ -18,7 +18,7 @@ copy_ssh_keys() {
 
 # Create home directories
 echo "Creating user home directories"
-for ACCOUNT in backup readonly admin; do
+for ACCOUNT in backup readonly admin recovery; do
     HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
     echo "Creating home directory for ${ACCOUNT}: ${HOMEDIR}"
     mkdir -p "${HOMEDIR}"
@@ -26,7 +26,7 @@ done
 
 # Setup SSH keys
 echo "Setting up SSH keys for accounts"
-for ACCOUNT in backup readonly admin; do
+for ACCOUNT in backup readonly admin recovery; do
     HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
     GROUP=$(id -ng "${ACCOUNT}")
 
@@ -36,7 +36,7 @@ for ACCOUNT in backup readonly admin; do
     GUESTOS_AUTHORIZED_SSH_KEYS="/boot/config/accounts_ssh_authorized_keys/${ACCOUNT}"
     AUTHORIZED_KEYS_FILE="${HOMEDIR}/.ssh/authorized_keys"
 
-    if [ "$SEV_ACTIVE" = 0 ]; then
+    if [ "$TEE_ENABLED" = 0 ]; then
         echo "SEV/TEE is not active - SSH key copying is enabled"
         copy_ssh_keys "${GUESTOS_AUTHORIZED_SSH_KEYS}" "${AUTHORIZED_KEYS_FILE}"
     else

@@ -1,20 +1,21 @@
 use crate::{
     args::OrchestratorArgs,
     boundary_node::BoundaryNodeManager,
-    catch_up_package_provider::CatchUpPackageProvider,
+    catch_up_package_provider::{CatchUpPackageProvider, LocalCUPReader},
     dashboard::{Dashboard, OrchestratorDashboard},
     firewall::Firewall,
     hostos_upgrade::HostosUpgrader,
     ipv4_network::Ipv4Configurator,
     metrics::OrchestratorMetrics,
-    process_manager::ProcessManager,
+    process_manager::ProcessManagerImpl,
     registration::NodeRegistration,
     registry_helper::RegistryHelper,
     ssh_access_manager::SshAccessManager,
     upgrade::{OrchestratorControlFlow, Upgrade},
 };
+use anyhow::Context;
 use backoff::ExponentialBackoffBuilder;
-use get_if_addrs::get_if_addrs;
+use config_tool::guestos::network::{get_best_interface_name, get_interface_addresses};
 use guest_upgrade_server::orchestrator::new_disk_encryption_key_exchange_server_agent_for_orchestrator;
 use ic_config::{
     Config,
@@ -23,7 +24,7 @@ use ic_config::{
 use ic_crypto::CryptoComponent;
 use ic_crypto_node_key_generation::{NodeKeyGenerationError, generate_node_keys_once};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
-use ic_image_upgrader::ImageUpgrader;
+use ic_image_upgrader::{ImageUpgrader, ManagebootRunnerImpl};
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
@@ -33,7 +34,7 @@ use std::{
     collections::HashMap,
     convert::TryFrom,
     future::Future,
-    net::SocketAddr,
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     thread,
@@ -46,12 +47,25 @@ const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
 
 /// The subnet is initially in the `Unknown` state. After the upgrade loop runs for the first time,
 /// it will initialize it to either `Unassigned` or `Assigned(subnet_id)`.
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub(crate) enum SubnetAssignment {
     #[default]
     Unknown,
     Unassigned,
     Assigned(SubnetId),
+}
+
+impl PartialEq for SubnetAssignment {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (SubnetAssignment::Unknown, SubnetAssignment::Unknown) => false,
+            (SubnetAssignment::Unassigned, SubnetAssignment::Unassigned) => true,
+            (SubnetAssignment::Assigned(sid1), SubnetAssignment::Assigned(sid2)) => sid1 == sid2,
+            (SubnetAssignment::Unknown, _) => false,
+            (SubnetAssignment::Unassigned, _) => false,
+            (SubnetAssignment::Assigned(_), _) => false,
+        }
+    }
 }
 
 pub struct Orchestrator {
@@ -138,16 +152,24 @@ impl Orchestrator {
             loop {
                 // Sleep early because IPv4 takes several minutes to configure
                 thread::sleep(Duration::from_secs(10 * 60));
-                let (ipv4, ipv6) = Self::get_ip_addresses();
+                let (ipv4, ipv6) = Self::get_ip_addresses().unwrap_or_default();
 
                 let message = indoc::formatdoc!(
                     r#"
                     Node-id: {node_id}
                     Replica version: {version}
-                    IPv6: {ipv6}
-                    IPv4: {ipv4}
+                    IPv6: {}
+                    IPv4: {}
 
-                "#
+                "#,
+                    match ipv6 {
+                        Some(ip) => ip.to_string(),
+                        None => "none configured".to_string(),
+                    },
+                    match ipv4 {
+                        Some(ip) => ip.to_string(),
+                        None => "none configured".to_string(),
+                    },
                 );
 
                 UtilityCommand::notify_host(&message, 1);
@@ -160,19 +182,11 @@ impl Orchestrator {
         let metrics = Arc::new(metrics);
         let mut task_tracker = TaskTracker::new(metrics.clone(), logger.clone());
 
-        let registry_replicator = Arc::new(RegistryReplicator::new_from_config(
-            logger.clone(),
-            Some(node_id),
-            config,
-        ));
+        let registry_replicator = Arc::new(
+            RegistryReplicator::new_from_config(logger.clone(), Some(node_id), config).await,
+        );
 
-        let (nns_urls, nns_pub_key) =
-            registry_replicator.parse_registry_access_info_from_config(config);
-
-        match registry_replicator
-            .start_polling(nns_urls, nns_pub_key, cancellation_token)
-            .await
-        {
+        match registry_replicator.start_polling(cancellation_token) {
             Ok(future) => task_tracker.spawn("registry_replicator", future),
             Err(err) => {
                 metrics
@@ -186,8 +200,6 @@ impl Orchestrator {
             }
         }
 
-        // Filesystem API to local registry copy
-        let registry_local_store = registry_replicator.get_local_store();
         // Caches local registry by regularly polling local store
         let registry_client = registry_replicator.get_registry_client();
         // Wrapper to `RegistryClient`
@@ -198,14 +210,14 @@ impl Orchestrator {
         ));
 
         let c_log = logger.clone();
-        let c_registry = registry.clone();
+        let c_registry_client = registry_client.clone();
         let crypto_config = config.crypto.clone();
         let c_metrics = metrics_registry.clone();
         let crypto = tokio::task::spawn_blocking(move || {
             Arc::new(CryptoComponent::new(
                 &crypto_config,
                 Some(tokio::runtime::Handle::current()),
-                c_registry.get_registry_client(),
+                c_registry_client,
                 c_log.clone(),
                 Some(&c_metrics),
             ))
@@ -225,24 +237,32 @@ impl Orchestrator {
             Arc::clone(&metrics),
             node_id,
             Arc::clone(&crypto) as _,
-            registry_local_store.clone(),
+            Arc::clone(&crypto) as _,
         );
 
-        let replica_process = Arc::new(Mutex::new(ProcessManager::new(logger.clone())));
+        let replica_process = Arc::new(Mutex::new(ProcessManagerImpl::new(logger.clone())));
         let ic_binary_directory = args
             .ic_binary_directory
             .as_ref()
             .unwrap_or(&PathBuf::from("/tmp"))
             .clone();
+        let manageboot_runner = Box::new(ManagebootRunnerImpl::new(
+            ic_binary_directory.join("manageboot.sh"),
+        ));
 
-        let cup_provider = Arc::new(CatchUpPackageProvider::new(
+        // Create a read-only CUP reader that can be shared among Dashboard and Firewall
+        // They read from the same file, so they'll see the same persisted CUP
+        let local_cup_reader = LocalCUPReader::new(args.cup_dir.clone(), logger.clone());
+
+        // Create the cup_provider for the Upgrade module
+        let cup_provider = CatchUpPackageProvider::new(
             Arc::clone(&registry),
-            args.cup_dir.clone(),
+            local_cup_reader.clone(),
             Arc::clone(&crypto) as _,
             Arc::clone(&crypto) as _,
             logger.clone(),
             node_id,
-        ));
+        );
 
         if args.enable_provisional_registration {
             // will not return until the node is registered
@@ -255,17 +275,21 @@ impl Orchestrator {
                 Arc::clone(&registry_client),
             );
 
+        let subnet_assignment: Arc<RwLock<SubnetAssignment>> = Default::default();
+
         let upgrade = Some(
             Upgrade::new(
-                Arc::clone(&registry),
+                Arc::clone(&registry) as _,
                 Arc::clone(&metrics),
-                Arc::clone(&replica_process),
-                Arc::clone(&cup_provider),
+                Arc::clone(&replica_process) as _,
+                manageboot_runner,
+                cup_provider,
+                Arc::clone(&subnet_assignment),
                 replica_version.clone(),
                 args.replica_config_file.clone(),
                 node_id,
                 ic_binary_directory.clone(),
-                registry_replicator,
+                Arc::clone(&registry_replicator) as _,
                 args.replica_binary_dir.clone(),
                 logger.clone(),
                 args.orchestrator_data_directory.clone(),
@@ -316,7 +340,7 @@ impl Orchestrator {
             Arc::clone(&metrics),
             config.firewall.clone(),
             config.boundary_node_firewall.clone(),
-            cup_provider.clone(),
+            local_cup_reader.clone(),
             logger.clone(),
         );
 
@@ -334,19 +358,18 @@ impl Orchestrator {
             logger.clone(),
         );
 
-        let subnet_assignment: Arc<RwLock<SubnetAssignment>> = Default::default();
-
         let orchestrator_dashboard = Some(OrchestratorDashboard::new(
             Arc::clone(&registry),
             node_id,
             ssh_access_manager.get_last_applied_parameters(),
             firewall.get_last_applied_version(),
             ipv4_configurator.get_last_applied_version(),
+            registry_replicator.get_latest_certified_time(),
             replica_process,
             Arc::clone(&subnet_assignment),
             replica_version,
             hostos_version.ok(),
-            cup_provider,
+            local_cup_reader,
             logger.clone(),
         ));
 
@@ -389,7 +412,6 @@ impl Orchestrator {
     ///    to do the rotation and attempt to register the rotated key.
     pub async fn start_tasks(&mut self, cancellation_token: CancellationToken) {
         async fn upgrade_checks(
-            subnet_assignment: Arc<RwLock<SubnetAssignment>>,
             mut upgrade: Upgrade,
             cancellation_token: CancellationToken,
             log: ReplicaLogger,
@@ -406,20 +428,10 @@ impl Orchestrator {
                     Ok(Ok(control_flow)) => {
                         upgrade.metrics.failed_consecutive_upgrade_checks.reset();
 
-                        match control_flow {
-                            OrchestratorControlFlow::Assigned(subnet_id)
-                            | OrchestratorControlFlow::Leaving(subnet_id) => {
-                                *subnet_assignment.write().unwrap() =
-                                    SubnetAssignment::Assigned(subnet_id);
-                            }
-                            OrchestratorControlFlow::Unassigned => {
-                                *subnet_assignment.write().unwrap() = SubnetAssignment::Unassigned;
-                            }
-                            OrchestratorControlFlow::Stop => {
-                                // Wake up all orchestrator tasks and instruct them to stop.
-                                cancellation_token.cancel();
-                                break;
-                            }
+                        if matches!(control_flow, OrchestratorControlFlow::Stop) {
+                            // Wake up all orchestrator tasks and instruct them to stop.
+                            cancellation_token.cancel();
+                            break;
                         }
 
                         let node_id = upgrade.node_id();
@@ -593,12 +605,7 @@ impl Orchestrator {
         if let Some(upgrade) = self.upgrade.take() {
             self.task_tracker.spawn(
                 "GuestOS_upgrade",
-                upgrade_checks(
-                    Arc::clone(&self.subnet_assignment),
-                    upgrade,
-                    cancellation_token.clone(),
-                    self.logger.clone(),
-                ),
+                upgrade_checks(upgrade, cancellation_token.clone(), self.logger.clone()),
             );
         }
 
@@ -679,30 +686,11 @@ impl Orchestrator {
         (metrics, metrics_endpoint)
     }
 
-    fn get_ip_addresses() -> (String, String) {
-        let ifaces = get_if_addrs().unwrap_or_default();
-
-        let ipv4 = ifaces
-            .iter()
-            .find_map(|iface| match iface.addr {
-                get_if_addrs::IfAddr::V4(ref addr) if !addr.ip.is_loopback() => {
-                    Some(addr.ip.to_string())
-                }
-                _ => None,
-            })
-            .unwrap_or_else(|| "none configured".to_string());
-
-        let ipv6 = ifaces
-            .iter()
-            .find_map(|iface| match iface.addr {
-                get_if_addrs::IfAddr::V6(ref addr) if !addr.ip.is_loopback() => {
-                    Some(addr.ip.to_string())
-                }
-                _ => None,
-            })
-            .unwrap_or_else(|| "none configured".to_string());
-
-        (ipv4, ipv6)
+    fn get_ip_addresses() -> anyhow::Result<(Option<Ipv4Addr>, Option<Ipv6Addr>)> {
+        let interface = get_best_interface_name().context("unable to get interface")?;
+        let (ipv4, ipv6) =
+            get_interface_addresses(&interface).context("unable to get addresses")?;
+        Ok((ipv4, ipv6))
     }
 }
 
@@ -760,7 +748,7 @@ impl TaskTracker {
                         error!(self.logger, "Task `{task_name}` panicked: {err}");
                         self.metrics
                             .critical_error_task_failed
-                            .with_label_values(&[&task_name, "panic"])
+                            .with_label_values(&[task_name.as_str(), "panic"])
                             .inc();
                     } else {
                         info!(self.logger, "Task `{task_name}` was cancelled");

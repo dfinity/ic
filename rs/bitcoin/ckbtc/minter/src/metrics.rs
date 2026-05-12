@@ -211,20 +211,11 @@ pub fn encode_metrics(
             }) as f64,
         )?
         .value(
-            &[("status", "sending")],
-            state::read_state(|s| {
-                s.requests_in_flight
-                    .values()
-                    .filter(|v| matches!(*v, state::InFlightStatus::Sending { .. }))
-                    .count()
-            }) as f64,
-        )?
-        .value(
             &[("status", "submitted")],
             state::read_state(|s| {
                 s.submitted_transactions
                     .iter()
-                    .map(|tx| tx.requests.len())
+                    .map(|tx| tx.requests.count_retrieve_btc_requests())
                     .sum::<usize>()
             }) as f64,
         )?;
@@ -336,6 +327,12 @@ pub fn encode_metrics(
     )?;
 
     metrics.encode_gauge(
+        "ckbtc_minter_duplicated_outpoint_count",
+        state::read_state(|s| s.duplicated_outpoints.len()) as f64,
+        "Total number of outpoints found to be duplicated during update_balance.",
+    )?;
+
+    metrics.encode_gauge(
         "ckbtc_minter_concurrent_update_balance_count",
         state::read_state(|s| s.update_balance_accounts.len()) as f64,
         "Total number of concurrent update_balance requests.",
@@ -355,7 +352,7 @@ pub fn encode_metrics(
 
     metrics.encode_gauge(
         "ckbtc_minter_median_fee_per_vbyte",
-        state::read_state(|s| s.last_fee_per_vbyte[50]) as f64,
+        state::read_state(|s| s.last_fee_per_vbyte[50].millis()) as f64,
         "Median Bitcoin transaction fee per vbyte in Satoshi.",
     )?;
 

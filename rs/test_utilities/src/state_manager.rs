@@ -1,11 +1,11 @@
 use ic_crypto_sha2::Sha256;
-use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
+use ic_crypto_tree_hash::{Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness};
 use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
 use ic_interfaces_state_manager::{
     CertificationScope, CertifiedStateSnapshot, Labeled, PermanentStateHashError::*,
-    StateHashError, StateManager, StateReader, TransientStateHashError::*,
+    StateHashError, StateHashMetadata, StateManager, StateReader, TransientStateHashError::*,
 };
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_registry_subnet_type::SubnetType;
@@ -56,7 +56,8 @@ impl Snapshot {
 #[derive(Clone)]
 pub struct FakeStateManager {
     states: Arc<RwLock<Vec<Snapshot>>>,
-    tip: Arc<RwLock<Option<(Height, ReplicatedState)>>>,
+    tip: Arc<RwLock<Option<ReplicatedState>>>,
+    tip_height: Arc<RwLock<Height>>,
     tempdir: Arc<tempfile::TempDir>,
     /// Size 1 by default (no op).
     pub encode_certified_stream_slice_barrier: Arc<RwLock<Barrier>>,
@@ -75,9 +76,10 @@ impl FakeStateManager {
         let fake_hash = CryptoHash(Sha256::hash(&height.get().to_le_bytes()).to_vec());
         let partial_hash = CryptoHashOf::from(fake_hash);
         let fake_hash = CryptoHash(Sha256::hash(&height.get().to_le_bytes()).to_vec());
+        let state = initial_state().take();
         let snapshot = Snapshot {
             height,
-            state: initial_state().take(),
+            state: state.clone(),
             partial_hash,
             root_hash: CryptoHashOf::from(fake_hash),
             certification: None,
@@ -85,10 +87,8 @@ impl FakeStateManager {
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
         Self {
             states: Arc::new(RwLock::new(vec![snapshot])),
-            tip: Arc::new(RwLock::new(Some((
-                height,
-                ReplicatedState::new(subnet_test_id(169), SubnetType::Application),
-            )))),
+            tip: Arc::new(RwLock::new(Some((*state).clone()))),
+            tip_height: Arc::new(RwLock::new(height)),
             tempdir: Arc::new(tmpdir),
             encode_certified_stream_slice_barrier: Arc::new(RwLock::new(Barrier::new(1))),
             fd_factory: Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
@@ -102,6 +102,11 @@ impl FakeStateManager {
     pub fn get_fd_factory(&self) -> Arc<dyn PageAllocatorFileDescriptor> {
         Arc::clone(&self.fd_factory)
     }
+
+    pub fn tip_height(&self) -> Height {
+        let h = self.tip_height.read().unwrap();
+        *h
+    }
 }
 
 const INITIAL_STATE_HEIGHT: Height = Height::new(0);
@@ -109,32 +114,40 @@ fn initial_state() -> Labeled<Arc<ReplicatedState>> {
     Labeled::new(
         INITIAL_STATE_HEIGHT,
         Arc::new(ReplicatedState::new(
-            subnet_test_id(1),
+            subnet_test_id(169),
             SubnetType::Application,
         )),
     )
 }
 
 impl StateManager for FakeStateManager {
+    fn tip_height(&self) -> Height {
+        self.tip_height()
+    }
+
     fn take_tip(&self) -> (Height, Self::State) {
-        self.tip
-            .write()
-            .unwrap()
-            .take()
-            .expect("TIP is not owned by this StateManager")
+        (
+            self.tip_height(),
+            self.tip
+                .write()
+                .unwrap()
+                .take()
+                .expect("TIP is not owned by this StateManager"),
+        )
     }
 
     fn take_tip_at(&self, h: Height) -> StateManagerResult<Self::State> {
         let mut guard = self.tip.write().unwrap();
-        let (height, tip) = guard.take().expect("TIP is not owned by this StateManager");
+        let height = self.tip_height();
+        let tip = guard.take().expect("TIP is not owned by this StateManager");
 
         if height < h {
-            *guard = Some((height, tip));
+            *guard = Some(tip);
             return Err(StateManagerError::StateNotCommittedYet(h));
         }
 
         if h < height {
-            *guard = Some((height, tip));
+            *guard = Some(tip);
             return Err(StateManagerError::StateRemoved(h));
         }
 
@@ -185,14 +198,24 @@ impl StateManager for FakeStateManager {
         });
     }
 
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata> {
         self.states
             .read()
             .unwrap()
             .iter()
             .filter(|s| s.height > Height::from(0) && s.certification.is_none())
-            .map(|s| (s.height, s.partial_hash.clone()))
+            .map(|s| StateHashMetadata {
+                height: s.height,
+                hash: s.partial_hash.clone(),
+                height_witness: Witness::new_for_testing(
+                    s.partial_hash.clone().get().0.to_vec().try_into().unwrap(),
+                ),
+            })
             .collect()
+    }
+
+    fn list_state_heights_to_certify(&self) -> Vec<Height> {
+        vec![]
     }
 
     fn deliver_state_certification(&self, certification: Certification) {
@@ -220,13 +243,21 @@ impl StateManager for FakeStateManager {
         // All heights are checkpoints
     }
 
+    fn update_fast_forward_height(&self, _height: Height) {
+        // `FakeStateManager` does not implement fast-forwarding.
+    }
+
     fn commit_and_certify(
         &self,
         state: ReplicatedState,
-        height: Height,
         _scope: CertificationScope,
         _batch_summary: Option<BatchSummary>,
     ) {
+        let height = {
+            let mut h = self.tip_height.write().unwrap();
+            *h = h.increment();
+            *h
+        };
         let fake_hash = CryptoHash(Sha256::hash(&height.get().to_le_bytes()).to_vec());
         self.states.write().unwrap().push(Snapshot {
             state: Arc::new(state.clone()),
@@ -244,7 +275,7 @@ impl StateManager for FakeStateManager {
             tip.is_none(),
             "Attempt to submit a state not borrowed from this StateManager Height {height}"
         );
-        *tip = Some((height, state));
+        *tip = Some(state);
     }
 
     fn report_diverged_checkpoint(&self, height: Height) {
@@ -630,6 +661,7 @@ pub fn encode_certified_stream_slice(
         merkle_proof: vec![],
         certification: Certification {
             height: state_height,
+            height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
             signed: Signed {
                 signature: ThresholdSignature {
                     signer: NiDkgId {
@@ -664,6 +696,10 @@ impl RefMockStateManager {
 }
 
 impl StateManager for RefMockStateManager {
+    fn tip_height(&self) -> Height {
+        self.mock.read().unwrap().tip_height()
+    }
+
     fn take_tip(&self) -> (Height, Self::State) {
         self.mock.read().unwrap().take_tip()
     }
@@ -688,8 +724,12 @@ impl StateManager for RefMockStateManager {
             .fetch_state(height, root_hash, cup_interval_length)
     }
 
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<StateHashMetadata> {
         self.mock.read().unwrap().list_state_hashes_to_certify()
+    }
+
+    fn list_state_heights_to_certify(&self) -> Vec<Height> {
+        self.mock.read().unwrap().list_state_heights_to_certify()
     }
 
     fn deliver_state_certification(&self, certification: Certification) {
@@ -701,6 +741,10 @@ impl StateManager for RefMockStateManager {
 
     fn remove_states_below(&self, height: Height) {
         self.mock.read().unwrap().remove_states_below(height)
+    }
+
+    fn update_fast_forward_height(&self, height: Height) {
+        self.mock.read().unwrap().update_fast_forward_height(height)
     }
 
     fn remove_inmemory_states_below(
@@ -717,14 +761,13 @@ impl StateManager for RefMockStateManager {
     fn commit_and_certify(
         &self,
         state: ReplicatedState,
-        height: Height,
         scope: CertificationScope,
         batch_summary: Option<BatchSummary>,
     ) {
         self.mock
             .read()
             .unwrap()
-            .commit_and_certify(state, height, scope, batch_summary)
+            .commit_and_certify(state, scope, batch_summary)
     }
 
     fn report_diverged_checkpoint(&self, height: Height) {

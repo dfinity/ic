@@ -1,5 +1,5 @@
 //! Unit tests
-use crate::migration_canister::{ListEventsArgs, MigrationCanisterInitArgs};
+use crate::migration_canister::MigrationCanisterInitArgs;
 use crate::privileged::MigrationCanisterError;
 use crate::{MigrateCanisterArgs, MigrationStatus, ValidationError};
 use candid::Principal;
@@ -12,23 +12,23 @@ use crate::{
 
 #[test]
 fn test() {
-    let source = Principal::self_authenticating(vec![1]);
-    let target = Principal::self_authenticating(vec![2]);
-    let source_subnet = Principal::self_authenticating(vec![3]);
-    let target_subnet = Principal::self_authenticating(vec![4]);
+    let migrated_canister = Principal::self_authenticating(vec![1]);
+    let replaced_canister = Principal::self_authenticating(vec![2]);
+    let migrated_canister_subnet = Principal::self_authenticating(vec![3]);
+    let replaced_canister_subnet = Principal::self_authenticating(vec![4]);
     let caller = Principal::self_authenticating(vec![5]);
 
     let request = Request::new(
-        source,
-        source_subnet,
+        migrated_canister,
+        migrated_canister_subnet,
         vec![],
-        target,
-        target_subnet,
+        replaced_canister,
+        replaced_canister_subnet,
         vec![],
         caller,
     );
     insert_request(RequestState::Accepted { request });
-    assert!(find_request(source, target).len() == 1);
+    assert!(find_request(migrated_canister, replaced_canister).is_some());
 }
 
 #[test]

@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     CheckpointMetrics, ManifestMetrics, NUMBER_OF_CHECKPOINT_THREADS, StateManagerMetrics,
     checkpoint::make_unvalidated_checkpoint,
-    flush_canister_snapshots_and_page_maps,
+    flush_checkpoint_ops_and_page_maps,
     manifest::RehashManifest,
     state_sync::types::{FileInfo, Manifest},
     tip::{flush_tip_channel, spawn_tip_thread},
@@ -17,8 +17,8 @@ use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CheckpointLoadingMetrics, ReplicatedState, SystemMetadata,
-    canister_snapshots::CanisterSnapshot, page_map::TestPageAllocatorFileDescriptorImpl,
-    testing::ReplicatedStateTesting,
+    canister_state::canister_snapshots::CanisterSnapshot,
+    page_map::TestPageAllocatorFileDescriptorImpl, testing::ReplicatedStateTesting,
 };
 use ic_state_layout::{
     CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR, INGRESS_HISTORY_FILE, ProtoFileWith,
@@ -33,12 +33,13 @@ use ic_test_utilities_types::{
 };
 use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 use ic_types::{
-    Cycles, Height,
+    Height,
     ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::MessageId,
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::Cycles;
 use std::{path::Path, sync::Arc, time::Duration};
 use tempfile::TempDir;
 
@@ -141,7 +142,7 @@ fn read_write_roundtrip() {
         let layout = StateLayout::try_new(log.clone(), root.clone(), &metrics_registry).unwrap();
         let mut thread_pool = Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
         // Sanity check: ensure that we have a single checkpoint.
-        assert_eq!(1, layout.checkpoint_heights().unwrap().len());
+        assert_eq!(1, layout.verified_checkpoint_heights().unwrap().len());
 
         // Compute the manifest of the original checkpoint.
         let metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
@@ -169,7 +170,7 @@ fn read_write_roundtrip() {
         )
         .expect("failed to write checkpoint");
         // Sanity check: ensure that we now have exactly two checkpoints.
-        assert_eq!(2, layout.checkpoint_heights().unwrap().len());
+        assert_eq!(2, layout.verified_checkpoint_heights().unwrap().len());
 
         // Compute the manifest of the newly written checkpoint.
         let (manifest_after, height_after) = compute_manifest(&layout, manifest_metrics, &log);
@@ -360,13 +361,13 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     state.put_canister_state(new_canister_state_with_execution(
         CANISTER_2,
         CANISTER_0.get(),
-        INITIAL_CYCLES * 2usize,
+        INITIAL_CYCLES * 2_usize,
         NumSeconds::from(200_000),
     ));
     state.put_canister_state(new_canister_state_with_execution(
         CANISTER_3,
         CANISTER_0.get(),
-        INITIAL_CYCLES * 3usize,
+        INITIAL_CYCLES * 3_usize,
         NumSeconds::from(300_000),
     ));
     state.metadata.ingress_history.insert(
@@ -381,7 +382,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
             )),
         },
         UNIX_EPOCH,
-        (1u64 << 30).into(),
+        (1_u64 << 30).into(),
         |_| {},
     );
     state.metadata.batch_time = Time::from_secs_since_unix_epoch(1234567890).unwrap();
@@ -391,7 +392,14 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     let snapshot =
         CanisterSnapshot::from_canister(state.canister_state(&CANISTER_1).unwrap(), state.time())
             .unwrap();
-    state.take_snapshot(snapshot_id, Arc::new(snapshot));
+    let canister = state.canister_state_make_mut(&CANISTER_1).unwrap();
+    canister
+        .canister_snapshots
+        .push(snapshot_id, Arc::new(snapshot));
+    state
+        .metadata
+        .unflushed_checkpoint_ops
+        .take_snapshot(CANISTER_1, snapshot_id);
 
     // Make subnet_queues non-empty
     state
@@ -404,7 +412,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         )
         .unwrap();
 
-    flush_canister_snapshots_and_page_maps(&mut state, HEIGHT, &tip_channel);
+    flush_checkpoint_ops_and_page_maps(&mut state, HEIGHT, &tip_channel);
 
     let mut thread_pool = thread_pool();
     let (state, cp_layout) = make_unvalidated_checkpoint(
@@ -428,7 +436,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     .unwrap();
 
     // Sanity checks.
-    assert_eq!(layout.checkpoint_heights().unwrap(), vec![HEIGHT]);
+    assert_eq!(layout.verified_checkpoint_heights().unwrap(), vec![HEIGHT]);
     let checkpoint = layout.checkpoint_verified(HEIGHT).unwrap();
     assert_eq!(
         checkpoint.canister_ids().unwrap(),
@@ -511,7 +519,11 @@ fn compute_manifest(
     manifest_metrics: &ManifestMetrics,
     log: &ReplicaLogger,
 ) -> (Manifest, Height) {
-    let last_checkpoint_height = state_layout.checkpoint_heights().unwrap().pop().unwrap();
+    let last_checkpoint_height = state_layout
+        .verified_checkpoint_heights()
+        .unwrap()
+        .pop()
+        .unwrap();
     let last_checkpoint_layout = state_layout
         .checkpoint_verified(last_checkpoint_height)
         .unwrap();

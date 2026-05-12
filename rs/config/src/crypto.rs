@@ -175,10 +175,8 @@ impl CryptoConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir as tempdir_deleted_at_end_of_scope;
 
-    // TODO(CRP-1338): review the creation/usage of the temp dirs.
     pub fn mk_temp_dir_with_permissions(mode: u32) -> TempDir {
         let dir = tempdir_deleted_at_end_of_scope().unwrap();
         fs::set_permissions(dir.path(), Permissions::from_mode(mode))
@@ -195,18 +193,6 @@ mod tests {
     #[test]
     fn default_config_serializes_and_deserializes() {
         CryptoConfig::run_with_temp_config(serde_test);
-    }
-
-    proptest! {
-        #[allow(dead_code)]
-        // #[test]
-        // TODO(CRP-323): The current json5 implementation is buggy:
-        // Unicode code points U+2028 and U+2029 are not escaped/parsed properly.
-        // This test is disabled until issue is fixed.
-        // https://github.com/callum-oakley/json5-rs/issues/21
-        fn arbitrary_config_serializes_and_deserializes(config: CryptoConfig) {
-            serde_test(config);
-        }
     }
 
     #[test]

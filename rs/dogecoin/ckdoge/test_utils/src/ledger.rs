@@ -91,7 +91,7 @@ impl LedgerCanister {
             .map(|index| index.0.try_into().unwrap())
     }
 
-    pub fn icrc1_balance_of(&self, user: impl Into<Account>) -> u64 {
+    pub fn icrc1_balance_of(&self, user: impl Into<Account>) -> u128 {
         let user = user.into();
         let call_result = self
             .env

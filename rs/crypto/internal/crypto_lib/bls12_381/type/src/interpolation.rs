@@ -120,9 +120,10 @@ impl LagrangeCoefficients {
             // Compute the value at 0 of the i-th Lagrange polynomial that is `0` at the
             // other data points but `1` at `x_i`.
             let mut denom = Scalar::one();
-            let x_i = samples[i].clone();
-            for x_j in samples.iter().filter(|x_j| **x_j != x_i) {
-                denom *= x_j - &x_i;
+            for (j, x_j) in samples.iter().enumerate() {
+                if j != i {
+                    denom *= x_j - &samples[i];
+                }
             }
 
             denominator.push(denom);
@@ -152,6 +153,11 @@ impl LagrangeCoefficients {
         &self.coefficients
     }
 
+    /// Return the Lagrange coefficients, consuming self
+    pub fn into_coefficients(self) -> Vec<Scalar> {
+        self.coefficients
+    }
+
     /// Given a list of samples `(x, f(x) * g)` for a set of unique `x`, some
     /// polynomial `f`, and some integer `g`, returns `f(value) * g`.
     ///
@@ -170,10 +176,7 @@ impl LagrangeCoefficients {
     /// polynomial `f`, and some elliptic curve point `g`, returns `f(value) * g`.
     ///
     /// See: <https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing#Computationally_efficient_approach>
-    pub fn interpolate_g1<T: AsRef<G1Affine>>(
-        &self,
-        y: &[T],
-    ) -> Result<G1Affine, InterpolationError> {
+    pub fn interpolate_g1(&self, y: &[G1Affine]) -> Result<G1Affine, InterpolationError> {
         if y.len() != self.coefficients.len() {
             return Err(InterpolationError::WrongSampleCount);
         } else if y.is_empty() {
@@ -187,10 +190,7 @@ impl LagrangeCoefficients {
     /// polynomial `f`, and some elliptic curve point `g`, returns `f(value) * g`.
     ///
     /// See: <https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing#Computationally_efficient_approach>
-    pub fn interpolate_g2<T: AsRef<G2Affine>>(
-        &self,
-        y: &[T],
-    ) -> Result<G2Affine, InterpolationError> {
+    pub fn interpolate_g2(&self, y: &[G2Affine]) -> Result<G2Affine, InterpolationError> {
         if y.len() != self.coefficients.len() {
             return Err(InterpolationError::WrongSampleCount);
         } else if y.is_empty() {

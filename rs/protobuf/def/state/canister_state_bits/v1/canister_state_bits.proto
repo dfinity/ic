@@ -14,6 +14,9 @@ enum SnapshotSource {
 }
 
 message CallContext {
+  reserved 3, 6;
+  reserved "available_funds", "query";
+
   message Ingress {
     types.v1.UserId user_id = 1;
     bytes message_id = 2;
@@ -32,9 +35,6 @@ message CallContext {
   }
   // System task is either a Heartbeat or a GlobalTimer.
   message SystemTask {}
-  // deprecated types.v1.UserId query
-  reserved 3;
-  reserved "query";
   oneof call_origin {
     Ingress ingress = 1;
     CanisterUpdateOrQuery canister_update = 2;
@@ -43,11 +43,12 @@ message CallContext {
     Query user_query = 12;
   }
   bool responded = 5;
-  state.queues.v1.Funds available_funds = 6;
+  state.queues.v1.Cycles available_cycles = 13;
   bool deleted = 8;
   uint64 time_nanos = 9;
   uint64 instructions_executed = 10;
   state.queues.v1.RequestMetadata metadata = 11;
+  state.ingress.v1.SenderInfo sender_info = 14;
 }
 
 message CallContextEntry {
@@ -62,17 +63,21 @@ message WasmClosure {
 }
 
 message Callback {
+  reserved 6;
+  reserved 8;
+  reserved 9;
+
   uint64 call_context_id = 1;
   WasmClosure on_reply = 2;
   WasmClosure on_reject = 3;
   WasmClosure on_cleanup = 4;
   state.queues.v1.Cycles cycles_sent = 5;
-  types.v1.CanisterId originator = 6;
   types.v1.CanisterId respondent = 7;
-  state.queues.v1.Cycles prepayment_for_response_execution = 8;
-  state.queues.v1.Cycles prepayment_for_response_transmission = 9;
   // If non-zero, this is a best-effort call.
   uint32 deadline_seconds = 10;
+  state.queues.v1.CompoundCycles prepayment_for_response_execution_compound = 11;
+  state.queues.v1.CompoundCycles prepayment_for_response_transmission_compound = 12;
+  state.queues.v1.CompoundCycles prepayment_for_call_transmission = 13;
 }
 
 message CallbackEntry {
@@ -168,9 +173,10 @@ message StopCanisterContext {
   }
 
   message Canister {
+    reserved 3;
+    reserved "funds";
     types.v1.CanisterId sender = 1;
     uint64 reply_callback = 2;
-    state.queues.v1.Funds funds = 3;
     state.queues.v1.Cycles cycles = 4;
     optional uint64 call_id = 5;
     // If non-zero, this is a best-effort canister update call.
@@ -203,27 +209,37 @@ message ExecutionTask {
   }
 
   message AbortedExecution {
+    reserved 2;
+    reserved 4;
+
+    message AbortedResponse {
+      state.queues.v1.Response response = 7;
+      Callback callback = 8;
+    }
+
     oneof input {
       state.queues.v1.Request request = 1;
-      state.queues.v1.Response response = 2;
+      AbortedResponse aborted_response = 6;
       ingress.v1.Ingress ingress = 3;
       CanisterTask task = 5;
     }
     // The execution cost that has already been charged from the canister.
     // Retried execution does not have to pay for it again.
-    state.queues.v1.Cycles prepaid_execution_cycles = 4;
+    state.queues.v1.CompoundCycles prepaid_execution_compound_cycles = 7;
   }
 
   message AbortedInstallCode {
+    reserved 3;
+
     oneof message {
       state.queues.v1.Request request = 1;
       ingress.v1.Ingress ingress = 2;
     }
-    // The execution cost that has already been charged from the canister.
-    // Retried execution does not have to pay for it again.
-    state.queues.v1.Cycles prepaid_execution_cycles = 3;
     reserved "request_id";
     optional uint64 call_id = 4;
+    // The execution cost that has already been charged from the canister.
+    // Retried execution does not have to pay for it again.
+    state.queues.v1.CompoundCycles prepaid_execution_compound_cycles = 5;
   }
 
   oneof task {
@@ -233,6 +249,8 @@ message ExecutionTask {
 }
 
 enum CyclesUseCase {
+  reserved 11;
+
   CYCLES_USE_CASE_UNSPECIFIED = 0;
   CYCLES_USE_CASE_MEMORY = 1;
   CYCLES_USE_CASE_COMPUTE_ALLOCATION = 2;
@@ -244,7 +262,6 @@ enum CyclesUseCase {
   CYCLES_USE_CASE_ECDSA_OUTCALLS = 8;
   CYCLES_USE_CASE_HTTP_OUTCALLS = 9;
   CYCLES_USE_CASE_DELETED_CANISTERS = 10;
-  CYCLES_USE_CASE_NON_CONSUMED = 11;
   CYCLES_USE_CASE_BURNED_CYCLES = 12;
   CYCLES_USE_CASE_SCHNORR_OUTCALLS = 13;
   CYCLES_USE_CASE_VET_KD = 14;
@@ -368,6 +385,18 @@ message LogVisibilityV2 {
   }
 }
 
+message SnapshotVisibilityAllowedViewers {
+  repeated types.v1.PrincipalId principals = 1;
+}
+
+message SnapshotVisibility {
+  oneof snapshot_visibility {
+    int32 controllers = 1;
+    int32 public = 2;
+    SnapshotVisibilityAllowedViewers allowed_viewers = 3;
+  }
+}
+
 message CanisterLogRecord {
   uint64 idx = 1;
   uint64 timestamp_nanos = 2;
@@ -401,43 +430,32 @@ message TaskQueue {
   repeated ExecutionTask queue = 3;
 }
 
-// Next ID: 57
+// Next ID: 65
 message CanisterStateBits {
-  reserved 1;
-  reserved "controller";
-  uint64 last_full_execution_round = 2;
-  reserved 3;
+  reserved 1, 2, 3, 5, 6, 9, 10, 14, 16, 17, 24, 30, 35, 42, 47, 48, 49, 52, 53;
+
   uint64 compute_allocation = 4;
-  int64 accumulated_priority = 5;
-  reserved 6;
-  reserved "query_allocation";
   ExecutionStateBits execution_state_bits = 7;
   uint64 memory_allocation = 8;
-  reserved 9;
-  reserved "cycles_account";
-  reserved 10;
-  reserved "icp_balance";
   oneof canister_status {
     CanisterStatusRunning running = 11;
     CanisterStatusStopping stopping = 12;
     CanisterStatusStopped stopped = 13;
   }
-  reserved 14;
-  reserved "scheduled_to_run";
+  uint64 rounds_scheduled = 57;
   uint64 scheduled_as_first = 15;
-  reserved 16;
-  reserved "skipped_round_due_to_low_cycles";
-  uint64 skipped_round_due_to_no_messages = 17;
   // In how many rounds a canister is executed.
   uint64 executed = 18;
-  reserved 19;
-  reserved "executed_and_exhausted_its_messages";
+  uint64 ingress_messages_executed = 58;
+  uint64 remote_subnet_messages_executed = 59;
+  uint64 local_subnet_messages_executed = 60;
+  uint64 http_outcalls_executed = 61;
+  uint64 heartbeats_and_global_timers_executed = 62;
+  uint64 instructions_executed = 63;
   bytes certified_data = 20;
   uint64 interrupted_during_execution = 21;
   types.v1.NominalCycles consumed_cycles = 22;
   uint64 freeze_threshold = 23;
-  reserved 24;
-  reserved "stable_memory_size";
   repeated types.v1.PrincipalId controllers = 25;
   state.queues.v1.Cycles cycles_balance = 26;
   // The size of the canister's stable memory in bytes.
@@ -448,9 +466,6 @@ message CanisterStateBits {
   // The instruction debit for install_code messages of this canister. This is
   // tracked for the purposes of rate limiting the install_code messages.
   uint64 install_code_debit = 29;
-  // Contains tasks that need to be executed before processing any input of the
-  // canister.
-  reserved 30;
   // Time of last charge for resource allocations.
   google.protobuf.UInt64Value time_of_last_allocation_charge_nanos = 31;
   // Postponed charges that are not applied to `cycles_balance` yet.
@@ -459,8 +474,15 @@ message CanisterStateBits {
   optional uint64 global_timer_nanos = 33;
   // Canister version.
   uint64 canister_version = 34;
-  reserved 35;
+  // Consumed cycles by use case presented as gauges. When prepayments happen
+  // the respective amount is added to the consumed amount while when a refund
+  // happens the refund amount is subtracted from consumed amount.
   repeated ConsumedCyclesByUseCase consumed_cycles_by_use_cases = 36;
+  // Consumed cycles by use case presented as counters. The consumed amount is
+  // only updated once the refund is known to perform a single accounting step.
+  // These counters facilitate programming retrieval of metrics and performing
+  // various aggregations on them more easily than their gauge counterparts.
+  repeated ConsumedCyclesByUseCase consumed_cycles_by_use_cases_as_counters = 65;
   CanisterHistory canister_history = 37;
   // Resource reservation cycles.
   state.queues.v1.Cycles reserved_balance = 38;
@@ -470,8 +492,6 @@ message CanisterStateBits {
   WasmChunkStoreMetadata wasm_chunk_store_metadata = 40;
   // Statistics on query execution for entire lifetime of canister.
   TotalQueryStats total_query_stats = 41;
-  reserved 42;
-  reserved "log_visibility";
   // Log visibility for the canister.
   LogVisibilityV2 log_visibility_v2 = 51;
   // The capacity of the canister log in bytes.
@@ -487,16 +507,12 @@ message CanisterStateBits {
   optional uint64 wasm_memory_limit = 45;
   // The next local snapshot ID.
   uint64 next_snapshot_id = 46;
-  // Captures the memory usage of all snapshots associated with a canister.
-  uint64 snapshots_memory_usage = 52;
-  reserved 47;
-  int64 priority_credit = 48;
-  LongExecutionMode long_execution_mode = 49;
   optional uint64 wasm_memory_threshold = 50;
-  reserved 53;
   // Contains tasks that need to be executed before processing any input of the
   // canister.
   TaskQueue tasks = 54;
   // A map of environment variable names to their values
   map<string, string> environment_variables = 55;
+  // Snapshot visibility for the canister.
+  SnapshotVisibility snapshot_visibility = 64;
 }

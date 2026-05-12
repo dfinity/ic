@@ -14,6 +14,7 @@
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -153,6 +154,8 @@ pub struct AbridgedNeuron {
     pub voting_power_refreshed_timestamp_seconds: ::core::option::Option<u64>,
     #[prost(uint32, optional, tag = "25")]
     pub recent_ballots_next_entry_index: ::core::option::Option<u32>,
+    #[prost(uint64, tag = "26")]
+    pub eight_year_gang_bonus_base_e8s: u64,
     #[prost(oneof = "abridged_neuron::DissolveState", tags = "9, 10")]
     pub dissolve_state: ::core::option::Option<abridged_neuron::DissolveState>,
 }
@@ -263,6 +266,7 @@ pub mod add_or_remove_node_provider {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -304,6 +308,7 @@ pub mod reward_node_provider {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         Copy,
         PartialEq,
@@ -318,6 +323,7 @@ pub mod reward_node_provider {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -331,6 +337,7 @@ pub mod reward_node_provider {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Oneof,
@@ -352,6 +359,7 @@ pub mod reward_node_provider {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -423,11 +431,16 @@ pub struct Proposal {
     /// 2000 bytes.
     #[prost(string, tag = "2")]
     pub url: ::prost::alloc::string::String,
+    /// A self-describing action that can be understood without the schema of a specific proposal type.
+    /// This is populated and stored at the time of proposal creation and does not change as the
+    /// proposal type evolves.
+    #[prost(message, optional, tag = "30")]
+    pub self_describing_action: ::core::option::Option<SelfDescribingProposalAction>,
     /// This section describes the action that the proposal proposes to
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33, 34"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -533,7 +546,39 @@ pub mod proposal {
         /// Create a rented subnet.
         #[prost(message, tag = "28")]
         FulfillSubnetRentalRequest(super::FulfillSubnetRentalRequest),
+        /// Allow node operators to manually intervene in case of disaster to run
+        /// (NNS-approved) new software.
+        #[prost(message, tag = "31")]
+        BlessAlternativeGuestOsVersion(super::BlessAlternativeGuestOsVersion),
+        /// Take a canister snapshot.
+        #[prost(message, tag = "32")]
+        TakeCanisterSnapshot(super::TakeCanisterSnapshot),
+        /// Load a canister snapshot.
+        #[prost(message, tag = "33")]
+        LoadCanisterSnapshot(super::LoadCanisterSnapshot),
+        /// Create a canister in a (possibly non-NNS) subnet and install code into it.
+        #[prost(message, tag = "34")]
+        CreateCanisterAndInstallCode(super::CreateCanisterAndInstallCode),
     }
+}
+/// Take a canister snapshot.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct TakeCanisterSnapshot {
+    /// The canister being snapshotted.
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// If set, the existing snapshot with this content will be replaced.
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub replace_snapshot: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// Empty message to use in oneof fields that represent empty
 /// enums.
@@ -586,6 +631,7 @@ pub mod manage_neuron {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         Copy,
         PartialEq,
@@ -628,6 +674,7 @@ pub mod manage_neuron {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -642,6 +689,7 @@ pub mod manage_neuron {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -657,6 +705,7 @@ pub mod manage_neuron {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         Copy,
         PartialEq,
@@ -699,6 +748,7 @@ pub mod manage_neuron {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         Copy,
         PartialEq,
@@ -817,6 +867,7 @@ pub mod manage_neuron {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         Copy,
         PartialEq,
@@ -836,6 +887,7 @@ pub mod manage_neuron {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         Copy,
         PartialEq,
@@ -856,6 +908,7 @@ pub mod manage_neuron {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -900,6 +953,7 @@ pub mod manage_neuron {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         Copy,
         PartialEq,
@@ -918,6 +972,7 @@ pub mod manage_neuron {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -1077,6 +1132,7 @@ pub mod manage_neuron {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -1132,6 +1188,7 @@ pub mod manage_neuron {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Oneof,
@@ -1463,6 +1520,75 @@ pub struct ProposalData {
     /// bug might have caused the voting power spike.
     #[prost(uint64, optional, tag = "24")]
     pub previous_ballots_timestamp_seconds: ::core::option::Option<u64>,
+    /// When an adopted proposal has been executed successfully, this may contain
+    /// a value produced by the execution (e.g. the ID of a newly created canister).
+    /// This is the dual of failure_reason: that field is populated on failure,
+    /// this field is populated on success.
+    #[prost(message, optional, tag = "25")]
+    pub success_value: ::core::option::Option<SuccessfulProposalExecutionValue>,
+}
+/// A value produced by successfully executing a proposal.
+/// Not all proposal types produce a value; for those that don't, this field
+/// is simply not set.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SuccessfulProposalExecutionValue {
+    #[prost(
+        oneof = "successful_proposal_execution_value::ProposalType",
+        tags = "1, 2"
+    )]
+    pub proposal_type: ::core::option::Option<successful_proposal_execution_value::ProposalType>,
+}
+/// Nested message and enum types in `SuccessfulProposalExecutionValue`.
+pub mod successful_proposal_execution_value {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum ProposalType {
+        #[prost(message, tag = "1")]
+        CreateCanisterAndInstallCode(super::CreateCanisterAndInstallCodeOk),
+        #[prost(message, tag = "2")]
+        TakeCanisterSnapshot(super::TakeCanisterSnapshotOk),
+    }
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct CreateCanisterAndInstallCodeOk {
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct TakeCanisterSnapshotOk {
+    #[prost(bytes = "vec", tag = "1")]
+    pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
 }
 /// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
 #[derive(
@@ -1910,7 +2036,9 @@ pub struct WaitForQuietState {
 /// NetworkEconomics to 0.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[self_describing]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    ic_nns_governance_derive_self_describing::SelfDescribing, Clone, PartialEq, ::prost::Message,
+)]
 pub struct NetworkEconomics {
     /// The number of E8s (10E-8 of an ICP token) that a rejected
     /// proposal will cost.
@@ -1970,6 +2098,7 @@ pub struct NetworkEconomics {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     Copy,
     PartialEq,
@@ -2015,6 +2144,7 @@ pub struct VotingPowerEconomics {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -2052,6 +2182,7 @@ pub struct NeuronsFundMatchedFundingCurveCoefficients {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -2224,6 +2355,7 @@ pub struct OpenSnsTokenSwap {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -2259,6 +2391,7 @@ pub mod create_service_nervous_system {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -2280,6 +2413,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             PartialEq,
             ::prost::Message,
@@ -2296,6 +2430,7 @@ pub mod create_service_nervous_system {
                 candid::Deserialize,
                 serde::Serialize,
                 comparable::Comparable,
+                ic_nns_governance_derive_self_describing::SelfDescribing,
                 Clone,
                 PartialEq,
                 ::prost::Message,
@@ -2320,6 +2455,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             Copy,
             PartialEq,
@@ -2334,6 +2470,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             Copy,
             PartialEq,
@@ -2349,6 +2486,7 @@ pub mod create_service_nervous_system {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -2404,6 +2542,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             Copy,
             PartialEq,
@@ -2422,6 +2561,7 @@ pub mod create_service_nervous_system {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -2443,8 +2583,8 @@ pub mod create_service_nervous_system {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
-        Copy,
         PartialEq,
         ::prost::Message,
     )]
@@ -2478,6 +2618,11 @@ pub mod create_service_nervous_system {
         #[prost(message, optional, tag = "10")]
         pub voting_reward_parameters:
             ::core::option::Option<governance_parameters::VotingRewardParameters>,
+        /// Custom proposal criticality configuration. Allows specifying additional native function IDs
+        /// that should be considered critical, requiring a higher level of consensus.
+        #[prost(message, optional, tag = "11")]
+        pub custom_proposal_criticality:
+            ::core::option::Option<governance_parameters::CustomProposalCriticality>,
     }
     /// Nested message and enum types in `GovernanceParameters`.
     pub mod governance_parameters {
@@ -2486,6 +2631,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             Copy,
             PartialEq,
@@ -2501,6 +2647,20 @@ pub mod create_service_nervous_system {
             #[prost(message, optional, tag = "3")]
             pub reward_rate_transition_duration:
                 ::core::option::Option<::ic_nervous_system_proto::pb::v1::Duration>,
+        }
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
+            Clone,
+            PartialEq,
+            ::prost::Message,
+        )]
+        pub struct CustomProposalCriticality {
+            #[prost(uint64, repeated, tag = "1")]
+            pub additional_critical_native_action_ids: ::prost::alloc::vec::Vec<u64>,
         }
     }
 }
@@ -2521,6 +2681,9 @@ pub struct InstallCode {
     #[prost(enumeration = "install_code::CanisterInstallMode", optional, tag = "2")]
     pub install_mode: ::core::option::Option<i32>,
     /// The wasm module to install. required.
+    /// If we add support for chunked WASMs later, the WasmModule type should
+    /// probably be used in place of this field in order to be consistent with
+    /// CreateCanisterAndInstallCode.
     #[prost(bytes = "vec", optional, tag = "3")]
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub wasm_module: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
@@ -2655,6 +2818,8 @@ pub mod stop_or_start_canister {
         }
     }
 }
+/// The CanisterSettings struct as defined in the ic-interface-spec
+/// <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.>
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -2664,17 +2829,31 @@ pub mod stop_or_start_canister {
     PartialEq,
     ::prost::Message,
 )]
-pub struct UpdateCanisterSettings {
-    /// The target canister ID to call update_settings on. Required.
+pub struct CanisterSettings {
     #[prost(message, optional, tag = "1")]
-    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
-    /// The settings to update. Required.
-    #[prost(message, optional, tag = "2")]
-    pub settings: ::core::option::Option<update_canister_settings::CanisterSettings>,
+    pub controllers: ::core::option::Option<canister_settings::Controllers>,
+    #[prost(uint64, optional, tag = "2")]
+    pub compute_allocation: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "3")]
+    pub memory_allocation: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "4")]
+    pub freezing_threshold: ::core::option::Option<u64>,
+    #[prost(enumeration = "canister_settings::LogVisibility", optional, tag = "5")]
+    pub log_visibility: ::core::option::Option<i32>,
+    #[prost(uint64, optional, tag = "6")]
+    pub wasm_memory_limit: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "7")]
+    pub wasm_memory_threshold: ::core::option::Option<u64>,
+    #[prost(
+        enumeration = "canister_settings::SnapshotVisibility",
+        optional,
+        tag = "8"
+    )]
+    pub snapshot_visibility: ::core::option::Option<i32>,
 }
-/// Nested message and enum types in `UpdateCanisterSettings`.
-pub mod update_canister_settings {
-    /// The controllers of the canister. We use a message to wrap the repeated field because prost does
+/// Nested message and enum types in `CanisterSettings`.
+pub mod canister_settings {
+    /// We used a message to wrap the repeated field because prost does
     /// not generate `Option<Vec<T>>` for repeated fields.
     #[derive(
         candid::CandidType,
@@ -2689,33 +2868,6 @@ pub mod update_canister_settings {
         /// The controllers of the canister.
         #[prost(message, repeated, tag = "1")]
         pub controllers: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
-    }
-    /// The CanisterSettings struct as defined in the ic-interface-spec
-    /// <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.>
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct CanisterSettings {
-        #[prost(message, optional, tag = "1")]
-        pub controllers: ::core::option::Option<Controllers>,
-        #[prost(uint64, optional, tag = "2")]
-        pub compute_allocation: ::core::option::Option<u64>,
-        #[prost(uint64, optional, tag = "3")]
-        pub memory_allocation: ::core::option::Option<u64>,
-        #[prost(uint64, optional, tag = "4")]
-        pub freezing_threshold: ::core::option::Option<u64>,
-        #[prost(enumeration = "LogVisibility", optional, tag = "5")]
-        pub log_visibility: ::core::option::Option<i32>,
-        #[prost(uint64, optional, tag = "6")]
-        pub wasm_memory_limit: ::core::option::Option<u64>,
-        #[prost(uint64, optional, tag = "7")]
-        pub wasm_memory_threshold: ::core::option::Option<u64>,
     }
     /// Log visibility of a canister.
     #[derive(
@@ -2763,6 +2915,69 @@ pub mod update_canister_settings {
             }
         }
     }
+    /// Snapshot visibility of a canister.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
+    )]
+    #[repr(i32)]
+    pub enum SnapshotVisibility {
+        Unspecified = 0,
+        /// Snapshots are visible to the controllers of the dapp canister.
+        Controllers = 1,
+        /// Snapshots are visible to the public.
+        Public = 2,
+    }
+    impl SnapshotVisibility {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Self::Unspecified => "SNAPSHOT_VISIBILITY_UNSPECIFIED",
+                Self::Controllers => "SNAPSHOT_VISIBILITY_CONTROLLERS",
+                Self::Public => "SNAPSHOT_VISIBILITY_PUBLIC",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "SNAPSHOT_VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
+                "SNAPSHOT_VISIBILITY_CONTROLLERS" => Some(Self::Controllers),
+                "SNAPSHOT_VISIBILITY_PUBLIC" => Some(Self::Public),
+                _ => None,
+            }
+        }
+    }
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct UpdateCanisterSettings {
+    /// The target canister ID to call update_settings on. Required.
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// The settings to update. Required.
+    #[prost(message, optional, tag = "2")]
+    pub settings: ::core::option::Option<CanisterSettings>,
 }
 #[derive(
     candid::CandidType,
@@ -2780,6 +2995,212 @@ pub struct FulfillSubnetRentalRequest {
     pub node_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
     #[prost(string, tag = "2")]
     pub replica_version_id: ::prost::alloc::string::String,
+    /// Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+    /// If not set, handling defaults to the NNS subnet.
+    #[prost(message, optional, tag = "4")]
+    pub initial_dkg_subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct BlessAlternativeGuestOsVersion {
+    #[prost(bytes = "vec", repeated, tag = "1")]
+    pub chip_ids: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    #[prost(string, tag = "2")]
+    pub rootfs_hash: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub base_guest_launch_measurements: ::core::option::Option<
+        ::ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements,
+    >,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct LoadCanisterSnapshot {
+    /// The ID of the canister to load the snapshot into.
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// The ID of the snapshot to load.
+    #[prost(bytes = "vec", tag = "2")]
+    pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
+}
+/// A WASM module. Currently only supports inlined WASMs.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct WasmModule {
+    /// Derived from the `content` field. Cached here to speed up responses by
+    /// avoiding re-calculation.
+    #[prost(bytes = "vec", optional, tag = "10")]
+    pub hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(oneof = "wasm_module::Content", tags = "1")]
+    pub content: ::core::option::Option<wasm_module::Content>,
+}
+/// Nested message and enum types in `WasmModule`.
+pub mod wasm_module {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Content {
+        /// Chunked WASMs could be added here as another oneof variant.
+        #[prost(bytes, tag = "1")]
+        Inlined(::prost::alloc::vec::Vec<u8>),
+    }
+}
+/// Create a canister in a (possibly non-NNS) subnet and install code into it.
+/// The canister is created by the NNS Root canister, which becomes its default
+/// controller.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct CreateCanisterAndInstallCode {
+    /// The subnet where the canister will be created.
+    #[prost(message, optional, tag = "1")]
+    pub host_subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Settings for the new canister.
+    /// If not specified, defaults are used (Root becomes the sole controller).
+    #[prost(message, optional, tag = "2")]
+    pub canister_settings: ::core::option::Option<CanisterSettings>,
+    /// The WASM module to install.
+    #[prost(message, optional, tag = "3")]
+    pub wasm_module: ::core::option::Option<WasmModule>,
+    /// The argument to pass to the canister's install handler.
+    #[prost(bytes = "vec", optional, tag = "4")]
+    pub install_arg: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Derived from the `install_arg` field. Cached here to speed up responses by
+    /// avoiding re-calculation.
+    #[prost(bytes = "vec", optional, tag = "6")]
+    pub install_arg_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+/// Snapshot of a neuron's dissolve state, recorded before clamping to the
+/// Mission 70 maximum. Used to restore the original dissolve state if the
+/// maximum dissolve delay is ever increased again.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct NeuronDissolveStateSnapshot {
+    #[prost(oneof = "neuron_dissolve_state_snapshot::DissolveState", tags = "1, 2")]
+    pub dissolve_state: ::core::option::Option<neuron_dissolve_state_snapshot::DissolveState>,
+}
+/// Nested message and enum types in `NeuronDissolveStateSnapshot`.
+pub mod neuron_dissolve_state_snapshot {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum DissolveState {
+        #[prost(uint64, tag = "1")]
+        DissolveDelaySeconds(u64),
+        #[prost(uint64, tag = "2")]
+        WhenDissolvedTimestampSeconds(u64),
+    }
+}
+/// A sampled price consisting of a timestamp and a permyriad rate.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SampledPrice {
+    /// Timestamp in seconds since Unix epoch. Each entry represents one calendar day; there is at most
+    /// one entry per day.
+    #[prost(uint64, tag = "1")]
+    pub timestamp_seconds: u64,
+    /// The ICP/XDR rate in permyriad. For example, 80000 means 1 ICP = 8 XDR.
+    #[prost(uint64, tag = "2")]
+    pub xdr_permyriad_per_icp: u64,
+}
+/// ICP price history from the Exchange Rate Canister (XRC).
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct IcpPriceHistory {
+    /// Daily ICP/XDR rates (up to 365 entries), sorted by timestamp_seconds (ascending).
+    #[prost(message, repeated, tag = "1")]
+    pub icp_xdr_rates: ::prost::alloc::vec::Vec<SampledPrice>,
+}
+/// The maturity modulation factor is applied when disbursing (unstaked) maturity to ICP.
+///
+/// When a neuron owner disburses maturity, the amount of ICP received is:
+///    maturity * (1 + current_value_permyriad / 10_000)
+///
+/// This factor stabilizes ICP price: it is positive when ICP is above its long-term average
+/// (encouraging selling pressure), and negative when below (discouraging selling).
+///
+/// This might be unpopulated, which indicates that no value is currently available.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct MaturityModulation {
+    /// Current maturity modulation in permyriad (0.01% per unit).
+    #[prost(int32, optional, tag = "1")]
+    pub current_value_permyriad: ::core::option::Option<i32>,
+    /// Day (days_since_epoch) when current_value_permyriad was last computed.
+    #[prost(uint64, optional, tag = "2")]
+    pub updated_at_days_since_epoch: ::core::option::Option<u64>,
 }
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
@@ -2900,6 +3321,25 @@ pub struct Governance {
     /// Map of proposal IDs to their topics for those garbage collected.
     #[prost(map = "uint64, enumeration(Topic)", tag = "29")]
     pub topic_of_garbage_collected_proposals: ::std::collections::HashMap<u64, i32>,
+    /// Persisted-true sentinel: the one-time eight year gang bonus base migration ran on mainnet.
+    /// Retained as a rollback guard; if a previous release sees this as true, it skips the migration.
+    #[prost(bool, tag = "31")]
+    pub eight_year_gang_bonus_migration_done: bool,
+    /// Snapshot of each neuron's dissolve state taken while clamping to the Mission 70 maximum
+    /// dissolve delay. Enables restoring original dissolve states if the maximum is reversed.
+    #[prost(map = "uint64, message", tag = "32")]
+    pub neuron_id_to_pre_clamp_dissolve_state:
+        ::std::collections::HashMap<u64, NeuronDissolveStateSnapshot>,
+    /// Persisted-true sentinel: the relaxed eight year gang member induction ran on mainnet.
+    /// Retained as a rollback guard; if a previous release sees this as true, it skips the migration.
+    #[prost(bool, tag = "33")]
+    pub relaxed_eight_year_gang_bonus_migration_done: bool,
+    /// ICP price history from the Exchange Rate Canister (XRC), used for maturity modulation.
+    #[prost(message, optional, tag = "34")]
+    pub icp_price_history: ::core::option::Option<IcpPriceHistory>,
+    /// Maturity modulation state, updated daily from icp_price_history.
+    #[prost(message, optional, tag = "35")]
+    pub maturity_modulation: ::core::option::Option<MaturityModulation>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -2920,7 +3360,7 @@ pub mod governance {
         pub timestamp: u64,
         #[prost(
             oneof = "neuron_in_flight_command::Command",
-            tags = "2, 3, 5, 7, 8, 9, 10, 20, 21, 22"
+            tags = "2, 3, 5, 7, 8, 9, 10, 20, 21, 22, 23"
         )]
         pub command: ::core::option::Option<neuron_in_flight_command::Command>,
     }
@@ -2976,6 +3416,8 @@ pub mod governance {
             SyncCommand(SyncCommand),
             #[prost(message, tag = "22")]
             FinalizeDisburseMaturity(super::super::FinalizeDisburseMaturity),
+            #[prost(message, tag = "23")]
+            CreateNeuron(super::super::CreateNeuron),
         }
     }
     /// Stores metrics that are too costly to compute each time metrics are
@@ -3059,6 +3501,8 @@ pub mod governance {
         pub not_dissolving_neurons_e8s_buckets_ect: ::std::collections::HashMap<u64, f64>,
         #[prost(uint64, tag = "42")]
         pub spawning_neurons_count: u64,
+        #[prost(uint64, tag = "43")]
+        pub total_maturity_disbursements_in_progress_e8s_equivalent: u64,
         /// Deprecated. Use non_self_authenticating_controller_neuron_subset_metrics instead.
         #[prost(uint64, optional, tag = "36")]
         pub total_voting_power_non_self_authenticating_controller: ::core::option::Option<u64>,
@@ -4094,6 +4538,137 @@ pub struct FinalizeDisburseMaturity {
     #[prost(message, optional, tag = "5")]
     pub to_account_identifier: ::core::option::Option<::icp_ledger::protobuf::AccountIdentifier>,
 }
+/// Records information needed to recover from a failed create_neuron call.
+/// Most fields are copied from the request/argument that was passed to the
+/// create_neuron canister method.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct CreateNeuron {
+    /// The neuron ID being created.
+    #[prost(message, optional, tag = "1")]
+    pub neuron_id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
+    /// The neuron's subaccount.
+    #[prost(bytes = "vec", tag = "2")]
+    pub neuron_subaccount: ::prost::alloc::vec::Vec<u8>,
+    /// The source account from which to transfer ICP.
+    #[prost(message, optional, tag = "3")]
+    pub source_account: ::core::option::Option<Account>,
+    /// The amount to stake in e8s.
+    #[prost(uint64, tag = "4")]
+    pub amount_e8s: u64,
+    /// The controller of the neuron.
+    #[prost(message, optional, tag = "5")]
+    pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// The dissolve delay of the neuron in seconds.
+    #[prost(uint64, tag = "6")]
+    pub dissolve_delay_seconds: u64,
+    /// The timestamp when the operation started.
+    #[prost(uint64, tag = "7")]
+    pub timestamp_seconds: u64,
+    /// The followees to set for the neuron.
+    #[prost(message, optional, tag = "8")]
+    pub followees: ::core::option::Option<manage_neuron::SetFollowing>,
+}
+/// An ICRC-3-like value.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SelfDescribingValue {
+    #[prost(
+        oneof = "self_describing_value::Value",
+        tags = "1, 2, 3, 4, 5, 6, 7, 8"
+    )]
+    pub value: ::core::option::Option<self_describing_value::Value>,
+}
+/// Nested message and enum types in `SelfDescribingValue`.
+pub mod self_describing_value {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Value {
+        #[prost(bytes, tag = "1")]
+        Blob(::prost::alloc::vec::Vec<u8>),
+        #[prost(string, tag = "2")]
+        Text(::prost::alloc::string::String),
+        /// nat/int are stored as bytes since candid Nat/Int does not have equivalent protobuf types.
+        #[prost(bytes, tag = "3")]
+        Nat(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "4")]
+        Int(::prost::alloc::vec::Vec<u8>),
+        #[prost(message, tag = "5")]
+        Array(super::SelfDescribingValueArray),
+        #[prost(message, tag = "6")]
+        Map(super::SelfDescribingValueMap),
+        #[prost(message, tag = "7")]
+        Null(super::Empty),
+        #[prost(bool, tag = "8")]
+        Bool(bool),
+    }
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SelfDescribingValueArray {
+    #[prost(message, repeated, tag = "1")]
+    pub values: ::prost::alloc::vec::Vec<SelfDescribingValue>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SelfDescribingValueMap {
+    #[prost(map = "string, message", tag = "1")]
+    pub values: ::std::collections::HashMap<::prost::alloc::string::String, SelfDescribingValue>,
+}
+/// Proposal action that is self-describing. It can be understood without the schema of a specific
+/// proposal type.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SelfDescribingProposalAction {
+    #[prost(string, tag = "1")]
+    pub type_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub type_description: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub value: ::core::option::Option<SelfDescribingValue>,
+}
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow
 /// relationships are defined per topic.
@@ -4699,6 +5274,13 @@ pub enum NnsFunction {
     UnpauseCanisterMigrations = 54,
     /// Take subnet offline or bring back online. Used as part of subnet recovery.
     SetSubnetOperationalLevel = 55,
+    /// The proposal requests to split a subnet.
+    SplitSubnet = 56,
+    /// Delete a subnet. The subnet record, catch-up package, threshold signing key
+    /// and routing table entries are removed from the registry, and the subnet's
+    /// nodes become unassigned.
+    /// Currently limited to CloudEngine subnets.
+    DeleteSubnet = 57,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4772,6 +5354,8 @@ impl NnsFunction {
             Self::PauseCanisterMigrations => "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS",
             Self::UnpauseCanisterMigrations => "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS",
             Self::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
+            Self::SplitSubnet => "NNS_FUNCTION_SPLIT_SUBNET",
+            Self::DeleteSubnet => "NNS_FUNCTION_DELETE_SUBNET",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4852,6 +5436,8 @@ impl NnsFunction {
             "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS" => Some(Self::PauseCanisterMigrations),
             "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS" => Some(Self::UnpauseCanisterMigrations),
             "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
+            "NNS_FUNCTION_SPLIT_SUBNET" => Some(Self::SplitSubnet),
+            "NNS_FUNCTION_DELETE_SUBNET" => Some(Self::DeleteSubnet),
             _ => None,
         }
     }

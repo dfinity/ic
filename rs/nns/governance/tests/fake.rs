@@ -16,9 +16,10 @@ use ic_nns_constants::{
 use ic_nns_governance::{
     governance::{Environment, Governance, HeapGrowthPotential, RngError},
     pb::v1::{
-        ExecuteNnsFunction, GovernanceError, ManageNeuron, Motion, NetworkEconomics, Proposal,
-        Vote, manage_neuron, manage_neuron::NeuronIdOrSubaccount, proposal,
+        GovernanceError, ManageNeuron, Motion, NetworkEconomics, Proposal, Vote, manage_neuron,
+        manage_neuron::NeuronIdOrSubaccount, proposal,
     },
+    proposals::execute_nns_function::ValidExecuteNnsFunction,
 };
 use ic_nns_governance_api::Neuron;
 use ic_nns_governance_api::{ManageNeuronResponse, manage_neuron_response};
@@ -26,7 +27,10 @@ use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse}
 use ic_sns_swap::pb::v1 as sns_swap_pb;
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
-use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
+use icrc_ledger_types::{
+    icrc1::account::Account,
+    icrc3::blocks::{GetBlocksRequest, GetBlocksResult},
+};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use rand::{RngCore, SeedableRng};
@@ -47,7 +51,11 @@ use ic_nns_governance::governance::tla::{
     self, Destination, TLA_INSTRUMENTATION_STATE, ToTla, account_to_tla, tla_function,
 };
 use ic_nns_governance::{tla_log_request, tla_log_response};
+use ic_node_rewards_canister_api::RewardsCalculationAlgorithmVersion;
 use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRewardsResponse;
+use ic_node_rewards_canister_api::providers_rewards::{
+    GetNodeProvidersRewardsResponse, NodeProvidersRewards,
+};
 
 lazy_static! {
     pub(crate) static ref SNS_ROOT_CANISTER_ID: PrincipalId = PrincipalId::new_user_test_id(213599);
@@ -362,6 +370,17 @@ impl IcpLedger for FakeDriver {
         Ok(0)
     }
 
+    async fn icrc2_transfer_from(
+        &self,
+        _from: Account,
+        _to: Account,
+        _amount_e8s: u64,
+        _fee_e8s: u64,
+        _memo: u64,
+    ) -> Result<u64, NervousSystemError> {
+        unimplemented!()
+    }
+
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         if let Some(err) = self.error_on_next_ledger_call.lock().unwrap().take() {
             return Err(err);
@@ -449,7 +468,7 @@ impl RandomnessGenerator for FakeDriver {
     }
 
     fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
-        let mut bytes = [0u8; 32];
+        let mut bytes = [0_u8; 32];
         self.state.try_lock().unwrap().rng.fill_bytes(&mut bytes);
         Ok(bytes)
     }
@@ -472,7 +491,7 @@ impl Environment for FakeDriver {
     fn execute_nns_function(
         &self,
         _proposal_id: u64,
-        _update: &ExecuteNnsFunction,
+        _update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         Ok(())
         //panic!("unexpected call")
@@ -611,6 +630,19 @@ impl Environment for FakeDriver {
             .unwrap());
         }
 
+        if method_name == "get_node_providers_rewards" {
+            assert_eq!(PrincipalId::from(target), NODE_REWARDS_CANISTER_ID.get());
+
+            let response: GetNodeProvidersRewardsResponse = Ok(NodeProvidersRewards {
+                rewards_xdr_permyriad: btreemap! {
+                    PrincipalId::new_user_test_id(1).0 => NODE_PROVIDER_REWARD,
+                },
+                algorithm_version: RewardsCalculationAlgorithmVersion::default(),
+            });
+
+            return Ok(Encode!(&response).unwrap());
+        }
+
         if method_name == "get_average_icp_xdr_conversion_rate" {
             assert_eq!(PrincipalId::from(target), CYCLES_MINTING_CANISTER_ID.get());
 
@@ -629,7 +661,7 @@ impl Environment for FakeDriver {
         }
 
         if method_name == "raw_rand" {
-            let mut bytes = [0u8; 32];
+            let mut bytes = [0_u8; 32];
             self.state.try_lock().unwrap().rng.fill_bytes(&mut bytes);
             return Ok(Encode!(&bytes).unwrap());
         }

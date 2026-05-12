@@ -5,7 +5,7 @@
 # Other related links: https://github.com/bazelbuild/rules_rust/issues/2529
 #                      https://github.com/Asana/cc-rs
 diff --git a/src/lib.rs b/src/lib.rs
-index ae1a546..ac10816 100644
+index 48730e0..f8f3021 100644
 --- a/src/lib.rs
 +++ b/src/lib.rs
 @@ -2262,6 +2262,20 @@ impl Build {

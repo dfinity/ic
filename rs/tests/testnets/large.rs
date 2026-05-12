@@ -2,10 +2,10 @@
 //   one 4-node System, one 4-node Application, and one 1-node Application subnets, a single API boundary node, single ic-gateway/s and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 64 vCPUs, 480GiB of RAM, and 2,000 GiB disk.
 //
-// You can setup this testnet with a lifetime of 180 mins by executing the following commands:
+// You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/tools/docker-run
-//   $ ict testnet create large --lifetime-mins=180 --output-dir=./large -- --test_tmpdir=./large
+//   $ ict testnet create large --output-dir=./large -- --test_tmpdir=./large
 //
 // The --output-dir=./large will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./large will store the remaining test output in the specified directory.
@@ -43,12 +43,11 @@ use anyhow::Result;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::ic::{
-    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
+    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
 };
 use ic_system_test_driver::driver::ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm};
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
-    prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
@@ -70,19 +69,15 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    // start p8s for metrics and dashboards
-    PrometheusVm::default()
-        .start(&env)
-        .expect("Failed to start prometheus VM");
     // set up IC overriding the default resources to be more powerful
-    let vm_resources = VmResources {
+    let vm_resource_overrides = VmResourceOverrides {
         vcpus: Some(NrOfVCPUs::new(64)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
         boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2000)),
     };
     let mut ic = InternetComputer::new()
         .with_api_boundary_nodes(1)
-        .with_default_vm_resources(vm_resources);
+        .with_resource_overrides(vm_resource_overrides);
     ic = ic.add_subnet(Subnet::new(SubnetType::System).add_nodes(4));
     for _ in 0..NUM_FULL_CONSENSUS_APP_SUBNETS {
         ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(4));
@@ -110,8 +105,6 @@ pub fn setup(env: TestEnv) {
     }
     let ic_gateway = env.get_deployed_ic_gateway("ic-gateway-0").unwrap();
     let ic_gateway_url = ic_gateway.get_public_url();
-    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
-    env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
 
     // pick an SNS subnet among the application subnets
     let topology = env.topology_snapshot();

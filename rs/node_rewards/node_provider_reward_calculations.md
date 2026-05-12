@@ -146,6 +146,13 @@ Types:
 - type1.1: Gen1 nodes with increased storage capacity and reduced rewards after the initial 48 month agreements
 - type2: Not in use anymore
 - type3: Currently used node types with decreasing reward scale
+- type3.1: Same as type3 but with different values in the Node Rewards Table
+- type4: Cloud Engine nodes
+- type4.1: Cloud Engine nodes sub-variant
+- type4.2: Cloud Engine nodes sub-variant
+- type4.3: Cloud Engine nodes sub-variant
+- type4.4: Cloud Engine nodes sub-variant
+- type4.5: Cloud Engine nodes sub-variant
 
 Reward calculation varies by:
 

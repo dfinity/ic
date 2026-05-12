@@ -25,7 +25,7 @@ use ic_system_test_driver::{
     driver::{
         constants::DEVICE_NAME,
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
+        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
@@ -46,7 +46,6 @@ use std::io::{self};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 const CANISTER_METHOD: &str = "write";
 // Seed for random generator
 const RND_SEED: u64 = 42;
@@ -92,22 +91,14 @@ const TASK_TIMEOUT: Duration = Duration::from_secs(320 * 60);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(350 * 60);
 
 pub fn setup(env: TestEnv, config: Config) {
-    let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(8)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
-        boot_image_minimal_size_gibibytes: None,
-    };
     InternetComputer::new()
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_default_vm_resources(vm_resources)
-                .add_nodes(config.nodes_system_subnet),
-        )
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(vm_resources)
-                .add_nodes(config.nodes_app_subnet),
-        )
+        .with_resource_overrides(VmResourceOverrides {
+            vcpus: Some(NrOfVCPUs::new(8)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
+            ..VmResourceOverrides::default()
+        })
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(config.nodes_system_subnet))
+        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(config.nodes_app_subnet))
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
 }
@@ -150,7 +141,10 @@ pub fn test(env: TestEnv, config: Config) {
         .nodes()
         .next()
         .unwrap()
-        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+        .create_and_install_canister_with_arg(
+            &std::env::var("COUNTER_CANISTER_WAT_PATH").unwrap(),
+            None,
+        );
     info!(&log, "Installation of counter canisters has succeeded.");
     info!(
         &log,

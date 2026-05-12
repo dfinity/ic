@@ -8,6 +8,21 @@ on:
         description: The commit sha to run the CI on
         required: true
         type: string
+      base-ref:
+        description: The base branch of the PR
+        required: false
+        default: ${{ github.event.pull_request.base.ref }}
+        type: string
+      head-ref:
+        description: The head branch of the PR
+        required: false
+        default: ${{ github.event.pull_request.head.ref }}
+        type: string
+      pr-number:
+        description: 'The PR number'
+        required: false
+        default: ${{ github.event.pull_request.number }}
+        type: string
 
 env:
   CI_PROJECT_DIR: ${{ github.workspace }}
@@ -22,43 +37,96 @@ jobs:
     runs-on: &dind-small-setup
       labels: dind-small
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:86c24b5b717519527920d3b720906f91723514d63acddcbaeb27ecf4144aeb37
+      image: ghcr.io/dfinity/ic-build@sha256:7d812574cc8f8cf2841519340de0f218d71007996fbf28dfff286f3c84977f43
       options: >-
-         -e NODE_NAME
+         -e NODE_NAME --mount type=tmpfs,target="/tmp/containers"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          # ensures we checkout out the latest base, which we
-          # compare against (pull_request.base.sha)
+          # Ensures we fetch the merge-base, which we compare against
           fetch-depth: 0
-          ref: ${{ inputs.commit-sha }}
+          ref: ${{ case(github.event_name == 'pull_request', github.event.pull_request.head.sha, inputs.commit-sha) }}
+      - uses: ./.github/actions/netrc
       - name: Run candid compatibility checks
         uses: ./.github/actions/bazel
         with:
           run: |
-            DID_CHECK_REV='${{ github.event.pull_request.base.sha }}' \
-              bazel test //... \
-                --build_tag_filters="didc" \
-                --test_tag_filters="didc"
+            export DID_CHECK_REV="$(git merge-base HEAD 'origin/${{ inputs.base-ref }}')"
+            echo "DID_CHECK_REV=$DID_CHECK_REV"
+            bazel run //pre-commit:did-check
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
-  insta-tests:
-    name: Quick Feedback Tests
+# Runs linters and formatters on code to automatically fix issues
+  autofix:
+    name: Autofix
     runs-on: *dind-small-setup
     container: *container-setup
     timeout-minutes: 30
     steps:
-      - &checkout
-        name: Checkout
-        uses: actions/checkout@v4
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        id: app-token
         with:
-          ref: ${{ inputs.commit-sha }}
-      - name: Run insta-tests
+          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
+      - &checkout-with-token
+        name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ case(github.event_name == 'pull_request', github.event.pull_request.head.ref, inputs.commit-sha) }}
+          token: ${{ steps.app-token.outputs.token }}
+      - uses: ./.github/actions/netrc
+      - name: Run Linter
+        id: linter
         uses: ./.github/actions/bazel
         with:
-          run: bazel test //:insta_tests
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          run: |
+            set -euo pipefail
+
+            EXIT_STATUS=0
+
+            checks=(
+              //pre-commit:{shfmt-check,ruff-check,buf-check,DFINITY-capitalization-check,do-not-merge-check,buildifier-check,gazelle-check}
+            )
+
+            # if the CI_OVERRIDE_BUF_BREAKING label is not set on the PR, then run the buf compatibility checks
+            if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}' != 'true' ]]; then
+              checks+=( //pre-commit:buf-breaking-check )
+            fi
+
+            # First run all checks and record any potential error
+            for check in ${checks[@]} ; do
+              echo -n "Checking $check ... "
+              if bazel run "$check"; then
+                echo "ok"
+              else
+                echo "failed"
+                EXIT_STATUS=1
+              fi
+            done
+
+            # Then try to autofix whenever possible
+            bazel run //pre-commit:buildifier-fix
+            bazel run //pre-commit:shfmt-fix
+            bazel run //pre-commit:ruff-fix
+            bazel run :rustfmt
+            bazel run :gazelle
+
+            git add --all
+            git status
+            if ! git diff --cached --quiet; then
+                # There are some changes staged
+                git config --global user.email "infra+github-automation@dfinity.org"
+                git config --global user.name "IDX GitHub Automation"
+                git commit -m "Automatically fixing code for linting and formatting issues"
+                git push origin HEAD:'${{ inputs.head-ref }}'
+
+                # Because the buildifier made changes, fail the PR
+                EXIT_STATUS=1
+            fi
+
+            exit "${EXIT_STATUS}"
 
   bazel-build-fuzzers-archives:
     name: Bazel Build Fuzzers Archives
@@ -67,11 +135,16 @@ jobs:
     container: *container-setup
     timeout-minutes: 90
     steps:
-      - *checkout
+      - &checkout
+        name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.commit-sha }}
       - name: Filter Relevant Files
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
+          ref: ${{ inputs.commit-sha }}
           filters: |
             fuzzers:
               - '.github/workflows/ci-pr-only.yml'
@@ -90,24 +163,19 @@ jobs:
     name: Lock Generate
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      CI_EVENT_NAME: ${{ github.event_name }}
     steps:
       - name: Create GitHub App Token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         id: app-token
         with:
           app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
           private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || inputs.commit-sha }}
-          token: ${{ steps.app-token.outputs.token }}
+      - *checkout-with-token
       - name: Filter Relevant Files
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
+          ref: ${{ inputs.commit-sha }}
           filters: |
             lock-generate:
               - '.github/workflows/ci-pr-only.yml'
@@ -121,118 +189,80 @@ jobs:
       - name: Run Lock Generate
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
-        run: ./ci/scripts/lock-generate.sh
+        shell: bash
+        run: |
+          set -eufo pipefail
+
+          EXIT_STATUS=0
+
+          # Update the cargo lockfile, if necessary
+          cargo update --workspace
+
+          # Repin the bazel crates, if necessary
+          ./bin/bazel-pin.sh
+
+          # Stage files and check if anything changed
+          git add Cargo.lock Cargo.Bazel.*.lock
+          git status
+          if ! git diff --cached --quiet; then
+              # There are some changes staged
+              git config --global user.email "infra+github-automation@dfinity.org"
+              git config --global user.name "IDX GitHub Automation"
+              git commit -m "Automatically updated Cargo*.lock"
+              git push origin HEAD:'${{ inputs.head-ref }}'
+
+              # Because the lockfiles need updating, fail the PR
+              EXIT_STATUS=1
+          fi
+
+          exit "${EXIT_STATUS}"
 
   generate-config-fixtures:
     name: Generate Config Fixtures
-    runs-on: ubuntu-latest
+    runs-on: *dind-small-setup
     container: *container-setup
-    timeout-minutes: 30
-    env:
-      CI_EVENT_NAME: ${{ github.event_name }}
+    timeout-minutes: 10
     steps:
       - name: Create GitHub App Token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         id: app-token
         with:
           app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
           private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || inputs.commit-sha }}
-          token: ${{ steps.app-token.outputs.token }}
+      - *checkout-with-token
       - name: Filter Relevant Files
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
+          ref: ${{ inputs.commit-sha }}
           filters: |
             generate-config-fixtures:
               - '.github/workflows/ci-pr-only.yml'
-              - 'rs/ic_os/config_types/**'
+              - 'rs/ic_os/config/types/**'
       - name: Run Generate Config Fixtures
         id: generate-config-fixtures
         if: steps.filter.outputs.generate-config-fixtures == 'true'
-        run: ./ci/scripts/generate-config-fixtures.sh
+        shell: bash
+        run: |
+          set -eufo pipefail
 
-  dependencies-check:
-    name: Dependency Scan for PR
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-      pull-requests: write
-    env:
-      SHELL_WRAPPER: "/usr/bin/time"
-      CARGO_AUDIT_VERSION: "0.21.0"
-      CI_MERGE_REQUEST_IID: ${{ github.event.pull_request.number }}
-      CI_PROJECT_PATH: ${{ github.repository }}
-      CI_PIPELINE_ID: ${{ github.run_id }}
-      CI_COMMIT_SHA: ${{ github.sha }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-      SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
-      REPO_NAME: ${{ github.repository }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.commit-sha }}
-      - name: Filter Relevant Files
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        id: filter
-        with:
-          filters: |
-            depcheck:
-              - '.github/workflows/ci-pr-only.yml'
-              - 'bazel/external_crates.bzl'
-              - '**/*.lock'
-              - '**/*.toml'
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        if: steps.filter.outputs.depcheck == 'true'
-        with:
-          python-version: "3.12"
-      - name: Setup environment deps
-        id: setup-environment-deps
-        if: steps.filter.outputs.depcheck == 'true'
-        shell: bash
-        run: |
-          # Ignore externally-managed-environment pip error, install packages system-wide.
-          PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
-          cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
-      - name: Dependency Scan for Pull Request
-        id: dependencies-check
-        if: steps.filter.outputs.depcheck == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
-          cd ci/src/dependencies/
-          $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
+          EXIT_STATUS=0
 
-  # CI job is also executed in Schedule Hourly
-  bazel-test-coverage:
-    name: Bazel Test Coverage
-    runs-on: *dind-large-setup
-    container: *container-setup
-    timeout-minutes: 90
-    if: contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - *checkout
-      - name: Run Bazel Test Coverage
-        shell: bash
-        run: |
-          ./ci/scripts/bazel-coverage.sh
-      - name: Upload bazel-coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: bazel-coverage
-          retention-days: 1
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            cov_html.zip
+          # Generate config fixtures if config types have been updated
+          bazel run //rs/ic_os/config/types/compatibility_tests:generate_config_types_fixture
+
+          # Stage files and check if anything changed
+          git add rs/ic_os/config/types/compatibility_tests/fixtures
+          git status
+          if ! git diff --cached --quiet; then
+              # There are some changes staged
+              git config --global user.email "infra+github-automation@dfinity.org"
+              git config --global user.name "IDX GitHub Automation"
+              git commit -m "Automatically updated config type fixtures"
+              git push origin HEAD:'${{ inputs.head-ref }}'
+
+              # Because the fixtures need updating, fail the PR
+              EXIT_STATUS=1
+          fi
+
+          exit "${EXIT_STATUS}"

@@ -11,7 +11,7 @@ edition.workspace = true
 documentation = "https://docs.rs/canlog"
 
 [dependencies]
-syn = { version = "2.0.100", features = ["derive"] }
+syn = { workspace = true }
 quote = "1.0.40"
 proc-macro2 = "1.0.94"
 darling = "0.20.11"

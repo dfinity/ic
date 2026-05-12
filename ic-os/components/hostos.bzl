@@ -2,7 +2,12 @@
 Enumerate every component file dependency for HostOS
 """
 
+load(":defs.bzl", "OS_TYPE_DEST")
+
 component_files = {
+    # OS-type marker file, this can be used to identify the OS
+    Label("upgrade/systemd-generators/os-type-hostos"): OS_TYPE_DEST,
+
     # hostos components
     Label("hostos/guestos/guestos.service"): "/etc/systemd/system/guestos.service",
     Label("hostos/guestos/upgrade-guestos.service"): "/etc/systemd/system/upgrade-guestos.service",
@@ -13,8 +18,6 @@ component_files = {
     Label("hostos/verbose-logging/verbose-logging.sh"): "/opt/ic/bin/verbose-logging.sh",
     Label("hostos/verbose-logging/verbose-logging.service"): "/etc/systemd/system/verbose-logging.service",
     Label("hostos/verbose-logging/logrotate.d/verbose-logging"): "/etc/logrotate.d/verbose-logging",
-    Label("hostos/misc/grub-upgrader/grub-upgrader.sh"): "/opt/ic/bin/grub-upgrader.sh",
-    Label("hostos/misc/grub-upgrader/grub-upgrader.service"): "/etc/systemd/system/grub-upgrader.service",
     Label("hostos/misc/logrotate/override.conf"): "/etc/systemd/system/logrotate.service.d/override.conf",
 
     # early-boot
@@ -31,12 +34,11 @@ component_files = {
     Label("early-boot/initramfs-tools/hostos/amd64-microcode"): "/etc/default/amd64-microcode",
     Label("early-boot/initramfs-tools/hostos/intel-microcode"): "/etc/default/intel-microcode",
     Label("early-boot/initramfs-tools/hostos/modules"): "/etc/initramfs-tools/modules",
-    Label("early-boot/initramfs-tools/hostos/set-machine-id/set-machine-id"): "/etc/initramfs-tools/scripts/init-bottom/set-machine-id/set-machine-id",
+    Label("early-boot/initramfs-tools/hostos/set-machine-id/set-machine-id"): "/etc/initramfs-tools/scripts/init-bottom/set-machine-id",
 
     # misc
     Label("misc/config/config-hostos.sh"): "/opt/ic/bin/config.sh",
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
-    Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("misc/output-wrapper.sh"): "/opt/ic/bin/output-wrapper.sh",
     Label("misc/vsock/vsock-agent.service"): "/etc/systemd/system/vsock-agent.service",
     Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
@@ -44,13 +46,16 @@ component_files = {
     Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("hostos/misc/sudoers"): "/etc/sudoers",
     Label("hostos/misc/limited-console"): "/opt/ic/bin/limited-console",
+    Label("hostos/misc/bash"): "/opt/ic/bin/rbash/bash",
     Label("hostos/misc/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
     Label("hostos/misc/20-ipmi.rules"): "/etc/udev/rules.d/20-ipmi.rules",
+    Label("hostos/misc/reserve-hugepages/reserve-hugepages.service"): "/etc/systemd/system/reserve-hugepages.service",
     Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.sh"): "/opt/ic/bin/guestos-recovery-upgrader.sh",
-    Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.service"): "/etc/systemd/system/guestos-recovery-upgrader.service",
+    Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-launcher.sh"): "/opt/ic/bin/guestos-recovery-launcher.sh",
     Label("misc/systemd-user/user@.service"): "/etc/systemd/system/user@.service",
 
     # monitoring
+    Label("monitoring/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("monitoring/hostos/monitor-guestos.sh"): "/opt/ic/bin/monitor-guestos.sh",
     Label("monitoring/hostos/monitor-guestos.service"): "/etc/systemd/system/monitor-guestos.service",
     Label("monitoring/hostos/monitor-guestos.timer"): "/etc/systemd/system/monitor-guestos.timer",
@@ -74,9 +79,10 @@ component_files = {
     Label("monitoring/metrics-proxy/metrics-proxy.service"): "/etc/systemd/system/metrics-proxy.service",
     Label("monitoring/journald.conf"): "/etc/systemd/journald.conf",
     Label("misc/log-config/log-config-hostos.service"): "/etc/systemd/system/log-config.service",
-    Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
     Label("monitoring/grub-version/grub-version.sh"): "/opt/ic/bin/grub-version.sh",
     Label("monitoring/grub-version/grub-version.service"): "/etc/systemd/system/grub-version.service",
+    Label("monitoring/hostos/export-guestos-serial-logs.sh"): "/opt/ic/bin/export-guestos-serial-logs.sh",
+    Label("monitoring/hostos/export-guestos-serial-logs.service"): "/etc/systemd/system/export-guestos-serial-logs.service",
 
     # networking
     Label("networking/generate-network-config/generate-network-config-hostos.service"): "/etc/systemd/system/generate-network-config.service",
@@ -95,10 +101,13 @@ component_files = {
     Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys-hostos.sh"): "/opt/ic/bin/setup-ssh-user-keys.sh",
     Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys.service"): "/etc/systemd/system/setup-ssh-user-keys.service",
 
+    # TODO: remove in NODE-1859
+    Label("hostos/update-config/update-config.service"): "/etc/systemd/system/update-config.service",
+
     # upgrade
     Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
-    Label("upgrade/systemd-generators/hostos/mount-generator"): "/etc/systemd/system-generators/mount-generator",
+    Label("upgrade/systemd-generators/mount-generator"): "/etc/systemd/system-generators/mount-generator",
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/install-upgrade.sh"): "/opt/ic/bin/install-upgrade.sh",
-    Label("upgrade/grub.sh"): "/opt/ic/bin/grub.sh",
+    Label("upgrade/boot-state.sh"): "/opt/ic/bin/boot-state.sh",
 }

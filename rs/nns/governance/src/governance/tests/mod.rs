@@ -1,4 +1,5 @@
 use super::*;
+use crate::pb::v1::ExecuteNnsFunction;
 use crate::storage::with_voting_history_store;
 use crate::test_utils::MockRandomness;
 use crate::{
@@ -6,7 +7,9 @@ use crate::{
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::{E8, assert_is_err, assert_is_ok};
+use ic_nervous_system_common::{
+    E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, assert_is_err, assert_is_ok,
+};
 #[cfg(feature = "test")]
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::pb::v1::NeuronId;
@@ -21,6 +24,7 @@ use lazy_static::lazy_static;
 use maplit::hashmap;
 use std::{convert::TryFrom, time::Duration};
 
+mod get_maturity_modulation;
 mod get_neuron_index;
 mod list_neurons;
 mod list_proposals;
@@ -390,6 +394,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 swap_due_timestamp_seconds: None,
                 nns_proposal_id: None,
                 neurons_fund_participation_constraints: None,
+                custom_proposal_criticality: None,
             },
         );
 
@@ -738,6 +743,7 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
                 neuron_basket_construction_parameters: None,
                 swap_start_timestamp_seconds: None,
                 swap_due_timestamp_seconds: None,
+                custom_proposal_criticality: None,
             },
         );
 
@@ -1030,7 +1036,7 @@ mod neuron_archiving_tests {
         // Dissolved in the distant past.
         let model_neuron = NeuronBuilder::new(
             NeuronId { id: 1 },
-            Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
+            Subaccount::try_from(&[0_u8; 32] as &[u8]).unwrap(),
             PrincipalId::new_user_test_id(1),
             DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds: 42,
@@ -1066,7 +1072,7 @@ mod neuron_archiving_tests {
         let neuron_with_dissolve_state_and_age = |dissolve_state_and_age| {
             NeuronBuilder::new(
                 NeuronId { id: 1 },
-                Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
+                Subaccount::try_from(&[0_u8; 32] as &[u8]).unwrap(),
                 PrincipalId::new_user_test_id(1),
                 dissolve_state_and_age,
                 NOW,
@@ -1128,7 +1134,7 @@ mod neuron_archiving_tests {
             let staked_maturity_e8s_equivalent = Some(staked_maturity_e8s_equivalent);
             let mut neuron = NeuronBuilder::new(
                 NeuronId { id: 1 },
-                Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
+                Subaccount::try_from(&[0_u8; 32] as &[u8]).unwrap(),
                 PrincipalId::new_user_test_id(1),
                 DissolveStateAndAge::DissolvingOrDissolved {
                     when_dissolved_timestamp_seconds: 42,
@@ -1216,7 +1222,7 @@ fn can_spawn_neurons_only_true_when_not_spawning_and_neurons_ready_to_spawn() {
         .add_neuron(
             NeuronBuilder::new(
                 NeuronId { id: 1 },
-                Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+                Subaccount::try_from(vec![0_u8; 32].as_slice()).unwrap(),
                 PrincipalId::new_user_test_id(1),
                 DissolveStateAndAge::NotDissolving {
                     dissolve_delay_seconds: 42,
@@ -1257,9 +1263,14 @@ fn test_validate_execute_nns_function() {
         Box::new(MockRandomness::new()),
     );
 
-    let test_execute_nns_function_error =
+    let test_execute_nns_function_validate_error =
         |execute_nns_function: ExecuteNnsFunction, error_message: String| {
-            let actual_result = governance.validate_execute_nns_function(&execute_nns_function);
+            // Test that validation fails with the expected error message
+            let valid_execute_nns_function =
+                ValidExecuteNnsFunction::try_from(execute_nns_function)
+                    .expect("Failed to create ValidExecuteNnsFunction");
+            let actual_result =
+                governance.validate_execute_nns_function(&valid_execute_nns_function);
             let expected_result = Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 error_message,
@@ -1267,18 +1278,12 @@ fn test_validate_execute_nns_function() {
             assert_eq!(actual_result, expected_result);
         };
 
-    let error_test_cases = vec![
-        (
-            ExecuteNnsFunction {
-                nns_function: i32::MAX,
-                payload: vec![],
-            },
-            "Invalid NnsFunction id: 2147483647".to_string(),
-        ),
+    // Test cases that should fail during validation
+    let validate_error_test_cases = vec![
         (
             ExecuteNnsFunction {
                 nns_function: NnsFunction::CreateSubnet as i32,
-                payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX + 1],
+                payload: vec![1_u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX + 1],
             },
             format!(
                 "The maximum NNS function payload size in a proposal action is {} bytes, \
@@ -1286,15 +1291,6 @@ fn test_validate_execute_nns_function() {
                 PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX,
                 PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX + 1,
             ),
-        ),
-        (
-            ExecuteNnsFunction {
-                nns_function: NnsFunction::IcpXdrConversionRate as i32,
-                payload: vec![],
-            },
-            "Proposal is obsolete because NNS_FUNCTION_ICP_XDR_CONVERSION_RATE is obsolete as \
-            conversion rates are now provided by the exchange rate canister automatically."
-                .to_string(),
         ),
         (
             ExecuteNnsFunction {
@@ -1343,81 +1339,16 @@ fn test_validate_execute_nns_function() {
              than 255 characters"
                 .to_string(),
         ),
-        (
-            ExecuteNnsFunction {
-                nns_function: NnsFunction::UpdateAllowedPrincipals as i32,
-                payload: vec![],
-            },
-            "Proposal is obsolete because NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS is only used \
-            for the old SNS initialization mechanism, which is now obsolete. Use \
-            CREATE_SERVICE_NERVOUS_SYSTEM instead."
-                .to_string(),
-        ),
-        (
-            ExecuteNnsFunction {
-                nns_function: NnsFunction::UpdateApiBoundaryNodesVersion as i32,
-                payload: vec![],
-            },
-            "Proposal is obsolete because NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION is \
-            obsolete. Use NNS_FUNCTION_DEPLOY_GUESTOS_TO_SOME_API_BOUNDARY_NODES instead."
-                .to_string(),
-        ),
-        (
-            ExecuteNnsFunction {
-                nns_function: NnsFunction::UpdateUnassignedNodesConfig as i32,
-                payload: vec![],
-            },
-            "Proposal is obsolete because NNS_FUNCTION_UPDATE_UNASSIGNED_NODES_CONFIG is \
-            obsolete. Use NNS_FUNCTION_DEPLOY_GUESTOS_TO_ALL_UNASSIGNED_NODES/\
-            NNS_FUNCTION_UPDATE_SSH_READONLY_ACCESS_FOR_ALL_UNASSIGNED_NODES instead."
-                .to_string(),
-        ),
-        (
-            ExecuteNnsFunction {
-                nns_function: NnsFunction::UpdateElectedHostosVersions as i32,
-                payload: vec![],
-            },
-            "Proposal is obsolete because NNS_FUNCTION_UPDATE_ELECTED_HOSTOS_VERSIONS is \
-            obsolete. Use NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS instead."
-                .to_string(),
-        ),
-        (
-            ExecuteNnsFunction {
-                nns_function: NnsFunction::UpdateNodesHostosVersion as i32,
-                payload: vec![],
-            },
-            "Proposal is obsolete because NNS_FUNCTION_UPDATE_NODES_HOSTOS_VERSION is obsolete. \
-            Use NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES instead."
-                .to_string(),
-        ),
-        (
-            ExecuteNnsFunction {
-                nns_function: NnsFunction::NnsCanisterUpgrade as i32,
-                payload: vec![],
-            },
-            "Proposal is obsolete because NNS_FUNCTION_NNS_CANISTER_UPGRADE is obsolete. \
-            Use InstallCode instead."
-                .to_string(),
-        ),
-        (
-            ExecuteNnsFunction {
-                nns_function: NnsFunction::NnsRootUpgrade as i32,
-                payload: vec![],
-            },
-            "Proposal is obsolete because NNS_FUNCTION_NNS_ROOT_UPGRADE is obsolete. \
-            Use InstallCode instead."
-                .to_string(),
-        ),
     ];
 
-    for (execute_nns_function, error_message) in error_test_cases {
-        test_execute_nns_function_error(execute_nns_function, error_message);
+    for (execute_nns_function, error_message) in validate_error_test_cases {
+        test_execute_nns_function_validate_error(execute_nns_function, error_message);
     }
 
     let ok_test_cases = vec![
         ExecuteNnsFunction {
             nns_function: NnsFunction::CreateSubnet as i32,
-            payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX],
+            payload: vec![1_u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX],
         },
         ExecuteNnsFunction {
             nns_function: NnsFunction::AssignNoid as i32,
@@ -1461,7 +1392,9 @@ fn test_validate_execute_nns_function() {
     ];
 
     for execute_nns_function in ok_test_cases {
-        let actual_result = governance.validate_execute_nns_function(&execute_nns_function);
+        let valid_execute_nns_function = ValidExecuteNnsFunction::try_from(execute_nns_function)
+            .expect("Failed to create ValidExecuteNnsFunction");
+        let actual_result = governance.validate_execute_nns_function(&valid_execute_nns_function);
         assert_eq!(actual_result, Ok(()));
     }
 }
@@ -1473,18 +1406,13 @@ fn test_canister_and_function_no_unreachable() {
     for nns_function in NnsFunction::iter() {
         // This will return either `Ok(_)` for nns functions that are still used, or `Err(_)` for
         // obsolete ones. The test just makes sure that it doesn't panic.
-        let _ = nns_function.canister_and_function();
-    }
-}
-
-#[test]
-fn test_compute_topic_at_creation_no_unreachable() {
-    use strum::IntoEnumIterator;
-
-    for nns_function in NnsFunction::iter() {
-        // This will return either `Ok(_)` for nns functions that are still used, or `Err(_)` for
-        // obsolete ones. The test just makes sure that it doesn't panic.
-        let _ = nns_function.compute_topic_at_creation();
+        let execute_nns_function = ExecuteNnsFunction {
+            nns_function: nns_function as i32,
+            payload: vec![],
+        };
+        if let Ok(valid_execute) = ValidExecuteNnsFunction::try_from(execute_nns_function) {
+            let _ = valid_execute.nns_function.canister_and_function();
+        }
     }
 }
 
@@ -1577,9 +1505,8 @@ fn test_update_neuron_errors_out_expectedly() {
 }
 
 #[test]
-fn test_compute_ballots_for_new_proposal() {
+fn test_compute_ballots_for_manage_neuron_proposal() {
     const CREATED_TIMESTAMP_SECONDS: u64 = 1729791574;
-    let now_seconds = CREATED_TIMESTAMP_SECONDS + 999;
 
     fn new_neuron_builder(id: u64) -> NeuronBuilder {
         NeuronBuilder::new_for_test(
@@ -1617,24 +1544,12 @@ fn test_compute_ballots_for_new_proposal() {
     );
 
     governance.add_neuron(10, neuron_10).unwrap();
-    governance
-        .add_neuron(200, new_neuron_builder(200).build())
-        .unwrap();
-    governance
-        .add_neuron(3_000, new_neuron_builder(3_000).build())
-        .unwrap();
 
-    let manage_neuron_action = Action::ManageNeuron(Box::new(ManageNeuron {
-        id: Some(NeuronId { id: 10 }),
-        neuron_id_or_subaccount: None,
-        command: None,
-    }));
-    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
-        .compute_ballots_for_new_proposal(&manage_neuron_action, &NeuronId { id: 10 }, now_seconds)
-        .expect("Failed computing ballots for new proposal");
+    let managed_id = manage_neuron::NeuronIdOrSubaccount::NeuronId(NeuronId { id: 10 });
+    let ballots = governance
+        .compute_ballots_for_manage_neuron_proposal(&managed_id, &NeuronId { id: 10 })
+        .expect("Failed computing ballots for manage neuron proposal");
 
-    let expected = 7; // 7 followees
-    assert_eq!(tot_potential_voting_power, expected);
     assert_eq!(
         ballots,
         hashmap! {
@@ -1647,18 +1562,41 @@ fn test_compute_ballots_for_new_proposal() {
         206 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
         }
     );
+}
 
-    let motion_action = Action::Motion(Default::default());
-    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
-        .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
-        .expect("Failed computing ballots for new proposal");
-    // Similar to previous; this time though, Action::ManageNeuron, the weird
-    // special case.
-    let expected_potential_voting_power: u64 =
-        governance.neuron_store.with_active_neurons_iter(|iter| {
-            iter.map(|neuron| neuron.potential_voting_power(now_seconds))
-                .sum()
-        });
+#[test]
+fn test_compute_ballots_for_standard_proposal() {
+    const CREATED_TIMESTAMP_SECONDS: u64 = 1729791574;
+    let now_seconds = CREATED_TIMESTAMP_SECONDS + 999;
+
+    fn new_neuron_builder(id: u64) -> NeuronBuilder {
+        NeuronBuilder::new_for_test(
+            id,
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
+                aging_since_timestamp_seconds: CREATED_TIMESTAMP_SECONDS + 42,
+            },
+        )
+        .with_cached_neuron_stake_e8s(id * E8)
+    }
+
+    let mut governance = Governance::new(
+        Default::default(),
+        Arc::<MockEnvironment>::default(),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
+    );
+
+    governance
+        .add_neuron(10, new_neuron_builder(10).build())
+        .unwrap();
+    governance
+        .add_neuron(200, new_neuron_builder(200).build())
+        .unwrap();
+    governance
+        .add_neuron(3_000, new_neuron_builder(3_000).build())
+        .unwrap();
 
     let deciding_vote = |g: &Governance, id, now| {
         g.neuron_store
@@ -1667,7 +1605,22 @@ fn test_compute_ballots_for_new_proposal() {
             })
             .unwrap()
     };
-    assert_eq!(tot_potential_voting_power, expected_potential_voting_power);
+
+    // Test with initial timestamp
+    let (ballots, total_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
+        .compute_ballots_for_standard_proposal(now_seconds)
+        .expect("Failed computing ballots for standard proposal");
+
+    let expected_potential_voting_power: u64 =
+        governance.neuron_store.with_active_neurons_iter(|iter| {
+            iter.map(|neuron| neuron.potential_voting_power(now_seconds))
+                .sum()
+        });
+
+    assert_eq!(
+        total_potential_voting_power,
+        expected_potential_voting_power
+    );
     assert_eq!(
         ballots,
         hashmap! {
@@ -1677,18 +1630,18 @@ fn test_compute_ballots_for_new_proposal() {
         }
     );
 
-    // Not affected by refresh.
+    // Test again with a much later timestamp (not affected by refresh)
     let now_seconds = CREATED_TIMESTAMP_SECONDS + 20 * ONE_YEAR_SECONDS;
 
-    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
-        .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
-        .expect("Failed computing ballots for new proposal");
+    let (ballots, total_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
+        .compute_ballots_for_standard_proposal(now_seconds)
+        .expect("Failed computing ballots for standard proposal");
     let expected: u64 = governance.neuron_store.with_active_neurons_iter(|iter| {
         iter.map(|neuron| neuron.potential_voting_power(now_seconds))
             .sum()
     });
 
-    assert_eq!(tot_potential_voting_power, expected);
+    assert_eq!(total_potential_voting_power, expected);
     assert_eq!(
         ballots,
         hashmap! {
@@ -1696,130 +1649,6 @@ fn test_compute_ballots_for_new_proposal() {
             200 => Ballot { voting_power: deciding_vote(&governance, 200, now_seconds), vote: Vote::Unspecified as i32 },
             3_000 => Ballot { voting_power: deciding_vote(&governance,3_000 , now_seconds), vote: Vote::Unspecified as i32 },
         }
-    );
-}
-
-#[test]
-fn test_validate_add_or_remove_node_provider() {
-    let node_provider_id = PrincipalId::new_user_test_id(1);
-    let existing_node_provider = api::NodeProvider {
-        id: Some(node_provider_id),
-        reward_account: None,
-    };
-
-    let governance = Governance::new(
-        api::Governance {
-            node_providers: vec![existing_node_provider.clone()],
-            ..Default::default()
-        },
-        Arc::new(MockEnvironment::new(vec![], 100)),
-        Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
-        Box::new(MockRandomness::new()),
-    );
-
-    let existing_node_provider = NodeProvider::from(existing_node_provider);
-
-    // Test case 1: No change field
-    let add_or_remove_no_change = AddOrRemoveNodeProvider { change: None };
-    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_no_change);
-    assert!(result.is_err());
-
-    // Test case 2: ToAdd with new node provider (should succeed)
-    let new_node_provider_id = PrincipalId::new_user_test_id(2);
-    let valid_account = AccountIdentifier::new(new_node_provider_id, None);
-
-    let new_node_provider = NodeProvider {
-        id: Some(new_node_provider_id),
-        reward_account: Some(valid_account.into_proto_with_checksum()),
-    };
-    let add_or_remove_add_new = AddOrRemoveNodeProvider {
-        change: Some(Change::ToAdd(new_node_provider)),
-    };
-    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_add_new);
-    assert!(
-        result.is_ok(),
-        "Expected to succeed, but got error: {result:?}"
-    );
-
-    // Test case 3: ToAdd with existing node provider (should fail)
-    let add_or_remove_add_existing = AddOrRemoveNodeProvider {
-        change: Some(Change::ToAdd(existing_node_provider.clone())),
-    };
-    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_add_existing);
-    assert!(result.is_err());
-
-    // Test case 4: ToAdd with invalid account identifier (should fail)
-    let node_provider_with_invalid_account = NodeProvider {
-        id: Some(PrincipalId::new_user_test_id(3)),
-        reward_account: Some(icp_ledger::protobuf::AccountIdentifier {
-            hash: vec![1, 2, 3], // Invalid length
-        }),
-    };
-    let add_or_remove_invalid_account = AddOrRemoveNodeProvider {
-        change: Some(Change::ToAdd(node_provider_with_invalid_account)),
-    };
-    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_invalid_account);
-    assert!(result.is_err());
-
-    // Test case 5: ToAdd with 28-byte length (should fail)
-    let node_provider_with_invalid_account = NodeProvider {
-        id: Some(PrincipalId::new_user_test_id(3)),
-        reward_account: Some(icp_ledger::protobuf::AccountIdentifier {
-            hash: vec![1; 28], // 32-byte required, but only 28 bytes provided
-        }),
-    };
-    let add_or_remove_invalid_account = AddOrRemoveNodeProvider {
-        change: Some(Change::ToAdd(node_provider_with_invalid_account)),
-    };
-    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_invalid_account);
-    assert!(result.is_err());
-
-    // Test case 6: ToRemove with existing node provider (should succeed)
-    let add_or_remove_remove_existing = AddOrRemoveNodeProvider {
-        change: Some(Change::ToRemove(existing_node_provider)),
-    };
-    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_remove_existing);
-    assert!(result.is_ok());
-
-    // Test case 7: ToRemove with non-existing node provider (should fail)
-    let non_existing_node_provider = NodeProvider {
-        id: Some(PrincipalId::new_user_test_id(999)),
-        reward_account: None,
-    };
-    let add_or_remove_remove_non_existing = AddOrRemoveNodeProvider {
-        change: Some(Change::ToRemove(non_existing_node_provider)),
-    };
-    let result =
-        governance.validate_add_or_remove_node_provider(&add_or_remove_remove_non_existing);
-    assert!(result.is_err());
-
-    // Test Case 8: ToAdd with no NodeProvider ID (should fail)
-    let node_provider_without_id = NodeProvider {
-        id: None,
-        reward_account: Some(valid_account.into_proto_with_checksum()),
-    };
-    let add_or_remove_no_id = AddOrRemoveNodeProvider {
-        change: Some(Change::ToAdd(node_provider_without_id)),
-    };
-    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_no_id);
-    assert!(
-        result.is_err(),
-        "Expected to fail, but got success: {result:?}"
-    );
-
-    // Test Case 9: ToRemove with no NodeProvider ID (should fail)
-    let node_provider_without_id = NodeProvider {
-        id: None,
-        reward_account: None,
-    };
-    let add_or_remove_no_id = AddOrRemoveNodeProvider {
-        change: Some(Change::ToRemove(node_provider_without_id)),
-    };
-    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_no_id);
-    assert!(
-        result.is_err(),
-        "Expected to fail, but got success: {result:?}"
     );
 }
 
@@ -1891,4 +1720,58 @@ fn test_record_known_neuron_abstentions() {
             vec![]
         );
     });
+}
+
+#[test]
+fn test_post_upgrade_migrates_neuron_minimum_dissolve_delay_to_vote_seconds() {
+    let _mission70 = crate::temporarily_enable_mission_70_voting_rewards();
+    // Simulate the old production state: 6 months.
+    let mut heap_data = HeapGovernanceData {
+        economics: Some(NetworkEconomics {
+            voting_power_economics: Some(VotingPowerEconomics {
+                neuron_minimum_dissolve_delay_to_vote_seconds: Some(6 * ONE_MONTH_SECONDS),
+                ..VotingPowerEconomics::with_default_values()
+            }),
+            ..NetworkEconomics::with_default_values()
+        }),
+        ..Default::default()
+    };
+
+    Governance::maybe_reduce_neuron_minimum_dissolve_delay_to_vote_seconds(&mut heap_data);
+
+    let actual = heap_data
+        .economics
+        .as_ref()
+        .unwrap()
+        .voting_power_economics
+        .as_ref()
+        .unwrap()
+        .neuron_minimum_dissolve_delay_to_vote_seconds;
+    assert_eq!(
+        actual,
+        Some(
+            VotingPowerEconomics::MISSION_70_DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS
+        ),
+    );
+}
+
+#[test]
+#[should_panic(expected = "unexpectedly below 2 weeks")]
+fn test_post_upgrade_panics_if_neuron_minimum_dissolve_delay_to_vote_seconds_below_two_weeks() {
+    let _mission70 = crate::temporarily_enable_mission_70_voting_rewards();
+    let one_week_seconds = 7 * ONE_DAY_SECONDS;
+
+    let mut heap_data = HeapGovernanceData {
+        economics: Some(NetworkEconomics {
+            voting_power_economics: Some(VotingPowerEconomics {
+                neuron_minimum_dissolve_delay_to_vote_seconds: Some(one_week_seconds),
+                ..VotingPowerEconomics::with_default_values()
+            }),
+            ..NetworkEconomics::with_default_values()
+        }),
+        ..Default::default()
+    };
+
+    // Should panic because the value is below 2 weeks.
+    Governance::maybe_reduce_neuron_minimum_dissolve_delay_to_vote_seconds(&mut heap_data);
 }

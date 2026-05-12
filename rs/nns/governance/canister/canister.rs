@@ -1,20 +1,23 @@
 use ic_base_types::PrincipalId;
-use ic_cdk::{heartbeat, init, post_upgrade, pre_upgrade, println, query, update};
+use ic_cdk::{heartbeat, init, post_upgrade, pre_upgrade, println, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::cmc::CMCCanister;
+use ic_nervous_system_clients::exchange_rate_canister_client::RealExchangeRateCanisterClient;
 use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
     serve_metrics,
 };
+use ic_nervous_system_query_instruction_logger::query;
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_common::{
     access_control::{check_caller_is_gtc, check_caller_is_ledger},
     pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto},
     types::{NeuronId, ProposalId},
 };
+use ic_nns_constants::EXCHANGE_RATE_CANISTER_ID;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
-    canister_state::{CanisterEnv, legacy_governance_mut, set_governance},
+    canister_state::{CanisterEnv, governance_ref, legacy_governance_mut, set_governance},
     encode_metrics,
     governance::Governance,
     neuron_data_validation::NeuronDataValidationSummary,
@@ -25,15 +28,17 @@ use ic_nns_governance::{
 #[cfg(feature = "test")]
 use ic_nns_governance_api::test_api::TimeWarp;
 use ic_nns_governance_api::{
-    ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse,
+    ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse, CreateNeuronRequest,
+    CreateNeuronResponse, GetMaturityModulationRequest, GetMaturityModulationResponse,
     GetNeuronIndexRequest, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-    Governance as ApiGovernanceProto, GovernanceError, ListKnownNeuronsResponse,
-    ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons, ListNeuronsResponse,
-    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListNodeProvidersResponse,
-    ListProposalInfoRequest, ListProposalInfoResponse, ManageNeuronCommandRequest,
-    ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
-    Neuron, NeuronIndexData, NeuronInfo, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary,
-    RewardEvent, SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
+    GetPendingProposalsRequest, Governance as ApiGovernanceProto, GovernanceError,
+    ListKnownNeuronsResponse, ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons,
+    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
+    ListNodeProvidersResponse, ListProposalInfoRequest, ListProposalInfoResponse,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
+    MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronIndexData, NeuronInfo,
+    NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
+    SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
     SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
     governance::GovernanceCachedMetrics,
@@ -73,15 +78,15 @@ pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 fn schedule_timers() {
     schedule_spawn_neurons();
     schedule_vote_processing();
-    schedule_tasks();
+    schedule_tasks(Some(Arc::new(RealExchangeRateCanisterClient::new(
+        EXCHANGE_RATE_CANISTER_ID,
+    ))));
 }
 
 const SPAWN_NEURONS_INTERVAL: Duration = Duration::from_secs(60);
 fn schedule_spawn_neurons() {
-    ic_cdk_timers::set_timer_interval(SPAWN_NEURONS_INTERVAL, || {
-        ic_cdk::futures::spawn_017_compat(async {
-            legacy_governance_mut().maybe_spawn_neurons().await;
-        });
+    ic_cdk_timers::set_timer_interval(SPAWN_NEURONS_INTERVAL, async || {
+        legacy_governance_mut().maybe_spawn_neurons().await;
     });
 }
 
@@ -89,12 +94,10 @@ fn schedule_spawn_neurons() {
 const VOTE_PROCESSING_INTERVAL: Duration = Duration::from_secs(3);
 
 fn schedule_vote_processing() {
-    ic_cdk_timers::set_timer_interval(VOTE_PROCESSING_INTERVAL, || {
-        ic_cdk::futures::spawn_017_compat(async {
-            legacy_governance_mut()
-                .process_voting_state_machines()
-                .await;
-        });
+    ic_cdk_timers::set_timer_interval(VOTE_PROCESSING_INTERVAL, async || {
+        legacy_governance_mut()
+            .process_voting_state_machines()
+            .await;
     });
 }
 
@@ -311,6 +314,14 @@ fn simulate_manage_neuron(manage_neuron: ManageNeuronRequest) -> ManageNeuronRes
     })
 }
 
+#[update]
+async fn create_neuron(request: CreateNeuronRequest) -> CreateNeuronResponse {
+    debug_log("create_neuron");
+    Governance::create_neuron(governance_ref(), caller(), request)
+        .await
+        .map_err(GovernanceError::from)
+}
+
 #[query]
 fn get_full_neuron_by_id_or_subaccount(
     by: NeuronIdOrSubaccount,
@@ -380,9 +391,9 @@ fn get_neurons_fund_audit_info(
 }
 
 #[query]
-fn get_pending_proposals() -> Vec<ProposalInfo> {
+fn get_pending_proposals(req: Option<GetPendingProposalsRequest>) -> Vec<ProposalInfo> {
     debug_log("get_pending_proposals");
-    with_governance(|governance| governance.get_pending_proposals(&caller()))
+    with_governance(|governance| governance.get_pending_proposals(&caller(), req))
 }
 
 #[query]
@@ -613,6 +624,15 @@ fn get_restore_aging_summary() -> RestoreAgingSummary {
         let response = governance.get_restore_aging_summary().unwrap_or_default();
         RestoreAgingSummary::from(response)
     })
+}
+
+/// Returns the current maturity modulation, as defined by Mission 70.
+#[query]
+fn get_maturity_modulation(
+    _request: GetMaturityModulationRequest,
+) -> GetMaturityModulationResponse {
+    debug_log("get_maturity_modulation");
+    with_governance(|governance| governance.get_maturity_modulation())
 }
 
 #[query]

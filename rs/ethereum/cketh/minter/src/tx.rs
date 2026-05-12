@@ -662,7 +662,7 @@ pub async fn lazy_refresh_gas_fee_estimate() -> Option<GasFeeEstimate> {
             .fee_history((5_u8, BlockTag::Latest))
             .with_reward_percentiles(vec![20])
             .with_cycles(MIN_ATTACHED_CYCLES)
-            .send()
+            .try_send()
             .await
             .reduce_with_strategy(StrictMajorityByKey::new(|fee_history: &FeeHistory| {
                 Nat::from(fee_history.oldest_block.clone())
@@ -742,8 +742,8 @@ fn median<T: Ord>(values: &mut [T]) -> Option<&T> {
 }
 
 fn split_in_two(array: [u8; 64]) -> ([u8; 32], [u8; 32]) {
-    let mut r = [0u8; 32];
-    let mut s = [0u8; 32];
+    let mut r = [0_u8; 32];
+    let mut s = [0_u8; 32];
     r.copy_from_slice(&array[..32]);
     s.copy_from_slice(&array[32..]);
     (r, s)

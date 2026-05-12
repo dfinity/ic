@@ -4,16 +4,13 @@ use super::types::{
     CombinedSignature, CombinedSignatureBytes, IndividualSignature, IndividualSignatureBytes, Pop,
     PopBytes, PublicKey, PublicKeyBytes, SecretKey, SecretKeyBytes,
 };
+use ic_crypto_internal_seed::Seed;
 use ic_types::crypto::{AlgorithmId, CryptoError};
-use rand::{CryptoRng, Rng};
 use std::convert::TryFrom;
 
-#[cfg(test)]
-mod tests;
-
-/// Generates a keypair using the given `rng`.
-pub fn keypair_from_rng<R: Rng + CryptoRng>(rng: &mut R) -> (SecretKeyBytes, PublicKeyBytes) {
-    let (secret_key, public_key) = crypto::keypair_from_rng(rng);
+/// Generates a keypair from the given `seed`.
+pub fn keypair_from_seed(seed: Seed) -> (SecretKeyBytes, PublicKeyBytes) {
+    let (secret_key, public_key) = crypto::keypair_from_rng(&mut seed.into_rng());
     (
         SecretKeyBytes::from(&secret_key),
         PublicKeyBytes::from(&public_key),
@@ -91,6 +88,17 @@ pub fn combine(
     Ok(CombinedSignatureBytes::from(&signature))
 }
 
+fn key_from_bytes_with_cache(public_key_bytes: &PublicKeyBytes) -> Result<PublicKey, CryptoError> {
+    // This can't be defined on PublicKey because it is just a typedef for G2Projective at the moment
+    ic_crypto_internal_bls12_381_type::G2Affine::deserialize_cached(&public_key_bytes.0).map_err(
+        |_| CryptoError::MalformedPublicKey {
+            algorithm: AlgorithmId::MultiBls12_381,
+            key_bytes: Some(public_key_bytes.0.to_vec()),
+            internal_error: "Point decoding failed".to_string(),
+        },
+    )
+}
+
 /// Verifies an individual signature over the given `message` using the given
 /// `public_key_bytes`.
 ///
@@ -107,7 +115,8 @@ pub fn verify_individual(
     public_key_bytes: &PublicKeyBytes,
 ) -> Result<(), CryptoError> {
     let signature = IndividualSignature::try_from(signature_bytes)?;
-    let public_key = PublicKey::try_from(public_key_bytes)?;
+    let public_key = key_from_bytes_with_cache(public_key_bytes)?;
+
     if crypto::verify_individual_message_signature(message, &signature, &public_key) {
         Ok(())
     } else {
@@ -137,7 +146,7 @@ pub fn verify_combined(
     public_keys: &[PublicKeyBytes],
 ) -> Result<(), CryptoError> {
     let public_keys: Result<Vec<PublicKey>, CryptoError> =
-        public_keys.iter().map(PublicKey::try_from).collect();
+        public_keys.iter().map(key_from_bytes_with_cache).collect();
     if crypto::verify_combined_message_signature(
         message,
         &CombinedSignature::try_from(signature)?,

@@ -2,7 +2,6 @@ load("@rules_motoko//motoko:defs.bzl", "motoko_binary", "motoko_library")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_ic_test_suite")
 load("//bazel:prost.bzl", "generated_files_check")
-load("//bazel/candid:defs.bzl", "did_git_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -21,7 +20,6 @@ rust_library(
     name = "icp_ledger",
     srcs = glob([
         "src/**",
-        "gen/**",
     ]),
     crate_name = "icp_ledger",
     proc_macro_deps = [
@@ -32,7 +30,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/crypto/sha2",
         "//rs/ledger_suite/common/ledger_canister_core",
         "//rs/ledger_suite/common/ledger_core",
@@ -49,7 +47,6 @@ rust_library(
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_cbor",
-        "@crate_index//:strum",
     ],
 )
 
@@ -103,13 +100,14 @@ rust_ic_test_suite(
         "MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:archive.wasm.gz)",
         "MAINNET_ICP_LEDGER_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:ledger.wasm.gz)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "RUST_TEST_THREADS": "4",
     },
     deps = [
         # Keep sorted.
         ":icp_ledger",
         "//packages/ic-http-types",
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//packages/pocket-ic",
         "//rs/canister_client/sender",
         "//rs/crypto/sha2",
@@ -186,7 +184,7 @@ rust_ic_test_suite(
     deps = [
         # Keep sorted.
         ":icp_ledger",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/ledger_suite/common/ledger_core",
         "//rs/ledger_suite/icp/archive:ic-icp-archive",
         "//rs/ledger_suite/icp/index:ic-icp-index",
@@ -214,11 +212,6 @@ rust_test(
         "@crate_index//:proptest",
         "@crate_index//:serde_bytes",
     ],
-)
-
-did_git_test(
-    name = "ledger_did_git_test",
-    did = ":ledger.did",
 )
 
 generated_files_check(

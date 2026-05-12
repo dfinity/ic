@@ -2,7 +2,9 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::CanisterId;
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
-use ic_ledger_suite_state_machine_tests::test_http_request_decoding_quota;
+use ic_ledger_suite_state_machine_tests::{
+    check_icrc3_supported_block_types, test_http_request_decoding_quota,
+};
 use ic_state_machine_tests::{StateMachine, WasmResult};
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::Account;
@@ -89,7 +91,7 @@ impl Setup {
 
 impl Default for Setup {
     fn default() -> Self {
-        Self::new(&Principal::anonymous(), &0u64, &None, &None)
+        Self::new(&Principal::anonymous(), &0_u64, &None, &None)
     }
 }
 
@@ -111,6 +113,7 @@ fn test_icrc3_get_blocks() {
                 created_at_time: None,
                 memo: None,
             },
+            btype: None,
         }
     };
 
@@ -127,7 +130,7 @@ fn test_icrc3_get_blocks() {
         None,
         Operation::Mint {
             to: Account::from(Principal::anonymous()),
-            amount: Tokens::from(1_000_000_000u64),
+            amount: Tokens::from(1_000_000_000_u64),
             fee: None,
         },
     );
@@ -140,7 +143,7 @@ fn test_icrc3_get_blocks() {
                 owner: Principal::anonymous(),
                 subaccount: Some([1; 32]),
             },
-            amount: Tokens::from(1u64),
+            amount: Tokens::from(1_u64),
             fee: None,
             spender: None,
         },
@@ -154,7 +157,7 @@ fn test_icrc3_get_blocks() {
                 owner: Principal::anonymous(),
                 subaccount: Some([1; 32]),
             },
-            amount: Tokens::from(1_000_000u64),
+            amount: Tokens::from(1_000_000_u64),
             fee: None,
             expected_allowance: None,
             expires_at: None,
@@ -173,7 +176,7 @@ fn test_icrc3_get_blocks() {
                 owner: Principal::anonymous(),
                 subaccount: Some([1; 32]),
             },
-            amount: Tokens::from(100_000u64),
+            amount: Tokens::from(100_000_u64),
             fee: None,
         },
     );
@@ -184,7 +187,7 @@ fn test_icrc3_get_blocks() {
         block2.encode(),
         block3.encode(),
     ];
-    let blockids = vec![blockid0, blockid1, blockid2, blockid3];
+    let blockids = [blockid0, blockid1, blockid2, blockid3];
     let _ = setup.append_blocks(blocks);
 
     let check_icrc3_get_blocks =
@@ -198,7 +201,7 @@ fn test_icrc3_get_blocks() {
                 })
                 .collect::<Vec<_>>();
             let blocks_found = setup.icrc3_get_blocks(req);
-            assert_eq!(blocks_found.log_length, 4u64);
+            assert_eq!(blocks_found.log_length, 4_u64);
             assert_eq!(blocks_found.archived_blocks, Vec::<ArchivedBlocks>::new());
             let mut expected = vec![];
             for (start, length) in expected_start_lengths {
@@ -265,6 +268,7 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
                 created_at_time: None,
                 memo: None,
             },
+            btype: None,
         }
         .encode()
     }
@@ -292,7 +296,7 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
                 .collect::<Vec<_>>();
             let blocks_found = setup.icrc3_get_blocks(req);
             assert_eq!(
-                blocks_found.log_length, 101u64,
+                blocks_found.log_length, 101_u64,
                 "{requested_start_lengths:?}"
             );
             assert_eq!(
@@ -349,4 +353,11 @@ fn test_archive_http_request_decoding_quota() {
     let setup = Setup::default();
 
     test_http_request_decoding_quota(&setup.state_machine, setup.archive_id);
+}
+
+#[test]
+fn test_icrc3_supported_block_types() {
+    let setup = Setup::default();
+
+    check_icrc3_supported_block_types(&setup.state_machine, setup.archive_id, true);
 }

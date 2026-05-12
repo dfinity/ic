@@ -1,0 +1,5 @@
+[package]
+name = "ic-nervous-system-access-list"
+edition.workspace = true
+version.workspace = true
+

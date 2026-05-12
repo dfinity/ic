@@ -28,14 +28,15 @@ use ic_test_utilities_state::canister_from_exec_state;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_test_utilities_types::messages::IngressBuilder;
 use ic_types::{
-    Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
+    MemoryAllocation, NumBytes, NumInstructions, Time,
     messages::{CallbackId, CanisterMessage, NO_DEADLINE, Payload, RejectContext},
     methods::{Callback, WasmClosure},
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 
 pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(500_000_000_000);
 // Note: this canister ID is required for the `ic0_mint_cycles128()`
@@ -46,7 +47,7 @@ pub const USER_ID: u64 = 0;
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX;
 
 /// Enables Wasm64 benchmarks.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum Wasm64 {
     Enabled,
     Disabled,
@@ -59,6 +60,40 @@ lazy_static! {
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY
         );
+}
+
+/// Returns the extra instruction overhead charged by the deterministic memory
+/// tracker for `n_wasm_pages` Wasm pages first accessed without dirty tracking
+/// (e.g. read-only accesses or non-replicated execution).
+///
+/// Each first-accessed Wasm page (64 KiB) triggers `mark_wasm_page_accessed`,
+/// which charges one instruction per OS page in-band via the SIGSEGV handler
+/// when the deterministic memory tracker is enabled.  The number of OS pages
+/// per Wasm page varies by platform (4 KiB pages on Linux, 16 KiB on
+/// arm64-darwin).
+pub fn deterministic_tracker_overhead(n_wasm_pages: u64) -> u64 {
+    use ic_config::flag_status::FlagStatus;
+    const WASM_PAGE_SIZE: u64 = 65536;
+    if EmbeddersConfig::default()
+        .feature_flags
+        .deterministic_memory_tracker
+        == FlagStatus::Enabled
+    {
+        n_wasm_pages * (WASM_PAGE_SIZE / ic_sys::PAGE_SIZE as u64)
+    } else {
+        0
+    }
+}
+
+/// Returns the extra instruction overhead charged by the deterministic memory
+/// tracker for `n_wasm_pages` Wasm heap pages first written in replicated
+/// execution (DirtyPageTracking::Track).
+///
+/// Each first-written Wasm page triggers both `mark_wasm_page_accessed` and
+/// `mark_wasm_page_dirty` via the SIGSEGV handler, charging two instructions
+/// per OS page when the deterministic memory tracker is enabled.
+pub fn deterministic_tracker_write_overhead(n_wasm_pages: u64) -> u64 {
+    2 * deterministic_tracker_overhead(n_wasm_pages)
 }
 
 /// Pieces needed to execute a benchmark.
@@ -128,15 +163,16 @@ where
             Cycles::new(10),
             UNIX_EPOCH,
             Default::default(),
+            None,
         )
         .unwrap();
     let callback = Callback::new(
         call_context_id,
-        canister_test_id(LOCAL_CANISTER_ID),
         canister_test_id(REMOTE_CANISTER_ID),
         Cycles::new(0),
-        Cycles::new(0),
-        Cycles::new(0),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 1),
         WasmClosure::new(0, 1),
         None,
@@ -175,6 +211,8 @@ where
         subnet_type,
         subnets,
         None,
+        CanisterCyclesCostSchedule::Normal,
+        BTreeSet::new(),
     ));
 
     BenchmarkArgs {

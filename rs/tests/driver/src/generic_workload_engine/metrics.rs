@@ -83,13 +83,13 @@ impl LoadTestMetrics {
     pub fn success_calls(&self) -> Counter {
         self.inner
             .values()
-            .fold(0usize, |acc, x| acc + x.success_calls())
+            .fold(0_usize, |acc, x| acc + x.success_calls())
     }
 
     pub fn failure_calls(&self) -> Counter {
         self.inner
             .values()
-            .fold(0usize, |acc, x| acc + x.failure_calls())
+            .fold(0_usize, |acc, x| acc + x.failure_calls())
     }
 
     pub fn total_calls(&self) -> Counter {
@@ -600,21 +600,21 @@ mod tests {
 
         // Perform checks
         {
-            let (success_calls, expectected_success_calls) = (m.success_calls(), 3usize);
+            let (success_calls, expectected_success_calls) = (m.success_calls(), 3_usize);
             assert_eq!(
                 success_calls, expectected_success_calls,
                 "Expected {expectected_success_calls} success calls but observed {success_calls}"
             );
         }
         {
-            let (failure_calls, expected_failure_calls) = (m.failure_calls(), 3usize);
+            let (failure_calls, expected_failure_calls) = (m.failure_calls(), 3_usize);
             assert_eq!(
                 failure_calls, expected_failure_calls,
                 "Expected {expected_failure_calls} failure calls but observed {failure_calls}"
             );
         }
         {
-            let (total_calls, expected_total_calls) = (m.total_calls(), 6usize);
+            let (total_calls, expected_total_calls) = (m.total_calls(), 6_usize);
             assert_eq!(
                 total_calls, expected_total_calls,
                 "Expected {expected_total_calls} calls but observed {total_calls}"
@@ -624,8 +624,8 @@ mod tests {
             let (errors, expected_errors) = (
                 m.errors(),
                 vec![
-                    ("request-1-failure".to_string(), 1usize),
-                    ("request-2-failure".to_string(), 2usize),
+                    ("request-1-failure".to_string(), 1_usize),
+                    ("request-2-failure".to_string(), 2_usize),
                 ]
                 .into_iter()
                 .collect::<HashMap<String, usize>>(),
@@ -698,7 +698,7 @@ mod tests {
         {
             let (errors, expected_errors) = (
                 m.errors(),
-                vec![("failure".to_string(), 3usize)]
+                vec![("failure".to_string(), 3_usize)]
                     .into_iter()
                     .collect::<HashMap<String, usize>>(),
             );

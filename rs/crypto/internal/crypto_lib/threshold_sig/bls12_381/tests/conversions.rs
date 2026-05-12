@@ -1,15 +1,14 @@
 //! Tests for PublicCoefficients conversions
 
-use ic_crypto_internal_bls12_381_type::{G2Projective, Polynomial};
+use ic_crypto_internal_bls12_381_type::{G2Affine, Polynomial};
 use ic_crypto_internal_threshold_sig_bls12381::crypto::public_key_from_secret_key;
 use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::pub_key_bytes_from_pub_coeff_bytes;
 use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::try_number_of_nodes_from_pub_coeff_bytes;
 use ic_crypto_internal_threshold_sig_bls12381::types::{PublicCoefficients, PublicKey};
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
+use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_types::NumberOfNodes;
-use rand::SeedableRng;
-use rand_chacha::ChaChaRng;
 
 /// Verifies that the size of PublicCoefficients is measured correctly
 #[test]
@@ -23,7 +22,7 @@ fn public_coefficients_size_should_be_correct() {
             NumberOfNodes::try_from(&public_coefficients).expect("Invalid size"),
             NumberOfNodes::from(size)
         );
-        public_keys.push(PublicKey(G2Projective::generator().clone()));
+        public_keys.push(PublicKey(G2Affine::generator().clone()));
     }
 }
 
@@ -39,7 +38,7 @@ fn public_coefficients_bytes_size_should_be_correct() {
             try_number_of_nodes_from_pub_coeff_bytes(&public_coefficients).expect("Invalid size"),
             NumberOfNodes::from(size)
         );
-        public_keys.push(PublicKeyBytes([0u8; PublicKeyBytes::SIZE]));
+        public_keys.push(PublicKeyBytes([0_u8; PublicKeyBytes::SIZE]));
     }
 }
 
@@ -49,7 +48,7 @@ fn public_coefficients_bytes_size_should_be_correct() {
 /// not much to check apart from length.
 #[test]
 fn public_coefficients_from_polynomial_should_be_correct() {
-    let rng = &mut ChaChaRng::from_seed([1u8; 32]);
+    let rng = &mut ReproducibleRng::new();
     for size in 0_usize..10 {
         let polynomial = Polynomial::random(size, rng);
         let public_coefficients = PublicCoefficients::from(polynomial);
@@ -59,13 +58,13 @@ fn public_coefficients_from_polynomial_should_be_correct() {
 
 #[test]
 fn public_key_for_public_coefficients_should_be_correct() {
-    let mut test_vectors: Vec<(PublicCoefficients, G2Projective)> = vec![(
+    let mut test_vectors: Vec<(PublicCoefficients, G2Affine)> = vec![(
         PublicCoefficients {
             coefficients: Vec::new(),
         },
-        G2Projective::identity(),
+        G2Affine::identity(),
     )];
-    let rng = &mut ChaChaRng::from_seed([1u8; 32]);
+    let rng = &mut ReproducibleRng::new();
     for _ in 0..3 {
         let polynomial = Polynomial::random(5, rng);
         let public_coefficients = PublicCoefficients::from(&polynomial);
@@ -84,14 +83,14 @@ fn public_key_for_empty_public_coefficients_should_be_zero() {
         coefficients: Vec::new(),
     };
     let public_key = PublicKey::from(&public_coefficients);
-    assert_eq!(G2Projective::identity(), public_key.0);
+    assert_eq!(G2Affine::identity(), public_key.0);
 }
 
 /// Verifies that the public key for non-empty public coefficients is the first
 /// coefficient
 #[test]
 fn public_key_for_non_empty_public_coefficients_should_be_correct() {
-    let rng = &mut ChaChaRng::from_seed([1u8; 32]);
+    let rng = &mut ReproducibleRng::new();
     let polynomial = Polynomial::random(5, rng);
     let public_coefficients = PublicCoefficients::from(&polynomial);
     let public_key = PublicKey::from(&public_coefficients);
@@ -102,7 +101,7 @@ fn public_key_for_non_empty_public_coefficients_should_be_correct() {
 /// public key.
 #[test]
 fn public_key_from_public_coefficients_should_return_malformed_error() {
-    let malformed_public_key_bytes = PublicKeyBytes([5u8; PublicKeyBytes::SIZE]);
+    let malformed_public_key_bytes = PublicKeyBytes([5_u8; PublicKeyBytes::SIZE]);
     assert!(
         PublicKey::try_from(&malformed_public_key_bytes).is_err(),
         "Test error: Bytes are not malformed"
@@ -124,7 +123,7 @@ fn public_key_from_empty_public_coefficients_bytes_should_be_zero() {
     };
     assert_eq!(
         PublicKey::try_from(&public_coefficients_bytes),
-        Ok(PublicKey(G2Projective::identity()))
+        Ok(PublicKey(G2Affine::identity()))
     );
 }
 
@@ -132,9 +131,9 @@ fn public_key_from_empty_public_coefficients_bytes_should_be_zero() {
 /// the first coefficient
 #[test]
 fn public_key_bytes_for_non_empty_public_coefficients_bytes_should_be_correct() {
-    let pk_0 = PublicKeyBytes([9u8; PublicKeyBytes::SIZE]);
-    let pk_1 = PublicKeyBytes([11u8; PublicKeyBytes::SIZE]);
-    let pk_2 = PublicKeyBytes([27u8; PublicKeyBytes::SIZE]);
+    let pk_0 = PublicKeyBytes([9_u8; PublicKeyBytes::SIZE]);
+    let pk_1 = PublicKeyBytes([11_u8; PublicKeyBytes::SIZE]);
+    let pk_2 = PublicKeyBytes([27_u8; PublicKeyBytes::SIZE]);
     let public_coefficients_bytes = PublicCoefficientsBytes {
         coefficients: vec![pk_0, pk_1, pk_2],
     };
@@ -146,7 +145,7 @@ fn public_key_bytes_for_non_empty_public_coefficients_bytes_should_be_correct() 
 /// PublicCoefficients results in an error
 #[test]
 fn malformed_public_coefficients_bytes_should_fail_to_parse() {
-    let malformed_public_key_bytes = PublicKeyBytes([5u8; PublicKeyBytes::SIZE]);
+    let malformed_public_key_bytes = PublicKeyBytes([5_u8; PublicKeyBytes::SIZE]);
     assert!(
         PublicKey::try_from(&malformed_public_key_bytes).is_err(),
         "Test error: Bytes are not malformed"

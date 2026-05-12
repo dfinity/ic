@@ -106,16 +106,7 @@ impl Registry {
         versions_to_remove: &BTreeSet<String>,
     ) -> Vec<String> {
         let version = self.latest_version();
-        // Get the current list
-        let blessed_key = make_blessed_replica_versions_key();
-        let before_removal = self
-            .get(blessed_key.as_bytes(), version)
-            .map(|reg_value| {
-                BlessedReplicaVersions::decode(reg_value.value.as_slice())
-                    .unwrap()
-                    .blessed_version_ids
-            })
-            .unwrap_or_default();
+        let before_removal = self.get_blessed_replica_version_ids();
 
         let after_removal: Vec<String> = before_removal
             .iter()
@@ -181,6 +172,19 @@ impl Registry {
 
         after_removal
     }
+
+    pub fn get_blessed_replica_version_ids(&self) -> Vec<String> {
+        self.get(
+            make_blessed_replica_versions_key().as_bytes(),
+            self.latest_version(),
+        )
+        .map(|reg_value| {
+            BlessedReplicaVersions::decode(reg_value.value.as_slice())
+                .expect("Failed to decode BlessedReplicaVersions")
+                .blessed_version_ids
+        })
+        .expect("BlessedReplicaVersions key not found in registry")
+    }
 }
 
 /// The payload of a proposal to update elected replica versions.
@@ -236,14 +240,6 @@ impl ReviseElectedGuestosVersionsPayload {
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        if self
-            .guest_launch_measurements
-            .as_ref()
-            .is_some_and(|measurements| measurements.guest_launch_measurements.is_empty())
-        {
-            return Err("guest_launch_measurements must not be an empty vector".into());
-        }
-
         if self.is_electing_a_version()? || self.is_unelecting_a_version() {
             Ok(())
         } else {

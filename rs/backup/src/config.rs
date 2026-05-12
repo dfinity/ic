@@ -32,6 +32,7 @@ pub struct Config {
     pub network_name: String,
     pub backup_instance: String,
     pub nns_url: Option<Url>,
+    pub max_logs_age_to_keep_days: Option<u64>,
     pub nns_pem: PathBuf,
     pub root_dir: PathBuf,
     pub excluded_dirs: Vec<String>,

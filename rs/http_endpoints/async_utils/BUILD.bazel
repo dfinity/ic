@@ -11,8 +11,6 @@ rust_library(
         # Keep sorted.
         "//rs/monitoring/logger",
         "@crate_index//:async-stream",
-        "@crate_index//:byte-unit",
-        "@crate_index//:bytes",
         "@crate_index//:futures",
         "@crate_index//:futures-util",
         "@crate_index//:hyper",

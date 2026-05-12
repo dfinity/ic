@@ -26,7 +26,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 
 mod filters {
-    pub fn timestamp_to_datetime<T: std::fmt::Display>(timestamp: T) -> askama::Result<String> {
+    #[askama::filter_fn]
+    pub fn timestamp_to_datetime<T: std::fmt::Display>(
+        timestamp: T,
+        _env: &dyn askama::Values,
+    ) -> askama::Result<String> {
         let input = timestamp.to_string();
         let ts: i128 = input
             .parse()
@@ -39,7 +43,11 @@ mod filters {
         Ok(dt_offset.format(&format).unwrap())
     }
 
-    pub fn lower_alphanumeric<T: std::fmt::Display>(input: T) -> askama::Result<String> {
+    #[askama::filter_fn]
+    pub fn lower_alphanumeric<T: std::fmt::Display>(
+        input: T,
+        _env: &dyn askama::Values,
+    ) -> askama::Result<String> {
         let mut input = input.to_string();
         input.make_ascii_lowercase();
         input.retain(|c| c.is_ascii_alphanumeric());

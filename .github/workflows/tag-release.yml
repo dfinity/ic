@@ -7,6 +7,19 @@ on:
   push:
     tags:
       - 'release-*'
+  workflow_dispatch:
+    inputs:
+      tag-name:
+        description: 'Tag Name'
+        required: true
+      dry-run:
+        description: "Run in dry-run mode (don't actually publish the release)"
+        required: true
+        default: 'true'
+        type: boolean
+
+env:
+  RELEASE_TAG: ${{ github.event.inputs.tag-name || github.ref_name }}
 
 jobs:
   build:
@@ -14,22 +27,28 @@ jobs:
     steps:
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.inputs.tag-name || github.ref }}
 
       - name: Collect Release Artifacts
         run: |
           set -euxo pipefail
 
-          DOWNLOAD_PREFIX="https://download.dfinity.systems/ic/$GITHUB_SHA"
+          CI_COMMIT_SHA=$(git rev-parse HEAD)
+          DOWNLOAD_PREFIX="https://download.dfinity.systems/ic/${CI_COMMIT_SHA}"
 
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/setup-os/disk-img/disk-img.tar.zst" -o setup-os-img.tar.zst
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/guest-os/update-img/update-img.tar.zst" -o update-os-img.tar.zst
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-linux/ic-admin.gz" -o ic-admin-x86_64-linux.gz
-          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-darwin/ic-admin.gz" -o ic-admin-x86_64-darwin.gz
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-linux/pocket-ic.gz" -o pocket-ic-x86_64-linux.gz
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-darwin/pocket-ic.gz" -o pocket-ic-x86_64-darwin.gz
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/arm64-linux/pocket-ic.gz" -o pocket-ic-arm64-linux.gz
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/arm64-linux/ic-admin.gz" -o ic-admin-arm64-linux.gz
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/arm64-linux/sns.gz" -o sns-arm64-linux.gz
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/arm64-darwin/pocket-ic.gz" -o pocket-ic-arm64-darwin.gz
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/arm64-darwin/ic-admin.gz" -o ic-admin-arm64-darwin.gz
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/arm64-darwin/sns.gz" -o sns-arm64-darwin.gz
           sha256sum *.gz > sha256sums.txt
 
           echo "DOWNLOAD_PREFIX=${DOWNLOAD_PREFIX}" >> "$GITHUB_ENV"
@@ -74,16 +93,20 @@ jobs:
       - name: Publish Release
         # v0.1.15
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
+        if: ${{ github.event_name == 'push' || github.event.inputs.dry-run == 'false' }}
         with:
-          body: "IC ${{github.ref_name}}"
+          body: "IC ${{ env.RELEASE_TAG }}"
           files: |
             canisters.tar
             setup-os-img.tar.gz
             update-os-img.tar.gz
             ic-admin-x86_64-linux.gz
-            ic-admin-x86_64-darwin.gz
+            ic-admin-arm64-linux.gz
+            ic-admin-arm64-darwin.gz
             pocket-ic-x86_64-linux.gz
             pocket-ic-x86_64-darwin.gz
             pocket-ic-arm64-linux.gz
             pocket-ic-arm64-darwin.gz
+            sns-arm64-linux.gz
+            sns-arm64-darwin.gz
             sha256sums.txt

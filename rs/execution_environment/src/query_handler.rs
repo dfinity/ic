@@ -16,8 +16,8 @@ use crate::{
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
 use candid::Encode;
+use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
-use ic_config::{execution_environment::Config, subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE};
 use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
@@ -43,6 +43,7 @@ use prometheus::{Histogram, histogram_opts, labels};
 use serde::Serialize;
 use std::convert::Infallible;
 use std::str::FromStr;
+use std::sync::atomic::AtomicU64;
 use std::{
     future::Future,
     pin::Pin,
@@ -54,9 +55,12 @@ use tokio::sync::oneshot;
 use tower::{Service, util::BoxCloneService};
 
 pub(crate) use self::query_scheduler::QueryScheduler;
+use crate::execution::common::validate_subnet_admin;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, FetchCanisterLogsRequest, Payload, QueryMethod,
+    CanisterIdRange, CanisterIdRecord, CanisterMetricsArgs, EmptyBlob, FetchCanisterLogsRequest,
+    ListCanistersResponse, Payload, QueryMethod,
 };
+use ic_registry_routing_table::canister_id_into_u64;
 
 pub struct DataCertificateWithDelegationMetadata {
     pub data_certificate: Vec<u8>,
@@ -172,6 +176,47 @@ impl InternalHttpQueryHandler {
         self.local_query_execution_stats.set_epoch(epoch);
     }
 
+    fn list_canisters(
+        &self,
+        state: &ReplicatedState,
+        caller: &ic_types::PrincipalId,
+        payload: &[u8],
+    ) -> Result<WasmResult, UserError> {
+        match EmptyBlob::decode(payload) {
+            Err(err) => Err(err),
+            Ok(EmptyBlob) => {
+                match state.get_own_subnet_admins() {
+                    Some(ref admins) => {
+                        validate_subnet_admin(admins, caller).map_err(UserError::from)?
+                    }
+                    None => {
+                        return Err(UserError::new(
+                            ErrorCode::CanisterRejectedMessage,
+                            "list_canisters is only available on subnets with subnet admins",
+                        ));
+                    }
+                }
+                let mut canisters: Vec<CanisterIdRange> = Vec::new();
+                for id in state.canister_states().keys() {
+                    let id_u64 = canister_id_into_u64(*id);
+                    match canisters.last_mut() {
+                        Some(last)
+                            if canister_id_into_u64(last.end).checked_add(1) == Some(id_u64) =>
+                        {
+                            last.end = *id;
+                        }
+                        _ => canisters.push(CanisterIdRange {
+                            start: *id,
+                            end: *id,
+                        }),
+                    }
+                }
+                let response = ListCanistersResponse { canisters };
+                Ok(WasmResult::Reply(Encode!(&response).unwrap()))
+            }
+        }
+    }
+
     /// Handle a query of type `Query`.
     pub fn query(
         &self,
@@ -179,6 +224,8 @@ impl InternalHttpQueryHandler {
         state: Labeled<Arc<ReplicatedState>>,
         data_certificate_with_delegation_metadata: Option<DataCertificateWithDelegationMetadata>,
         enable_query_stats_tracking: bool,
+        instruction_observation: Option<Arc<AtomicU64>>,
+        max_instructions: Option<NumInstructions>,
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
 
@@ -191,7 +238,7 @@ impl InternalHttpQueryHandler {
                         query.source(),
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
-                        self.config.fetch_canister_logs_filter,
+                        self.config.log_memory_store_feature,
                     )?;
                     let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
                     self.metrics.observe_subnet_query_message(
@@ -219,18 +266,53 @@ impl InternalHttpQueryHandler {
                     let response = self.canister_manager.get_canister_status(
                         query.source(),
                         canister,
-                        state
-                            .get_ref()
-                            .metadata
-                            .network_topology
-                            .get_subnet_size(&self.hypervisor.subnet_id())
-                            .unwrap_or(DEFAULT_REFERENCE_SUBNET_SIZE),
+                        state.get_ref().get_own_subnet_size(),
                         state.get_ref().get_own_cost_schedule(),
                         ready_for_migration,
+                        state.get_ref().get_own_subnet_admins(),
                     )?;
                     let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::CanisterStatus,
+                        since.elapsed().as_secs_f64(),
+                        &result,
+                    );
+                    return result;
+                }
+                Ok(QueryMethod::ListCanisters) => {
+                    let since = Instant::now();
+                    let caller = query.source();
+                    let result =
+                        self.list_canisters(state.get_ref(), &caller, &query.method_payload);
+                    self.metrics.observe_subnet_query_message(
+                        QueryMethod::ListCanisters,
+                        since.elapsed().as_secs_f64(),
+                        &result,
+                    );
+                    return result;
+                }
+                Ok(QueryMethod::CanisterMetrics) => {
+                    let args = CanisterMetricsArgs::decode(&query.method_payload)?;
+                    let canister_id = args.get_canister_id();
+                    let canister =
+                        state
+                            .get_ref()
+                            .canister_state(&canister_id)
+                            .ok_or_else(|| {
+                                UserError::new(
+                                    ErrorCode::CanisterNotFound,
+                                    format!("Canister {canister_id} not found"),
+                                )
+                            })?;
+                    let since = Instant::now(); // Start logging execution time.
+                    let response = self.canister_manager.get_canister_metrics(
+                        query.source(),
+                        canister,
+                        state.get_ref().get_own_subnet_admins(),
+                    )?;
+                    let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
+                    self.metrics.observe_subnet_query_message(
+                        QueryMethod::CanisterMetrics,
                         since.elapsed().as_secs_f64(),
                         &result,
                     );
@@ -277,7 +359,8 @@ impl InternalHttpQueryHandler {
 
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
-        let subnet_available_memory = full_subnet_memory_capacity(&self.config);
+        let subnet_available_memory =
+            full_subnet_memory_capacity(&self.config, state.get_ref().resource_limits());
         // Letting the canister use the full subnet memory reservation
         // is fine as we do not persist state modifications.
         let subnet_memory_reservation = self.config.subnet_memory_reservation;
@@ -291,6 +374,10 @@ impl InternalHttpQueryHandler {
                 data_certificate_with_delegation_metadata.data_certificate
             },
         );
+        let max_instructions_per_query = match max_instructions {
+            Some(max_ins) => max_ins.min(self.max_instructions_per_query),
+            None => self.max_instructions_per_query,
+        };
         let mut context = query_context::QueryContext::new(
             &self.log,
             self.hypervisor.as_ref(),
@@ -304,7 +391,7 @@ impl InternalHttpQueryHandler {
             subnet_available_callbacks,
             subnet_memory_reservation,
             self.config.canister_guaranteed_callback_quota as u64,
-            self.max_instructions_per_query,
+            max_instructions_per_query,
             self.config.max_query_call_graph_depth,
             self.config.max_query_call_graph_instructions,
             self.config.max_query_call_walltime,
@@ -314,6 +401,7 @@ impl InternalHttpQueryHandler {
             &self.metrics.query_critical_error,
             query_stats_collector,
             Arc::clone(&self.cycles_account_manager),
+            instruction_observation,
         );
 
         let result = context.run(query, &self.metrics, &measurement_scope);
@@ -468,6 +556,8 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                             state,
                             Some(data_certificate_with_delegation_metadata),
                             enable_query_stats_tracking,
+                            None,
+                            None,
                         );
 
                         Ok((response, time))
@@ -496,7 +586,14 @@ impl Service<TransformExecutionInput> for HttpQueryHandler {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, TransformExecutionInput { query }: TransformExecutionInput) -> Self::Future {
+    fn call(
+        &mut self,
+        TransformExecutionInput {
+            query,
+            instruction_observation,
+            max_instructions,
+        }: TransformExecutionInput,
+    ) -> Self::Future {
         let internal = Arc::clone(&self.internal);
         let state_reader = Arc::clone(&self.state_reader);
         let (tx, rx) = oneshot::channel();
@@ -527,8 +624,14 @@ impl Service<TransformExecutionInput> for HttpQueryHandler {
                             .height_diff_during_query_scheduling
                             .observe(height_diff as f64);
 
-                        let response =
-                            internal.query(query, state, None, enable_query_stats_tracking);
+                        let response = internal.query(
+                            query,
+                            state,
+                            None,
+                            enable_query_stats_tracking,
+                            Some(instruction_observation),
+                            Some(max_instructions),
+                        );
 
                         Ok((response, time))
                     }

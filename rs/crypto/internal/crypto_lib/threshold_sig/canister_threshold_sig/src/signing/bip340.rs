@@ -463,7 +463,8 @@ impl ThresholdBip340CombinedSignatureInternal {
 
         // R = s*G - e*P
         let g = EccPoint::generator_g(EccCurveType::K256);
-        let rp = EccPoint::mul_2_points(&g, &self.s, &rerandomized.derived_key, &e.negate())?;
+        let rp =
+            EccPoint::mul_2_points_vartime(&g, &self.s, &rerandomized.derived_key, &e.negate())?;
 
         // We already checked above that self.r is not infinity and has even y:
         if rp != self.r {

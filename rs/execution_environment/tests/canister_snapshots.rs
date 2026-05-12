@@ -16,7 +16,8 @@ use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConf
 use ic_test_utilities::universal_canister::{
     UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM, wasm,
 };
-use ic_types::{CanisterId, Cycles};
+use ic_types::CanisterId;
+use ic_types_cycles::Cycles;
 
 // Asserts that two snapshots are equal modulo their source, timestamp, and canister version (transient values).
 fn assert_snapshot_eq(
@@ -137,7 +138,7 @@ fn get_current_metadata(
     canister_id: CanisterId,
 ) -> ReadCanisterSnapshotMetadataResponse {
     let inspect_snapshot_id = env
-        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None, None, None))
         .unwrap()
         .snapshot_id();
     let download_args = ReadCanisterSnapshotMetadataArgs::new(canister_id, inspect_snapshot_id);
@@ -158,16 +159,13 @@ fn take_download_upload_load_snapshot_roundtrip(
     expected_globals: Vec<Global>,
     download_upload: bool,
 ) {
-    let env = StateMachineBuilder::new()
-        .with_snapshot_download_enabled(true)
-        .with_snapshot_upload_enabled(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
 
     let canister_wasm = wat::parse_str(canister_wat).unwrap();
     let canister_id = env.install_canister(canister_wasm, vec![], None).unwrap();
 
     let snapshot_id = env
-        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None, None, None))
         .unwrap()
         .snapshot_id();
     let download_args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
@@ -198,7 +196,7 @@ fn take_download_upload_load_snapshot_roundtrip(
 
     // We take one more snapshot to inspect the canister state after loading the snapshot in a previous step.
     let inspect_snapshot_id = env
-        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None, None, None))
         .unwrap()
         .snapshot_id();
     assert_snapshot_eq(
@@ -283,10 +281,7 @@ fn take_download_upload_load_snapshot_roundtrip_one_global() {
 
 fn test_env_for_global_timer_on_low_wasm_memory()
 -> (StateMachine, CanisterId, SnapshotId, WasmResult) {
-    let env = StateMachineBuilder::new()
-        .with_snapshot_download_enabled(true)
-        .with_snapshot_upload_enabled(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
 
     // Set the wasm memory limit explicitly to `4 GiB` (the default is lower)
     // and the wasm memory threshold to `4 GiB - 30 MiB` so that growing the (32-bit) wasm memory by `30 MiB` triggers the on low wasm memory hook.
@@ -337,7 +332,7 @@ fn test_env_for_global_timer_on_low_wasm_memory()
     ));
 
     let snapshot_id = env
-        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None, None, None))
         .unwrap()
         .snapshot_id();
 
@@ -398,7 +393,7 @@ fn download_upload_load_snapshot_global_timer_on_low_wasm_memory() {
 
     // We take one more snapshot to inspect the canister state after loading the snapshot in a previous step.
     let inspect_snapshot_id = env
-        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None, None, None))
         .unwrap()
         .snapshot_id();
     assert_snapshot_eq(
@@ -458,10 +453,7 @@ fn take_load_snapshot_global_timer_on_low_wasm_memory() {
 
 #[test]
 fn upload_and_load_snapshot_with_invalid_wasm() {
-    let env = StateMachineBuilder::new()
-        .with_snapshot_download_enabled(true)
-        .with_snapshot_upload_enabled(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
 
     let canister_id = env.create_canister(None);
 
@@ -491,10 +483,7 @@ fn upload_and_load_snapshot_with_invalid_wasm() {
 
 #[test]
 fn upload_snapshot_module_with_checkpoint() {
-    let env = StateMachineBuilder::new()
-        .with_snapshot_download_enabled(true)
-        .with_snapshot_upload_enabled(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
     let counter_canister_wasm = wat::parse_str(COUNTER_GROW_CANISTER_WAT).unwrap();
     let canister_id = env
         .install_canister(counter_canister_wasm.clone(), vec![], None)
@@ -541,10 +530,7 @@ fn upload_snapshot_module_with_checkpoint() {
 
 #[test]
 fn upload_snapshot_with_checkpoint() {
-    let env = StateMachineBuilder::new()
-        .with_snapshot_download_enabled(true)
-        .with_snapshot_upload_enabled(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
     let counter_canister_wasm = wat::parse_str(COUNTER_GROW_CANISTER_WAT).unwrap();
     let canister_id = env
         .install_canister(counter_canister_wasm.clone(), vec![], None)
@@ -570,7 +556,7 @@ fn upload_snapshot_with_checkpoint() {
     env.upload_chunk(chunk_args).unwrap();
     // take snapshot to learn valid metadata
     let snapshot_id_orig = env
-        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None, None, None))
         .unwrap()
         .snapshot_id();
     let md_args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id_orig);
@@ -612,11 +598,23 @@ fn upload_snapshot_with_checkpoint() {
         chunk_1.clone(),
     ))
     .unwrap();
-    // spread stable memory upload over a checkpoint event
+    // spread stable memory upload over sevaral checkpoints, covering three types of uploads:
+    // 1. In the same checkpoint interval as the metadata upload
+    // 2. In a checkpoint interval of its own
+    // 3. In the same checkpoint interval as the eventual download.
     env.upload_snapshot_stable_memory(canister_id, snapshot_id, &stable_memory_dl, None, Some(1))
         .unwrap();
     env.checkpointed_tick();
-    env.upload_snapshot_stable_memory(canister_id, snapshot_id, &stable_memory_dl, Some(1), None)
+    env.upload_snapshot_stable_memory(
+        canister_id,
+        snapshot_id,
+        &stable_memory_dl,
+        Some(1),
+        Some(2),
+    )
+    .unwrap();
+    env.checkpointed_tick();
+    env.upload_snapshot_stable_memory(canister_id, snapshot_id, &stable_memory_dl, Some(2), None)
         .unwrap();
     // upload second chunk after checkpoint
     env.upload_canister_snapshot_data(&UploadCanisterSnapshotDataArgs::new(
@@ -632,7 +630,7 @@ fn upload_snapshot_with_checkpoint() {
     env.load_canister_snapshot(load_args).unwrap();
     // compare metadata
     let snapshot_id_2 = env
-        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None, None, None))
         .unwrap()
         .snapshot_id();
     let md_args_2 = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id_2);
@@ -654,10 +652,7 @@ fn upload_snapshot_with_checkpoint() {
 
 #[test]
 fn load_snapshot_inconsistent_metadata_hook_status_fails() {
-    let env = StateMachineBuilder::new()
-        .with_snapshot_download_enabled(true)
-        .with_snapshot_upload_enabled(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
     let counter_canister_wasm = wat::parse_str(COUNTER_GROW_CANISTER_WAT).unwrap();
     let canister_id = env
         .install_canister(counter_canister_wasm.clone(), vec![], None)
@@ -666,7 +661,7 @@ fn load_snapshot_inconsistent_metadata_hook_status_fails() {
     env.execute_ingress(canister_id, "inc", vec![]).unwrap();
     // take snapshot to learn valid metadata
     let snapshot_id_orig = env
-        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None, None, None))
         .unwrap()
         .snapshot_id();
     let md_args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id_orig);
@@ -882,6 +877,8 @@ fn take_frozen_canister_snapshot_fails() {
     let args = TakeCanisterSnapshotArgs {
         canister_id: canister_id.get(),
         replace_snapshot: None,
+        uninstall_code: None,
+        sender_canister_version: None,
     };
     let err = env.take_canister_snapshot(args).unwrap_err();
     assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
@@ -895,7 +892,6 @@ fn load_canister_snapshot_works_on_another_canister() {
     let config = StateMachineConfig::new(subnet_config, execution_config);
     let env = StateMachineBuilder::new()
         .with_config(Some(config))
-        .with_snapshot_download_enabled(true)
         .with_subnet_type(subnet_type)
         .build();
 
@@ -903,7 +899,7 @@ fn load_canister_snapshot_works_on_another_canister() {
     let initial_cycles = 10 * T;
     let canister_id_1 = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
             vec![],
             None,
             initial_cycles.into(),
@@ -912,7 +908,7 @@ fn load_canister_snapshot_works_on_another_canister() {
 
     let canister_id_2 = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
             vec![],
             None,
             initial_cycles.into(),
@@ -931,10 +927,15 @@ fn load_canister_snapshot_works_on_another_canister() {
         .canister_state(&canister_id_1)
         .unwrap()
         .system_state
-        .canister_version;
+        .canister_version();
 
     let snapshot_1 = env
-        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id_1, None))
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(
+            canister_id_1,
+            None,
+            None,
+            None,
+        ))
         .unwrap();
     let snapshot_id_1 = snapshot_1.snapshot_id();
     let snapshot_taken_at_timestamp = snapshot_1.taken_at_timestamp();
@@ -973,7 +974,12 @@ fn load_canister_snapshot_works_on_another_canister() {
 
     // The two canisters now should have the same state (equivalently, their current snapshots should be equal).
     let snapshot_id_2 = env
-        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id_2, None))
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(
+            canister_id_2,
+            None,
+            None,
+            None,
+        ))
         .unwrap()
         .snapshot_id();
     assert_snapshot_eq(
@@ -1056,7 +1062,212 @@ fn canister_snapshots_and_memory_allocation() {
         let args = TakeCanisterSnapshotArgs {
             canister_id: canister_id.get(),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         };
         env.take_canister_snapshot(args).unwrap();
+    }
+}
+
+mod snapshot_visibility {
+    use ic_base_types::{CanisterId, PrincipalId};
+    use ic_error_types::{ErrorCode, UserError};
+    use ic_management_canister_types_private::{
+        BoundedAllowedViewers, CanisterSettingsArgsBuilder, CanisterSnapshotDataKind,
+        CanisterSnapshotResponse, ListCanisterSnapshotArgs, ReadCanisterSnapshotDataArgs,
+        ReadCanisterSnapshotMetadataArgs, SnapshotVisibility, TakeCanisterSnapshotArgs,
+    };
+    use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+    use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
+
+    #[test]
+    fn test_visibility_of_canister_snapshots() {
+        let env = StateMachineBuilder::new().build();
+        let controller = PrincipalId::new_user_test_id(1);
+        let not_a_controller = PrincipalId::new_user_test_id(2);
+        let allowed_viewer = PrincipalId::new_user_test_id(3);
+        let not_allowed_viewer = PrincipalId::new_user_test_id(4);
+        let allowed_viewers = BoundedAllowedViewers::new(vec![allowed_viewer]);
+        let test_cases = vec![
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::Public,
+                sender: controller,
+                expected_result: Ok(()),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::Public,
+                sender: not_a_controller,
+                expected_result: Ok(()),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::Public,
+                sender: allowed_viewer,
+                expected_result: Ok(()),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::Public,
+                sender: not_allowed_viewer,
+                expected_result: Ok(()),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::Controllers,
+                sender: controller,
+                expected_result: Ok(()),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::Controllers,
+                sender: not_a_controller,
+                expected_result: Err(not_a_controller),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::Controllers,
+                sender: allowed_viewer,
+                expected_result: Err(allowed_viewer),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::Controllers,
+                sender: not_allowed_viewer,
+                expected_result: Err(not_allowed_viewer),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::AllowedViewers(allowed_viewers.clone()),
+                sender: allowed_viewer,
+                expected_result: Ok(()),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::AllowedViewers(allowed_viewers.clone()),
+                sender: not_a_controller,
+                expected_result: Err(not_a_controller),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::AllowedViewers(allowed_viewers.clone()),
+                sender: not_allowed_viewer,
+                expected_result: Err(not_allowed_viewer),
+            },
+            TestCase {
+                snapshot_visibility: SnapshotVisibility::AllowedViewers(allowed_viewers),
+                sender: controller,
+                expected_result: Ok(()),
+            },
+        ];
+
+        for test_case in &test_cases {
+            let canister_id = env
+                .install_canister(
+                    UNIVERSAL_CANISTER_WASM.to_vec(),
+                    vec![],
+                    Some(
+                        CanisterSettingsArgsBuilder::new()
+                            .with_snapshot_visibility(test_case.snapshot_visibility.clone())
+                            .with_controllers(vec![controller])
+                            .build(),
+                    ),
+                )
+                .unwrap();
+
+            test_case.check_list_canister_snapshot(canister_id, &[], &env);
+
+            let snapshot = env
+                .take_canister_snapshot(TakeCanisterSnapshotArgs {
+                    canister_id: canister_id.get(),
+                    replace_snapshot: None,
+                    uninstall_code: None,
+                    sender_canister_version: None,
+                })
+                .unwrap();
+            let snapshot_id = snapshot.snapshot_id();
+
+            test_case.check_list_canister_snapshot(canister_id, &[snapshot], &env);
+            test_case.check_read_canister_snapshot_metadata(canister_id, snapshot_id, &env);
+            test_case.check_read_canister_snapshot_data(canister_id, snapshot_id, &env);
+        }
+    }
+
+    #[derive(Debug)]
+    struct TestCase {
+        snapshot_visibility: SnapshotVisibility,
+        sender: PrincipalId,
+        expected_result: Result<(), PrincipalId>,
+    }
+
+    impl TestCase {
+        fn check_list_canister_snapshot(
+            &self,
+            canister_id: CanisterId,
+            snapshots: &[CanisterSnapshotResponse],
+            env: &StateMachine,
+        ) {
+            let result = env.list_canister_snapshots_as(
+                ListCanisterSnapshotArgs::new(canister_id),
+                self.sender,
+            );
+            match &self.expected_result {
+                Err(caller) => {
+                    assert_eq!(
+                        result.as_ref().err(),
+                        Some(&expected_error(caller, "list_canister_snapshots")),
+                        "{self:?}"
+                    );
+                }
+                Ok(()) => {
+                    assert_eq!(result, Ok(snapshots.to_vec()), "{self:?}");
+                }
+            }
+        }
+
+        fn check_read_canister_snapshot_metadata(
+            &self,
+            canister_id: CanisterId,
+            snapshot_id: ic_base_types::SnapshotId,
+            env: &StateMachine,
+        ) {
+            let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
+            let result = env.read_canister_snapshot_metadata_as(&args, self.sender);
+            match &self.expected_result {
+                Err(caller) => {
+                    assert_eq!(
+                        result.as_ref().err(),
+                        Some(&expected_error(caller, "read_canister_snapshot_metadata")),
+                        "{self:?}"
+                    );
+                }
+                Ok(()) => {
+                    assert!(result.is_ok(), "{self:?}: {}", result.unwrap_err());
+                }
+            }
+        }
+
+        fn check_read_canister_snapshot_data(
+            &self,
+            canister_id: CanisterId,
+            snapshot_id: ic_base_types::SnapshotId,
+            env: &StateMachine,
+        ) {
+            let args = ReadCanisterSnapshotDataArgs::new(
+                canister_id,
+                snapshot_id,
+                CanisterSnapshotDataKind::StableMemory { offset: 0, size: 0 },
+            );
+            let result = env.read_canister_snapshot_data_as(&args, self.sender);
+            match &self.expected_result {
+                Err(caller) => {
+                    assert_eq!(
+                        result.as_ref().err(),
+                        Some(&expected_error(caller, "read_canister_snapshot_data")),
+                        "{self:?}"
+                    );
+                }
+                Ok(()) => {
+                    assert!(result.is_ok(), "{self:?}: {}", result.unwrap_err());
+                }
+            }
+        }
+    }
+
+    fn expected_error(caller: &PrincipalId, method: &str) -> UserError {
+        UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            format!("Caller {caller} is not allowed to call {method}"),
+        )
     }
 }

@@ -65,11 +65,7 @@ mod tests;
 #[tarpc::service]
 pub trait TarpcCspVault {
     // Corresponds to `BasicSignatureCspVault.sign()`.
-    async fn sign(
-        algorithm_id: AlgorithmId,
-        message: ByteBuf,
-        key_id: KeyId,
-    ) -> Result<CspSignature, CspBasicSignatureError>;
+    async fn sign(message: ByteBuf) -> Result<CspSignature, CspBasicSignatureError>;
 
     // Corresponds to `BasicSignatureCspVault.gen_node_signing_key_pair()`.
     async fn gen_node_signing_key_pair() -> Result<CspPublicKey, CspBasicSignatureKeygenError>;
@@ -105,14 +101,23 @@ pub trait TarpcCspVault {
     ) -> Result<(), ni_dkg_errors::CspDkgUpdateFsEpochError>;
 
     // Corresponds to `NiDkgCspVault.create_dealing()`.
-    #[allow(clippy::too_many_arguments)]
     async fn create_dealing(
         algorithm_id: AlgorithmId,
         dealer_index: NodeIndex,
         threshold: NumberOfNodes,
         epoch: Epoch,
         receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
-        maybe_resharing_secret: Option<KeyId>,
+    ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateDealingError>;
+
+    // Corresponds to `NiDkgCspVault.create_resharing_dealing()`.
+    #[allow(clippy::too_many_arguments)]
+    async fn create_resharing_dealing(
+        algorithm_id: AlgorithmId,
+        dealer_index: NodeIndex,
+        threshold: NumberOfNodes,
+        epoch: Epoch,
+        receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
+        resharing_secret: KeyId,
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError>;
 
     // Corresponds to `NiDkgCspVault.load_threshold_signing_key()`.

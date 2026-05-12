@@ -171,6 +171,23 @@ pub struct Args {
     /// Timeout in seconds for sync watchdog. If no synchronization is attempted within this time, the sync thread will be restarted.
     #[arg(long = "watchdog-timeout-seconds", default_value = "60")]
     pub watchdog_timeout_seconds: u64,
+
+    /// Maximum cache size for SQLite in KB. This controls the PRAGMA cache_size.
+    /// Lower values reduce memory usage but may impact performance.
+    #[arg(long = "sqlite-max-cache-kb")]
+    pub sqlite_max_cache_kb: Option<i64>,
+
+    /// Flush the cache and shrink the memory after processing account balances.
+    /// If enabled, reduces memory usage but may impact performance.
+    #[arg(long = "flush-cache-shrink-mem", default_value = "false")]
+    pub flush_cache_shrink_mem: bool,
+
+    /// Batch size for account balance synchronization. This controls how many blocks
+    /// are loaded into memory at once when updating account balances.
+    /// Lower values reduce memory usage but may slow down sync.
+    /// Default is 100000 blocks per batch.
+    #[arg(long = "balance-sync-batch-size")]
+    pub balance_sync_batch_size: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -185,6 +202,9 @@ pub struct ParsedConfig {
     pub offline: bool,
     pub log_file: PathBuf,
     pub watchdog_timeout_seconds: u64,
+    pub sqlite_max_cache_kb: Option<i64>,
+    pub flush_cache_shrink_mem: bool,
+    pub balance_sync_batch_size: Option<u64>,
 }
 
 impl ParsedConfig {
@@ -229,6 +249,9 @@ impl ParsedConfig {
             offline: args.offline,
             log_file: args.log_file,
             watchdog_timeout_seconds: args.watchdog_timeout_seconds,
+            sqlite_max_cache_kb: args.sqlite_max_cache_kb,
+            flush_cache_shrink_mem: args.flush_cache_shrink_mem,
+            balance_sync_batch_size: args.balance_sync_batch_size,
         })
     }
 
@@ -244,12 +267,12 @@ impl ParsedConfig {
 
             let mut token_dec = format!("{}", args.ledger_id.unwrap(),);
 
-            if args.icrc1_symbol.is_some() {
-                token_dec.push_str(&format!(":s={}", args.icrc1_symbol.clone().unwrap()));
+            if let Some(icrc1_symbol) = &args.icrc1_symbol {
+                token_dec.push_str(&format!(":s={}", icrc1_symbol.clone()));
             }
 
-            if args.icrc1_decimals.is_some() {
-                token_dec.push_str(&format!(":d={}", args.icrc1_decimals.unwrap()));
+            if let Some(icrc1_decimals) = &args.icrc1_decimals {
+                token_dec.push_str(&format!(":d={}", icrc1_decimals));
             }
 
             input_tokens.push(token_dec);
@@ -306,6 +329,9 @@ mod tests {
             offline: false,
             log_file: PathBuf::from("/test/log"),
             watchdog_timeout_seconds: 60,
+            sqlite_max_cache_kb: None,
+            flush_cache_shrink_mem: false,
+            balance_sync_batch_size: Some(100000),
         }
     }
 

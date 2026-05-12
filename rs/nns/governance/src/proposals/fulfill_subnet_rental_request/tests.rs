@@ -1,4 +1,6 @@
 use super::*;
+
+use crate::pb::v1::FulfillSubnetRentalRequest;
 use ic_base_types::PrincipalId;
 
 #[test]
@@ -20,41 +22,40 @@ fn test_validate_fulfill_subnet_rental_request() {
             .map(|_| new_subnet_id())
             .collect(),
         replica_version_id: "60fb469c46e44e6071193a3314cc442044fcf17a".to_string(),
+        initial_dkg_subnet_id: None,
     };
 
     // Sad cases.
 
-    let no_user = FulfillSubnetRentalRequest {
+    let no_user = ValidFulfillSubnetRentalRequest::try_from(FulfillSubnetRentalRequest {
         user: None,
         ..ok.clone()
-    }
-    .validate()
+    })
     .unwrap_err();
 
-    let no_node_ids = FulfillSubnetRentalRequest {
+    let no_node_ids = ValidFulfillSubnetRentalRequest::try_from(FulfillSubnetRentalRequest {
         node_ids: vec![],
         ..ok.clone()
-    }
-    .validate()
+    })
     .unwrap_err();
 
-    let absurdly_many_node_ids = FulfillSubnetRentalRequest {
-        node_ids: (0_u64..5000).map(|_| new_subnet_id()).collect(),
-        ..ok.clone()
-    }
-    .validate()
-    .unwrap_err();
+    let absurdly_many_node_ids =
+        ValidFulfillSubnetRentalRequest::try_from(FulfillSubnetRentalRequest {
+            node_ids: (0_u64..5000).map(|_| new_subnet_id()).collect(),
+            ..ok.clone()
+        })
+        .unwrap_err();
 
-    let garbage_replica_version_id = FulfillSubnetRentalRequest {
-        replica_version_id: "Trust me, bro. This replica_version_id is legit.".to_string(),
-        ..ok.clone()
-    }
-    .validate()
-    .unwrap_err();
+    let garbage_replica_version_id =
+        ValidFulfillSubnetRentalRequest::try_from(FulfillSubnetRentalRequest {
+            replica_version_id: "Trust me, bro. This replica_version_id is legit.".to_string(),
+            ..ok.clone()
+        })
+        .unwrap_err();
 
     // Step 3: Verify results.
 
-    assert_eq!(ok.validate(), Ok(()));
+    ValidFulfillSubnetRentalRequest::try_from(ok).unwrap();
 
     #[track_caller]
     fn assert_invalid(err: GovernanceError, key_words: &[&str]) {

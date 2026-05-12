@@ -3,9 +3,10 @@ use crate::sign::basic_sig::BasicSigVerifierInternal;
 use crate::sign::canister_threshold_sig::idkg::complaint::verify_complaint;
 use crate::sign::canister_threshold_sig::idkg::utils::{
     index_and_batch_signed_dealing_of_dealer, index_and_dealing_of_dealer,
-    key_id_from_mega_public_key_or_panic, retrieve_mega_public_key_from_registry,
+    retrieve_mega_public_key_from_registry,
 };
 use ic_crypto_internal_csp::api::CspSigner;
+use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::vault::api::{
     CspVault, IDkgDealingInternalBytes, IDkgTranscriptInternalBytes,
 };
@@ -39,13 +40,13 @@ pub fn create_transcript<C: CspSigner>(
     vault: &dyn CspVault,
     registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
-    dealings: &BatchSignedIDkgDealings,
+    dealings: BatchSignedIDkgDealings,
 ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
-    ensure_sufficient_dealings_collected(params, dealings)?;
-    ensure_dealers_allowed_by_params(params, dealings)?;
-    ensure_signers_allowed_by_params(params, dealings)?;
+    ensure_sufficient_dealings_collected(params, &dealings)?;
+    ensure_dealers_allowed_by_params(params, &dealings)?;
+    ensure_signers_allowed_by_params(params, &dealings)?;
 
-    for dealing in dealings {
+    for dealing in &dealings {
         verify_signature_batch(
             csp_client,
             vault,
@@ -73,7 +74,7 @@ pub fn create_transcript<C: CspSigner>(
     let internal_transcript = idkg_create_transcript(
         params.algorithm_id(),
         params.reconstruction_threshold(),
-        &internal_dealings,
+        internal_dealings,
         &internal_operation_type,
     )
     .map_err(|e| IDkgCreateTranscriptError::InternalError {
@@ -147,7 +148,7 @@ pub fn verify_transcript<C: CspSigner>(
         &internal_transcript,
         transcript.algorithm_id,
         params.reconstruction_threshold(),
-        &internal_dealings,
+        internal_dealings,
         &internal_transcript_operation,
     )?)
 }
@@ -180,7 +181,7 @@ pub fn load_transcript(
         internal_dealings_bytes,
         transcript.context_data(),
         self_index,
-        key_id_from_mega_public_key_or_panic(&self_mega_pubkey),
+        KeyId::from(&self_mega_pubkey),
         IDkgTranscriptInternalBytes::from(transcript.transcript_to_bytes()),
     )?;
     let complaints = complaints_from_internal_complaints(&internal_complaints, transcript)?;
@@ -246,7 +247,7 @@ pub fn load_transcript_with_openings(
         internal_openings,
         transcript.context_data(),
         self_index,
-        key_id_from_mega_public_key_or_panic(&self_mega_pubkey),
+        KeyId::from(&self_mega_pubkey),
         IDkgTranscriptInternalBytes::from(transcript.transcript_to_bytes()),
     )
 }
@@ -292,7 +293,7 @@ pub fn open_transcript(
         dealer_index,
         context_data,
         opener_index,
-        key_id_from_mega_public_key_or_panic(&opener_public_key),
+        KeyId::from(&opener_public_key),
     )?;
     let internal_opening_raw =
         internal_opening
@@ -410,11 +411,11 @@ fn internal_dealings_from_signed_dealings(
 ///
 /// Only the first collection_threshold dealings are returned
 fn dealings_by_index_from_dealings(
-    dealings: &BatchSignedIDkgDealings,
+    dealings: BatchSignedIDkgDealings,
     params: &IDkgTranscriptParams,
 ) -> Result<BTreeMap<NodeIndex, BatchSignedIDkgDealing>, IDkgCreateTranscriptError> {
     dealings
-        .iter()
+        .into_iter()
         .take(params.collection_threshold().get() as usize)
         .map(|dealing| {
             let index = params.dealer_index(dealing.dealer_id()).ok_or(
@@ -422,7 +423,7 @@ fn dealings_by_index_from_dealings(
                     node_id: dealing.dealer_id(),
                 },
             )?;
-            Ok((index, dealing.clone()))
+            Ok((index, dealing))
         })
         .collect()
 }

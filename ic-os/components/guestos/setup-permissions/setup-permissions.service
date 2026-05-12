@@ -2,6 +2,7 @@
 Description=Set up persistent storage permissions
 After=bootstrap-ic-node.service
 Wants=bootstrap-ic-node.service
+RequiresMountsFor=/var
 
 [Service]
 Type=oneshot

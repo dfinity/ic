@@ -3,14 +3,16 @@ use std::path::Path;
 
 pub mod crypt;
 pub mod generated_key;
+pub mod metrics;
 pub mod sev;
 
 pub const DEFAULT_PREVIOUS_SEV_KEY_PATH: &str = "/var/alternative_store.keyfile";
+pub const DEFAULT_STORE_LUKS_HEADER_PATH: &str = "/var/store_luks_header.bin";
 
 // We depend on the values of these constants in bash scripts and config files so be careful
 // when changing them!
 const VAR_CRYPT_NAME: &str = "var_crypt";
-const STORE_CRYPT_NAME: &str = "vda10-crypt";
+const STORE_CRYPT_NAME: &str = "store-crypt";
 
 pub trait DiskEncryption {
     /// Opens an encrypted device and activates it under /dev/mapper/`crypt_name`.

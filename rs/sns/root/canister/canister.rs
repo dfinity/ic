@@ -233,8 +233,7 @@ fn change_canister(request: ChangeCanisterRequest) {
     // spawn to do the real work in the background.
     CanisterRuntime::spawn_future(async move {
         let change_canister_result =
-            ic_nervous_system_root::change_canister::change_canister::<CanisterRuntime>(request)
-                .await;
+            ic_nervous_system_root::change_canister::change_canister(request).await;
         // We don't want to panic in here, or the log messages will be lost when
         // the state rolls back.
         match change_canister_result {
@@ -473,8 +472,8 @@ fn init_timers() {
         });
     });
 
-    let new_timer_id = ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, || {
-        ic_cdk::spawn(run_periodic_tasks())
+    let new_timer_id = ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, async || {
+        run_periodic_tasks().await
     });
     TIMER_ID.with(|saved_timer_id| {
         let mut saved_timer_id = saved_timer_id.borrow_mut();

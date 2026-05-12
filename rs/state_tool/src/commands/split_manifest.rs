@@ -9,6 +9,7 @@ use ic_state_manager::state_sync::types::Manifest;
 use ic_types::crypto::CryptoHash;
 use ic_types::{CanisterId, CryptoHashOfState, SubnetId, Time};
 use std::fs::File;
+use std::io::Write;
 use std::path::PathBuf;
 
 /// Computes the expected manifests (chunk hashes, file hashes and root hash) of
@@ -27,6 +28,7 @@ pub fn do_split_manifest(
     subnet_type: SubnetType,
     batch_time: Time,
     migrated_ranges: Vec<CanisterIdRange>,
+    writer: &mut impl Write,
 ) -> Result<(), String> {
     let (version, files, chunks, hash) = parse_manifest(
         File::open(&path)
@@ -71,18 +73,28 @@ pub fn do_split_manifest(
     )
     .map_err(|e| format!("Failed to split manifest: {e}"))?;
 
-    print_manifest(subnet_a, &manifest_a);
-    print_manifest(subnet_b, &manifest_b);
+    write_manifest(subnet_a, &manifest_a, writer)
+        .map_err(|err| format!("Failed to write manifest: {err}"))?;
+    write_manifest(subnet_b, &manifest_b, writer)
+        .map_err(|err| format!("Failed to write manifest: {err}"))?;
 
     Ok(())
 }
 
-fn print_manifest(subnet: SubnetId, manifest: &Manifest) {
-    println!("Subnet {subnet}");
-    println!("--------");
-    println!("{manifest}");
-    println!();
-    println!("ROOT HASH: {}", hex::encode(manifest_hash(manifest)));
-    println!("========");
-    println!();
+fn write_manifest(
+    subnet: SubnetId,
+    manifest: &Manifest,
+    writer: &mut impl Write,
+) -> Result<(), std::io::Error> {
+    let root_hash = hex::encode(manifest_hash(manifest));
+
+    writeln!(writer, "Subnet {subnet}")?;
+    writeln!(writer, "--------")?;
+    writeln!(writer, "{manifest}")?;
+    writeln!(writer)?;
+    writeln!(writer, "ROOT HASH: {root_hash}")?;
+    writeln!(writer, "========")?;
+    writeln!(writer)?;
+
+    Ok(())
 }

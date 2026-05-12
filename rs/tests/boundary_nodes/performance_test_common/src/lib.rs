@@ -9,8 +9,10 @@ use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},
     driver::{
         farm::HostFeature,
-        ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
+        ic::{
+            AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet,
+            VmResourceOverrides,
+        },
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
@@ -31,7 +33,6 @@ use rand::thread_rng;
 use slog::info;
 use tokio::runtime::{Builder, Runtime};
 
-const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 // Size of the payload sent to the counter canister in update("write") call.
 const PAYLOAD_SIZE_BYTES: usize = 1024;
 // Parameters related to workload creation.
@@ -40,16 +41,12 @@ const MAX_RUNTIME_THREADS: usize = 64;
 const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 
 pub fn setup(env: TestEnv) {
-    PrometheusVm::default()
-        .with_required_host_features(vec![HostFeature::Performance])
-        .start(&env)
-        .expect("failed to start prometheus VM");
     InternetComputer::new()
         .with_required_host_features(vec![HostFeature::Performance])
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_default_vm_resources(VmResources {
+                .with_resource_overrides(VmResourceOverrides {
                     vcpus: Some(NrOfVCPUs::new(64)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
@@ -68,8 +65,6 @@ pub fn setup(env: TestEnv) {
     NnsInstallationBuilder::new()
         .install(&nns_node, &env)
         .expect("Could not install NNS canisters");
-
-    env.sync_with_prometheus();
 }
 
 // Execute update calls (without polling) with an increasing req/s rate, against a counter canister via the boundary node agent.
@@ -88,7 +83,10 @@ pub fn update_calls_test(env: TestEnv) {
         .nodes()
         .next()
         .unwrap()
-        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+        .create_and_install_canister_with_arg(
+            &std::env::var("COUNTER_CANISTER_WAT_PATH").unwrap(),
+            None,
+        );
 
     let api_bn_agent = env
         .topology_snapshot()
@@ -152,7 +150,10 @@ pub fn query_calls_test(env: TestEnv) {
         .nodes()
         .next()
         .unwrap()
-        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+        .create_and_install_canister_with_arg(
+            &std::env::var("COUNTER_CANISTER_WAT_PATH").unwrap(),
+            None,
+        );
 
     let api_bn_agent = env
         .topology_snapshot()
@@ -365,7 +366,7 @@ pub fn mainnet_query_calls_ic_gateway_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
                 let mut rng = StdRng::from_entropy();
                 let prob = rng.r#gen::<f64>() * 100.0;
 
-                let mut payload = [0u8; 8];
+                let mut payload = [0_u8; 8];
                 rng.fill_bytes(&mut payload);
                 let canister_request = GenericRequest::new(
                     counter_canister_principal,

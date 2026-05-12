@@ -11,8 +11,8 @@ use crate::{
     neuron_store::NeuronStore,
     pb::v1::{
         Ballot, BallotInfo, CreateServiceNervousSystem, ExecuteNnsFunction, Followees, InstallCode,
-        KnownNeuron, NnsFunction, Proposal, ProposalData, Topic, Vote,
-        install_code::CanisterInstallMode, proposal::Action,
+        NnsFunction, Proposal, ProposalData, Topic, Vote, install_code::CanisterInstallMode,
+        proposal::Action,
     },
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
@@ -72,6 +72,7 @@ fn set_up<R: Rng>(
                 action: Some(Action::Motion(Motion {
                     motion_text: "Motion".to_string(),
                 })),
+                self_describing_action: None,
             }),
             ..Default::default()
         },
@@ -124,7 +125,7 @@ fn set_up_centralized<R: Rng>(
         ))
         .expect("Could not add neuron");
 
-    for _ in 1u64..=num_neurons {
+    for _ in 1_u64..=num_neurons {
         let neuron = make_neuron(
             rng.next_u64(),
             PrincipalId::new_user_test_id(rng.next_u64()),
@@ -190,7 +191,7 @@ fn set_up_single_vote<R: Rng>(
         .add_neuron(neuron)
         .expect("Could not add neuron");
 
-    for _ in 2u64..=num_neurons {
+    for _ in 2_u64..=num_neurons {
         let neuron_id = rng.next_u64();
         let neuron = make_neuron(
             neuron_id,
@@ -226,11 +227,11 @@ fn set_up_chain<R: Rng>(
     );
 
     let num_half_followees = num_followees / 2;
-    let neuron_ids: Vec<NeuronIdProto> = (0u64..num_neurons)
+    let neuron_ids: Vec<NeuronIdProto> = (0_u64..num_neurons)
         .map(|_| NeuronIdProto { id: rng.next_u64() })
         .collect();
 
-    let not_voting_neuron_ids = (0u64..num_half_followees)
+    let not_voting_neuron_ids = (0_u64..num_half_followees)
         .map(|i| neuron_ids[i as usize])
         .collect::<Vec<_>>();
 
@@ -465,14 +466,7 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
 
     let bench_result = bench_fn(|| {
         governance
-            .compute_ballots_for_new_proposal(
-                &Action::RegisterKnownNeuron(KnownNeuron {
-                    id: None,
-                    known_neuron_data: None,
-                }),
-                &NeuronIdProto { id: 1 },
-                123_456_789,
-            )
+            .compute_ballots_for_standard_proposal(123_456_789)
             .expect("Failed!");
     });
 
@@ -535,6 +529,7 @@ fn distribute_rewards_with_stable_neurons() -> BenchResult {
                     action: Some(api::proposal::Action::Motion(api::Motion {
                         motion_text: "Motion".to_string(),
                     })),
+                    self_describing_action: None,
                 }),
                 ..Default::default()
             }
@@ -693,15 +688,15 @@ fn list_proposals_benchmark() -> BenchResult {
     let proposal_actions = vec![
         Action::ExecuteNnsFunction(ExecuteNnsFunction {
             nns_function: NnsFunction::HardResetNnsRootToVersion as i32,
-            payload: vec![0u8; 1 << 20], // 1 MiB
+            payload: vec![0_u8; 1 << 20], // 1 MiB
         }),
         Action::InstallCode(InstallCode {
             canister_id: Some(GOVERNANCE_CANISTER_ID.get()),
-            wasm_module: Some(vec![0u8; 1 << 20]), // 1 MiB
-            arg: Some(vec![0u8; 1 << 20]),         // 1 MiB
+            wasm_module: Some(vec![0_u8; 1 << 20]), // 1 MiB
+            arg: Some(vec![0_u8; 1 << 20]),         // 1 MiB
             install_mode: Some(CanisterInstallMode::Install as i32),
-            wasm_module_hash: Some(Sha256::hash(&vec![0u8; 1 << 20]).to_vec()),
-            arg_hash: Some(Sha256::hash(&vec![0u8; 1 << 20]).to_vec()),
+            wasm_module_hash: Some(Sha256::hash(&vec![0_u8; 1 << 20]).to_vec()),
+            arg_hash: Some(Sha256::hash(&vec![0_u8; 1 << 20]).to_vec()),
             skip_stopping_before_installing: None,
         }),
         Action::CreateServiceNervousSystem(
@@ -719,6 +714,7 @@ fn list_proposals_benchmark() -> BenchResult {
                     url: "".to_string(),
                     title: Some("Title".to_string()),
                     action: Some(proposal_action),
+                    self_describing_action: None,
                 },
             )
             .now_or_never()

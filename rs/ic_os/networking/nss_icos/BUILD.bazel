@@ -1,0 +1,20 @@
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+rust_shared_library(
+    name = "nss_icos",
+    srcs = glob(["src/**"]),
+    crate_name = "nss_icos",
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:paste",
+    ],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:lazy_static",
+        "@crate_index//:libc",
+        "@crate_index//:libnss",
+        "@crate_index//:local-ip-address",
+    ],
+)

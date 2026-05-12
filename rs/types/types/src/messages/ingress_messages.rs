@@ -7,14 +7,18 @@ use crate::{
     messages::{
         Authentication, HasCanisterId, HttpCallContent, HttpCanisterUpdate, HttpRequest,
         HttpRequestContent, HttpRequestEnvelope, HttpRequestError, SignedRequestBytes,
-        http::{CallOrQuery, representation_independent_hash_call_or_query},
+        http::{
+            CallOrQuery, RawSignedSenderInfoSlices, SignedSenderInfo,
+            representation_independent_hash_call_or_query,
+        },
     },
 };
 use ic_error_types::{ErrorCode, UserError};
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInfoRequest, CanisterMetadataRequest, ClearChunkStoreArgs,
-    DeleteCanisterSnapshotArgs, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
-    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload,
+    CanisterIdRecord, CanisterInfoRequest, CanisterMetadataRequest, CanisterMetricsArgs,
+    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, IC_00, InstallChunkedCodeArgs,
+    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
     StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
     UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
@@ -44,6 +48,7 @@ pub struct SignedIngressContent {
     arg: Vec<u8>,
     ingress_expiry: u64,
     nonce: Option<Vec<u8>>,
+    sender_info: Option<SignedSenderInfo>,
 }
 
 impl SignedIngressContent {
@@ -76,14 +81,15 @@ impl SignedIngressContent {
         Time::from_nanos_since_unix_epoch(self.ingress_expiry)
     }
 
-    #[cfg(test)]
-    pub fn new(
+    /// Public only for use in tests.
+    pub fn new_for_testing(
         sender: UserId,
         canister_id: CanisterId,
         method_name: String,
         arg: Vec<u8>,
         ingress_expiry: u64,
         nonce: Option<Vec<u8>>,
+        sender_info: Option<SignedSenderInfo>,
     ) -> Self {
         Self {
             sender,
@@ -92,6 +98,7 @@ impl SignedIngressContent {
             arg,
             ingress_expiry,
             nonce,
+            sender_info,
         }
     }
 }
@@ -106,12 +113,19 @@ impl HttpRequestContent for SignedIngressContent {
     fn id(&self) -> MessageId {
         MessageId::from(representation_independent_hash_call_or_query(
             CallOrQuery::Call,
-            self.canister_id.get().into_vec(),
+            self.canister_id.as_ref(),
             &self.method_name,
-            self.arg.clone(),
+            &self.arg,
             self.ingress_expiry,
-            self.sender.get().into_vec(),
+            self.sender.get_ref().as_slice(),
             self.nonce.as_deref(),
+            self.sender_info
+                .as_ref()
+                .map(|sender_info| RawSignedSenderInfoSlices {
+                    info: &sender_info.info,
+                    signer: sender_info.signer.as_ref(),
+                    sig: &sender_info.sig,
+                }),
         ))
     }
 
@@ -125,6 +139,20 @@ impl HttpRequestContent for SignedIngressContent {
 
     fn nonce(&self) -> Option<Vec<u8>> {
         self.nonce.clone()
+    }
+
+    fn sender_info(&self) -> Option<&SignedSenderInfo> {
+        self.sender_info.as_ref()
+    }
+}
+
+impl SignedIngressContent {
+    /// Returns the sender info as a validated `SenderInfo` (without the signature).
+    pub fn as_sender_info(&self) -> Option<SenderInfo> {
+        self.sender_info.as_ref().map(|si| SenderInfo {
+            info: si.info.clone(),
+            signer: si.signer,
+        })
     }
 }
 
@@ -147,6 +175,18 @@ impl TryFrom<HttpCanisterUpdate> for SignedIngressContent {
             arg: update.arg.0,
             ingress_expiry: update.ingress_expiry,
             nonce: update.nonce.map(|n| n.0),
+            sender_info: match update.sender_info {
+                Some(sender_info) => Some(SignedSenderInfo {
+                    info: sender_info.info.0,
+                    signer: CanisterId::try_from(sender_info.signer.0).map_err(|err| {
+                        HttpRequestError::InvalidPrincipalId(format!(
+                            "Converting sender_info.signer to PrincipalId failed with {err:?}"
+                        ))
+                    })?,
+                    sig: sender_info.sig.0,
+                }),
+                None => None,
+            },
         })
     }
 }
@@ -352,6 +392,40 @@ impl CountBytes for SignedIngress {
     }
 }
 
+/// Sender info after decoding and signature validation.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+pub struct SenderInfo {
+    #[serde(with = "serde_bytes")]
+    pub info: Vec<u8>,
+    pub signer: CanisterId,
+}
+
+impl DeterministicHeapBytes for SenderInfo {
+    fn deterministic_heap_bytes(&self) -> usize {
+        self.info.len()
+    }
+}
+
+impl From<&SenderInfo> for pb_ingress::SenderInfo {
+    fn from(item: &SenderInfo) -> Self {
+        Self {
+            info: item.info.clone(),
+            signer: Some(item.signer.into()),
+        }
+    }
+}
+
+impl TryFrom<pb_ingress::SenderInfo> for SenderInfo {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_ingress::SenderInfo) -> Result<Self, Self::Error> {
+        let signer = try_from_option_field(item.signer, "SenderInfo::signer")?;
+        Ok(Self {
+            info: item.info,
+            signer,
+        })
+    }
+}
+
 /// A message sent from an end user to a canister.
 ///
 /// Used internally by the InternetComputer. See related [`SignedIngress`] for
@@ -367,6 +441,7 @@ pub struct Ingress {
     pub method_payload: Vec<u8>,
     pub message_id: MessageId,
     pub expiry_time: Time,
+    pub sender_info: Option<SenderInfo>,
 }
 
 impl Ingress {
@@ -379,15 +454,7 @@ impl Ingress {
 impl From<(SignedIngress, Option<CanisterId>)> for Ingress {
     fn from(item: (SignedIngress, Option<CanisterId>)) -> Self {
         let (signed_ingress, effective_canister_id) = item;
-        Self {
-            source: signed_ingress.sender(),
-            receiver: signed_ingress.canister_id(),
-            effective_canister_id,
-            method_name: signed_ingress.method_name(),
-            method_payload: signed_ingress.method_arg().to_vec(),
-            message_id: signed_ingress.id(),
-            expiry_time: signed_ingress.expiry_time(),
-        }
+        (signed_ingress.take_content(), effective_canister_id).into()
     }
 }
 
@@ -395,6 +462,11 @@ impl From<(SignedIngressContent, Option<CanisterId>)> for Ingress {
     fn from(item: (SignedIngressContent, Option<CanisterId>)) -> Self {
         let (ingress, effective_canister_id) = item;
         let message_id = ingress.id();
+        let signed_sender_info = ingress.sender_info;
+        let sender_info = signed_sender_info.map(|signed_sender_info| SenderInfo {
+            info: signed_sender_info.info,
+            signer: signed_sender_info.signer,
+        });
         Self {
             source: ingress.sender,
             receiver: ingress.canister_id,
@@ -403,6 +475,7 @@ impl From<(SignedIngressContent, Option<CanisterId>)> for Ingress {
             method_payload: ingress.arg,
             message_id,
             expiry_time: Time::from_nanos_since_unix_epoch(ingress.ingress_expiry),
+            sender_info,
         }
     }
 }
@@ -410,6 +483,7 @@ impl From<(SignedIngressContent, Option<CanisterId>)> for Ingress {
 impl From<&Ingress> for pb_ingress::Ingress {
     fn from(item: &Ingress) -> Self {
         let effective_canister_id = item.effective_canister_id.map(pb_types::CanisterId::from);
+        let sender_info = item.sender_info.as_ref().map(pb_ingress::SenderInfo::from);
         Self {
             source: Some(crate::user_id_into_protobuf(item.source)),
             receiver: Some(pb_types::CanisterId::from(item.receiver)),
@@ -418,6 +492,7 @@ impl From<&Ingress> for pb_ingress::Ingress {
             message_id: item.message_id.as_bytes().to_vec(),
             expiry_time_nanos: item.expiry_time.as_nanos_since_unix_epoch(),
             effective_canister_id,
+            sender_info,
         }
     }
 }
@@ -428,24 +503,44 @@ impl TryFrom<pb_ingress::Ingress> for Ingress {
         let effective_canister_id =
             try_from_option_field(item.effective_canister_id, "Ingress::effective_canister_id")
                 .ok();
+        let sender_info = item.sender_info.map(SenderInfo::try_from).transpose()?;
         Ok(Self {
-            source: crate::user_id_try_from_protobuf(try_from_option_field(
-                item.source,
-                "Ingress::source",
-            )?)?,
+            source: crate::user_id_try_from_option(item.source, "Ingress::source")?,
             receiver: try_from_option_field(item.receiver, "Ingress::receiver")?,
             effective_canister_id,
             method_name: item.method_name,
             method_payload: item.method_payload,
             message_id: item.message_id.as_slice().try_into()?,
             expiry_time: Time::from_nanos_since_unix_epoch(item.expiry_time_nanos),
+            sender_info,
         })
     }
 }
 
 impl CountBytes for Ingress {
     fn count_bytes(&self) -> usize {
-        size_of::<Ingress>() + self.method_name.len() + self.method_payload.len()
+        // Decomposing `Ingress` to force a decision here if a new field is added to `Ingress`.
+        let Ingress {
+            method_name,
+            method_payload,
+            sender_info,
+            // The remaining fields are constant-size and thus fully accounted for by `size_of::<Ingress>()`.
+            source: _,
+            receiver: _,
+            effective_canister_id: _,
+            message_id: _,
+            expiry_time: _,
+        } = self;
+        size_of::<Ingress>()
+            + method_name.len()
+            + method_payload.len()
+            + sender_info
+                .as_ref()
+                .map(|sender_info| {
+                    let SenderInfo { info, signer: _ } = sender_info;
+                    info.len()
+                })
+                .unwrap_or_default()
     }
 }
 
@@ -487,9 +582,9 @@ pub fn extract_effective_canister_id(
         return Ok(None);
     }
     match Method::from_str(ingress.method_name()) {
-        Ok(Method::ProvisionalCreateCanisterWithCycles) | Ok(Method::ProvisionalTopUpCanister) => {
-            Ok(None)
-        }
+        Ok(Method::CreateCanister)
+        | Ok(Method::ProvisionalCreateCanisterWithCycles)
+        | Ok(Method::ProvisionalTopUpCanister) => Ok(None),
         Ok(Method::StartCanister)
         | Ok(Method::CanisterStatus)
         | Ok(Method::DeleteCanister)
@@ -578,11 +673,15 @@ pub fn extract_effective_canister_id(
             Ok(record) => Ok(Some(record.get_canister_id())),
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },
+        Ok(Method::CanisterMetrics) => match CanisterMetricsArgs::decode(ingress.arg()) {
+            Ok(record) => Ok(Some(record.get_canister_id())),
+            Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
+        },
 
-        Ok(Method::CreateCanister)
-        | Ok(Method::SetupInitialDKG)
+        Ok(Method::SetupInitialDKG)
         | Ok(Method::DepositCycles)
         | Ok(Method::HttpRequest)
+        | Ok(Method::FlexibleHttpRequest)
         | Ok(Method::RawRand)
         | Ok(Method::ECDSAPublicKey)
         | Ok(Method::SignWithECDSA)
@@ -627,6 +726,7 @@ mod test {
             arg: vec![],
             ingress_expiry: 0,
             nonce: None,
+            sender_info: None,
         };
         let result = extract_effective_canister_id(&msg);
         assert!(
@@ -644,6 +744,7 @@ mod test {
             arg: vec![],
             ingress_expiry: 0,
             nonce: None,
+            sender_info: None,
         };
         assert_eq!(
             extract_effective_canister_id(&msg),

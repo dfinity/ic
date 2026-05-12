@@ -17,9 +17,7 @@ use ic_embedders::{
     wasmtime_embedder::system_api::{ApiType, ExecutionParameters},
 };
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::execution_environment::{
-    CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
-};
+use ic_interfaces::execution_environment::{HypervisorError, WasmExecutionOutput};
 use ic_logger::{ReplicaLogger, info};
 use ic_replicated_state::{
     CallContextAction, CallOrigin, CanisterState,
@@ -30,7 +28,8 @@ use ic_types::messages::{
     CanisterTask, RequestMetadata,
 };
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
-use ic_types::{CanisterTimer, Cycles, NumBytes, NumInstructions, Time};
+use ic_types::{CanisterTimer, NumBytes, NumInstructions, Time};
+use ic_types_cycles::{CompoundCycles, Cycles, Instructions};
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
@@ -43,7 +42,7 @@ pub fn execute_call_or_task(
     clean_canister: CanisterState,
     call_or_task: CanisterCallOrTask,
     method: WasmMethod,
-    prepaid_execution_cycles: Option<Cycles>,
+    prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
     execution_parameters: ExecutionParameters,
     time: Time,
     round: RoundContext,
@@ -116,17 +115,6 @@ pub fn execute_call_or_task(
             }
         };
 
-    let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
-        clean_canister.system_state.freeze_threshold,
-        clean_canister.system_state.memory_allocation,
-        clean_canister.memory_usage(),
-        clean_canister.message_memory_usage(),
-        clean_canister.compute_allocation(),
-        subnet_size,
-        round.cost_schedule,
-        clean_canister.system_state.reserved_balance(),
-    );
-
     let request_metadata = match &call_or_task {
         CanisterCallOrTask::Update(CanisterCall::Request(request))
         | CanisterCallOrTask::Query(CanisterCall::Request(request)) => {
@@ -146,7 +134,6 @@ pub fn execute_call_or_task(
         subnet_size,
         time,
         request_metadata,
-        freezing_threshold,
         canister_id: clean_canister.canister_id(),
         log_dirty_pages,
     };
@@ -171,12 +158,14 @@ pub fn execute_call_or_task(
             msg.cycles(),
             *msg.sender(),
             helper.call_context_id(),
+            msg.sender_info().cloned(),
         ),
         CanisterCallOrTask::Query(msg) => ApiType::replicated_query(
             time,
             msg.method_payload().to_vec(),
             *msg.sender(),
             helper.call_context_id(),
+            msg.sender_info().cloned(),
         ),
         CanisterCallOrTask::Task(CanisterTask::Heartbeat) => ApiType::system_task(
             SystemMethod::CanisterHeartbeat,
@@ -276,6 +265,7 @@ fn finish_err(
 
     canister.system_state.apply_ingress_induction_cycles_debit(
         canister.canister_id(),
+        round.cost_schedule,
         round.log,
         round.counters.charging_from_balance_error,
     );
@@ -315,13 +305,12 @@ fn finish_err(
 struct OriginalContext {
     call_origin: CallOrigin,
     call_or_task: CanisterCallOrTask,
-    prepaid_execution_cycles: Cycles,
+    prepaid_execution_cycles: CompoundCycles<Instructions>,
     method: WasmMethod,
     execution_parameters: ExecutionParameters,
     subnet_size: usize,
     time: Time,
     request_metadata: RequestMetadata,
-    freezing_threshold: Cycles,
     canister_id: CanisterId,
     log_dirty_pages: FlagStatus,
 }
@@ -388,6 +377,12 @@ impl CallOrTaskHelper {
             }
         }
 
+        let sender_info = match &original.call_or_task {
+            CanisterCallOrTask::Update(msg) | CanisterCallOrTask::Query(msg) => {
+                msg.sender_info().cloned()
+            }
+            CanisterCallOrTask::Task(_) => None,
+        };
         let call_context_id = canister
             .system_state
             .new_call_context(
@@ -395,6 +390,7 @@ impl CallOrTaskHelper {
                 original.call_or_task.cycles(),
                 original.time,
                 original.request_metadata.clone(),
+                sender_info,
             )
             .unwrap();
 
@@ -488,13 +484,13 @@ impl CallOrTaskHelper {
             .system_state
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
+                round.cost_schedule,
                 round.log,
                 round.counters.charging_from_balance_error,
             );
 
         // Check that the cycles balance does not go below the freezing
         // threshold after applying the Wasm execution state changes.
-        let old_balance = self.canister.system_state.balance();
         let requested = canister_state_changes
             .system_state_modifications
             .removed_cycles();
@@ -508,28 +504,23 @@ impl CallOrTaskHelper {
             + canister_state_changes
                 .system_state_modifications
                 .reserved_cycles();
-        let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
-            clean_canister.system_state.freeze_threshold,
-            clean_canister.system_state.memory_allocation,
-            new_memory_usage,
-            new_message_memory_usage,
-            clean_canister.compute_allocation(),
-            original.subnet_size,
-            round.cost_schedule,
-            new_reserved_balance,
-        );
         let reveal_top_up = self
             .canister
             .controllers()
             .contains(&original.call_origin.get_principal());
-        if old_balance < requested + freezing_threshold {
-            let err = CanisterOutOfCyclesError {
-                canister_id: self.canister.canister_id(),
-                available: old_balance,
+        if let Err(err) = round
+            .cycles_account_manager
+            .can_withdraw_cycles_with_threshold(
+                &self.canister.system_state,
                 requested,
-                threshold: original.freezing_threshold,
+                new_memory_usage,
+                new_message_memory_usage,
+                new_reserved_balance,
+                original.subnet_size,
+                round.cost_schedule,
                 reveal_top_up,
-            };
+            )
+        {
             let err = UserError::new(ErrorCode::CanisterOutOfCycles, err);
             info!(
                 round.log,
@@ -562,6 +553,7 @@ impl CallOrTaskHelper {
                     round.time,
                     round.network_topology,
                     round.hypervisor.subnet_id(),
+                    round.hypervisor.metrics(),
                     round.log,
                     round.counters.state_changes_error,
                     call_tree_metrics,
@@ -586,6 +578,7 @@ impl CallOrTaskHelper {
                         round.network_topology,
                         round.hypervisor.subnet_id(),
                         is_composite_query,
+                        round.hypervisor.metrics(),
                         round.log,
                     )
                 {
@@ -616,7 +609,6 @@ impl CallOrTaskHelper {
             .system_state
             .on_canister_result(
                 self.call_context_id,
-                None,
                 output.wasm_result.clone(),
                 instructions_used,
             )
@@ -808,7 +800,10 @@ impl PausedExecution for PausedCallOrTaskExecution {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessageOrTask, Cycles) {
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (CanisterMessageOrTask, CompoundCycles<Instructions>) {
         info!(
             log,
             "[DTS] Aborting {:?} execution of canister {}",

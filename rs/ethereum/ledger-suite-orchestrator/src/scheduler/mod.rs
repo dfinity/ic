@@ -863,7 +863,10 @@ async fn install_ledger_suite<R: CanisterRuntime>(
 
     let index_arg = Some(IndexArg::Init(IndexInitArg {
         ledger_id: ledger_canister_id,
+        #[allow(deprecated)]
         retrieve_blocks_from_ledger_interval_seconds: None,
+        min_retrieve_blocks_from_ledger_interval_seconds: None,
+        max_retrieve_blocks_from_ledger_interval_seconds: None,
     }));
     install_canister_once::<Index, _, _>(
         &args.contract,
@@ -907,6 +910,7 @@ fn icrc1_ledger_init_arg(
 ) -> LedgerInitArgs {
     use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
     use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
+    use icrc_ledger_types::icrc::metadata_key::MetadataKey;
     use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
 
     const LEDGER_FEE_SUBACCOUNT: [u8; 32] = [
@@ -914,7 +918,10 @@ fn icrc1_ledger_init_arg(
         0x0f, 0xee,
     ];
     const MAX_MEMO_LENGTH: u16 = 80;
-    const ICRC2_FEATURE: LedgerFeatureFlags = LedgerFeatureFlags { icrc2: true };
+    const ICRC2_FEATURE: LedgerFeatureFlags = LedgerFeatureFlags {
+        icrc2: true,
+        icrc152: false,
+    };
 
     LedgerInitArgs {
         minting_account: LedgerAccount::from(minter_id),
@@ -928,7 +935,7 @@ fn icrc1_ledger_init_arg(
         token_name: ledger_init_arg.token_name,
         token_symbol: ledger_init_arg.token_symbol,
         metadata: vec![(
-            "icrc1:logo".to_string(),
+            MetadataKey::ICRC1_LOGO.to_string(),
             LedgerMetadataValue::from(ledger_init_arg.token_logo),
         )],
         archive_options: icrc1_archive_options(

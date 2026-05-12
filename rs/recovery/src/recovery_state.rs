@@ -130,10 +130,10 @@ mod tests {
     use std::{fs, str::FromStr};
 
     use crate::app_subnet_recovery::AppSubnetRecoveryArgs;
-    use crate::error::GracefulExpect;
 
     use super::*;
     use ic_base_types::{PrincipalId, SubnetId};
+    use ic_types::NodeId;
     use tempfile::tempdir;
     use url::Url;
 
@@ -147,7 +147,7 @@ mod tests {
         assert!(tmp.path().join("recovery/recovery_state.json").exists());
 
         let deserialized_state =
-            RecoveryState::read(tmp.path()).expect_graceful("Failed to deserialize the state");
+            RecoveryState::read(tmp.path()).expect("Failed to deserialize the state");
 
         assert_eq!(deserialized_state, Some(state));
     }
@@ -177,24 +177,31 @@ mod tests {
                 admin_key_file: Some(PathBuf::from(dir)),
                 test_mode: true,
                 skip_prompts: true,
-                use_local_binaries: false,
             },
             subcommand_args: SubCommand::AppSubnetRecovery(AppSubnetRecoveryArgs {
                 subnet_id: fake_subnet_id(),
                 upgrade_version: None,
                 replacement_nodes: None,
                 replay_until_height: None,
-                readonly_pub_key: Some(String::from("Fake public key")),
+                readonly_pub_key: Some(String::from("Fake readonly public key")),
                 readonly_key_file: Some(PathBuf::from(dir)),
+                write_node_id_and_pub_key: Some((
+                    fake_node_id(),
+                    String::from("Fake write public key"),
+                )),
+                recovery_key_file: Some(PathBuf::from(dir)),
                 download_pool_node: None,
                 download_state_method: None,
                 keep_downloaded_state: Some(false),
+                download_state_height: None,
                 upload_method: None,
                 wait_for_cup_node: None,
                 chain_key_subnet_id: Some(fake_subnet_id()),
+                initial_dkg_subnet_id: None,
                 next_step: None,
                 upgrade_image_url: None,
                 upgrade_image_hash: None,
+                upgrade_image_launch_measurements_path: None,
                 skip: None,
             }),
             neuron_args: None,
@@ -204,6 +211,12 @@ mod tests {
     fn fake_subnet_id() -> SubnetId {
         PrincipalId::from_str("gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe")
             .map(SubnetId::from)
+            .unwrap()
+    }
+
+    fn fake_node_id() -> NodeId {
+        PrincipalId::from_str("igjkj-job4m-om7ug-cmzok-admxb-ag2xv-xqlgk-2bxsr-ro2mx-r5i7q-hqe")
+            .map(NodeId::from)
             .unwrap()
     }
 }
