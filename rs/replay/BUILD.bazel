@@ -224,8 +224,8 @@ rust_test(
     ],
     env = {
         # Keep sorted.
-        "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
     },
     proc_macro_deps = [
         # Keep sorted.
