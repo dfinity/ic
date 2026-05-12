@@ -4,6 +4,7 @@ This module defines utilities for building Rust canisters.
 
 load("@rules_motoko//motoko:defs.bzl", "motoko_binary")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 def _wasm_rust_transition_impl(_settings, attr):
     return {
@@ -129,8 +130,16 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
         visibility = visibility,
         testonly = testonly,
         keep_name_section = keep_name_section,
-        hidden_endpoints = hidden_endpoints,
     )
+
+    if hidden_endpoints != None:
+        _check_endpoints_test(
+            name = name + "_check_endpoints_test",
+            wasm = ":" + final_name,
+            hidden_endpoints = hidden_endpoints,
+            testonly = testonly,
+            visibility = visibility,
+        )
 
     native.alias(
         name = name,
@@ -185,56 +194,45 @@ def motoko_canister(name, entry, deps, **kwargs):
         actual = final_name,
     )
 
-def finalize_wasm(*, name, src_wasm, service_file = None, version_file, testonly, visibility = ["//visibility:public"], keep_name_section = False, hidden_endpoints = None):
+def finalize_wasm(*, name, src_wasm, service_file = None, version_file, testonly, visibility = ["//visibility:public"], keep_name_section = False):
     """Generates an output file name `name + '.wasm.gz'`.
 
     The input file is shrunk, annotated with metadata, and gzipped. The canister
     metadata consists of:
         'icp:public git_commit_id': version used in the build
         'icp:public candid:service': the canister's candid service description
-
-    When `hidden_endpoints` is provided (a label pointing at a `hidden_endpoints.conf`
-    file), `ic-wasm check-endpoints --hidden <conf>` is also run on the finalized
-    wasm before gzip, failing the build if the wasm exports a method that is
-    neither in the candid `service` nor allowlisted in the conf.
-
-    Args:
-      name: target name; the rule outputs a file `name`.
-      src_wasm: the input wasm label.
-      service_file: optional candid `.did` file to embed as `candid:service` metadata.
-      version_file: text file whose contents become the `git_commit_id` metadata.
-      testonly: testonly attribute on the generated genrule.
-      visibility: visibility of the output target.
-      keep_name_section: pass `--keep-name-section` to every `ic-wasm` invocation.
-      hidden_endpoints: optional `hidden_endpoints.conf` label; enables `ic-wasm check-endpoints --hidden <conf>`.
     """
-
-    steps = [
-        "{ic_wasm} {input_wasm} -o $@.shrunk shrink {keep_name_section}",
-        "{ic_wasm} $@.shrunk -o $@.meta metadata candid:service {keep_name_section} --visibility public --file " + "$(location {})".format(service_file) if not (service_file == None) else "cp $@.shrunk $@.meta",  # if service_file is None, don't include a service file
-        "{ic_wasm} $@.meta -o $@.ver metadata git_commit_id {keep_name_section} --visibility public --file {version_file}",
-    ]
-    if hidden_endpoints != None:
-        steps.append("{ic_wasm} $@.ver check-endpoints --hidden $(location {hidden_endpoints})")
-    steps.append("{pigz} --processes 16 --no-name $@.ver --stdout > $@")
-
     native.genrule(
         name = "_" + name + "_finalize",
-        srcs = [src_wasm, version_file] +
-               ([service_file] if not (service_file == None) else []) +
-               ([hidden_endpoints] if hidden_endpoints != None else []),
+        srcs = [src_wasm, version_file] + ([service_file] if not (service_file == None) else []),
         outs = [name],
         visibility = visibility,
         testonly = testonly,
         message = "Finalizing canister " + name,
         tools = ["@crate_index//:ic-wasm__ic-wasm", "@pigz"],
-        cmd_bash = " && ".join(steps)
-            .format(
-            input_wasm = "$(location {})".format(src_wasm),
-            ic_wasm = "$(location @crate_index//:ic-wasm__ic-wasm)",
-            version_file = "$(location {})".format(version_file),
-            pigz = "$(location @pigz)",
-            keep_name_section = "--keep-name-section" if keep_name_section else "",
-            hidden_endpoints = hidden_endpoints if hidden_endpoints != None else "",
-        ),
+        cmd_bash = " && ".join([
+            "{ic_wasm} {input_wasm} -o $@.shrunk shrink {keep_name_section}",
+            "{ic_wasm} $@.shrunk -o $@.meta metadata candid:service {keep_name_section} --visibility public --file " + "$(location {})".format(service_file) if not (service_file == None) else "cp $@.shrunk $@.meta",  # if service_file is None, don't include a service file
+            "{ic_wasm} $@.meta -o $@.ver metadata git_commit_id {keep_name_section} --visibility public --file {version_file}",
+            "{pigz} --processes 16 --no-name $@.ver --stdout > $@",
+        ])
+            .format(input_wasm = "$(location {})".format(src_wasm), ic_wasm = "$(location @crate_index//:ic-wasm__ic-wasm)", version_file = "$(location {})".format(version_file), pigz = "$(location @pigz)", keep_name_section = "--keep-name-section" if keep_name_section else ""),
+    )
+
+def _check_endpoints_test(name, wasm, hidden_endpoints, testonly, visibility):
+    sh_test(
+        name = name,
+        srcs = ["//bazel:check_endpoints_test.sh"],
+        data = [
+            wasm,
+            hidden_endpoints,
+            "@crate_index//:ic-wasm__ic-wasm",
+        ],
+        env = {
+            "IC_WASM": "$(location @crate_index//:ic-wasm__ic-wasm)",
+            "WASM": "$(location {})".format(wasm),
+            "HIDDEN": "$(location {})".format(hidden_endpoints),
+        },
+        testonly = testonly,
+        visibility = visibility,
     )
