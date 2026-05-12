@@ -116,7 +116,8 @@ COPY_ARGS=()
 for entry in "${NNS_CANISTERS[@]}"; do
     target="${entry%%|*}"
     outname="${entry##*|}"
-    pkg="${target#//}"; pkg="${pkg%%:*}"
+    pkg="${target#//}"
+    pkg="${pkg%%:*}"
     name="${target##*:}"
     COPY_ARGS+=("$pkg/$name" "$outname")
 done

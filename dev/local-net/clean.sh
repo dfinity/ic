@@ -16,9 +16,15 @@ WIPE_ARTIFACTS=0
 WIPE_CACHE=0
 for arg in "$@"; do
     case "$arg" in
-        --all)   WIPE_ARTIFACTS=1; WIPE_CACHE=1 ;;
+        --all)
+            WIPE_ARTIFACTS=1
+            WIPE_CACHE=1
+            ;;
         --cache) WIPE_CACHE=1 ;;
-        --help|-h) sed -n '3,9p' "$0"; exit 0 ;;
+        --help | -h)
+            sed -n '3,9p' "$0"
+            exit 0
+            ;;
     esac
 done
 

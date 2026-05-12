@@ -20,9 +20,19 @@ LOGS_ARGS=()
 GREP_ARGS=()
 while [ $# -gt 0 ]; do
     case "$1" in
-        --) shift; LOGS_ARGS+=("$@"); break ;;
-        -*) LOGS_ARGS+=("$1"); shift ;;
-        *)  GREP_ARGS+=("$1"); shift ;;
+        --)
+            shift
+            LOGS_ARGS+=("$@")
+            break
+            ;;
+        -*)
+            LOGS_ARGS+=("$1")
+            shift
+            ;;
+        *)
+            GREP_ARGS+=("$1")
+            shift
+            ;;
     esac
 done
 
