@@ -58,7 +58,7 @@ fn in_replica_vault(
         logger,
         "Proceeding with an in-replica csp_vault, CryptoConfig: {:?}", config
     );
-    let vault = ProdLocalCspVault::new_in_dir(&config.crypto_root, metrics, logger);
+    let vault = ProdLocalCspVault::builder_in_dir(&config.crypto_root, metrics, logger).build();
     Arc::new(vault)
 }
 
