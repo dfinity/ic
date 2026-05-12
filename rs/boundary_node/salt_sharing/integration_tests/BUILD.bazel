@@ -2,21 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
-DEV_DATA = [
-    "@mainnet_canisters//:registry.wasm.gz",
-    "//rs/registry/canister:registry-canister",
-    "//rs/pocket_ic_server:pocket-ic-server",
-    "//rs/boundary_node/salt_sharing:salt_sharing_canister",
-]
-
-DEV_ENV = {
-    "CARGO_MANIFEST_DIR": "rs/nns/integration_tests",
-    "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
-    "MAINNET_REGISTRY_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:registry.wasm.gz)",
-    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
-    "SALT_SHARING_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/salt_sharing:salt_sharing_canister)",
-}
-
 rust_library(
     name = "salt_sharing_canister_integration_tests",
     testonly = True,
@@ -54,8 +39,19 @@ rust_test_suite(
     srcs = glob(
         ["tests/**/*.rs"],
     ),
-    data = DEV_DATA,
-    env = DEV_ENV,
+    data = [
+        "@mainnet_canisters//:registry.wasm.gz",
+        "//rs/registry/canister:registry-canister",
+        "//rs/pocket_ic_server:pocket-ic-server",
+        "//rs/boundary_node/salt_sharing:salt_sharing_canister",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/nns/integration_tests",
+        "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
+        "MAINNET_REGISTRY_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:registry.wasm.gz)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "SALT_SHARING_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/salt_sharing:salt_sharing_canister)",
+    },
     deps = [
         # Keep sorted.
         ":salt_sharing_canister_integration_tests",

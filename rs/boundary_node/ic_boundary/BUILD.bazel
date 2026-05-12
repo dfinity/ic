@@ -2,8 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-VERSION = "0.1.0"
-
 rust_binary(
     name = "ic-boundary",
     srcs = glob(
@@ -15,7 +13,7 @@ rust_binary(
         "@crate_index//:async-trait",
         "@crate_index//:derive-new",
     ],
-    version = VERSION,
+    version = "0.1.0",
     deps = [
         # Keep sorted.
         "//packages/ic-ed25519",
@@ -205,7 +203,7 @@ rust_library(
         "@crate_index//:derive-new",
         "@crate_index//:indoc",
     ],
-    version = VERSION,
+    version = "0.1.0",
     deps = [
         # Keep sorted.
         "//packages/ic-ed25519",
