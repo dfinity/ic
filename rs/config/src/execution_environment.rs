@@ -199,9 +199,9 @@ pub const DEFAULT_MAX_NUMBER_OF_CANISTERS: u64 = 120_000;
 pub const MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER: usize = 10;
 
 /// Maximum number of http outcall requests in-flight on a subnet.
-/// To support 100 req/s with a worst case request latency of 30s the queue size needs buffer 100 req/s * 30s = 3000 req.
+/// To support 100 req/s with a worst case request latency of 30s the queue size needs buffer 100 req/s * 120s = 12000 req.
 /// The worst case request latency used here should be equivalent to the request timeout in the adapter.
-pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
+pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 12000;
 
 /// The default value of `wasm_memory_limit` in the canister settings:
 /// - this value is used directly for newly created canisters.
