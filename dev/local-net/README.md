@@ -11,10 +11,8 @@ run real BFT consensus over a real QUIC P2P transport.
 
 ## Quick start
 
-Prerequisites: OrbStack (or Docker Desktop) with Rosetta enabled; dfx
-(optional, only for deploying canisters); and a VPN connection to DFINITY's
-internal network (for the bazel-remote cache — without it the first build
-is much slower).
+Prerequisites: Docker Desktop (with Rosetta enabled on Apple Silicon); dfx
+(optional, only for deploying canisters).
 
 ```sh
 cd dev/local-net          # from the IC repo root
@@ -44,22 +42,40 @@ What this network **is**:
 - Suitable for testing changes to `rs/p2p/`, `rs/consensus/`, `rs/state_manager/`,
   ingress handling, transport, etc.
 
-What it **isn't** (yet):
-- NNS-enabled. Registry / Governance / Ledger canisters are not installed.
-  Anything requiring them (`dfx wallet`, `dfx ledger`, `ic-admin get-topology`)
-  will report `Canister rwlgt-... not found`.
+What it **isn't**:
 - Multi-subnet. Single subnet, single canister-ID range.
 - A faithful production deployment shape. There is no HostOS / SetupOS /
   orchestrator layer; replicas are plain Linux processes.
+
+## Two variants
+
+After `docker compose up -d` you have a working subnet. There are two
+flavors of "working":
+
+- **Bare application subnet** (default after `prep.sh`) — accepts canister
+  deploys via `provisional_create_canister_with_cycles`. No NNS canisters
+  installed, so `dfx wallet`, `dfx ledger`, and `ic-admin get-topology`
+  don't work. This is what variant 2 in the original plan was. Fast to
+  bring up, sufficient for most consensus/P2P work.
+- **NNS-enabled subnet** — run `./nns-init.sh` after `docker compose up`
+  to install Registry, Governance, Root, Lifeline, Cycles-Minting,
+  Ledger, GTC, SNS-WASM, etc. as real canisters on the same subnet.
+  Adds ~30 min the first time (15 canister WASMs to build) and ~2 min
+  thereafter (mostly cached). After this, `ic-admin get-topology` and
+  governance flows work.
+
+You can also go from bare → NNS-enabled in place — just run `nns-init.sh`
+against the already-running network. No need to restart anything.
 
 ## The scripts
 
 | Script | Purpose | Typical time |
 |---|---|---|
-| `build.sh` | Cold build of all binaries via the official `ic-build` image | 5–10 min first, ~1 min incr |
+| `build.sh` | Cold build of replica + ic-prep + ic-admin + ic-nns-init + sandboxes | 5–10 min first, ~1 min incr |
 | `prep.sh` | Run `ic-prep`, generate per-node `ic.json5`, lay out `bootstrap/` | <5s |
-| `verify.sh` | Smoke-test the running network (status + dfx ping + per-node health) | <5s |
+| `verify.sh` | Smoke-test (status + dfx ping + per-node health + NNS state) | <5s |
 | `iter.sh [services] [--tail]` | bazel build → restart → wait healthy. **Fast dev loop.** | 20s warm |
+| `nns-init.sh` | Build 15 NNS canister WASMs and install them on the running subnet | 30 min first, ~2 min incr |
 | `reset.sh` | Down `-v`, regen prep, fresh up. Use for genesis from height 0. | ~15s |
 | `logs.sh [pattern]` | `docker compose logs -f` with optional grep filter | streaming |
 | `clean.sh [--all]` | Tear down compose + builder; `--all` also wipes `bootstrap/`, `out/`, `cache/` | <5s |
@@ -154,9 +170,9 @@ file ... missing field 'X'`. If you've edited `prep.sh`, regenerate with
 Pass `--no-wallet` to `dfx canister create`. See DEPLOY.md.
 
 **`Canister rwlgt-iiaaa-aaaaa-aaaaa-cai not found` from `ic-admin`**
-That's the NNS Registry canister, which isn't installed. Use commands that
-don't require the NNS Registry — e.g. operate on the local-store directly,
-or install the NNS canisters (out of scope for now).
+That's the NNS Registry canister. You're on a bare application subnet
+(variant 2) where NNS canisters aren't installed. Run `./nns-init.sh` to
+install them, or use commands that don't go through the NNS.
 
 **Bazel build fails with `RegistryUnreachable` or `No route to host`**
 The bazel-remote cache and downloader live on DFINITY's internal network.

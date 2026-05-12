@@ -58,11 +58,13 @@ the subnet has the canister-ID range that matches mainnet conventions
 `bnz7o-iuaaa-aaaaa-qaaaa-cai`, the second `bd3sg-...`, and so on — i.e.
 familiar dfx IDs work.
 
-## Limitations
+## NNS-dependent flows
 
 Anything that requires NNS canisters (`dfx wallet`, `dfx ledger`,
-`dfx nns ...`, governance proposals, cycles-ledger interactions) won't
-work on this variant — those canisters aren't installed. For that flow
-we'd need a separate `nns-init.sh` step that installs Registry,
-Governance, Root, Lifeline, Cycles-Minting, and Ledger as canisters on
-top of this same network.
+`dfx nns ...`, governance proposals, cycles-ledger interactions) needs
+the NNS canisters installed first. Run `./nns-init.sh` against the
+running network — it builds and installs Registry, Governance, Root,
+Lifeline, Cycles-Minting, Ledger, GTC, SNS-WASM, and friends as real
+canisters on the existing subnet. After that, `ic-admin --nns-url
+http://localhost:8080 get-topology` works, and so do the dfx
+NNS-dependent commands.
