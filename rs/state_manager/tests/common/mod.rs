@@ -157,7 +157,7 @@ pub fn encode_decode_stream_test<
         });
 
         state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
-
+        state_manager.flush_hash_channel();
         certify_height(&state_manager, Height::new(1));
 
         let slice = state_manager
@@ -219,7 +219,7 @@ pub fn encode_partial_slice_test(
         });
 
         state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
-
+        state_manager.flush_hash_channel();
         certify_height(&state_manager, Height::new(1));
 
         let slice = state_manager
@@ -313,6 +313,7 @@ pub fn modify_encoded_stream_helper<F: FnOnce(StreamSlice) -> Stream>(
     });
 
     state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
+    state_manager.flush_hash_channel();
 
     certify_height(state_manager, Height::new(2));
 
@@ -571,6 +572,7 @@ fn state_manager_with_verifier_result(
         &config,
         None,
         ic_types::malicious_flags::MaliciousFlags::default(),
+        tokio::sync::watch::channel(Height::from(0)).0,
         None,
         &metrics_registry,
         log,
@@ -626,6 +628,7 @@ fn state_manager_test_with_state_sync_and_verifier_result<
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
+            tokio::sync::watch::channel(Height::from(0)).0,
             None,
             &metrics_registry,
             log.clone(),
@@ -665,6 +668,7 @@ where
                 &config,
                 starting_height,
                 ic_types::malicious_flags::MaliciousFlags::default(),
+                tokio::sync::watch::channel(Height::from(0)).0,
                 None,
                 &metrics_registry,
                 log_sm.clone(),
@@ -724,6 +728,7 @@ where
                 &config,
                 starting_height,
                 ic_types::malicious_flags::MaliciousFlags::default(),
+                tokio::sync::watch::channel(Height::from(0)).0,
                 None,
                 &metrics_registry,
                 log.clone(),
@@ -787,6 +792,7 @@ where
                 &config,
                 starting_height,
                 ic_types::malicious_flags::MaliciousFlags::default(),
+                tokio::sync::watch::channel(Height::from(0)).0,
                 None,
                 &metrics_registry,
                 log.clone(),

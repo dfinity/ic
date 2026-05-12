@@ -301,6 +301,7 @@ impl Player {
             &cfg.state_manager,
             None,
             MaliciousFlags::default(),
+            tokio::sync::watch::channel(Height::from(0)).0,
             Some(replicated_state_invariants),
             &metrics_registry,
             log.clone(),

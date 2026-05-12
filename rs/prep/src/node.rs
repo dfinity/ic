@@ -225,6 +225,7 @@ impl InitializedNode {
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
+            tokio::sync::watch::channel(ic_types::Height::from(0)).0,
             None,
             &ic_metrics::MetricsRegistry::new(),
             ic_logger::replica_logger::no_op_logger(),

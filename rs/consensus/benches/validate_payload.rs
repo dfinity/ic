@@ -102,6 +102,7 @@ where
             &StateManagerConfig::new(tmpdir.path().to_path_buf()),
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
+            tokio::sync::watch::channel(ic_types::Height::from(0)).0,
             None,
             &metrics_registry,
             no_op_logger(),

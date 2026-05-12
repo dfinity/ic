@@ -1,6 +1,7 @@
 {
     "boundary-node": "eng-boundary-nodes",
     "Consensus": "eng-consensus-prs",
+    "core-protocol": "eng-core-protocol-prs",
     "defi": "eng-defi-prs",
     "DRE": "eng-release-bots",
     "ic-support": "ic-support-notifications",

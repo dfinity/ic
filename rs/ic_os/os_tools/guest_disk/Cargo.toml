@@ -20,6 +20,7 @@ ic_device = { path = "../../device" }
 sev_guest = { path = "../../sev/guest" }
 ic-sys = { path = "../../../sys" }
 itertools = { workspace = true }
+mockall = { workspace = true }
 nix = { workspace = true }
 prometheus = { workspace = true }
 rand = { workspace = true }
