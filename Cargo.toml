@@ -790,13 +790,13 @@ prost = "0.13.3"
 prost-build = "0.13.3"
 protobuf = "3.7.2"
 qrcode = { version = "0.14.1", default-features = false }
-quinn = { version = "0.11.5", default-features = false, features = [
+quinn = { version = "0.11.9", default-features = false, features = [
     "ring",
     "log",
     "runtime-tokio",
     "rustls",
 ] }
-quinn-udp = "0.5.5"
+quinn-udp = "0.5.14"
 quote = "1.0.37"
 rand = { version = "0.8.5", features = ["small_rng"] }
 rand_chacha = "0.3.1"
@@ -922,7 +922,7 @@ wast = "248.0.0"
 wat = "~1.248.0"
 webpki-roots = "1.0.6"
 which = "6.0.3"
-wirm = { version = "2.1.0", features = ["parallel"] }
+wirm = { version = "4.0.4", features = ["parallel"] }
 wsl = "0.1.0"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
@@ -933,4 +933,4 @@ zstd = "0.13.2"
 [workspace.dependencies.ic-wasm]
 default-features = false
 features = ["exe"]
-version = "^0.8.1"
+version = "^0.9.11"
