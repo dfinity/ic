@@ -40,10 +40,10 @@ rust_test_suite(
         ["tests/**/*.rs"],
     ),
     data = [
-        "@mainnet_canisters//:registry.wasm.gz",
-        "//rs/registry/canister:registry-canister",
-        "//rs/pocket_ic_server:pocket-ic-server",
         "//rs/boundary_node/salt_sharing:salt_sharing_canister",
+        "//rs/pocket_ic_server:pocket-ic-server",
+        "//rs/registry/canister:registry-canister",
+        "@mainnet_canisters//:registry.wasm.gz",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/nns/integration_tests",
