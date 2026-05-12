@@ -1826,9 +1826,6 @@ impl ExecutionEnvironment {
                                 Ok(args) => {
                                     let canister_id = args.get_canister_id();
                                     let subnet_size = registry_settings.subnet_size;
-                                    let max_fee = self
-                                        .cycles_account_manager
-                                        .max_fetch_canister_logs_fee(subnet_size, cost_schedule);
                                     self.execute_mgmt_operation_on_canister(
                                         canister_id,
                                         |canister, msg, _round_limits, _consumed_cycles| {
@@ -1838,15 +1835,9 @@ impl ExecutionEnvironment {
                                                 args,
                                                 self.config.log_memory_store_feature,
                                                 msg,
-                                                max_fee,
-                                                |len| {
-                                                    self.cycles_account_manager
-                                                        .fetch_canister_logs_fee(
-                                                            NumBytes::new(len as u64),
-                                                            subnet_size,
-                                                            cost_schedule,
-                                                        )
-                                                },
+                                                &self.cycles_account_manager,
+                                                subnet_size,
+                                                cost_schedule,
                                             )
                                         },
                                         &mut state,

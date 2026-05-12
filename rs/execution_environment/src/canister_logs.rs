@@ -2,6 +2,7 @@ use crate::canister_manager::types::{CanisterManagerError, CanisterManagerRespon
 use crate::canister_settings::VisibilitySettings;
 use candid::Encode;
 use ic_config::flag_status::FlagStatus;
+use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
     CanisterLogRecord, FetchCanisterLogsFilter, FetchCanisterLogsRange, FetchCanisterLogsRequest,
@@ -10,7 +11,7 @@ use ic_management_canister_types_private::{
 use ic_replicated_state::CanisterState;
 use ic_types::messages::CanisterCall;
 use ic_types::{NumBytes, PrincipalId};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use std::collections::VecDeque;
 
 pub(crate) fn fetch_canister_logs(
@@ -19,9 +20,11 @@ pub(crate) fn fetch_canister_logs(
     args: FetchCanisterLogsRequest,
     log_memory_store_feature: FlagStatus,
     msg: &mut CanisterCall,
-    max_fee: Cycles,
-    get_actual_fee: impl Fn(usize) -> Cycles,
+    cycles_account_manager: &CyclesAccountManager,
+    subnet_size: usize,
+    cost_schedule: CanisterCyclesCostSchedule,
 ) -> Result<CanisterManagerResponse, CanisterManagerError> {
+    let max_fee = cycles_account_manager.max_fetch_canister_logs_fee(subnet_size, cost_schedule);
     let payment = msg.cycles();
     if payment < max_fee {
         return Err(CanisterManagerError::FetchCanisterLogsNotEnoughCycles {
@@ -32,7 +35,11 @@ pub(crate) fn fetch_canister_logs(
     let canister_id = canister.canister_id();
     let reply = fetch_canister_logs_response(sender, canister, args, log_memory_store_feature)
         .map_err(|_| CanisterManagerError::CallerNotAuthorized)?;
-    msg.deduct_cycles(get_actual_fee(reply.len()));
+    msg.deduct_cycles(cycles_account_manager.fetch_canister_logs_fee(
+        NumBytes::new(reply.len() as u64),
+        subnet_size,
+        cost_schedule,
+    ));
     Ok(CanisterManagerResponse {
         canister_id,
         reply: Some(reply),
