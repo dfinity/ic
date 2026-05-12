@@ -111,14 +111,18 @@ where
         .into_bytes()
         .map_err(|e| (RejectionCode::Unknown, e.to_string()))?;
 
-    let res: CallResult<Vec<u8>> = ic_cdk::call::Call::unbounded_wait(canister_id.get().0, method_name)
-        .with_raw_args(bytes.as_slice())
-        .await
-        .map(|response| response.into_bytes())
-        .map_err(|e| match e {
-            ic_cdk::call::CallFailed::CallRejected(r) => (RejectionCode::from(r.raw_reject_code()), r.reject_message().to_string()),
-            other => (RejectionCode::Unknown, other.to_string()),
-        });
+    let res: CallResult<Vec<u8>> =
+        ic_cdk::call::Call::unbounded_wait(canister_id.get().0, method_name)
+            .with_raw_args(bytes.as_slice())
+            .await
+            .map(|response| response.into_bytes())
+            .map_err(|e| match e {
+                ic_cdk::call::CallFailed::CallRejected(r) => (
+                    RejectionCode::from(r.raw_reject_code()),
+                    r.reject_message().to_string(),
+                ),
+                other => (RejectionCode::Unknown, other.to_string()),
+            });
 
     res.and_then(|bytes| {
         Ok(ProtoBuf::<Res>::from_bytes(bytes)
