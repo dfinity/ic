@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Strip the quinn-proto wasm-bindgen leak from the cargo-bazel lockfiles.
+"""
+Strip the quinn-proto wasm-bindgen leak from the cargo-bazel lockfiles.
 
 Background:
     quinn-proto 0.11.14 declares dependencies for the
@@ -92,9 +93,7 @@ def strip_toml_lock(text: str) -> tuple[str, bool]:
     if not match:
         return text, False
     deps_body = match.group(2)
-    cleaned_lines = [
-        line for line in deps_body.split("\n") if line not in LEAKED_TOML_DEPS
-    ]
+    cleaned_lines = [line for line in deps_body.split("\n") if line not in LEAKED_TOML_DEPS]
     cleaned_body = "\n".join(cleaned_lines)
     if cleaned_body == deps_body:
         return text, False
@@ -106,8 +105,10 @@ def write_json_lock(data: dict) -> None:
 
 
 def query_expected_digest() -> str:
-    """Run `bazel query` to force cargo-bazel digest verification and parse
-    the expected digest from the failure output."""
+    """
+    Run `bazel query` to force cargo-bazel digest verification and parse
+    the expected digest from the failure output.
+    """
     result = subprocess.run(
         ["bazel", "query", CRATE_INDEX_QUERY_TARGET],
         cwd=REPO_ROOT,
@@ -122,10 +123,7 @@ def query_expected_digest() -> str:
     combined = result.stdout + "\n" + result.stderr
     match = EXPECTED_DIGEST_RE.search(combined)
     if not match:
-        sys.exit(
-            "Could not find expected digest in bazel output. "
-            "Full output:\n" + combined
-        )
+        sys.exit("Could not find expected digest in bazel output. " "Full output:\n" + combined)
     return match.group(1)
 
 
@@ -138,12 +136,7 @@ def verify_lockfile() -> None:
         text=True,
     )
     if result.returncode != 0:
-        sys.exit(
-            "bazel query still fails after digest update. Output:\n"
-            + result.stdout
-            + "\n"
-            + result.stderr
-        )
+        sys.exit("bazel query still fails after digest update. Output:\n" + result.stdout + "\n" + result.stderr)
 
 
 def main() -> int:
