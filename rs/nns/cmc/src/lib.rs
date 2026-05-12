@@ -2,8 +2,41 @@
 pub use ic_management_canister_types::CanisterSettings;
 
 use candid::{CandidType, Nat};
-use ic_cdk::api::call::{CallResult, RejectionCode};
 use std::time::{Duration, SystemTime};
+
+/// Backwards-compatible reject code enum, matching the discriminants used by
+/// ic-cdk 0.19's `RejectionCode` enum. The corresponding type was removed in
+/// 0.20 in favour of `ic_cdk::call::RejectCode`, which is non-exhaustive and
+/// doesn't roundtrip via `as i32` like the old enum did.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(i32)]
+pub enum RejectionCode {
+    NoError = 0,
+    SysFatal = 1,
+    SysTransient = 2,
+    DestinationInvalid = 3,
+    CanisterReject = 4,
+    CanisterError = 5,
+    Unknown = 6,
+}
+
+impl From<u32> for RejectionCode {
+    fn from(value: u32) -> Self {
+        match value {
+            0 => RejectionCode::NoError,
+            1 => RejectionCode::SysFatal,
+            2 => RejectionCode::SysTransient,
+            3 => RejectionCode::DestinationInvalid,
+            4 => RejectionCode::CanisterReject,
+            5 => RejectionCode::CanisterError,
+            _ => RejectionCode::Unknown,
+        }
+    }
+}
+
+/// Backwards-compatible alias for `Result<T, (RejectionCode, String)>` as it
+/// was returned by ic-cdk 0.19's `ic_cdk::api::call::*` helpers.
+pub type CallResult<T> = Result<T, (RejectionCode, String)>;
 
 use dfn_protobuf::{ProtoBuf, ToProto};
 
@@ -78,8 +111,14 @@ where
         .into_bytes()
         .map_err(|e| (RejectionCode::Unknown, e.to_string()))?;
 
-    let res: CallResult<Vec<u8>> =
-        ic_cdk::api::call::call_raw(canister_id.get().0, method_name, bytes.as_slice(), 0).await;
+    let res: CallResult<Vec<u8>> = ic_cdk::call::Call::unbounded_wait(canister_id.get().0, method_name)
+        .with_raw_args(bytes.as_slice())
+        .await
+        .map(|response| response.into_bytes())
+        .map_err(|e| match e {
+            ic_cdk::call::CallFailed::CallRejected(r) => (RejectionCode::from(r.raw_reject_code()), r.reject_message().to_string()),
+            other => (RejectionCode::Unknown, other.to_string()),
+        });
 
     res.and_then(|bytes| {
         Ok(ProtoBuf::<Res>::from_bytes(bytes)

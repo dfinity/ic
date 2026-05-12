@@ -274,8 +274,17 @@ pub async fn change_canister(request: ChangeCanisterRequest) -> Result<(), Strin
     })
 }
 
+fn map_call_failed(e: ic_cdk::call::CallFailed) -> (i32, String) {
+    match &e {
+        ic_cdk::call::CallFailed::CallRejected(r) => {
+            (r.raw_reject_code() as i32, r.reject_message().to_string())
+        }
+        _ => (-1, e.to_string()),
+    }
+}
+
 /// Calls a function of the management canister to install the requested code.
-async fn install_code(request: ChangeCanisterRequest) -> ic_cdk::api::call::CallResult<()> {
+async fn install_code(request: ChangeCanisterRequest) -> Result<(), (i32, String)> {
     let ChangeCanisterRequest {
         mode,
         canister_id,
@@ -310,12 +319,14 @@ async fn install_code(request: ChangeCanisterRequest) -> ic_cdk::api::call::Call
             arg,
             sender_canister_version,
         };
-        ic_cdk::api::call::call(
+        ic_cdk::call::Call::unbounded_wait(
             Principal::try_from(IC_00.get().as_slice()).unwrap(),
             "install_chunked_code",
-            (&argument,),
         )
+        .with_args(&(&argument,))
         .await
+        .map_err(map_call_failed)
+        .map(|_| ())
     } else {
         let argument = InstallCodeArgs {
             mode,
@@ -324,12 +335,14 @@ async fn install_code(request: ChangeCanisterRequest) -> ic_cdk::api::call::Call
             arg,
             sender_canister_version,
         };
-        ic_cdk::api::call::call(
+        ic_cdk::call::Call::unbounded_wait(
             Principal::try_from(IC_00.get().as_slice()).unwrap(),
             "install_code",
-            (&argument,),
         )
+        .with_args(&(&argument,))
         .await
+        .map_err(map_call_failed)
+        .map(|_| ())
     }
 }
 
