@@ -31,6 +31,7 @@ ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-client = { path = "../../canister_client" }
 ic-cdk = { workspace = true }
+ic-cdk-management-canister = { workspace = true }
 ic-config = { path = "../../config" }
 ic-limits = { path = "../../limits" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }

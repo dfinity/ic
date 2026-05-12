@@ -841,7 +841,7 @@ fn install_bitcoin_mock_canister(env: &StateMachine, btc_network: Network) {
     env.install_existing_canister(
         cid,
         bitcoin_mock_wasm(),
-        Encode!(&ic_cdk::bitcoin_canister::Network::from(btc_network)).unwrap(),
+        Encode!(&ic_cdk_0_19::bitcoin_canister::Network::from(btc_network)).unwrap(),
     )
     .unwrap();
 }

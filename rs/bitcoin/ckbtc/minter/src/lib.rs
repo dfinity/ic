@@ -7,8 +7,8 @@ use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
 use canlog::log;
-use ic_cdk::bitcoin_canister;
-use ic_cdk::management_canister::SignWithEcdsaArgs;
+use ic_cdk_0_19::bitcoin_canister;
+use ic_cdk_management_canister::SignWithEcdsaArgs;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::Memo;
 use scopeguard::{ScopeGuard, guard};
@@ -1739,11 +1739,11 @@ impl CanisterRuntime for IcCanisterRuntime {
         derivation_path: Vec<Vec<u8>>,
         message_hash: [u8; 32],
     ) -> Result<Vec<u8>, CallError> {
-        ic_cdk::management_canister::sign_with_ecdsa(&SignWithEcdsaArgs {
+        ic_cdk_management_canister::sign_with_ecdsa(&SignWithEcdsaArgs {
             message_hash: message_hash.to_vec(),
             derivation_path,
-            key_id: ic_cdk::management_canister::EcdsaKeyId {
-                curve: ic_cdk::management_canister::EcdsaCurve::Secp256k1,
+            key_id: ic_cdk_management_canister::EcdsaKeyId {
+                curve: ic_cdk_management_canister::EcdsaCurve::Secp256k1,
                 name: key_name.clone(),
             },
         })
@@ -1762,7 +1762,7 @@ impl CanisterRuntime for IcCanisterRuntime {
             network: network.into(),
         })
         .await
-        .map_err(|err| CallError::from_cdk_call_error("bitcoin_send_transaction", err))
+        .map_err(|err| CallError::from_cdk_0_19_call_error("bitcoin_send_transaction", err))
     }
 
     fn block_time(&self, network: Network) -> Duration {

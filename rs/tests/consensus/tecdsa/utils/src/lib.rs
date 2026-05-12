@@ -5,7 +5,7 @@ use ic_agent::AgentError;
 use ic_base_types::{CanisterId, NodeId, SubnetId};
 use ic_bls12_381::G1Affine;
 use ic_canister_client::Sender;
-use ic_cdk::management_canister::{
+use ic_cdk_management_canister::{
     SignWithEcdsaResult, SignWithSchnorrResult, VetKDDeriveKeyResult,
 };
 use ic_config::subnet_config::{ECDSA_SIGNATURE_FEE, SCHNORR_SIGNATURE_FEE, VETKD_FEE};
@@ -1285,40 +1285,40 @@ pub enum SignWithChainKeyReply {
     VetKd(VetKdDeriveKeyResult),
 }
 
-fn cast_ecdsa_key_id(key_id: EcdsaKeyId) -> ic_cdk::management_canister::EcdsaKeyId {
-    ic_cdk::management_canister::EcdsaKeyId {
+fn cast_ecdsa_key_id(key_id: EcdsaKeyId) -> ic_cdk_management_canister::EcdsaKeyId {
+    ic_cdk_management_canister::EcdsaKeyId {
         curve: match key_id.curve {
-            EcdsaCurve::Secp256k1 => ic_cdk::management_canister::EcdsaCurve::Secp256k1,
+            EcdsaCurve::Secp256k1 => ic_cdk_management_canister::EcdsaCurve::Secp256k1,
         },
         name: key_id.name,
     }
 }
 
-fn cast_schnorr_key_id(key_id: SchnorrKeyId) -> ic_cdk::management_canister::SchnorrKeyId {
-    ic_cdk::management_canister::SchnorrKeyId {
+fn cast_schnorr_key_id(key_id: SchnorrKeyId) -> ic_cdk_management_canister::SchnorrKeyId {
+    ic_cdk_management_canister::SchnorrKeyId {
         algorithm: match key_id.algorithm {
             SchnorrAlgorithm::Bip340Secp256k1 => {
-                ic_cdk::management_canister::SchnorrAlgorithm::Bip340secp256k1
+                ic_cdk_management_canister::SchnorrAlgorithm::Bip340secp256k1
             }
-            SchnorrAlgorithm::Ed25519 => ic_cdk::management_canister::SchnorrAlgorithm::Ed25519,
+            SchnorrAlgorithm::Ed25519 => ic_cdk_management_canister::SchnorrAlgorithm::Ed25519,
         },
         name: key_id.name,
     }
 }
 
-fn cast_vetkd_key_id(key_id: VetKdKeyId) -> ic_cdk::management_canister::VetKDKeyId {
-    ic_cdk::management_canister::VetKDKeyId {
+fn cast_vetkd_key_id(key_id: VetKdKeyId) -> ic_cdk_management_canister::VetKDKeyId {
+    ic_cdk_management_canister::VetKDKeyId {
         curve: match key_id.curve {
-            VetKdCurve::Bls12_381_G2 => ic_cdk::management_canister::VetKDCurve::Bls12_381_G2,
+            VetKdCurve::Bls12_381_G2 => ic_cdk_management_canister::VetKDCurve::Bls12_381_G2,
         },
         name: key_id.name,
     }
 }
 
-fn cast_schnorr_aux(aux: SignWithSchnorrAux) -> ic_cdk::management_canister::SchnorrAux {
+fn cast_schnorr_aux(aux: SignWithSchnorrAux) -> ic_cdk_management_canister::SchnorrAux {
     match aux {
         SignWithSchnorrAux::Bip341(aux) => {
-            ic_cdk::management_canister::SchnorrAux::Bip341(ic_cdk::management_canister::Bip341 {
+            ic_cdk_management_canister::SchnorrAux::Bip341(ic_cdk_management_canister::Bip341 {
                 merkle_root_hash: aux.merkle_root_hash.to_vec(),
             })
         }

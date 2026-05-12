@@ -5,9 +5,9 @@ use crate::{CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, 
 use candid::Principal;
 use ic_btc_checker::{CheckTransactionArgs, CheckTransactionResponse};
 use ic_btc_interface::{Address, Utxo};
-use ic_cdk::bitcoin_canister;
-use ic_cdk::bitcoin_canister::GetCurrentFeePercentilesRequest;
-use ic_cdk::management_canister::SignCallError;
+use ic_cdk_0_19::bitcoin_canister;
+use ic_cdk_0_19::bitcoin_canister::GetCurrentFeePercentilesRequest;
+use ic_cdk_management_canister::SignCallError;
 use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
 use ic_management_canister_types_private::DerivationPath;
 use std::fmt;
@@ -33,6 +33,22 @@ impl CallError {
 
     pub fn from_cdk_call_error<T: Into<ic_cdk::call::Error>>(method: &str, error: T) -> CallError {
         use ic_cdk::call::Error as CdkError;
+        CallError {
+            method: String::from(method),
+            reason: match error.into() {
+                CdkError::InsufficientLiquidCycleBalance(_e) => Reason::OutOfCycles,
+                CdkError::CallPerformFailed(e) => Reason::Rejected(e.to_string()),
+                CdkError::CallRejected(e) => Reason::Rejected(e.to_string()),
+                CdkError::CandidDecodeFailed(e) => Reason::CanisterError(e.to_string()),
+            },
+        }
+    }
+
+    pub fn from_cdk_0_19_call_error<T: Into<ic_cdk_0_19::call::Error>>(
+        method: &str,
+        error: T,
+    ) -> CallError {
+        use ic_cdk_0_19::call::Error as CdkError;
         CallError {
             method: String::from(method),
             reason: match error.into() {
@@ -194,7 +210,7 @@ pub async fn bitcoin_get_utxos(request: &GetUtxosRequest) -> Result<GetUtxosResp
     bitcoin_canister::bitcoin_get_utxos(request)
         .await
         .map(GetUtxosResponse::from)
-        .map_err(|err| CallError::from_cdk_call_error("bitcoin_get_utxos", err))
+        .map_err(|err| CallError::from_cdk_0_19_call_error("bitcoin_get_utxos", err))
 }
 
 /// Returns the current fee percentiles on the Bitcoin network.
@@ -208,7 +224,9 @@ pub async fn bitcoin_get_current_fee_percentiles(
                 .map(FeeRate::from_millis_per_byte)
                 .collect()
         })
-        .map_err(|err| CallError::from_cdk_call_error("bitcoin_get_current_fee_percentiles", err))
+        .map_err(|err| {
+            CallError::from_cdk_0_19_call_error("bitcoin_get_current_fee_percentiles", err)
+        })
 }
 
 /// Sends the transaction to the network the management canister interacts with.
@@ -221,7 +239,7 @@ pub async fn send_transaction(
         network: network.into(),
     })
     .await
-    .map_err(|err| CallError::from_cdk_call_error("bitcoin_send_transaction", err))
+    .map_err(|err| CallError::from_cdk_0_19_call_error("bitcoin_send_transaction", err))
 }
 
 /// Fetches the ECDSA public key of the canister.
@@ -229,24 +247,14 @@ pub async fn ecdsa_public_key(
     key_name: String,
     derivation_path: DerivationPath,
 ) -> Result<ECDSAPublicKey, CallError> {
-    let key_id = EcdsaKeyId {
-        curve: EcdsaCurve::Secp256k1,
-        name: key_name,
-    };
-    ic_cdk::management_canister::ecdsa_public_key(
-        &ic_cdk::management_canister::EcdsaPublicKeyArgs {
-            canister_id: None,
-            derivation_path: derivation_path.into_inner(),
-            key_id: ic_management_canister_types_0_5::EcdsaKeyId {
-                curve: match key_id.curve {
-                    EcdsaCurve::Secp256k1 => {
-                        ic_management_canister_types_0_5::EcdsaCurve::Secp256k1
-                    }
-                },
-                name: key_id.name,
-            },
+    ic_cdk_management_canister::ecdsa_public_key(&ic_cdk_management_canister::EcdsaPublicKeyArgs {
+        canister_id: None,
+        derivation_path: derivation_path.into_inner(),
+        key_id: EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: key_name,
         },
-    )
+    })
     .await
     .map(|response| ECDSAPublicKey {
         public_key: response.public_key,

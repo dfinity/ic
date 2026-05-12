@@ -28,6 +28,8 @@ rust_library(
         "@crate_index//:ciborium",
         "@crate_index//:hex",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-0_19",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:serde",
         "@crate_index//:sha2",
     ],
@@ -88,6 +90,7 @@ rust_test(
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
             "@crate_index//:candid",
             "@crate_index//:ic-cdk",
+            "@crate_index//:ic-cdk-management-canister",
         ],
     )
     for (name, features) in [

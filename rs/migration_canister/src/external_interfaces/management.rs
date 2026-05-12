@@ -4,9 +4,9 @@ use candid::{CandidType, Principal, Reserved};
 use ic_cdk::{
     api::{canister_self, canister_version},
     call::{Call, CallFailed, Error as CallError, RejectCode},
-    management_canister::{CanisterInfoArgs, CanisterInfoResult, canister_info},
     println,
 };
+use ic_cdk_management_canister::{CanisterInfoArgs, CanisterInfoResult, canister_info};
 use ic_management_canister_types::ListCanisterSnapshotsArgs;
 use serde::Deserialize;
 
@@ -262,13 +262,7 @@ pub async fn rename_canister(
 
 pub async fn assert_no_snapshots(canister_id: Principal) -> ProcessingResult<(), ValidationError> {
     let args = ListCanisterSnapshotsArgs { canister_id };
-    match ic_cdk::management_canister::list_canister_snapshots(
-        &ic_management_canister_types_0_5::ListCanisterSnapshotsArgs {
-            canister_id: args.canister_id,
-        },
-    )
-    .await
-    {
+    match ic_cdk_management_canister::list_canister_snapshots(&args).await {
         Ok(snapshots) => {
             if snapshots.is_empty() {
                 ProcessingResult::Success(())

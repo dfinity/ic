@@ -24,6 +24,7 @@ DEPENDENCIES = [
     "@crate_index//:chrono_canisters",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-management-canister",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-management-canister-types",
     "@crate_index//:ic-metrics-encoder",
