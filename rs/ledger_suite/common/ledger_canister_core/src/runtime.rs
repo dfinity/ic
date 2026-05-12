@@ -41,11 +41,11 @@ pub struct CdkRuntime;
 #[async_trait]
 impl Runtime for CdkRuntime {
     fn id() -> CanisterId {
-        CanisterId::unchecked_from_principal(PrincipalId::from(ic_cdk::api::id()))
+        CanisterId::unchecked_from_principal(PrincipalId::from(ic_cdk::api::canister_self()))
     }
 
     fn print(msg: impl AsRef<str>) {
-        ic_cdk::api::print(msg)
+        ic_cdk::api::debug_print(msg)
     }
 
     async fn call<In, Out>(

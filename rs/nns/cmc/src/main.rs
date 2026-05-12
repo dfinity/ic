@@ -425,7 +425,7 @@ where
     yansi::Paint<S>: std::string::ToString,
 {
     #[cfg(target_arch = "wasm32")]
-    ic_cdk::api::print(yansi::Paint::yellow(s).to_string());
+    ic_cdk::api::debug_print(yansi::Paint::yellow(s).to_string());
 
     #[cfg(not(target_arch = "wasm32"))]
     println!("{}", yansi::Paint::yellow(s).to_string());
@@ -1615,7 +1615,7 @@ async fn fetch_transaction(
     };
 
     let expected_to = AccountIdentifier::new(
-        PrincipalId::from(ic_cdk::api::id()),
+        PrincipalId::from(ic_cdk::api::canister_self()),
         Some(expected_to_subaccount),
     );
     if to != expected_to {
@@ -1783,7 +1783,7 @@ async fn issue_automatic_refund_if_memo_not_offerred(
             spender: _,
         } => {
             let incoming_to_account_identifier = AccountIdentifier::new(
-                PrincipalId::from(ic_cdk::api::id()),
+                PrincipalId::from(ic_cdk::api::canister_self()),
                 Some(incoming_to_subaccount),
             );
             if to != &incoming_to_account_identifier {

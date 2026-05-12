@@ -676,7 +676,7 @@ fn execute_transfer_not_async(
 #[update]
 async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
     let from_account = Account {
-        owner: ic_cdk::api::caller(),
+        owner: ic_cdk::api::msg_caller(),
         subaccount: arg.from_subaccount,
     };
     execute_transfer(
@@ -702,7 +702,7 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
 #[update]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
     let spender_account = Account {
-        owner: ic_cdk::api::caller(),
+        owner: ic_cdk::api::msg_caller(),
         subaccount: arg.spender_subaccount,
     };
     execute_transfer(
@@ -893,7 +893,7 @@ fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, A
 
 #[update]
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
-    let block_idx = icrc2_approve_not_async(ic_cdk::api::caller(), arg)?;
+    let block_idx = icrc2_approve_not_async(ic_cdk::api::msg_caller(), arg)?;
 
     // NB. we need to set the certified data before the first async call to make sure that the
     // blockchain state agrees with the certificate while archiving is in progress.
@@ -990,7 +990,7 @@ fn icrc152_mint_not_async(
 
 #[update]
 async fn icrc152_mint(args: Icrc152MintArgs) -> Result<Nat, Icrc152MintError> {
-    let block_idx = icrc152_mint_not_async(ic_cdk::api::caller(), args)?;
+    let block_idx = icrc152_mint_not_async(ic_cdk::api::msg_caller(), args)?;
     ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
     archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
     Ok(Nat::from(block_idx))
@@ -1088,7 +1088,7 @@ fn icrc152_burn_not_async(
 
 #[update]
 async fn icrc152_burn(args: Icrc152BurnArgs) -> Result<Nat, Icrc152BurnError> {
-    let block_idx = icrc152_burn_not_async(ic_cdk::api::caller(), args)?;
+    let block_idx = icrc152_burn_not_async(ic_cdk::api::msg_caller(), args)?;
     ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
     archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
     Ok(Nat::from(block_idx))
@@ -1191,7 +1191,7 @@ fn icrc106_get_index_principal() -> Result<Principal, Icrc106Error> {
 fn icrc21_canister_call_consent_message(
     consent_msg_request: ConsentMessageRequest,
 ) -> Result<ConsentInfo, Icrc21Error> {
-    let caller_principal = ic_cdk::api::caller();
+    let caller_principal = ic_cdk::api::msg_caller();
     let ledger_fee = icrc1_fee();
     let token_symbol = icrc1_symbol();
     let token_name = icrc1_name();
@@ -1215,7 +1215,7 @@ fn is_ledger_ready() -> bool {
 #[query]
 fn icrc103_get_allowances(arg: GetAllowancesArgs) -> Result<Allowances, GetAllowancesError> {
     let from_account = arg.from_account.unwrap_or_else(|| Account {
-        owner: ic_cdk::api::caller(),
+        owner: ic_cdk::api::msg_caller(),
         subaccount: None,
     });
     let max_take_allowances = Access::with_ledger(|ledger| ledger.max_take_allowances());

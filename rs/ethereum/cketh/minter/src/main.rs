@@ -60,7 +60,7 @@ pub const SEPOLIA_TEST_CHAIN_ID: u64 = 11155111;
 pub const CKETH_LEDGER_TRANSACTION_FEE: Wei = Wei::new(2_000_000_000_000_u128);
 
 fn validate_caller_not_anonymous() -> candid::Principal {
-    let principal = ic_cdk::caller();
+    let principal = ic_cdk::api::msg_caller();
     if principal == candid::Principal::anonymous() {
         panic!("anonymous principal is not allowed");
     }
@@ -564,7 +564,7 @@ fn is_address_blocked(address_string: String) -> bool {
 async fn add_ckerc20_token(erc20_token: AddCkErc20Token) {
     let orchestrator_id = read_state(|s| s.ledger_suite_orchestrator_id)
         .unwrap_or_else(|| ic_cdk::trap("ERROR: ERC-20 feature is not activated"));
-    if orchestrator_id != ic_cdk::caller() {
+    if orchestrator_id != ic_cdk::api::msg_caller() {
         ic_cdk::trap(format!(
             "ERROR: only the orchestrator {orchestrator_id} can add ERC-20 tokens"
         ));
@@ -578,7 +578,7 @@ async fn add_ckerc20_token(erc20_token: AddCkErc20Token) {
 async fn get_canister_status() -> ic_cdk::api::management_canister::main::CanisterStatusResponse {
     ic_cdk::api::management_canister::main::canister_status(
         ic_cdk::api::management_canister::main::CanisterIdRecord {
-            canister_id: ic_cdk::id(),
+            canister_id: ic_cdk::api::canister_self(),
         },
     )
     .await

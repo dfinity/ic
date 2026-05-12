@@ -184,7 +184,7 @@ impl IcCanisterRuntime {
 #[async_trait]
 impl CanisterRuntime for IcCanisterRuntime {
     fn id(&self) -> Principal {
-        ic_cdk::id()
+        ic_cdk::api::canister_self()
     }
 
     fn time(&self) -> u64 {

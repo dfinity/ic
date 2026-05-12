@@ -98,7 +98,7 @@ fn post_upgrade(orchestrator_arg: Option<OrchestratorArg>) {
 #[update]
 async fn get_canister_status() -> CanisterStatusResponse {
     canister_status(CanisterIdRecord {
-        canister_id: ic_cdk::id(),
+        canister_id: ic_cdk::api::canister_self(),
     })
     .await
     .expect("failed to fetch canister status")

@@ -178,7 +178,7 @@ impl Environment for CanisterEnv {
 
     /// Return the canister's ID.
     fn canister_id(&self) -> CanisterId {
-        CanisterId::unchecked_from_principal(PrincipalId::from(ic_cdk::id()))
+        CanisterId::unchecked_from_principal(PrincipalId::from(ic_cdk::api::canister_self()))
     }
 
     /// Return the canister version.
