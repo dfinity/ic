@@ -32,6 +32,10 @@ crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
 # Use particular version with `@crate_index//:mycrate-3.14.16`
 
 crate.spec(
+    package = "actix-http",
+    version = "^3.12.1",
+)
+crate.spec(
     package = "actix-rt",
     version = "^2.10.0",
 )
@@ -2057,6 +2061,15 @@ crate.annotation(
     crate = "libcryptsetup-rs",
     patch_args = ["-p1"],
     patches = ["@@//bazel:libcryptsetup-rs.patch"],
+)
+crate.annotation(
+    # Drop quinn-proto's wasm-target `getrandom` dep so its `wasm_js` feature
+    # doesn't leak into the canister wasm build via Cargo feature unification.
+    # IC compiles quinn-proto only for the Linux replica, so this is a no-op
+    # for the real build graph. See bazel/quinn-proto.patch.
+    crate = "quinn-proto",
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:quinn-proto.patch"],
 )
 crate.annotation(
     crate = "libz-sys",
