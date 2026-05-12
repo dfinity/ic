@@ -1,5 +1,5 @@
 {
-  "checksum": "4168aacfa381cabbadfb8fb9e42663b0d8ca6a3994877ed71bebd8c5adc3ff65",
+  "checksum": "2d3dc07f101e9aab9fa001ab446b1b2cb2deb304fc03320dc5c5d7e39bd68b2c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22689,11 +22689,11 @@
               "target": "quickcheck"
             },
             {
-              "id": "quinn 0.11.5",
+              "id": "quinn 0.11.9",
               "target": "quinn"
             },
             {
-              "id": "quinn-udp 0.5.5",
+              "id": "quinn-udp 0.5.14",
               "target": "quinn_udp"
             },
             {
@@ -23645,7 +23645,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.60.2",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ]
@@ -47708,6 +47708,46 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "lru-slab 0.1.2": {
+      "name": "lru-slab",
+      "version": "0.1.2",
+      "package_url": "https://github.com/Ralith/lru-slab",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/lru-slab/0.1.2/download",
+          "sha256": "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "lru_slab",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "lru_slab",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "0.1.2"
+      },
+      "license": "MIT OR Apache-2.0 OR Zlib",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT",
+        "Zlib"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "lz4_flex 0.11.6": {
       "name": "lz4_flex",
       "version": "0.11.6",
@@ -63206,14 +63246,14 @@
       ],
       "license_file": "LICENSE-MIT"
     },
-    "quinn 0.11.5": {
+    "quinn 0.11.9": {
       "name": "quinn",
-      "version": "0.11.5",
+      "version": "0.11.9",
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/quinn/0.11.5/download",
-          "sha256": "8c7c5fdde3cdae7203427dc4f0a68fe0ed09833edc525a03456b153b79828684"
+          "url": "https://static.crates.io/crates/quinn/0.11.9/download",
+          "sha256": "b9e20a958963c291dc322d98411f541009df2ced7b5a4f2bd52337638cfccf20"
         }
       },
       "targets": [
@@ -63221,6 +63261,18 @@
           "Library": {
             "crate_name": "quinn",
             "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
             "srcs": {
               "allow_empty": true,
               "include": [
@@ -63240,7 +63292,8 @@
             "log",
             "ring",
             "runtime-tokio",
-            "rustls"
+            "rustls",
+            "rustls-ring"
           ],
           "selects": {}
         },
@@ -63255,12 +63308,16 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "quinn-proto 0.11.7",
+              "id": "quinn 0.11.9",
+              "target": "build_script_build"
+            },
+            {
+              "id": "quinn-proto 0.11.14",
               "target": "quinn_proto",
               "alias": "proto"
             },
             {
-              "id": "quinn-udp 0.5.5",
+              "id": "quinn-udp 0.5.14",
               "target": "quinn_udp",
               "alias": "udp"
             },
@@ -63273,11 +63330,7 @@
               "target": "rustls"
             },
             {
-              "id": "socket2 0.5.9",
-              "target": "socket2"
-            },
-            {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -63289,10 +63342,43 @@
               "target": "tracing"
             }
           ],
-          "selects": {}
+          "selects": {
+            "cfg(all(target_family = \"wasm\", target_os = \"unknown\"))": [
+              {
+                "id": "web-time 1.1.0",
+                "target": "web_time"
+              }
+            ],
+            "cfg(not(all(target_family = \"wasm\", target_os = \"unknown\")))": [
+              {
+                "id": "socket2 0.6.1",
+                "target": "socket2"
+              }
+            ]
+          }
         },
         "edition": "2021",
-        "version": "0.11.5"
+        "version": "0.11.9"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cfg_aliases 0.2.1",
+              "target": "cfg_aliases"
+            }
+          ],
+          "selects": {}
+        }
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -63301,14 +63387,20 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "quinn-proto 0.11.7": {
+    "quinn-proto 0.11.14": {
       "name": "quinn-proto",
-      "version": "0.11.7",
+      "version": "0.11.14",
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/quinn-proto/0.11.7/download",
-          "sha256": "ea0a9b3a42929fad8a7c3de7f86ce0814cfa893328157672680e9fb1145549c5"
+          "url": "https://static.crates.io/crates/quinn-proto/0.11.14/download",
+          "sha256": "434b42fec591c96ef50e21e886936e66d3cc3f737104fdb9b737c40ffb94c098",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:quinn-proto.patch"
+          ]
         }
       },
       "targets": [
@@ -63334,7 +63426,7 @@
           "common": [
             "log",
             "ring",
-            "rustls"
+            "rustls-ring"
           ],
           "selects": {}
         },
@@ -63345,7 +63437,11 @@
               "target": "bytes"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "lru-slab 0.1.2",
+              "target": "lru_slab"
+            },
+            {
+              "id": "rand 0.9.4",
               "target": "rand"
             },
             {
@@ -63365,7 +63461,7 @@
               "target": "slab"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -63377,10 +63473,25 @@
               "target": "tracing"
             }
           ],
-          "selects": {}
+          "selects": {
+            "cfg(all(target_family = \"wasm\", target_os = \"unknown\"))": [
+              {
+                "id": "getrandom 0.3.1",
+                "target": "getrandom"
+              },
+              {
+                "id": "rustls-pki-types 1.12.0",
+                "target": "rustls_pki_types"
+              },
+              {
+                "id": "web-time 1.1.0",
+                "target": "web_time"
+              }
+            ]
+          }
         },
         "edition": "2021",
-        "version": "0.11.7"
+        "version": "0.11.14"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -63389,14 +63500,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "quinn-udp 0.5.5": {
+    "quinn-udp 0.5.14": {
       "name": "quinn-udp",
-      "version": "0.5.5",
+      "version": "0.5.14",
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/quinn-udp/0.5.5/download",
-          "sha256": "4fe68c2e9e1a1234e218683dbdf9f9dfcb094113c5ac2b938dfcb9bab4c4140b"
+          "url": "https://static.crates.io/crates/quinn-udp/0.5.14/download",
+          "sha256": "addec6a0dcad8a8d96a771f815f0eaf55f9d1805756410b39f5fa81332574cbd"
         }
       },
       "targets": [
@@ -63404,6 +63515,18 @@
           "Library": {
             "crate_name": "quinn_udp",
             "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
             "srcs": {
               "allow_empty": true,
               "include": [
@@ -63433,8 +63556,8 @@
               "target": "libc"
             },
             {
-              "id": "socket2 0.5.9",
-              "target": "socket2"
+              "id": "quinn-udp 0.5.14",
+              "target": "build_script_build"
             },
             {
               "id": "tracing 0.1.41",
@@ -63442,20 +63565,46 @@
             }
           ],
           "selects": {
+            "cfg(not(all(target_family = \"wasm\", target_os = \"unknown\")))": [
+              {
+                "id": "socket2 0.6.1",
+                "target": "socket2"
+              }
+            ],
             "cfg(windows)": [
               {
                 "id": "once_cell 1.21.3",
                 "target": "once_cell"
               },
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.60.2",
                 "target": "windows_sys"
               }
             ]
           }
         },
         "edition": "2021",
-        "version": "0.5.5"
+        "version": "0.5.14"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cfg_aliases 0.2.1",
+              "target": "cfg_aliases"
+            }
+          ],
+          "selects": {}
+        }
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -68006,7 +68155,11 @@
             "dev_urandom_fallback",
             "std"
           ],
-          "selects": {}
+          "selects": {
+            "wasm32-unknown-unknown": [
+              "wasm32_unknown_unknown_js"
+            ]
+          }
         },
         "deps": {
           "common": [
@@ -69913,7 +70066,7 @@
                 "alias": "libc_errno"
               },
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ],
@@ -70736,7 +70889,12 @@
             "default",
             "std"
           ],
-          "selects": {}
+          "selects": {
+            "wasm32-unknown-unknown": [
+              "web",
+              "web-time"
+            ]
+          }
         },
         "deps": {
           "common": [
@@ -70745,7 +70903,14 @@
               "target": "zeroize"
             }
           ],
-          "selects": {}
+          "selects": {
+            "wasm32-unknown-unknown": [
+              {
+                "id": "web-time 1.1.0",
+                "target": "web_time"
+              }
+            ]
+          }
         },
         "edition": "2021",
         "version": "1.12.0"
@@ -70856,7 +71021,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ]
@@ -80800,7 +80965,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ],
@@ -100385,6 +100550,12 @@
       "x86_64-apple-darwin",
       "x86_64-unknown-linux-gnu"
     ],
+    "cfg(not(all(target_family = \"wasm\", target_os = \"unknown\")))": [
+      "aarch64-apple-darwin",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-apple-darwin",
+      "x86_64-unknown-linux-gnu"
+    ],
     "cfg(not(any(target_os = \"unknown\", target_arch = \"wasm32\")))": [
       "aarch64-apple-darwin",
       "aarch64-unknown-linux-gnu",
@@ -100730,8 +100901,8 @@
     "publicsuffix 2.2.3",
     "qrcode 0.14.1",
     "quickcheck 1.0.3",
-    "quinn 0.11.5",
-    "quinn-udp 0.5.5",
+    "quinn 0.11.9",
+    "quinn-udp 0.5.14",
     "quote 1.0.42",
     "rand 0.8.5",
     "rand_chacha 0.3.1",

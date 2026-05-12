@@ -76,3 +76,8 @@ else
     echo "Repinning crates: ${CRATES[*]}"
     CARGO_BAZEL_REPIN="${CRATES[*]}" bazel build @crate_index//...
 fi
+
+# Strip the quinn-proto wasm-bindgen leak that would otherwise break the
+# canister wasm build. The script is idempotent and a no-op when the leak is
+# already absent.
+"$(git rev-parse --show-toplevel)/bin/strip-quinn-wasm-leak.py"
