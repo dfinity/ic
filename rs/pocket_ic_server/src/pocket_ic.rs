@@ -101,6 +101,7 @@ use ic_registry_transport::{
     GetChunk, dechunkify_delta, deserialize_atomic_mutate_response,
     deserialize_get_changes_since_response, serialize_get_changes_since_request,
 };
+use ic_replicated_state::metrics::ReplicatedStateInvariants;
 use ic_sns_wasm::init::SnsWasmCanisterInitPayloadBuilder;
 use ic_sns_wasm::pb::v1::add_wasm_response::Result as AddWasmResult;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, AddWasmResponse, SnsCanisterType, SnsWasm};
@@ -3032,17 +3033,22 @@ impl PocketIc {
                         let temp_state_dir = TempDir::new().unwrap();
                         copy_dir(subnet_state_dir, temp_state_dir.path())
                             .expect("Failed to copy state directory");
+                        let metrics_registry = MetricsRegistry::new();
                         let state_manager = StateManagerImpl::new(
                             Arc::new(FakeVerifier),
                             SubnetId::new(PrincipalId::default()),
                             conv_type(subnet_kind),
-                            no_op_logger(),
-                            &MetricsRegistry::new(),
                             &ic_config::state_manager::Config::new(
                                 temp_state_dir.path().to_path_buf(),
                             ),
                             None,
                             MaliciousFlags::default(),
+                            Some(ReplicatedStateInvariants::new(
+                                &metrics_registry,
+                                &icp_config.hypervisor_config,
+                            )),
+                            &metrics_registry,
+                            no_op_logger(),
                         );
                         let metadata = state_manager.get_latest_state().take().metadata.clone();
                         // Shut down the temporary state manager to avoid race conditions.

@@ -66,11 +66,12 @@ impl StateManagerFixture {
             verifier,
             subnet_id,
             subnet_type,
-            log.clone(),
-            &metrics,
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
+            None,
+            &metrics,
+            log.clone(),
         );
 
         Self {

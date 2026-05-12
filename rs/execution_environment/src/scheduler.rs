@@ -1064,15 +1064,8 @@ impl SchedulerImpl {
     /// NOTE: This is also called by `checkpoint_round_with_no_execution()`, so it
     /// must be safe to call even when no execution has taken place.
     //
-    // TODO(DSM-103): Consider only aborting / checking DTS invariants for actually
-    // scheduled canisters.
-    fn finish_round(
-        &self,
-        state: &mut ReplicatedState,
-        current_round: ExecutionRound,
-        current_round_type: ExecutionRoundType,
-        logger: &ReplicaLogger,
-    ) {
+    // TODO(DSM-103): Consider only aborting actually scheduled canisters.
+    fn finish_round(&self, state: &mut ReplicatedState, current_round_type: ExecutionRoundType) {
         let cost_schedule = state.get_own_cost_schedule();
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
@@ -1088,61 +1081,6 @@ impl SchedulerImpl {
             ExecutionRoundType::OrdinaryRound => {
                 self.abort_paused_executions_above_limit(state);
             }
-        }
-
-        self.check_invariants(state, current_round_type, current_round, logger);
-    }
-
-    /// Checks the DTS and subnet memory usage invariants at the end of the round.
-    //
-    // TODO(DSM-103): Move into ReplicatedStateMetrics.
-    fn check_invariants(
-        &self,
-        state: &ReplicatedState,
-        current_round_type: ExecutionRoundType,
-        current_round: ExecutionRound,
-        logger: &ReplicaLogger,
-    ) {
-        let canisters_with_tasks = state
-            .canisters_iter()
-            .filter(|canister| !canister.system_state.task_queue.is_empty());
-
-        for canister in canisters_with_tasks {
-            canister
-                .system_state
-                .task_queue
-                .check_dts_invariants(current_round_type, &canister.canister_id());
-        }
-
-        let mut total_canister_history_memory_usage = NumBytes::new(0);
-        let mut total_canister_memory_allocated_bytes = NumBytes::new(0);
-        for canister in state.canisters_iter() {
-            total_canister_history_memory_usage += canister.canister_history_memory_usage();
-            total_canister_memory_allocated_bytes += canister
-                .memory_allocation()
-                .allocated_bytes(canister.memory_usage());
-        }
-        let subnet_memory_capacity = self
-            .exec_env
-            .subnet_memory_capacity(state.resource_limits());
-
-        // Check that subnet memory usage invariant still holds after the round execution.
-        // We allow `total_canister_memory_allocated_bytes` to exceed the subnet memory capacity
-        // by `total_canister_history_memory_usage` because the canister history
-        // memory usage is not tracked during a round in `SubnetAvailableMemory`.
-        if total_canister_memory_allocated_bytes
-            > subnet_memory_capacity + total_canister_history_memory_usage
-        {
-            self.metrics.subnet_memory_usage_invariant.inc();
-            warn!(
-                logger,
-                "{}: In round {} @ time {}, total canister memory allocated bytes {} exceeded subnet memory capacity {}",
-                SUBNET_MEMORY_USAGE_INVARIANT_BROKEN,
-                current_round,
-                state.time(),
-                total_canister_memory_allocated_bytes,
-                subnet_memory_capacity
-            );
         }
     }
 }
@@ -1365,7 +1303,7 @@ impl Scheduler for SchedulerImpl {
                     scheduled_heap_delta_limit,
                     subnet_heap_delta_capacity,
                 );
-                self.finish_round(&mut state, current_round, current_round_type, &round_log);
+                self.finish_round(&mut state, current_round_type);
                 self.metrics
                     .round_skipped_due_to_current_heap_delta_above_limit
                     .inc();
@@ -1541,12 +1479,7 @@ impl Scheduler for SchedulerImpl {
                 round_schedule.finish_round(&mut final_state, current_round, &self.metrics);
             }
 
-            self.finish_round(
-                &mut final_state,
-                current_round,
-                current_round_type,
-                &round_log,
-            );
+            self.finish_round(&mut final_state, current_round_type);
 
             final_state
                 .metadata
@@ -1560,16 +1493,7 @@ impl Scheduler for SchedulerImpl {
     }
 
     fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState) {
-        self.finish_round(
-            state,
-            // TODO(DSM-106) This is a workaround to avoid having to temporarily change the
-            // `Scheduler` trait. The round number is only used to decide whether to log
-            // warnings about long open call contexts. When `ReplicatedState`
-            // instrumentation moves to MessageRouting, this argument will be dropped.
-            ExecutionRound::from(0),
-            ExecutionRoundType::CheckpointRound,
-            &self.log,
-        );
+        self.finish_round(state, ExecutionRoundType::CheckpointRound);
     }
 }
 

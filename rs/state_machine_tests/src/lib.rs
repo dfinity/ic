@@ -122,6 +122,7 @@ use ic_replicated_state::{
         canister_snapshots::CanisterSnapshots, system_state::CanisterHistory,
     },
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
+    metrics::ReplicatedStateInvariants,
     page_map::Buffer,
     replicated_state::ReplicatedStateMessageRouting,
 };
@@ -2042,6 +2043,8 @@ impl StateMachine {
         if let Some(lsmt_override) = lsmt_override {
             sm_config.lsmt_config = lsmt_override;
         }
+        let replicated_state_invariants =
+            ReplicatedStateInvariants::new(&metrics_registry, &hypervisor_config);
 
         // We are not interested in ingress signature validation.
         let malicious_flags = MaliciousFlags {
@@ -2053,11 +2056,12 @@ impl StateMachine {
             Arc::new(FakeVerifier),
             subnet_id,
             subnet_type,
-            replica_logger.clone(),
-            &metrics_registry,
             &sm_config,
             None,
             malicious_flags.clone(),
+            Some(replicated_state_invariants),
+            &metrics_registry,
+            replica_logger.clone(),
         );
         let state_manager = Arc::new(StateMachineStateManager {
             inner: state_manager_impl,

@@ -24,7 +24,7 @@ use ic_pprof::Pprof;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replica_setup_ic_network::setup_consensus_and_p2p;
-use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::{ReplicatedState, metrics::ReplicatedStateInvariants};
 use ic_state_manager::{StateManagerImpl, state_sync::StateSync};
 use ic_tracing::ReloadHandles;
 use ic_types::{
@@ -165,18 +165,21 @@ pub fn construct_ic_stack(
     // ---------- REPLICATED STATE DEPS FOLLOW ----------
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
     let verifier = Arc::new(VerifierImpl::new(crypto.clone()));
+    let replicated_state_invariants =
+        ReplicatedStateInvariants::new(metrics_registry, &config.hypervisor);
     let state_manager = Arc::new(StateManagerImpl::new(
         verifier,
         subnet_id,
         subnet_type,
-        log.clone(),
-        metrics_registry,
         &config.state_manager,
         // In order for the state manager to start, it needs to know the height of the last
         // CUP and/or certification. This information part of the persisted consensus pool.
         // Hence the need of the dependency on consensus here.
         Some(consensus_pool_cache.starting_height()),
         config.malicious_behavior.malicious_flags.clone(),
+        Some(replicated_state_invariants),
+        metrics_registry,
+        log.clone(),
     ));
     // ---------- EXECUTION DEPS FOLLOW ----------
 

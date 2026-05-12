@@ -38,11 +38,12 @@ impl TestEnvironment {
             Arc::new(FakeVerifier::new()),
             subnet_test_id(42),
             SubnetType::Application,
-            log.clone(),
-            &MetricsRegistry::new(),
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
+            None,
+            &MetricsRegistry::new(),
+            log.clone(),
         ));
 
         let state_layout = state_manager.state_layout.clone();
