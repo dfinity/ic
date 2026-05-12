@@ -10,7 +10,7 @@ use ic_device::device_mapping::{Bytes, TempDevice};
 use ic_os_logging::init_logging;
 use itertools::Either::Right;
 use libcryptsetup_rs::consts::flags::{CryptActivate, CryptVolumeKey};
-use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat};
+use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat, KeyslotInfo};
 use libcryptsetup_rs::{CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle};
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use sev_guest_testing::MockSevGuestFirmwareBuilder;
@@ -394,6 +394,8 @@ fn test_sev_unlock_store_partition_with_previous_key() {
         .add_by_passphrase(None, b"previous key", b"deprecated key")
         .expect("Failed to add deprecated key slot");
 
+    drop(device);
+
     // Write some data to the disk.
     activate_crypt_device(
         &fixture.device.path().unwrap(),
@@ -485,6 +487,32 @@ fn test_sev_unlock_store_partition_with_previous_key() {
         DEPRECATED_KEY,
     )
     .expect_err("deprecated key should not unlock the store partition");
+
+    let mut device = open_luks2_device(
+        &fixture.device.path().unwrap(),
+        LuksHeaderLocation::Detached(&fixture.store_luks_header_path),
+    )
+    .expect("Failed to open detached Store header");
+    let mut keyslot_handle = device.keyslot_handle();
+
+    // Test the all keys have correct params
+    let mut active_keyslot_count = 0;
+    for key_slot in 0..32 {
+        if matches!(
+            keyslot_handle
+                .status(key_slot)
+                .expect("Failed to get keyslot status"),
+            KeyslotInfo::Active | KeyslotInfo::ActiveLast
+        ) {
+            active_keyslot_count += 1;
+            let pbkdf = keyslot_handle
+                .get_pbkdf(key_slot)
+                .expect("Failed to get PBKDF params for active keyslot");
+            assert_eq!(pbkdf.type_, CryptKdf::Pbkdf2);
+            assert_eq!(pbkdf.iterations, TEST_PBKDF_ITERATIONS);
+        }
+    }
+    assert_eq!(active_keyslot_count, 2);
 }
 
 #[test]
