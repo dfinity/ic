@@ -1,5 +1,5 @@
 {
-  "checksum": "b2974f21d939dba59b70408feb7c9baab3acf3a827b0f3fa175a3770cf2930ab",
+  "checksum": "2d3dc07f101e9aab9fa001ab446b1b2cb2deb304fc03320dc5c5d7e39bd68b2c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -30303,13 +30303,7 @@
             "custom",
             "std"
           ],
-          "selects": {
-            "wasm32-unknown-unknown": [
-              "js",
-              "js-sys",
-              "wasm-bindgen"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -30329,16 +30323,6 @@
               {
                 "id": "libc 0.2.177",
                 "target": "libc"
-              }
-            ],
-            "wasm32-unknown-unknown": [
-              {
-                "id": "js-sys 0.3.77",
-                "target": "js_sys"
-              },
-              {
-                "id": "wasm-bindgen 0.2.100",
-                "target": "wasm_bindgen"
               }
             ]
           }
@@ -63410,7 +63394,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/quinn-proto/0.11.14/download",
-          "sha256": "434b42fec591c96ef50e21e886936e66d3cc3f737104fdb9b737c40ffb94c098"
+          "sha256": "434b42fec591c96ef50e21e886936e66d3cc3f737104fdb9b737c40ffb94c098",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:quinn-proto.patch"
+          ]
         }
       },
       "targets": [
