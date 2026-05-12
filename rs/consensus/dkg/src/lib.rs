@@ -360,7 +360,7 @@ impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
         let mut processed = 0;
         let dealings: Vec<Vec<&Message>> = dkg_pool
             .get_unvalidated()
-            // Group all unvalidated dealings by dealer.
+            // Group all unvalidated dealings by (dealer, DKG ID).
             .fold(BTreeMap::new(), |mut map, dealing| {
                 let key = (dealing.signature.signer, dealing.content.dkg_id.clone());
                 let dealings: &mut Vec<_> = map.entry(key).or_default();
@@ -368,7 +368,7 @@ impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
                 processed += 1;
                 map
             })
-            // Get the dealings sorted by dealers
+            // Get the dealings sorted by (dealer, DKG ID)
             .values()
             .cloned()
             .collect();
