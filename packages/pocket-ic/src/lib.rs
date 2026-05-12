@@ -574,6 +574,24 @@ impl TryFrom<Time> for SystemTime {
     }
 }
 
+/// Specifies where to place a newly created canister.
+#[derive(Debug)]
+pub enum CreateCanisterPlacement {
+    /// Place the canister on the given subnet.
+    SubnetId(SubnetId),
+    /// Create the canister with the given specific canister ID.
+    CanisterId(CanisterId),
+}
+
+/// Parameters for [`PocketIc::create_canister_with_params`].
+#[derive(Debug, Default)]
+pub struct CreateCanisterParams {
+    /// Initial cycles balance; defaults to 100T if `None`.
+    pub cycles: Option<u128>,
+    pub settings: Option<CanisterSettings>,
+    pub placement: Option<CreateCanisterPlacement>,
+}
+
 /// Main entry point for interacting with PocketIC.
 pub struct PocketIc {
     pocket_ic: PocketIcAsync,
@@ -1098,6 +1116,7 @@ impl PocketIc {
     }
 
     /// Create a canister with default settings as the anonymous principal.
+    /// The canister is created with 100T cycles.
     #[instrument(ret(Display), skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn create_canister(&self) -> CanisterId {
         let runtime = self.runtime.clone();
@@ -1105,6 +1124,7 @@ impl PocketIc {
     }
 
     /// Create a canister with optional custom settings and a sender.
+    /// The canister is created with 100T cycles.
     #[instrument(ret(Display), skip(self), fields(instance_id=self.pocket_ic.instance_id, settings = ?settings, sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn create_canister_with_settings(
         &self,
@@ -1120,6 +1140,7 @@ impl PocketIc {
     }
 
     /// Creates a canister with a specific canister ID and optional custom settings.
+    /// The canister is created with 100T cycles.
     /// Returns an error if the canister ID is already in use.
     /// Creates a new subnet if the canister ID is not contained in any of the subnets.
     ///
@@ -1142,6 +1163,7 @@ impl PocketIc {
     }
 
     /// Create a canister on a specific subnet with optional custom settings.
+    /// The canister is created with 100T cycles.
     #[instrument(ret(Display), skip(self), fields(instance_id=self.pocket_ic.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string(), settings = ?settings, subnet_id = %subnet_id.to_string()))]
     pub fn create_canister_on_subnet(
         &self,
@@ -1153,6 +1175,24 @@ impl PocketIc {
         runtime.block_on(async {
             self.pocket_ic
                 .create_canister_on_subnet(sender, settings, subnet_id)
+                .await
+        })
+    }
+
+    /// Create a canister with optional cycles, settings, and placement.
+    /// The placement specifies either a target subnet or a specific canister ID.
+    /// Defaults to 100T cycles if `params.cycles` is `None`.
+    /// Returns an error if the specified canister ID is already in use.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn create_canister_with_params(
+        &self,
+        sender: Option<Principal>,
+        params: CreateCanisterParams,
+    ) -> Result<CanisterId, String> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .create_canister_with_params(sender, params)
                 .await
         })
     }

@@ -142,15 +142,6 @@ fn test_create_canister_with_id() {
 }
 
 #[test]
-#[should_panic(expected = "is out of cycles")]
-fn test_install_canister_with_no_cycles() {
-    let pic = PocketIc::new();
-    let canister_id = pic.create_canister();
-    let wasm = b"\x00\x61\x73\x6d\x01\x00\x00\x00".to_vec();
-    pic.install_canister(canister_id, wasm.clone(), vec![], None);
-}
-
-#[test]
 #[should_panic(expected = "not found")]
 fn test_canister_routing_not_found() {
     let pic = PocketIc::new();
