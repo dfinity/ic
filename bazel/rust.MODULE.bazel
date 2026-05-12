@@ -658,6 +658,10 @@ crate.spec(
     version = "^0.20.1",
 )
 crate.spec(
+    package = "ic-cdk",
+    version = "^0.19",
+)
+crate.spec(
     package = "ic-cdk-executor",
     version = "^2.0.0",
 )

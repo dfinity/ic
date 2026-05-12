@@ -692,6 +692,7 @@ ic-canister-runtime = "0.2.2"
 ic-canister-sig-creation = "1.3.1"
 ic-cbor = "3"
 ic-cdk = "0.20.1"
+ic-cdk-0_19 = { package = "ic-cdk", version = "0.19" }
 ic-cdk-timers = "1.0.0"
 ic-certificate-verification = "3.0.3"
 ic-certification = "3"
