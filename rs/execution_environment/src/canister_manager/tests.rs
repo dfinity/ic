@@ -5432,7 +5432,9 @@ fn update_settings_log_memory_limit_increases_subnet_heap_delta() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
     const MIB: u64 = 1024 * 1024;
 
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_log_memory_store_feature_enabled()
+        .build();
     let canister_id = test
         .create_canister_with_settings(
             CYCLES,
