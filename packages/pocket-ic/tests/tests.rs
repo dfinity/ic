@@ -226,7 +226,7 @@ fn test_create_canister_with_params_default() {
 #[test]
 fn test_create_canister_with_params_cycles() {
     let pic = PocketIc::new();
-    let cycles = 42_000_000_000_000u128;
+    let cycles = 42_000_000_000_000_u128;
     let canister_id = pic
         .create_canister_with_params(
             None,
