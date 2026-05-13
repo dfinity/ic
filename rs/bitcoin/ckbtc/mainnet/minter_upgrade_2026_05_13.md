@@ -16,8 +16,8 @@ Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/
 ---
 
 ## Motivation
-TODO: THIS MUST BE FILLED OUT
 
+* Support [ICRC-21](https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md) consent messages.
 
 ## Release Notes
 
