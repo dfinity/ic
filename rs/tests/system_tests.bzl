@@ -132,8 +132,6 @@ def system_test(
     _runtime_deps |= icos_config.runtime_deps
     icos_images |= icos_config.icos_images
 
-    env_var_files["FARM_METADATA"] = "//rs/tests:farm_metadata.txt"
-
     extra_args_simple = []
     extra_args_colocated = []
 
@@ -210,6 +208,9 @@ def system_test(
 
     tags = tags + ["requires-network", "system_test"]
 
+    env["RUN_SCRIPT_VOLATILE_STATUS_PATH"] = "$(rootpath //bazel:volatile-status.txt)"
+    data.append("//bazel:volatile-status.txt")
+
     sh_test(
         name = test_name,
         srcs = ["//rs/tests:run_systest.sh"],
@@ -225,8 +226,6 @@ def system_test(
         visibility = visibility,
     )
 
-    COLOCATED_RUNTIME_DEP_ENV_VARS = RUN_SCRIPT_RUNTIME_DEP_ENV_VARS
-
     # create a colocated version of the test (marked as manual _unless_ the test is tagged with "colocate")
     sh_test(
         srcs = ["//rs/tests:run_systest.sh"],
@@ -239,7 +238,6 @@ def system_test(
         env = env | {
                   "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath //rs/tests/idx:colocate_test_bin)",
                   "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_colocated),
-                  "COLOCATED_RUNTIME_DEP_ENV_VARS": COLOCATED_RUNTIME_DEP_ENV_VARS,
                   "COLOCATED_UVM_CONFIG_IMAGE_PATH": "$(rootpath //rs/tests:colocate_uvm_config_image)",
                   "COLOCATED_TEST_NAME": test_name,
                   "COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES": json.encode(colocated_test_driver_vm_required_host_features),
