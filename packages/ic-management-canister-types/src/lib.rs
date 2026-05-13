@@ -205,7 +205,7 @@ pub struct DefiniteCanisterSettings {
 pub struct CreateCanisterArgs {
     /// Canister settings.
     pub settings: Option<CanisterSettings>,
-    /// Must match the canister's [`canister_version`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-canister-version) value when specified.
+    /// Must match the canister's [`canister_version`](https://docs.internetcomputer.org/references/ic-interface-spec/canister-interface/#system-api-canister-version) value when specified.
     pub sender_canister_version: Option<u64>,
 }
 
@@ -225,7 +225,7 @@ pub struct UpdateSettingsArgs {
     pub canister_id: CanisterId,
     ///Canister settings.
     pub settings: CanisterSettings,
-    /// Must match the canister's [`canister_version`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-canister-version) value when specified.
+    /// Must match the canister's [`canister_version`](https://docs.internetcomputer.org/references/ic-interface-spec/canister-interface/#system-api-canister-version) value when specified.
     pub sender_canister_version: Option<u64>,
 }
 
@@ -363,7 +363,7 @@ pub struct InstallCodeArgs {
     /// The argument to be passed to `canister_init` or `canister_post_upgrade`.
     #[serde(with = "serde_bytes")]
     pub arg: Vec<u8>,
-    /// Must match the canister's [`canister_version`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-canister-version) value when specified.
+    /// Must match the canister's [`canister_version`](https://docs.internetcomputer.org/references/ic-interface-spec/canister-interface/#system-api-canister-version) value when specified.
     pub sender_canister_version: Option<u64>,
 }
 
@@ -388,7 +388,7 @@ pub struct InstallChunkedCodeArgs {
     /// The argument to be passed to `canister_init` or `canister_post_upgrade`.
     #[serde(with = "serde_bytes")]
     pub arg: Vec<u8>,
-    /// Must match the canister's [`canister_version`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-canister-version) value when specified.
+    /// Must match the canister's [`canister_version`](https://docs.internetcomputer.org/references/ic-interface-spec/canister-interface/#system-api-canister-version) value when specified.
     pub sender_canister_version: Option<u64>,
 }
 
@@ -401,7 +401,7 @@ pub struct InstallChunkedCodeArgs {
 pub struct UninstallCodeArgs {
     /// Canister ID.
     pub canister_id: CanisterId,
-    /// Must match the canister's [`canister_version`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-canister-version) value when specified.
+    /// Must match the canister's [`canister_version`](https://docs.internetcomputer.org/references/ic-interface-spec/canister-interface/#system-api-canister-version) value when specified.
     pub sender_canister_version: Option<u64>,
 }
 
@@ -845,7 +845,7 @@ pub struct HttpRequestArgs {
     /// This value affects the cost of the http request and it is highly recommended
     /// to set it as low as possible to avoid unnecessary extra costs.
     ///
-    /// See also the [pricing section of HTTP outcalls documentation](https://internetcomputer.org/docs/current/references/https-outcalls-how-it-works#pricing).
+    /// See also the [pricing section of HTTP outcalls documentation](https://docs.internetcomputer.org/references/cycles-costs/#https-outcalls).
     pub max_response_bytes: Option<u64>,
     /// The method of HTTP request.
     pub method: HttpMethod,
@@ -1394,7 +1394,7 @@ pub struct ProvisionalCreateCanisterWithCyclesArgs {
     pub settings: Option<CanisterSettings>,
     /// If set, the canister will be created under this id.
     pub specified_id: Option<CanisterId>,
-    /// Must match the canister's [`canister_version`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-canister-version) value when specified.
+    /// Must match the canister's [`canister_version`](https://docs.internetcomputer.org/references/ic-interface-spec/canister-interface/#system-api-canister-version) value when specified.
     pub sender_canister_version: Option<u64>,
 }
 
@@ -1451,7 +1451,7 @@ pub struct TakeCanisterSnapshotArgs {
     pub replace_snapshot: Option<SnapshotId>,
     /// If true, uninstall the canister code after taking the snapshot.
     pub uninstall_code: Option<bool>,
-    /// Must match the canister's [`canister_version`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-canister-version) value when specified.
+    /// Must match the canister's [`canister_version`](https://docs.internetcomputer.org/references/ic-interface-spec/canister-interface/#system-api-canister-version) value when specified.
     pub sender_canister_version: Option<u64>,
 }
 
@@ -1471,7 +1471,7 @@ pub struct LoadCanisterSnapshotArgs {
     pub canister_id: CanisterId,
     /// ID of the snapshot to be loaded.
     pub snapshot_id: SnapshotId,
-    /// Must match the canister's [`canister_version`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-canister-version) value when specified.
+    /// Must match the canister's [`canister_version`](https://docs.internetcomputer.org/references/ic-interface-spec/canister-interface/#system-api-canister-version) value when specified.
     pub sender_canister_version: Option<u64>,
 }
 
