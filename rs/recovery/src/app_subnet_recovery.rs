@@ -1,7 +1,7 @@
 use crate::{
     DataLocation, NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step,
     cli::{
-        consent_given, print_height_info, read, read_optional, read_optional_data_location,
+        consent_given, print_height_info, read, read_data_location, read_optional,
         read_optional_node_ids, read_optional_subnet_id, read_optional_type, wait_for_confirmation,
     },
     error::{GracefulExpect, RecoveryError},
@@ -324,16 +324,16 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     );
 
                     self.params.download_pool_node =
-                        read_optional(&self.logger, "Enter consensus pool download IP:");
+                        Some(read(&self.logger, "Enter consensus pool download IP:"));
                 }
             }
 
             StepType::DownloadState => {
                 if self.params.download_state_method.is_none() {
-                    self.params.download_state_method = read_optional_data_location(
+                    self.params.download_state_method = Some(read_data_location(
                         &self.logger,
                         "Enter location of the subnet state to be recovered [local/<ipv6>]:",
-                    );
+                    ));
                 }
 
                 if self.params.keep_downloaded_state.is_none()
@@ -363,7 +363,17 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
 
             StepType::BlessVersion => {
                 if self.params.upgrade_version.is_none() {
-                    self.params.upgrade_version = read_optional(&self.logger, "Upgrade version: ");
+                    self.params.upgrade_version =
+                        read_optional(&self.logger, "Version to bless (and upgrade to): ");
+                }
+            }
+
+            StepType::UpgradeVersion => {
+                if self.params.upgrade_version.is_none() {
+                    self.params.upgrade_version = read_optional(
+                        &self.logger,
+                        "Version to upgrade to (WARN: it should already be blessed): ",
+                    );
                 }
             }
 
@@ -390,10 +400,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
 
             StepType::UploadState => {
                 if self.params.upload_method.is_none() {
-                    self.params.upload_method = read_optional_data_location(
+                    self.params.upload_method = Some(read_data_location(
                         &self.logger,
                         "Are you performing a local recovery directly on the node, or a remote recovery? [local/<ipv6>]",
-                    );
+                    ));
                 }
             }
 
