@@ -205,8 +205,9 @@ fn test_evict_stale_rates_keeps_one_seed_before_window() {
     // must drop all the pre-window entries except the most recent one, which is kept as the
     // LOCF seed for any leading missing days at the start of the window.
     let current_day = 1_000_u64;
-    let oldest_kept_day = current_day - (MAX_RATES_BUFFER_SIZE as u64 - 1); // 636
-    let mut rates: Vec<SampledPrice> = (0..=635)
+    let oldest_kept_day = current_day - (MAX_RATES_BUFFER_SIZE as u64 - 1);
+    let last_pre_window_day = oldest_kept_day - 1;
+    let mut rates: Vec<SampledPrice> = (0..=last_pre_window_day)
         .map(|d| SampledPrice {
             timestamp_seconds: d * ONE_DAY_SECONDS,
             xdr_permyriad_per_icp: 50_000,
@@ -222,11 +223,11 @@ fn test_evict_stale_rates_keeps_one_seed_before_window() {
         icp_xdr_rates: rates,
     };
     evict_stale_rates(&mut history, current_day);
-    // Only the most recent pre-window entry (day 635) survives, plus the in-window entry.
+    // Only the most recent pre-window entry survives, plus the in-window entry.
     assert_eq!(history.icp_xdr_rates.len(), 2);
     assert_eq!(
         history.icp_xdr_rates[0].timestamp_seconds,
-        635 * ONE_DAY_SECONDS,
+        last_pre_window_day * ONE_DAY_SECONDS,
         "the most recent pre-window entry must be retained as the LOCF seed"
     );
     assert_eq!(
@@ -333,8 +334,8 @@ fn test_compute_average_icp_xdr_rate_full_window_no_gaps() {
 }
 
 #[test]
-fn test_compute_average_icp_xdr_rate_locf_fills_middle_gap() {
-    // 7-day window ending at day 100. Days 94-99 present (50_000), day 100 missing.
+fn test_compute_average_icp_xdr_rate_locf_fills_trailing_gap() {
+    // 7-day window ending at day 100. Days 94-99 present (50_000), trailing day 100 missing.
     // LOCF carries day 99's rate forward to day 100 → 7 contributions of 50_000 → avg 50_000.
     let rates: Vec<SampledPrice> = (94..=99)
         .map(|d| SampledPrice {
