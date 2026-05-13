@@ -1158,13 +1158,8 @@ impl PocketIc {
             },),
         )
         .await
-        .map(|(x,)| x);
-        match res {
-            Ok(CanisterIdRecord {
-                canister_id: actual_canister_id,
-            }) => Ok(actual_canister_id),
-            Err(e) => Err(format!("{e:?}")),
-        }
+        .map(|(x,)| x.canister_id)
+        .map_err(|e| format!("{e:?}"))
     }
 
     /// Upload a WASM chunk to the WASM chunk store of a canister.
