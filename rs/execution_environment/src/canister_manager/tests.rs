@@ -5428,6 +5428,46 @@ fn upload_chunk_increases_subnet_heap_delta() {
 }
 
 #[test]
+fn update_settings_log_memory_limit_increases_subnet_heap_delta() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const MIB: u64 = 1024 * 1024;
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(MIB)
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
+
+    let old_log_memory_usage = test
+        .canister_state(canister_id)
+        .log_memory_store_memory_usage();
+    // header (4 KiB) + index table (4 KiB) + data region (1 MiB)
+    assert_eq!(old_log_memory_usage, NumBytes::new(MIB + 8 * 1024));
+
+    // Changing the log memory limit rewrites the log store, so the heap delta
+    // should increase by the old log store memory usage.
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(2 * MIB)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, args).unwrap();
+
+    assert_eq!(
+        test.state().metadata.heap_delta_estimate,
+        old_log_memory_usage,
+    );
+}
+
+#[test]
 fn upload_chunk_charges_canister_cycles() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
     let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
