@@ -2,7 +2,6 @@ use super::*;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::state::queues::v1::CompoundCycles as PbCompoundCycles;
-use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Instructions};
 
 impl From<&CanisterStatus> for pb::canister_state_bits::CanisterStatus {
     fn from(item: &CanisterStatus) -> Self {
@@ -100,9 +99,6 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                     task: Some(pb::execution_task::Task::AbortedExecution(
                         pb::execution_task::AbortedExecution {
                             input: Some(input),
-                            prepaid_execution_cycles: Some(
-                                (prepaid_execution_cycles.real()).into(),
-                            ),
                             prepaid_execution_compound_cycles: Some(PbCompoundCycles::from(
                                 *prepaid_execution_cycles,
                             )),
@@ -125,9 +121,6 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                         pb::execution_task::AbortedInstallCode {
                             message: Some(message),
                             call_id: Some(call_id.get()),
-                            prepaid_execution_cycles: Some(
-                                (prepaid_execution_cycles.real()).into(),
-                            ),
                             prepaid_execution_compound_cycles: Some(PbCompoundCycles::from(
                                 *prepaid_execution_cycles,
                             )),
@@ -146,14 +139,6 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
         let task = value
             .task
             .ok_or(ProxyDecodeError::MissingField("ExecutionTask::task"))?;
-        // cost_schedule should ideally be read from the checkpoint, however there
-        // is no easy access to it here (will need to be propagated from `StateManager`).
-        // Given that the current state is that the values for `Cycles` and `NominalCycles`
-        // should still match and that they should be 0 on `Free` schedule, we can use `Normal`
-        // without any loss (to maintain values on subnets with `Normal` schedule).
-        // This code will be removed anyway when the new fields are set and the old fields
-        // containing just `Cycles` can be retired.
-        let cost_schedule = CanisterCyclesCostSchedule::Normal;
         let task = match task {
             pb::execution_task::Task::AbortedExecution(aborted) => {
                 use pb::execution_task::{
@@ -193,15 +178,10 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                         CanisterMessageOrTask::Task(task)
                     }
                 };
-                let prepaid_execution_cycles = match aborted.prepaid_execution_compound_cycles {
-                    Some(value) => CompoundCycles::try_from(value)?,
-                    None => {
-                        let prepaid_execution_cycles = aborted
-                            .prepaid_execution_cycles
-                            .map_or_else(Cycles::zero, |c| c.into());
-                        CompoundCycles::<Instructions>::new(prepaid_execution_cycles, cost_schedule)
-                    }
-                };
+                let prepaid_execution_cycles = try_from_option_field(
+                    aborted.prepaid_execution_compound_cycles,
+                    "AbortedExecution::prepaid_execution_compound_cycles",
+                )?;
                 ExecutionTask::AbortedExecution {
                     input,
                     prepaid_execution_cycles,
@@ -216,15 +196,10 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     Message::Request(v) => CanisterCall::Request(Arc::new(v.try_into()?)),
                     Message::Ingress(v) => CanisterCall::Ingress(Arc::new(v.try_into()?)),
                 };
-                let prepaid_execution_cycles = match aborted.prepaid_execution_compound_cycles {
-                    Some(value) => CompoundCycles::try_from(value)?,
-                    None => {
-                        let prepaid_execution_cycles = aborted
-                            .prepaid_execution_cycles
-                            .map_or_else(Cycles::zero, |c| c.into());
-                        CompoundCycles::<Instructions>::new(prepaid_execution_cycles, cost_schedule)
-                    }
-                };
+                let prepaid_execution_cycles = try_from_option_field(
+                    aborted.prepaid_execution_compound_cycles,
+                    "AbortedExecution::prepaid_execution_compound_cycles",
+                )?;
                 let call_id = aborted.call_id.ok_or(ProxyDecodeError::MissingField(
                     "AbortedInstallCode::call_id",
                 ))?;

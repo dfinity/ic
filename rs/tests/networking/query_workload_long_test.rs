@@ -25,7 +25,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},
     driver::{
-        farm::HostFeature,
+        farm::{HostFeature, VmAllocationMode},
         group::SystemTestGroup,
         ic::ImageSizeGiB,
         test_env::TestEnv,
@@ -153,6 +153,7 @@ fn main() -> Result<()> {
     let overall_timeout: Duration = per_task_timeout + OVERALL_TIMEOUT_DELTA; // This should be a bit larger than the per_task_timeout.
     let test = |env| test(env, RPS, WORKLOAD_RUNTIME);
     SystemTestGroup::new()
+        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(|env| {
             setup(
                 env,

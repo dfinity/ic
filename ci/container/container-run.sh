@@ -133,8 +133,19 @@ elif ! "${CONTAINER_CMD[@]}" image exists $IMAGE; then
 fi
 
 if [ "$DEVENV" = true ]; then
-    eprintln "Purging non-relevant container images"
-    "${CONTAINER_CMD[@]}" image prune -a -f --filter "reference!=$IMAGE"
+    # on the devenv we issue a warning if the images start taking up a lot of space.
+    # Podman does not have a dedicated layer cache like docker, so we avoid nuking dangling/unused images unless space becomes a concern;
+    # this allows new image builds to benefit from cached layers.
+    # We only issue a warning so that the user can GC when it's most convenient.
+    MAX_GB=20
+    images_rawsize=$(${CONTAINER_CMD[@]} system df --format json | jq -cMr '.[]|select(.Type == "Images")|.RawSize')
+    if (($images_rawsize > $MAX_GB * 10 ** 9)); then
+        tput -T xterm setaf 3
+        tput -T xterm bold
+        eprintln "Container images take up more than ${MAX_GB}GB. You can reclaim space by clearing the container image cache (will cause a rebuild):"
+        eprintln "> ${CONTAINER_CMD[@]} image prune --all --force --filter containers=false"
+        tput -T xterm sgr0
+    fi
 fi
 
 WORKDIR="/ic"

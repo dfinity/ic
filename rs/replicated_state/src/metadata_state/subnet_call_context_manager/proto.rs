@@ -332,12 +332,6 @@ fn try_into_array_message_hash(
     try_into_array::<MESSAGE_HASH_SIZE>(bytes, "message_hash")
 }
 
-fn try_into_array_pseudo_random_id(
-    bytes: Vec<u8>,
-) -> Result<[u8; PSEUDO_RANDOM_ID_SIZE], ProxyDecodeError> {
-    try_into_array::<PSEUDO_RANDOM_ID_SIZE>(bytes, "pseudo_random_id")
-}
-
 fn try_into_array_nonce(bytes: Vec<u8>) -> Result<[u8; NONCE_SIZE], ProxyDecodeError> {
     try_into_array::<NONCE_SIZE>(bytes, "nonce")
 }
@@ -535,10 +529,6 @@ impl From<&SignWithThresholdContext> for pb_metadata::SignWithThresholdContext {
             request: Some((&context.request).into()),
             args: Some((&context.args).into()),
             derivation_path_vec: context.derivation_path.to_vec(),
-            deprecated_pseudo_random_id: context
-                .deprecated_pseudo_random_id
-                .map(|id| id.to_vec())
-                .unwrap_or_default(),
             batch_time: context.batch_time.as_nanos_since_unix_epoch(),
             nonce: context.nonce.map(|n| n.to_vec()),
         }
@@ -556,10 +546,6 @@ impl TryFrom<pb_metadata::SignWithThresholdContext> for SignWithThresholdContext
             request,
             args,
             derivation_path: Arc::new(context.derivation_path_vec),
-            deprecated_pseudo_random_id: try_into_array_pseudo_random_id(
-                context.deprecated_pseudo_random_id,
-            )
-            .ok(),
             batch_time: Time::from_nanos_since_unix_epoch(context.batch_time),
             nonce: context.nonce.map(try_into_array_nonce).transpose()?,
         })

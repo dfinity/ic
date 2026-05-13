@@ -35,7 +35,7 @@ use ic_types::{
     consensus::idkg::{IDkgMasterPublicKeyId, PreSigId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload, RejectContext,
+        CallbackId, CanisterTask, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload, RejectContext,
         RequestOrResponse, Response,
     },
     time::UNIX_EPOCH,
@@ -4141,6 +4141,274 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
             .get(&CyclesUseCase::BurnedCycles)
             .is_none()
     );
+}
+
+#[test]
+fn canister_init_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let canister_id = test.create_canister(initial_cycles);
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    let init_payload = wasm().cycles_burn128(cycles_to_burn).build();
+    test.install_canister_with_args(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), init_payload)
+        .unwrap();
+
+    // Canister loses `cycles_to_burn` from its balance (in addition to execution cost).
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(canister_id).real() - cycles_to_burn
+    );
+
+    // The burned cycles are accounted for in the canister's metrics.
+    let burned_cycles = *test
+        .canister_state(canister_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .get(&CyclesUseCase::BurnedCycles)
+        .unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+}
+
+#[test]
+fn canister_post_upgrade_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let canister_id = test.create_canister(initial_cycles);
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    test.install_canister_with_args(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), vec![])
+        .unwrap();
+    let post_upgrade_payload = wasm().cycles_burn128(cycles_to_burn).build();
+    test.upgrade_canister_with_args(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        post_upgrade_payload,
+    )
+    .unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(canister_id).real() - cycles_to_burn
+    );
+
+    let burned_cycles = *test
+        .canister_state(canister_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .get(&CyclesUseCase::BurnedCycles)
+        .unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+}
+
+#[test]
+fn canister_pre_upgrade_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let canister_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_pre_upgrade(wasm().cycles_burn128(cycles_to_burn))
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(canister_id).real() - cycles_to_burn
+    );
+
+    let burned_cycles = *test
+        .canister_state(canister_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .get(&CyclesUseCase::BurnedCycles)
+        .unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+}
+
+#[test]
+fn reply_callback_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let caller_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let callee_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    test.ingress(
+        caller_id,
+        "update",
+        wasm()
+            .inter_update(
+                callee_id,
+                call_args()
+                    .other_side(wasm().reply())
+                    .on_reply(wasm().cycles_burn128(cycles_to_burn).reply()),
+            )
+            .build(),
+    )
+    .unwrap();
+
+    let use_cases = test
+        .canister_state(caller_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .clone();
+    let transmission_cost = Cycles::new(
+        use_cases
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .map(|c| c.get())
+            .unwrap_or(0),
+    );
+    assert_eq!(
+        test.canister_state(caller_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(caller_id).real()
+            - transmission_cost
+            - cycles_to_burn
+    );
+
+    let burned_cycles = *use_cases.get(&CyclesUseCase::BurnedCycles).unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+}
+
+#[test]
+fn reject_callback_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let caller_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let callee_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    test.ingress(
+        caller_id,
+        "update",
+        wasm()
+            .inter_update(
+                callee_id,
+                call_args()
+                    .other_side(wasm().trap())
+                    .on_reject(wasm().cycles_burn128(cycles_to_burn).reply()),
+            )
+            .build(),
+    )
+    .unwrap();
+
+    let use_cases = test
+        .canister_state(caller_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .clone();
+    let transmission_cost = Cycles::new(
+        use_cases
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .map(|c| c.get())
+            .unwrap_or(0),
+    );
+    assert_eq!(
+        test.canister_state(caller_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(caller_id).real()
+            - transmission_cost
+            - cycles_to_burn
+    );
+
+    let burned_cycles = *use_cases.get(&CyclesUseCase::BurnedCycles).unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+}
+
+#[test]
+fn cleanup_callback_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let caller_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let callee_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    // The reply callback traps, triggering the cleanup callback.
+    // The ingress fails because the reply callback trapped.
+    test.ingress(
+        caller_id,
+        "update",
+        wasm()
+            .inter_update(
+                callee_id,
+                call_args()
+                    .other_side(wasm().reply())
+                    .on_reply(wasm().trap())
+                    .on_cleanup(wasm().cycles_burn128(cycles_to_burn)),
+            )
+            .build(),
+    )
+    .unwrap_err();
+
+    let use_cases = test
+        .canister_state(caller_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .clone();
+    let transmission_cost = Cycles::new(
+        use_cases
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .map(|c| c.get())
+            .unwrap_or(0),
+    );
+    assert_eq!(
+        test.canister_state(caller_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(caller_id).real()
+            - transmission_cost
+            - cycles_to_burn
+    );
+
+    let burned_cycles = *use_cases.get(&CyclesUseCase::BurnedCycles).unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+}
+
+#[test]
+fn heartbeat_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let canister_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_heartbeat(wasm().cycles_burn128(cycles_to_burn))
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    test.canister_task(canister_id, CanisterTask::Heartbeat);
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(canister_id).real() - cycles_to_burn
+    );
+
+    let burned_cycles = *test
+        .canister_state(canister_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .get(&CyclesUseCase::BurnedCycles)
+        .unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
 }
 
 #[test]

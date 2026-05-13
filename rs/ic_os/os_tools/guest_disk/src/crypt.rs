@@ -1,7 +1,7 @@
 use crate::metrics::export_luks_parameters;
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use itertools::Either::Right;
-use libcryptsetup_rs::consts::flags::{CryptActivate, CryptVolumeKey};
+use libcryptsetup_rs::consts::flags::{CryptActivate, CryptPbkdf, CryptVolumeKey};
 use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat, KeyslotInfo};
 use libcryptsetup_rs::{CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle};
 use std::fs;
@@ -90,7 +90,7 @@ pub fn activate_crypt_device(
     device_path: &Path,
     header_location: LuksHeaderLocation,
     name: &str,
-    encryption_key: &[u8],
+    passphrase: &[u8],
     flags: CryptActivate,
     verify_luks_params: bool,
     metrics_file: Option<&Path>,
@@ -102,7 +102,7 @@ pub fn activate_crypt_device(
 
     let active_keyslot = crypt_device
         .activate_handle()
-        .activate_by_passphrase(Some(name), None, encryption_key, flags)
+        .activate_by_passphrase(Some(name), None, passphrase, flags)
         .context("Failed to activate cryptographic device")?;
 
     if let Some(metrics_file) = metrics_file {
@@ -129,6 +129,26 @@ pub fn deactivate_crypt_device(crypt_name: &str) -> Result<()> {
     Ok(())
 }
 
+fn apply_default_settings(crypt_device: &mut CryptDevice) -> Result<()> {
+    // The settings below are not preserved in the persisted metadata, therefore they need to be
+    // set every time the device is opened, otherwise the defaults are used.
+
+    // TODO: We should revisit the use of Pbkdf2 and consider using the LUKS2 default KDF, Argon2i
+    let mut pbkdf_params = CryptSettingsHandle::get_pbkdf_type_params(&PBKDF_TYPE)
+        .context("Failed to get PBKDF params")?;
+    // Set minimal iteration count and disable benchmarking -- we already use a random key with
+    // maximal entropy, pbkdf doesn't gain anything (besides slowing down boot by a couple seconds
+    // which needlessly annoys for testing).
+    pbkdf_params.iterations = PBKDF_ITERATIONS;
+    pbkdf_params.flags |= CryptPbkdf::NO_BENCHMARK;
+    crypt_device
+        .settings_handle()
+        .set_pbkdf_type(&pbkdf_params)
+        .context("Failed to set PBKDF type")?;
+
+    Ok(())
+}
+
 /// Formats the given cryptographic device with LUKS2 and initializes it with the provided
 /// encryption key.
 /// WARNING: Leads to data loss on the device!
@@ -149,17 +169,7 @@ pub fn format_crypt_device(
         "Formatting {} with LUKS2 and initializing it with an encryption key",
         device_path.display()
     );
-    // TODO: We should revisit the use of Pbkdf2 and consider using the LUKS2 default KDF, Argon2i
-    let mut pbkdf_params = CryptSettingsHandle::get_pbkdf_type_params(&PBKDF_TYPE)
-        .context("Failed to get PBKDF2 params")?;
-    // Set minimal iteration count -- we already use a random key with
-    // maximal entropy, pbkdf doesn't gain anything (besides slowing
-    // down boot by a couple seconds which needlessly annoys for testing).
-    pbkdf_params.iterations = PBKDF_ITERATIONS;
-    crypt_device
-        .settings_handle()
-        .set_pbkdf_type(&pbkdf_params)
-        .context("Failed to set PBKDF2 type")?;
+    apply_default_settings(&mut crypt_device)?;
     crypt_device
         .context_handle()
         .format::<CryptParamsLuks2Ref>(
@@ -178,7 +188,8 @@ pub fn format_crypt_device(
     Ok(crypt_device)
 }
 
-/// Opens a LUKS2 device at the specified path and loads its context. Does not activate the device.
+/// Opens a LUKS2 device at the specified path, loads its context, and prepares handle-local
+/// defaults for follow-on operations such as adding keyslots. Does not activate the device.
 pub fn open_luks2_device(
     device_path: &Path,
     header_location: LuksHeaderLocation,
@@ -188,6 +199,7 @@ pub fn open_luks2_device(
     crypt_device
         .context_handle()
         .load::<CryptParamsLuks2Ref>(Some(ENCRYPTION_FORMAT), None)?;
+    apply_default_settings(&mut crypt_device)?;
 
     Ok(crypt_device)
 }
@@ -239,7 +251,10 @@ pub fn backup_luks_header_to_file(device_path: &Path, header_path: &Path) -> Res
                 temp_header_path.display()
             )
         })?;
-    fs::set_permissions(&temp_header_path, fs::Permissions::from_mode(0o600))
+
+    // We allow every user to read the header. The replica (running as user ic-replica) needs
+    // access to this file so that it can share it during an upgrade.
+    fs::set_permissions(&temp_header_path, fs::Permissions::from_mode(0o644))
         .context("Failed to set permissions on temporary detached LUKS header file")?;
 
     fs::rename(&temp_header_path, header_path)
