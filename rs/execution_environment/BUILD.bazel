@@ -274,12 +274,7 @@ rust_ic_test(
     name = "memory_matrix_test",
     size = "large",
     srcs = ["tests/memory_matrix.rs"],
-    # Reduce parallelism on Linux to deflake the test (see PR #9647),
-    # but keep the higher parallelism on Darwin to avoid timeouts on arm64-darwin.
-    args = select({
-        "@platforms//os:linux": ["--test-threads=2"],
-        "//conditions:default": ["--test-threads=4"],
-    }),
+    args = ["--test-threads=2"],
     data = [
         "//rs/universal_canister/impl:universal_canister.module",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
@@ -290,7 +285,6 @@ rust_ic_test(
     },
     tags = [
         "cpu:4",
-        "test_all_platforms_slow",
     ],
     deps = [
         # Keep sorted.
