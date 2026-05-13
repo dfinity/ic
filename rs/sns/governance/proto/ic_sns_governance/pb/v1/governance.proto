@@ -563,7 +563,7 @@ message ManageDappCanisterSettings {
   repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
 
   // Below are fields under CanisterSettings defined at
-  // https://docs.internetcomputer.org/references/management-canister/#canister-settings.
+  // https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.
   optional uint64 compute_allocation = 2;
   optional uint64 memory_allocation = 3;
   optional uint64 freezing_threshold = 4;

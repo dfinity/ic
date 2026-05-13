@@ -2704,7 +2704,7 @@ pub struct UpdateCanisterSettings {
 }
 
 /// The CanisterSettings struct as defined in the ic-interface-spec
-/// <https://docs.internetcomputer.org/references/management-canister/#canister-settings>.
+/// <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.>
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
 )]
