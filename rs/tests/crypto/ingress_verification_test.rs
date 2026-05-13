@@ -76,6 +76,7 @@ enum GenericIdentityType<'a> {
     Canister(&'a UniversalCanister<'a>),
     WebAuthnEcdsaSecp256r1,
     WebAuthnRsaPkcs1,
+    WebAuthnEd25519,
 }
 
 impl<'a> GenericIdentityType<'a> {
@@ -83,22 +84,24 @@ impl<'a> GenericIdentityType<'a> {
         canister: &'a UniversalCanister<'a>,
         rng: &mut R,
     ) -> Self {
-        match rng.r#gen::<usize>() % 6 {
+        match rng.r#gen::<usize>() % 7 {
             0 => Self::EcdsaSecp256k1,
             1 => Self::EcdsaSecp256r1,
             2 => Self::Canister(canister),
             3 => Self::WebAuthnEcdsaSecp256r1,
             4 => Self::WebAuthnRsaPkcs1,
+            5 => Self::WebAuthnEd25519,
             _ => Self::Ed25519,
         }
     }
 
     fn random<R: Rng + CryptoRng>(rng: &mut R) -> Self {
-        match rng.r#gen::<usize>() % 5 {
+        match rng.r#gen::<usize>() % 6 {
             0 => Self::EcdsaSecp256k1,
             1 => Self::EcdsaSecp256r1,
             2 => Self::WebAuthnEcdsaSecp256r1,
             3 => Self::WebAuthnRsaPkcs1,
+            4 => Self::WebAuthnEd25519,
             _ => Self::Ed25519,
         }
     }
@@ -112,6 +115,7 @@ enum GenericIdentityInner<'a> {
     Canister(CanisterSigner<'a>),
     WebAuthnEcdsaSecp256r1(ic_secp256r1::PrivateKey),
     WebAuthnRsaPkcs1(rsa::RsaPrivateKey),
+    WebAuthnEd25519(ic_ed25519::PrivateKey),
 }
 
 #[derive(Clone)]
@@ -154,6 +158,11 @@ impl<'a> GenericIdentity<'a> {
                 let sk = rsa::RsaPrivateKey::new(rng, 2048).expect("RSA keygen failed");
                 let pk = webauthn_cose_wrap_rsa_pkcs1_key(&rsa::RsaPublicKey::from(&sk));
                 (GenericIdentityInner::WebAuthnRsaPkcs1(sk), pk)
+            }
+            GenericIdentityType::WebAuthnEd25519 => {
+                let sk = ic_ed25519::PrivateKey::generate_using_rng(rng);
+                let pk = webauthn_cose_wrap_ed25519_key(&sk.public_key());
+                (GenericIdentityInner::WebAuthnEd25519(sk), pk)
             }
         };
 
@@ -214,6 +223,7 @@ impl<'a> GenericIdentity<'a> {
                 webauthn_sign_ecdsa_secp256r1(sk, bytes)
             }
             GenericIdentityInner::WebAuthnRsaPkcs1(sk) => webauthn_sign_rsa_pkcs1(sk, bytes),
+            GenericIdentityInner::WebAuthnEd25519(sk) => webauthn_sign_ed25519(sk, bytes),
             GenericIdentityInner::Canister(canister_signer) => {
                 let sign_future = canister_signer.sign(bytes);
                 // We are in a sync method and need to call the async `CanisterSigner::sign`,
@@ -2469,6 +2479,38 @@ fn webauthn_cose_wrap_ecdsa_secp256r1_key(pk: &ic_secp256r1::PublicKey) -> Vec<u
     wrap_cose_key_in_der_spki(&Value::Map(map))
 }
 
+fn webauthn_cose_wrap_ed25519_key(pk: &ic_ed25519::PublicKey) -> Vec<u8> {
+    let mut map = std::collections::BTreeMap::new();
+
+    use serde_cbor::Value;
+
+    /*
+    See:
+    - RFC 8152 ("CBOR Object Signing and Encryption (COSE)"), section 13.2
+      for OKP key-type parameters.
+    - RFC 8812 ("CBOR Object Signing and Encryption (COSE) and JSON Object
+      Signing and Encryption (JOSE) Registrations for Web Authentication
+      (WebAuthn) Algorithms"), section 3.1 for the EdDSA algorithm code.
+     */
+    const COSE_PARAM_KTY: serde_cbor::Value = serde_cbor::Value::Integer(1);
+    const COSE_PARAM_KTY_OKP: serde_cbor::Value = serde_cbor::Value::Integer(1);
+
+    const COSE_PARAM_ALG: serde_cbor::Value = serde_cbor::Value::Integer(3);
+    const COSE_PARAM_ALG_EDDSA: serde_cbor::Value = serde_cbor::Value::Integer(-8);
+
+    const COSE_PARAM_OKP_CRV: serde_cbor::Value = serde_cbor::Value::Integer(-1);
+    const COSE_PARAM_OKP_CRV_ED25519: serde_cbor::Value = serde_cbor::Value::Integer(6);
+
+    const COSE_PARAM_OKP_X: serde_cbor::Value = serde_cbor::Value::Integer(-2);
+
+    map.insert(COSE_PARAM_KTY, COSE_PARAM_KTY_OKP);
+    map.insert(COSE_PARAM_ALG, COSE_PARAM_ALG_EDDSA);
+    map.insert(COSE_PARAM_OKP_CRV, COSE_PARAM_OKP_CRV_ED25519);
+    map.insert(COSE_PARAM_OKP_X, Value::Bytes(pk.serialize_raw().to_vec()));
+
+    wrap_cose_key_in_der_spki(&Value::Map(map))
+}
+
 fn webauthn_sign_message<F: FnOnce(&[u8]) -> Vec<u8>>(msg: &[u8], sign_fn: F) -> Vec<u8> {
     use serde::Serialize;
 
@@ -2519,5 +2561,12 @@ fn webauthn_sign_rsa_pkcs1(sk: &rsa::RsaPrivateKey, msg: &[u8]) -> Vec<u8> {
         use rsa::signature::{SignatureEncoding, Signer};
         signing_key.sign(to_sign).to_vec()
     };
+    webauthn_sign_message(msg, sign_fn)
+}
+
+fn webauthn_sign_ed25519(sk: &ic_ed25519::PrivateKey, msg: &[u8]) -> Vec<u8> {
+    // WebAuthn EdDSA signatures are the raw 64-byte R || s encoding from
+    // RFC 8032 §5.1.6 — no DER wrapping (cf. WebAuthn §6.5.6).
+    let sign_fn = |to_sign: &[u8]| -> Vec<u8> { sk.sign_message(to_sign).to_vec() };
     webauthn_sign_message(msg, sign_fn)
 }

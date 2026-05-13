@@ -72,6 +72,7 @@ pub fn validate_payload(
                 state_reader,
                 validation_context,
                 log.clone(),
+                None,
             )?;
             if summary_payload.dkg != expected_summary {
                 return Err(InvalidDkgPayloadReason::MismatchedDkgSummary(
@@ -230,6 +231,7 @@ fn validate_dealings_payload(
             parent,
             remote_config_results,
             log,
+            None,
         )?;
 
         if dealings.transcripts_for_remote_subnets != expected_transcripts {

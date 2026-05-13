@@ -1,5 +1,5 @@
 use anyhow::Result;
-use ic_system_test_driver::driver::farm::HostFeature;
+use ic_system_test_driver::driver::farm::{HostFeature, VmAllocationMode};
 use std::time::Duration;
 
 use ic_networking_subnet_update_workload::{setup, test};
@@ -30,6 +30,7 @@ fn main() -> Result<()> {
         )
     };
     SystemTestGroup::new()
+        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(setup)
         .add_test(systest!(test))
         .with_timeout_per_test(per_task_timeout) // each task (including the setup function) may take up to `per_task_timeout`.

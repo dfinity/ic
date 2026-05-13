@@ -658,6 +658,7 @@ where
 
     match pk_type {
         KeyBytesContentType::EcdsaP256PublicKeyDerWrappedCose
+        | KeyBytesContentType::Ed25519PublicKeyDerWrappedCose
         | KeyBytesContentType::RsaSha256PublicKeyDerWrappedCose => {
             let webauthn_sig = WebAuthnSignature::try_from(signature.signature.as_slice())
                 .map_err(WebAuthnError)
@@ -800,6 +801,7 @@ where
 
     match pk_type {
         KeyBytesContentType::EcdsaP256PublicKeyDerWrappedCose
+        | KeyBytesContentType::Ed25519PublicKeyDerWrappedCose
         | KeyBytesContentType::RsaSha256PublicKeyDerWrappedCose => {
             let webauthn_sig = WebAuthnSignature::try_from(signature).map_err(WebAuthnError)?;
             validate_webauthn_sig(validator, &webauthn_sig, delegation, &pk)
