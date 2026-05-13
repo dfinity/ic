@@ -269,6 +269,7 @@ impl StateRemover for StateRemoverImpl {
     }
 }
 
+#[cfg_attr(test, derive(Clone, Debug))]
 pub(crate) enum SubnetUpgrade {
     Fast(ReplicaVersion),
     Slow(GuestosVersion),
@@ -1402,6 +1403,83 @@ mod tests {
                 &*raw
             }
         }
+
+        // Asserts that neither upgrader took any action. `prepared_before` carries any
+        // upgrade prepared in a previous iteration and is routed to the corresponding
+        // upgrader (guestos for `Slow`, binaries for `Fast`).
+        fn assert_no_upgrade(&self, prepared_before: Option<&SubnetUpgrade>) {
+            match prepared_before {
+                None => {
+                    self.fake_guestos_upgrader().assert_idle(None);
+                    self.fake_binaries_upgrader().assert_idle(None);
+                }
+                Some(SubnetUpgrade::Slow(guestos_version)) => {
+                    self.fake_guestos_upgrader()
+                        .assert_idle(Some(guestos_version));
+                    self.fake_binaries_upgrader().assert_idle(None);
+                }
+                Some(SubnetUpgrade::Fast(replica_version)) => {
+                    self.fake_guestos_upgrader().assert_idle(None);
+                    self.fake_binaries_upgrader()
+                        .assert_idle(Some(replica_version));
+                }
+            }
+        }
+
+        // Asserts that the upgrade was prepared (but not executed) on the relevant
+        // upgrader, and that the other upgrader stayed idle.
+        fn assert_upgrade_prepared(&self, upgrade: &ReplicaUpgradeScenario) {
+            match &upgrade.upgrade_version {
+                SubnetUpgrade::Slow(guestos_version) => {
+                    self.fake_guestos_upgrader()
+                        .assert_prepared(guestos_version, upgrade.has_prepared_upgrade_before);
+                    self.fake_binaries_upgrader().assert_idle(None);
+                }
+                SubnetUpgrade::Fast(replica_version) => {
+                    self.fake_guestos_upgrader().assert_idle(None);
+                    self.fake_binaries_upgrader()
+                        .assert_prepared(replica_version, upgrade.has_prepared_upgrade_before);
+                }
+            }
+        }
+
+        // Asserts that the upgrade was executed on the relevant upgrader, and that the
+        // other upgrader stayed idle.
+        fn assert_upgrade_executed(&self, upgrade: &ReplicaUpgradeScenario) {
+            match &upgrade.upgrade_version {
+                SubnetUpgrade::Slow(_) => {
+                    self.fake_guestos_upgrader()
+                        .assert_executed(upgrade.has_prepared_upgrade_before);
+                    self.fake_binaries_upgrader().assert_idle(None);
+                }
+                SubnetUpgrade::Fast(_) => {
+                    self.fake_guestos_upgrader().assert_idle(None);
+                    self.fake_binaries_upgrader()
+                        .assert_executed(upgrade.has_prepared_upgrade_before);
+                }
+            }
+        }
+
+        // Asserts the outcome of attempting an upgrade. The upgrade is executed if and
+        // only if `should_be_executed()` returns `Ok`; otherwise the upgrader stays idle
+        // (preserving any upgrade prepared in a previous iteration). Returns the expected
+        // control flow that should be observed by the caller.
+        fn assert_upgrade_attempted(
+            &self,
+            upgrade: &ReplicaUpgradeScenario,
+        ) -> OrchestratorResult<OrchestratorControlFlow> {
+            let expected_flow = upgrade.should_be_executed();
+            if expected_flow.is_ok() {
+                self.assert_upgrade_executed(upgrade);
+            } else {
+                self.assert_no_upgrade(
+                    upgrade
+                        .has_prepared_upgrade_before
+                        .then_some(&upgrade.upgrade_version),
+                );
+            }
+            expected_flow
+        }
     }
 
     struct FakeProcessManager {
@@ -1468,12 +1546,12 @@ mod tests {
         }
     }
 
-    struct FakeImageUpgrader<V: Debug> {
+    struct FakeImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync> {
         prepared_upgrade_version: Option<V>,
         download_path: PathBuf,
         restart_time_path: PathBuf,
         logger: ReplicaLogger,
-        manageboot_runner: FakeManagebootRunner,
+        fake_manageboot_runner: FakeManagebootRunner,
         times_prepared_to_some_version: u32,
         times_cleared_version: u32,
         times_exchanged_disk_encryption_keys: u32,
@@ -1481,7 +1559,7 @@ mod tests {
         // `self`.
         times_downloaded_release_packages: RwLock<u32>,
     }
-    impl<V: Debug> FakeImageUpgrader<V> {
+    impl<V: Clone + Debug + PartialEq + Eq + Send + Sync> FakeImageUpgrader<V> {
         pub fn new(
             prepared_upgrade_version: Option<V>,
             download_path: PathBuf,
@@ -1499,7 +1577,7 @@ mod tests {
                 download_path,
                 restart_time_path,
                 logger,
-                manageboot_runner: FakeManagebootRunner::new(),
+                fake_manageboot_runner: FakeManagebootRunner::new(),
                 times_prepared_to_some_version: 0,
                 times_cleared_version: 0,
                 times_exchanged_disk_encryption_keys: 0,
@@ -1508,23 +1586,98 @@ mod tests {
         }
 
         pub fn fake_manageboot_runner(&self) -> &FakeManagebootRunner {
-            &self.manageboot_runner
+            &self.fake_manageboot_runner
         }
 
-        pub fn times_prepared_to_some_version(&self) -> u32 {
-            self.times_prepared_to_some_version
+        // Asserts the upgrader matches the expected (prepared, executed) combination by
+        // checking action counters, the `manageboot` arguments invoked, and how many times
+        // the prepared version was cleared.
+        fn assert_actions(&self, prepared: bool, executed: bool) {
+            let (prepare_args, prepare_cleared): (Vec<Vec<OsString>>, u32) = if prepared {
+                assert_eq!(*self.times_downloaded_release_packages.read().unwrap(), 1);
+                assert_eq!(self.times_exchanged_disk_encryption_keys, 1);
+                assert_eq!(self.times_prepared_to_some_version, 1);
+                (
+                    vec![vec![
+                        OsString::from("upgrade-install"),
+                        OsString::from(self.download_path()),
+                    ]],
+                    1,
+                )
+            } else {
+                assert_eq!(*self.times_downloaded_release_packages.read().unwrap(), 0);
+                assert_eq!(self.times_exchanged_disk_encryption_keys, 0);
+                assert_eq!(self.times_prepared_to_some_version, 0);
+                (vec![], 0)
+            };
+            let (execute_args, execute_cleared): (Vec<Vec<OsString>>, u32) = if executed {
+                assert!(self.restart_time_path().exists());
+                (vec![vec![OsString::from("upgrade-commit")]], 1)
+            } else {
+                assert!(!self.restart_time_path().exists());
+                (vec![], 0)
+            };
+            let expected_args: Vec<Vec<OsString>> =
+                prepare_args.into_iter().chain(execute_args).collect();
+            assert_eq!(self.fake_manageboot_runner.executed_args(), expected_args);
+            assert_eq!(
+                self.times_cleared_version,
+                prepare_cleared + execute_cleared
+            );
         }
 
-        pub fn times_cleared_version(&self) -> u32 {
-            self.times_cleared_version
+        // Asserts that the upgrader took no action in this iteration. If `prepared_before`
+        // is `Some`, an upgrade was prepared in a previous iteration and the download
+        // path/prepared version should reflect that.
+        fn assert_idle(&self, prepared_before: Option<&V>) {
+            self.assert_actions(/*prepared=*/ false, /*executed=*/ false);
+
+            if let Some(version) = prepared_before {
+                assert_eq!(
+                    std::fs::read_to_string(self.download_path()).unwrap(),
+                    format!("{:?}", version)
+                );
+                assert_eq!(self.get_prepared_version(), Some(version));
+            } else {
+                assert!(!self.download_path().exists());
+                assert_eq!(self.get_prepared_version(), None);
+            }
+            // TODO: Then maybe assert that it exists <=> an upgrade is scheduled AND
+            // prepared before
+            // We could also assert that the download path does not exist and that there is no
+            // prepared version, but there are legitimate cases where these would not hold:
+            //   - The upgrade version was recalled but prepared before (we do not check
+            //   recalled versions when preparing).
+            //   - The node was *leaving* (not yet left) and saw and upgrade and thus prepared
+            //   it in advance. But he left at an earlier version than the upgrade -> it would
+            //   stay prepared when actually leaving the subnet.
         }
 
-        pub fn times_exchanged_disk_encryption_keys(&self) -> u32 {
-            self.times_exchanged_disk_encryption_keys
+        // Asserts that the upgrader prepared (but did not execute) an upgrade to the given
+        // version. `was_prepared_before` indicates whether the upgrade had already been
+        // prepared in a previous iteration, in which case no new prepare actions are expected.
+        fn assert_prepared(&self, version: &V, was_prepared_before: bool) {
+            self.assert_actions(
+                /*prepared=*/ !was_prepared_before,
+                /*executed=*/ false,
+            );
+            assert_eq!(
+                std::fs::read_to_string(self.download_path()).unwrap(),
+                format!("{:?}", version)
+            );
+            assert_eq!(self.get_prepared_version(), Some(version));
         }
 
-        pub fn times_downloaded_release_packages(&self) -> u32 {
-            *self.times_downloaded_release_packages.read().unwrap()
+        // Asserts that the upgrader executed the upgrade. `was_prepared_before` indicates
+        // whether the upgrade had already been prepared in a previous iteration, in which
+        // case no new prepare actions are expected.
+        fn assert_executed(&self, was_prepared_before: bool) {
+            self.assert_actions(
+                /*prepared=*/ !was_prepared_before,
+                /*executed=*/ true,
+            );
+            assert!(!self.download_path().exists());
+            assert_eq!(self.get_prepared_version(), None);
         }
     }
     #[async_trait]
@@ -1560,7 +1713,7 @@ mod tests {
         }
 
         fn manageboot_runner(&self) -> &dyn ManagebootRunner {
-            &self.manageboot_runner
+            &self.fake_manageboot_runner
         }
 
         fn get_release_package_urls_and_hash(
@@ -1802,13 +1955,15 @@ mod tests {
         registry_version: RegistryVersion,
         subnet_id: SubnetId,
         membership: impl AsRef<[NodeId]>,
-        replica_version: &ReplicaVersion,
+        upgrade_version: &SubnetUpgrade,
         recalled_replica_versions: impl AsRef<[String]>,
     ) {
         let subnet_record = SubnetRecordBuilder::new()
             .with_membership(membership.as_ref())
-            .with_replica_version(replica_version.as_ref())
+            .with_replica_version(upgrade_version.as_ref().as_ref())
             .with_recalled_replica_version_ids(recalled_replica_versions.as_ref())
+            // TODO: skip until SubnetRecordBuilder gains with_synchronous_binary_replacement
+            // .with_synchronous_binary_replacement(matches!(upgrade_version, SubnetUpgrade::Fast(_)))
             .build();
 
         data_provider
@@ -1951,23 +2106,27 @@ mod tests {
         let orchestrator_data_dir = dir.join("orchestrator");
         std::fs::create_dir_all(&orchestrator_data_dir).unwrap();
 
-        let guestos_prepared_upgrade_version = if let Some(upgrade) = &test_scenario.upgrade_to
-            && upgrade.has_prepared_upgrade_before
-        {
-            Some(GuestosVersion(upgrade.replica_version.clone()))
-        } else {
-            None
-        };
+        let (guestos_prepared_upgrade_version, binaries_prepared_upgrade_version) =
+            if let Some(upgrade) = test_scenario.upgrade_to
+                && upgrade.has_prepared_upgrade_before
+            {
+                match upgrade.upgrade_version {
+                    SubnetUpgrade::Slow(guestos_version) => (Some(guestos_version), None),
+                    SubnetUpgrade::Fast(replica_version) => (None, Some(replica_version)),
+                }
+            } else {
+                (None, None)
+            };
         let guestos_upgrader = Box::new(FakeImageUpgrader::new(
             guestos_prepared_upgrade_version,
             guestos_release_content_dir.join("image.bin"),
-            orchestrator_data_dir.join("reboot_time.txt"),
+            orchestrator_data_dir.join("guestos_reboot_time.txt"),
             logger.clone(),
         ));
         let binaries_upgrader = Box::new(FakeImageUpgrader::new(
-            /*prepared_upgrade_version=*/ None,
+            binaries_prepared_upgrade_version,
             binaries_release_content_dir.join("binaries.bin"),
-            orchestrator_data_dir.join("reboot_time.txt"),
+            orchestrator_data_dir.join("binaries_reboot_time.txt"),
             logger.clone(),
         ));
 
@@ -2013,8 +2172,8 @@ mod tests {
     // Parameters for a replica upgrade in the test scenario
     #[derive(Clone, Debug)]
     struct ReplicaUpgradeScenario {
-        // The target replica version of the upgrade
-        replica_version: ReplicaVersion,
+        // The target version of the upgrade
+        upgrade_version: SubnetUpgrade,
         // The registry version where the upgrade is effective
         registry_version: RegistryVersion,
         // Whether the target replica version is recalled at the latest registry version
@@ -2037,13 +2196,13 @@ mod tests {
                 // or not. We should thus wait until the replicator has caught up.
                 Err(OrchestratorError::UpgradeError(format!(
                     "Delaying upgrade to {} until registry data is recent enough.",
-                    self.replica_version,
+                    self.upgrade_version.as_ref()
                 )))
             } else if self.is_recalled {
                 // The replica version was recalled, so we should not upgrade
                 Err(OrchestratorError::UpgradeError(format!(
                     "Not upgrading to recalled replica version {}",
-                    self.replica_version,
+                    self.upgrade_version.as_ref()
                 )))
             } else {
                 // The replica version was not recalled, so we are expected to stop
@@ -2131,7 +2290,7 @@ mod tests {
             }
 
             // The node is leaving now, so the state should be removed
-            return true;
+            true
         }
 
         // Returns whether the upgrade loop should call
@@ -2207,7 +2366,7 @@ mod tests {
                     &data_provider,
                     // Usually, replica versions are elected before subnets are upgraded to them.
                     RegistryVersion::from(upgrade.registry_version.get() - 1),
-                    &upgrade.replica_version,
+                    upgrade.upgrade_version.as_ref(),
                 );
             }
             // If the upgrade is to a recalled replica version, we should add that version to the
@@ -2216,21 +2375,21 @@ mod tests {
             let recalled_replica_versions = if let Some(upgrade) = &self.upgrade_to
                 && upgrade.is_recalled
             {
-                vec![upgrade.replica_version.to_string()]
+                vec![upgrade.upgrade_version.as_ref().to_string()]
             } else {
                 vec![]
             };
 
             if let Some(local_cup) = &self.has_local_cup {
                 // The node is part of the subnet at the beginning, including the current replica
-                // version
+                // version. We assume the version at genesis was a slow upgrade.
                 // Also add another node, in case the current one will leave
                 add_subnet_record_to_provider(
                     &data_provider,
                     RegistryVersion::from(1),
                     local_cup.subnet_id,
                     vec![self.node_id, other_node_id],
-                    &self.current_replica_version,
+                    &SubnetUpgrade::Slow(self.current_guestos_version.clone()),
                     &recalled_replica_versions,
                 );
 
@@ -2245,7 +2404,7 @@ mod tests {
                             upgrade.registry_version,
                             local_cup.subnet_id,
                             vec![self.node_id, other_node_id],
-                            &upgrade.replica_version,
+                            &upgrade.upgrade_version,
                             &recalled_replica_versions,
                         );
                     }
@@ -2257,7 +2416,7 @@ mod tests {
                             *leaving_registry_version,
                             local_cup.subnet_id,
                             vec![other_node_id],
-                            &self.current_replica_version,
+                            &SubnetUpgrade::Slow(self.current_guestos_version.clone()),
                             &recalled_replica_versions,
                         );
                     }
@@ -2270,7 +2429,7 @@ mod tests {
                             *leaving_registry_version,
                             local_cup.subnet_id,
                             vec![other_node_id],
-                            &self.current_replica_version,
+                            &SubnetUpgrade::Slow(self.current_guestos_version.clone()),
                             &recalled_replica_versions,
                         );
                         // And later upgrade the subnet
@@ -2279,7 +2438,7 @@ mod tests {
                             upgrade.registry_version,
                             local_cup.subnet_id,
                             vec![other_node_id],
-                            &upgrade.replica_version,
+                            &upgrade.upgrade_version,
                             &recalled_replica_versions,
                         );
                     }
@@ -2293,7 +2452,7 @@ mod tests {
                             *leaving_registry_version,
                             local_cup.subnet_id,
                             vec![other_node_id],
-                            &upgrade.replica_version,
+                            &upgrade.upgrade_version,
                             &recalled_replica_versions,
                         );
                     }
@@ -2304,7 +2463,7 @@ mod tests {
                             upgrade.registry_version,
                             local_cup.subnet_id,
                             vec![self.node_id, other_node_id],
-                            &upgrade.replica_version,
+                            &upgrade.upgrade_version,
                             &recalled_replica_versions,
                         );
                         // And later remove the node from the membership
@@ -2313,7 +2472,7 @@ mod tests {
                             *leaving_registry_version,
                             local_cup.subnet_id,
                             vec![other_node_id],
-                            &upgrade.replica_version,
+                            &upgrade.upgrade_version,
                             &recalled_replica_versions,
                         );
                     }
@@ -2335,7 +2494,7 @@ mod tests {
                         add_unassigned_nodes_config_record(
                             &data_provider,
                             upgrade.registry_version,
-                            &upgrade.replica_version,
+                            upgrade.upgrade_version.as_ref(),
                         );
                     }
                     (Some((registry_cup, registry_cup_registry_version)), None) => {
@@ -2346,7 +2505,7 @@ mod tests {
                             *registry_cup_registry_version,
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
-                            &self.current_replica_version,
+                            &SubnetUpgrade::Slow(self.current_guestos_version.clone()),
                             &recalled_replica_versions,
                         );
                     }
@@ -2359,7 +2518,7 @@ mod tests {
                             *registry_cup_registry_version,
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
-                            &self.current_replica_version,
+                            &SubnetUpgrade::Slow(self.current_guestos_version.clone()),
                             &recalled_replica_versions,
                         );
                         // And later upgrade the subnet
@@ -2368,7 +2527,7 @@ mod tests {
                             upgrade.registry_version,
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
-                            &upgrade.replica_version,
+                            &upgrade.upgrade_version,
                             &recalled_replica_versions,
                         );
                     }
@@ -2380,7 +2539,7 @@ mod tests {
                             *registry_cup_registry_version,
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
-                            &upgrade.replica_version,
+                            &upgrade.upgrade_version,
                             &recalled_replica_versions,
                         );
                     }
@@ -2389,7 +2548,7 @@ mod tests {
                         add_unassigned_nodes_config_record(
                             &data_provider,
                             upgrade.registry_version,
-                            &upgrade.replica_version,
+                            upgrade.upgrade_version.as_ref(),
                         );
                         // And later add the node to the subnet
                         add_subnet_record_to_provider(
@@ -2397,7 +2556,7 @@ mod tests {
                             *registry_cup_registry_version,
                             registry_cup.subnet_id,
                             vec![self.node_id, other_node_id],
-                            &upgrade.replica_version,
+                            &upgrade.upgrade_version,
                             &recalled_replica_versions,
                         );
                     }
@@ -2496,173 +2655,14 @@ mod tests {
         }
 
         // Returns the expected control flow after the upgrade loop.
-        // Additionally asserts whether the orchestrator has prepared for an upgrade
-        // Additionally asserts whether the prepared version and image have been cleared
+        // Additionally asserts whether the orchestrator has prepared and/or executed an upgrade. In
+        // particular, asserts everything the `ImageUpgrader` trait is responsible for:
+        // `manageboot.sh` calls, installing/removing the downloaded image/binaries, exchange disk
+        // encryption keys for SEV.
         fn expected_flow(
             &self,
             upgrade_loop: &Upgrade,
         ) -> OrchestratorResult<OrchestratorControlFlow> {
-            let assert_has_prepared = || {
-                assert_eq!(
-                    upgrade_loop
-                        .fake_guestos_upgrader()
-                        .times_downloaded_release_packages(),
-                    1
-                );
-                assert_eq!(
-                    upgrade_loop
-                        .fake_guestos_upgrader()
-                        .times_exchanged_disk_encryption_keys(),
-                    1
-                );
-                assert_eq!(
-                    upgrade_loop
-                        .fake_guestos_upgrader()
-                        .times_prepared_to_some_version(),
-                    1
-                );
-            };
-            let assert_has_not_prepared = || {
-                assert_eq!(
-                    upgrade_loop
-                        .fake_guestos_upgrader()
-                        .times_downloaded_release_packages(),
-                    0
-                );
-                assert_eq!(
-                    upgrade_loop
-                        .fake_guestos_upgrader()
-                        .times_exchanged_disk_encryption_keys(),
-                    0
-                );
-                assert_eq!(
-                    upgrade_loop
-                        .fake_guestos_upgrader()
-                        .times_prepared_to_some_version(),
-                    0
-                );
-            };
-            let assert_has_executed = || {
-                assert!(
-                    upgrade_loop
-                        .fake_guestos_upgrader()
-                        .restart_time_path()
-                        .exists()
-                );
-            };
-            let assert_has_not_executed = || {
-                assert!(
-                    !upgrade_loop
-                        .fake_guestos_upgrader()
-                        .restart_time_path()
-                        .exists()
-                );
-            };
-
-            let assert_has_not_prepared_nor_executed = || {
-                assert_has_not_prepared();
-                assert_has_not_executed();
-
-                assert_eq!(
-                    upgrade_loop
-                        .fake_guestos_upgrader()
-                        .fake_manageboot_runner()
-                        .executed_args(),
-                    Vec::<Vec<OsString>>::new()
-                );
-
-                // Not cleared before preparing and not cleared before executing
-                assert_eq!(
-                    upgrade_loop.fake_guestos_upgrader().times_cleared_version(),
-                    0
-                );
-
-                // We could also assert that the download path does not exist and that there is no
-                // prepared version, but there are legitimate cases where these would not hold:
-                //   - The upgrade version was recalled but prepared before (we do not check
-                //   recalled versions when preparing).
-                //   - The node was *leaving* (not yet left) and saw and upgrade and thus prepared
-                //   it in advance. But he left at an earlier version than the upgrade -> it would
-                //   stay prepared when actually leaving the subnet.
-            };
-            let expectations_whether_prepared_before = |upgrade: &ReplicaUpgradeScenario| {
-                if upgrade.has_prepared_upgrade_before {
-                    assert_has_not_prepared();
-
-                    (vec![], 0)
-                } else {
-                    assert_has_prepared();
-
-                    let download_path = upgrade_loop.fake_guestos_upgrader().download_path();
-                    (
-                        vec![vec![
-                            OsString::from("upgrade-install"),
-                            OsString::from(download_path),
-                        ]],
-                        1,
-                    )
-                }
-            };
-            let assert_has_prepared_upgrade = |upgrade: &ReplicaUpgradeScenario| {
-                assert_has_not_executed();
-
-                let (expected_manageboot_args, expected_times_cleared_version) =
-                    expectations_whether_prepared_before(upgrade);
-
-                assert_eq!(
-                    upgrade_loop
-                        .fake_guestos_upgrader()
-                        .fake_manageboot_runner()
-                        .executed_args(),
-                    expected_manageboot_args
-                );
-
-                assert_eq!(
-                    upgrade_loop.fake_guestos_upgrader().times_cleared_version(),
-                    expected_times_cleared_version
-                );
-                // The upgrade image should be downloaded
-                assert_eq!(
-                    std::fs::read_to_string(upgrade_loop.fake_guestos_upgrader().download_path())
-                        .unwrap(),
-                    format!("{:?}", GuestosVersion(upgrade.replica_version.clone()))
-                );
-                // The prepared version should be the upgrade version
-                assert_eq!(
-                    upgrade_loop.fake_guestos_upgrader().get_prepared_version(),
-                    Some(&GuestosVersion(upgrade.replica_version.clone()))
-                );
-            };
-            let assert_has_executed_upgrade = |upgrade: &ReplicaUpgradeScenario| {
-                assert_has_executed();
-
-                let (mut expected_manageboot_args, expected_times_cleared_version) =
-                    expectations_whether_prepared_before(upgrade);
-                expected_manageboot_args.push(vec!["upgrade-commit".into()]);
-                assert_eq!(
-                    upgrade_loop
-                        .fake_guestos_upgrader()
-                        .fake_manageboot_runner()
-                        .executed_args(),
-                    expected_manageboot_args
-                );
-
-                assert_eq!(
-                    upgrade_loop.fake_guestos_upgrader().times_cleared_version(),
-                    expected_times_cleared_version + 1
-                );
-                assert!(
-                    !upgrade_loop
-                        .fake_guestos_upgrader()
-                        .download_path()
-                        .exists()
-                );
-                assert_eq!(
-                    upgrade_loop.fake_guestos_upgrader().get_prepared_version(),
-                    None
-                );
-            };
-
             match &self.has_local_cup {
                 Some(local_cup) => {
                     let highest_height_cup =
@@ -2670,7 +2670,7 @@ mod tests {
 
                     match (&self.is_leaving, &self.upgrade_to) {
                         (None, None) => {
-                            assert_has_not_prepared_nor_executed();
+                            upgrade_loop.assert_no_upgrade(None);
                             Ok(OrchestratorControlFlow::Assigned(local_cup.subnet_id))
                         }
                         (None, Some(upgrade))
@@ -2678,40 +2678,29 @@ mod tests {
                         {
                             // An upgrade is scheduled but the CUP's registry version has not
                             // reached the upgrade registry version yet, so we are expected not to
-                            // stop and reboot
-                            // Though, we should start to download it in advance
-                            assert_has_prepared_upgrade(upgrade);
+                            // stop and reboot. Though, we should start to download it in advance.
+                            upgrade_loop.assert_upgrade_prepared(upgrade);
                             Ok(OrchestratorControlFlow::Assigned(local_cup.subnet_id))
                         }
                         (None, Some(upgrade)) => {
                             // An upgrade is scheduled and the CUP's registry version has reached
                             // the upgrade registry version.
-                            let expected_flow = upgrade.should_be_executed();
-
-                            if expected_flow.is_ok() {
-                                // The upgrade is going to be executed, so the prepared version and
-                                // image should be cleared
-                                assert_has_executed_upgrade(upgrade);
-                            } else {
-                                assert_has_not_prepared_nor_executed();
-                            }
-
-                            expected_flow
+                            upgrade_loop.assert_upgrade_attempted(upgrade)
                         }
                         (Some(leaving_registry_version), None)
                             if &highest_height_cup.registry_version < leaving_registry_version =>
                         {
                             // The node is leaving the subnet, but the CUP's registry version has
                             // not reached the leaving registry version yet, so we are expected to
-                            // be `Leaving`
-                            assert_has_not_prepared_nor_executed();
+                            // be `Leaving`.
+                            upgrade_loop.assert_no_upgrade(None);
                             Ok(OrchestratorControlFlow::Leaving(local_cup.subnet_id))
                         }
                         (Some(_leaving_registry_version), None) => {
                             // The node is leaving the subnet and the CUP's registry version has
                             // reached the leaving registry version, so we are expected to be
-                            // `Unassigned`
-                            assert_has_not_prepared_nor_executed();
+                            // `Unassigned`.
+                            upgrade_loop.assert_no_upgrade(None);
                             Ok(OrchestratorControlFlow::Unassigned)
                         }
                         (Some(leaving_registry_version), Some(upgrade))
@@ -2720,9 +2709,9 @@ mod tests {
                                     < upgrade.registry_version =>
                         {
                             // Both leaving and upgrade are scheduled, but the CUP's registry version
-                            // has not reached either of them yet, so we are expected to be `Leaving`
-                            // Though, we should start to download the upgrade in advance
-                            assert_has_prepared_upgrade(upgrade);
+                            // has not reached either of them yet, so we are expected to be `Leaving`.
+                            // Though, we should start to download the upgrade in advance.
+                            upgrade_loop.assert_upgrade_prepared(upgrade);
                             Ok(OrchestratorControlFlow::Leaving(local_cup.subnet_id))
                         }
                         (Some(leaving_registry_version), Some(upgrade))
@@ -2730,45 +2719,38 @@ mod tests {
                         {
                             // Both leaving and upgrade are scheduled, but the CUP's registry version
                             // has only reached the upgrade registry version, not the leaving registry
-                            // version.
-                            // We should now first check if the replica version was recalled.
-                            let expected_flow = upgrade.should_be_executed();
-
-                            if expected_flow.is_ok() {
-                                // The upgrade is going to be executed, so the prepared version and
-                                // image should be cleared
-                                assert_has_executed_upgrade(upgrade);
-                            } else {
-                                assert_has_not_prepared_nor_executed();
-                            }
-
-                            expected_flow
+                            // version. We should now first check if the replica version was recalled.
+                            upgrade_loop.assert_upgrade_attempted(upgrade)
                         }
-                        (Some(_leaving_registry_version), Some(_upgrade)) => {
+                        (Some(_leaving_registry_version), Some(upgrade)) => {
                             // Both leaving and upgrade are scheduled, and the CUP's registry
                             // version has reached the leaving registry version. Regardless of
                             // whether the upgrade registry version has been reached, leaving the
-                            // subnet takes precedence, and we are expected to be `Unassigned`
-                            assert_has_not_prepared_nor_executed();
+                            // subnet takes precedence, and we are expected to be `Unassigned`.
+                            upgrade_loop.assert_no_upgrade(
+                                upgrade
+                                    .has_prepared_upgrade_before
+                                    .then_some(&upgrade.upgrade_version),
+                            );
                             Ok(OrchestratorControlFlow::Unassigned)
                         }
                     }
                 }
                 None => match (&self.has_registry_cup, &self.upgrade_to) {
                     (None, None) => {
-                        assert_has_not_prepared_nor_executed();
+                        upgrade_loop.assert_no_upgrade(None);
                         Ok(OrchestratorControlFlow::Unassigned)
                     }
                     (None, Some(upgrade)) => {
                         // An upgrade is scheduled. Unassigned nodes always instantly upgrade so we
-                        // are expected to stop and reboot
-                        assert_has_executed_upgrade(upgrade);
+                        // are expected to stop and reboot.
+                        upgrade_loop.assert_upgrade_executed(upgrade);
                         Ok(OrchestratorControlFlow::Stop)
                     }
                     (Some((registry_cup, _)), None) => {
                         // The node is joining a subnet, and there is no upgrade scheduled, so we
-                        // are expected to turn `Assigned`
-                        assert_has_not_prepared_nor_executed();
+                        // are expected to turn `Assigned`.
+                        upgrade_loop.assert_no_upgrade(None);
                         Ok(OrchestratorControlFlow::Assigned(registry_cup.subnet_id))
                     }
                     (Some((registry_cup, _)), Some(upgrade))
@@ -2776,25 +2758,15 @@ mod tests {
                     {
                         // An upgrade is scheduled but the CUP's registry version has not
                         // reached the upgrade registry version yet, so we are expected to turn
-                        // `Assigned` and not stop and reboot
-                        // Though, we should start to download the upgrade in advance
-                        assert_has_prepared_upgrade(upgrade);
+                        // `Assigned` and not stop and reboot. Though, we should start to download
+                        // the upgrade in advance.
+                        upgrade_loop.assert_upgrade_prepared(upgrade);
                         Ok(OrchestratorControlFlow::Assigned(registry_cup.subnet_id))
                     }
                     (Some((_registry_cup, _)), Some(upgrade)) => {
                         // This scenario can be interpreted as the unassigned node having a
-                        // different replica version than the subnet's
-                        let expected_flow = upgrade.should_be_executed();
-
-                        if expected_flow.is_ok() {
-                            // The upgrade is going to be executed, so the prepared version and
-                            // image should be cleared
-                            assert_has_executed_upgrade(upgrade);
-                        } else {
-                            assert_has_not_prepared_nor_executed();
-                        }
-
-                        expected_flow
+                        // different replica version than the subnet's.
+                        upgrade_loop.assert_upgrade_attempted(upgrade)
                     }
                 },
             }
@@ -3233,6 +3205,7 @@ mod tests {
         is_leaving: Option<RegistryVersion>,
         #[values(false, true)] does_upgrade: bool,
         #[values(ReplicaVersion::try_from("replica_version_0.2").unwrap())] upgrade_replica_version: ReplicaVersion,
+        #[values(false, true)] upgrade_is_binaries_only: bool,
         #[values(
             RegistryVersion::from(3),
             RegistryVersion::from(5),
@@ -3248,7 +3221,11 @@ mod tests {
         #[values(false, true)] upgrade_has_prepared_upgrade_before: bool,
     ) {
         let upgrade_to = does_upgrade.then_some(ReplicaUpgradeScenario {
-            replica_version: upgrade_replica_version,
+            upgrade_version: if upgrade_is_binaries_only {
+                SubnetUpgrade::Fast(upgrade_replica_version)
+            } else {
+                SubnetUpgrade::Slow(GuestosVersion(upgrade_replica_version))
+            },
             registry_version: upgrade_registry_version,
             is_recalled: upgrade_is_recalled,
             has_replicated_versions_before_init: upgrade_has_replicated_versions_before_init,
@@ -3266,26 +3243,31 @@ mod tests {
             upgrade_to,
         };
 
-        if test_scenario.has_local_cup.is_none()
-            && test_scenario.has_registry_cup.is_none()
-            && matches!(
+        if test_scenario.has_local_cup.is_none() && test_scenario.has_registry_cup.is_none() {
+            if matches!(
                 test_scenario.initial_subnet_assignment,
                 SubnetAssignment::Assigned(_)
-            )
-        {
-            // Invalid scenario: having an `Assigned` initial subnet assignment
-            // means that the node previously had a local or registry CUP
-            return;
-        }
+            ) {
+                // Invalid scenario: having an `Assigned` initial subnet assignment
+                // means that the node previously had a local or registry CUP
+                return;
+            }
 
-        if test_scenario.has_local_cup.is_none()
-            && test_scenario.has_registry_cup.is_none()
-            && let Some(upgrade) = &test_scenario.upgrade_to
-            && upgrade.has_prepared_upgrade_before
-        {
-            // Invalid scenario: preparing upgrades in advance only applies to nodes having a CUP
-            // (i.e., assigned)
-            return;
+            if let Some(upgrade) = &test_scenario.upgrade_to
+                && upgrade.has_prepared_upgrade_before
+            {
+                // Invalid scenario: preparing upgrades in advance only applies to nodes having a
+                // CUP (i.e., assigned)
+                return;
+            }
+
+            if let Some(upgrade) = &test_scenario.upgrade_to
+                && matches!(upgrade.upgrade_version, SubnetUpgrade::Fast(_))
+            {
+                // Invalid scenario: fast upgrades only apply to subnets, i.e., assigned, i.e.,
+                // nodes having a CUP
+                return;
+            }
         }
 
         if test_scenario.has_local_cup.is_none()
@@ -3301,8 +3283,12 @@ mod tests {
         test_upgrade(test_scenario).await;
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn test_ignore_recalled_versions_if_nns() {
+    async fn test_ignore_recalled_versions_if_nns(
+        #[values(false, true)] upgrade_is_binaries_only: bool,
+    ) {
+        let upgrade_replica_version = ReplicaVersion::try_from("replica_version_0.2").unwrap();
         let test_scenario = UpgradeTestScenario {
             node_id: NODE_1,
             current_guestos_version: GuestosVersion(
@@ -3319,7 +3305,11 @@ mod tests {
             initial_subnet_assignment: SubnetAssignment::Unknown,
             is_leaving: None,
             upgrade_to: Some(ReplicaUpgradeScenario {
-                replica_version: ReplicaVersion::try_from("replica_version_0.2").unwrap(),
+                upgrade_version: if upgrade_is_binaries_only {
+                    SubnetUpgrade::Fast(upgrade_replica_version)
+                } else {
+                    SubnetUpgrade::Slow(GuestosVersion(upgrade_replica_version))
+                },
                 registry_version: RegistryVersion::from(10),
                 is_recalled: true,
                 has_replicated_versions_before_init: false,
@@ -3347,8 +3337,12 @@ mod tests {
         assert_matches!(flow_result, Ok(OrchestratorControlFlow::Stop));
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn test_ignore_up_to_date_replicator_after_timeout() {
+    async fn test_ignore_up_to_date_replicator_after_timeout(
+        #[values(false, true)] upgrade_is_binaries_only: bool,
+    ) {
+        let upgrade_replica_version = ReplicaVersion::try_from("replica_version_0.2").unwrap();
         let test_scenario = UpgradeTestScenario {
             node_id: NODE_1,
             current_guestos_version: GuestosVersion(
@@ -3364,7 +3358,11 @@ mod tests {
             initial_subnet_assignment: SubnetAssignment::Unknown,
             is_leaving: None,
             upgrade_to: Some(ReplicaUpgradeScenario {
-                replica_version: ReplicaVersion::try_from("replica_version_0.2").unwrap(),
+                upgrade_version: if upgrade_is_binaries_only {
+                    SubnetUpgrade::Fast(upgrade_replica_version)
+                } else {
+                    SubnetUpgrade::Slow(GuestosVersion(upgrade_replica_version))
+                },
                 registry_version: RegistryVersion::from(10),
                 is_recalled: true,
                 has_replicated_versions_before_init: false,
