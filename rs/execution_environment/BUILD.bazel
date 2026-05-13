@@ -217,7 +217,6 @@ rust_ic_test(
     },
     tags = [
         "cpu:4",
-        "test_all_platforms_slow",
     ],
     deps = [
         # Keep sorted.
