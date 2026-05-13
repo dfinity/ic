@@ -29,7 +29,7 @@ pub struct SchedulerMetrics {
     pub(super) expired_ingress_messages_count: IntCounter,
     pub(super) round_skipped_due_to_current_heap_delta_above_limit: IntCounter,
     pub(super) execute_round_called: IntCounter,
-    pub(super) inner_loop_processed_non_zero_inputs_count: IntCounter,
+    pub(super) inner_loop_consumed_non_zero_instructions_count: IntCounter,
     pub(super) inner_round_loop_consumed_max_instructions: IntCounter,
     pub(super) num_canisters_uninstalled_out_of_cycles: IntCounter,
     pub(super) round: ScopedMetrics,
@@ -147,9 +147,9 @@ impl SchedulerMetrics {
             // allows one to estimate how often we manage to execute multiple
             // loops of inner_round(), i.e. how often we manage to successfully
             // induct messages on the same subnet and make progress on them.
-            inner_loop_processed_non_zero_inputs_count: metrics_registry.int_counter(
-                "inner_loop_processed_non_zero_inputs_count",
-                "The number of times inner_round()'s loop processed at least 1 canister input.",
+            inner_loop_consumed_non_zero_instructions_count: metrics_registry.int_counter(
+                "inner_loop_consumed_non_zero_instructions_count",
+                "The number of times inner_round()'s loop consumed at least 1 instruction.",
             ),
             inner_round_loop_consumed_max_instructions: metrics_registry.int_counter(
                 "inner_round_loop_consumed_max_instructions",
