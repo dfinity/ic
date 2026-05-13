@@ -348,8 +348,8 @@ def rust_test_with_binary(name, binary_name, **kwargs):
         test_target = name,
     )
 
-def _write_info_file_var_impl(ctx):
-    """Helper rule that creates a file with the content of the provided var from the info file."""
+def _write_stable_file_var_impl(ctx):
+    """Helper rule that creates a file with the content of the provided var from the info file (bazel-out/stable-status.txt)."""
 
     output = ctx.actions.declare_file(ctx.label.name)
     ctx.actions.run_shell(
@@ -361,8 +361,8 @@ def _write_info_file_var_impl(ctx):
     )
     return [DefaultInfo(files = depset([output]))]
 
-write_info_file_var = rule(
-    implementation = _write_info_file_var_impl,
+write_stable_file_var = rule(
+    implementation = _write_stable_file_var_impl,
     attrs = {
         "varname": attr.string(mandatory = True),
     },
