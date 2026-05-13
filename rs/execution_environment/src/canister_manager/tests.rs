@@ -5353,14 +5353,7 @@ fn upload_chunk_fails_when_heap_delta_rate_limited() {
     let mut test = ExecutionTestBuilder::new()
         .with_heap_delta_rate_limit(wasm_chunk_store::chunk_size())
         .build();
-    let canister_id = test
-        .create_canister_with_settings(
-            CYCLES,
-            CanisterSettingsArgsBuilder::new()
-                .with_log_memory_limit(0)
-                .build(),
-        )
-        .unwrap();
+    let canister_id = test.create_canister(CYCLES);
     assert_eq!(
         test.canister_state(canister_id)
             .system_state
@@ -5406,14 +5399,7 @@ fn upload_chunk_increases_subnet_heap_delta() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
     let mut test = ExecutionTestBuilder::new().build();
-    let canister_id = test
-        .create_canister_with_settings(
-            CYCLES,
-            CanisterSettingsArgsBuilder::new()
-                .with_log_memory_limit(0)
-                .build(),
-        )
-        .unwrap();
+    let canister_id = test.create_canister(CYCLES);
     assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
 
     // Uploading one chunk will increase the delta.

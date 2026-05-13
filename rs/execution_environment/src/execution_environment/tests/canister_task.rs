@@ -88,14 +88,7 @@ fn heartbeat_produces_heap_delta() {
             )
             (memory (export "memory") 1)
         )"#;
-    let canister_id = test
-        .canister_from_wat_with_settings(
-            wat,
-            CanisterSettingsArgsBuilder::new()
-                .with_log_memory_limit(0)
-                .build(),
-        )
-        .unwrap();
+    let canister_id = test.canister_from_wat(wat).unwrap();
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
     test.canister_task(canister_id, CanisterTask::Heartbeat);
     assert_eq!(
@@ -114,14 +107,7 @@ fn global_timer_produces_heap_delta() {
             )
             (memory (export "memory") 1)
         )"#;
-    let canister_id = test
-        .canister_from_wat_with_settings(
-            wat,
-            CanisterSettingsArgsBuilder::new()
-                .with_log_memory_limit(0)
-                .build(),
-        )
-        .unwrap();
+    let canister_id = test.canister_from_wat(wat).unwrap();
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
     test.canister_task(canister_id, CanisterTask::GlobalTimer);
     assert_eq!(
@@ -134,14 +120,7 @@ fn global_timer_produces_heap_delta() {
 fn heartbeat_fails_gracefully_if_not_exported() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = "(module)";
-    let canister_id = test
-        .canister_from_wat_with_settings(
-            wat,
-            CanisterSettingsArgsBuilder::new()
-                .with_log_memory_limit(0)
-                .build(),
-        )
-        .unwrap();
+    let canister_id = test.canister_from_wat(wat).unwrap();
     test.canister_task(canister_id, CanisterTask::Heartbeat);
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
     assert_eq!(
@@ -154,14 +133,7 @@ fn heartbeat_fails_gracefully_if_not_exported() {
 fn global_timer_fails_gracefully_if_not_exported() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = "(module)";
-    let canister_id = test
-        .canister_from_wat_with_settings(
-            wat,
-            CanisterSettingsArgsBuilder::new()
-                .with_log_memory_limit(0)
-                .build(),
-        )
-        .unwrap();
+    let canister_id = test.canister_from_wat(wat).unwrap();
     test.canister_task(canister_id, CanisterTask::GlobalTimer);
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
     assert_eq!(

@@ -633,6 +633,7 @@ impl CanisterManager {
         validate_controller(canister, &sender)?;
 
         let old_log_store_memory_usage = canister.log_memory_store_memory_usage();
+
         self.validate_and_update_canister_settings(
             canister,
             round_limits,
@@ -643,9 +644,6 @@ impl CanisterManager {
             cost_schedule,
             Some(metrics),
         )?;
-        let heap_delta_increase = canister
-            .log_memory_store_memory_usage()
-            .saturating_sub(&old_log_store_memory_usage);
 
         canister.system_state.bump_canister_version();
         let new_controllers = match settings.controllers() {
@@ -697,7 +695,7 @@ impl CanisterManager {
         Ok(CanisterManagerResponse {
             canister_id: canister.canister_id(),
             reply: Some(EmptyBlob.encode()),
-            heap_delta_increase,
+            heap_delta_increase: old_log_store_memory_usage,
             unflushed_checkpoint_op: None,
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
@@ -1518,15 +1516,6 @@ impl CanisterManager {
 
         if specified_id.is_none() {
             state.metadata.commit_new_canister_id(new_canister_id);
-        }
-
-        let heap_delta = new_canister.log_memory_store_memory_usage();
-        state.metadata.heap_delta_estimate += heap_delta;
-        if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
-            new_canister.scheduler_state.heap_delta_debit = new_canister
-                .scheduler_state
-                .heap_delta_debit
-                .saturating_add(&heap_delta);
         }
 
         // Add new canister to the replicated state.
