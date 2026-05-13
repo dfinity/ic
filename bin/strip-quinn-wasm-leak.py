@@ -33,6 +33,7 @@ import json
 import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -41,7 +42,6 @@ TOML_LOCK = REPO_ROOT / "Cargo.Bazel.toml.lock"
 
 LEAKED_FEATURES = ("js", "js-sys", "wasm-bindgen")
 LEAKED_DEP_IDS = ("js-sys 0.3.77", "wasm-bindgen 0.2.100")
-LEAKED_TOML_DEPS = (' "js-sys",', ' "wasm-bindgen",')
 
 CRATE_INDEX_QUERY_TARGET = "@crate_index//:all"
 DIGEST_PLACEHOLDER = "0" * 64
@@ -83,21 +83,37 @@ def strip_json_lock(data: dict) -> bool:
 
 def strip_toml_lock(text: str) -> tuple[str, bool]:
     """Remove `js-sys` and `wasm-bindgen` from `getrandom 0.2.10`'s deps."""
-    pattern = re.compile(
-        r'(\[\[package\]\]\nname = "getrandom"\nversion = "0\.2\.10"\n'
-        r'source = "registry\+https://github\.com/rust-lang/crates\.io-index"\n'
-        r'checksum = "[0-9a-f]+"\ndependencies = \[\n)(.*?)(\n\])',
-        re.DOTALL,
+    data = tomllib.loads(text)
+    target = next(
+        (
+            pkg
+            for pkg in data.get("package", [])
+            if pkg.get("name") == "getrandom" and pkg.get("version") == "0.2.10"
+        ),
+        None,
     )
-    match = pattern.search(text)
-    if not match:
+    if target is None:
         return text, False
-    deps_body = match.group(2)
-    cleaned_lines = [line for line in deps_body.split("\n") if line not in LEAKED_TOML_DEPS]
-    cleaned_body = "\n".join(cleaned_lines)
-    if cleaned_body == deps_body:
+    deps = target.get("dependencies", [])
+    cleaned = [d for d in deps if d not in ("js-sys", "wasm-bindgen")]
+    if cleaned == deps:
         return text, False
-    return text[: match.start(2)] + cleaned_body + text[match.end(2) :], True
+
+    # cargo's Cargo.lock format uses 1-space-indented array items. We need to
+    # preserve that exactly so subsequent cargo-bazel runs don't see a spurious
+    # diff. There's no TOML writer in the Python stdlib that produces this
+    # format, so we splice the rewritten `dependencies = [...]` array back into
+    # the original text at the location tomllib located for us.
+    block_header = '[[package]]\nname = "getrandom"\nversion = "0.2.10"\n'
+    block_start = text.find(block_header)
+    if block_start == -1:
+        sys.exit("Could not locate getrandom 0.2.10 [[package]] block.")
+    deps_open = text.find("dependencies = [", block_start)
+    deps_close = text.find("]", deps_open)
+    if deps_open == -1 or deps_close == -1:
+        sys.exit("Could not locate getrandom 0.2.10 dependencies array.")
+    new_block = "dependencies = [\n" + "".join(f' "{d}",\n' for d in cleaned) + "]"
+    return text[:deps_open] + new_block + text[deps_close + 1 :], True
 
 
 def write_json_lock(data: dict) -> None:
