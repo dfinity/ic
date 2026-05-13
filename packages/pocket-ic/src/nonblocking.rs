@@ -1144,7 +1144,7 @@ impl PocketIc {
                 Some(canister_id),
             ),
         };
-        let res = call_candid_as(
+        call_candid_as::<_, (CanisterIdRecord,)>(
             self,
             Principal::management_canister(),
             effective_principal,

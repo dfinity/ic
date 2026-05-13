@@ -575,7 +575,7 @@ impl TryFrom<Time> for SystemTime {
 }
 
 /// Specifies where to place a newly created canister.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum CreateCanisterPlacement {
     /// Place the canister on the given subnet.
     SubnetId(SubnetId),
@@ -584,11 +584,13 @@ pub enum CreateCanisterPlacement {
 }
 
 /// Parameters for [`PocketIc::create_canister_with_params`].
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct CreateCanisterParams {
     /// Initial cycles balance; defaults to 100T if `None`.
     pub cycles: Option<u128>,
+    /// Canister settings; defaults to default canister settings if `None`.
     pub settings: Option<CanisterSettings>,
+    /// Canister placement (subnet or specific canister ID); a random application subnet is chosen if `None`.
     pub placement: Option<CreateCanisterPlacement>,
 }
 
