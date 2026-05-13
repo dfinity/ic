@@ -192,6 +192,7 @@ pub struct StateManagerMetrics {
     latest_hash_tree_max_index: IntGauge,
     fast_forward_height: IntGauge,
     no_state_clone_count: IntCounter,
+    skip_optimization_missing_cert_count: IntCounter,
 }
 
 #[derive(Clone)]
@@ -487,6 +488,11 @@ impl StateManagerMetrics {
             "Number of heights whose states were not cloned and not stored by this node.",
         );
 
+        let skip_optimization_missing_cert_count = metrics_registry.int_counter(
+            "state_manager_skip_optimization_missing_cert_count",
+            "How often we could have skipped state cloning but did not because no certification was available.",
+        );
+
         Self {
             state_manager_error_count,
             checkpoint_op_duration,
@@ -514,6 +520,7 @@ impl StateManagerMetrics {
             latest_hash_tree_max_index,
             fast_forward_height,
             no_state_clone_count,
+            skip_optimization_missing_cert_count,
         }
     }
 
@@ -3417,18 +3424,23 @@ impl StateManager for StateManagerImpl {
                 && !height
                     .get()
                     .is_multiple_of(MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING_AND_HASHING)
-                && maybe_delivered_certification.is_some()
             {
-                #[cfg(debug_assertions)]
-                check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
+                if maybe_delivered_certification.is_some() {
+                    #[cfg(debug_assertions)]
+                    check_certifications_metadata_snapshots_and_states_metadata_are_consistent(
+                        &states,
+                    );
 
-                assert_tip_is_none(&states);
+                    assert_tip_is_none(&states);
 
-                self.metrics.no_state_clone_count.inc();
+                    self.metrics.no_state_clone_count.inc();
 
-                states.tip_height = height;
-                states.tip = Some(state);
-                return;
+                    states.tip_height = height;
+                    states.tip = Some(state);
+                    return;
+                } else {
+                    self.metrics.skip_optimization_missing_cert_count.inc();
+                }
             }
             maybe_delivered_certification
         };

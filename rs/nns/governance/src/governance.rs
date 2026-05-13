@@ -108,8 +108,9 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::{
     self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
-    GetNeuronIndexRequest, GetPendingProposalsRequest, ListNeuronVotesRequest, ListNeurons,
-    ListNeuronsResponse, ListProposalInfoRequest, ListProposalInfoResponse, ManageNeuronResponse,
+    GetMaturityModulationResponse, GetNeuronIndexRequest, GetPendingProposalsRequest,
+    ListNeuronVotesRequest, ListNeurons, ListNeuronsResponse, ListProposalInfoRequest,
+    ListProposalInfoResponse, ManageNeuronResponse, MaturityModulation as ApiMaturityModulation,
     NeuronIndexData, NeuronInfo, NeuronVote, NeuronVotes, ProposalInfo,
     manage_neuron_response::{self, StakeMaturityResponse},
     proposal_validation::{
@@ -2203,20 +2204,24 @@ impl Governance {
 
         let from_subaccount = parent_neuron.subaccount();
 
-        let to_subaccount_bytes = if let Some(memo) = memo {
-            ledger::compute_neuron_split_subaccount_bytes(parent_neuron.controller(), memo)
-        } else {
-            self.randomness.random_byte_array()?
-        };
-        let to_subaccount = Subaccount(to_subaccount_bytes);
-
-        // Make sure there isn't already a neuron with the same sub-account.
-        if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "There is already a neuron with the same subaccount.",
+        let to_subaccount = if let Some(memo) = memo {
+            let to_subaccount = Subaccount(ledger::compute_neuron_split_subaccount_bytes(
+                parent_neuron.controller(),
+                memo,
             ));
-        }
+            // Deterministic subaccount: fail immediately on collision since
+            // retrying would produce the same result.
+            if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "There is already a neuron with the same subaccount.",
+                ));
+            }
+            to_subaccount
+        } else {
+            self.neuron_store
+                .new_neuron_subaccount(&mut *self.randomness)?
+        };
 
         let in_flight_command = NeuronInFlightCommand {
             timestamp: created_timestamp_seconds,
@@ -2671,21 +2676,25 @@ impl Governance {
 
         let child_nid = self.neuron_store.new_neuron_id(&mut *self.randomness)?;
 
-        // use provided sub-account if any, otherwise generate a random one.
+        // Use provided sub-account if any, otherwise generate a random one.
         let to_subaccount = match spawn.nonce {
-            None => Subaccount(self.randomness.random_byte_array()?),
+            None => self
+                .neuron_store
+                .new_neuron_subaccount(&mut *self.randomness)?,
             Some(nonce_val) => {
-                ledger::compute_neuron_staking_subaccount(child_controller, nonce_val)
+                let to_subaccount =
+                    ledger::compute_neuron_staking_subaccount(child_controller, nonce_val);
+                // Deterministic subaccount: fail immediately on collision since
+                // retrying would produce the same result.
+                if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::PreconditionFailed,
+                        "There is already a neuron with the same subaccount.",
+                    ));
+                }
+                to_subaccount
             }
         };
-
-        // Make sure there isn't already a neuron with the same sub-account.
-        if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "There is already a neuron with the same subaccount.",
-            ));
-        }
 
         let created_timestamp_seconds = self.env.now();
         let dissolve_and_spawn_at_timestamp_seconds =
@@ -8021,6 +8030,16 @@ impl Governance {
 
     pub fn get_restore_aging_summary(&self) -> Option<RestoreAgingSummary> {
         self.heap_data.restore_aging_summary.clone()
+    }
+
+    /// Returns the current maturity modulation, as defined by Mission 70.
+    pub fn get_maturity_modulation(&self) -> GetMaturityModulationResponse {
+        GetMaturityModulationResponse {
+            maturity_modulation: self
+                .heap_data
+                .maturity_modulation
+                .map(ApiMaturityModulation::from),
+        }
     }
 }
 
