@@ -2819,7 +2819,7 @@ pub mod stop_or_start_canister {
     }
 }
 /// The CanisterSettings struct as defined in the ic-interface-spec
-/// <https://docs.internetcomputer.org/references/management-canister/#canister-settings>.
+/// <https://docs.internetcomputer.org/references/management-canister/#canister-settings.>
 #[derive(
     candid::CandidType,
     candid::Deserialize,

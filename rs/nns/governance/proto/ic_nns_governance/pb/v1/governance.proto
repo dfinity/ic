@@ -1943,7 +1943,7 @@ message StopOrStartCanister {
 }
 
 // The CanisterSettings struct as defined in the ic-interface-spec
-// <https://docs.internetcomputer.org/references/management-canister/#canister-settings>.
+// https://docs.internetcomputer.org/references/management-canister/#canister-settings.
 message CanisterSettings {
   // Log visibility of a canister.
   enum LogVisibility {
