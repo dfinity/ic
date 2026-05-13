@@ -150,7 +150,7 @@ impl DiskEncryptionKeyExchangeServerAgent {
         let registry_version = self.registry_client.get_latest_version();
         let expected_measurements = self
             .registry_client
-            .get_replica_version_record_from_version_id(&replica_version, registry_version)
+            .get_replica_version_record_from_version_id(replica_version, registry_version)
             .map_err(|err| {
                 DiskEncryptionKeyExchangeError::ServerStartError(format!(
                     "Failed to get replica version record for {replica_version}: {err}"
