@@ -140,7 +140,7 @@ use super::{
 use crate::{
     driver::{
         constants::{self, GROUP_TTL, SSH_USERNAME},
-        farm::{Farm, GroupSpec},
+        farm::{Farm, GroupSpec, VmAllocationMode},
         log_events,
         test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
     },
@@ -1486,6 +1486,7 @@ pub trait HasGroupSetup {
         &self,
         group_base_name: String,
         allocate_testnet_to_local_dc: bool,
+        vm_allocation_mode: Option<VmAllocationMode>,
         no_group_ttl: bool,
     );
 }
@@ -1495,6 +1496,7 @@ impl HasGroupSetup for TestEnv {
         &self,
         group_base_name: String,
         allocate_testnet_to_local_dc: bool,
+        vm_allocation_mode: Option<VmAllocationMode>,
         no_group_ttl: bool,
     ) {
         let log = self.logger();
@@ -1528,7 +1530,7 @@ impl HasGroupSetup for TestEnv {
                     let farm_base_url = FarmBaseUrl::read_attribute(self);
                     let farm = Farm::new(farm_base_url.into(), self.logger());
                     let group_spec = GroupSpec {
-                        vm_allocation: None,
+                        vm_allocation_mode,
                         required_host_features,
                         preferred_network: None,
                         metadata: None,

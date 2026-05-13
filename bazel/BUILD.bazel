@@ -113,6 +113,22 @@ volatile_status(
     visibility = ["//visibility:public"],
 )
 
+# Prebuilt protoc binary, selected by exec platform.
+# Used instead of @protobuf//:protoc to avoid
+# compiling protoc from C++ source on every build.
+# Platform config_settings are defined in //:BUILD.bazel alongside platform() rules.
+# Inspired by: https://github.com/protocolbuffers/protobuf/issues/19558
+alias(
+    name = "protoc",
+    actual = select({
+        "@bazel_tools//src/conditions:linux_x86_64": "@toolchains_protoc_hub.linux_x86_64//:bin/protoc",
+        "@bazel_tools//src/conditions:linux_aarch64": "@toolchains_protoc_hub.linux_aarch_64//:bin/protoc",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@toolchains_protoc_hub.osx_x86_64//:bin/protoc",
+        "@bazel_tools//src/conditions:darwin_arm64": "@toolchains_protoc_hub.osx_aarch_64//:bin/protoc",
+    }),
+    visibility = ["//visibility:public"],
+)
+
 exports_files(
     [
         "prost_generator.sh",

@@ -5,7 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy};
+use crate::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs};
 use crate::driver::log_events;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env::{RequiredHostFeaturesFromCmdLine, TestEnvAttribute};
@@ -420,9 +420,19 @@ struct CreateGroupRequest {
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+pub enum VmAllocationMode {
+    #[serde(rename = "minIntraDistanceLoadBalanceAllocation")]
+    MinIntraDistanceLoadBalanceAllocation,
+    #[serde(rename = "performanceOptimizedAllocation")]
+    PerformanceOptimizedAllocation,
+    #[serde(rename = "distributeAcrossDcs")]
+    DistributeAcrossDcs,
+}
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct GroupSpec {
-    #[serde(rename = "vmAllocation")]
-    pub vm_allocation: Option<VmAllocationStrategy>,
+    #[serde(rename = "vmAllocationMode")]
+    pub vm_allocation_mode: Option<VmAllocationMode>,
     #[serde(rename = "requiredHostFeatures")]
     pub required_host_features: Vec<HostFeature>,
     #[serde(rename = "preferredNetwork")]
@@ -578,8 +588,8 @@ pub struct CreateVmRequest {
     pub primary_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
     #[serde(rename = "hasIPv4")]
     pub has_ipv4: bool,
-    #[serde(rename = "vmAllocation")]
-    pub vm_allocation: Option<VmAllocationStrategy>,
+    #[serde(rename = "vmAllocationMode")]
+    pub vm_allocation_mode: Option<VmAllocationMode>,
     #[serde(rename = "requiredHostFeatures")]
     pub required_host_features: Vec<HostFeature>,
 }
@@ -594,7 +604,7 @@ impl CreateVmRequest {
         primary_image: ImageLocation,
         primary_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
         has_ipv4: bool,
-        vm_allocation: Option<VmAllocationStrategy>,
+        vm_allocation_mode: Option<VmAllocationMode>,
         required_host_features: Vec<HostFeature>,
     ) -> Self {
         Self {
@@ -606,7 +616,7 @@ impl CreateVmRequest {
             primary_image,
             primary_image_minimal_size_gibibytes,
             has_ipv4,
-            vm_allocation,
+            vm_allocation_mode,
             required_host_features,
         }
     }

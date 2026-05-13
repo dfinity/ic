@@ -4,7 +4,7 @@ use crate::driver::{
     context::{GroupContext, ProcessContext},
     dsl::{SubprocessFn, TestFunction},
     event::TaskId,
-    farm::{Farm, HostFeature},
+    farm::{Farm, HostFeature, VmAllocationMode},
     plan::{EvalOrder, Plan},
     report::Outcome,
     task::{DebugKeepaliveTask, EmptyTask},
@@ -649,6 +649,7 @@ impl SystemTestSubGroup {
 
 pub struct SystemTestGroup {
     allocate_testnet_to_local_dc: bool,
+    vm_allocation_mode: Option<VmAllocationMode>,
     setup: Option<Box<dyn PotSetupFn>>,
     teardowns: Vec<Box<dyn PotSetupFn>>,
     tests: Vec<SystemTestSubGroup>,
@@ -694,6 +695,7 @@ impl SystemTestGroup {
     pub fn new() -> Self {
         Self {
             allocate_testnet_to_local_dc: false,
+            vm_allocation_mode: Default::default(),
             setup: Default::default(),
             teardowns: Default::default(),
             tests: Default::default(),
@@ -748,6 +750,11 @@ impl SystemTestGroup {
 
     pub fn allocate_testnet_to_local_dc(mut self) -> Self {
         self.allocate_testnet_to_local_dc = true;
+        self
+    }
+
+    pub fn with_vm_allocation_mode(mut self, mode: VmAllocationMode) -> Self {
+        self.vm_allocation_mode = Some(mode);
         self
     }
 
@@ -1306,6 +1313,7 @@ impl SystemTestGroup {
                 root_env.create_group_setup(
                     group_ctx.group_base_name.clone(),
                     self.allocate_testnet_to_local_dc,
+                    self.vm_allocation_mode.clone(),
                     args.no_group_ttl,
                 );
             }

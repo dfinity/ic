@@ -44,7 +44,13 @@ rust_doc(
     crate = ":ic-metrics-assert",
 )
 
-rust_doc_test(
-    name = "doc_test",
-    crate = ":ic-metrics-assert_pocket_ic",
-)
+[
+    rust_doc_test(
+        name = "doc_test" + name_suffix,
+        crate = ":ic-metrics-assert" + name_suffix,
+    )
+    for name_suffix in [
+        "",
+        "_pocket_ic",
+    ]
+]
