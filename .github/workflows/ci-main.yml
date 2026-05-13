@@ -386,6 +386,7 @@ jobs:
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             test \
+            --config=flaky_retry \
             --test_tag_filters="test_all_platforms,test_all_platforms_slow" \
             --build_tests_only \
             "${bazel_test_targets[@]}"
