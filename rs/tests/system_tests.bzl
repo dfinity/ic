@@ -208,12 +208,7 @@ def system_test(
 
     tags = tags + ["requires-network", "system_test"]
 
-    # VOLATILE_STATUS_FILE is read during group creation time to determine the required host features and Farm metadata.
-    # In colocated tests the group is created in the non-colocated wrapper driver, we shouldn't use runtime_deps
-    # to depend on the VOLATILE_STATUS_FILE since that will cause the variable to be repointed to a path on the colocated VM
-    # which won't exist during group creaton time on the non-colocated wrapper. Instead we pass it as a regular environment variable
-    # and repoint it to its realpath in ./run_systest.sh.
-    env["RUN_SCRIPT_VOLATILE_STATUS_FILE"] = "$(rootpath //bazel:volatile-status.txt)"
+    env["RUN_SCRIPT_VOLATILE_STATUS_PATH"] = "$(rootpath //bazel:volatile-status.txt)"
     data.append("//bazel:volatile-status.txt")
 
     sh_test(
