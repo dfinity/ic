@@ -1636,21 +1636,6 @@ pub fn read_dependency_from_env_to_string(v: &str) -> Result<String> {
     read_dependency_to_string(path_from_env)
 }
 
-pub fn read_var_from_volatile_status_file(var_name: &str) -> Option<String> {
-    let volatile_status_path = get_dependency_path_from_env("VOLATILE_STATUS_FILE");
-    let content = fs::read_to_string(&volatile_status_path).unwrap_or_else(|e| {
-        panic!("Couldn't read content of the {volatile_status_path:?} file: {e:?}")
-    });
-    for line in content.lines() {
-        if let Some((name, value)) = line.split_once(' ')
-            && name.trim() == var_name
-        {
-            return Some(value.trim().to_string());
-        }
-    }
-    None
-}
-
 pub fn load_wasm<P: AsRef<Path>>(p: P) -> Vec<u8> {
     let mut wasm_bytes = std::fs::read(get_dependency_path(&p))
         .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", p.as_ref()));
