@@ -205,7 +205,6 @@ rust_ic_test_suite(
 rust_ic_test(
     name = "dts_test",
     size = "large",
-    flaky = True,
     srcs = ["tests/dts.rs"],
     data = [
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
@@ -216,6 +215,7 @@ rust_ic_test(
         "UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister_no_heartbeat.wasm.gz)",
         "RUST_TEST_THREADS": "4",
     },
+    flaky = True,
     tags = [
         "cpu:4",
         "test_all_platforms_slow",
@@ -274,7 +274,6 @@ rust_ic_test(
 rust_ic_test(
     name = "memory_matrix_test",
     size = "large",
-    flaky = True,
     srcs = ["tests/memory_matrix.rs"],
     # Reduce parallelism on Linux to deflake the test (see PR #9647),
     # but keep the higher parallelism on Darwin to avoid timeouts on arm64-darwin.
@@ -290,6 +289,7 @@ rust_ic_test(
         "UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.module)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
+    flaky = True,
     tags = [
         "cpu:4",
         "test_all_platforms_slow",
