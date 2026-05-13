@@ -54,6 +54,17 @@ if [ -d "$BOOTSTRAP" ] && [ "${PRESERVE:-0}" != "1" ]; then
 fi
 mkdir -p "$BOOTSTRAP"
 
+# State volumes are incompatible across prep.sh runs because ic-prep generates
+# fresh random DKG transcripts each time. Old certifications in a stale consensus
+# pool will disagree with the new state hash, triggering a panic in the replica.
+# Always wipe the volumes here so the network starts clean.
+for vol in ic-local-net_state-0 ic-local-net_state-1 ic-local-net_state-2 ic-local-net_state-3; do
+    if docker volume inspect "$vol" >/dev/null 2>&1; then
+        echo "==> Removing stale Docker volume $vol"
+        docker volume rm "$vol" >/dev/null
+    fi
+done
+
 # Verify the runtime image exists.
 if ! docker image inspect ic-replica:dev >/dev/null 2>&1; then
     echo "ERROR: ic-replica:dev image not found. Run ./build.sh first." >&2
@@ -82,22 +93,51 @@ for i in 0 1 2 3; do
 done
 echo
 
-# Run ic-prep inside the runtime image. --user 0:0 sidesteps any UID
-# mismatch between host and container for the output directory.
+# Run ic-prep inside a Docker-managed named volume instead of the bind-mounted
+# bootstrap directory.  On macOS with Docker Desktop (virtiofs), rename(2)
+# inside a bind-mount does an in-place inode update rather than an atomic
+# inode-pointer swap.  The ProtoSecretKeyStore cleanup mechanism creates a hard
+# link to the current sks_data.pb, writes a new version via rename, then zeros
+# the hard-linked "old" file.  Because virtiofs reuses the original inode the
+# hard link and the current file share the same inode after the rename, so the
+# zeroing step corrupts sks_data.pb (writes N_old zeros into the first N_old
+# bytes, leaving the last (N_new - N_old) bytes intact).
+#
+# Fix: run ic-prep against a true ext4 Docker volume where rename is atomic,
+# then copy the output files to the bind-mounted bootstrap directory.
+PREP_VOL="ic-local-prep-$$"
+docker volume create "$PREP_VOL" >/dev/null
+
+cleanup_vol() { docker volume rm "$PREP_VOL" >/dev/null 2>&1 || true; }
+trap cleanup_vol EXIT
+
 docker run --rm \
     --platform=linux/amd64 \
     --user 0:0 \
+    -v "$PREP_VOL:/prep_out" \
     -v "$BOOTSTRAP:/bootstrap" \
-    -w /bootstrap \
+    -w /prep_out \
     --entrypoint /usr/local/bin/ic-prep \
     ic-replica:dev \
-    --working-dir /bootstrap \
+    --working-dir /prep_out \
     --replica-version "$REPLICA_VERSION" \
     --allow-empty-update-image \
     --nns-subnet-index "$SUBNET_IDX" \
     --provisional-whitelist /bootstrap/.provisional_whitelist.json \
     --use-specified-ids-allocation-range \
     "${NODE_ARGS[@]}"
+
+# Copy the correctly-written output from the Docker volume to the bind mount.
+docker run --rm \
+    --platform=linux/amd64 \
+    --user 0:0 \
+    -v "$PREP_VOL:/prep_out" \
+    -v "$BOOTSTRAP:/bootstrap" \
+    ic-replica:dev \
+    cp -a /prep_out/. /bootstrap/
+
+trap - EXIT
+cleanup_vol
 
 # Permissions: ic-prep wrote as root inside the container. Make the
 # resulting tree readable by the host user so we can inspect it.
