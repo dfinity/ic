@@ -944,9 +944,6 @@ impl Governance {
             .expect("Neuron must have a NeuronId")
             .clone();
 
-        // New neurons are not allowed when the heap is too large.
-        self.check_heap_can_grow()?;
-
         // New neurons are not allowed when the maximum configured is reached
         self.check_neuron_population_can_grow()?;
 
@@ -1295,9 +1292,6 @@ impl Governance {
         caller: &PrincipalId,
         split: &manage_neuron::Split,
     ) -> Result<NeuronId, GovernanceError> {
-        // New neurons are not allowed when the heap is too large.
-        self.check_heap_can_grow()?;
-
         let min_stake = self
             .proto
             .parameters
@@ -4439,6 +4433,15 @@ impl Governance {
             return ClaimSwapNeuronsResponse::new_with_error(ClaimSwapNeuronsError::Unauthorized);
         }
 
+        if let Err(err) = self.check_heap_can_grow() {
+            log!(
+                ERROR,
+                "Could not claim_swap_neurons due to heap growth limits. Err: {}",
+                err.error_message,
+            );
+            return ClaimSwapNeuronsResponse::new_with_error(ClaimSwapNeuronsError::Internal);
+        }
+
         // Validate NervousSystemParameters and it's underlying parameters.
         match self
             .proto
@@ -4791,6 +4794,10 @@ impl Governance {
                 command: Some(command.into()),
             },
         )?;
+
+        if !command.allowed_when_resources_are_low() {
+            self.check_heap_can_grow()?;
+        }
 
         use manage_neuron::Command as C;
         match command {
@@ -6077,7 +6084,7 @@ impl Governance {
             // At this point, we no longer need ballots for either of these
             // things, and since they take up a fair amount of space, we take
             // this opportunity to jettison them.
-            p.ballots.clear();
+            p.ballots = BTreeMap::new();
         }
 
         // Conclude this round of rewards.
