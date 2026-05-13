@@ -489,16 +489,7 @@ impl XNetPayloadBuilderImpl {
             .map_err(Error::RegistryGetSubnetsFailed)?
             .unwrap_or_default();
 
-        let subnet_ids: Vec<_> = all_subnet_ids
-            .into_iter()
-            .filter(|subnet_id| {
-                self.registry
-                    .get_subnet_type(*subnet_id, validation_context.registry_version)
-                    .is_ok_and(|maybe_t| {
-                        maybe_t.is_some_and(|t| t != SubnetType::CloudEngine.into())
-                    })
-            })
-            .collect();
+        let subnet_ids: Vec<_> = all_subnet_ids.into_iter().collect();
 
         let expected_indices = subnet_ids
             .into_iter()
@@ -641,18 +632,11 @@ impl XNetPayloadBuilderImpl {
             );
         }
 
-        // Do not accept slices from CloudEngine subnets or subnets whose type
-        // cannot be determined.
+        // Do not accept slices from subnets whose type cannot be determined.
         match self
             .registry
             .get_subnet_type(subnet_id, validation_context.registry_version)
         {
-            Ok(Some(subnet_type)) if subnet_type == SubnetType::CloudEngine.into() => {
-                return SliceValidationResult::Invalid(format!(
-                    "Slice from CloudEngine subnet {}",
-                    subnet_id
-                ));
-            }
             Ok(Some(_)) => {}
             Ok(None) => {
                 return SliceValidationResult::Invalid(format!(
@@ -869,11 +853,6 @@ impl XNetPayloadBuilderImpl {
                 e
             })?
             .take();
-
-        // CloudEngine subnets do not participate in XNet.
-        if state.metadata.own_subnet_type == SubnetType::CloudEngine {
-            return Ok((XNetPayload::default(), 0.into()));
-        }
 
         // Build the payload based on indices computed from state + past payloads.
         let stream_positions =
@@ -1234,16 +1213,6 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                 return Err(from_state_manager_error(err));
             }
         };
-
-        if state.metadata.own_subnet_type == SubnetType::CloudEngine
-            && !payload.stream_slices.is_empty()
-        {
-            return Err(ValidationError::InvalidArtifact(
-                InvalidXNetPayload::InvalidSlice(
-                    "CloudEngine subnets do not accept XNet payloads".to_string(),
-                ),
-            ));
-        }
 
         // For every slice in `payload`, check certification and gaps/duplicates.
         let mut new_stream_positions = Vec::new();

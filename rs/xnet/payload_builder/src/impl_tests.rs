@@ -88,7 +88,7 @@ async fn expected_stream_indices() {
 /// `expected_stream_indices` should not include `SUBNET_6`
 /// (registered as `CloudEngine` in `get_simple_registry_for_test`).
 #[tokio::test]
-async fn expected_stream_indices_excludes_engine_subnets() {
+async fn expected_stream_indices_includes_engine_subnets() {
     with_test_replica_logger(|log| {
         let state_manager = FakeStateManager::new();
         let (payloads, _expected_indices) = get_xnet_state_for_testing(&state_manager);
@@ -126,13 +126,13 @@ async fn expected_stream_indices_excludes_engine_subnets() {
             )
             .unwrap();
 
-        // SUBNET_6 is a CloudEngine and must be excluded.
+        // SUBNET_6 is a CloudEngine and must now be included.
         assert!(
-            !computed_indices.contains_key(&SUBNET_6),
-            "CloudEngine subnet SUBNET_6 should be excluded from expected stream indices"
+            computed_indices.contains_key(&SUBNET_6),
+            "CloudEngine subnet SUBNET_6 should be included in expected stream indices"
         );
 
-        // Application subnets should still be present.
+        // Application subnets should also be present.
         for subnet in &[SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4] {
             assert!(
                 computed_indices.contains_key(subnet),

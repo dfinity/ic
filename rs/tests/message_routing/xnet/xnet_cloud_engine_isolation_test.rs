@@ -1,10 +1,11 @@
 /* tag::catalog[]
-Title:: CloudEngine subnets are isolated from XNet traffic.
+Title:: CloudEngine subnets enforce XNet filtering.
 
-Goal:: Verify that a CloudEngine subnet cannot exchange XNet messages with
-other subnets (including other CloudEngine subnets), while intra-subnet
-(loopback) calls still work. Additionally verify that the state tree only
-exposes the expected subnets via /subnet and /canister_ranges.
+Goal:: Verify that a CloudEngine subnet only accepts best-effort,
+no-cycles XNet messages (and rejects guaranteed-response calls or calls
+carrying cycles), while intra-subnet (loopback) calls always work.
+Additionally verify that the state tree exposes the full topology to all
+subnets via /subnet and /canister_ranges.
 
 Runbook::
 0. Set up an IC with one System (NNS) subnet, one Application subnet, and
@@ -15,19 +16,20 @@ Runbook::
    other (intra-subnet).
 4. Verify that XNet calls between NNS and Application subnets succeed
    (both directions).
-5. Verify that XNet calls involving any CloudEngine subnet are rejected:
-   Application <-> CloudEngine, NNS <-> CloudEngine, and
-   CloudEngine 1 <-> CloudEngine 2.
+5. For every pair crossing an engine boundary (Application <-> CloudEngine,
+   NNS <-> CloudEngine, CloudEngine 1 <-> CloudEngine 2):
+   a. Guaranteed-response (unbounded-wait) calls are rejected with SysFatal.
+   b. Best-effort (bounded-wait), no-cycles calls succeed.
+   c. Best-effort calls carrying cycles are rejected with SysFatal.
 6. Via read_state, verify that /subnet/<id>/public_key and
-   /canister_ranges/<id> are present only for the expected subnets:
-   - NNS sees all four subnets (full topology).
-   - Application sees NNS and itself.
-   - Each CloudEngine sees only itself.
+   /canister_ranges/<id> are present for all subnets on every subnet
+   (full topology).
 
 Success::
 All assertions pass: loopback works, non-CloudEngine XNet works,
-all cross-subnet directions involving CloudEngine are rejected, and
-the state tree matches the expected visibility.
+guaranteed-response cross-engine calls are rejected, best-effort
+no-cycles cross-engine calls succeed, and the state tree shows the
+full topology on every subnet.
 
 end::catalog[] */
 
@@ -290,12 +292,19 @@ fn test(env: TestEnv) {
         );
         info!(logger, "Application -> NNS succeeded.");
 
-        // ── XNet calls that should be rejected (CloudEngine involved) ───
-
-        // All cross-subnet calls involving a CloudEngine subnet must fail
-        // with DestinationInvalid. The on_reject handler replies with the
-        // reject code so we can verify the exact code.
-        let rejected_pairs: &[(&str, &UniversalCanister<'_>, &str, &UniversalCanister<'_>)] = &[
+        // ── XNet calls crossing an engine boundary ──────────────────────
+        //
+        // For every pair crossing an engine boundary:
+        //   - Guaranteed-response (unbounded-wait) calls must be rejected
+        //     with SysFatal.
+        //   - Best-effort (bounded-wait), no-cycles calls must succeed.
+        //   - Best-effort calls carrying cycles must be rejected with SysFatal.
+        let engine_boundary_pairs: &[(
+            &str,
+            &UniversalCanister<'_>,
+            &str,
+            &UniversalCanister<'_>,
+        )] = &[
             ("Application", &uc_app, "CloudEngine 1", &uc_ce_1a),
             ("CloudEngine 1", &uc_ce_1a, "Application", &uc_app),
             ("NNS", &uc_nns, "CloudEngine 1", &uc_ce_1a),
@@ -306,10 +315,10 @@ fn test(env: TestEnv) {
             ("CloudEngine 2", &uc_ce_2a, "CloudEngine 1", &uc_ce_1a),
         ];
 
-        for (src_name, src_uc, dst_name, dst_uc) in rejected_pairs {
+        for (src_name, src_uc, dst_name, dst_uc) in engine_boundary_pairs {
             info!(
                 logger,
-                "Testing XNet call: {src_name} -> {dst_name} (should fail)..."
+                "Testing XNet call: {src_name} -> {dst_name} (guaranteed-response, should fail)..."
             );
             let res = src_uc
                 .update(
@@ -321,8 +330,58 @@ fn test(env: TestEnv) {
                     ),
                 )
                 .await;
-            assert_xnet_rejected(res, RejectCode::DestinationInvalid);
-            info!(logger, "{src_name} -> {dst_name} correctly rejected.");
+            assert_xnet_rejected(res, RejectCode::SysFatal);
+            info!(
+                logger,
+                "{src_name} -> {dst_name} guaranteed-response correctly rejected."
+            );
+
+            info!(
+                logger,
+                "Testing XNet call: {src_name} -> {dst_name} (best-effort, should succeed)..."
+            );
+            let res = src_uc
+                .update(
+                    wasm().call_simple_with_cycles_and_best_effort_response(
+                        dst_uc.canister_id(),
+                        "update",
+                        call_args()
+                            .other_side(wasm().reply_data(&data))
+                            .on_reject(wasm().reject_message().reject()),
+                        0_u128,
+                        30_u32,
+                    ),
+                )
+                .await;
+            assert_eq!(
+                res.unwrap(),
+                data,
+                "{src_name} -> {dst_name} best-effort should succeed"
+            );
+            info!(logger, "{src_name} -> {dst_name} best-effort succeeded.");
+
+            info!(
+                logger,
+                "Testing XNet call: {src_name} -> {dst_name} (best-effort with cycles, should fail)..."
+            );
+            let res = src_uc
+                .update(
+                    wasm().call_simple_with_cycles_and_best_effort_response(
+                        dst_uc.canister_id(),
+                        "update",
+                        call_args()
+                            .other_side(wasm().reply_data(&data))
+                            .on_reject(wasm().reject_code().reply_int()),
+                        1_u128,
+                        30_u32,
+                    ),
+                )
+                .await;
+            assert_xnet_rejected(res, RejectCode::SysFatal);
+            info!(
+                logger,
+                "{src_name} -> {dst_name} best-effort with cycles correctly rejected."
+            );
         }
 
         // ── Verify /subnet and /canister_ranges via read_state ──────────
@@ -331,9 +390,7 @@ fn test(env: TestEnv) {
         // /canister_ranges/<id> for every known subnet ID and verify that
         // the expected ones are present and the rest absent.
         //
-        // NNS sees all subnets (full topology for the state tree).
-        // Application sees NNS and itself.
-        // Each CloudEngine sees only itself.
+        // All subnets see the full topology (all four subnets).
         info!(
             logger,
             "Verifying /subnet and /canister_ranges via read_state..."
@@ -362,19 +419,19 @@ fn test(env: TestEnv) {
                 "Application",
                 &app_agent,
                 app_subnet_id,
-                vec![nns_subnet_id, app_subnet_id],
+                vec![nns_subnet_id, app_subnet_id, ce_subnet_id_1, ce_subnet_id_2],
             ),
             (
                 "CloudEngine 1",
                 &ce_agent_1,
                 ce_subnet_id_1,
-                vec![ce_subnet_id_1],
+                vec![nns_subnet_id, app_subnet_id, ce_subnet_id_1, ce_subnet_id_2],
             ),
             (
                 "CloudEngine 2",
                 &ce_agent_2,
                 ce_subnet_id_2,
-                vec![ce_subnet_id_2],
+                vec![nns_subnet_id, app_subnet_id, ce_subnet_id_1, ce_subnet_id_2],
             ),
         ] {
             info!(logger, "Checking /subnet and /canister_ranges on {name}...");

@@ -10,8 +10,8 @@ use ic_replicated_state::replicated_state::{
 };
 use ic_replicated_state::{ReplicatedState, Stream};
 use ic_types::messages::{
-    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, Payload, RejectContext,
-    Request, RequestOrResponse, Response, StreamMessage,
+    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE, Payload,
+    RejectContext, Request, RequestOrResponse, Response, StreamMessage,
 };
 use ic_types::{CountBytes, SubnetId};
 use ic_types_cycles::{CompoundCycles, Cycles};
@@ -71,6 +71,7 @@ const LABEL_VALUE_TYPE_REFUND: &str = "refund";
 const LABEL_VALUE_STATUS_SUCCESS: &str = "success";
 const LABEL_VALUE_STATUS_CANISTER_NOT_FOUND: &str = "canister_not_found";
 const LABEL_VALUE_STATUS_PAYLOAD_TOO_LARGE: &str = "payload_too_large";
+const LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED: &str = "engine_not_allowed";
 
 const CRITICAL_ERROR_INFINITE_LOOP: &str = "mr_stream_builder_infinite_loop";
 const CRITICAL_ERROR_PAYLOAD_TOO_LARGE: &str = "mr_stream_builder_payload_too_large";
@@ -423,6 +424,7 @@ impl StreamBuilderImpl {
 
         let mut streams = state.take_streams();
         let network_topology = state.metadata.network_topology.clone();
+        let own_subnet_type = state.metadata.own_subnet_type;
 
         // First, have up to `max_stream_messages / 2` refunds in each stream (including
         // already routed ones) while respecting stream message and byte limits.
@@ -439,6 +441,8 @@ impl StreamBuilderImpl {
 
         let mut requests_to_reject = Vec::new();
         let mut oversized_requests = Vec::new();
+        let mut engine_requests_to_reject: Vec<Arc<Request>> = Vec::new();
+        let mut engine_response_dropped_cycles = Cycles::zero();
 
         let mut output_iter = state.output_into_iter();
         let mut last_output_size = usize::MAX;
@@ -487,9 +491,52 @@ impl StreamBuilderImpl {
                     // We will route (or reject) the message, pop it.
                     let mut msg = validated_next(&mut output_iter, &msg);
 
+                    let is_engine_dst = !is_loopback_stream
+                        && network_topology
+                            .subnets()
+                            .get(&dst_subnet_id)
+                            .is_some_and(|t| t.subnet_type == SubnetType::CloudEngine);
+                    let is_engine_src =
+                        !is_loopback_stream && own_subnet_type == SubnetType::CloudEngine;
+
                     // Reject messages with oversized payloads, as they may
                     // cause streams to permanently stall.
                     match msg {
+                        // Request at an engine boundary: reject if unbounded-wait or carries cycles.
+                        RequestOrResponse::Request(ref req)
+                            if (is_engine_dst || is_engine_src)
+                                && (req.deadline == NO_DEADLINE
+                                    || req.payment > Cycles::zero()) =>
+                        {
+                            self.observe_message_type_status(
+                                LABEL_VALUE_TYPE_REQUEST,
+                                LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED,
+                            );
+                            let req = match msg {
+                                RequestOrResponse::Request(req) => req,
+                                _ => unreachable!(),
+                            };
+                            engine_requests_to_reject.push(req);
+                        }
+
+                        // Response that should not exist at an engine boundary: a
+                        // guaranteed-response response, or one carrying cycles. Neither
+                        // guaranteed-response calls nor cycles are allowed across the
+                        // boundary, so such a response can only come from a buggy local
+                        // canister. Drop it; any cycles are lost. Kept above the
+                        // oversized-response arm, which truncates and routes; matching
+                        // here first ensures such a response is dropped, not routed.
+                        RequestOrResponse::Response(ref rep)
+                            if (is_engine_dst || is_engine_src)
+                                && (rep.deadline == NO_DEADLINE || rep.refund > Cycles::zero()) =>
+                        {
+                            engine_response_dropped_cycles += rep.refund;
+                            self.observe_message_type_status(
+                                LABEL_VALUE_TYPE_RESPONSE,
+                                LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED,
+                            );
+                        }
+
                         // Remote request above the payload size limit.
                         RequestOrResponse::Request(req)
                             if dst_subnet_id != self.subnet_id
@@ -616,6 +663,24 @@ impl StreamBuilderImpl {
             );
         }
 
+        for req in engine_requests_to_reject {
+            self.reject_local_request(
+                &mut state,
+                &req,
+                RejectCode::SysFatal,
+                "Unbounded-wait calls and calls with cycles are not allowed to CloudEngine subnets"
+                    .to_string(),
+            );
+        }
+
+        if engine_response_dropped_cycles > Cycles::zero() {
+            let own_cost_schedule = state.get_own_cost_schedule();
+            state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                engine_response_dropped_cycles,
+                own_cost_schedule,
+            ));
+        }
+
         // Export the total number of enqueued messages and byte size, per stream.
         streams
             .iter()
@@ -685,11 +750,27 @@ impl StreamBuilderImpl {
     ) {
         let mut cycles_lost = Cycles::zero();
         let own_cost_schedule = state.get_own_cost_schedule();
+        let own_is_engine = state.metadata.own_subnet_type == SubnetType::CloudEngine;
         state.take_refunds(|refund| {
             match network_topology.route(refund.recipient().get()) {
                 Some(dst_subnet_id) => {
-                    let stream = streams.entry(dst_subnet_id).or_default();
                     let is_loopback_stream = dst_subnet_id == self.subnet_id;
+                    let is_engine_dst = !is_loopback_stream
+                        && network_topology
+                            .subnets()
+                            .get(&dst_subnet_id)
+                            .is_some_and(|t| t.subnet_type == SubnetType::CloudEngine);
+                    let is_engine_src = !is_loopback_stream && own_is_engine;
+                    if is_engine_dst || is_engine_src {
+                        // Refund destined to cross the engine boundary: drop, cycles lost.
+                        cycles_lost += refund.amount();
+                        self.observe_message_type_status(
+                            LABEL_VALUE_TYPE_REFUND,
+                            LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED,
+                        );
+                        return true;
+                    }
+                    let stream = streams.entry(dst_subnet_id).or_default();
                     if is_loopback_stream
                         || (stream.refund_count() < refund_limit
                             && stream.messages().len() < self.max_stream_messages

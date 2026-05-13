@@ -211,6 +211,10 @@ pub enum RejectReason {
     /// `StateError` variants that shouldn't be possible to occur for requests.
     /// It is not expected that this reason will ever be used.
     Unknown = 7,
+
+    /// Request rejected because the sending subnet is a CloudEngine subnet,
+    /// which is not allowed to send guaranteed-response calls to non-engine subnets.
+    EngineNotAllowed = 8,
 }
 
 impl RejectReason {
@@ -231,6 +235,7 @@ impl From<RejectReason> for pb_queues::RejectReason {
             RejectReason::QueueFull => Self::QueueFull,
             RejectReason::OutOfMemory => Self::OutOfMemory,
             RejectReason::Unknown => Self::Unknown,
+            RejectReason::EngineNotAllowed => Self::EngineNotAllowed,
         }
     }
 }
@@ -250,6 +255,7 @@ impl TryFrom<pb_queues::RejectReason> for RejectReason {
             pb_queues::RejectReason::QueueFull => Ok(Self::QueueFull),
             pb_queues::RejectReason::OutOfMemory => Ok(Self::OutOfMemory),
             pb_queues::RejectReason::Unknown => Ok(Self::Unknown),
+            pb_queues::RejectReason::EngineNotAllowed => Ok(Self::EngineNotAllowed),
         }
     }
 }

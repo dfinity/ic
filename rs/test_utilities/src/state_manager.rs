@@ -460,6 +460,7 @@ pub enum SerializableRejectReason {
     QueueFull = 5,
     OutOfMemory = 6,
     Unknown = 7,
+    EngineNotAllowed = 8,
 }
 
 impl From<&RejectReason> for SerializableRejectReason {
@@ -472,6 +473,7 @@ impl From<&RejectReason> for SerializableRejectReason {
             RejectReason::QueueFull => Self::QueueFull,
             RejectReason::OutOfMemory => Self::OutOfMemory,
             RejectReason::Unknown => Self::Unknown,
+            RejectReason::EngineNotAllowed => Self::EngineNotAllowed,
         }
     }
 }
@@ -486,6 +488,7 @@ impl From<SerializableRejectReason> for RejectReason {
             SerializableRejectReason::QueueFull => RejectReason::QueueFull,
             SerializableRejectReason::OutOfMemory => RejectReason::OutOfMemory,
             SerializableRejectReason::Unknown => RejectReason::Unknown,
+            SerializableRejectReason::EngineNotAllowed => RejectReason::EngineNotAllowed,
         }
     }
 }

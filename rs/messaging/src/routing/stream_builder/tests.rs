@@ -799,6 +799,260 @@ fn build_streams_with_best_effort_messages() {
     }
 }
 
+/// Tests that a guaranteed-response request from a CloudEngine subnet (own subnet) to a
+/// non-engine subnet is rejected with a synthetic reject response.
+#[test]
+fn build_streams_engine_src_rejects_gr_request() {
+    let local_canister_id = canister_test_id(0);
+    let remote_canister_id = canister_test_id(1);
+    with_test_replica_logger(|log| {
+        let msg = RequestBuilder::new()
+            .sender(local_canister_id)
+            .receiver(remote_canister_id)
+            .sender_reply_callback(CallbackId::from(1))
+            .deadline(NO_DEADLINE)
+            .payment(Cycles::zero())
+            .build();
+
+        let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
+
+        provided_state.metadata.own_subnet_type = SubnetType::CloudEngine;
+        provided_state.metadata.network_topology.set_subnets(btreemap! {
+            LOCAL_SUBNET => SubnetTopology { subnet_type: SubnetType::CloudEngine, ..Default::default() },
+            REMOTE_SUBNET => SubnetTopology { subnet_type: SubnetType::Application, ..Default::default() },
+        });
+        provided_state.metadata.network_topology.set_routing_table(
+            RoutingTable::try_from(btreemap! {
+                CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
+                CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
+            })
+            .unwrap(),
+        );
+
+        let provided_canister_states = canister_states_with_outputs(vec![msg]);
+        provided_state.put_canister_states(provided_canister_states);
+
+        let result_state = stream_builder.build_streams(provided_state);
+
+        // No message in REMOTE_SUBNET stream.
+        assert!(
+            result_state
+                .streams()
+                .get(&REMOTE_SUBNET)
+                .is_none_or(|s| s.messages().is_empty())
+        );
+
+        // A synthetic reject response was delivered back to the sender.
+        assert!(
+            result_state
+                .canister_state(&local_canister_id)
+                .unwrap()
+                .clone()
+                .pop_input()
+                .is_some()
+        );
+
+        assert_routed_messages_eq(
+            metric_vec(&[(
+                &[
+                    (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                    (LABEL_STATUS, LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED),
+                ],
+                1,
+            )]),
+            &metrics_registry,
+        );
+        assert_eq_critical_errors(0, 0, &metrics_registry);
+    });
+}
+
+/// Tests that a best-effort request with cycles from a CloudEngine subnet (own subnet) to a
+/// non-engine subnet is rejected with a synthetic reject response.
+#[test]
+fn build_streams_engine_src_rejects_cycles_request() {
+    let local_canister_id = canister_test_id(0);
+    let remote_canister_id = canister_test_id(1);
+    with_test_replica_logger(|log| {
+        let msg = RequestBuilder::new()
+            .sender(local_canister_id)
+            .receiver(remote_canister_id)
+            .sender_reply_callback(CallbackId::from(1))
+            .deadline(SOME_DEADLINE)
+            .payment(Cycles::new(100))
+            .build();
+
+        let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
+
+        provided_state.metadata.own_subnet_type = SubnetType::CloudEngine;
+        provided_state.metadata.network_topology.set_subnets(btreemap! {
+            LOCAL_SUBNET => SubnetTopology { subnet_type: SubnetType::CloudEngine, ..Default::default() },
+            REMOTE_SUBNET => SubnetTopology { subnet_type: SubnetType::Application, ..Default::default() },
+        });
+        provided_state.metadata.network_topology.set_routing_table(
+            RoutingTable::try_from(btreemap! {
+                CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
+                CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
+            })
+            .unwrap(),
+        );
+
+        let provided_canister_states = canister_states_with_outputs(vec![msg]);
+        provided_state.put_canister_states(provided_canister_states);
+
+        let result_state = stream_builder.build_streams(provided_state);
+
+        // No message in REMOTE_SUBNET stream.
+        assert!(
+            result_state
+                .streams()
+                .get(&REMOTE_SUBNET)
+                .is_none_or(|s| s.messages().is_empty())
+        );
+
+        // A synthetic reject response was delivered back to the sender.
+        assert!(
+            result_state
+                .canister_state(&local_canister_id)
+                .unwrap()
+                .clone()
+                .pop_input()
+                .is_some()
+        );
+
+        assert_routed_messages_eq(
+            metric_vec(&[(
+                &[
+                    (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                    (LABEL_STATUS, LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED),
+                ],
+                1,
+            )]),
+            &metrics_registry,
+        );
+        assert_eq_critical_errors(0, 0, &metrics_registry);
+    });
+}
+
+/// Tests that a response with a cycles refund from a CloudEngine subnet (own subnet) to a
+/// non-engine subnet is dropped (no synthetic reject, no stream entry).
+#[test]
+fn build_streams_engine_src_drops_cycles_response() {
+    let local_canister_id = canister_test_id(0);
+    let remote_canister_id = canister_test_id(1);
+    with_test_replica_logger(|log| {
+        let response = Arc::new(Response {
+            originator: remote_canister_id,
+            respondent: local_canister_id,
+            originator_reply_callback: CallbackId::from(1),
+            refund: Cycles::new(100),
+            response_payload: Payload::Data(vec![]),
+            deadline: NO_DEADLINE,
+        });
+
+        let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
+
+        provided_state.metadata.own_subnet_type = SubnetType::CloudEngine;
+        provided_state.metadata.network_topology.set_subnets(btreemap! {
+            LOCAL_SUBNET => SubnetTopology { subnet_type: SubnetType::CloudEngine, ..Default::default() },
+            REMOTE_SUBNET => SubnetTopology { subnet_type: SubnetType::Application, ..Default::default() },
+        });
+        provided_state.metadata.network_topology.set_routing_table(
+            RoutingTable::try_from(btreemap! {
+                CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
+                CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
+            })
+            .unwrap(),
+        );
+
+        let provided_canister_states =
+            canister_states_with_outputs(vec![RequestOrResponse::Response(response)]);
+        provided_state.put_canister_states(provided_canister_states);
+
+        let result_state = stream_builder.build_streams(provided_state);
+
+        // No message in REMOTE_SUBNET stream (response was dropped).
+        assert!(
+            result_state
+                .streams()
+                .get(&REMOTE_SUBNET)
+                .is_none_or(|s| s.messages().is_empty())
+        );
+
+        // No synthetic reject: responses are dropped silently.
+        let maybe_reject = result_state
+            .canister_state(&local_canister_id)
+            .unwrap()
+            .clone()
+            .pop_input();
+        assert!(maybe_reject.is_none());
+
+        assert_routed_messages_eq(
+            metric_vec(&[(
+                &[
+                    (LABEL_TYPE, LABEL_VALUE_TYPE_RESPONSE),
+                    (LABEL_STATUS, LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED),
+                ],
+                1,
+            )]),
+            &metrics_registry,
+        );
+        assert_eq_critical_errors(0, 0, &metrics_registry);
+    });
+}
+
+/// Tests that refunds destined to cross an engine boundary are dropped, in both
+/// directions:
+///   * engine → non-engine (own subnet is engine, recipient on a non-engine subnet)
+///   * non-engine → engine (own subnet is non-engine, recipient on an engine subnet)
+///
+/// In both cases, the refund must not appear in the destination stream.
+#[test]
+fn build_streams_drops_refunds_at_engine_boundary() {
+    let local_canister_id = canister_test_id(0);
+    let remote_canister_id = canister_test_id(1);
+
+    for (own_subnet_type, remote_subnet_type) in [
+        (SubnetType::CloudEngine, SubnetType::Application),
+        (SubnetType::Application, SubnetType::CloudEngine),
+    ] {
+        with_test_replica_logger(|log| {
+            let (stream_builder, mut provided_state, _) = new_fixture(&log);
+
+            provided_state.metadata.own_subnet_type = own_subnet_type;
+            provided_state
+                .metadata
+                .network_topology
+                .set_subnets(btreemap! {
+                    LOCAL_SUBNET => SubnetTopology { subnet_type: own_subnet_type, ..Default::default() },
+                    REMOTE_SUBNET => SubnetTopology { subnet_type: remote_subnet_type, ..Default::default() },
+                });
+            provided_state.metadata.network_topology.set_routing_table(
+                RoutingTable::try_from(btreemap! {
+                    CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
+                    CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
+                })
+                .unwrap(),
+            );
+
+            // Add a refund destined for the canister on the other side of the engine boundary.
+            provided_state.add_refund(remote_canister_id, Cycles::new(100));
+
+            let result_state = stream_builder.build_streams(provided_state);
+
+            // The refund must NOT have been routed into the REMOTE_SUBNET stream.
+            let routed_refunds = result_state
+                .streams()
+                .get(&REMOTE_SUBNET)
+                .map_or(0, |s| s.refund_count());
+            assert_eq!(
+                0, routed_refunds,
+                "Refund leaked across engine boundary (own_subnet_type={own_subnet_type:?}, \
+                 remote_subnet_type={remote_subnet_type:?})",
+            );
+        });
+    }
+}
+
 /// Given a stream with some (potentially zero) initial refunds and canister
 /// messages, tests that `build_streams()` respects the various limits when
 /// routing additional refunds and canister messages:

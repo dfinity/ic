@@ -127,6 +127,7 @@ const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_all
 const CRITICAL_ERROR_FAILED_TO_READ_REGISTRY: &str = "mr_failed_to_read_registry_error";
 pub const CRITICAL_ERROR_NON_INCREASING_BATCH_TIME: &str = "mr_non_increasing_batch_time";
 pub const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "mr_induct_response_failed";
+pub const CRITICAL_ERROR_ENGINE_MESSAGE: &str = "mr_engine_message";
 const CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS: &str = "mr_illegal_non_empty_subnet_admins";
 
 /// Records the timestamp when all messages before the given index (down to the
@@ -344,6 +345,10 @@ pub(crate) struct MessageRoutingMetrics {
     /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
     /// failures to induct responses.
     pub critical_error_induct_response_failed: IntCounter,
+    /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
+    /// messages to/from CloudEngine subnets that carried cycles or were
+    /// guaranteed-response calls, which are not permitted on non-engine subnets.
+    pub critical_error_engine_message: IntCounter,
     /// Critical error: a non-rental subnet has a non-empty subnet admins list.
     critical_error_illegal_non_empty_subnet_admins: IntCounter,
 
@@ -487,6 +492,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_NON_INCREASING_BATCH_TIME),
             critical_error_induct_response_failed: metrics_registry
                 .error_counter(CRITICAL_ERROR_INDUCT_RESPONSE_FAILED),
+            critical_error_engine_message: metrics_registry
+                .error_counter(CRITICAL_ERROR_ENGINE_MESSAGE),
             critical_error_illegal_non_empty_subnet_admins: metrics_registry
                 .error_counter(CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS),
 
@@ -1070,43 +1077,17 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .map_err(|err| registry_error("routing table", None, err))?
             .unwrap_or_default();
 
-        // Derive filtered subnets and routing table.
-        let (subnets, routing_table) = if own_subnet_type == SubnetType::CloudEngine {
-            // CloudEngine subnets only see themselves.
-            let subnets = all_subnets
-                .iter()
-                .filter(|(id, _)| **id == own_subnet_id)
-                .map(|(id, topo)| (*id, topo.clone()))
-                .collect();
-            let routing_table = full_routing_table
-                .iter()
-                .filter(|(_, id)| **id == own_subnet_id)
-                .map(|(range, id)| (*range, *id))
-                .collect::<BTreeMap<_, _>>()
-                .try_into()
-                .map_err(|err| {
-                    Persistent(format!(
-                        "'filtered routing table for CloudEngine subnet {}', err: {:?}",
-                        own_subnet_id, err
-                    ))
-                })?;
-            (subnets, routing_table)
-        } else {
-            // Non-engine subnets see every subnet that is *not* a CloudEngine.
-            let subnets: BTreeMap<_, _> = all_subnets
-                .iter()
-                .filter(|(_, topo)| topo.subnet_type != SubnetType::CloudEngine)
-                .map(|(id, topo)| (*id, topo.clone()))
-                .collect();
-            let routing_table = full_routing_table
-                .iter()
-                .filter(|(_, id)| subnets.contains_key(id))
-                .map(|(range, id)| (*range, *id))
-                .collect::<BTreeMap<_, _>>()
-                .try_into()
-                .map_err(|err| Persistent(format!("'filtered routing table', err: {:?}", err)))?;
-            (subnets, routing_table)
-        };
+        // All subnets see the full topology, including CloudEngine subnets.
+        let subnets: BTreeMap<_, _> = all_subnets
+            .iter()
+            .map(|(id, topo)| (*id, topo.clone()))
+            .collect();
+        let routing_table = full_routing_table
+            .iter()
+            .map(|(range, id)| (*range, *id))
+            .collect::<BTreeMap<_, _>>()
+            .try_into()
+            .map_err(|err| Persistent(format!("routing table err: {:?}", err)))?;
         let canister_migrations = self
             .registry
             .get_canister_migrations(registry_version)
@@ -1130,6 +1111,22 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .map_err(|err| registry_error("default initial DKG subnet ID", None, err))?
             .filter(|subnet_id| subnets.contains_key(subnet_id));
 
+        // A signing subnet is only usable from here if a chain-key request can
+        // reach it without crossing the CloudEngine boundary: requests carrying
+        // cycles or guaranteed-response calls are rejected at that boundary (see
+        // `StreamBuilderImpl`/`StreamHandlerImpl`), and chain-key requests are
+        // always both. The local subnet is always reachable (loopback); any other
+        // subnet is reachable only if neither end is a CloudEngine. Pruning such
+        // subnets here means routing returns a clean `ChainKeyError` (and the cost
+        // API an `UnknownKey`) instead of routing a doomed request to the boundary.
+        let chain_key_subnet_is_reachable = |id: &SubnetId| match subnets.get(id) {
+            None => false,
+            Some(topo) => {
+                *id == own_subnet_id
+                    || (own_subnet_type != SubnetType::CloudEngine
+                        && topo.subnet_type != SubnetType::CloudEngine)
+            }
+        };
         let chain_key_enabled_subnets: BTreeMap<_, _> = self
             .registry
             .get_chain_key_enabled_subnets(registry_version)
@@ -1139,7 +1136,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .filter_map(|(key, subnet_ids)| {
                 let filtered: Vec<_> = subnet_ids
                     .into_iter()
-                    .filter(|id| subnets.contains_key(id))
+                    .filter(&chain_key_subnet_is_reachable)
                     .collect();
                 if filtered.is_empty() {
                     None
