@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to make canister calls with sender info (additional information provided by the canister with which the sender principal is associated).
 - The function `PocketIcBuilder::with_test_threshold_keys_subnet` to create a test threshold keys subnet.
 - The function `PocketIc::create_canister_with_params` and supporting types `CreateCanisterParams` and `CreateCanisterPlacement` to create a canister with custom cycles, settings, and/or placement (specific subnet or canister ID).
+- Public reexport of `ic_management_canister_types::EnvironmentVariable`.
 
 ### Changed
 - The functions `PocketIc::create_canister`, `PocketIc::create_canister_with_settings`, `PocketIc::create_canister_with_id`, and `PocketIc::create_canister_on_subnet` now create a canister with 100T cycles by default.

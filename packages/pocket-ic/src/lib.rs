@@ -69,7 +69,7 @@ use candid::{
 use flate2::read::GzDecoder;
 pub use ic_management_canister_types::{
     CanisterId, CanisterInstallMode, CanisterLogRecord, CanisterSettings, CanisterStatusResult,
-    Snapshot,
+    EnvironmentVariable, Snapshot,
 };
 pub use ic_transport_types::SubnetMetrics;
 use reqwest::Url;
