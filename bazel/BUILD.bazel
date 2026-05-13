@@ -76,8 +76,8 @@ write_stable_file_var(
 # i.e. all non-STABLE_, volatile key value pairs outputted from ./workspace_status.sh.
 #
 # Targets that need to use volatile keys should depend on this directly.
-# When volatile keys change the target remain cached.
-# When the target has to be rebuild it will always use the latest volatile keys.
+# When volatile keys change the target remains cached.
+# When the target has to be rebuilt it will always use the latest volatile keys.
 volatile_status(
     name = "volatile-status.txt",
     visibility = ["//visibility:public"],
