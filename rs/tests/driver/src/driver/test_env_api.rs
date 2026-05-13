@@ -134,7 +134,7 @@
 use super::{
     config::NODES_INFO,
     driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR,
-    farm::{DnsRecord, PlaynetCertificate},
+    farm::{DnsRecord, HostFeature, PlaynetCertificate},
     test_setup::{GroupSetup, InfraProvider},
 };
 use crate::{
@@ -1485,6 +1485,7 @@ pub trait HasGroupSetup {
     fn create_group_setup(
         &self,
         group_base_name: String,
+        allocate_testnet_to_local_dc: bool,
         vm_allocation_mode: Option<VmAllocationMode>,
         no_group_ttl: bool,
     );
@@ -1494,6 +1495,7 @@ impl HasGroupSetup for TestEnv {
     fn create_group_setup(
         &self,
         group_base_name: String,
+        allocate_testnet_to_local_dc: bool,
         vm_allocation_mode: Option<VmAllocationMode>,
         no_group_ttl: bool,
     ) {
@@ -1511,11 +1513,23 @@ impl HasGroupSetup for TestEnv {
             let group_setup = GroupSetup::new(group_base_name.clone(), timeout);
             match InfraProvider::read_attribute(self) {
                 InfraProvider::Farm => {
+                    let required_host_features = allocate_testnet_to_local_dc
+                        .then(|| std::env::var("DC").ok())
+                        .flatten()
+                        .map(|dc| vec![HostFeature::DC(dc)])
+                        .unwrap_or_default();
+                    info!(
+                        log,
+                        "Creating group {} with required_host_features: {:?} ...",
+                        group_setup.infra_group_name,
+                        required_host_features
+                    );
+
                     let farm_base_url = FarmBaseUrl::read_attribute(self);
                     let farm = Farm::new(farm_base_url.into(), self.logger());
                     let group_spec = GroupSpec {
                         vm_allocation_mode,
-                        required_host_features: vec![],
+                        required_host_features,
                         preferred_network: None,
                         metadata: None,
                     };
