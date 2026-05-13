@@ -282,7 +282,23 @@ impl CanisterSnapshot {
             .as_ref()
             .ok_or(CanisterSnapshotError::EmptyExecutionState(canister_id))?;
         let global_timer = canister.system_state.global_timer;
-        let hook_status = canister.system_state.task_queue.peek_hook_status();
+        // A frozen canister whose `OnLowWasmMemory` hook could not run is left with
+        // `OnLowWasmMemoryHookStatus::ConditionNotSatisfied` while the underlying memory condition is still
+        // satisfied (see the matching comment in `execute_call_or_task`). The canister itself recovers from
+        // this transient inconsistency the next time `finish_subnet_message_execution` evaluates the hook
+        // condition, but the inconsistency must not leak into snapshots: it would (1) be reported as a lie
+        // through `read_canister_snapshot_metadata`, and (2) cause `upload_canister_snapshot_metadata` to
+        // reject any round-trip of the metadata via the `is_consistent_with` check. Lifting the recorded
+        // status to `Ready` whenever the condition is actually satisfied preserves the invariant that
+        // snapshots always agree with their memory contents.
+        let hook_status = match canister.system_state.task_queue.peek_hook_status() {
+            OnLowWasmMemoryHookStatus::ConditionNotSatisfied
+                if canister.is_low_wasm_memory_hook_condition_satisfied() =>
+            {
+                OnLowWasmMemoryHookStatus::Ready
+            }
+            other => other,
+        };
         let execution_snapshot = ExecutionStateSnapshot {
             wasm_binary: execution_state.wasm_binary.binary.clone(),
             exported_globals: execution_state.exported_globals.clone(),

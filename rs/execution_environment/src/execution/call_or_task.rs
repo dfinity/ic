@@ -85,20 +85,29 @@ pub fn execute_call_or_task(
                     Ok(cycles) => cycles,
                     Err(err) => {
                         if call_or_task == CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) {
-                            //`OnLowWasmMemoryHook` is taken from task_queue (i.e. `OnLowWasmMemoryHookStatus` is `Executed`),
-                            // but it was not executed due to the freezing of the canister. To ensure that the hook is executed
-                            // when the canister is unfrozen we need to set `OnLowWasmMemoryHookStatus` to `Ready`. Because of
-                            // the way `OnLowWasmMemoryHookStatus::update` is implemented we first need to remove it from the
-                            // task_queue (which calls `OnLowWasmMemoryHookStatus::update(false)`) followed with `enqueue`
-                            // (which calls `OnLowWasmMemoryHookStatus::update(true)`) to ensure desired behavior.
+                            // `OnLowWasmMemoryHook` was taken from `task_queue` (so `OnLowWasmMemoryHookStatus` is
+                            // `Executed`), but it could not run because the canister is frozen. If we left the
+                            // status as `Executed` or re-enqueued the hook to `Ready`, the scheduler would either
+                            // never re-fire the hook (because the memory condition is still satisfied so the
+                            // `Executed -> Ready` transition never happens) or would immediately pop it again,
+                            // re-enter this branch, and spin in a tight loop until the round instruction limit is
+                            // reached.
+                            //
+                            // Instead we reset the status to `ConditionNotSatisfied` and rely on
+                            // `finish_subnet_message_execution` to re-arm the hook on the next successful
+                            // management call against this canister (e.g. `deposit_cycles`, `update_settings`,
+                            // `provisional_top_up_canister`, ...): that path calls
+                            // `update_on_low_wasm_memory_hook_condition`, sees the live memory condition is still
+                            // satisfied, observes the status as inconsistent and flips it back to `Ready`.
+                            //
+                            // This leaves the canister in a transiently inconsistent state
+                            // (`(ConditionNotSatisfied, condition = true)`); `CanisterSnapshot::from_canister`
+                            // hides this by lifting the snapshot's stored status to `Ready` in this case, so
+                            // observers of snapshot metadata never see the lie.
                             canister
                                 .system_state
                                 .task_queue
                                 .remove(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
-                            canister
-                                .system_state
-                                .task_queue
-                                .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
                         }
                         return finish_call_with_error(
                             UserError::new(ErrorCode::CanisterOutOfCycles, err),
