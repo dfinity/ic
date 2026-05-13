@@ -9,7 +9,7 @@ use crate::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs};
 use crate::driver::log_events;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env::{RequiredHostFeaturesFromCmdLine, TestEnvAttribute};
-use crate::driver::test_env_api::{HasFarmUrl, read_var_from_volatile_status_file};
+use crate::driver::test_env_api::HasFarmUrl;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use ic_crypto_sha2::Sha256;
@@ -445,7 +445,7 @@ impl GroupSpec {
     pub fn add_meta(mut self, group_base_name: &str) -> Self {
         // Read injected farm metadata. We expect 'USER' and 'JOB_NAME' to be set and
         // use sensible defaults if unset.
-        let mut runtime_args_map = parse_farm_metadata();
+        let mut runtime_args_map = parse_farm_metadata_env();
         let user = runtime_args_map.remove("USER").unwrap_or("CI".to_string());
         let job_schedule = runtime_args_map
             .remove("JOB_NAME")
@@ -470,10 +470,10 @@ pub struct GroupMetadata {
     pub test_name: String,
 }
 
-fn parse_farm_metadata() -> HashMap<String, String> {
-    // Read the FARM_METADATA variable from the volatile status file containing ';' separated key pairs:
+fn parse_farm_metadata_env() -> HashMap<String, String> {
+    // Read the FARM_METADATA environment variable containing ';' separated key pairs:
     //      'FARM_METADATA=FOO=bar;BAZ=quux'
-    let farm_metadata = read_var_from_volatile_status_file("FARM_METADATA")
+    let farm_metadata = std::env::var("FARM_METADATA")
         .expect("Expected the environment variable FARM_METADATA to be defined!");
     let mut map = HashMap::new();
     let pairs = farm_metadata.split(';');

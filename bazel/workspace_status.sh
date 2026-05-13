@@ -28,6 +28,9 @@ if [ -n "${CI_JOB_NAME:-}" ]; then
 fi
 echo "FARM_METADATA $FARM_METADATA"
 
-# Used for allocating a Farm testnet to the local DC in CI (Search for allocate_testnet_to_local_dc)
-NODE_NAME="${NODE_NAME:-unknown}"
-echo "DC ${NODE_NAME%%-*}"
+# Output the DC (Data Center) as a volatile variable in case NODE_NAME is set.
+# This is used to allocate a Farm testnet to the local DC in CI (Search for allocate_testnet_to_local_dc)
+# NODE_NAME is assumed to be in the format <dc-name>-<node-id>, e.g. "dm1-dll01"
+if [ -n "${NODE_NAME:-}" ]; then
+    echo "DC ${NODE_NAME%%-*}"
+fi

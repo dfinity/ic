@@ -1514,9 +1514,7 @@ impl HasGroupSetup for TestEnv {
             match InfraProvider::read_attribute(self) {
                 InfraProvider::Farm => {
                     let required_host_features = allocate_testnet_to_local_dc
-                        .then(|| {
-                            read_var_from_volatile_status_file("DC").filter(|dc| dc != "unknown")
-                        })
+                        .then(|| std::env::var("DC").ok())
                         .flatten()
                         .map(|dc| vec![HostFeature::DC(dc)])
                         .unwrap_or_default();

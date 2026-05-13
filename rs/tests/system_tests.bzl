@@ -213,7 +213,7 @@ def system_test(
     # to depend on the VOLATILE_STATUS_FILE since that will cause the variable to be repointed to a path on the colocated VM
     # which won't exist during group creaton time on the non-colocated wrapper. Instead we pass it as a regular environment variable
     # and repoint it to its realpath in ./run_systest.sh.
-    env["VOLATILE_STATUS_FILE"] = "$(rootpath //bazel:volatile-status.txt)"
+    env["RUN_SCRIPT_VOLATILE_STATUS_FILE"] = "$(rootpath //bazel:volatile-status.txt)"
     data.append("//bazel:volatile-status.txt")
 
     sh_test(
