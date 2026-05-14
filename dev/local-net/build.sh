@@ -55,8 +55,19 @@ if [ "${SKIP_BAZEL:-0}" != "1" ]; then
     echo "    Targets:  ${TARGETS[*]}"
     echo
 
+    # Fix cache ownership: previous runs (or a fresh cache) may have files owned
+    # by the container's internal user. Running as root (default) lets us chown
+    # them to the current host user so the main build below can write to them.
+    docker run --rm \
+        --user root \
+        -v "$CACHE_DIR:/cache" \
+        "$BUILDER_IMG" \
+        chown -R "$(id -u):$(id -g)" /cache
+
     docker run --rm \
         --platform=linux/amd64 \
+        --user "$(id -u):$(id -g)" \
+        -e HOME=/tmp \
         -v "$IC_REPO:/ic" \
         -v "$CACHE_DIR:/cache" \
         -v "$OUT_DIR:/out" \

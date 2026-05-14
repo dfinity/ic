@@ -1,0 +1,5 @@
+networks:
+  - name: local
+    mode: connected
+    url: http://localhost:8080
+

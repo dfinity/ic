@@ -76,6 +76,8 @@ ensure_builder() {
     echo "    (spinning up persistent builder: $BUILDER_NAME)"
     docker run -d \
         --platform=linux/amd64 \
+        --user "$(id -u):$(id -g)" \
+        -e HOME=/tmp \
         --name "$BUILDER_NAME" \
         -v "$IC_REPO:/ic" \
         -v "$LOCAL_NET_DIR/cache:/cache" \
@@ -94,8 +96,12 @@ for entry in "${NNS_CANISTERS[@]}"; do
     TARGETS+=("${entry%%|*}")
 done
 
+# Fix cache ownership so the host-user-mapped container can write to it
+# (mirrors the same step in build.sh — see comment there for rationale).
+docker exec --user root "$BUILDER_NAME" chown -R "$(id -u):$(id -g)" /cache
+
 t0=$(date +%s)
-docker exec "$BUILDER_NAME" bash -eu -o pipefail -c "
+docker exec --user "$(id -u):$(id -g)" "$BUILDER_NAME" bash -eu -o pipefail -c "
     bazel build \
         --disk_cache=/cache/bazel-disk \
         --repository_cache=/cache/bazel-repo \
@@ -122,7 +128,7 @@ for entry in "${NNS_CANISTERS[@]}"; do
     COPY_ARGS+=("$pkg/$name" "$outname")
 done
 
-docker exec "$BUILDER_NAME" bash -eu -o pipefail -c '
+docker exec --user "$(id -u):$(id -g)" "$BUILDER_NAME" bash -eu -o pipefail -c '
     mkdir -p /out/wasms
     while [ $# -gt 0 ]; do
         src_base=$1
