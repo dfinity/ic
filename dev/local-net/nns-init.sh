@@ -31,12 +31,13 @@ CYCLES_LEDGER_CANISTER_ID="um5iw-rqaaa-aaaaq-qaaba-cai"
 # ul4oc-4iaaa-aaaaq-qaabq-cai = 0x_0210_0003
 CYCLES_LEDGER_INDEX_CANISTER_ID="ul4oc-4iaaa-aaaaq-qaabq-cai"
 
-# Path to a local cycles-ledger checkout (must be main branch; initial_balances
-# was never released). Defaults to a sibling of the IC repo.
-CYCLES_LEDGER_SRC="${CYCLES_LEDGER_SRC:-$(cd "$IC_REPO/.." && pwd)/cycles-ledger}"
+# Cycles ledger WASM — v1.0.6 is the first release with initial_balances support
+# (added in commit 136a7dc, DID file not regenerated but the WASM has it)
+CYCLES_LEDGER_WASM_URL="https://github.com/dfinity/cycles-ledger/releases/download/cycles-ledger-v1.0.6/cycles-ledger.wasm.gz"
+CYCLES_LEDGER_WASM_SHA256="ed99402535bb4f58e4ab469acc40c903f2fdeea409be16623d5c6a9131cbf120"
 
 # Pre-encoded Candid init args produced by:
-#   didc encode -d "$CYCLES_LEDGER_SRC/cycles-ledger/cycles-ledger.did" \
+#   didc encode -d cycles-ledger/cycles-ledger/cycles-ledger.did \
 #     '(variant { Init = record { max_blocks_per_request=50:nat64;
 #        index_id=opt principal "ul4oc-4iaaa-aaaaq-qaabq-cai";
 #        initial_balances=opt vec { record {
@@ -190,19 +191,15 @@ docker run --rm \
 t3=$(date +%s)
 echo "    (ic-nns-init: $((t3 - t2))s)"
 
-# --- build cycles-ledger WASM from source + build index WASM ---
+# --- fetch cycles-ledger WASM + build index WASM ---
 echo
-echo "==> Building cycles-ledger WASM from source"
-if [ ! -d "$CYCLES_LEDGER_SRC" ]; then
-    echo "ERROR: CYCLES_LEDGER_SRC=$CYCLES_LEDGER_SRC not found." >&2
-    echo "       Clone https://github.com/dfinity/cycles-ledger alongside the IC repo" >&2
-    echo "       or set CYCLES_LEDGER_SRC to its path." >&2
-    exit 1
+echo "==> Fetching cycles-ledger WASM"
+if [ ! -f "$WASMS_DIR/cycles-ledger.wasm.gz" ]; then
+    curl -fsSL "$CYCLES_LEDGER_WASM_URL" -o "$WASMS_DIR/cycles-ledger.wasm.gz"
 fi
-# dfx build --check produces the optimised wasm.gz without deploying
-(cd "$CYCLES_LEDGER_SRC" && dfx build --check cycles-ledger 2>&1 | tail -5)
-cp "$CYCLES_LEDGER_SRC/.dfx/local/canisters/cycles-ledger/cycles-ledger.wasm.gz" \
-    "$WASMS_DIR/cycles-ledger.wasm.gz"
+printf '%s  %s\n' "$CYCLES_LEDGER_WASM_SHA256" "$WASMS_DIR/cycles-ledger.wasm.gz" \
+    | shasum -a 256 -c --status \
+    || { echo "ERROR: SHA256 mismatch on cycles-ledger.wasm.gz" >&2; exit 1; }
 echo "    cycles-ledger.wasm.gz OK ($(du -h "$WASMS_DIR/cycles-ledger.wasm.gz" | awk '{print $1}'))"
 
 echo "==> Building cycles-ledger-index WASM"
