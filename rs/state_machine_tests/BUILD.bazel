@@ -105,6 +105,7 @@ BIN_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/certification",
     "//rs/types/base_types",
     "//rs/types/types_test_utils",
     "//rs/universal_canister/lib",
@@ -128,6 +129,7 @@ rust_binary(
 rust_ic_test(
     name = "state_machine_integration_tests",
     srcs = [
+        "tests/delegation.rs",
         "tests/dts.rs",
         "tests/mod.rs",
         "tests/multi_subnet.rs",
