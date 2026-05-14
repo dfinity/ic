@@ -41,7 +41,7 @@ use async_trait::async_trait;
 use candid::{Nat, Principal};
 use futures::{FutureExt, join};
 use ic_canister_client_sender::Sender;
-use ic_nervous_system_canisters::cmc::FakeCmc;
+use ic_nervous_system_clients::nns_governance_client::FakeNnsGovernanceClient;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusType,
 };
@@ -214,7 +214,7 @@ async fn test_perform_transfer_sns_treasury_funds_execution_fails_when_another_c
         Box::new(NativeEnvironment::new(None)),
         Box::new(DoNothingLedger {}), // SNS token ledger.
         Box::new(StubLedger {}),      // ICP ledger.
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Step 2: Run code under test.
@@ -399,7 +399,7 @@ async fn test_neuron_operations_exclude_one_another() {
                     transfer_funds_continue: transfer_funds_continue.clone(),
                 }),
                 Box::new(DoNothingLedger {}),
-                Box::new(FakeCmc::new()),
+                Box::new(FakeNnsGovernanceClient::new()),
             );
 
             // Step 2: Execute code under test.
@@ -799,7 +799,7 @@ fn test_disallow_set_mode_not_normal() {
         Box::<NativeEnvironment>::default(),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
     let swap_canister_id = governance.proto.swap_canister_id_or_panic();
 
@@ -834,7 +834,7 @@ async fn test_disallow_enabling_voting_rewards_while_in_pre_initialization_swap(
         Box::new(NativeEnvironment::new(Some(CanisterId::from_u64(350519)))),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Step 2: Run code under test.
@@ -958,7 +958,7 @@ async fn no_new_reward_event_when_there_are_no_new_proposals() {
         Box::new(DummyEnvironment::new(now.clone())),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Step 1.3: Record original last_reward_event. That way, we can detect
@@ -1190,7 +1190,7 @@ fn test_disallow_concurrent_upgrade_execution(
         Box::<NativeEnvironment>::default(),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     let upgrade_proposals_in_progress = governance.upgrade_proposals_in_progress();
@@ -1425,7 +1425,7 @@ fn test_upgrade_sns_to_next_version_upgrades_correct_canister(
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // When we execute the proposal
@@ -1721,7 +1721,7 @@ fn test_distribute_rewards_does_not_block_upgrades() {
         Box::new(env),
         Box::new(AlwaysSucceedingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Get the initial reward event for comparison later
@@ -1863,7 +1863,7 @@ fn test_check_upgrade_status_fails_if_upgrade_not_finished_in_time() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     assert_eq!(
@@ -2005,7 +2005,7 @@ fn test_check_upgrade_status_succeeds() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     assert_eq!(
@@ -2162,7 +2162,7 @@ fn test_check_upgrade_not_yet_failed_if_canister_summary_errs_and_before_mark_fa
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     assert_eq!(
@@ -2311,7 +2311,7 @@ fn test_check_upgrade_fails_if_canister_summary_errs_and_past_mark_failed_at_tim
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     assert_eq!(
@@ -2470,7 +2470,7 @@ fn test_no_target_version_fails_check_upgrade_status() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     governance.run_periodic_tasks().now_or_never();
@@ -2671,7 +2671,7 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
     if let Some(parameters) = governance.proto.parameters.as_mut() {
         parameters.automatically_advance_target_version = Some(automatically_advance_target_version)
@@ -2852,7 +2852,7 @@ fn test_upgrade_periodic_task_lock() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // The lock is initially None
@@ -2930,7 +2930,7 @@ fn test_check_upgrade_can_succeed_if_archives_out_of_sync() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     assert_eq!(
@@ -3008,7 +3008,7 @@ fn test_check_upgrade_status_succeeds_if_no_archives_present() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     assert_eq!(
@@ -3121,7 +3121,7 @@ fn test_sns_controlled_canister_upgrade_only_upgrades_dapp_canisters() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Helper function to assert failures.
@@ -3210,7 +3210,7 @@ fn test_allow_canister_upgrades_while_motion_proposal_execution_is_in_progress()
         Box::<NativeEnvironment>::default(),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Step 2: Run code under test.
@@ -3270,7 +3270,7 @@ fn test_allow_canister_upgrades_while_another_upgrade_proposal_is_open() {
         Box::<NativeEnvironment>::default(),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Step 2: Run code under test.
@@ -3331,7 +3331,7 @@ fn test_allow_canister_upgrades_after_another_upgrade_proposal_has_executed() {
         Box::<NativeEnvironment>::default(),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Step 2: Run code under test.
@@ -3376,7 +3376,7 @@ fn test_allow_canister_upgrades_proposal_does_not_block_itself_but_does_block_ot
         Box::<NativeEnvironment>::default(),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Step 2 & 3: Run code under test, and inspect results.
@@ -3435,7 +3435,7 @@ fn test_upgrade_proposals_blocked_by_pending_upgrade() {
         Box::<NativeEnvironment>::default(),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Step 2 & 3: Run code under test, and inspect results.
@@ -3500,7 +3500,7 @@ fn test_upgrade_proposals_not_blocked_by_old_upgrade_proposals() {
         Box::<NativeEnvironment>::default(),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Step 2: Check that the proposal is not blocked by an old proposal.
@@ -3554,7 +3554,7 @@ fn test_add_generic_nervous_system_function_succeeds() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     let id = 1000;
@@ -3616,7 +3616,7 @@ fn default_governance_with_proto(governance_proto: GovernanceProto) -> Governanc
         Box::<NativeEnvironment>::default(),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     )
     .enable_test_features()
 }
@@ -4308,7 +4308,7 @@ fn prepare_setup_for_split_neuron_tests(stake_e8s: u64, maturity_e8s: u64) -> Sp
         Box::new(NativeEnvironment::new(Some(canister_id))),
         Box::new(AlwaysSucceedingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     SplitNeuronTestSetup {
@@ -4538,7 +4538,7 @@ fn test_add_generic_nervous_system_function_fails_when_restricted() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     let list_that_should_fail = vec![
@@ -4733,7 +4733,7 @@ fn test_list_topics() {
         Box::new(NativeEnvironment::new(None)),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     let registered_spec = ExtensionSpec {

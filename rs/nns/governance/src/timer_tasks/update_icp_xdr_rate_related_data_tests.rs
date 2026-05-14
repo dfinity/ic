@@ -389,8 +389,15 @@ async fn test_execute_stores_rate_and_computes_modulation() {
                 }],
             }
         );
-        // The 365-day window is not yet full, so maturity modulation is not computed.
-        assert_eq!(gov.heap_data.maturity_modulation, None);
+        // The 365-day window is not yet full, so maturity modulation has not been
+        // recomputed from price history; it's still the neutral init default.
+        assert_eq!(
+            gov.heap_data.maturity_modulation,
+            Some(MaturityModulation {
+                current_value_permyriad: Some(0),
+                updated_at_days_since_epoch: None,
+            })
+        );
     });
 
     // With almost no history, the next delay should be short (backfill interval) so that
@@ -682,7 +689,14 @@ async fn test_execute_repeated_calls_accumulate_rates() {
                 ],
             }
         );
-        // The 365-day window is not yet full, so maturity modulation is not computed.
-        assert_eq!(gov.heap_data.maturity_modulation, None);
+        // The 365-day window is not yet full, so maturity modulation has not been
+        // recomputed from price history; it's still the neutral init default.
+        assert_eq!(
+            gov.heap_data.maturity_modulation,
+            Some(MaturityModulation {
+                current_value_permyriad: Some(0),
+                updated_at_days_since_epoch: None,
+            })
+        );
     });
 }

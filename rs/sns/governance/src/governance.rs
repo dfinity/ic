@@ -98,8 +98,9 @@ use ic_ledger_core::Tokens;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
-use ic_nervous_system_canisters::cmc::CMC;
-use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
+use ic_nervous_system_clients::{
+    ledger_client::ICRC1Ledger, nns_governance_client::NnsGovernanceClient,
+};
 use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
     NervousSystemError, ONE_DAY_SECONDS, ONE_HOUR_SECONDS, i2d,
@@ -623,8 +624,8 @@ pub struct Governance {
     // Implementation of the interface pointing to the NNS's ICP ledger canister
     pub(crate) nns_ledger: Box<dyn ICRC1Ledger>,
 
-    /// Implementation of the interface with the CMC canister.
-    cmc: Box<dyn CMC>,
+    /// Client for fetching maturity modulation from the NNS Governance canister.
+    nns_governance: Box<dyn NnsGovernanceClient>,
 
     // Stores information about the instruction usage of various "spans", which
     // map roughly to the execution of a single update call.
@@ -707,7 +708,7 @@ impl Governance {
         env: Box<dyn Environment>,
         ledger: Box<dyn ICRC1Ledger>,
         nns_ledger: Box<dyn ICRC1Ledger>,
-        cmc: Box<dyn CMC>,
+        nns_governance: Box<dyn NnsGovernanceClient>,
     ) -> Self {
         let mut proto = proto.into_inner();
         let now = env.now();
@@ -751,7 +752,7 @@ impl Governance {
             ledger,
             profiling_information: &PROFILING_INFORMATION,
             nns_ledger,
-            cmc,
+            nns_governance,
             function_followee_index: BTreeMap::new(),
             topic_follower_index: BTreeMap::new(),
             principal_to_neuron_ids_index: BTreeMap::new(),
@@ -5692,15 +5693,15 @@ impl Governance {
             return;
         };
 
-        // Fetch new maturity modulation.
-        let maturity_modulation = self.cmc.neuron_maturity_modulation().await;
-
-        // Unwrap response.
-        let Ok(maturity_modulation) = maturity_modulation else {
+        // Fetch new maturity modulation. Bail if the call failed or NNS
+        // Governance does not yet have a value.
+        let Ok(Some(maturity_modulation)) = self.nns_governance.get_maturity_modulation().await
+        else {
             return;
         };
 
-        // Construct new MaturityModulation.
+        // Permyriad and basis points are the same unit (1/10,000), so the
+        // numeric value carries over unchanged.
         let new_maturity_modulation = MaturityModulation {
             current_basis_points: Some(maturity_modulation),
             updated_at_timestamp_seconds: Some(self.env.now()),

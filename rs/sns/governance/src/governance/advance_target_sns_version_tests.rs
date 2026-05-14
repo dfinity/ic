@@ -20,7 +20,7 @@ use crate::{
     sns_upgrade::{ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsVersion},
     types::test_helpers::NativeEnvironment,
 };
-use ic_nervous_system_canisters::cmc::FakeCmc;
+use ic_nervous_system_clients::nns_governance_client::FakeNnsGovernanceClient;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusType,
 };
@@ -85,7 +85,7 @@ async fn test_initiate_upgrade_blocked_by_upgrade_proposal() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Step 2: Run code under test.
@@ -181,7 +181,7 @@ async fn test_automatic_upgrade_when_behind_target_version_for_root() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Step 2: Update the cached upgrade steps
@@ -318,7 +318,7 @@ async fn test_automatic_upgrade_when_behind_target_version_for_governance() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Step 2: Update the cached upgrade steps
@@ -438,7 +438,7 @@ async fn test_automatic_upgrade_when_behind_target_version_for_archive_then_ledg
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Step 2: Update the cached upgrade steps
@@ -582,7 +582,7 @@ async fn test_initiate_upgrade_blocked_by_pending_upgrade() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Step 2: Run code under test.
@@ -680,7 +680,7 @@ fn test_perform_advance_target_version() {
             Box::new(env),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
-            Box::new(FakeCmc::new()),
+            Box::new(FakeNnsGovernanceClient::new()),
         );
         // TODO[NNS1-3365]: Enable the AdvanceSnsTargetVersionFeature.
         governance.test_features_enabled = true;
@@ -746,7 +746,7 @@ fn test_upgrade_periodic_task_lock_times_out() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     assert!(gov.acquire_upgrade_periodic_task_lock());
@@ -812,7 +812,7 @@ async fn test_refresh_cached_upgrade_steps_rejects_duplicate_versions() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Precondition
@@ -857,7 +857,7 @@ fn test_upgrade_periodic_task_lock_does_not_get_stuck_during_overflow() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     gov.upgrade_periodic_task_lock = Some(u64::MAX);
@@ -895,7 +895,7 @@ fn get_or_reset_upgrade_steps_leads_to_should_refresh_cached_upgrade_steps() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Precondition
@@ -962,7 +962,7 @@ async fn test_refresh_cached_upgrade_steps_advances_target_version_automatically
             Box::new(env),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
-            Box::new(FakeCmc::new()),
+            Box::new(FakeNnsGovernanceClient::new()),
         )
     };
 
@@ -1295,7 +1295,7 @@ fn test_get_upgrade_journal_pagination() {
         Box::new(NativeEnvironment::new(None)),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Scenario 1: Default behavior shows most recent entries

@@ -10,8 +10,8 @@ use ic_ledger_core::{
     Tokens,
     tokens::{CheckedAdd, TOKEN_SUBDIVIDABLE_BY},
 };
-use ic_nervous_system_canisters::cmc::FakeCmc;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
+use ic_nervous_system_clients::nns_governance_client::FakeNnsGovernanceClient;
 use ic_nervous_system_common::{DEFAULT_TRANSFER_FEE, NervousSystemError, ONE_YEAR_SECONDS, i2d};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
@@ -880,7 +880,7 @@ fn test_disburse_maturity_succeeds_to_other_account() {
 #[test]
 fn test_disburse_maturity_fails_if_no_maturity() {
     local_test_on_sns_subnet(|runtime| async move {
-        // Only needed for the Cycles Minting Canister (CMC), because it provides maturity modulation.
+        // SNS Governance needs NNS Governance available to fetch maturity modulation.
         let _nns_canisters =
             NnsCanisters::set_up(&runtime, NnsInitPayloadsBuilder::new().build()).await;
 
@@ -955,7 +955,7 @@ async fn create_sns_canisters_with_staked_neuron_and_maturity<'a>(
     runtime: &'a Runtime,
     owner: &'a Sender,
 ) -> (SnsCanisters<'a>, NeuronId, Subaccount) {
-    // Only needed for the Cycles Minting Canister (CMC), because it provides maturity modulation.
+    // SNS Governance needs NNS Governance available to fetch maturity modulation.
     let _nns_canisters = NnsCanisters::set_up(runtime, NnsInitPayloadsBuilder::new().build()).await;
 
     let account_identifier = Account {
@@ -1317,7 +1317,7 @@ async fn zero_total_reward_shares() {
         Box::new(environment),
         Box::new(EmptyLedger {}),
         Box::new(EmptyLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
     // Prevent gc.
     governance.latest_gc_timestamp_seconds = now;
@@ -1562,7 +1562,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
         Box::new(environment),
         Box::new(StubLedger {}),
         Box::new(StubLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
     // Prevent gc.
     governance.latest_gc_timestamp_seconds = now;

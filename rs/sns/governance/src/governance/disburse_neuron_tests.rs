@@ -16,7 +16,7 @@ use async_trait::async_trait;
 use candid::Nat;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_canisters::cmc::FakeCmc;
+use ic_nervous_system_clients::nns_governance_client::FakeNnsGovernanceClient;
 use ic_nervous_system_common::{
     E8, NervousSystemError, ledger::compute_neuron_staking_subaccount_bytes,
 };
@@ -144,7 +144,7 @@ fn governance_with_ledger_tracking(governance_proto: GovernanceProto) -> (Govern
         Box::new(NativeEnvironment::new(Some(test_governance_canister_id))),
         Box::new(sns_ledger.clone()), // SNS ledger - clone shares the same Arc<Mutex<Vec<...>>>
         Box::new(MockLedger::new()),  // ICP ledger - separate instance
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     )
     .enable_test_features();
 

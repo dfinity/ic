@@ -6,6 +6,7 @@ pub mod exchange_rate_canister_client;
 pub mod ledger_client;
 pub mod load_canister_snapshot;
 pub mod management_canister_client;
+pub mod nns_governance_client;
 pub mod stop_canister;
 pub mod take_canister_snapshot;
 pub mod update_settings;

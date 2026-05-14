@@ -1859,7 +1859,8 @@ mod tests {
     };
     use ic_ledger_core::Tokens;
     use ic_management_canister_types_private::{CanisterInfoRequest, CanisterInfoResponse};
-    use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockICRC1Ledger};
+    use ic_nervous_system_canisters::ledger::MockICRC1Ledger;
+    use ic_nervous_system_clients::nns_governance_client::FakeNnsGovernanceClient;
     use maplit::btreemap;
 
     /// Common function to create a basic GovernanceProto for tests
@@ -1955,7 +1956,7 @@ mod tests {
             Box::new(env),
             Box::new(sns_ledger),
             Box::new(icp_ledger),
-            Box::new(MockCMC::default()),
+            Box::new(FakeNnsGovernanceClient::default()),
         )
     }
 
@@ -2654,7 +2655,7 @@ mod tests {
             Box::new(env),
             Box::new(sns_ledger),
             Box::new(icp_ledger),
-            Box::new(MockCMC::default()),
+            Box::new(FakeNnsGovernanceClient::default()),
         )
     }
 

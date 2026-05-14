@@ -8,9 +8,10 @@ use ic_canister_profiler::{measure_span, measure_span_async};
 use ic_cdk::{caller as cdk_caller, init, post_upgrade, pre_upgrade, println, query, update};
 use ic_cdk_timers::TimerId;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
+use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nervous_system_clients::{
     canister_status::CanisterStatusResultV2, ledger_client::LedgerCanister,
+    nns_governance_client::RealNnsGovernanceClient,
 };
 use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
@@ -20,7 +21,10 @@ use ic_nervous_system_proto::pb::v1::{
     GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
 };
 use ic_nervous_system_runtime::CdkRuntime;
-use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID,
+};
 #[cfg(feature = "test")]
 use ic_sns_governance::extensions::add_allowed_extension_spec;
 #[cfg(feature = "test")]
@@ -239,7 +243,7 @@ fn canister_init_(init_payload: sns_gov_pb::Governance) {
             Box::new(CanisterEnv::new()),
             Box::new(LedgerCanister::new(ledger_canister_id)),
             Box::new(IcpLedgerCanister::<CdkRuntime>::new(NNS_LEDGER_CANISTER_ID)),
-            Box::new(CMCCanister::<CdkRuntime>::new()),
+            Box::new(RealNnsGovernanceClient::new(NNS_GOVERNANCE_CANISTER_ID)),
         );
         let governance = if cfg!(feature = "test") {
             governance.enable_test_features()

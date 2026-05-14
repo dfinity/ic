@@ -14,7 +14,7 @@ use crate::{
     types::test_helpers::NativeEnvironment,
 };
 use ic_base_types::PrincipalId;
-use ic_nervous_system_canisters::cmc::FakeCmc;
+use ic_nervous_system_clients::nns_governance_client::FakeNnsGovernanceClient;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 
@@ -107,7 +107,7 @@ fn test_does_nothing_if_there_is_no_upgrade_in_progress() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // The code being tested is supposed to affect these fields. We
@@ -156,7 +156,7 @@ fn test_does_nothing_if_upgrade_attempt_not_expired() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // The code being tested is supposed to affect these fields. We
@@ -233,7 +233,7 @@ fn test_fails_proposal_and_removes_upgrade_if_upgrade_attempt_is_expired() {
         Box::new(env),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // The code being tested is supposed to affect these fields. We
