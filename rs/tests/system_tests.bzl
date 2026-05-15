@@ -193,6 +193,16 @@ def system_test(
     }
 
     if vm_allocation_mode != None:
+        allowed_vm_allocation_modes = [
+            "minIntraDistanceLoadBalanceAllocation",
+            "performanceOptimizedAllocation",
+            "distributeAcrossDcs",
+        ]
+        if vm_allocation_mode not in allowed_vm_allocation_modes:
+            fail("Invalid vm_allocation_mode {}: must be one of {}".format(
+                repr(vm_allocation_mode),
+                allowed_vm_allocation_modes,
+            ))
         env |= {"VM_ALLOCATION_MODE": vm_allocation_mode}
 
     # RUN_SCRIPT_ICOS_IMAGES:
