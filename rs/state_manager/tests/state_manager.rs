@@ -6352,9 +6352,9 @@ fn remove_too_many_diverged_state_markers() {
         let (_height, state) = state_manager.take_tip();
         state_manager.commit_and_certify_sync(state, CertificationScope::Metadata, None);
         let mut certification = certify_height(&state_manager, Height(1));
-        for _i in 2..(divergence + 1) {
+        for i in 2..(divergence + 1) {
             let (_height, state) = state_manager.take_tip();
-            if _i == divergence {
+            if i == divergence {
                 state_manager.commit_and_certify_sync(state, CertificationScope::Metadata, None);
             } else {
                 state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
