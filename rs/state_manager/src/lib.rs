@@ -4398,6 +4398,27 @@ pub mod testing {
             batch_summary: Option<BatchSummary>,
         );
 
+        /// Testing only: Like `commit_and_certify_at_height`, but waits for hashing thread to finish.
+        /// Note that this does not guarantee that the certification metadata is populated, if a
+        /// catch-up optimization is active.
+        fn commit_and_certify_at_height_sync(
+            &self,
+            state: ReplicatedState,
+            height: Height,
+            scope: CertificationScope,
+            batch_summary: Option<BatchSummary>,
+        );
+
+        /// Testing only: Like `commit_and_certify`, but waits for hashing thread to finish.
+        /// Note that this does not guarantee that the certification metadata is populated, if a
+        /// catch-up optimization is active.
+        fn commit_and_certify_sync(
+            &self,
+            state: ReplicatedState,
+            scope: CertificationScope,
+            batch_summary: Option<BatchSummary>,
+        );
+
         /// Testing only: Purges the `manifest` at `height` in `states.states_metadata`.
         fn purge_manifest(&mut self, height: Height) -> bool;
 
@@ -4455,6 +4476,27 @@ pub mod testing {
             );
 
             self.commit_and_certify(state, scope, batch_summary);
+        }
+
+        fn commit_and_certify_at_height_sync(
+            &self,
+            state: ReplicatedState,
+            height: Height,
+            scope: CertificationScope,
+            batch_summary: Option<BatchSummary>,
+        ) {
+            self.commit_and_certify_at_height(state, height, scope, batch_summary);
+            self.flush_hash_channel();
+        }
+
+        fn commit_and_certify_sync(
+            &self,
+            state: ReplicatedState,
+            scope: CertificationScope,
+            batch_summary: Option<BatchSummary>,
+        ) {
+            self.commit_and_certify(state, scope, batch_summary);
+            self.flush_hash_channel();
         }
 
         fn purge_manifest(&mut self, height: Height) -> bool {

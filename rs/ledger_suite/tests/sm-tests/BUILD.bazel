@@ -2,50 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-error-types",
-    "//packages/ic-http-types",
-    "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
-    "//rs/config",
-    "//rs/ledger_suite/common/ledger_canister_core",
-    "//rs/ledger_suite/common/ledger_core",
-    "//rs/ledger_suite/icp:icp_ledger",
-    "//rs/ledger_suite/icrc1",
-    "//rs/ledger_suite/icrc1/ledger",
-    "//rs/ledger_suite/icrc1/test_utils",
-    "//rs/ledger_suite/test_utils/in_memory_ledger:ic-ledger-suite-in-memory-ledger",
-    "//rs/ledger_suite/test_utils/state_machine_helpers:ic-ledger-suite-state-machine-helpers",
-    "//rs/ledger_suite/tests/sm-tests/constants:ic-ledger-suite-state-machine-tests-constants",
-    "//rs/registry/subnet_type",
-    "//rs/state_machine_tests",
-    "//rs/types/base_types",
-    "//rs/types/cycles",
-    "//rs/types/management_canister_types",
-    "//rs/types/types",
-    "//rs/universal_canister/lib",
-    "@crate_index//:anyhow",
-    "@crate_index//:assert_matches",
-    "@crate_index//:candid",
-    "@crate_index//:cddl",
-    "@crate_index//:futures",
-    "@crate_index//:hex",
-    "@crate_index//:ic-agent",
-    "@crate_index//:icrc1-test-env",
-    "@crate_index//:icrc1-test-suite",
-    "@crate_index//:num-bigint",
-    "@crate_index//:num-traits",
-    "@crate_index//:proptest",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:async-trait",
-]
-
 [
     rust_library(
         name = "ic-ledger-suite-state-machine-tests" + name_suffix,
@@ -58,9 +14,49 @@ MACRO_DEPENDENCIES = [
         data = [
             "//rs/ledger_suite/icrc1/ledger:block.cddl",
         ],
-        proc_macro_deps = MACRO_DEPENDENCIES,
+        proc_macro_deps = [
+            # Keep sorted.
+            "@crate_index//:async-trait",
+        ],
         version = "0.9.0",
-        deps = DEPENDENCIES + extra_deps,
+        deps = [
+            # Keep sorted.
+            "//packages/ic-error-types",
+            "//packages/ic-http-types",
+            "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+            "//rs/config",
+            "//rs/ledger_suite/common/ledger_canister_core",
+            "//rs/ledger_suite/common/ledger_core",
+            "//rs/ledger_suite/icp:icp_ledger",
+            "//rs/ledger_suite/icrc1",
+            "//rs/ledger_suite/icrc1/ledger",
+            "//rs/ledger_suite/icrc1/test_utils",
+            "//rs/ledger_suite/test_utils/in_memory_ledger:ic-ledger-suite-in-memory-ledger",
+            "//rs/ledger_suite/test_utils/state_machine_helpers:ic-ledger-suite-state-machine-helpers",
+            "//rs/ledger_suite/tests/sm-tests/constants:ic-ledger-suite-state-machine-tests-constants",
+            "//rs/registry/subnet_type",
+            "//rs/state_machine_tests",
+            "//rs/types/base_types",
+            "//rs/types/cycles",
+            "//rs/types/management_canister_types",
+            "//rs/types/types",
+            "//rs/universal_canister/lib",
+            "@crate_index//:anyhow",
+            "@crate_index//:assert_matches",
+            "@crate_index//:candid",
+            "@crate_index//:cddl",
+            "@crate_index//:futures",
+            "@crate_index//:hex",
+            "@crate_index//:ic-agent",
+            "@crate_index//:icrc1-test-env",
+            "@crate_index//:icrc1-test-suite",
+            "@crate_index//:num-bigint",
+            "@crate_index//:num-traits",
+            "@crate_index//:proptest",
+            "@crate_index//:serde",
+            "@crate_index//:serde_bytes",
+        ] + extra_deps,
     )
     for (name_suffix, features, extra_deps) in [
         (

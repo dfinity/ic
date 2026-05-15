@@ -81,9 +81,9 @@ impl WorkerThread {
     #[doc(hidden)]
     pub fn flush_channel(&self) {
         // Blocking send waits for the worker thread to complete any in-progress job.
-        let res = self.sender.send(Job::Flush());
-        println!("flush_channel: {:?}", res);
-        res.expect("worker thread has exited unexpectedly");
+        self.sender
+            .send(Job::Flush())
+            .expect("worker thread has exited unexpectedly");
     }
 }
 
