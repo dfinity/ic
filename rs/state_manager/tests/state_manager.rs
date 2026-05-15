@@ -9671,7 +9671,7 @@ fn remove_states_below_protects_tip_height() {
         // Fetch state at height 10 using the hash of state 1.
         // This clones the verified checkpoint @1 to @10 and advances
         // `latest_state_height` to 10, but does not touch `tip_height`.
-        sm.fetch_state_sync(Height(10), hash_at_1.clone(), Height::new(999));
+        sm.fetch_state(Height(10), hash_at_1.clone(), Height::new(999));
         assert_eq!(sm.latest_state_height(), Height(10));
 
         // height 2 should be retained
@@ -9714,7 +9714,7 @@ fn remove_states_below_protects_tip_height_with_optimization() {
         // Fetch state at height 10 using the hash of state 1.
         // This clones the verified checkpoint @1 to @10 and advances
         // `latest_state_height` to 10, but does not touch `tip_height`.
-        sm.fetch_state_sync(Height(10), hash_at_1.clone(), Height::new(999));
+        sm.fetch_state(Height(10), hash_at_1.clone(), Height::new(999));
         assert_eq!(sm.latest_state_height(), Height(10));
 
         // height 2 should be retained

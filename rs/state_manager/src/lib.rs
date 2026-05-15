@@ -4358,7 +4358,9 @@ pub mod testing {
             batch_summary: Option<BatchSummary>,
         );
 
-        /// Testing only: Like `commit_and_certify_at_height`, but waits for hashing/certification metadata.
+        /// Testing only: Like `commit_and_certify_at_height`, but waits for hashing thread to finish.
+        /// Note that this does not guarantee that the certification metadata is populated, if a
+        /// catch-up optimization is active.
         fn commit_and_certify_at_height_sync(
             &self,
             state: ReplicatedState,
@@ -4367,7 +4369,9 @@ pub mod testing {
             batch_summary: Option<BatchSummary>,
         );
 
-        /// Testing only: Commits, then waits for hashing/certification metadata to be populated.
+        /// Testing only: Like `commit_and_certify`, but waits for hashing thread to finish.
+        /// Note that this does not guarantee that the certification metadata is populated, if a
+        /// catch-up optimization is active.
         fn commit_and_certify_sync(
             &self,
             state: ReplicatedState,
@@ -4407,14 +4411,6 @@ pub mod testing {
 
         /// Testing only: Push state
         fn push_state_and_cert_metadata(&self, height: Height, state: ReplicatedState);
-
-        /// Testing only: Like `fetch_state`, but waits for hashing/certification metadata.
-        fn fetch_state_sync(
-            &self,
-            height: Height,
-            root_hash: CryptoHashOfState,
-            cup_interval_length: Height,
-        );
     }
 
     impl StateManagerTesting for StateManagerImpl {
@@ -4553,16 +4549,6 @@ pub mod testing {
                 state,
                 &mut states,
             );
-        }
-
-        fn fetch_state_sync(
-            &self,
-            height: Height,
-            root_hash: CryptoHashOfState,
-            cup_interval_length: Height,
-        ) {
-            self.fetch_state(height, root_hash, cup_interval_length);
-            self.flush_hash_channel();
         }
     }
 }
