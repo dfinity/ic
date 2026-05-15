@@ -476,8 +476,8 @@ mod tests {
                         idkg: Some(idkg),
                     }),
                 );
-                proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
             }
+            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
 
             pool.advance_round_with_block(&proposal);
 
