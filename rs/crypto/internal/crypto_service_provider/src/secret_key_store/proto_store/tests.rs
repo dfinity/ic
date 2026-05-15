@@ -1023,6 +1023,36 @@ mod zeroize_old_secret_key_store {
     }
 
     #[test]
+    fn zeroize_or_unlink_old_file_is_noop_when_old_file_does_not_exist() {
+        // First write to a fresh keystore: `try_create_hard_link_to_existing_file` was a
+        // no-op (no existing `proto_file` at the time), so `.old` does not exist when
+        // `zeroize_or_unlink_old_file` is reached after the write completes. The helper
+        // must short-circuit without erroring (calling `are_hard_links_to_the_same_inode`
+        // on a non-existent path would return `NotFound`).
+        let setup = Setup::new();
+        let _ = fs::remove_file(&setup.secret_key_store.old_proto_file_to_zeroize);
+        assert_matches!(
+            Path::try_exists(&setup.secret_key_store.old_proto_file_to_zeroize),
+            Ok(false)
+        );
+        let initial_sks_bytes = fs::read(&setup.secret_key_store.proto_file)
+            .expect("error reading initial secret key store");
+
+        setup
+            .secret_key_store
+            .zeroize_or_unlink_old_file()
+            .expect("zeroize_or_unlink_old_file should succeed when .old does not exist");
+
+        assert_matches!(
+            Path::try_exists(&setup.secret_key_store.old_proto_file_to_zeroize),
+            Ok(false)
+        );
+        let current_sks_bytes = fs::read(&setup.secret_key_store.proto_file)
+            .expect("error reading current secret key store");
+        assert_eq!(current_sks_bytes, initial_sks_bytes);
+    }
+
+    #[test]
     fn zeroize_or_unlink_old_file_zeroes_and_deletes_when_inodes_differ() {
         let setup = Setup::new();
         // Simulate the normal-filesystem post-rename state: `.old` is a distinct file
