@@ -272,7 +272,8 @@ pub fn test(env: TestEnv) {
         .build()
         .expect("failed to create agent");
     let canister_msg = block_on(
-        MessageCanister::from_canister_id(&agent_bypass_signature, app_can_id).try_read_msg(),
+        MessageCanister::from_canister_id(&agent_bypass_signature, app_can_id)
+            .try_read_msg_and_log(),
     )
     .expect("failed to read message")
     .expect("message should exist");
@@ -297,7 +298,8 @@ pub fn test(env: TestEnv) {
         &logger,
     );
     let canister_msg_new = block_on(
-        MessageCanister::from_canister_id(&agent_bypass_signature, new_app_can_id).try_read_msg(),
+        MessageCanister::from_canister_id(&agent_bypass_signature, new_app_can_id)
+            .try_read_msg_and_log(),
     )
     .expect("failed to read message")
     .expect("message should exist");

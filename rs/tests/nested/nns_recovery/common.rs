@@ -343,7 +343,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                 logger,
                 "Storing a message in canister with id {} at {}", canister_principal, nns_url
             );
-            mcan.store_msg(init_msg.to_string()).await;
+            mcan.store_msg_and_log(init_msg.to_string()).await;
 
             canister_principal
         })
@@ -935,12 +935,12 @@ fn assert_subnet_is_healthy_without_signature_verification(
 
     info!(logger, "Ensure the old message is still readable");
     assert_eq!(
-        block_on(mcan.read_msg()).expect("Received an empty message"),
+        block_on(mcan.read_msg_and_log()).expect("Received an empty message"),
         old_msg,
     );
 
     info!(logger, "Ensure that the subnet is accepting updates");
-    block_on(mcan.store_msg(new_msg));
+    block_on(mcan.store_msg_and_log(new_msg));
 
     // Wait until all nodes answer with the new message
     for node in subnet {
@@ -960,7 +960,7 @@ fn assert_subnet_is_healthy_without_signature_verification(
             secs(30),
             secs(5),
             || async {
-                match mcan.try_read_msg().await {
+                match mcan.try_read_msg_and_log().await {
                     Ok(Some(msg)) if msg == new_msg => Ok(()),
                     Ok(Some(msg)) => {
                         bail!(

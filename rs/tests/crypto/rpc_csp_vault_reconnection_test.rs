@@ -202,7 +202,7 @@ fn ensure_replica_is_not_stuck(message_canister: &MessageCanister, logger: &Logg
     );
 
     let _msg = block_on(async {
-        tokio::time::timeout(Duration::from_secs(30), message_canister.read_msg()).await
+        tokio::time::timeout(Duration::from_secs(30), message_canister.read_msg_and_log()).await
     })
     .expect("failed to run read message future");
 }

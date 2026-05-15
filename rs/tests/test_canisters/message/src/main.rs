@@ -12,6 +12,11 @@ fn store(text: String) {
     MSG.with(|msg| *msg.borrow_mut() = Some(text));
 }
 
+#[ic_cdk::update]
+fn log(text: String) {
+    ic_cdk::println!("{}", text);
+}
+
 #[ic_cdk::query]
 fn read() -> Option<String> {
     MSG.with(|msg| (*msg.borrow()).clone())

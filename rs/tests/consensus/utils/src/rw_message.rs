@@ -20,8 +20,8 @@ pub fn store_message(
     block_on(async {
         let agent = assert_create_agent(url.as_str()).await;
         let mcan = MessageCanister::new(&agent, effective_canister_id).await;
-        // send an update call to it
-        mcan.store_msg(msg.to_string()).await;
+        // send an update call to store message and produce a canister log
+        mcan.store_msg_and_log(msg.to_string()).await;
         mcan.canister_id()
     })
 }
@@ -47,8 +47,8 @@ pub fn store_message_with_retries(
             secs(10),
         )
         .await;
-        // send an update call to it
-        mcan.store_msg(msg.to_string()).await;
+        // send an update call to store message and produce a canister log
+        mcan.store_msg_and_log(msg.to_string()).await;
         mcan.canister_id()
     })
 }
@@ -60,11 +60,11 @@ pub fn can_store_msg(log: &Logger, url: &Url, canister_id: Principal, msg: &str)
             Ok(agent) => {
                 debug!(log, "Try to get canister reference");
                 let mcan = MessageCanister::from_canister_id(&agent, canister_id);
-                debug!(log, "Success, will try to write next");
+                debug!(log, "Success, will try to store message and produce canister log next");
                 matches!(
                     tokio::time::timeout(
                         Duration::from_secs(30),
-                        mcan.try_store_msg(msg.to_string()),
+                        mcan.try_store_msg_and_log(msg.to_string()),
                     )
                     .await,
                     Ok(Ok(_))
@@ -139,8 +139,8 @@ async fn can_read_msg_impl(
             Ok(agent) => {
                 debug!(log, "Try to get canister reference");
                 let mcan = MessageCanister::from_canister_id(&agent, canister_id);
-                debug!(log, "Success, will try to read next");
-                match mcan.try_read_msg().await {
+                debug!(log, "Success, will try to read stored message and canister log next");
+                match mcan.try_read_msg_and_log().await {
                     Ok(Some(msg)) if msg == expected_msg => {
                         return true;
                     }
@@ -340,4 +340,36 @@ pub fn install_nns_with_customizations_and_check_progress(
 
 pub fn install_nns_and_check_progress(topology: TopologySnapshot) {
     install_nns_with_customizations_and_check_progress(topology, NnsCustomizations::default());
+}
+
+pub fn log_message(url: &Url, canister_id: Principal, msg: &str, log: &Logger) {
+    info!(
+        log,
+        "Logging message in canister with id {} at {}", canister_id, url
+    );
+    block_on(async {
+        let agent = assert_create_agent(url.as_str()).await;
+        let mcan = MessageCanister::from_canister_id(&agent, canister_id);
+        mcan.log_msg(msg.to_string()).await;
+    })
+}
+
+pub fn can_fetch_logs(log: &Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
+    block_on(async {
+        match create_agent(url.as_str()).await {
+            Ok(agent) => {
+                let mcan = MessageCanister::from_canister_id(&agent, canister_id);
+                match tokio::time::timeout(Duration::from_secs(30), mcan.fetch_logs()).await {
+                    Ok(records) => records
+                        .iter()
+                        .any(|r| String::from_utf8_lossy(&r.content).contains(msg)),
+                    Err(_) => false,
+                }
+            }
+            Err(e) => {
+                debug!(log, "Could not create agent: {:?}", e);
+                false
+            }
+        }
+    })
 }

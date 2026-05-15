@@ -54,7 +54,10 @@ use ic_types::{
 };
 use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm as universal_canister_argument_builder};
-use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
+use ic_utils::{
+    call::{AsyncCall, SyncCall},
+    interfaces::{ManagementCanister, management_canister::CanisterLogRecord},
+};
 use icp_ledger::{
     AccountBalanceArgs, AccountIdentifier, DEFAULT_TRANSFER_FEE, Memo, SendArgs, Subaccount,
     Tokens, tokens_from_proto,
@@ -765,22 +768,29 @@ impl<'a> MessageCanister<'a> {
         .await
     }
 
-    pub async fn try_store_msg<P: Into<String>>(&self, msg: P) -> Result<(), AgentError> {
+    pub async fn try_store_msg_and_log<P: Into<String>>(&self, msg: P) -> Result<(), AgentError> {
+        let s = msg.into();
         self.agent
             .update(&self.canister_id, "store")
-            .with_arg(Encode!(&msg.into()).unwrap())
+            .with_arg(Encode!(&s).unwrap())
+            .call_and_wait()
+            .await
+            .map(|_| ())?;
+        self.agent
+            .update(&self.canister_id, "log")
+            .with_arg(Encode!(&s).unwrap())
             .call_and_wait()
             .await
             .map(|_| ())
     }
 
-    pub async fn store_msg<P: Into<String>>(&self, msg: P) {
-        self.try_store_msg(msg)
+    pub async fn store_msg_and_log<P: Into<String>>(&self, msg: P) {
+        self.try_store_msg_and_log(msg)
             .await
             .unwrap_or_else(|err| panic!("Could not store message: {err}"))
     }
 
-    pub async fn try_read_msg(&self) -> Result<Option<String>, String> {
+    pub async fn try_read_msg_and_log(&self) -> Result<Option<String>, String> {
         self.agent
             .query(&self.canister_id, "read")
             .with_arg(Encode!(&()).unwrap())
@@ -790,10 +800,30 @@ impl<'a> MessageCanister<'a> {
             .and_then(|r| Decode!(r.as_slice(), Option<String>).map_err(|e| e.to_string()))
     }
 
-    pub async fn read_msg(&self) -> Option<String> {
-        self.try_read_msg()
+    pub async fn read_msg_and_log(&self) -> Option<String> {
+        self.try_read_msg_and_log()
             .await
             .unwrap_or_else(|err| panic!("Could not read message: {err}"))
+    }
+
+    pub async fn log_msg<P: Into<String>>(&self, msg: P) {
+        self.agent
+            .update(&self.canister_id, "log")
+            .with_arg(Encode!(&msg.into()).unwrap())
+            .call_and_wait()
+            .await
+            .map(|_| ())
+            .unwrap_or_else(|err| panic!("Could not log message: {err}"))
+    }
+
+    pub async fn fetch_logs(&self) -> Vec<CanisterLogRecord> {
+        let mgr = ManagementCanister::create(self.agent);
+        mgr.fetch_canister_logs(&self.canister_id)
+            .call()
+            .await
+            .unwrap_or_else(|err| panic!("Could not fetch canister logs: {err}"))
+            .0
+            .canister_log_records
     }
 }
 
