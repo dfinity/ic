@@ -20,7 +20,7 @@ use ic_nns_governance_api::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        farm::{HostFeature, VmAllocationMode},
+        farm::HostFeature,
         group::SystemTestGroup,
         ic::{ImageSizeGiB, InternetComputer, Subnet, VmResourceOverrides},
         simulate_network::{FixedNetworkSimulation, SimulateNetwork},
@@ -204,7 +204,6 @@ fn test(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(setup)
         .with_timeout_per_test(Duration::from_secs(20 * 60))
         .add_test(systest!(test))

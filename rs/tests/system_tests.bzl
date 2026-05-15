@@ -41,6 +41,7 @@ def system_test(
         data = [],
         additional_colocate_tags = [],
         logs = True,
+        vm_allocation_mode = None,
         **kwargs):
     """Declares a system-test.
 
@@ -85,6 +86,12 @@ def system_test(
       logs: Specifies if vector vm for scraping logs should not be spawned.
       exclude_logs: Specifies uvm name patterns to exclude from streaming.
       data: List of files used by the test driver.
+      vm_allocation_mode: Optional VM allocation mode string forwarded to the
+        test driver via the `VM_ALLOCATION_MODE` environment variable. Must
+        match one of the serde rename strings of `VmAllocationMode`, e.g.
+        `"performanceOptimizedAllocation"`,
+        `"minIntraDistanceLoadBalanceAllocation"` or `"distributeAcrossDcs"`.
+        When None it defaults to `"minIntraDistanceLoadBalanceAllocation"`.
       **kwargs: additional arguments to pass to the rust_binary rule.
 
     Returns:
@@ -184,6 +191,9 @@ def system_test(
         "PROMETHEUS_VM_RESOURCES": json.encode(prometheus_vm_resources),
         "PROMETHEUS_VM_SCRAPE_INTERVAL_SECS": json.encode(prometheus_vm_scrape_interval_secs),
     }
+
+    if vm_allocation_mode != None:
+        env |= {"VM_ALLOCATION_MODE": vm_allocation_mode}
 
     # RUN_SCRIPT_ICOS_IMAGES:
     # Have the run script resolve repo based ICOS images.

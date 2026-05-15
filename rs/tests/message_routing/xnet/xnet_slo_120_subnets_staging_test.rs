@@ -1,5 +1,4 @@
 use anyhow::Result;
-use ic_system_test_driver::driver::farm::VmAllocationMode;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
 use std::time::Duration;
@@ -17,7 +16,6 @@ fn main() -> Result<()> {
     let config = Config::new(SUBNETS, NODES_PER_SUBNET, RUNTIME, REQUEST_RATE);
     let test = config.clone().test();
     SystemTestGroup::new()
-        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(config.build())
         .add_test(systest!(test))
         .with_timeout_per_test(PER_TASK_TIMEOUT) // each task (including the setup function) may take up to `per_task_timeout`.

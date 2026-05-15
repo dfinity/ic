@@ -8,7 +8,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::{
-    farm::{HostFeature, VmAllocationMode},
+    farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet},
     simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
@@ -226,7 +226,6 @@ fn test(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(setup)
         .with_timeout_per_test(Duration::from_secs(15 * 60))
         .add_test(systest!(test))
