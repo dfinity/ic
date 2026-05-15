@@ -1486,9 +1486,27 @@ pub trait HasGroupSetup {
         &self,
         group_base_name: String,
         allocate_testnet_to_local_dc: bool,
-        vm_allocation_mode: Option<VmAllocationMode>,
         no_group_ttl: bool,
     );
+}
+
+/// Name of the environment variable that controls the VM allocation mode used
+/// when creating a Farm group. The value must match one of the serde rename
+/// strings of [`VmAllocationMode`] (e.g. `performanceOptimizedAllocation`).
+const VM_ALLOCATION_MODE_ENV_VAR: &str = "VM_ALLOCATION_MODE";
+
+fn vm_allocation_mode_from_env() -> Option<VmAllocationMode> {
+    let raw = match std::env::var(VM_ALLOCATION_MODE_ENV_VAR) {
+        Ok(v) if !v.is_empty() => v,
+        _ => return None,
+    };
+    let mode = serde_json::from_value::<VmAllocationMode>(serde_json::Value::String(raw.clone()))
+        .unwrap_or_else(|e| {
+            panic!(
+                "Invalid value {raw:?} for environment variable {VM_ALLOCATION_MODE_ENV_VAR}: {e}"
+            )
+        });
+    Some(mode)
 }
 
 impl HasGroupSetup for TestEnv {
@@ -1496,10 +1514,10 @@ impl HasGroupSetup for TestEnv {
         &self,
         group_base_name: String,
         allocate_testnet_to_local_dc: bool,
-        vm_allocation_mode: Option<VmAllocationMode>,
         no_group_ttl: bool,
     ) {
         let log = self.logger();
+        let vm_allocation_mode = vm_allocation_mode_from_env();
         if GroupSetup::attribute_exists(self) {
             let group_setup = GroupSetup::read_attribute(self);
             info!(
@@ -1520,9 +1538,10 @@ impl HasGroupSetup for TestEnv {
                         .unwrap_or_default();
                     info!(
                         log,
-                        "Creating group {} with required_host_features: {:?} ...",
+                        "Creating group {} with required_host_features: {:?} and vm_allocation_mode: {:?} ...",
                         group_setup.infra_group_name,
-                        required_host_features
+                        required_host_features,
+                        vm_allocation_mode,
                     );
 
                     let farm_base_url = FarmBaseUrl::read_attribute(self);

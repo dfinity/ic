@@ -4,43 +4,51 @@ load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/rust_canisters/dfn_core",
-    "@crate_index//:rand",
-    "@crate_index//:rand_pcg",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/rust_canisters/canister_test",
-    "//rs/state_machine_tests",
-    "//rs/test_utilities",
-    "//rs/types/management_canister_types",
-    "//rs/types/types",
-]
-
 rust_library(
     name = "memory_test",
     srcs = glob(["src/**"]),
     crate_name = "memory_test",
     version = "0.1.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/rust_canisters/dfn_core",
+        "@crate_index//:rand",
+        "@crate_index//:rand_pcg",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+    ],
 )
 
 rust_canister(
     name = "memory_test_canister",
     srcs = ["src/main.rs"],
     service_file = ":memory_test.did",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/rust_canisters/dfn_core",
+        "@crate_index//:rand",
+        "@crate_index//:rand_pcg",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+    ],
 )
 
 rust_test(
     name = "memory_test_test",
     crate = ":memory_test",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_core",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:rand",
+        "@crate_index//:rand_pcg",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+    ],
 )
 
 rust_ic_test(
@@ -53,7 +61,19 @@ rust_ic_test(
         "CARGO_MANIFEST_DIR": "rs/rust_canisters/memory_test",
         "MEMORY_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/memory_test:memory_test_canister)",
     },
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_core",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:rand",
+        "@crate_index//:rand_pcg",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+    ],
 )
 
 rust_doc_test(
