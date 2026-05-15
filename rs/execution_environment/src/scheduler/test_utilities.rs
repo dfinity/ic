@@ -605,7 +605,7 @@ impl SchedulerTest {
         // Explicitly observe the Replicated State metrics after every round. This used
         // to be done by the scheduler, so there are a number of tests depending on
         // various state metrics, but instrumentation was moved into the State Manager.
-        // So we "manually"update the metrics after every round.
+        // So we "manually" update the metrics after every round.
         self.state_metrics.observe(
             state.metadata.own_subnet_id,
             &state,

@@ -9623,6 +9623,8 @@ fn commit_and_certify_observes_replicated_state_metrics() {
     state_manager_test(|metrics, sm| {
         let state = sm.take_tip().1;
         // Sanity check: metrics should be zero before any observations are made.
+        //
+        // Use an arbitrary histogram that is updated once per round as a canary.
         assert_matches!(
             fetch_histogram_stats(metrics, "scheduler_canister_paused_execution"),
             Some(HistogramStats { count: 0, sum: 0.0 })
