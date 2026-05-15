@@ -6481,6 +6481,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-nns-governance-conversions",
+ "ic-nns-handler-lifeline-interface",
  "ic-nns-handler-root",
  "ic-nns-init",
  "ic-nns-test-utils",

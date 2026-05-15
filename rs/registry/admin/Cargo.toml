@@ -36,9 +36,9 @@ ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-nns-governance-conversions = { path = "../../nns/governance/conversions" }
+ic-nns-handler-lifeline-interface = { path = "../../nns/handlers/lifeline/interface" }
 ic-nns-handler-root = { path = "../../nns/handlers/root/impl" }
 ic-nns-init = { path = "../../nns/init" }
-ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-prep = { path = "../../prep" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client = { path = "../client" }
@@ -75,6 +75,7 @@ assert_matches = { workspace = true }
 ic-nervous-system-agent = { path = "../../nervous_system/agent" }
 ic-nervous-system-chunks = { path = "../../nervous_system/chunks" }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
+ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-registry-canister-api = { path = "../canister/api" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 
