@@ -14629,6 +14629,7 @@ dependencies = [
  "ic-base-types",
  "ic-btc-adapter-client",
  "ic-btc-consensus",
+ "ic-certification 0.9.0",
  "ic-config",
  "ic-consensus",
  "ic-consensus-cup-utils",
