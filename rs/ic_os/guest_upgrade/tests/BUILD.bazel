@@ -21,6 +21,7 @@ rust_test(
         "//rs/registry/fake",
         "//rs/registry/proto_data_provider",
         "//rs/test_utilities/registry",
+        "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:futures",
         "@crate_index//:rustls",

@@ -1,5 +1,5 @@
 {
-  "checksum": "d5e56cc1432fd9375c658e96be82dba9eb7b369c3577d7b020b68bca150e8f97",
+  "checksum": "aea19d87cbb48424ca5c034cc77d9e77bf4ad7efb3771c315a31acc32035d4da",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -59217,7 +59217,7 @@
         ],
         "data": {
           "common": [
-            "@protobuf//:protoc"
+            "@@//bazel:protoc"
           ],
           "selects": {}
         },
@@ -59239,7 +59239,7 @@
         },
         "build_script_env": {
           "common": {
-            "PROTOC": "$(execpath @protobuf//:protoc)"
+            "PROTOC": "$(execpath @@//bazel:protoc)"
           },
           "selects": {}
         }
