@@ -759,7 +759,8 @@ fn test_resize_down_preserves_records_and_next_idx() {
 fn test_from_checkpoint_feature_enabled() {
     let some_page_map = Some(PageMap::new_for_testing());
 
-    let s = LogMemoryStore::from_checkpoint(FlagStatus::Enabled, some_page_map, TEST_NEXT_IDX);
+    let s =
+        LogMemoryStore::from_checkpoint(FlagStatus::Enabled, some_page_map, TEST_NEXT_IDX, false);
     assert!(s.maybe_page_map().is_some());
     assert_eq!(s.next_idx(), TEST_NEXT_IDX);
 }
@@ -768,7 +769,8 @@ fn test_from_checkpoint_feature_enabled() {
 fn test_from_checkpoint_feature_disabled() {
     let some_page_map = Some(PageMap::new_for_testing());
 
-    let s = LogMemoryStore::from_checkpoint(FlagStatus::Disabled, some_page_map, TEST_NEXT_IDX);
+    let s =
+        LogMemoryStore::from_checkpoint(FlagStatus::Disabled, some_page_map, TEST_NEXT_IDX, false);
     assert!(s.maybe_page_map().is_none());
     // When feature is disabled, next_idx should be initialized to 0 regardless of the provided value.
     assert_eq!(s.next_idx(), 0);

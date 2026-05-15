@@ -1278,6 +1278,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             } else {
                 canister_state.system_state.canister_log.next_idx()
             },
+            log_memory_store_migrated: canister_state.system_state.log_memory_store.is_migrated(),
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id(),
             environment_variables: canister_state
