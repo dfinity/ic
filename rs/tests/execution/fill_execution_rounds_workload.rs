@@ -14,7 +14,7 @@ use ic_registry_routing_table::CanisterIdRanges;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        farm::{HostFeature, VmAllocationMode},
+        farm::HostFeature,
         group::SystemTestGroup,
         ic::{
             AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet,
@@ -79,7 +79,6 @@ fn main() -> Result<()> {
         )
     };
     SystemTestGroup::new()
-        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(setup)
         .add_test(systest!(test))
         .with_timeout_per_test(per_task_timeout) // each task (including the setup function) may take up to `per_task_timeout`.

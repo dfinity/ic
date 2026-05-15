@@ -24,7 +24,6 @@ use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types_private::{HttpMethod, TransformContext, TransformFunc};
-use ic_system_test_driver::driver::farm::VmAllocationMode;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::IcNodeContainer;
 use ic_system_test_driver::driver::{
@@ -43,7 +42,6 @@ const INSTALLED_CANISTERS: usize = 6;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(stress_setup)
         .add_test(systest!(test))
         .execute_from_args()?;
