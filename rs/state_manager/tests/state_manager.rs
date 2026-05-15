@@ -84,7 +84,8 @@ use ic_test_utilities_consensus::fake::{Fake, FakeVerifier};
 use ic_test_utilities_io::{make_mutable, make_readonly, write_all_at};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    Labels, fetch_gauge, fetch_histogram_vec_stats, fetch_int_counter_vec, fetch_int_gauge,
+    HistogramStats, Labels, fetch_gauge, fetch_histogram_stats, fetch_histogram_vec_stats,
+    fetch_int_counter_vec, fetch_int_gauge,
 };
 use ic_test_utilities_state::{arb_stream, arb_stream_slice, canister_ids};
 use ic_test_utilities_tmpdir::tmpdir;
@@ -9646,6 +9647,31 @@ fn commit_and_certify_panic_on_delivered_fake_certification() {
         let state = sm.take_tip().1;
         sm.commit_and_certify_at_height(state, no_opt_height, CertificationScope::Metadata, None);
         assert_eq!(no_state_clone_count(metrics), 0);
+    });
+}
+
+#[test]
+fn commit_and_certify_observes_replicated_state_metrics() {
+    state_manager_test(|metrics, sm| {
+        let state = sm.take_tip().1;
+        // Sanity check: metrics should be zero before any observations are made.
+        //
+        // Use an arbitrary histogram that is updated once per round as a canary.
+        assert_matches!(
+            fetch_histogram_stats(metrics, "scheduler_canister_paused_execution"),
+            Some(HistogramStats { count: 0, sum: 0.0 })
+        );
+
+        // Call `commit_and_certify` and wait for the background thread to complete the
+        // observation.
+        sm.commit_and_certify_at_height(state, Height::new(1), CertificationScope::Metadata, None);
+        sm.flush_metrics_channel();
+
+        // Metrics have now been updated.
+        assert_matches!(
+            fetch_histogram_stats(metrics, "scheduler_canister_paused_execution"),
+            Some(HistogramStats { count: 1, sum: 0.0 })
+        );
     });
 }
 

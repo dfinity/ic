@@ -15604,6 +15604,8 @@ name = "ic-utils-thread"
 version = "0.9.0"
 dependencies = [
  "crossbeam-channel",
+ "ic-metrics",
+ "prometheus",
 ]
 
 [[package]]

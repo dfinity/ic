@@ -1507,6 +1507,9 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         }
         state_after_round.metadata.subnet_metrics.num_canisters =
             state_after_round.canister_states().len() as u64;
+
+        // TODO(DSM-103): Consider either doing this every N rounds; or doing it just
+        // before (and only when actually) hashing the state.
         let total_memory_usage = self.observe_canisters_memory_usage(&state_after_round);
         state_after_round
             .metadata
