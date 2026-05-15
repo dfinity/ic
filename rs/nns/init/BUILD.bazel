@@ -18,6 +18,7 @@ DEPENDENCIES = [
     "//rs/test_utilities/identity",
     "//rs/types/base_types",
     "@crate_index//:clap",
+    "@crate_index//:hex",
     "@crate_index//:tokio",
     "@crate_index//:url",
 ]
@@ -48,6 +49,15 @@ rust_binary(
     name = "ic-nns-init",
     testonly = True,
     srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":init"],
+)
+
+rust_binary(
+    name = "ic-canister-install",
+    testonly = True,
+    srcs = ["src/canister_install.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":init"],

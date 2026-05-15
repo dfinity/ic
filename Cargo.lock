@@ -12415,6 +12415,7 @@ version = "0.9.0"
 dependencies = [
  "canister-test",
  "clap 4.6.0",
+ "hex",
  "ic-base-types",
  "ic-canister-client",
  "ic-interfaces-registry",

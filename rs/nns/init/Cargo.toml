@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 canister-test = { path = "../../rust_canisters/canister_test" }
 clap = { workspace = true }
+hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-client = { path = "../../canister_client" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
@@ -27,6 +28,10 @@ url = { workspace = true }
 [[bin]]
 name = "ic-nns-init"
 path = "src/main.rs"
+
+[[bin]]
+name = "ic-canister-install"
+path = "src/canister_install.rs"
 
 [dev-dependencies]
 tempfile = { workspace = true }

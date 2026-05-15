@@ -25,6 +25,30 @@ IC_REPO="${IC_REPO:-$(cd "$LOCAL_NET_DIR/../.." && pwd)}"
 BUILDER_NAME="ic-builder"
 WASMS_DIR="$LOCAL_NET_DIR/out/wasms"
 
+# Cycles ledger canister IDs (from rs/nns/constants/src/lib.rs)
+# um5iw-rqaaa-aaaaq-qaaba-cai = 0x_0210_0002
+CYCLES_LEDGER_CANISTER_ID="um5iw-rqaaa-aaaaq-qaaba-cai"
+# ul4oc-4iaaa-aaaaq-qaabq-cai = 0x_0210_0003
+CYCLES_LEDGER_INDEX_CANISTER_ID="ul4oc-4iaaa-aaaaq-qaabq-cai"
+
+# Cycles ledger WASM — v1.0.6 is the first release with initial_balances support
+# (added in commit 136a7dc, DID file not regenerated but the WASM has it)
+CYCLES_LEDGER_WASM_URL="https://github.com/dfinity/cycles-ledger/releases/download/cycles-ledger-v1.0.6/cycles-ledger.wasm.gz"
+CYCLES_LEDGER_WASM_SHA256="ed99402535bb4f58e4ab469acc40c903f2fdeea409be16623d5c6a9131cbf120"
+
+# Pre-encoded Candid init args produced by:
+#   didc encode -d cycles-ledger/cycles-ledger/cycles-ledger.did \
+#     '(variant { Init = record { max_blocks_per_request=50:nat64;
+#        index_id=opt principal "ul4oc-4iaaa-aaaaq-qaabq-cai";
+#        initial_balances=opt vec { record {
+#          record { owner=principal "2vxsx-fae"; subaccount=null };
+#          1_000_000_000_000_000:nat } } } })'
+CYCLES_LEDGER_INIT_HEX="4449444c076b01b0ced18403016c03b2a4dab20502a89cb2b50c06afe0ff870d786e036d046c020005017d6c02b3b0dac30368ad86ca83057f6e68010000010101010480809aa6eaafe30101010a000000000210000301013200000000000000"
+#   didc encode -d index-ng.did \
+#     '(opt variant { Init = record { ledger_id=principal
+#        "um5iw-rqaaa-aaaaq-qaaba-cai"; ... } })'
+CYCLES_LEDGER_INDEX_INIT_HEX="4449444c036e016b01b0ced18403026c04f1f7fcf70668dcb79b830b7fe9bbd2a50e7f97b3c9a90e7f01000100010a00000000021000020101"
+
 # NNS_CANISTER_WASMS in rs/nns/constants/src/lib.rs lists 15 entries that
 # ic-nns-init's set_up_env_vars_for_all_canisters() looks up in --wasm-dir
 # — if any are missing the binary panics. The list below maps each
@@ -84,7 +108,7 @@ ensure_builder() {
         -v "$LOCAL_NET_DIR/out:/out" \
         -w /ic \
         "ghcr.io/dfinity/ic-build:${tag}" \
-        sleep infinity >/dev/null
+        sleep infinity
 }
 
 # --- build all canister WASMs ---
@@ -96,8 +120,7 @@ for entry in "${NNS_CANISTERS[@]}"; do
     TARGETS+=("${entry%%|*}")
 done
 
-# Fix cache ownership so the host-user-mapped container can write to it
-# (mirrors the same step in build.sh — see comment there for rationale).
+# Fix cache ownership so the host-user-mapped container can write bazel's caches.
 docker exec --user root "$BUILDER_NAME" chown -R "$(id -u):$(id -g)" /cache
 
 t0=$(date +%s)
@@ -105,14 +128,16 @@ docker exec --user "$(id -u):$(id -g)" "$BUILDER_NAME" bash -eu -o pipefail -c "
     bazel build \
         --disk_cache=/cache/bazel-disk \
         --repository_cache=/cache/bazel-repo \
-        ${TARGETS[*]} 2>&1 | tail -10
-" 2>&1 | grep -vE "^WARNING: Remote Cache" | tail -10
+        ${TARGETS[*]} 2>&1
+" 2>&1 | tee "$LOCAL_NET_DIR"/ic_nns_init.log | grep -vE "^WARNING: Remote Cache" | tail -10
 t1=$(date +%s)
 echo "    (bazel: $((t1 - t0))s)"
 
 # --- collect into out/wasms/ with the canonical names ic-nns-init expects ---
 echo
 echo "==> Collecting WASMs into out/wasms/"
+# Wipe and recreate so read-only bazel outputs from a previous run don't block cp.
+rm -rf "$WASMS_DIR"
 mkdir -p "$WASMS_DIR"
 
 # Pass src/dst pairs as positional args to avoid shell-quoting headaches
@@ -173,6 +198,30 @@ docker run --rm \
 t3=$(date +%s)
 echo "    (ic-nns-init: $((t3 - t2))s)"
 
+# --- fetch cycles-ledger WASM + build index WASM ---
+echo
+echo "==> Fetching cycles-ledger WASM"
+if [ ! -f "$WASMS_DIR/cycles-ledger.wasm.gz" ]; then
+    curl -fsSL "$CYCLES_LEDGER_WASM_URL" -o "$WASMS_DIR/cycles-ledger.wasm.gz"
+fi
+printf '%s  %s\n' "$CYCLES_LEDGER_WASM_SHA256" "$WASMS_DIR/cycles-ledger.wasm.gz" \
+    | shasum -a 256 -c --status \
+    || { echo "ERROR: SHA256 mismatch on cycles-ledger.wasm.gz" >&2; exit 1; }
+echo "    cycles-ledger.wasm.gz OK ($(du -h "$WASMS_DIR/cycles-ledger.wasm.gz" | awk '{print $1}'))"
+
+echo "==> Building cycles-ledger-index WASM"
+docker exec "$BUILDER_NAME" bash -eu -o pipefail -c "
+    bazel build \
+        --disk_cache=/cache/bazel-disk \
+        --repository_cache=/cache/bazel-repo \
+        //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz 2>&1
+" 2>&1 | grep -vE "^WARNING: Remote Cache" | tail -5
+docker exec "$BUILDER_NAME" bash -eu -o pipefail -c '
+    src=bazel-bin/rs/ledger_suite/icrc1/index-ng/index_ng_canister_u256.wasm.gz
+    cp -L "$src" /out/wasms/cycles-ledger-index.wasm.gz
+    printf "  %-42s  %s\n" "cycles-ledger-index.wasm.gz" "$(du -h "$src" | awk "{print \$1}")"
+'
+
 # --- verify ---
 echo
 echo "==> Verify: registry canister responds"
@@ -183,8 +232,71 @@ docker run --rm \
     ic-replica:dev \
     --nns-url "http://[fd00:1::10]:8080" get-subnet-list 2>&1 | head -10
 
+# --- deploy cycles ledger + index via ic-canister-install ---
+#
+# Uses the provisional canister creation API (whitelist = ["*"] in prep.sh)
+# and ic-canister-install (rs/nns/init) built in the builder container.
+# Targets localhost:8080 which node-0 exposes to the host.
 echo
-echo "OK — NNS is installed."
+echo "==> Building ic-canister-install"
+docker exec --user root "$BUILDER_NAME" chown -R "$(id -u):$(id -g)" /cache
+docker exec --user "$(id -u):$(id -g)" "$BUILDER_NAME" bash -eu -o pipefail -c "
+    bazel build \
+        --disk_cache=/cache/bazel-disk \
+        --repository_cache=/cache/bazel-repo \
+        //rs/nns/init:ic-canister-install 2>&1
+" 2>&1 | grep -vE "^WARNING: Remote Cache" | tail -5
+docker exec --user "$(id -u):$(id -g)" "$BUILDER_NAME" bash -eu -o pipefail -c '
+    cp -L bazel-bin/rs/nns/init/ic-canister-install /out/ic-canister-install
+    chmod +x /out/ic-canister-install
+'
+IC_CANISTER_INSTALL="$LOCAL_NET_DIR/out/ic-canister-install"
+
+echo
+echo "==> Deploying cycles ledger and index"
+"$IC_CANISTER_INSTALL" \
+    --url http://localhost:8080 \
+    --canister-id "$CYCLES_LEDGER_CANISTER_ID" \
+    --wasm "$WASMS_DIR/cycles-ledger.wasm.gz" \
+    --init-arg-hex "$CYCLES_LEDGER_INIT_HEX"
+echo "    cycles-ledger:       $CYCLES_LEDGER_CANISTER_ID"
+
+"$IC_CANISTER_INSTALL" \
+    --url http://localhost:8080 \
+    --canister-id "$CYCLES_LEDGER_INDEX_CANISTER_ID" \
+    --wasm "$WASMS_DIR/cycles-ledger-index.wasm.gz" \
+    --init-arg-hex "$CYCLES_LEDGER_INDEX_INIT_HEX"
+echo "    cycles-ledger-index: $CYCLES_LEDGER_INDEX_CANISTER_ID"
+
+# --- authorize the subnet on the CMC so cycles-ledger can create canisters ---
+#
+# The CMC only creates canisters on subnets in its authorized list, which is
+# governed by NNS. propose-to-set-authorized-subnetworks with
+# --test-neuron-proposer submits, auto-votes, and waits for execution.
+# No --who means the default list (available to all principals / cycles-ledger).
+echo
+echo "==> Authorizing subnet on CMC"
+SUBNET_ID=$(docker run --rm \
+    --platform=linux/amd64 \
+    --network ic-local-net_ic-local \
+    --entrypoint /usr/local/bin/ic-admin \
+    ic-replica:dev \
+    --nns-url "http://[fd00:1::10]:8080" get-subnet-list 2>/dev/null \
+    | jq -r '.[0]')
+echo "    subnet: $SUBNET_ID"
+docker run --rm \
+    --platform=linux/amd64 \
+    --network ic-local-net_ic-local \
+    --entrypoint /usr/local/bin/ic-admin \
+    ic-replica:dev \
+    --nns-url "http://[fd00:1::10]:8080" \
+    propose-to-set-authorized-subnetworks \
+    --test-neuron-proposer \
+    --summary "Authorize local-net subnet for cycles-ledger canister creation" \
+    --subnets "$SUBNET_ID" 2>&1
+
+echo
+echo "OK — NNS and cycles ledger are installed."
 echo
 echo "Try:"
 echo "    docker run --rm --network ic-local-net_ic-local --platform=linux/amd64 \\"

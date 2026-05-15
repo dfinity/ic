@@ -188,6 +188,24 @@ NI-DKG keys at runtime. If you modified `compose.yml`, check that the
 The first iter spins up the persistent builder and starts a fresh bazel
 server, which takes ~3-4 min. Subsequent iters reuse both and run in ~20s.
 
+## Using icp-cli
+
+After running `./nns-init.sh` get the root key of the network:
+export ROOT_KEY=$(icp network ping | jq -r '.root_key[]' | xargs printf '%02x' | tr -d ' \n')
+
+The root key can be added to the network definition in icp.yaml
+Or it can be passed on the command line:
+
+```
+> icp cycles balance --root-key $ROOT_KEY -n http://localhost:8080
+Balance: 1_000_000_000_000_000 cycles
+
+> icp canister create --detached --root-key $ROOT_KEY -n http://localhost:8080
+Created canister with ID bnz7o-iuaaa-aaaaa-qaaaa-cai
+
+```
+
+
 ## Background
 
 For the design rationale (why x86_64 Linux replicas in Rosetta containers
