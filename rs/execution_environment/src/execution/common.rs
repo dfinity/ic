@@ -622,6 +622,12 @@ pub fn apply_canister_state_changes(
             output.wasm_result = Err(err);
         }
     }
+
+    // Re-evaluate the `OnLowWasmMemory` hook condition after every execution,
+    // regardless of whether memory was grown (or even of success), because the
+    // scheduler will sometimes "forget" a `Ready` status (if not enough cycles were
+    // available to execute the hook).
+    system_state.update_on_low_wasm_memory_hook_status(execution_state.wasm_memory_usage());
 }
 
 pub(crate) fn finish_call_with_error(

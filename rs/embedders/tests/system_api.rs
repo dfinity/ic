@@ -1702,6 +1702,13 @@ fn helper_test_on_low_wasm_memory(
         )
         .unwrap();
 
+    // The hook status is re-evaluated after every successful execution by
+    // `apply_canister_state_changes`; mirror that here.
+    if grow_wasm_memory {
+        let new_wasm_memory_usage = NumBytes::new(additional_wasm_pages * wasm_page_size as u64);
+        system_state.update_on_low_wasm_memory_hook_status(new_wasm_memory_usage);
+    }
+
     assert_eq!(system_state.task_queue.peek_hook_status(), expected_status);
 }
 
