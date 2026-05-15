@@ -5,7 +5,8 @@ use crate::pb::v1::governance::Versions;
 use crate::pb::v1::governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Mode as ModePb};
 use crate::types::test_helpers::NativeEnvironment;
 use futures::FutureExt;
-use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockICRC1Ledger};
+use ic_nervous_system_canisters::ledger::MockICRC1Ledger;
+use ic_nervous_system_clients::nns_governance_client::FakeNnsGovernanceClient;
 use ic_test_utilities_types::ids::canister_test_id;
 use pretty_assertions::assert_eq;
 
@@ -80,7 +81,7 @@ fn governance_for_tests(governance_proto: GovernancePb) -> Governance {
         Box::new(NativeEnvironment::new(Some(canister_test_id(501)))),
         Box::new(MockICRC1Ledger::default()),
         Box::new(MockICRC1Ledger::default()),
-        Box::new(MockCMC::default()),
+        Box::new(FakeNnsGovernanceClient::default()),
     )
 }
 

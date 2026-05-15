@@ -21,7 +21,12 @@ fn make_governance() -> Governance {
 }
 
 #[test]
-fn returns_none_when_unset() {
+fn defaults_to_zero_at_init() {
+    // `initialize_governance` seeds `heap_data.maturity_modulation` with a
+    // neutral 0-permyriad value at init, so callers get a usable response
+    // immediately rather than `None` while the XRC-fed price history task
+    // accumulates enough data to compute a real value. The `updated_at` field
+    // is left absent until the task produces a real measurement.
     let governance = make_governance();
 
     let response = governance.get_maturity_modulation();
@@ -29,7 +34,10 @@ fn returns_none_when_unset() {
     assert_eq!(
         response,
         GetMaturityModulationResponse {
-            maturity_modulation: None
+            maturity_modulation: Some(ApiMaturityModulation {
+                current_value_permyriad: Some(0),
+                updated_at_timestamp_seconds: None,
+            }),
         }
     );
 }

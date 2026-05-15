@@ -4,8 +4,9 @@ use candid::Nat;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_canisters::cmc::CMC;
-use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
+use ic_nervous_system_clients::{
+    ledger_client::ICRC1Ledger, nns_governance_client::FakeNnsGovernanceClient,
+};
 use ic_nervous_system_common::{E8, NervousSystemError};
 use ic_sns_governance::{
     governance::{Governance, ValidGovernanceProto},
@@ -231,26 +232,6 @@ impl LedgerFixtureBuilder {
     }
 }
 
-#[derive(Clone, Default)]
-pub struct CmcFixture {
-    pub maturity_modulation: Arc<Mutex<i32>>,
-}
-
-impl CmcFixture {
-    pub fn new(maturity_modulation: i32) -> Self {
-        Self {
-            maturity_modulation: Arc::new(Mutex::new(maturity_modulation)),
-        }
-    }
-}
-
-#[async_trait]
-impl CMC for CmcFixture {
-    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
-        Ok(*self.maturity_modulation.try_lock().unwrap())
-    }
-}
-
 /// The NeuronBuilder is used for creating neurons on behalf of the governance
 /// canister. The principal id and subaccount identifier are both derived from
 /// the neuron id, which is provided by the caller.
@@ -447,7 +428,7 @@ pub struct GovernanceCanisterFixture {
     pub environment_fixture: EnvironmentFixture,
     pub icp_ledger_fixture: LedgerFixture,
     pub sns_ledger_fixture: LedgerFixture,
-    pub cmc_fixture: CmcFixture,
+    pub nns_governance_fixture: FakeNnsGovernanceClient,
     pub governance: Governance,
     pub(crate) initial_state: Option<GovernanceState>,
 }
@@ -872,7 +853,7 @@ pub struct GovernanceCanisterFixtureBuilder {
     icp_ledger_transforms: Vec<LedgerTransform>,
     sns_ledger_builder: LedgerFixtureBuilder,
     icp_ledger_builder: LedgerFixtureBuilder,
-    cmc_fixture: CmcFixture,
+    nns_governance_fixture: FakeNnsGovernanceClient,
 }
 
 impl Default for GovernanceCanisterFixtureBuilder {
@@ -918,7 +899,7 @@ impl Default for GovernanceCanisterFixtureBuilder {
                 governance_canister_id,
                 icp_ledger_canister_id,
             ),
-            cmc_fixture: CmcFixture::default(),
+            nns_governance_fixture: FakeNnsGovernanceClient::default(),
         }
     }
 }
@@ -960,13 +941,13 @@ impl GovernanceCanisterFixtureBuilder {
             environment_fixture: environment_fixture.clone(),
             icp_ledger_fixture,
             sns_ledger_fixture,
-            cmc_fixture: self.cmc_fixture.clone(),
+            nns_governance_fixture: self.nns_governance_fixture.clone(),
             governance: Governance::new(
                 valid_governance,
                 Box::new(environment_fixture),
                 sns_ledger,
                 icp_ledger,
-                Box::new(self.cmc_fixture),
+                Box::new(self.nns_governance_fixture),
             )
             .enable_test_features(),
             initial_state: None,
@@ -994,7 +975,8 @@ impl GovernanceCanisterFixtureBuilder {
     }
 
     pub fn set_maturity_modulation(mut self, maturity_modulation: i32) -> Self {
-        self.cmc_fixture = CmcFixture::new(maturity_modulation);
+        self.nns_governance_fixture =
+            FakeNnsGovernanceClient::with_maturity_modulation(maturity_modulation);
         self
     }
 

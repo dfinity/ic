@@ -2939,9 +2939,9 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
     let neuron = canister_fixture.get_neuron(&neuron_id);
     assert_eq!(neuron.maturity_e8s_equivalent, 0);
 
-    // Update the maturity_modulation that the CMC will serve before the disbursement
+    // Update the maturity_modulation that NNS Governance will serve before the disbursement
     *canister_fixture
-        .cmc_fixture
+        .nns_governance_fixture
         .maturity_modulation
         .try_lock()
         .unwrap() = time_of_disbursement_maturity_modulation_basis_points;

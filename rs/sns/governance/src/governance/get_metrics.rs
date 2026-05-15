@@ -3,7 +3,7 @@ use crate::governance::test_helpers::basic_governance_proto;
 use crate::governance::{Governance, test_helpers::DoNothingLedger};
 use crate::pb::v1::{self as pb, ProposalData};
 use crate::types::test_helpers::NativeEnvironment;
-use ic_nervous_system_canisters::cmc::FakeCmc;
+use ic_nervous_system_clients::nns_governance_client::FakeNnsGovernanceClient;
 
 #[test]
 fn test_recently_executed_proposals() {
@@ -41,7 +41,7 @@ fn test_recently_executed_proposals() {
         Box::<NativeEnvironment>::default(),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     #[allow(clippy::identity_op)]
@@ -107,7 +107,7 @@ fn test_recently_submitted_proposals() {
         Box::<NativeEnvironment>::default(),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     #[allow(clippy::identity_op)]

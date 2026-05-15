@@ -14,7 +14,7 @@ use crate::{
     types::{native_action_ids::nervous_system_functions, test_helpers::NativeEnvironment},
 };
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_canisters::cmc::FakeCmc;
+use ic_nervous_system_clients::nns_governance_client::FakeNnsGovernanceClient;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use maplit::btreemap;
 use pb::{ExecuteGenericNervousSystemFunction, NervousSystemFunction};
@@ -74,7 +74,7 @@ fn test_all_topics() {
         Box::<NativeEnvironment>::default(),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     let mut test_cases = vec![
@@ -324,7 +324,7 @@ fn test_additional_critical_native_action_ids_upgrades_criticality() {
         Box::<NativeEnvironment>::default(),
         Box::new(DoNothingLedger {}),
         Box::new(DoNothingLedger {}),
-        Box::new(FakeCmc::new()),
+        Box::new(FakeNnsGovernanceClient::new()),
     );
 
     // Test that Motion is upgraded to Critical due to custom_proposal_criticality
