@@ -1200,6 +1200,17 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .map_err(|err| registry_error("NNS subnet ID", None, err))?
             .ok_or_else(|| not_found_error("NNS subnet ID", None))?;
 
+        // Look up the default subnet for `SetupInitialDKG`. The key may be
+        // unset (in which case `SetupInitialDKG` requests fall back to the
+        // calling subnet), or the configured subnet may not be visible from
+        // this subnet (e.g. if it has been filtered out above), in which case
+        // we also fall back to the calling subnet.
+        let default_initial_dkg_subnet_id = self
+            .registry
+            .get_default_initial_dkg_subnet_id(registry_version)
+            .map_err(|err| registry_error("default initial DKG subnet ID", None, err))?
+            .filter(|subnet_id| subnets.contains_key(subnet_id));
+
         let chain_key_enabled_subnets: BTreeMap<_, _> = self
             .registry
             .get_chain_key_enabled_subnets(registry_version)
@@ -1240,6 +1251,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             self.bitcoin_config.testnet_canister_id,
             self.bitcoin_config.mainnet_canister_id,
             full_topology,
+            default_initial_dkg_subnet_id,
         ))
     }
 
