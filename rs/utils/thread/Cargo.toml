@@ -10,3 +10,7 @@ documentation.workspace = true
 
 [dependencies]
 crossbeam-channel = { workspace = true }
+prometheus = { workspace = true }
+
+[dev-dependencies]
+ic-metrics = { path = "../../monitoring/metrics" }
