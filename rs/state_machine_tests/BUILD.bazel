@@ -109,6 +109,7 @@ rust_binary(
 rust_ic_test(
     name = "state_machine_integration_tests",
     srcs = [
+        "tests/delegation.rs",
         "tests/dts.rs",
         "tests/mod.rs",
         "tests/multi_subnet.rs",
@@ -128,6 +129,7 @@ rust_ic_test(
         "//rs/artifact_pool",
         "//rs/bitcoin/client",
         "//rs/bitcoin/consensus",
+        "//rs/certification",
         "//rs/config",
         "//rs/consensus",
         "//rs/consensus/cup_utils",
