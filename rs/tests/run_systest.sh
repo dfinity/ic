@@ -10,7 +10,8 @@ export -n \
     RUN_SCRIPT_TEST_EXECUTABLE \
     RUN_SCRIPT_ENV_VAR_FILES \
     RUN_SCRIPT_DRIVER_EXTRA_ARGS \
-    RUN_SCRIPT_RUNTIME_DEP_ENV_VARS
+    RUN_SCRIPT_RUNTIME_DEP_ENV_VARS \
+    RUN_SCRIPT_VOLATILE_STATUS_PATH
 
 # RUN_SCRIPT_ICOS_IMAGES:
 # For every ic-os image specified, first ensure it's in remote
@@ -76,6 +77,13 @@ for env_var in "${runtime_dep_env_vars[@]}"; do
     ln -sf "$old_dep_abs" "$runtime_deps/$new_dep"
     export "$env_var=$runtime_dep_base/$new_dep"
 done
+
+# Set environment variables based on volatile status variables:
+export FARM_METADATA="$(grep '^FARM_METADATA ' "$RUN_SCRIPT_VOLATILE_STATUS_PATH" | cut -d' ' -f2-)"
+DC="$(grep '^DC ' "$RUN_SCRIPT_VOLATILE_STATUS_PATH" | cut -d' ' -f2- || true)"
+if [ -n "$DC" ]; then
+    export DC
+fi
 
 exec \
     env -C "$TEST_TMPDIR" \
