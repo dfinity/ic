@@ -2492,6 +2492,11 @@ impl StateMachine {
                 subnet_id.get().into(),
                 b"canister_ranges".into(),
             ]),
+            LabeledTreePath::new(vec![
+                b"subnet".into(),
+                subnet_id.get().into(),
+                b"type".into(),
+            ]),
             LabeledTreePath::from(Label::from("time")),
         ];
         let labeled_tree = sparse_labeled_tree_from_paths(&paths).unwrap();

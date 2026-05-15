@@ -265,7 +265,6 @@ MAINNET_NNS_CANISTER_ENV = {
 [
     rust_library(
         name = "pocket-ic-server-lib" + name_suffix,
-        testonly = True,
         srcs = [
             "src/beta_features.rs",
             "src/external_canister_types.rs",
@@ -290,7 +289,6 @@ MAINNET_NNS_CANISTER_ENV = {
 [
     rust_binary(
         name = "pocket-ic-server" + name_suffix,
-        testonly = True,
         srcs = ["src/main.rs"],
         compile_data = ["//:mainnet-routing-table.json"],
         proc_macro_deps = MACRO_DEPENDENCIES,
