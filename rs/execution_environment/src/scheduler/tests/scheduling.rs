@@ -1235,8 +1235,7 @@ fn frozen_canister_with_on_low_wasm_memory_hook() {
     // regardless of actual memory usage:
     //   `wasm_memory_threshold > wasm_memory_limit - wasm_memory_usage`.
     let canister_state = test.canister_state_mut(canister);
-    canister_state.system_state.wasm_memory_threshold =
-        NumBytes::new(4 * 1024 * 1024 * 1024 + 1);
+    canister_state.system_state.wasm_memory_threshold = NumBytes::new(4 * 1024 * 1024 * 1024 + 1);
     canister_state
         .system_state
         .task_queue
@@ -1287,9 +1286,7 @@ fn frozen_canister_with_on_low_wasm_memory_hook() {
         CanisterSnapshot::from_canister(test.canister_state(canister), test.state().time())
             .unwrap();
     assert_eq!(
-        snapshot
-            .execution_snapshot()
-            .on_low_wasm_memory_hook_status,
+        snapshot.execution_snapshot().on_low_wasm_memory_hook_status,
         Some(OnLowWasmMemoryHookStatus::Ready)
     );
 
