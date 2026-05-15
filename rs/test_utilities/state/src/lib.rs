@@ -502,18 +502,35 @@ impl SystemStateBuilder {
         match on_low_wasm_memory_hook_status {
             // Default hook status is `ConditionNotSatisfied`.
             OnLowWasmMemoryHookStatus::ConditionNotSatisfied => (),
-            // To make hook status `Ready`, we should enqueue `ExecutionTask::OnLowWasmMemory`.
-            OnLowWasmMemoryHookStatus::Ready => self
-                .system_state
-                .task_queue
-                .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory),
-            // To make hook status `Executed`, we should enqueue `ExecutionTask::OnLowWasmMemory`,
-            // followed by `pop_front()`, which from the standpoint of `TaskQueue` is equivalent to
-            // executing task.
+            // Enqueue the hook with a zero-cycles reservation: tests that
+            // only care about the hook *status* don't exercise the cycles
+            // plumbing.
+            OnLowWasmMemoryHookStatus::Ready => {
+                assert!(
+                    self.system_state
+                        .task_queue
+                        .enqueue_on_low_wasm_memory_hook(
+                            ic_types_cycles::CompoundCycles::new(
+                                ic_types_cycles::Cycles::zero(),
+                                ic_types_cycles::CanisterCyclesCostSchedule::Normal,
+                            ),
+                        )
+                        .is_none()
+                );
+            }
+            // To produce the `Executed` state we enqueue then pop the hook.
             OnLowWasmMemoryHookStatus::Executed => {
-                self.system_state
-                    .task_queue
-                    .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
+                assert!(
+                    self.system_state
+                        .task_queue
+                        .enqueue_on_low_wasm_memory_hook(
+                            ic_types_cycles::CompoundCycles::new(
+                                ic_types_cycles::Cycles::zero(),
+                                ic_types_cycles::CanisterCyclesCostSchedule::Normal,
+                            ),
+                        )
+                        .is_none()
+                );
                 self.system_state.task_queue.pop_front();
             }
         };

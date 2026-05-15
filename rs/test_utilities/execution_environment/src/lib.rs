@@ -1280,16 +1280,23 @@ impl ExecutionTest {
                     .enqueue(ExecutionTask::GlobalTimer);
             }
             CanisterTask::OnLowWasmMemory => {
-                // Set `OnLowWasmMemoryHookStatus` to `ConditionNotSatisfied`.
-                canister
+                // Start from `ConditionNotSatisfied` and enqueue with a
+                // zero-cycles reservation, since this is a test helper that
+                // bypasses the regular message prepay path.
+                let _ = canister
                     .system_state
                     .task_queue
-                    .remove(ExecutionTask::OnLowWasmMemory);
-                // Set `OnLowWasmMemoryHookStatus` to `Ready`.
-                canister
-                    .system_state
-                    .task_queue
-                    .enqueue(ExecutionTask::OnLowWasmMemory);
+                    .dequeue_on_low_wasm_memory_hook();
+                assert_eq!(
+                    canister
+                        .system_state
+                        .task_queue
+                        .enqueue_on_low_wasm_memory_hook(ic_types_cycles::CompoundCycles::new(
+                            ic_types_cycles::Cycles::zero(),
+                            ic_types_cycles::CanisterCyclesCostSchedule::Normal,
+                        )),
+                    None
+                );
             }
         }
         let result = execute_canister(

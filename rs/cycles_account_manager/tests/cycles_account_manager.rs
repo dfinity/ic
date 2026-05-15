@@ -1074,6 +1074,103 @@ fn withdraw_execution_cycles_consumes_cycles() {
 }
 
 #[test]
+fn prepay_execution_cycles_with_hook_reservation_charges_both_portions() {
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let subnet_size = SMALL_APP_SUBNET_MAX_SIZE;
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    let message_instructions = NumInstructions::from(2_000_000);
+    let hook_instructions = NumInstructions::from(500_000);
+
+    // Reference: what would each portion cost in isolation.
+    let expected_msg = cycles_account_manager.execution_cost(
+        message_instructions,
+        subnet_size,
+        cost_schedule,
+        WASM_EXECUTION_MODE,
+    );
+    let expected_hook = cycles_account_manager.execution_cost(
+        hook_instructions,
+        subnet_size,
+        cost_schedule,
+        WASM_EXECUTION_MODE,
+    );
+
+    let mut system_state = SystemStateBuilder::new().build();
+    let balance_before = system_state.balance();
+
+    let (msg_prepay, hook_reservation) = cycles_account_manager
+        .prepay_execution_cycles_with_hook_reservation(
+            &mut system_state,
+            NumBytes::from(0),
+            MessageMemoryUsage::ZERO,
+            ComputeAllocation::default(),
+            message_instructions,
+            hook_instructions,
+            subnet_size,
+            cost_schedule,
+            false,
+            WASM_EXECUTION_MODE,
+        )
+        .unwrap();
+
+    // Each returned portion matches what a standalone `execution_cost` call
+    // would yield. The two portions are charged together as a single deduction
+    // from the balance.
+    assert_eq!(msg_prepay, expected_msg);
+    assert_eq!(hook_reservation, expected_hook);
+    assert_eq!(
+        balance_before - system_state.balance(),
+        (expected_msg + expected_hook).real(),
+    );
+}
+
+#[test]
+fn prepay_execution_cycles_with_hook_reservation_is_atomic_on_insufficient_funds() {
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let subnet_size = SMALL_APP_SUBNET_MAX_SIZE;
+    let cycles_account_manager = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    let message_instructions = NumInstructions::from(2_000_000);
+    let hook_instructions = NumInstructions::from(2_000_000);
+
+    let msg_cost = cycles_account_manager.execution_cost(
+        message_instructions,
+        subnet_size,
+        cost_schedule,
+        WASM_EXECUTION_MODE,
+    );
+
+    // Fund the canister with exactly enough to cover the message alone but
+    // not the message plus the hook reservation.
+    let mut system_state = SystemStateBuilder::new()
+        .initial_cycles(msg_cost.real() + Cycles::new(1))
+        .build();
+    let balance_before = system_state.balance();
+
+    let err = cycles_account_manager
+        .prepay_execution_cycles_with_hook_reservation(
+            &mut system_state,
+            NumBytes::from(0),
+            MessageMemoryUsage::ZERO,
+            ComputeAllocation::default(),
+            message_instructions,
+            hook_instructions,
+            subnet_size,
+            cost_schedule,
+            false,
+            WASM_EXECUTION_MODE,
+        )
+        .unwrap_err();
+    assert!(matches!(err, CanisterOutOfCyclesError { .. }));
+    // Nothing should have been deducted: the message prepay alone would have
+    // succeeded, so this exercises the atomicity of the joint check.
+    assert_eq!(system_state.balance(), balance_before);
+}
+
+#[test]
 fn withdraw_for_transfer_does_not_consume_cycles() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let system_state = SystemStateBuilder::new().build();

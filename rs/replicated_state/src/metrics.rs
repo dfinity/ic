@@ -385,7 +385,7 @@ impl ReplicatedStateMetrics {
                 }
                 Some(ExecutionTask::Heartbeat)
                 | Some(ExecutionTask::GlobalTimer)
-                | Some(ExecutionTask::OnLowWasmMemory)
+                | Some(ExecutionTask::OnLowWasmMemory(_))
                 | None => {}
             }
             consumed_cycles_total += canister.system_state.canister_metrics().consumed_cycles();

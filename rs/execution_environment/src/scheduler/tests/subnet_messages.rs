@@ -637,6 +637,7 @@ mod can_execute_subnet_msg_tests {
                 Cycles::zero(),
                 CanisterCyclesCostSchedule::Normal,
             ),
+            prepaid_hook_reservation: None,
         });
         test.inject_call(Method::StopCanister, &CanisterIdRecord::from(test.canister));
 
@@ -655,6 +656,7 @@ mod can_execute_subnet_msg_tests {
                 Cycles::zero(),
                 CanisterCyclesCostSchedule::Normal,
             ),
+            prepaid_hook_reservation: None,
         });
         test.inject_canister_status_call(test.canister);
 

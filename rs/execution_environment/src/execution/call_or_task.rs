@@ -43,6 +43,7 @@ pub fn execute_call_or_task(
     call_or_task: CanisterCallOrTask,
     method: WasmMethod,
     prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
+    prepaid_hook_reservation: Option<CompoundCycles<Instructions>>,
     execution_parameters: ExecutionParameters,
     time: Time,
     round: RoundContext,
@@ -52,9 +53,29 @@ pub fn execute_call_or_task(
     log_dirty_pages: FlagStatus,
     deallocation_sender: &DeallocationSender,
 ) -> ExecuteMessageResult {
-    let (clean_canister, prepaid_execution_cycles, resuming_aborted) =
+    // A caller-supplied hook reservation only makes sense alongside a
+    // caller-supplied message prepayment (i.e. when resuming an aborted
+    // execution). Fresh calls do their own joint prepayment below.
+    debug_assert!(
+        prepaid_execution_cycles.is_some() || prepaid_hook_reservation.is_none(),
+        "prepaid_hook_reservation requires prepaid_execution_cycles",
+    );
+
+    let (clean_canister, prepaid_execution_cycles, hook_reservation, resuming_aborted) =
         match prepaid_execution_cycles {
-            Some(prepaid_execution_cycles) => (clean_canister, prepaid_execution_cycles, true),
+            // Resumed aborted executions and the `OnLowWasmMemory` task itself
+            // arrive with their own prepayment already in hand. For aborted
+            // executions, the hook reservation (if the original message
+            // charged one) was preserved inside the `AbortedExecution` task
+            // and is now passed back in via `prepaid_hook_reservation`. For
+            // the `OnLowWasmMemory` task itself, no further hook reservation
+            // is held (its own prepayment IS the reservation).
+            Some(prepaid_execution_cycles) => (
+                clean_canister,
+                prepaid_execution_cycles,
+                prepaid_hook_reservation,
+                true,
+            ),
             None => {
                 let mut canister = clean_canister;
                 let memory_usage = canister.memory_usage();
@@ -69,37 +90,69 @@ pub fn execute_call_or_task(
                     .as_ref()
                     .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
 
-                let prepaid_execution_cycles = match round
-                    .cycles_account_manager
-                    .prepay_execution_cycles(
-                        &mut canister.system_state,
-                        memory_usage,
-                        message_memory_usage,
-                        execution_parameters.compute_allocation,
-                        execution_parameters.instruction_limits.message(),
-                        subnet_size,
-                        round.cost_schedule,
-                        reveal_top_up,
-                        wasm_execution_mode,
-                    ) {
-                    Ok(cycles) => cycles,
+                // Charge the hook reservation alongside the message prepayment
+                // for canisters that export `canister_on_low_wasm_memory` and
+                // whose replicated message may cause Wasm memory to grow past
+                // the threshold (i.e. updates, heartbeat, global timer). Query
+                // execution does not persist state changes, so it cannot
+                // enqueue the hook; we therefore skip the joint prepay for
+                // queries.
+                let charge_hook_reservation = canister.exports_on_low_wasm_memory()
+                    && matches!(
+                        call_or_task,
+                        CanisterCallOrTask::Update(_)
+                            | CanisterCallOrTask::Task(
+                                CanisterTask::Heartbeat | CanisterTask::GlobalTimer
+                            ),
+                    );
+
+                let prepay_result = if charge_hook_reservation {
+                    round
+                        .cycles_account_manager
+                        .prepay_execution_cycles_with_hook_reservation(
+                            &mut canister.system_state,
+                            memory_usage,
+                            message_memory_usage,
+                            execution_parameters.compute_allocation,
+                            execution_parameters.instruction_limits.message(),
+                            execution_parameters.instruction_limits.message(),
+                            subnet_size,
+                            round.cost_schedule,
+                            reveal_top_up,
+                            wasm_execution_mode,
+                        )
+                        .map(|(msg, hook)| (msg, Some(hook)))
+                } else {
+                    round
+                        .cycles_account_manager
+                        .prepay_execution_cycles(
+                            &mut canister.system_state,
+                            memory_usage,
+                            message_memory_usage,
+                            execution_parameters.compute_allocation,
+                            execution_parameters.instruction_limits.message(),
+                            subnet_size,
+                            round.cost_schedule,
+                            reveal_top_up,
+                            wasm_execution_mode,
+                        )
+                        .map(|msg| (msg, None))
+                };
+
+                let (prepaid_execution_cycles, hook_reservation) = match prepay_result {
+                    Ok(prepaid) => prepaid,
                     Err(err) => {
-                        if call_or_task == CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) {
-                            //`OnLowWasmMemoryHook` is taken from task_queue (i.e. `OnLowWasmMemoryHookStatus` is `Executed`),
-                            // but it was not executed due to the freezing of the canister. To ensure that the hook is executed
-                            // when the canister is unfrozen we need to set `OnLowWasmMemoryHookStatus` to `Ready`. Because of
-                            // the way `OnLowWasmMemoryHookStatus::update` is implemented we first need to remove it from the
-                            // task_queue (which calls `OnLowWasmMemoryHookStatus::update(false)`) followed with `enqueue`
-                            // (which calls `OnLowWasmMemoryHookStatus::update(true)`) to ensure desired behavior.
-                            canister
-                                .system_state
-                                .task_queue
-                                .remove(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
-                            canister
-                                .system_state
-                                .task_queue
-                                .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
-                        }
+                        // The `OnLowWasmMemory` task always carries its
+                        // prepayment in the variant (see
+                        // `TaskQueue::enqueue_on_low_wasm_memory_hook`), so it
+                        // is dispatched through this function with
+                        // `prepaid_execution_cycles == Some(_)` and never
+                        // reaches this branch.
+                        debug_assert_ne!(
+                            call_or_task,
+                            CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory),
+                            "OnLowWasmMemory must always arrive with a prepaid reservation",
+                        );
                         return finish_call_with_error(
                             UserError::new(ErrorCode::CanisterOutOfCycles, err),
                             canister,
@@ -111,7 +164,12 @@ pub fn execute_call_or_task(
                         );
                     }
                 };
-                (canister, prepaid_execution_cycles, false)
+                (
+                    canister,
+                    prepaid_execution_cycles,
+                    hook_reservation,
+                    false,
+                )
             }
         };
 
@@ -130,6 +188,7 @@ pub fn execute_call_or_task(
         method,
         call_or_task,
         prepaid_execution_cycles,
+        hook_reservation,
         execution_parameters,
         subnet_size,
         time,
@@ -287,6 +346,13 @@ fn finish_err(
         wasm_execution_mode,
         round.log,
     );
+    // The hook never ran in this error path. Refund the held reservation in
+    // full, if any.
+    if let Some(hook_reservation) = original.hook_reservation {
+        canister
+            .system_state
+            .refund_cycles(hook_reservation, hook_reservation);
+    }
     let instructions_used = instruction_limit - instructions_left;
     finish_call_with_error(
         err,
@@ -306,6 +372,14 @@ struct OriginalContext {
     call_origin: CallOrigin,
     call_or_task: CanisterCallOrTask,
     prepaid_execution_cycles: CompoundCycles<Instructions>,
+    /// Worst-case `OnLowWasmMemory` hook prepayment, charged alongside the
+    /// message prepayment for canisters that export the hook (see the prepay
+    /// branch in `execute_call_or_task`). Resolved at the end of execution by
+    /// either feeding it to
+    /// [`TaskQueue::enqueue_on_low_wasm_memory_hook`](ic_replicated_state::canister_state::system_state::task_queue::TaskQueue::enqueue_on_low_wasm_memory_hook)
+    /// (when the hook condition just became satisfied) or refunding it back
+    /// to the canister balance.
+    hook_reservation: Option<CompoundCycles<Instructions>>,
     method: WasmMethod,
     execution_parameters: ExecutionParameters,
     subnet_size: usize,
@@ -540,6 +614,15 @@ impl CallOrTaskHelper {
             );
         }
 
+        // Capture the hook condition check result before
+        // `apply_canister_state_changes` consumes `canister_state_changes`.
+        // This drives the post-execution enqueue-or-refund of
+        // `original.hook_reservation`, if any (handled after
+        // `refund_unused_execution_cycles` below).
+        let hook_condition_check_result = canister_state_changes
+            .system_state_modifications
+            .on_low_wasm_memory_hook_condition_check_result;
+
         let is_composite_query = matches!(original.method, WasmMethod::CompositeQuery(_));
         let heap_delta = match original.call_or_task {
             // Update methods and tasks can persist changes to the canister's state.
@@ -614,6 +697,12 @@ impl CallOrTaskHelper {
             )
             .unwrap();
 
+        // Capture whether the Wasm execution completed successfully before
+        // the Query branch below consumes `output.wasm_result` via
+        // `map_err(...)`. This drives the post-execution hook accounting
+        // further down.
+        let wasm_result_is_ok = output.wasm_result.is_ok();
+
         let response = match original.call_or_task {
             CanisterCallOrTask::Update(_) | CanisterCallOrTask::Task(_) => action_to_response(
                 &self.canister,
@@ -664,6 +753,34 @@ impl CallOrTaskHelper {
             wasm_execution_mode,
             round.log,
         );
+
+        // Resolve the hook reservation that was charged together with the
+        // message prepayment (if any). If the hook condition just became
+        // satisfied for the first time since the last crossing AND the
+        // execution applied successfully, hand the reservation to the task
+        // queue so the upcoming `OnLowWasmMemory` task can spend it; otherwise
+        // refund it back to the canister balance.
+        //
+        // `enqueue_on_low_wasm_memory_hook` itself enforces "fire exactly
+        // once": if the hook is already `Ready` (a previous message has
+        // already enqueued and funded it) or `Executed` (the hook already
+        // fired for the current memory-limit crossing), it returns the
+        // supplied reservation back for refund.
+        if let Some(hook_reservation) = original.hook_reservation {
+            let should_enqueue = wasm_result_is_ok
+                && hook_condition_check_result == Some(true);
+            let leftover = if should_enqueue {
+                self.canister
+                    .system_state
+                    .task_queue
+                    .enqueue_on_low_wasm_memory_hook(hook_reservation)
+            } else {
+                Some(hook_reservation)
+            };
+            if let Some(refund) = leftover {
+                self.canister.system_state.refund_cycles(refund, refund);
+            }
+        }
 
         if original.log_dirty_pages == FlagStatus::Enabled {
             log_dirty_pages(
@@ -803,7 +920,11 @@ impl PausedExecution for PausedCallOrTaskExecution {
     fn abort(
         self: Box<Self>,
         log: &ReplicaLogger,
-    ) -> (CanisterMessageOrTask, CompoundCycles<Instructions>) {
+    ) -> (
+        CanisterMessageOrTask,
+        CompoundCycles<Instructions>,
+        Option<CompoundCycles<Instructions>>,
+    ) {
         info!(
             log,
             "[DTS] Aborting {:?} execution of canister {}",
@@ -812,7 +933,11 @@ impl PausedExecution for PausedCallOrTaskExecution {
         );
         self.paused_wasm_execution.abort();
         let message_or_task = into_message_or_task(self.original.call_or_task);
-        (message_or_task, self.original.prepaid_execution_cycles)
+        (
+            message_or_task,
+            self.original.prepaid_execution_cycles,
+            self.original.hook_reservation,
+        )
     }
 
     fn input(&self) -> CanisterMessageOrTask {

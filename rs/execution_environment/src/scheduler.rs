@@ -1891,7 +1891,7 @@ fn can_execute_subnet_msg(
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::OnLowWasmMemory) => false,
+            | Some(ExecutionTask::OnLowWasmMemory(_)) => false,
             Some(ExecutionTask::AbortedExecution { .. }) => true,
             Some(ExecutionTask::PausedExecution { .. })
             | Some(ExecutionTask::PausedInstallCode(_)) => {

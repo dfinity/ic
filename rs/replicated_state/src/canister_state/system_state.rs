@@ -517,7 +517,11 @@ pub enum ExecutionTask {
 
     /// On low Wasm memory hook.
     /// The task exists only within an execution round, it never gets serialized.
-    OnLowWasmMemory,
+    ///
+    /// Carries the prepayment that funds the hook's execution. The prepayment
+    /// is taken from the replicated message whose execution enqueued the hook
+    /// (see `TaskQueue::enqueue_on_low_wasm_memory_hook`).
+    OnLowWasmMemory(CompoundCycles<Instructions>),
 
     /// A paused execution task exists only within an epoch (between
     /// checkpoints). It is never serialized, and it turns into `AbortedExecution`
@@ -542,6 +546,17 @@ pub enum ExecutionTask {
         /// The execution cost that has already been charged from the canister.
         /// Retried execution does not have to pay for it again.
         prepaid_execution_cycles: CompoundCycles<Instructions>,
+        /// The worst-case `OnLowWasmMemory` hook prepayment charged together
+        /// with `prepaid_execution_cycles` for canisters that export the hook
+        /// (see
+        /// [`CyclesAccountManager::prepay_execution_cycles_with_hook_reservation`]).
+        /// Aborted executions correspond to messages that have already been
+        /// popped from the canister's input queue and have started executing,
+        /// so they must preserve every prepayment across the abort/resume
+        /// cycle — including this one. The resumed execution either consumes
+        /// the reservation (when the memory-limit crossing happens at the
+        /// end of execution) or refunds it.
+        prepaid_hook_reservation: Option<CompoundCycles<Instructions>>,
     },
 
     /// Any paused `install_code` that doesn't finish until the next checkpoint
@@ -562,7 +577,7 @@ pub enum ExecutionTask {
 impl ExecutionTask {
     pub fn is_hook(&self) -> bool {
         match self {
-            Self::OnLowWasmMemory => true,
+            Self::OnLowWasmMemory(_) => true,
             Self::Heartbeat
             | Self::GlobalTimer
             | Self::PausedExecution { .. }
@@ -2156,17 +2171,35 @@ impl SystemState {
         }
     }
 
-    /// Enqueues or removes `OnLowWasmMemory` task from `task_queue`
-    /// depending if the condition for `OnLowWasmMemoryHook` is satisfied:
+    /// Dequeues the `OnLowWasmMemory` hook if the condition is no longer
+    /// satisfied. The auto-enqueue direction was removed: enqueueing the hook
+    /// requires a prepayment, which is only available within replicated
+    /// message execution paths (see
+    /// `TaskQueue::enqueue_on_low_wasm_memory_hook`). Subnet messages that
+    /// satisfy the condition (e.g. `update_settings` lowering the threshold)
+    /// therefore do not auto-enqueue; the next replicated message will
+    /// enqueue the hook through its prepayment.
+    ///
+    /// Hook condition:
     ///
     ///   `wasm_memory_threshold > wasm_memory_limit - wasm_memory_usage`
     ///
     /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
-    pub fn update_on_low_wasm_memory_hook_status(&mut self, wasm_memory_usage: NumBytes) {
+    ///
+    /// If the hook was previously enqueued and the condition is no longer
+    /// satisfied, the held reservation is returned for the caller to refund
+    /// to the canister balance via `system_state.refund_cycles`.
+    #[must_use = "the returned reservation, if any, must be refunded to the canister balance"]
+    pub fn update_on_low_wasm_memory_hook_status(
+        &mut self,
+        wasm_memory_usage: NumBytes,
+    ) -> Option<CompoundCycles<Instructions>> {
         if self.is_low_wasm_memory_hook_condition_satisfied(wasm_memory_usage) {
-            self.task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
+            // Auto-enqueue removed: callers with a prepayment use
+            // `TaskQueue::enqueue_on_low_wasm_memory_hook` directly.
+            None
         } else {
-            self.task_queue.remove(ExecutionTask::OnLowWasmMemory);
+            self.task_queue.dequeue_on_low_wasm_memory_hook()
         }
     }
 

@@ -174,7 +174,7 @@ impl CanisterState {
         match self.system_state.task_queue.front() {
             Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::OnLowWasmMemory) => NextExecution::StartNew,
+            | Some(ExecutionTask::OnLowWasmMemory(_)) => NextExecution::StartNew,
 
             Some(ExecutionTask::AbortedExecution { .. })
             | Some(ExecutionTask::PausedExecution { .. }) => NextExecution::ContinueLong,
@@ -619,22 +619,38 @@ impl CanisterState {
             + self.system_state.wasm_chunk_store.heap_delta()
     }
 
-    /// Updates status of `OnLowWasmMemory` hook.
+    /// Updates the status of the `OnLowWasmMemory` hook in the dequeue
+    /// direction only: if the canister was previously holding a hook
+    /// reservation but the underlying condition is no longer satisfied, the
+    /// reservation is refunded to the canister balance.
+    ///
+    /// Auto-enqueueing was removed: enqueueing the hook requires a
+    /// prepayment, which is only available within replicated message
+    /// execution paths.
     pub fn update_on_low_wasm_memory_hook_condition(self: &mut Arc<Self>) {
         let wasm_memory_usage = self.wasm_memory_usage();
         let hook_condition = self
             .system_state
             .is_low_wasm_memory_hook_condition_satisfied(wasm_memory_usage);
-        // Only `make_mut` if the hook condition has changed.
         if !self
             .system_state
             .task_queue
             .peek_hook_status()
             .is_consistent_with(hook_condition)
         {
-            Arc::make_mut(self)
+            let canister = Arc::make_mut(self);
+            let stale_reservation = canister
                 .system_state
                 .update_on_low_wasm_memory_hook_status(wasm_memory_usage);
+            if let Some(stale_reservation) = stale_reservation {
+                // The held reservation no longer belongs to a hook that will
+                // fire (the condition is no longer satisfied). Refund the full
+                // prepayment to the canister balance, observing it as a refund
+                // of an `Instructions` prepayment.
+                canister
+                    .system_state
+                    .refund_cycles(stale_reservation, stale_reservation);
+            }
         }
     }
 

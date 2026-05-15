@@ -320,6 +320,14 @@ pub mod execution_task {
         #[prost(message, optional, tag = "7")]
         pub prepaid_execution_compound_cycles:
             ::core::option::Option<super::super::super::queues::v1::CompoundCycles>,
+        /// The worst-case `OnLowWasmMemory` hook prepayment, charged together with
+        /// `prepaid_execution_compound_cycles` for canisters that export the hook.
+        /// Aborted executions correspond to messages that have already started
+        /// executing, so they must preserve every prepayment across the
+        /// abort/resume cycle.
+        #[prost(message, optional, tag = "8")]
+        pub prepaid_hook_reservation:
+            ::core::option::Option<super::super::super::queues::v1::CompoundCycles>,
         #[prost(oneof = "aborted_execution::Input", tags = "1, 6, 3, 5")]
         pub input: ::core::option::Option<aborted_execution::Input>,
     }
@@ -644,6 +652,15 @@ pub struct TaskQueue {
     /// Queue of `Heartbeat` and `GlobalTimer` tasks.
     #[prost(message, repeated, tag = "3")]
     pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
+    /// Cycles prepaid for the next `OnLowWasmMemory` hook execution. Set iff
+    /// `on_low_wasm_memory_hook_status` is `READY`; reserved at the end of the
+    /// replicated message that armed the hook and consumed when the hook runs.
+    /// Checkpoint round-trip must preserve this field precisely so that replicas
+    /// that continue across the checkpoint and replicas that restart from it end
+    /// up in the exact same state.
+    #[prost(message, optional, tag = "4")]
+    pub on_low_wasm_memory_hook_reservation:
+        ::core::option::Option<super::super::queues::v1::CompoundCycles>,
 }
 /// Next ID: 65
 #[derive(Clone, PartialEq, ::prost::Message)]

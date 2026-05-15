@@ -498,6 +498,87 @@ impl CyclesAccountManager {
         .map(|_| cost)
     }
 
+    /// Like [`Self::prepay_execution_cycles`], but additionally prepays for a
+    /// worst-case `OnLowWasmMemory` hook execution. The freezing-threshold
+    /// check accounts for both prepayments as a single atomic deduction, so
+    /// that a canister with a low-memory hook can never enter a state where
+    /// it has enough cycles to run the message but not the hook that the
+    /// message may have triggered.
+    ///
+    /// Returns a tuple `(message_prepayment, hook_reservation)`. The caller
+    /// owns both `CompoundCycles<Instructions>` values:
+    ///
+    /// - `message_prepayment` is refunded via
+    ///   [`Self::refund_unused_execution_cycles`] after the message executes
+    ///   (exactly as for [`Self::prepay_execution_cycles`]).
+    /// - `hook_reservation` is either:
+    ///   - handed to
+    ///     [`TaskQueue::enqueue_on_low_wasm_memory_hook`](ic_replicated_state::canister_state::system_state::task_queue::TaskQueue::enqueue_on_low_wasm_memory_hook)
+    ///     to fund a newly-armed hook execution, in which case its eventual
+    ///     leftover is refunded when the hook task itself runs; or
+    ///   - refunded to the canister balance via
+    ///     [`SystemState::refund_cycles`] if the hook is already enqueued
+    ///     (a previous message already funded it) or if the memory condition
+    ///     is not satisfied after this message.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `CanisterOutOfCyclesError` if the canister cannot pay for
+    /// both the message and the hook prepayment without dropping below the
+    /// freezing threshold.
+    pub fn prepay_execution_cycles_with_hook_reservation(
+        &self,
+        system_state: &mut SystemState,
+        canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
+        canister_compute_allocation: ComputeAllocation,
+        message_num_instructions: NumInstructions,
+        hook_num_instructions: NumInstructions,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+        reveal_top_up: bool,
+        execution_mode: WasmExecutionMode,
+    ) -> Result<
+        (
+            CompoundCycles<Instructions>,
+            CompoundCycles<Instructions>,
+        ),
+        CanisterOutOfCyclesError,
+    > {
+        let message_cost = self.execution_cost(
+            message_num_instructions,
+            subnet_size,
+            cost_schedule,
+            execution_mode,
+        );
+        let hook_cost = self.execution_cost(
+            hook_num_instructions,
+            subnet_size,
+            cost_schedule,
+            execution_mode,
+        );
+        // Sum the two `CompoundCycles<Instructions>` values (both `real` and
+        // `nominal`) so the freezing-threshold check and the consumed-cycles
+        // bookkeeping see a single atomic deduction.
+        let total = message_cost + hook_cost;
+        self.consume_with_threshold(
+            system_state,
+            total,
+            self.freeze_threshold_cycles(
+                system_state.freeze_threshold,
+                system_state.memory_allocation,
+                canister_current_memory_usage,
+                canister_current_message_memory_usage,
+                canister_compute_allocation,
+                subnet_size,
+                cost_schedule,
+                system_state.reserved_balance(),
+            ),
+            reveal_top_up,
+        )?;
+        Ok((message_cost, hook_cost))
+    }
+
     /// Checks whether the canister has enough cycles to prepay the execution of a
     /// message with the given maximum number of instructions while respecting the
     /// freezing threshold.

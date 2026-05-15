@@ -24,7 +24,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::canister_state::system_state::is_low_wasm_memory_hook_condition_satisfied;
 use ic_replicated_state::{
-    CallOrigin, ExecutionTask, NetworkTopology, SystemState, canister_state::DEFAULT_QUEUE_CAPACITY,
+    CallOrigin, NetworkTopology, SystemState, canister_state::DEFAULT_QUEUE_CAPACITY,
 };
 use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::{
@@ -423,17 +423,24 @@ impl SystemStateModifications {
         self.validate_cycle_change(system_state.canister_id() == CYCLES_MINTING_CANISTER_ID)?;
         self.apply_balance_changes(system_state);
 
-        if let Some(hook_condition_check_result) =
-            self.on_low_wasm_memory_hook_condition_check_result
-        {
-            if hook_condition_check_result {
-                system_state
-                    .task_queue
-                    .enqueue(ExecutionTask::OnLowWasmMemory);
-            } else {
-                system_state
-                    .task_queue
-                    .remove(ExecutionTask::OnLowWasmMemory);
+        if let Some(false) = self.on_low_wasm_memory_hook_condition_check_result {
+            // The enqueue direction is intentionally not handled here.
+            // Enqueueing the `OnLowWasmMemory` hook requires a prepayment, which lives
+            // with the orchestrating execution path (see
+            // `crate::execute_call_or_task` and friends): the orchestrator
+            // reads `on_low_wasm_memory_hook_condition_check_result` after
+            // `apply_changes` to decide whether to enqueue or refund the hook
+            // prepayment. Here we only handle the dequeue direction so that
+            // a stale hook reservation does not linger past a memory shrink.
+            //
+            // Note: this path is currently never exercised because Wasm
+            // memory growth is monotonic. We still refund a stale reservation
+            // if it somehow exists to keep the invariant tight.
+            if let Some(stale_reservation) = system_state
+                .task_queue
+                .dequeue_on_low_wasm_memory_hook()
+            {
+                system_state.refund_cycles(stale_reservation, stale_reservation);
             }
         }
 

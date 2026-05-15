@@ -345,6 +345,7 @@ fn test_encode_decode_task_queue() {
                 Cycles::new(2),
                 CanisterCyclesCostSchedule::Normal,
             ),
+            prepaid_hook_reservation: None,
         },
         ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Request(Arc::clone(&request)),
@@ -363,6 +364,7 @@ fn test_encode_decode_task_queue() {
                 Cycles::new(4),
                 CanisterCyclesCostSchedule::Normal,
             ),
+            prepaid_hook_reservation: None,
         },
         ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Message(CanisterMessage::Ingress(Arc::clone(&ingress))),
@@ -370,6 +372,10 @@ fn test_encode_decode_task_queue() {
                 Cycles::new(5),
                 CanisterCyclesCostSchedule::Normal,
             ),
+            prepaid_hook_reservation: Some(CompoundCycles::new(
+                Cycles::new(6),
+                CanisterCyclesCostSchedule::Normal,
+            )),
         },
     ] {
         let mut task_queue = TaskQueue::default();
@@ -1193,7 +1199,16 @@ fn test_encode_decode_empty_task_queue() {
 #[test]
 fn test_encode_decode_non_empty_task_queue() {
     let mut task_queue = TaskQueue::default();
-    task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
+
+    // A low Wasm memory hook with a non-zero reservation.
+    assert!(
+        task_queue
+            .enqueue_on_low_wasm_memory_hook(CompoundCycles::new(
+                Cycles::new(7_654_321),
+                CanisterCyclesCostSchedule::Normal,
+            ))
+            .is_none()
+    );
 
     task_queue.enqueue(ExecutionTask::AbortedExecution {
         input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
@@ -1201,6 +1216,7 @@ fn test_encode_decode_non_empty_task_queue() {
             Cycles::zero(),
             CanisterCyclesCostSchedule::Normal,
         ),
+        prepaid_hook_reservation: None,
     });
 
     // A canister state with non empty TaskQueue.
@@ -1304,6 +1320,7 @@ mod mainnet_compatibility_tests {
                     Cycles::new(10),
                     CanisterCyclesCostSchedule::Normal,
                 ),
+                prepaid_hook_reservation: None,
             });
 
             CanisterStateBits {

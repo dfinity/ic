@@ -4570,15 +4570,24 @@ pub enum OnLowWasmMemoryHookStatus {
 }
 
 impl OnLowWasmMemoryHookStatus {
-    pub fn update(&mut self, is_hook_condition_satisfied: bool) {
-        *self = if is_hook_condition_satisfied {
-            match *self {
-                Self::ConditionNotSatisfied | Self::Ready => Self::Ready,
-                Self::Executed => Self::Executed,
+    /// Updates the status based on the live hook condition.
+    ///
+    /// Returns true if the status transitioned from `ConditionNotSatisfied` to
+    /// `Ready`, false otherwise.
+    pub fn update(&mut self, is_hook_condition_satisfied: bool) -> bool {
+        if !is_hook_condition_satisfied {
+            *self = Self::ConditionNotSatisfied;
+            return false;
+        }
+
+        match *self {
+            Self::ConditionNotSatisfied => {
+                *self = Self::Ready;
+                true
             }
-        } else {
-            Self::ConditionNotSatisfied
-        };
+            Self::Ready => false,
+            Self::Executed => false,
+        }
     }
 
     pub fn is_ready(&self) -> bool {

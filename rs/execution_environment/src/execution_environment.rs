@@ -387,11 +387,27 @@ pub trait PausedExecution: std::fmt::Debug + Send {
     ) -> ExecuteMessageResult;
 
     /// Aborts the paused execution.
-    /// Returns the original message and the cycles prepaid for execution.
+    ///
+    /// Returns:
+    /// - the original message,
+    /// - the cycles prepaid for the message's execution, and
+    /// - any `OnLowWasmMemory` hook reservation that the paused execution was
+    ///   holding (see `OriginalContext::hook_reservation` in `call_or_task`).
+    ///
+    /// Both prepayments are carried into the resulting `AbortedExecution`
+    /// task: aborted executions correspond to messages that have already been
+    /// popped from their input queue and have started executing, so resuming
+    /// them requires all of the original prepayments to still be in hand.
+    /// Implementations that never charge a hook reservation (e.g. response /
+    /// cleanup callbacks) return `None` for the third element.
     fn abort(
         self: Box<Self>,
         log: &ReplicaLogger,
-    ) -> (CanisterMessageOrTask, CompoundCycles<Instructions>);
+    ) -> (
+        CanisterMessageOrTask,
+        CompoundCycles<Instructions>,
+        Option<CompoundCycles<Instructions>>,
+    );
 
     /// Returns a reference to the message or task being executed.
     fn input(&self) -> CanisterMessageOrTask;
@@ -2249,6 +2265,7 @@ impl ExecutionEnvironment {
 
     /// Executes a replicated message sent to a canister or a canister task.
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     pub fn execute_canister_input(
         &self,
         canister: CanisterState,
@@ -2256,6 +2273,7 @@ impl ExecutionEnvironment {
         max_instructions_per_query_message: NumInstructions,
         input: CanisterMessageOrTask,
         prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
+        prepaid_hook_reservation: Option<CompoundCycles<Instructions>>,
         time: Time,
         network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
@@ -2297,6 +2315,7 @@ impl ExecutionEnvironment {
                     canister,
                     task,
                     prepaid_execution_cycles,
+                    prepaid_hook_reservation,
                     instruction_limits,
                     round,
                     round_limits,
@@ -2361,6 +2380,7 @@ impl ExecutionEnvironment {
                     CanisterCallOrTask::Query(req),
                     method,
                     prepaid_execution_cycles,
+                    prepaid_hook_reservation,
                     execution_parameters,
                     time,
                     round,
@@ -2397,6 +2417,7 @@ impl ExecutionEnvironment {
                     CanisterCallOrTask::Update(req),
                     method,
                     prepaid_execution_cycles,
+                    prepaid_hook_reservation,
                     execution_parameters,
                     time,
                     round,
@@ -2414,11 +2435,13 @@ impl ExecutionEnvironment {
     }
 
     /// Executes a canister task of a given canister.
+    #[allow(clippy::too_many_arguments)]
     fn execute_canister_task(
         &self,
         canister: CanisterState,
         task: CanisterTask,
         prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
+        prepaid_hook_reservation: Option<CompoundCycles<Instructions>>,
         instruction_limits: InstructionLimits,
         round: RoundContext,
         round_limits: &mut RoundLimits,
@@ -2436,6 +2459,7 @@ impl ExecutionEnvironment {
             CanisterCallOrTask::Task(task.clone()),
             WasmMethod::System(SystemMethod::from(task)),
             prepaid_execution_cycles,
+            prepaid_hook_reservation,
             execution_parameters,
             round.time,
             round,
@@ -4263,7 +4287,7 @@ impl ExecutionEnvironment {
         match task {
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
-            | ExecutionTask::OnLowWasmMemory
+            | ExecutionTask::OnLowWasmMemory(_)
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::AbortedExecution { .. } => {
                 panic!("Unexpected task {task:?} in `resume_install_code` (broken precondition).");
@@ -4335,6 +4359,12 @@ impl ExecutionEnvironment {
         guard.paused_install_code.remove(&id)
     }
 
+    /// Aborts the given paused task and returns the resulting
+    /// `AbortedExecution` / `AbortedInstallCode` task to be stored in the
+    /// canister's task queue. Both the message prepayment and (where
+    /// applicable) the `OnLowWasmMemory` hook reservation are preserved
+    /// inside the aborted task so the resumed execution sees all the
+    /// prepayments that the original execution started with.
     fn abort_paused_execution_and_return_task(
         &self,
         paused_task: &ExecutionTask,
@@ -4343,11 +4373,13 @@ impl ExecutionEnvironment {
         match *paused_task {
             ExecutionTask::PausedExecution { id, .. } => {
                 let paused = self.take_paused_execution(id).unwrap();
-                let (input, prepaid_execution_cycles) = paused.abort(log);
+                let (input, prepaid_execution_cycles, prepaid_hook_reservation) =
+                    paused.abort(log);
 
                 ExecutionTask::AbortedExecution {
                     input,
                     prepaid_execution_cycles,
+                    prepaid_hook_reservation,
                 }
             }
             ExecutionTask::PausedInstallCode(id) => {
@@ -4364,7 +4396,7 @@ impl ExecutionEnvironment {
             | ExecutionTask::AbortedInstallCode { .. }
             | ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
-            | ExecutionTask::OnLowWasmMemory => {
+            | ExecutionTask::OnLowWasmMemory(_) => {
                 unreachable!(
                     "Function abort_paused_execution_and_return_task is only called after
                     the paused task is returned from TaskQueue, hence no task other than PausedExecution
@@ -4410,6 +4442,12 @@ impl ExecutionEnvironment {
             // TODO: EXC-1730 if `PausedExecutionRegistry` becomes local we can abort
             // paused execution on the canister without requesting ID from TaskQueue.
             let aborted_task = self.abort_paused_execution_and_return_task(paused_task, log);
+            // Both the message prepayment and any `OnLowWasmMemory` hook
+            // reservation that the paused execution was holding are carried
+            // inside `aborted_task`; resuming it later picks them back up,
+            // matching the invariant that an aborted execution corresponds
+            // to a message that has already been popped from its input queue
+            // and has all its prepayments accounted for.
             Arc::make_mut(canister)
                 .system_state
                 .task_queue
@@ -4879,9 +4917,11 @@ pub struct ExecuteCanisterResult {
 
 /// Executes the given input message or task.
 /// This is a helper for `execute_canister()`.
+#[allow(clippy::too_many_arguments)]
 fn execute_canister_input(
     input: CanisterMessageOrTask,
     prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
+    prepaid_hook_reservation: Option<CompoundCycles<Instructions>>,
     exec_env: &ExecutionEnvironment,
     mut canister: CanisterState,
     instruction_limits: InstructionLimits,
@@ -4930,6 +4970,7 @@ fn execute_canister_input(
         max_instructions_per_query_message,
         input,
         prepaid_execution_cycles,
+        prepaid_hook_reservation,
         time,
         network_topology,
         round_limits,
@@ -4976,7 +5017,11 @@ pub fn execute_canister(
     }
 
     let mut canister = Arc::unwrap_or_clone(canister);
-    let (input, prepaid_execution_cycles) = match canister.system_state.task_queue.pop_front() {
+    let (input, prepaid_execution_cycles, prepaid_hook_reservation) = match canister
+        .system_state
+        .task_queue
+        .pop_front()
+    {
         Some(task) => match task {
             ExecutionTask::PausedExecution { id, .. } => {
                 let paused = exec_env.take_paused_execution(id).unwrap();
@@ -5019,20 +5064,28 @@ pub fn execute_canister(
             }
             ExecutionTask::Heartbeat => {
                 let task = CanisterMessageOrTask::Task(CanisterTask::Heartbeat);
-                (task, None)
+                (task, None, None)
             }
             ExecutionTask::GlobalTimer => {
                 let task = CanisterMessageOrTask::Task(CanisterTask::GlobalTimer);
-                (task, None)
+                (task, None, None)
             }
-            ExecutionTask::OnLowWasmMemory => {
+            ExecutionTask::OnLowWasmMemory(reservation) => {
                 let task = CanisterMessageOrTask::Task(CanisterTask::OnLowWasmMemory);
-                (task, None)
+                // The hook task's own prepayment IS the reservation it was
+                // enqueued with; there is no further hook reservation to
+                // carry alongside it.
+                (task, Some(reservation), None)
             }
             ExecutionTask::AbortedExecution {
                 input,
                 prepaid_execution_cycles,
-            } => (input, Some(prepaid_execution_cycles)),
+                prepaid_hook_reservation,
+            } => (
+                input,
+                Some(prepaid_execution_cycles),
+                prepaid_hook_reservation,
+            ),
             ExecutionTask::PausedInstallCode(..) | ExecutionTask::AbortedInstallCode { .. } => {
                 unreachable!("The guard at the beginning filters these cases out")
             }
@@ -5044,12 +5097,13 @@ pub fn execute_canister(
             {
                 exec_env.metrics.oversize_intra_subnet_messages.inc();
             }
-            (CanisterMessageOrTask::Message(message), None)
+            (CanisterMessageOrTask::Message(message), None, None)
         }
     };
     execute_canister_input(
         input,
         prepaid_execution_cycles,
+        prepaid_hook_reservation,
         exec_env,
         canister,
         instruction_limits,

@@ -64,7 +64,7 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
         match item {
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
-            | ExecutionTask::OnLowWasmMemory
+            | ExecutionTask::OnLowWasmMemory(_)
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_) => {
                 panic!("Attempt to serialize ephemeral task: {item:?}.");
@@ -72,6 +72,7 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
             ExecutionTask::AbortedExecution {
                 input,
                 prepaid_execution_cycles,
+                prepaid_hook_reservation,
             } => {
                 use pb::execution_task::{
                     CanisterTask as PbCanisterTask, aborted_execution::AbortedResponse,
@@ -102,6 +103,10 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                             prepaid_execution_compound_cycles: Some(PbCompoundCycles::from(
                                 *prepaid_execution_cycles,
                             )),
+                            prepaid_hook_reservation: prepaid_hook_reservation
+                                .as_ref()
+                                .copied()
+                                .map(PbCompoundCycles::from),
                         },
                     )),
                 }
@@ -182,9 +187,14 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     aborted.prepaid_execution_compound_cycles,
                     "AbortedExecution::prepaid_execution_compound_cycles",
                 )?;
+                let prepaid_hook_reservation = aborted
+                    .prepaid_hook_reservation
+                    .map(CompoundCycles::try_from)
+                    .transpose()?;
                 ExecutionTask::AbortedExecution {
                     input,
                     prepaid_execution_cycles,
+                    prepaid_hook_reservation,
                 }
             }
             pb::execution_task::Task::AbortedInstallCode(aborted) => {

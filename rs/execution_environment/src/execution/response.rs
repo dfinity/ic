@@ -805,7 +805,11 @@ impl PausedExecution for PausedResponseExecution {
     fn abort(
         self: Box<Self>,
         log: &ReplicaLogger,
-    ) -> (CanisterMessageOrTask, CompoundCycles<Instructions>) {
+    ) -> (
+        CanisterMessageOrTask,
+        CompoundCycles<Instructions>,
+        Option<CompoundCycles<Instructions>>,
+    ) {
         info!(
             log,
             "[DTS] Aborting paused response callback {:?} of canister {}.",
@@ -817,10 +821,13 @@ impl PausedExecution for PausedResponseExecution {
             response: self.original.message,
             callback: self.original.callback,
         };
-        // No cycles were prepaid for execution during this DTS execution.
+        // No cycles were prepaid for execution during this DTS execution; the
+        // response prepayment lives elsewhere (see the request-side
+        // reservation). No hook reservation is held on this path.
         (
             CanisterMessageOrTask::Message(message),
             CompoundCycles::new(Cycles::zero(), self.original.cost_schedule),
+            None,
         )
     }
 
@@ -917,7 +924,11 @@ impl PausedExecution for PausedCleanupExecution {
     fn abort(
         self: Box<Self>,
         log: &ReplicaLogger,
-    ) -> (CanisterMessageOrTask, CompoundCycles<Instructions>) {
+    ) -> (
+        CanisterMessageOrTask,
+        CompoundCycles<Instructions>,
+        Option<CompoundCycles<Instructions>>,
+    ) {
         info!(
             log,
             "[DTS] Aborting paused cleanup callback {:?} of canister {}.",
@@ -929,10 +940,12 @@ impl PausedExecution for PausedCleanupExecution {
             response: self.original.message,
             callback: self.original.callback,
         };
-        // No cycles were prepaid for execution during this DTS execution.
+        // No cycles were prepaid for execution during this DTS execution; no
+        // hook reservation is held on this path either.
         (
             CanisterMessageOrTask::Message(message),
             CompoundCycles::new(Cycles::zero(), self.original.cost_schedule),
+            None,
         )
     }
 
