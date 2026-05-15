@@ -251,7 +251,10 @@ pub fn backup_luks_header_to_file(device_path: &Path, header_path: &Path) -> Res
                 temp_header_path.display()
             )
         })?;
-    fs::set_permissions(&temp_header_path, fs::Permissions::from_mode(0o600))
+
+    // We allow every user to read the header. The replica (running as user ic-replica) needs
+    // access to this file so that it can share it during an upgrade.
+    fs::set_permissions(&temp_header_path, fs::Permissions::from_mode(0o644))
         .context("Failed to set permissions on temporary detached LUKS header file")?;
 
     fs::rename(&temp_header_path, header_path)

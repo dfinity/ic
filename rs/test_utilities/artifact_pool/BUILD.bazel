@@ -2,48 +2,51 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/artifact_pool",
-    "//rs/config",
-    "//rs/consensus/dkg",
-    "//rs/consensus/utils",
-    "//rs/crypto/test_utils/crypto_returning_ok",
-    "//rs/interfaces",
-    "//rs/interfaces/registry",
-    "//rs/interfaces/state_manager",
-    "//rs/monitoring/logger",
-    "//rs/monitoring/metrics",
-    "//rs/registry/helpers",
-    "//rs/replicated_state",
-    "//rs/test_utilities/consensus",
-    "//rs/test_utilities/types",
-    "//rs/types/types",
-]
-
-MACRO_DEPENDENCIES = []
-
-DEV_DEPENDENCIES = []
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_library(
     name = "artifact_pool",
     testonly = True,
     srcs = glob(["src/**"]),
-    aliases = ALIASES,
     crate_name = "ic_test_artifact_pool",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/artifact_pool",
+        "//rs/config",
+        "//rs/consensus/dkg",
+        "//rs/consensus/utils",
+        "//rs/crypto/test_utils/crypto_returning_ok",
+        "//rs/interfaces",
+        "//rs/interfaces/registry",
+        "//rs/interfaces/state_manager",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/registry/helpers",
+        "//rs/replicated_state",
+        "//rs/test_utilities/consensus",
+        "//rs/test_utilities/types",
+        "//rs/types/types",
+    ],
 )
 
 rust_test(
     name = "artifact_pool_test",
-    aliases = ALIASES,
     crate = ":artifact_pool",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/artifact_pool",
+        "//rs/config",
+        "//rs/consensus/dkg",
+        "//rs/consensus/utils",
+        "//rs/crypto/test_utils/crypto_returning_ok",
+        "//rs/interfaces",
+        "//rs/interfaces/registry",
+        "//rs/interfaces/state_manager",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/registry/helpers",
+        "//rs/replicated_state",
+        "//rs/test_utilities/consensus",
+        "//rs/test_utilities/types",
+        "//rs/types/types",
+    ],
 )
