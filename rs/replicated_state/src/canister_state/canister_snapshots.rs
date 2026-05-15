@@ -283,14 +283,17 @@ impl CanisterSnapshot {
             .ok_or(CanisterSnapshotError::EmptyExecutionState(canister_id))?;
         let global_timer = canister.system_state.global_timer;
         // A frozen canister whose `OnLowWasmMemory` hook could not run is left with
-        // `OnLowWasmMemoryHookStatus::ConditionNotSatisfied` while the underlying memory condition is still
-        // satisfied (see the matching comment in `execute_call_or_task`). The canister itself recovers from
-        // this transient inconsistency the next time `finish_subnet_message_execution` evaluates the hook
-        // condition, but the inconsistency must not leak into snapshots: it would (1) be reported as a lie
-        // through `read_canister_snapshot_metadata`, and (2) cause `upload_canister_snapshot_metadata` to
-        // reject any round-trip of the metadata via the `is_consistent_with` check. Lifting the recorded
-        // status to `Ready` whenever the condition is actually satisfied preserves the invariant that
-        // snapshots always agree with their memory contents.
+        // `OnLowWasmMemoryHookStatus::ConditionNotSatisfied` while the underlying
+        // memory condition is still satisfied (see the matching comment in
+        // `execute_call_or_task`). The canister itself recovers from
+        // this transient inconsistency the next time a message execution or management
+        // call re-evaluates the hook condition, but the inconsistency must not leak
+        // into snapshots, as it would cause `upload_canister_snapshot_metadata` to
+        // reject any round-trip of the metadata via the `is_consistent_with` check.
+        //
+        // Lifting the recorded status to `Ready` whenever the condition is actually
+        // satisfied preserves the invariant that the condition and hook status always
+        // agree.
         let hook_status = match canister.system_state.task_queue.peek_hook_status() {
             OnLowWasmMemoryHookStatus::ConditionNotSatisfied
                 if canister.is_low_wasm_memory_hook_condition_satisfied() =>

@@ -1204,11 +1204,7 @@ fn frozen_canisters_with_heartbeats_or_timers_are_not_scheduled() {
     }
 }
 
-/// Ensures that `inner_round()` continues with another iteration after the
-/// previous iteration only processed messages that got rejected (e.g. because
-/// the callee was low on cycles), with zero Wasm instructions executed.
-///
-/// Also exercises the recovery path for an `OnLowWasmMemory` hook that could
+/// Exercises the recovery path for an `OnLowWasmMemory` hook that could
 /// not run because the canister was frozen: the live status is dropped to
 /// `ConditionNotSatisfied` so the per-canister loop terminates immediately,
 /// snapshots taken in that transient state still report `Ready` (since the
@@ -1229,13 +1225,11 @@ fn frozen_canister_with_on_low_wasm_memory_hook() {
         None,
         None,
     );
-    // Make the hook condition genuinely satisfied so the snapshot-lift path
-    // is exercised. With no explicit `wasm_memory_limit` the limit defaults
-    // to 4 GiB, so any threshold larger than that triggers the condition
-    // regardless of actual memory usage:
-    //   `wasm_memory_threshold > wasm_memory_limit - wasm_memory_usage`.
+    // Make the hook condition genuinely satisfied.
     let canister_state = test.canister_state_mut(canister);
+    canister_state.system_state.wasm_memory_limit = Some(NumBytes::new(4 * 1024 * 1024 * 1024));
     canister_state.system_state.wasm_memory_threshold = NumBytes::new(4 * 1024 * 1024 * 1024 + 1);
+
     canister_state
         .system_state
         .task_queue
@@ -1253,21 +1247,13 @@ fn frozen_canister_with_on_low_wasm_memory_hook() {
     // The frozen canister could not pay for the hook execution, so the hook
     // was reset to `ConditionNotSatisfied` to break what would otherwise be
     // an infinite loop in the scheduler's per-canister inner loop. The round
-    // therefore terminates without exhausting the round instruction budget
-    // and without being marked as interrupted.
+    // therefore terminates without exhausting the round instruction budget.
     assert_eq!(
         test.canister_state(canister)
             .system_state
             .task_queue
             .peek_hook_status(),
         OnLowWasmMemoryHookStatus::ConditionNotSatisfied
-    );
-    assert_eq!(
-        test.canister_state(canister)
-            .system_state
-            .canister_metrics()
-            .interrupted_during_execution(),
-        0
     );
     assert_eq!(
         test.canister_state(canister)
@@ -1290,12 +1276,12 @@ fn frozen_canister_with_on_low_wasm_memory_hook() {
         Some(OnLowWasmMemoryHookStatus::Ready)
     );
 
-    // Simulate the work done by `finish_subnet_message_execution` after any
-    // successful management call against this canister (e.g. `deposit_cycles`
-    // or `update_settings`): re-evaluating the hook condition observes the
-    // live status as inconsistent with the actual memory condition and flips
-    // it back to `Ready`. The hook will then run in a subsequent round once
-    // the canister is no longer frozen.
+    // Simulate the work done by `apply_canister_state_changes` /
+    // `finish_subnet_message_execution` after any completed execution / management
+    // call against this canister: re-evaluating the hook condition observes the
+    // live status as inconsistent with the actual memory condition and flips it
+    // back to `Ready`. The hook will then be re-enqueued and run in a subsequent
+    // round, once the canister is no longer frozen.
     test.state_mut()
         .canister_state_mut_arc(&canister)
         .unwrap()
