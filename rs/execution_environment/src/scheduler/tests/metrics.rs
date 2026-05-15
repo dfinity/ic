@@ -20,6 +20,7 @@ use ic_management_canister_types_private::{
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
+use ic_replicated_state::metrics::ReplicatedStateMetrics;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_test_utilities_metrics::{
     HistogramStats, fetch_counter_vec, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats,
@@ -605,7 +606,7 @@ fn long_open_call_context_is_recorded() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    let state_metrics = &test.scheduler().state_metrics;
+    let state_metrics = test.state_metrics();
     let gauge = state_metrics
         .old_open_call_contexts()
         .get_metric_with_label_values(&["1d"])
@@ -633,8 +634,8 @@ fn threshold_signature_agreements_metric_is_updated() {
         ])
         .build();
 
-    test.scheduler().state_metrics.observe(
-        test.scheduler().own_subnet_id,
+    test.state_metrics().observe(
+        test.state().metadata.own_subnet_id,
         test.state(),
         1.into(),
         &no_op_logger(),
@@ -797,8 +798,8 @@ fn threshold_signature_agreements_metric_is_updated() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    test.scheduler().state_metrics.observe(
-        test.scheduler().own_subnet_id,
+    test.state_metrics().observe(
+        test.state().metadata.own_subnet_id,
         test.state(),
         2.into(),
         &no_op_logger(),
@@ -857,8 +858,8 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
 
         let canister_id = test.create_canister();
 
-        test.scheduler().state_metrics.observe(
-            test.scheduler().own_subnet_id,
+        test.state_metrics().observe(
+            test.state().metadata.own_subnet_id,
             test.state(),
             0.into(),
             &no_op_logger(),
@@ -894,8 +895,8 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
             .sign_with_ecdsa_contexts();
         assert_eq!(sign_with_ecdsa_contexts.len(), 1);
 
-        test.scheduler().state_metrics.observe(
-            test.scheduler().own_subnet_id,
+        test.state_metrics().observe(
+            test.state().metadata.own_subnet_id,
             test.state(),
             0.into(),
             &no_op_logger(),
@@ -936,8 +937,8 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
 
         test.state_mut().metadata.own_subnet_features.http_requests = true;
 
-        test.scheduler().state_metrics.observe(
-            test.scheduler().own_subnet_id,
+        test.state_metrics().observe(
+            test.state().metadata.own_subnet_id,
             test.state(),
             0.into(),
             &no_op_logger(),
@@ -1002,8 +1003,8 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
             Some(NumBytes::from(response_size_limit)),
         );
 
-        test.scheduler().state_metrics.observe(
-            test.scheduler().own_subnet_id,
+        test.state_metrics().observe(
+            test.state().metadata.own_subnet_id,
             test.state(),
             0.into(),
             &no_op_logger(),
@@ -1130,8 +1131,8 @@ fn consumed_cycles_for_instructions_are_updated_from_valid_canisters() {
             .system_state
             .consume_cycles(removed_cycles);
 
-        test.scheduler().state_metrics.observe(
-            test.scheduler().own_subnet_id,
+        test.state_metrics().observe(
+            test.state().metadata.own_subnet_id,
             test.state(),
             0.into(),
             &no_op_logger(),
@@ -1176,8 +1177,8 @@ fn consumed_cycles_for_resource_allocations_are_updated_from_valid_canisters() {
         test.advance_time(duration);
         test.charge_for_resource_allocations();
 
-        test.scheduler().state_metrics.observe(
-            test.scheduler().own_subnet_id,
+        test.state_metrics().observe(
+            test.state().metadata.own_subnet_id,
             test.state(),
             0.into(),
             &no_op_logger(),
@@ -1260,8 +1261,8 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
         );
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        test.scheduler().state_metrics.observe(
-            test.scheduler().own_subnet_id,
+        test.state_metrics().observe(
+            test.state().metadata.own_subnet_id,
             test.state(),
             0.into(),
             &no_op_logger(),

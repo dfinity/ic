@@ -40,7 +40,6 @@ rust_library(
 # Same target as above but allows the adapter to make HTTP calls.
 rust_library(
     name = "adapter_with_http",
-    testonly = True,
     srcs = glob(
         ["src/**"],
         exclude = [
@@ -122,7 +121,6 @@ rust_binary(
 # This target is used for local testing (e.g. DFX)
 rust_binary(
     name = "ic-outcalls-adapter-with-http",
-    testonly = True,
     srcs = [
         "src/cli.rs",
         "src/main.rs",

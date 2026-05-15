@@ -76,15 +76,10 @@ pub(super) fn resolve_destination(
             let args = SetupInitialDKGArgs::decode(payload)?;
             // If the request specifies a subnet id explicitly, route to that
             // subnet. Otherwise, route to the default initial DKG subnet
-            // configured in the registry, falling back to `own_subnet` if no
-            // default is configured.
-            //
-            // Historically, this defaulted to `own_subnet`, which works
-            // because the message can only be sent by canisters on the NNS
-            // subnet (which is also the only subnet that previously processed
-            // these requests). The default initial DKG subnet registry entry
-            // is the new mechanism to route these requests to a non-NNS
-            // subnet.
+            // configured in the registry, falling back to the NNS if no
+            // default is configured. We assume that this message can only be
+            // sent by canisters on the NNS subnet hence defaulting to `own_subnet`
+            // here is fine.
             let subnet_id = args
                 .get_subnet_id()
                 .or(network_topology.default_initial_dkg_subnet_id)
