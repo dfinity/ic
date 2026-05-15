@@ -574,7 +574,7 @@ fn state_manager_with_verifier_result(
         ic_types::malicious_flags::MaliciousFlags::default(),
         tokio::sync::watch::channel(Height::from(0)).0,
         None,
-        &metrics_registry,
+        metrics_registry,
         log,
     );
     (state_manager, tmp)
