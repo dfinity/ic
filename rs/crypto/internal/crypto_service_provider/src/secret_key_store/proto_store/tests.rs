@@ -991,6 +991,65 @@ mod zeroize_old_secret_key_store {
         assert_eq!(current_sks_bytes, initial_sks_bytes);
     }
 
+    // Regression test for CRP-2979: on filesystems where `rename(2)` reuses the destination
+    // inode (e.g. virtiofs bind mounts via Docker Desktop on macOS), the post-rename state
+    // has `proto_file` and `old_proto_file_to_zeroize` pointing to the same inode. Zeroing
+    // that inode would clobber the keystore we just wrote. `zeroize_or_unlink_old_file` must
+    // detect the shared inode and unlink the extra link instead of zeroing.
+    #[test]
+    fn zeroize_or_unlink_old_file_unlinks_without_zeroing_when_inodes_are_shared() {
+        let setup = Setup::new();
+        ic_sys::fs::create_hard_link_to_existing_file(
+            &setup.secret_key_store.proto_file,
+            &setup.secret_key_store.old_proto_file_to_zeroize,
+        )
+        .expect("error creating hard link from current secret key store file to backup file");
+        let initial_sks_bytes = fs::read(&setup.secret_key_store.proto_file)
+            .expect("error reading initial secret key store");
+        assert!(!initial_sks_bytes.is_empty());
+
+        setup
+            .secret_key_store
+            .zeroize_or_unlink_old_file()
+            .expect("zeroize_or_unlink_old_file should succeed when inodes are shared");
+
+        assert_matches!(
+            Path::try_exists(&setup.secret_key_store.old_proto_file_to_zeroize),
+            Ok(false)
+        );
+        let current_sks_bytes = fs::read(&setup.secret_key_store.proto_file)
+            .expect("error reading current secret key store");
+        assert_eq!(current_sks_bytes, initial_sks_bytes);
+    }
+
+    #[test]
+    fn zeroize_or_unlink_old_file_zeroes_and_deletes_when_inodes_differ() {
+        let setup = Setup::new();
+        // Simulate the normal-filesystem post-rename state: `.old` is a distinct file
+        // (different inode) holding stale content that must be zeroed before deletion.
+        fs::copy(
+            &setup.secret_key_store.proto_file,
+            &setup.secret_key_store.old_proto_file_to_zeroize,
+        )
+        .expect("error copying current sks to old sks");
+        ic_sys::fs::create_hard_link_to_existing_file(
+            &setup.secret_key_store.old_proto_file_to_zeroize,
+            &setup.hard_link_to_test_zeroization,
+        )
+        .expect("error creating hard link to old secret key store file");
+
+        setup
+            .secret_key_store
+            .zeroize_or_unlink_old_file()
+            .expect("zeroize_or_unlink_old_file should succeed when inodes differ");
+
+        assert_matches!(
+            Path::try_exists(&setup.secret_key_store.old_proto_file_to_zeroize),
+            Ok(false)
+        );
+        assert_contains_only_zeroes(&setup.hard_link_to_test_zeroization);
+    }
+
     #[test]
     fn should_clean_up_leftover_old_file_when_dropping_secret_key_store() {
         let setup = Setup::new();
