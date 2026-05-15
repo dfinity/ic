@@ -4373,8 +4373,7 @@ impl ExecutionEnvironment {
         match *paused_task {
             ExecutionTask::PausedExecution { id, .. } => {
                 let paused = self.take_paused_execution(id).unwrap();
-                let (input, prepaid_execution_cycles, prepaid_hook_reservation) =
-                    paused.abort(log);
+                let (input, prepaid_execution_cycles, prepaid_hook_reservation) = paused.abort(log);
 
                 ExecutionTask::AbortedExecution {
                     input,

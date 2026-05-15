@@ -539,10 +539,7 @@ impl CyclesAccountManager {
         reveal_top_up: bool,
         execution_mode: WasmExecutionMode,
     ) -> Result<
-        (
-            CompoundCycles<Instructions>,
-            CompoundCycles<Instructions>,
-        ),
+        (CompoundCycles<Instructions>, CompoundCycles<Instructions>),
         CanisterOutOfCyclesError,
     > {
         let message_cost = self.execution_cost(

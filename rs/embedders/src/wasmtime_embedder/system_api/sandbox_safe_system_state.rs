@@ -436,9 +436,8 @@ impl SystemStateModifications {
             // Note: this path is currently never exercised because Wasm
             // memory growth is monotonic. We still refund a stale reservation
             // if it somehow exists to keep the invariant tight.
-            if let Some(stale_reservation) = system_state
-                .task_queue
-                .dequeue_on_low_wasm_memory_hook()
+            if let Some(stale_reservation) =
+                system_state.task_queue.dequeue_on_low_wasm_memory_hook()
             {
                 system_state.refund_cycles(stale_reservation, stale_reservation);
             }

@@ -164,12 +164,7 @@ pub fn execute_call_or_task(
                         );
                     }
                 };
-                (
-                    canister,
-                    prepaid_execution_cycles,
-                    hook_reservation,
-                    false,
-                )
+                (canister, prepaid_execution_cycles, hook_reservation, false)
             }
         };
 
@@ -767,8 +762,7 @@ impl CallOrTaskHelper {
         // fired for the current memory-limit crossing), it returns the
         // supplied reservation back for refund.
         if let Some(hook_reservation) = original.hook_reservation {
-            let should_enqueue = wasm_result_is_ok
-                && hook_condition_check_result == Some(true);
+            let should_enqueue = wasm_result_is_ok && hook_condition_check_result == Some(true);
             let leftover = if should_enqueue {
                 self.canister
                     .system_state

@@ -134,8 +134,7 @@ impl TaskQueue {
         let refund = if self.on_low_wasm_memory_hook_status.update(true) {
             // Status transitioned `ConditionNotSatisfied -> Ready`: hold the
             // prepayment with the enqueued task.
-            self.on_low_wasm_memory_hook_task =
-                Some(ExecutionTask::OnLowWasmMemory(reservation));
+            self.on_low_wasm_memory_hook_task = Some(ExecutionTask::OnLowWasmMemory(reservation));
             None
         } else {
             // No transition (status was `Ready` or `Executed`): refund.

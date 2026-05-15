@@ -509,12 +509,10 @@ impl SystemStateBuilder {
                 assert!(
                     self.system_state
                         .task_queue
-                        .enqueue_on_low_wasm_memory_hook(
-                            ic_types_cycles::CompoundCycles::new(
-                                ic_types_cycles::Cycles::zero(),
-                                ic_types_cycles::CanisterCyclesCostSchedule::Normal,
-                            ),
-                        )
+                        .enqueue_on_low_wasm_memory_hook(ic_types_cycles::CompoundCycles::new(
+                            ic_types_cycles::Cycles::zero(),
+                            ic_types_cycles::CanisterCyclesCostSchedule::Normal,
+                        ),)
                         .is_none()
                 );
             }
@@ -523,12 +521,10 @@ impl SystemStateBuilder {
                 assert!(
                     self.system_state
                         .task_queue
-                        .enqueue_on_low_wasm_memory_hook(
-                            ic_types_cycles::CompoundCycles::new(
-                                ic_types_cycles::Cycles::zero(),
-                                ic_types_cycles::CanisterCyclesCostSchedule::Normal,
-                            ),
-                        )
+                        .enqueue_on_low_wasm_memory_hook(ic_types_cycles::CompoundCycles::new(
+                            ic_types_cycles::Cycles::zero(),
+                            ic_types_cycles::CanisterCyclesCostSchedule::Normal,
+                        ),)
                         .is_none()
                 );
                 self.system_state.task_queue.pop_front();
