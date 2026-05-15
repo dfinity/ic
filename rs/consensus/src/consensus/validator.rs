@@ -1684,12 +1684,9 @@ impl Validator {
             return Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare.into());
         }
 
-        let summary = match block.payload.as_ref() {
-            BlockPayload::Summary(summary_payload) => summary_payload,
-            BlockPayload::Data(_) => {
-                return Err(InvalidArtifactReason::DataPayloadBlockInCatchUpPackageShare.into());
-            }
-        };
+        if let BlockPayload::Data(_) = block.payload.as_ref() {
+            return Err(InvalidArtifactReason::DataPayloadBlockInCatchUpPackageShare.into());
+        }
 
         let beacon = pool_reader
             .get_random_beacon(height)
@@ -1706,16 +1703,12 @@ impl Validator {
             return Err(InvalidArtifactReason::MismatchedStateHashInCatchUpPackageShare.into());
         }
 
-        let registry_version = if summary.idkg.is_some() {
-            // Should succeed as we already got the hash above
-            let state = self
-                .state_manager
-                .get_state_at(height)
-                .map_err(ValidationFailure::StateManagerError)?;
-            get_oldest_state_registry_version(state.get_ref())
-        } else {
-            None
-        };
+        // Should succeed as we already got the hash above
+        let state = self
+            .state_manager
+            .get_state_at(height)
+            .map_err(ValidationFailure::StateManagerError)?;
+        let registry_version = get_oldest_state_registry_version(state.get_ref());
         if registry_version != share_content.oldest_registry_version_in_use_by_replicated_state {
             return Err(
                 InvalidArtifactReason::MismatchedOldestRegistryVersionInCatchUpPackageShare.into(),
@@ -2195,7 +2188,24 @@ pub mod test {
     }
 
     #[test]
-    fn test_validate_catch_up_package_shares_with_registry_version() {
+    fn test_validate_catch_up_package_shares_with_registry_version_with_idkg_payload() {
+        test_validate_catch_up_package_shares_with_registry_version(
+            /*with_idkg_payload=*/ true,
+        );
+    }
+
+    /// Even without an iDKG payload in the summary block, the validator must
+    /// still check that the CUP share's
+    /// `oldest_registry_version_in_use_by_replicated_state` matches what is
+    /// actually pinned by the replicated state.
+    #[test]
+    fn test_validate_catch_up_package_shares_with_registry_version_without_idkg_payload() {
+        test_validate_catch_up_package_shares_with_registry_version(
+            /*with_idkg_payload=*/ false,
+        );
+    }
+
+    fn test_validate_catch_up_package_shares_with_registry_version(with_idkg_payload: bool) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let ValidatorAndDependencies {
                 validator,
@@ -2285,16 +2295,18 @@ pub mod test {
             let block = proposal.content.as_mut();
             block.context.certified_height = block.height();
 
-            let idkg = empty_idkg_payload(subnet_test_id(0));
-            let dkg = block.payload.as_ref().as_summary().dkg.clone();
-            block.payload = Payload::new(
-                ic_types::crypto::crypto_hash,
-                BlockPayload::Summary(SummaryPayload {
-                    dkg,
-                    idkg: Some(idkg),
-                }),
-            );
-            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+            if with_idkg_payload {
+                let idkg = empty_idkg_payload(subnet_test_id(0));
+                let dkg = block.payload.as_ref().as_summary().dkg.clone();
+                block.payload = Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Summary(SummaryPayload {
+                        dkg,
+                        idkg: Some(idkg),
+                    }),
+                );
+                proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+            }
 
             let beacon = pool.make_next_beacon();
             pool.advance_round_with_block(&proposal);
@@ -2312,6 +2324,7 @@ pub mod test {
 
             // Since the quadruple using registry version 1 wasn't matched, the oldest one in use
             // by the replicated state should be the registry version of quadruple 3, which is 2.
+            // This must hold regardless of whether the summary block carries an iDKG payload.
             let cup_share_valid =
                 make_next_cup_share(proposal, beacon, Some(RegistryVersion::from(2)));
             pool.insert_unvalidated(cup_share_valid.clone());

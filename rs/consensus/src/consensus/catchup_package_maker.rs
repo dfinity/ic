@@ -208,26 +208,21 @@ impl CatchUpPackageMaker {
                 panic!("Height {height} is not a fully certified height. This should not happen.",);
             }
             Ok(state_hash) => {
-                let summary = start_block.payload.as_ref().as_summary();
-                let registry_version = if summary.idkg.is_some() {
-                    // Should succeed as we already got the hash above
-                    let state = self
-                        .state_manager
-                        .get_state_at(height)
-                        .map_err(|err| {
-                            error!(
-                                self.log,
-                                "Cannot make IDKG CUP at height {}: `get_state_hash_at` \
-                                succeeded but `get_state_at` failed with {}. Will retry",
-                                height,
-                                err,
-                            )
-                        })
-                        .ok()?;
-                    get_oldest_state_registry_version(state.get_ref())
-                } else {
-                    None
-                };
+                // Should succeed as we already got the hash above
+                let state = self
+                    .state_manager
+                    .get_state_at(height)
+                    .map_err(|err| {
+                        error!(
+                            self.log,
+                            "Cannot make CUP at height {}: `get_state_hash_at` \
+                            succeeded but `get_state_at` failed with {}. Will retry",
+                            height,
+                            err,
+                        )
+                    })
+                    .ok()?;
+                let registry_version = get_oldest_state_registry_version(state.get_ref());
                 let content = CatchUpContent::new(
                     HashedBlock::new(ic_types::crypto::crypto_hash, start_block),
                     HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon),
@@ -366,7 +361,19 @@ mod tests {
     }
 
     #[test]
-    fn test_catch_up_package_maker_with_registry_version() {
+    fn test_catch_up_package_maker_with_registry_version_with_idkg_payload() {
+        test_catch_up_package_maker_with_registry_version(/*with_idkg_payload=*/ true);
+    }
+
+    /// Even without an iDKG payload in the summary block, the CUP share must
+    /// still pin the oldest registry version that is in use by the replicated
+    /// state (e.g. through `setup_initial_dkg_contexts`).
+    #[test]
+    fn test_catch_up_package_maker_with_registry_version_without_idkg_payload() {
+        test_catch_up_package_maker_with_registry_version(/*with_idkg_payload=*/ false);
+    }
+
+    fn test_catch_up_package_maker_with_registry_version(with_idkg_payload: bool) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let interval_length = 5;
             let committee: Vec<_> = (0..4).map(node_test_id).collect();
@@ -459,16 +466,18 @@ mod tests {
             let block = proposal.content.as_mut();
             block.context.certified_height = block.height();
 
-            let idkg = empty_idkg_payload(subnet_test_id(0));
-            let dkg = block.payload.as_ref().as_summary().dkg.clone();
-            block.payload = Payload::new(
-                ic_types::crypto::crypto_hash,
-                BlockPayload::Summary(SummaryPayload {
-                    dkg,
-                    idkg: Some(idkg),
-                }),
-            );
-            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+            if with_idkg_payload {
+                let idkg = empty_idkg_payload(subnet_test_id(0));
+                let dkg = block.payload.as_ref().as_summary().dkg.clone();
+                block.payload = Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Summary(SummaryPayload {
+                        dkg,
+                        idkg: Some(idkg),
+                    }),
+                );
+                proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+            }
 
             pool.advance_round_with_block(&proposal);
 
@@ -483,6 +492,7 @@ mod tests {
             );
             // Since the quadruple using registry version 1 wasn't matched, the oldest one in use
             // by the replicated state should be the registry version of quadruple 3, which is 2.
+            // This must hold regardless of whether the summary block carries an iDKG payload.
             assert_eq!(
                 share
                     .content
