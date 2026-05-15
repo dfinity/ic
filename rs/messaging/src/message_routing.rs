@@ -1200,6 +1200,9 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .map_err(|err| registry_error("NNS subnet ID", None, err))?
             .ok_or_else(|| not_found_error("NNS subnet ID", None))?;
 
+        // TODO(CON-1718): Populate this field once it is rolled out to all subnets.
+        let default_initial_dkg_subnet_id = None;
+
         let chain_key_enabled_subnets: BTreeMap<_, _> = self
             .registry
             .get_chain_key_enabled_subnets(registry_version)
@@ -1240,6 +1243,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             self.bitcoin_config.testnet_canister_id,
             self.bitcoin_config.mainnet_canister_id,
             full_topology,
+            default_initial_dkg_subnet_id,
         ))
     }
 
