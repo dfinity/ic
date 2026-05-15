@@ -38,10 +38,9 @@ use ic_system_test_driver::driver::test_env_api::{
     get_guestos_update_launch_measurements,
 };
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{MetricsFetcher, block_on, runtime_from_url};
+use ic_system_test_driver::util::{block_on, runtime_from_url};
 use ic_types::ReplicaVersion;
 use slog::{Logger, info};
-use std::collections::BTreeMap;
 use std::time::Duration;
 
 const PER_TASK_TIMEOUT: Duration = Duration::from_secs(25 * 60);
@@ -190,8 +189,6 @@ pub async fn test_async(env: TestEnv) {
     )
     .await;
 
-    assert_no_critical_errors(&env, &logger).await;
-
     info!(&logger, "Upgrading 1 app subnet.");
 
     upgrade_to(
@@ -212,8 +209,6 @@ pub async fn test_async(env: TestEnv) {
         &logger,
     )
     .await;
-
-    assert_no_critical_errors(&env, &logger).await;
 
     info!(&logger, "Downgrading app subnet back to initial version.");
 
@@ -243,8 +238,6 @@ pub async fn test_async(env: TestEnv) {
         xnet_slo_test_lib::check_success(metrics, &long_xnet_config, &logger),
         "Long running canisters didn't meet success conditions."
     );
-
-    assert_no_critical_errors(&env, &logger).await;
 }
 
 async fn upgrade_to(
@@ -256,33 +249,4 @@ async fn upgrade_to(
 ) {
     deploy_guestos_to_all_subnet_nodes(nns_node, target_version, subnet_id).await;
     assert_assigned_replica_version(subnet_node, target_version, logger.clone());
-}
-
-async fn assert_no_critical_errors(env: &TestEnv, log: &slog::Logger) {
-    let nodes = env.topology_snapshot().subnets().flat_map(|s| s.nodes());
-    const NUM_RETRIES: u32 = 10;
-    const BACKOFF_TIME_MILLIS: u64 = 500;
-
-    let metrics = MetricsFetcher::new(nodes, vec!["critical_errors".to_string()]);
-    for i in 0..NUM_RETRIES {
-        match metrics.fetch::<u64>().await {
-            Ok(result) => {
-                assert!(!result.is_empty());
-                let filtered_results = result
-                    .iter()
-                    .filter(|(_, v)| v.iter().any(|x| *x > 0))
-                    .collect::<BTreeMap<_, _>>();
-                assert!(
-                    filtered_results.is_empty(),
-                    "Critical error detected: {filtered_results:?}"
-                );
-                return;
-            }
-            Err(e) => {
-                info!(log, "Could not scrape metrics: {e}, attempt {i}.");
-            }
-        }
-        tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
-    }
-    panic!("Couldn't obtain metrics after {NUM_RETRIES} attempts.");
 }

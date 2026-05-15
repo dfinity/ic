@@ -869,6 +869,10 @@ pub struct IcNodeSnapshot {
 }
 
 impl IcNodeSnapshot {
+    pub fn test_env(&self) -> &TestEnv {
+        &self.env
+    }
+
     pub fn is_malicious(&self) -> bool {
         self.malicious_behavior().is_some()
     }
