@@ -11,6 +11,18 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-05-13: Proposal 141771
+
+http://dashboard.internetcomputer.org/proposal/141771
+
+## Fixed
+
+* Tolerate XRC failures when updating maturity modulation: compute the average
+  over available days using last-observation-carried-forward, and advance past
+  days where XRC returns no rate so that a single persistent gap no longer
+  stalls maturity modulation updates.
+
+
 # 2026-05-08: Proposal 141738
 
 http://dashboard.internetcomputer.org/proposal/141738
