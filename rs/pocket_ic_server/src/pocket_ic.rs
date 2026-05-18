@@ -101,7 +101,6 @@ use ic_registry_transport::{
     GetChunk, dechunkify_delta, deserialize_atomic_mutate_response,
     deserialize_get_changes_since_response, serialize_get_changes_since_request,
 };
-use ic_replicated_state::metrics::ReplicatedStateInvariants;
 use ic_sns_wasm::init::SnsWasmCanisterInitPayloadBuilder;
 use ic_sns_wasm::pb::v1::add_wasm_response::Result as AddWasmResult;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, AddWasmResponse, SnsCanisterType, SnsWasm};
@@ -3044,10 +3043,7 @@ impl PocketIc {
                             None,
                             MaliciousFlags::default(),
                             tokio::sync::watch::channel(ic_types::Height::from(0)).0,
-                            Some(ReplicatedStateInvariants::new(
-                                &metrics_registry,
-                                &execution_environment::Config::default(),
-                            )),
+                            None,
                             &metrics_registry,
                             no_op_logger(),
                         );
