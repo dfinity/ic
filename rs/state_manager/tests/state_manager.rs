@@ -1020,12 +1020,13 @@ fn state_manager_crash_test<Test>(
                     Arc::new(FakeVerifier::new()),
                     subnet_test_id(42),
                     SubnetType::Application,
-                    log.clone(),
-                    &MetricsRegistry::new(),
                     &config,
                     None,
                     ic_types::malicious_flags::MaliciousFlags::default(),
                     tokio::sync::watch::channel(Height::from(0)).0,
+                    None,
+                    &MetricsRegistry::new(),
+                    log.clone(),
                 ));
             })
             .expect_err(&format!("Crash test fixture {i} did not crash"));
@@ -1039,12 +1040,13 @@ fn state_manager_crash_test<Test>(
                 Arc::new(FakeVerifier::new()),
                 subnet_test_id(42),
                 SubnetType::Application,
-                log,
-                &metrics,
                 &config,
                 None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
                 tokio::sync::watch::channel(Height::from(0)).0,
+                None,
+                &metrics,
+                log,
             ),
         );
     });
@@ -1172,12 +1174,13 @@ fn checkpoints_outlive_state_manager() {
                 verifier,
                 own_subnet,
                 SubnetType::Application,
-                log.clone(),
-                &metrics_registry,
                 &config,
                 None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
                 tokio::sync::watch::channel(Height::from(0)).0,
+                None,
+                &metrics_registry,
+                log.clone(),
             );
             let (_height, mut state) = state_manager.take_tip();
             insert_dummy_canister(&mut state, canister_id);
@@ -1207,12 +1210,13 @@ fn checkpoints_outlive_state_manager() {
             verifier,
             own_subnet,
             SubnetType::Application,
-            log,
-            &metrics_registry,
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
             tokio::sync::watch::channel(Height::from(0)).0,
+            None,
+            &metrics_registry,
+            log,
         );
 
         assert_eq!(
@@ -1241,12 +1245,13 @@ fn certifications_are_not_persisted() {
                 Arc::new(FakeVerifier::new()),
                 subnet_test_id(42),
                 SubnetType::Application,
-                log.clone(),
-                &metrics_registry,
                 &config,
                 None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
                 tokio::sync::watch::channel(Height::from(0)).0,
+                None,
+                &metrics_registry,
+                log.clone(),
             );
             let (_height, state) = state_manager.take_tip();
             state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -1260,12 +1265,13 @@ fn certifications_are_not_persisted() {
                 Arc::new(FakeVerifier::new()),
                 subnet_test_id(42),
                 SubnetType::Application,
-                log,
-                &metrics_registry,
                 &config,
                 None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
                 tokio::sync::watch::channel(Height::from(0)).0,
+                None,
+                &metrics_registry,
+                log,
             );
             assert_eq!(vec![Height(1)], heights_to_certify(&state_manager));
         }
@@ -6096,12 +6102,13 @@ fn diverged_checkpoint_is_complete() {
             Arc::new(FakeVerifier::new()),
             subnet_test_id(42),
             SubnetType::Application,
-            log.clone(),
-            &MetricsRegistry::new(),
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
             tokio::sync::watch::channel(Height::from(0)).0,
+            None,
+            &MetricsRegistry::new(),
+            log.clone(),
         );
 
         let (_, state) = state_manager.take_tip();
@@ -6119,12 +6126,13 @@ fn diverged_checkpoint_is_complete() {
                 Arc::new(FakeVerifier::new()),
                 subnet_test_id(42),
                 SubnetType::Application,
-                log.clone(),
-                &MetricsRegistry::new(),
                 &config,
                 None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
                 tokio::sync::watch::channel(Height::from(0)).0,
+                None,
+                &MetricsRegistry::new(),
+                log.clone(),
             );
             // If the Tip thread is active while we report diverged checkpoint, it may crash
             // which is OK in production but confuses debug assertions.
@@ -6138,12 +6146,13 @@ fn diverged_checkpoint_is_complete() {
             Arc::new(FakeVerifier::new()),
             subnet_test_id(42),
             SubnetType::Application,
-            log,
-            &MetricsRegistry::new(),
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
             tokio::sync::watch::channel(Height::from(0)).0,
+            None,
+            &MetricsRegistry::new(),
+            log,
         );
 
         // check that the diverged checkpoint has the same manifest as before
@@ -9252,12 +9261,13 @@ fn max_certified_height_fires_when_state_already_committed() {
             std::sync::Arc::new(FakeVerifier::new()),
             subnet_test_id(42),
             SubnetType::Application,
-            log,
-            &metrics,
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
             max_certified_height_tx,
+            None,
+            &metrics,
+            log,
         );
 
         // Commit heights 1 and 2 so they are in certifications_metadata.
@@ -9309,12 +9319,13 @@ fn max_certified_height_deferred_when_cert_arrives_before_state() {
             std::sync::Arc::new(FakeVerifier::new()),
             subnet_test_id(42),
             SubnetType::Application,
-            log,
-            &metrics,
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
             max_certified_height_tx,
+            None,
+            &metrics,
+            log,
         );
 
         // Set fast_forward_height so that height 1 is in the range of heights to certify.
