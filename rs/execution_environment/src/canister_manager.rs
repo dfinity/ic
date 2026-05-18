@@ -535,7 +535,9 @@ impl CanisterManager {
         }
 
         // Log memory limit: validate, charge cycles for resize, and apply.
-        if let Some(requested_limit) = settings.log_memory_limit() {
+        if self.config.log_memory_store_feature == FlagStatus::Enabled
+            && let Some(requested_limit) = settings.log_memory_limit()
+        {
             let max_limit = NumBytes::new(MAX_AGGREGATE_LOG_MEMORY_LIMIT as u64);
             if requested_limit > max_limit {
                 return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooHigh {

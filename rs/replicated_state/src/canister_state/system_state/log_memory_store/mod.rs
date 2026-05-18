@@ -288,7 +288,7 @@ impl LogMemoryStore {
     /// Returns the projected memory usage after `resize(limit)` would complete,
     /// without mutating any state.
     pub fn memory_usage_for_limit(&self, limit: NumBytes) -> NumBytes {
-        if !self.migrated || limit == NumBytes::new(0) {
+        if limit == NumBytes::new(0) {
             return NumBytes::new(0);
         }
         // Mirror resize_impl's capacity clamping exactly.
@@ -322,8 +322,8 @@ impl LogMemoryStore {
     /// Also used as the early-return guard inside `resize_impl`, so the
     /// two cannot diverge.
     pub fn would_resize(&self, limit: usize) -> bool {
-        if !self.migrated || limit == 0 {
-            // Not migrated or limit zero — resize deallocates, work only if allocated.
+        if limit == 0 {
+            // Limit zero deallocates — work only if allocated.
             return self.maybe_page_map.is_some();
         }
         let target_limit = limit.max(DATA_CAPACITY_MIN);
@@ -350,7 +350,7 @@ impl LogMemoryStore {
         if !self.would_resize(limit) {
             return;
         }
-        if !self.migrated || limit == 0 {
+        if limit == 0 {
             self.deallocate();
             return;
         }
@@ -405,10 +405,6 @@ impl LogMemoryStore {
 
     /// Appends a delta log to the ring buffer if it exists.
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
-        if !self.migrated {
-            self.deallocate();
-            return;
-        }
         if delta_log.is_empty() {
             // No records to append, but still carry the monotone index forward.
             // The canister_log can be empty after uninstalling a canister (uninstall
