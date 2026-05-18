@@ -70,6 +70,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         local_subnet_messages_executed: 0,
         http_outcalls_executed: 0,
         heartbeats_and_global_timers_executed: 0,
+        log_memory_store_migrated: false,
     }
 }
 

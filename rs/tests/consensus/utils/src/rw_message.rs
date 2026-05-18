@@ -60,7 +60,10 @@ pub fn can_store_msg(log: &Logger, url: &Url, canister_id: Principal, msg: &str)
             Ok(agent) => {
                 debug!(log, "Try to get canister reference");
                 let mcan = MessageCanister::from_canister_id(&agent, canister_id);
-                debug!(log, "Success, will try to store message and produce canister log next");
+                debug!(
+                    log,
+                    "Success, will try to store message and produce canister log next"
+                );
                 matches!(
                     tokio::time::timeout(
                         Duration::from_secs(30),
@@ -139,7 +142,10 @@ async fn can_read_msg_impl(
             Ok(agent) => {
                 debug!(log, "Try to get canister reference");
                 let mcan = MessageCanister::from_canister_id(&agent, canister_id);
-                debug!(log, "Success, will try to read stored message and canister log next");
+                debug!(
+                    log,
+                    "Success, will try to read stored message and canister log next"
+                );
                 match mcan.try_read_msg_and_log().await {
                     Ok(Some(msg)) if msg == expected_msg => {
                         return true;
