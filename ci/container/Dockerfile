@@ -18,6 +18,9 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
 
+# Drop troublesome SSH file (Potentially related: Debian #1072221)
+RUN rm -f /etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf
+
 ## The image carries two users so the runtime UID can match the host's:
 ## - ubuntu (1000): DFINITY devenv
 ## - buildifier (1001): CI runners and namespace.so devboxes

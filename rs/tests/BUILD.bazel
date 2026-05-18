@@ -1,6 +1,6 @@
 load("@aspect_bazel_lib//lib:tar.bzl", "tar")
 load("@rules_distroless//apt:defs.bzl", "dpkg_status")
-load("@rules_distroless//distroless:defs.bzl", "passwd")
+load("@rules_distroless//distroless:defs.bzl", "flatten", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load(":system_tests.bzl", "oci_tar", "uvm_config_image")
@@ -94,33 +94,18 @@ UBUNTU_PACKAGES = [
     ":sh",
 ] + PACKAGES
 
-# Squash all packages into a single tarball (there are too many to make each a separate layer)
-genrule(
+flatten(
     name = "ubuntu_packages_tar",
-    srcs = UBUNTU_PACKAGES,
-    outs = ["ubuntu_packages.tar"],
-    cmd = """
-        mkdir -p squash_tmp
-        trap "rm -rf squash_tmp" EXIT
-
-        for f in $(SRCS); do
-            tar -xf $$f -C squash_tmp
-        done
-
-        tar -cf $@ -C squash_tmp .
-    """,
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
+    deduplicate = True,
+    target_compatible_with = ["@platforms//os:linux"],
+    tars = UBUNTU_PACKAGES,
 )
 
 oci_image(
     name = "ubuntu_test_runtime_image_src",
     architecture = "amd64",
     os = "linux",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
+    target_compatible_with = ["@platforms//os:linux"],
     tars = [
         ":ubuntu_packages_tar",
     ],
