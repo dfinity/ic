@@ -46,6 +46,9 @@ use std::time::Duration;
 #[derive(Debug, ValidateEq)]
 pub struct LogMemoryStore {
     /// Feature flag for controlling LogMemoryStore enabled.
+    /// Not persisted in checkpoints — set from the compile-time constant on every
+    /// load — so excluded from validate_eq to avoid spurious mismatches.
+    #[validate_eq(Ignore)]
     feature_flag: FlagStatus,
 
     /// Optional PageMap for storing log records ring-buffer with metadata.
@@ -125,7 +128,7 @@ impl LogMemoryStore {
         } else {
             None
         };
-        let persistent_next_idx = if feature_flag == FlagStatus::Enabled {
+        let persistent_next_idx = if feature_flag == FlagStatus::Enabled && migrated {
             persistent_next_idx
         } else {
             0
@@ -179,6 +182,11 @@ impl LogMemoryStore {
     /// forces an unnecessary reload of the page map in subsequent rounds.
     pub fn maybe_page_map_mut(&mut self) -> Option<&mut PageMap> {
         self.maybe_page_map.as_mut()
+    }
+
+    /// Returns the runtime feature flag for this store.
+    pub fn feature_flag(&self) -> FlagStatus {
+        self.feature_flag
     }
 
     /// Returns true if the underlying page map is allocated.

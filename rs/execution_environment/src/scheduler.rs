@@ -13,7 +13,6 @@ use crate::ic00_permissions::Ic00MethodPermissions;
 use crate::metrics::MeasurementScope;
 use crate::util::process_responses;
 use ic_config::embedders::Config as HypervisorConfig;
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
@@ -150,6 +149,7 @@ pub(crate) struct SchedulerImpl {
     thread_pool: RefCell<scoped_threadpool::Pool>,
     rate_limiting_of_heap_delta: FlagStatus,
     rate_limiting_of_instructions: FlagStatus,
+    log_memory_store_feature: FlagStatus,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 }
 
@@ -165,6 +165,7 @@ impl SchedulerImpl {
         log: ReplicaLogger,
         rate_limiting_of_heap_delta: FlagStatus,
         rate_limiting_of_instructions: FlagStatus,
+        log_memory_store_feature: FlagStatus,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
         let scheduler_cores = config.scheduler_cores as u32;
@@ -179,6 +180,7 @@ impl SchedulerImpl {
             log,
             rate_limiting_of_heap_delta,
             rate_limiting_of_instructions,
+            log_memory_store_feature,
             fd_factory,
         }
     }
@@ -1174,8 +1176,9 @@ impl Scheduler for SchedulerImpl {
                 .metrics
                 .round_log_memory_store_migration_duration
                 .start_timer();
+            let log_memory_store_feature = self.log_memory_store_feature;
             for canister in state.canisters_iter_mut() {
-                if LOG_MEMORY_STORE_FEATURE_ENABLED
+                if log_memory_store_feature == FlagStatus::Enabled
                     && !canister.system_state.log_memory_store.is_migrated()
                 {
                     let system_state = &mut Arc::make_mut(canister).system_state;
@@ -1187,7 +1190,7 @@ impl Scheduler for SchedulerImpl {
                         .log_memory_store
                         .append_delta_log(&mut system_state.canister_log.clone());
                     system_state.log_memory_store.set_migrated();
-                } else if !LOG_MEMORY_STORE_FEATURE_ENABLED
+                } else if log_memory_store_feature == FlagStatus::Disabled
                     && canister.system_state.log_memory_store.is_migrated()
                 {
                     let system_state = &mut Arc::make_mut(canister).system_state;

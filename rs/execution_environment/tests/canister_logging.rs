@@ -2659,3 +2659,91 @@ fn test_log_memory_store_feature_flag_via_execution_test_builder() {
         0,
     );
 }
+
+#[test]
+fn test_log_migration_from_canister_log_to_log_memory_store() {
+    let log_message = b"hello migration";
+    let controller = PrincipalId::new_anonymous();
+    let subnet_type = SubnetType::Application;
+
+    // Step 1: StateMachine with log_memory_store feature disabled. Install a canister
+    // and produce a log entry that lands in canister_log (old storage).
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(subnet_type),
+            ExecutionConfig {
+                log_memory_store_feature: FlagStatus::Disabled,
+                ..Default::default()
+            },
+        )))
+        .with_subnet_type(subnet_type)
+        .with_checkpoints_enabled(true)
+        .build();
+
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Public)
+            .with_controllers(vec![controller])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+
+    env.advance_time(Duration::from_secs(1));
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(log_message).reply().build(),
+    );
+
+    let records = fetch_log_records(&env, controller, canister_id);
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].content, log_message.to_vec());
+
+    // Step 2: Restart with log_memory_store feature enabled. Before any round
+    // executes, migration has not run yet: is_migrated=false, is_allocated=false,
+    // but fetch_canister_logs still works via the canister_log fallback.
+    let env = env.restart_node_with_config(StateMachineConfig::new(
+        SubnetConfig::new(subnet_type),
+        ExecutionConfig {
+            log_memory_store_feature: FlagStatus::Enabled,
+            ..Default::default()
+        },
+    ));
+
+    {
+        let state = env.get_latest_state();
+        let lms = &state
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .log_memory_store;
+        assert!(!lms.is_migrated());
+        assert!(!lms.is_allocated());
+    }
+
+    let records = fetch_log_records(&env, controller, canister_id);
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].content, log_message.to_vec());
+
+    // Step 3: Execute a round to trigger migration. Afterwards is_migrated=true,
+    // is_allocated=true, log_memory_store contains the migrated record, and
+    // fetch_canister_logs reads from log_memory_store.
+    env.tick();
+
+    {
+        let state = env.get_latest_state();
+        let lms = &state
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .log_memory_store;
+        assert!(lms.is_migrated());
+        assert!(lms.is_allocated());
+        assert!(!lms.is_empty());
+    }
+
+    let records = fetch_log_records(&env, controller, canister_id);
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].content, log_message.to_vec());
+}
