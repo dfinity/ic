@@ -30,7 +30,6 @@ file_size_check(
 # (image is used for HostOS upgrades)
 artifact_bundle(
     name = "bundle-update",
-    testonly = True,
     inputs = [
         icos_images.update_image,
         icos_images.update_image_test,

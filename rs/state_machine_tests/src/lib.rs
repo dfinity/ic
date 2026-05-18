@@ -121,11 +121,13 @@ use ic_replicated_state::{
         canister_snapshots::CanisterSnapshots, system_state::CanisterHistory,
     },
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
+    metrics::ReplicatedStateInvariants,
     page_map::Buffer,
     replicated_state::ReplicatedStateMessageRouting,
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly};
-use ic_state_manager::{StateManagerImpl, testing::StateManagerTesting};
+use ic_state_manager::StateManagerImpl;
+use ic_state_manager::testing::StateManagerTesting;
 use ic_test_utilities_consensus::{FakeConsensusPoolCache, batch::MockBatchPayloadBuilder};
 use ic_test_utilities_metrics::{
     Labels, fetch_counter_vec, fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_counter,
@@ -1132,6 +1134,9 @@ pub struct StateMachine {
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     pub registry_client: Arc<FakeRegistryClient>,
     pub state_manager: Arc<StateMachineStateManager>,
+    /// Whether to flush the replicated state metrics channel after each round.
+    /// Defaults to `true` but can be overridden, e.g. for benchmarks.
+    pub flush_replicated_state_metrics: bool,
     consensus_time: Arc<PocketConsensusTime>,
     ingress_pool: Arc<RwLock<PocketIngressPool>>,
     ingress_manager: Arc<IngressManager>,
@@ -2020,6 +2025,8 @@ impl StateMachine {
         if let Some(lsmt_override) = lsmt_override {
             sm_config.lsmt_config = lsmt_override;
         }
+        let replicated_state_invariants =
+            ReplicatedStateInvariants::new(&metrics_registry, &hypervisor_config);
 
         // We are not interested in ingress signature validation.
         let malicious_flags = MaliciousFlags {
@@ -2036,12 +2043,13 @@ impl StateMachine {
             Arc::new(FakeVerifier),
             subnet_id,
             subnet_type,
-            replica_logger.clone(),
-            &metrics_registry,
             &sm_config,
             None,
             malicious_flags.clone(),
             certified_height_tx,
+            Some(replicated_state_invariants),
+            &metrics_registry,
+            replica_logger.clone(),
         );
         let state_manager = Arc::new(StateMachineStateManager {
             inner: state_manager_impl,
@@ -2319,6 +2327,7 @@ impl StateMachine {
             registry_data_provider,
             registry_client: registry_client.clone(),
             state_manager,
+            flush_replicated_state_metrics: true,
             consensus_time,
             ingress_pool,
             ingress_manager: ingress_manager.clone(),
@@ -2482,6 +2491,11 @@ impl StateMachine {
                 b"subnet".into(),
                 subnet_id.get().into(),
                 b"canister_ranges".into(),
+            ]),
+            LabeledTreePath::new(vec![
+                b"subnet".into(),
+                subnet_id.get().into(),
+                b"type".into(),
             ]),
             LabeledTreePath::from(Label::from("time")),
         ];
@@ -3060,6 +3074,11 @@ impl StateMachine {
         }
         assert_eq!(self.state_manager.latest_state_height(), batch_number);
 
+        // Wait until the enqueued `ReplicatedStateMetrics::observe()` call has been
+        // processed by the background metrics thread.
+        if self.flush_replicated_state_metrics {
+            self.state_manager.flush_metrics_channel();
+        }
         self.check_critical_errors();
 
         self.set_time(time_of_next_round.into());

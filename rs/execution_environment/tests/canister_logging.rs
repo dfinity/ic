@@ -1821,8 +1821,8 @@ fn test_metric_canister_log_retention_seconds() {
     // Advance simulated time and append another record.
     env.advance_time(TIME_ADVANCE);
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-
     let after = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+
     assert_eq!(after.count, before.count + 1);
     let sample = after.sum - before.sum;
     // The new sample should report at least the advanced wall-clock gap.

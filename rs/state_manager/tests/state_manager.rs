@@ -52,7 +52,8 @@ use ic_test_utilities_consensus::fake::{Fake, FakeVerifier};
 use ic_test_utilities_io::{make_mutable, make_readonly, write_all_at};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    Labels, fetch_gauge, fetch_histogram_vec_stats, fetch_int_counter_vec, fetch_int_gauge,
+    HistogramStats, Labels, fetch_gauge, fetch_histogram_stats, fetch_histogram_vec_stats,
+    fetch_int_counter_vec, fetch_int_gauge,
 };
 use ic_test_utilities_state::{arb_stream, arb_stream_slice, canister_ids};
 use ic_test_utilities_tmpdir::tmpdir;
@@ -987,12 +988,13 @@ fn state_manager_crash_test<Test>(
                     Arc::new(FakeVerifier::new()),
                     subnet_test_id(42),
                     SubnetType::Application,
-                    log.clone(),
-                    &MetricsRegistry::new(),
                     &config,
                     None,
                     ic_types::malicious_flags::MaliciousFlags::default(),
                     tokio::sync::watch::channel(Height::from(0)).0,
+                    None,
+                    &MetricsRegistry::new(),
+                    log.clone(),
                 ));
             })
             .expect_err(&format!("Crash test fixture {i} did not crash"));
@@ -1006,12 +1008,13 @@ fn state_manager_crash_test<Test>(
                 Arc::new(FakeVerifier::new()),
                 subnet_test_id(42),
                 SubnetType::Application,
-                log,
-                &metrics,
                 &config,
                 None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
                 tokio::sync::watch::channel(Height::from(0)).0,
+                None,
+                &metrics,
+                log,
             ),
         );
     });
@@ -1139,12 +1142,13 @@ fn checkpoints_outlive_state_manager() {
                 verifier,
                 own_subnet,
                 SubnetType::Application,
-                log.clone(),
-                &metrics_registry,
                 &config,
                 None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
                 tokio::sync::watch::channel(Height::from(0)).0,
+                None,
+                &metrics_registry,
+                log.clone(),
             );
             let (_height, mut state) = state_manager.take_tip();
             insert_dummy_canister(&mut state, canister_id);
@@ -1174,12 +1178,13 @@ fn checkpoints_outlive_state_manager() {
             verifier,
             own_subnet,
             SubnetType::Application,
-            log,
-            &metrics_registry,
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
             tokio::sync::watch::channel(Height::from(0)).0,
+            None,
+            &metrics_registry,
+            log,
         );
 
         assert_eq!(
@@ -1208,12 +1213,13 @@ fn certifications_are_not_persisted() {
                 Arc::new(FakeVerifier::new()),
                 subnet_test_id(42),
                 SubnetType::Application,
-                log.clone(),
-                &metrics_registry,
                 &config,
                 None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
                 tokio::sync::watch::channel(Height::from(0)).0,
+                None,
+                &metrics_registry,
+                log.clone(),
             );
             let (_height, state) = state_manager.take_tip();
             state_manager.commit_and_certify(state, CertificationScope::Full, None);
@@ -1227,12 +1233,13 @@ fn certifications_are_not_persisted() {
                 Arc::new(FakeVerifier::new()),
                 subnet_test_id(42),
                 SubnetType::Application,
-                log,
-                &metrics_registry,
                 &config,
                 None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
                 tokio::sync::watch::channel(Height::from(0)).0,
+                None,
+                &metrics_registry,
+                log,
             );
             assert_eq!(vec![Height(1)], heights_to_certify(&state_manager));
         }
@@ -6063,12 +6070,13 @@ fn diverged_checkpoint_is_complete() {
             Arc::new(FakeVerifier::new()),
             subnet_test_id(42),
             SubnetType::Application,
-            log.clone(),
-            &MetricsRegistry::new(),
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
             tokio::sync::watch::channel(Height::from(0)).0,
+            None,
+            &MetricsRegistry::new(),
+            log.clone(),
         );
 
         let (_, state) = state_manager.take_tip();
@@ -6086,12 +6094,13 @@ fn diverged_checkpoint_is_complete() {
                 Arc::new(FakeVerifier::new()),
                 subnet_test_id(42),
                 SubnetType::Application,
-                log.clone(),
-                &MetricsRegistry::new(),
                 &config,
                 None,
                 ic_types::malicious_flags::MaliciousFlags::default(),
                 tokio::sync::watch::channel(Height::from(0)).0,
+                None,
+                &MetricsRegistry::new(),
+                log.clone(),
             );
             // If the Tip thread is active while we report diverged checkpoint, it may crash
             // which is OK in production but confuses debug assertions.
@@ -6105,12 +6114,13 @@ fn diverged_checkpoint_is_complete() {
             Arc::new(FakeVerifier::new()),
             subnet_test_id(42),
             SubnetType::Application,
-            log,
-            &MetricsRegistry::new(),
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
             tokio::sync::watch::channel(Height::from(0)).0,
+            None,
+            &MetricsRegistry::new(),
+            log,
         );
 
         // check that the diverged checkpoint has the same manifest as before
@@ -9219,12 +9229,13 @@ fn max_certified_height_fires_when_state_already_committed() {
             std::sync::Arc::new(FakeVerifier::new()),
             subnet_test_id(42),
             SubnetType::Application,
-            log,
-            &metrics,
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
             max_certified_height_tx,
+            None,
+            &metrics,
+            log,
         );
 
         // Commit heights 1 and 2 so they are in certifications_metadata.
@@ -9276,12 +9287,13 @@ fn max_certified_height_deferred_when_cert_arrives_before_state() {
             std::sync::Arc::new(FakeVerifier::new()),
             subnet_test_id(42),
             SubnetType::Application,
-            log,
-            &metrics,
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
             max_certified_height_tx,
+            None,
+            &metrics,
+            log,
         );
 
         // Set fast_forward_height so that height 1 is in the range of heights to certify.
@@ -9614,6 +9626,31 @@ fn commit_and_certify_panic_on_delivered_fake_certification() {
         let state = sm.take_tip().1;
         sm.commit_and_certify_at_height(state, no_opt_height, CertificationScope::Metadata, None);
         assert_eq!(no_state_clone_count(metrics), 0);
+    });
+}
+
+#[test]
+fn commit_and_certify_observes_replicated_state_metrics() {
+    state_manager_test(|metrics, sm| {
+        let state = sm.take_tip().1;
+        // Sanity check: metrics should be zero before any observations are made.
+        //
+        // Use an arbitrary histogram that is updated once per round as a canary.
+        assert_matches!(
+            fetch_histogram_stats(metrics, "scheduler_canister_paused_execution"),
+            Some(HistogramStats { count: 0, sum: 0.0 })
+        );
+
+        // Call `commit_and_certify` and wait for the background thread to complete the
+        // observation.
+        sm.commit_and_certify_at_height(state, Height::new(1), CertificationScope::Metadata, None);
+        sm.flush_metrics_channel();
+
+        // Metrics have now been updated.
+        assert_matches!(
+            fetch_histogram_stats(metrics, "scheduler_canister_paused_execution"),
+            Some(HistogramStats { count: 1, sum: 0.0 })
+        );
     });
 }
 

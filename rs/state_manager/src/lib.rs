@@ -50,10 +50,10 @@ use ic_metrics::{
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::{messaging::xnet::v1, state::v1 as pb};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
-use ic_replicated_state::{
-    ReplicatedState,
-    page_map::{PersistenceError, StorageMetrics},
+use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::metrics::{ReplicatedStateInvariants, ReplicatedStateMetrics};
+use ic_replicated_state::page_map::{
+    PageAllocatorFileDescriptor, PersistenceError, StorageMetrics,
 };
 use ic_state_layout::{
     CheckpointLayout, CheckpointStatus, ReadOnly, StateLayout, error::LayoutError,
@@ -69,7 +69,9 @@ use ic_types::{
     state_sync::CURRENT_STATE_SYNC_VERSION,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
 };
-use ic_utils_thread::{JoinOnDrop, deallocator_thread::DeallocatorThread};
+use ic_utils_thread::JoinOnDrop;
+use ic_utils_thread::deallocator_thread::DeallocatorThread;
+use ic_utils_thread::worker_thread::WorkerThread;
 use ic_wasm_types::ModuleLoadingStatus;
 use parking_lot::RwLockWriteGuard;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
@@ -193,6 +195,7 @@ pub struct StateManagerMetrics {
     fast_forward_height: IntGauge,
     no_state_clone_count: IntCounter,
     skip_optimization_missing_cert_count: IntCounter,
+    skipped_state_observations: IntCounter,
 }
 
 #[derive(Clone)]
@@ -493,6 +496,11 @@ impl StateManagerMetrics {
             "How often we could have skipped state cloning but did not because no certification was available.",
         );
 
+        let skipped_state_observations = metrics_registry.int_counter(
+            "state_manager_skipped_state_observations",
+            "Number of `ReplicatedStateMetrics::observe` invocations skipped because the background metrics thread was still busy.",
+        );
+
         Self {
             state_manager_error_count,
             checkpoint_op_duration,
@@ -521,6 +529,7 @@ impl StateManagerMetrics {
             fast_forward_height,
             no_state_clone_count,
             skip_optimization_missing_cert_count,
+            skipped_state_observations,
         }
     }
 
@@ -940,6 +949,10 @@ const EXTRA_CHECKPOINTS_TO_KEEP: usize = 0;
 pub struct StateManagerImpl {
     log: ReplicaLogger,
     metrics: StateManagerMetrics,
+    /// Runs expensive `ReplicatedStateMetrics::observe()` and
+    /// `ReplicatedStateInvariants::check()` calls in the background, so that
+    /// `commit_and_certify` does not have to do it on the critical path.
+    replicated_state_metrics_thread: ReplicatedStateMetricsThread,
     state_layout: StateLayout,
     /// The main metadata. Different threads will need to access this field.
     ///
@@ -1327,12 +1340,13 @@ impl StateManagerImpl {
         verifier: Arc<dyn Verifier>,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        log: ReplicaLogger,
-        metrics_registry: &MetricsRegistry,
         config: &Config,
         starting_height: Option<Height>,
         malicious_flags: MaliciousFlags,
         max_certified_height_tx: watch::Sender<Height>,
+        replicated_state_invariants: Option<ReplicatedStateInvariants>,
+        metrics_registry: &MetricsRegistry,
+        log: ReplicaLogger,
     ) -> Self {
         let metrics = StateManagerMetrics::new(metrics_registry, log.clone());
 
@@ -1340,6 +1354,16 @@ impl StateManagerImpl {
             .api_call_duration
             .with_label_values(&["new"])
             .start_timer();
+
+        let replicated_state_metrics = ReplicatedStateMetrics::new(metrics_registry);
+        let replicated_state_metrics_thread = ReplicatedStateMetricsThread {
+            metrics: Arc::new(replicated_state_metrics),
+            invariants: replicated_state_invariants.map(Arc::new),
+            worker_thread: WorkerThread::new(
+                "StateMetrics",
+                metrics.skipped_state_observations.clone(),
+            ),
+        };
 
         info!(
             log,
@@ -1632,6 +1656,7 @@ impl StateManagerImpl {
         Self {
             log,
             metrics,
+            replicated_state_metrics_thread,
             state_layout,
             states,
             verifier,
@@ -3542,6 +3567,13 @@ impl StateManager for StateManagerImpl {
                 .send(req)
                 .expect("failed to send tip request");
         }
+
+        // `ReplicatedStateMetrics::observe()` and `ReplicatedStateInvariants::check()`
+        // only update Prometheus metrics, so defer them to a background thread to keep
+        // them off the critical path.
+        let is_checkpoint_round = scope == CertificationScope::Full;
+        self.replicated_state_metrics_thread
+            .enqueue_observe_and_check(state, height, is_checkpoint_round, &self.log);
     }
 
     fn report_diverged_checkpoint(&self, height: Height) {
@@ -3674,13 +3706,13 @@ fn spawn_hash_thread(
                                 let delivered_hash = cert.signed.content.hash.as_ref();
                                 assert_prev_hash_matches(delivered_hash, "delivered");
                                 // If we do agree, write the certification to the metadata, so that consensus does
-                                // not have to deliver it again. 
+                                // not have to deliver it again.
                                 certification_metadata.certification = *reference_certification;
                             }
 
                             // It's possible that we already computed this state before. We
                             // validate that hashes agree to spot bugs causing non-determinism as
-                            // early as possible. 
+                            // early as possible.
                             let mut states = states.write();
                             if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
                                 let prev_hash = &prev_metadata.certified_state_hash;
@@ -4342,6 +4374,48 @@ impl PageAllocatorFileDescriptorImpl {
     }
 }
 
+/// A wrapper around a `ReplicatedStateMetrics`, an optional
+/// `ReplicatedStateInvariants` and a `WorkerThread` to run
+/// observations in the background.
+struct ReplicatedStateMetricsThread {
+    /// The metrics to be observed.
+    metrics: Arc<ReplicatedStateMetrics>,
+
+    /// Optional invariants to be checked.
+    ///
+    /// Always `Some` in the replica. May be `None` in tests or other binaries.
+    invariants: Option<Arc<ReplicatedStateInvariants>>,
+
+    /// Worker thread that runs the metrics observations and invariants checks.
+    worker_thread: WorkerThread,
+}
+
+impl ReplicatedStateMetricsThread {
+    /// Enqueues background metric observations and invariant checks for the given
+    /// state.
+    ///
+    /// No-op if the worker thread is backlogged with earlier enqueued tasks. Since
+    /// neither metrics nor invariant checks are critical to correct functioning of
+    /// the replica, this is preferable to blocking on the critical path.
+    fn enqueue_observe_and_check(
+        &self,
+        state: Arc<ReplicatedState>,
+        height: Height,
+        is_checkpoint_round: bool,
+        log: &ReplicaLogger,
+    ) {
+        let metrics = Arc::clone(&self.metrics);
+        let invariants = self.invariants.clone();
+        let log = log.clone();
+        self.worker_thread.enqueue(Box::new(move || {
+            metrics.observe(state.metadata.own_subnet_id, &state, height, &log);
+            if let Some(invariants) = invariants {
+                invariants.check(&state, is_checkpoint_round, height, &log);
+            }
+        }));
+    }
+}
+
 pub mod testing {
     use super::*;
 
@@ -4394,8 +4468,12 @@ pub mod testing {
         /// Testing only: Purges the `manifest` at `height` in `states.states_metadata`.
         fn purge_manifest(&mut self, height: Height) -> bool;
 
-        /// Testing only: Wait till deallocation queue is empty.
+        /// Testing only: Wait until deallocation queue is empty.
         fn flush_deallocation_channel(&self);
+
+        /// Testing only: Wait until all enqueued replicated state metrics observations
+        /// have been processed by the background metrics thread.
+        fn flush_metrics_channel(&self);
 
         /// Testing only: Returns heights in `states.snapshots`.
         fn state_snapshot_heights(&self) -> Vec<Height>;
@@ -4490,6 +4568,12 @@ pub mod testing {
 
         fn flush_deallocation_channel(&self) {
             self.deallocator_thread.flush_deallocation_channel();
+        }
+
+        fn flush_metrics_channel(&self) {
+            self.replicated_state_metrics_thread
+                .worker_thread
+                .flush_channel();
         }
 
         fn state_snapshot_heights(&self) -> Vec<Height> {
