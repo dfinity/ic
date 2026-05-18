@@ -230,6 +230,11 @@ pub struct NetworkTopology {
     /// Unfiltered topology for the certified state tree.
     /// Only set on the NNS subnet; `None` everywhere else.
     full_topology: Option<FullTopology>,
+
+    /// Subnet to which `SetupInitialDKG` management canister calls are routed
+    /// by default, i.e., when no subnet id is specified explicitly in the
+    /// request. If `None`, such requests are routed to the calling subnet.
+    pub default_initial_dkg_subnet_id: Option<SubnetId>,
 }
 
 /// Full description of the API Boundary Node, which is saved in the metadata.
@@ -258,6 +263,7 @@ impl Default for NetworkTopology {
             bitcoin_testnet_canister_id: None,
             bitcoin_mainnet_canister_id: None,
             full_topology: None,
+            default_initial_dkg_subnet_id: None,
         }
     }
 }
@@ -273,6 +279,7 @@ impl NetworkTopology {
         bitcoin_testnet_canister_id: Option<CanisterId>,
         bitcoin_mainnet_canister_id: Option<CanisterId>,
         full_topology: Option<FullTopology>,
+        default_initial_dkg_subnet_id: Option<SubnetId>,
     ) -> Self {
         Self {
             subnets,
@@ -283,6 +290,7 @@ impl NetworkTopology {
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
             full_topology,
+            default_initial_dkg_subnet_id,
         }
     }
 

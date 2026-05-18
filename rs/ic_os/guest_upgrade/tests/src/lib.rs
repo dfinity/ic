@@ -17,7 +17,8 @@ use ic_protobuf::registry::replica_version::v1::{
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_test_utilities_registry::{add_blessed_replica_versions, add_replica_version_record};
+use ic_test_utilities_registry::add_replica_version_record;
+use ic_types::ReplicaVersion;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use sev_guest_testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
 use std::future::Future;
@@ -113,8 +114,6 @@ impl DiskEncryptionKeyExchangeTestFixture {
         let _ = rustls::crypto::ring::default_provider().install_default();
 
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
-
-        add_blessed_replica_versions(&registry_data_provider, 1, &[REPLICA_VERSION]);
 
         add_replica_version_record(
             &registry_data_provider,
@@ -227,8 +226,9 @@ impl DiskEncryptionKeyExchangeTestFixture {
 
         let server_agent = self.create_server_agent(vsock_client);
 
+        let target_replica_version = ReplicaVersion::try_from(REPLICA_VERSION).unwrap();
         let server_future = server_agent
-            .exchange_keys()
+            .exchange_keys(&target_replica_version)
             .map_err(|e| e.into())
             .inspect_ok(|_| println!("Server finished successfully"))
             .inspect_err(|e| eprintln!("Server finished with error: {e:?}"));
@@ -487,9 +487,10 @@ async fn test_server_timeout() {
             Ok(Payload::NoPayload)
         });
 
+    let replica_version = ReplicaVersion::try_from(REPLICA_VERSION).unwrap();
     DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default())
         .create_server_agent(vsock_client)
-        .exchange_keys()
+        .exchange_keys(&replica_version)
         .await
         .expect_err("Key exchange should fail when server times out");
 }

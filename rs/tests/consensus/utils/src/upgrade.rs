@@ -6,7 +6,7 @@ use ic_protobuf::registry::replica_version::v1::{BlessedReplicaVersions, GuestLa
 use ic_registry_keys::make_blessed_replica_versions_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_system_test_driver::{
-    driver::test_env_api::*,
+    driver::{group::assert_no_critical_errors, test_env_api::*},
     nns::{
         get_governance_canister, submit_deploy_guestos_to_all_subnet_nodes_proposal,
         submit_update_elected_replica_versions_proposal,
@@ -197,6 +197,7 @@ pub async fn deploy_guestos_to_all_subnet_nodes(
     new_replica_version: &ReplicaVersion,
     subnet_id: SubnetId,
 ) {
+    assert_no_critical_errors(&nns_node.test_env());
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance_canister = get_governance_canister(&nns);
     let test_neuron_id = NeuronId(TEST_NEURON_1_ID);

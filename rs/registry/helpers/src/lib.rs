@@ -4,7 +4,6 @@
 //! to the respective crate/component at some point in the future.
 
 pub mod api_boundary_node;
-pub mod blessed_replica_version;
 pub mod chain_keys;
 pub mod crypto;
 pub mod ecdsa_keys;
@@ -13,6 +12,7 @@ pub mod hostos_version;
 pub mod node;
 pub mod node_operator;
 pub mod provisional_whitelist;
+pub mod replica_version;
 pub mod routing_table;
 pub mod subnet;
 pub mod test_proto;
