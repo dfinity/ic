@@ -2666,7 +2666,7 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
     let subnet_type = SubnetType::Application;
 
     // Step 1: StateMachine with log_memory_store feature disabled. Install a canister
-    // and produce a log entry that lands in canister_log (old storage).
+    // and produce log entries that land in canister_log (legacy storage).
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
             SubnetConfig::new(subnet_type),
@@ -2688,10 +2688,42 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
         UNIVERSAL_CANISTER_WASM.to_vec(),
     );
 
-    // Produce enough messages to cause wrap-around in the canister_log ring buffer
-    // (capacity ~74 records for a 15-byte message at DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT).
+    let check_records = |env: &StateMachine,
+                         expected_len: usize,
+                         expected_last_idx: u64,
+                         expected_last_content: &Vec<u8>| {
+        let records = fetch_log_records(env, controller, canister_id);
+        assert_eq!(records.len(), expected_len);
+        assert_eq!(
+            records.last().map(|r| (r.idx, &r.content)),
+            Some((expected_last_idx, expected_last_content))
+        );
+    };
+    let check_canister_log = |env: &StateMachine, expected_next_idx: u64| {
+        let state = env.get_latest_state();
+        let ss = &state.canister_state(&canister_id).unwrap().system_state;
+        assert_eq!(ss.canister_log.next_idx(), expected_next_idx);
+    };
+    let check_lms = |env: &StateMachine,
+                     expected_migrated: bool,
+                     expected_allocated: bool,
+                     expected_empty: bool,
+                     expected_next_idx: u64| {
+        let state = env.get_latest_state();
+        let lms = &state
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .log_memory_store;
+        assert_eq!(lms.is_migrated(), expected_migrated);
+        assert_eq!(lms.is_allocated(), expected_allocated);
+        assert_eq!(lms.is_empty(), expected_empty);
+        assert_eq!(lms.next_idx(), expected_next_idx);
+    };
+
+    // Execute enough messages to cause wrap-around in the legacy canister_log storage
+    // (capacity of ~74 records for a 15-byte message at DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT).
     let num_pre_migration = 200usize;
-    env.advance_time(Duration::from_secs(1));
     for i in 0..num_pre_migration {
         let msg = format!("hello migration {i}");
         let _ = env.execute_ingress(
@@ -2710,12 +2742,8 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
         records.last().map(|r| (r.idx, &r.content)),
         Some((num_pre_migration as u64 - 1, &last_pre_migration_msg))
     );
-    {
-        let state = env.get_latest_state();
-        let ss = &state.canister_state(&canister_id).unwrap().system_state;
-        // next_idx advances for every produced record, including dropped ones.
-        assert_eq!(ss.canister_log.next_idx(), num_pre_migration as u64);
-    }
+    // next_idx advances for every produced record, including dropped ones.
+    check_canister_log(&env, num_pre_migration as u64);
 
     // Step 2: Restart with log_memory_store feature enabled. Before any round
     // executes, migration has not run yet: is_migrated=false, is_allocated=false,
@@ -2728,23 +2756,16 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
         },
     ));
 
-    {
-        let state = env.get_latest_state();
-        let ss = &state.canister_state(&canister_id).unwrap().system_state;
-        let lms = &ss.log_memory_store;
-        assert!(!lms.is_migrated());
-        assert!(!lms.is_allocated());
-        // canister_log next_idx survives the restart via the checkpoint.
-        assert_eq!(ss.canister_log.next_idx(), num_pre_migration as u64);
-        // log_memory_store next_idx is 0 until migration runs.
-        assert_eq!(lms.next_idx(), 0);
-    }
+    // canister_log next_idx survives the restart via the checkpoint.
+    check_canister_log(&env, num_pre_migration as u64);
+    // log_memory_store is not yet migrated; next_idx is 0 until migration runs.
+    check_lms(&env, false, false, true, 0);
 
-    let records = fetch_log_records(&env, controller, canister_id);
-    assert_eq!(records.len(), pre_migration_len);
-    assert_eq!(
-        records.last().map(|r| (r.idx, &r.content)),
-        Some((num_pre_migration as u64 - 1, &last_pre_migration_msg))
+    check_records(
+        &env,
+        pre_migration_len,
+        num_pre_migration as u64 - 1,
+        &last_pre_migration_msg,
     );
 
     // Step 3: Execute a round to trigger migration. Afterwards is_migrated=true,
@@ -2752,31 +2773,19 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
     // fetch_canister_logs reads from log_memory_store.
     env.tick();
 
-    {
-        let state = env.get_latest_state();
-        let lms = &state
-            .canister_state(&canister_id)
-            .unwrap()
-            .system_state
-            .log_memory_store;
-        assert!(lms.is_migrated());
-        assert!(lms.is_allocated());
-        assert!(!lms.is_empty());
-        // After migration next_idx matches the canister_log next_idx.
-        assert_eq!(lms.next_idx(), num_pre_migration as u64);
-    }
+    // After migration next_idx matches the canister_log next_idx.
+    check_lms(&env, true, true, false, num_pre_migration as u64);
 
     // Migration must preserve exactly the records that survived wrap-around.
-    let records = fetch_log_records(&env, controller, canister_id);
-    assert_eq!(records.len(), pre_migration_len);
-    assert_eq!(
-        records.last().map(|r| (r.idx, &r.content)),
-        Some((num_pre_migration as u64 - 1, &last_pre_migration_msg))
+    check_records(
+        &env,
+        pre_migration_len,
+        num_pre_migration as u64 - 1,
+        &last_pre_migration_msg,
     );
 
     // Step 4: After migration, produce a new log entry and verify it can be queried
     // from log_memory_store together with the migrated records.
-    env.advance_time(Duration::from_secs(1));
     let post_migration_msg = format!("hello migration {num_pre_migration}").into_bytes();
     let _ = env.execute_ingress(
         canister_id,
@@ -2784,19 +2793,11 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
         wasm().debug_print(&post_migration_msg).reply().build(),
     );
 
-    let records = fetch_log_records(&env, controller, canister_id);
-    assert_eq!(records.len(), pre_migration_len + 1);
-    assert_eq!(
-        records.last().map(|r| (r.idx, &r.content)),
-        Some((num_pre_migration as u64, &post_migration_msg))
+    check_records(
+        &env,
+        pre_migration_len + 1,
+        num_pre_migration as u64,
+        &post_migration_msg,
     );
-    {
-        let state = env.get_latest_state();
-        let lms = &state
-            .canister_state(&canister_id)
-            .unwrap()
-            .system_state
-            .log_memory_store;
-        assert_eq!(lms.next_idx(), num_pre_migration as u64 + 1);
-    }
+    check_lms(&env, true, true, false, num_pre_migration as u64 + 1);
 }
