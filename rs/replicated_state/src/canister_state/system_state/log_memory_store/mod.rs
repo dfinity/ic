@@ -46,7 +46,7 @@ use std::time::Duration;
 #[derive(Debug, ValidateEq)]
 pub struct LogMemoryStore {
     /// Feature flag for controlling LogMemoryStore enabled.
-    /// Not persisted in checkpoints — set from the compile-time constant on every
+    /// Not persisted in checkpoints — set from a runtime config on every
     /// load — so excluded from validate_eq to avoid spurious mismatches.
     #[validate_eq(Ignore)]
     feature_flag: FlagStatus,
@@ -440,7 +440,13 @@ impl LogMemoryStore {
             return;
         }
         if delta_log.is_empty() {
-            return; // Don't append if delta is empty.
+            // No records to append, but still carry the monotone index forward.
+            // The canister_log can be empty after uninstalling a canister (uninstall
+            // clears the log records but preserves next_idx). Wrap-around alone will
+            // never evict all entries because truncation ensures every record fits
+            // within the capacity.
+            self.persistent_next_idx = self.persistent_next_idx.max(delta_log.next_idx());
+            return;
         }
         let Some(mut ring_buffer) = self.load_ring_buffer() else {
             return; // No ring buffer exists.

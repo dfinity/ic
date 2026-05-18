@@ -2662,7 +2662,6 @@ fn test_log_memory_store_feature_flag_via_execution_test_builder() {
 
 #[test]
 fn test_log_migration_from_canister_log_to_log_memory_store() {
-    let log_message = b"hello migration";
     let controller = PrincipalId::new_anonymous();
     let subnet_type = SubnetType::Application;
 
@@ -2689,16 +2688,34 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
         UNIVERSAL_CANISTER_WASM.to_vec(),
     );
 
+    // Produce enough messages to cause wrap-around in the canister_log ring buffer
+    // (capacity ~74 records for a 15-byte message at DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT).
+    let num_pre_migration = 200usize;
     env.advance_time(Duration::from_secs(1));
-    let _ = env.execute_ingress(
-        canister_id,
-        "update",
-        wasm().debug_print(log_message).reply().build(),
-    );
+    for i in 0..num_pre_migration {
+        let msg = format!("hello migration {i}");
+        let _ = env.execute_ingress(
+            canister_id,
+            "update",
+            wasm().debug_print(msg.as_bytes()).reply().build(),
+        );
+    }
+    let last_pre_migration_msg = format!("hello migration {}", num_pre_migration - 1).into_bytes();
 
     let records = fetch_log_records(&env, controller, canister_id);
-    assert_eq!(records.len(), 1);
-    assert_eq!(records[0].content, log_message.to_vec());
+    let pre_migration_len = records.len();
+    // Wrap-around dropped old records: fewer survive than were produced.
+    assert!(pre_migration_len < num_pre_migration);
+    assert_eq!(
+        records.last().map(|r| (r.idx, &r.content)),
+        Some((num_pre_migration as u64 - 1, &last_pre_migration_msg))
+    );
+    {
+        let state = env.get_latest_state();
+        let ss = &state.canister_state(&canister_id).unwrap().system_state;
+        // next_idx advances for every produced record, including dropped ones.
+        assert_eq!(ss.canister_log.next_idx(), num_pre_migration as u64);
+    }
 
     // Step 2: Restart with log_memory_store feature enabled. Before any round
     // executes, migration has not run yet: is_migrated=false, is_allocated=false,
@@ -2713,21 +2730,25 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
 
     {
         let state = env.get_latest_state();
-        let lms = &state
-            .canister_state(&canister_id)
-            .unwrap()
-            .system_state
-            .log_memory_store;
+        let ss = &state.canister_state(&canister_id).unwrap().system_state;
+        let lms = &ss.log_memory_store;
         assert!(!lms.is_migrated());
         assert!(!lms.is_allocated());
+        // canister_log next_idx survives the restart via the checkpoint.
+        assert_eq!(ss.canister_log.next_idx(), num_pre_migration as u64);
+        // log_memory_store next_idx is 0 until migration runs.
+        assert_eq!(lms.next_idx(), 0);
     }
 
     let records = fetch_log_records(&env, controller, canister_id);
-    assert_eq!(records.len(), 1);
-    assert_eq!(records[0].content, log_message.to_vec());
+    assert_eq!(records.len(), pre_migration_len);
+    assert_eq!(
+        records.last().map(|r| (r.idx, &r.content)),
+        Some((num_pre_migration as u64 - 1, &last_pre_migration_msg))
+    );
 
     // Step 3: Execute a round to trigger migration. Afterwards is_migrated=true,
-    // is_allocated=true, log_memory_store contains the migrated record, and
+    // is_allocated=true, log_memory_store contains the migrated records, and
     // fetch_canister_logs reads from log_memory_store.
     env.tick();
 
@@ -2741,9 +2762,41 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
         assert!(lms.is_migrated());
         assert!(lms.is_allocated());
         assert!(!lms.is_empty());
+        // After migration next_idx matches the canister_log next_idx.
+        assert_eq!(lms.next_idx(), num_pre_migration as u64);
     }
 
+    // Migration must preserve exactly the records that survived wrap-around.
     let records = fetch_log_records(&env, controller, canister_id);
-    assert_eq!(records.len(), 1);
-    assert_eq!(records[0].content, log_message.to_vec());
+    assert_eq!(records.len(), pre_migration_len);
+    assert_eq!(
+        records.last().map(|r| (r.idx, &r.content)),
+        Some((num_pre_migration as u64 - 1, &last_pre_migration_msg))
+    );
+
+    // Step 4: After migration, produce a new log entry and verify it can be queried
+    // from log_memory_store together with the migrated records.
+    env.advance_time(Duration::from_secs(1));
+    let post_migration_msg = format!("hello migration {num_pre_migration}").into_bytes();
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(&post_migration_msg).reply().build(),
+    );
+
+    let records = fetch_log_records(&env, controller, canister_id);
+    assert_eq!(records.len(), pre_migration_len + 1);
+    assert_eq!(
+        records.last().map(|r| (r.idx, &r.content)),
+        Some((num_pre_migration as u64, &post_migration_msg))
+    );
+    {
+        let state = env.get_latest_state();
+        let lms = &state
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .log_memory_store;
+        assert_eq!(lms.next_idx(), num_pre_migration as u64 + 1);
+    }
 }

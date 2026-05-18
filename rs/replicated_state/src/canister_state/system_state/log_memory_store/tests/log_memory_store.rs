@@ -804,6 +804,27 @@ fn test_next_idx_preserved_after_deallocate() {
     assert_eq!(store.next_idx(), TEST_NEXT_IDX + 2);
 }
 
+#[test]
+fn test_next_idx_preserved_when_appending_empty_delta_log() {
+    // Simulates migration from a canister_log that has no records but a
+    // non-zero next_idx (e.g. all records were evicted by wrap-around).
+    let log_size = 4096;
+    let next_idx = TEST_NEXT_IDX;
+
+    let mut store = LogMemoryStore::new(FlagStatus::Enabled);
+    store.resize_for_testing(log_size);
+    assert_eq!(store.next_idx(), 0);
+
+    // Delta log with no records but next_idx > 0, as produced by CanisterLog
+    // after uninstalling a canister (uninstall clears records but keeps next_idx).
+    let mut empty_delta = ic_types::CanisterLog::new_aggregate(next_idx, vec![]);
+    assert!(empty_delta.is_empty());
+
+    store.append_delta_log(&mut empty_delta);
+
+    assert_eq!(store.next_idx(), next_idx);
+}
+
 fn assert_memory_usage_for_limit(feature_flag: FlagStatus, limit: usize) {
     let mut s = LogMemoryStore::new(feature_flag);
     s.resize_for_testing(limit);
