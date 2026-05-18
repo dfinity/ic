@@ -56,7 +56,7 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
     MetricsFetcher, UniversalCanister, assert_create_agent, block_on, runtime_from_url,
 };
-use ic_types::{Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
+use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use registry_canister::mutations::do_create_subnet::CanisterCyclesCostSchedule;
 use registry_canister::mutations::do_set_default_initial_dkg_subnet::SetDefaultInitialDkgSubnetPayload;
 use slog::{Logger, info};
