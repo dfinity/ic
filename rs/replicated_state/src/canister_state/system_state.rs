@@ -716,7 +716,6 @@ impl SystemState {
             snapshot_visibility,
             canister_log,
             log_memory_store: LogMemoryStore::from_checkpoint(
-                LOG_MEMORY_STORE_FEATURE,
                 log_memory_store_data,
                 next_canister_log_record_idx,
                 log_memory_store_migrated,

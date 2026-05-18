@@ -5,7 +5,6 @@ use super::{
     routing::ResolveDestinationError,
 };
 use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
-use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
 };
@@ -401,9 +400,7 @@ impl SystemStateModifications {
             // TODO(DSM-11): Move this into append_delta_log() once there is only one of it.
             metrics.observe_delta_log_size(self.canister_log.bytes_used());
         }
-        if system_state.log_memory_store.feature_flag() == FlagStatus::Enabled
-            && system_state.log_memory_store.is_migrated()
-        {
+        if system_state.log_memory_store.is_migrated() {
             system_state
                 .log_memory_store
                 .append_delta_log(&mut self.canister_log.clone());
@@ -867,9 +864,7 @@ impl SandboxSafeSystemState {
             .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
 
         let (next_canister_log_record_idx, canister_log_memory_limit) =
-            if system_state.log_memory_store.feature_flag() == FlagStatus::Enabled
-                && system_state.log_memory_store.is_migrated()
-            {
+            if system_state.log_memory_store.is_migrated() {
                 let lms = &system_state.log_memory_store;
                 (lms.next_idx(), lms.byte_capacity())
             } else {
