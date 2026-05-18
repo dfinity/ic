@@ -146,10 +146,12 @@ impl LogMemoryStore {
         self.migrated = true;
     }
 
-    /// Clears the migration flag so the migration will run again on the next
-    /// round execution after the feature is re-enabled.
+    /// Clears the migration flag and resets the persistent index to zero so
+    /// that the feature can be cleanly re-enabled later. The migration will
+    /// run again on the next round execution after the feature is re-enabled.
     pub fn clear_migrated(&mut self) {
         self.migrated = false;
+        self.persistent_next_idx = 0;
     }
 
     /// Provides access to the underlying `PageMap`.

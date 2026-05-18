@@ -2800,4 +2800,55 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
         &post_migration_msg,
     );
     check_lms(&env, true, true, false, num_pre_migration as u64 + 1);
+
+    // Step 5: Downgrade — restart with log_memory_store feature disabled.
+    // The checkpoint still has migrated=true since it was saved after step 3.
+    let env = env.restart_node_with_config(StateMachineConfig::new(
+        SubnetConfig::new(subnet_type),
+        ExecutionConfig {
+            log_memory_store_feature: FlagStatus::Disabled,
+            ..Default::default()
+        },
+    ));
+
+    // Before any round, lms is still marked migrated as loaded from the checkpoint.
+    check_canister_log(&env, num_pre_migration as u64 + 1);
+    check_lms(&env, true, true, false, num_pre_migration as u64 + 1);
+
+    // Execute a round to trigger the downgrade.
+    env.tick();
+
+    // After downgrade, lms is deallocated, the migration flag is cleared,
+    // and persistent_next_idx is reset to zero.
+    check_canister_log(&env, num_pre_migration as u64 + 1);
+    check_lms(&env, false, false, true, 0);
+
+    // fetch_canister_logs falls back to canister_log after downgrade.
+    // canister_log was at capacity before step 4, so it wrapped around and still
+    // holds pre_migration_len records with the post-migration message at the tail.
+    check_records(
+        &env,
+        pre_migration_len,
+        num_pre_migration as u64,
+        &post_migration_msg,
+    );
+
+    // Execute a message after downgrade: new logs go only to canister_log since
+    // lms is not migrated. canister_log wraps around again, keeping pre_migration_len records.
+    env.advance_time(Duration::from_secs(1));
+    let post_downgrade_msg = format!("hello migration {}", num_pre_migration + 1).into_bytes();
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(&post_downgrade_msg).reply().build(),
+    );
+
+    check_canister_log(&env, num_pre_migration as u64 + 2);
+    check_lms(&env, false, false, true, 0);
+    check_records(
+        &env,
+        pre_migration_len,
+        num_pre_migration as u64 + 1,
+        &post_downgrade_msg,
+    );
 }
