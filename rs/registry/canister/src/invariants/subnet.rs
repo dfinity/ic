@@ -8,7 +8,7 @@ use crate::invariants::common::{
     get_subnet_ids_from_snapshot, get_value_from_snapshot,
 };
 
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_base_types::{NodeId, PrincipalId, SubnetId, subnet_id_try_from_protobuf};
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_protobuf::registry::{
     node::v1::{NodeRecord, NodeRewardType},
@@ -197,18 +197,11 @@ fn check_default_initial_dkg_subnet_invariant(
         return Ok(());
     };
 
-    let principal_id_proto = subnet_id_proto
-        .principal_id
-        .ok_or_else(|| InvariantCheckError {
-            msg: "default_initial_dkg_subnet_id is set but contains no principal_id".to_string(),
+    let subnet_id =
+        subnet_id_try_from_protobuf(subnet_id_proto).map_err(|err| InvariantCheckError {
+            msg: format!("default_initial_dkg_subnet_id failed to decode: {err}"),
             source: None,
         })?;
-    let principal_id =
-        PrincipalId::try_from(principal_id_proto.raw).map_err(|err| InvariantCheckError {
-            msg: format!("default_initial_dkg_subnet_id principal_id failed to decode: {err}"),
-            source: None,
-        })?;
-    let subnet_id = SubnetId::from(principal_id);
 
     if !get_subnet_ids_from_snapshot(snapshot).contains(&subnet_id) {
         return Err(InvariantCheckError {

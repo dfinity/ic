@@ -8,6 +8,7 @@ use candid::Encode;
 use dfn_core::call;
 use ic_base_types::{
     CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId, subnet_id_into_protobuf,
+    subnet_id_try_from_protobuf,
 };
 use ic_cdk::println;
 use ic_management_canister_types_private::{
@@ -90,11 +91,9 @@ impl Registry {
         let proto = SubnetIdProto::decode(registry_value.value.as_slice()).unwrap_or_else(|err| {
             panic!("{LOG_PREFIX}default_initial_dkg_subnet_id record failed to decode: {err}")
         });
-        let principal_id_proto = proto.principal_id?;
-        let principal_id = PrincipalId::try_from(principal_id_proto.raw).unwrap_or_else(|err| {
-            panic!("{LOG_PREFIX}default_initial_dkg_subnet_id principal_id failed to decode: {err}")
-        });
-        Some(SubnetId::from(principal_id))
+        Some(subnet_id_try_from_protobuf(proto).unwrap_or_else(|err| {
+            panic!("{LOG_PREFIX}default_initial_dkg_subnet_id failed to decode: {err}")
+        }))
     }
 
     /// Replace the given subnet record's membership with `new_membership`.

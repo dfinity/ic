@@ -297,8 +297,8 @@ enum SubCommand {
 
     /// Get the subnet to which `SetupInitialDKG` management canister calls
     /// without an explicit subnet id are routed by default. Prints `None` if
-    /// no default is configured (in which case such calls fall back to the
-    /// calling subnet).
+    /// no default is configured, in which case such calls fall back to the
+    /// calling subnet (NNS).
     GetDefaultInitialDkgSubnet,
 
     /// Get the ECDSA key ids and their signing subnets
