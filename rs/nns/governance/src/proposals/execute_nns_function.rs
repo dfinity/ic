@@ -941,8 +941,7 @@ impl ValidNnsFunction {
             ValidNnsFunction::SetDefaultInitialDkgSubnet => {
                 "Set or unset the default subnet to which `SetupInitialDKG` management canister \
                 calls are routed when no subnet is specified explicitly in the request. If unset, \
-                such requests are routed to the calling subnet (which historically has been the \
-                NNS subnet)."
+                such requests are routed to the calling subnet (NNS)."
             }
         }
     }
