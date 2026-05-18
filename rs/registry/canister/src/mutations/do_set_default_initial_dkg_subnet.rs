@@ -157,20 +157,11 @@ mod tests {
         });
 
         assert_eq!(registry_value(&registry), Some(*SUBNET_ID));
-    }
-
-    #[test]
-    fn test_set_default_initial_dkg_subnet_unset_after_set() {
-        let mut registry = REGISTRY.clone();
-
-        registry.do_set_default_initial_dkg_subnet(SetDefaultInitialDkgSubnetPayload {
-            subnet_id: Some(SUBNET_ID.get()),
-        });
-        assert_eq!(registry_value(&registry), Some(*SUBNET_ID));
 
         registry.do_set_default_initial_dkg_subnet(SetDefaultInitialDkgSubnetPayload {
             subnet_id: None,
         });
+
         assert_eq!(registry_value(&registry), None);
     }
 

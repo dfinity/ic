@@ -22,7 +22,7 @@ pub const ROOT_SUBNET_ID_KEY: &str = "nns_subnet_id";
 /// The subnet id of the subnet to which `SetupInitialDKG` management canister
 /// calls are routed by default (i.e., when no subnet id is specified
 /// explicitly in the request). If unset, `SetupInitialDKG` requests without
-/// an explicit subnet id are routed to the calling subnet.
+/// an explicit subnet id are routed to the calling subnet (NNS).
 pub const DEFAULT_INITIAL_DKG_SUBNET_ID_KEY: &str = "default_initial_dkg_subnet_id";
 pub const NODE_REWARDS_TABLE_KEY: &str = "node_rewards_table";
 const UNASSIGNED_NODES_CONFIG_RECORD_KEY: &str = "unassigned_nodes_config";
