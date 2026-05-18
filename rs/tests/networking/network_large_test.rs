@@ -109,19 +109,17 @@ pub fn test(env: TestEnv) {
         log,
         "Step 3: Assert that update call to the canister succeeds"
     );
-    block_on(message_canister.try_store_msg_and_log(UPDATE_MSG_1))
-        .expect("Update canister call failed.");
+    block_on(message_canister.try_store_msg(UPDATE_MSG_1)).expect("Update canister call failed.");
     assert_eq!(
-        block_on(message_canister.try_read_msg_and_log()),
+        block_on(message_canister.try_read_msg()),
         Ok(Some(UPDATE_MSG_1.to_string()))
     );
 
     info!(log, "Step 4: Run idle for a few min");
     block_on(async { tokio::time::sleep(IDLE_DURATION).await });
-    block_on(message_canister.try_store_msg_and_log(UPDATE_MSG_2))
-        .expect("Update canister call failed.");
+    block_on(message_canister.try_store_msg(UPDATE_MSG_2)).expect("Update canister call failed.");
     assert_eq!(
-        block_on(message_canister.try_read_msg_and_log()),
+        block_on(message_canister.try_read_msg()),
         Ok(Some(UPDATE_MSG_2.to_string()))
     );
 
@@ -139,10 +137,9 @@ pub fn test(env: TestEnv) {
         log,
         "Step 6: Assert that update call succeeds in presence of {} faulty nodes", FAULTY
     );
-    block_on(message_canister.try_store_msg_and_log(UPDATE_MSG_3))
-        .expect("Update canister call failed.");
+    block_on(message_canister.try_store_msg(UPDATE_MSG_3)).expect("Update canister call failed.");
     assert_eq!(
-        block_on(message_canister.try_read_msg_and_log()),
+        block_on(message_canister.try_read_msg()),
         Ok(Some(UPDATE_MSG_3.to_string()))
     );
 
@@ -160,7 +157,7 @@ pub fn test(env: TestEnv) {
     if let Ok(Ok(result)) = block_on(async {
         tokio::time::timeout(
             std::time::Duration::from_secs(30),
-            message_canister.try_store_msg_and_log(UPDATE_MSG_4),
+            message_canister.try_store_msg(UPDATE_MSG_4),
         )
         .await
     }) {
@@ -179,11 +176,10 @@ pub fn test(env: TestEnv) {
     );
 
     info!(log, "Storing message '{}' ...", UPDATE_MSG_5);
-    block_on(message_canister.try_store_msg_and_log(UPDATE_MSG_5))
-        .expect("Update canister call failed.");
+    block_on(message_canister.try_store_msg(UPDATE_MSG_5)).expect("Update canister call failed.");
     info!(log, "Reading message '{}' ...", UPDATE_MSG_5);
     assert_eq!(
-        block_on(message_canister.try_read_msg_and_log()),
+        block_on(message_canister.try_read_msg()),
         Ok(Some(UPDATE_MSG_5.to_string()))
     );
 
@@ -192,10 +188,9 @@ pub fn test(env: TestEnv) {
         "Step 9: Run idle for a few min on faulty node boundary"
     );
     block_on(async { tokio::time::sleep(IDLE_DURATION).await });
-    block_on(message_canister.try_store_msg_and_log(UPDATE_MSG_6))
-        .expect("Update canister call failed.");
+    block_on(message_canister.try_store_msg(UPDATE_MSG_6)).expect("Update canister call failed.");
     assert_eq!(
-        block_on(message_canister.try_read_msg_and_log()),
+        block_on(message_canister.try_read_msg()),
         Ok(Some(UPDATE_MSG_6.to_string()))
     );
 }

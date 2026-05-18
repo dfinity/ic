@@ -159,10 +159,9 @@ fn test(env: TestEnv) {
 
     // Assert that `update` call to the canister succeeds.
     info!(logger, "Assert that update call to the canister succeeds");
-    block_on(message_canister.try_store_msg_and_log(UPDATE_MSG_1))
-        .expect("Update canister call failed.");
+    block_on(message_canister.try_store_msg(UPDATE_MSG_1)).expect("Update canister call failed.");
     assert_eq!(
-        block_on(message_canister.try_read_msg_and_log()),
+        block_on(message_canister.try_read_msg()),
         Ok(Some(UPDATE_MSG_1.to_string()))
     );
 
@@ -184,10 +183,9 @@ fn test(env: TestEnv) {
         logger,
         "Assert that update call to the canister still succeeds"
     );
-    block_on(message_canister.try_store_msg_and_log(UPDATE_MSG_2))
-        .expect("Update canister call failed.");
+    block_on(message_canister.try_store_msg(UPDATE_MSG_2)).expect("Update canister call failed.");
     assert_eq!(
-        block_on(message_canister.try_read_msg_and_log()),
+        block_on(message_canister.try_read_msg()),
         Ok(Some(UPDATE_MSG_2.to_string()))
     );
 
@@ -204,7 +202,7 @@ fn test(env: TestEnv) {
     if let Ok(Ok(result)) = block_on(async {
         tokio::time::timeout(
             std::time::Duration::from_secs(30),
-            message_canister.try_store_msg_and_log(UPDATE_MSG_3),
+            message_canister.try_store_msg(UPDATE_MSG_3),
         )
         .await
     }) {
@@ -225,10 +223,9 @@ fn test(env: TestEnv) {
         logger,
         "Assert that update call to the canister succeeds again"
     );
-    block_on(message_canister.try_store_msg_and_log(UPDATE_MSG_4))
-        .expect("Update canister call failed.");
+    block_on(message_canister.try_store_msg(UPDATE_MSG_4)).expect("Update canister call failed.");
     assert_eq!(
-        block_on(message_canister.try_read_msg_and_log()),
+        block_on(message_canister.try_read_msg()),
         Ok(Some(UPDATE_MSG_4.to_string()))
     );
 }
