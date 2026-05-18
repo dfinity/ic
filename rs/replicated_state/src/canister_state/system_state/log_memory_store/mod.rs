@@ -67,11 +67,11 @@ pub struct LogMemoryStore {
     /// Tracks whether the one-time migration from `CanisterLog` to
     /// `LogMemoryStore` has already been performed for this canister.
     ///
-    /// On the first checkpoint load after the feature is enabled the store is
-    /// initialised with `DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT` and existing
-    /// `CanisterLog` records are copied in.  Once that has happened this flag
-    /// is set to `true` and persisted so that the migration is never repeated,
-    /// even if the user later resets `log_memory_limit` to 0.
+    /// On the first round execution after the upgrade that enables the feature
+    /// the store is initialised with `DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT` and
+    /// existing `CanisterLog` records are copied in.  Once that has happened
+    /// this flag is set to `true` and persisted so that the migration is never
+    /// repeated, even if the user later resets `log_memory_limit` to 0.
     migrated: bool,
 
     /// Caches the ring buffer header to avoid expensive reads from the `PageMap`.
@@ -161,7 +161,7 @@ impl LogMemoryStore {
     }
 
     /// Clears the migration flag so the migration will run again on the next
-    /// feature-enabled checkpoint load.
+    /// round execution after the feature is re-enabled.
     pub fn clear_migrated(&mut self) {
         self.migrated = false;
     }

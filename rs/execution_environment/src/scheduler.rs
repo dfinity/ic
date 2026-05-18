@@ -1198,7 +1198,9 @@ impl Scheduler for SchedulerImpl {
                         .log_memory_store
                         .append_delta_log(&mut system_state.canister_log.clone());
                     system_state.log_memory_store.set_migrated();
-                } else if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+                } else if !LOG_MEMORY_STORE_FEATURE_ENABLED
+                    && canister.system_state.log_memory_store.is_migrated()
+                {
                     let system_state = &mut Arc::make_mut(canister).system_state;
                     system_state
                         .log_memory_store
