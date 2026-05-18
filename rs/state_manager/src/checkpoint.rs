@@ -1,6 +1,5 @@
 use crossbeam_channel::{Sender, unbounded};
 use ic_base_types::{CanisterId, SnapshotId, subnet_id_try_from_protobuf};
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::canister_snapshots::{
@@ -20,7 +19,7 @@ use ic_state_layout::{
     PageMapLayout, ReadOnly, SnapshotLayout, error::LayoutError, try_mmap_wasm_file,
 };
 use ic_types::batch::RawQueryStats;
-use ic_types::{CanisterTimer, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, Height, Time};
+use ic_types::{CanisterTimer, Height, Time};
 use ic_utils::thread::maybe_parallel_map;
 use ic_validate_eq::ValidateEq;
 use std::collections::BTreeMap;
@@ -839,7 +838,7 @@ pub fn load_canister_state(
         None
     };
 
-    let mut system_state = SystemState::new_from_checkpoint(
+    let system_state = SystemState::new_from_checkpoint(
         canister_state_bits.controllers,
         *canister_id,
         queues,
@@ -873,21 +872,6 @@ pub fn load_canister_state(
         canister_state_bits.environment_variables,
         metrics,
     );
-
-    if LOG_MEMORY_STORE_FEATURE_ENABLED && !system_state.log_memory_store.is_migrated() {
-        system_state
-            .log_memory_store
-            .resize(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, Arc::clone(&fd_factory));
-        system_state
-            .log_memory_store
-            .append_delta_log(&mut system_state.canister_log.clone());
-        system_state.log_memory_store.set_migrated();
-    } else if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        system_state
-            .log_memory_store
-            .resize(0, Arc::clone(&fd_factory));
-        system_state.log_memory_store.clear_migrated();
-    }
 
     let canister_state = CanisterState {
         system_state,

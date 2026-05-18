@@ -13,6 +13,7 @@ use crate::ic00_permissions::Ic00MethodPermissions;
 use crate::metrics::MeasurementScope;
 use crate::util::process_responses;
 use ic_config::embedders::Config as HypervisorConfig;
+use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
@@ -42,8 +43,9 @@ use ic_types::batch::ChainKeyData;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{Ingress, MessageId, NO_DEADLINE, Response, SubnetMessage};
 use ic_types::{
-    CanisterId, ComputeAllocation, ExecutionRound, MemoryAllocation, NumBytes, NumInstructions,
-    NumMessages, NumSlices, Randomness, ReplicaVersion, SubnetId, Time,
+    CanisterId, ComputeAllocation, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, ExecutionRound,
+    MemoryAllocation, NumBytes, NumInstructions, NumMessages, NumSlices, Randomness,
+    ReplicaVersion, SubnetId, Time,
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
@@ -1177,6 +1179,34 @@ impl Scheduler for SchedulerImpl {
         // When making changes to this method, please make sure each piece of code is covered by duration metrics.
         // The goal is to ensure that we can track the performance of `execute_round` and its individual components.
         let root_measurement_scope = MeasurementScope::root(&self.metrics.round);
+
+        {
+            let _timer = self
+                .metrics
+                .round_log_memory_store_migration_duration
+                .start_timer();
+            for canister in state.canisters_iter_mut() {
+                if LOG_MEMORY_STORE_FEATURE_ENABLED
+                    && !canister.system_state.log_memory_store.is_migrated()
+                {
+                    let system_state = &mut Arc::make_mut(canister).system_state;
+                    system_state.log_memory_store.resize(
+                        DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
+                        Arc::clone(&self.fd_factory),
+                    );
+                    system_state
+                        .log_memory_store
+                        .append_delta_log(&mut system_state.canister_log.clone());
+                    system_state.log_memory_store.set_migrated();
+                } else if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+                    let system_state = &mut Arc::make_mut(canister).system_state;
+                    system_state
+                        .log_memory_store
+                        .resize(0, Arc::clone(&self.fd_factory));
+                    system_state.log_memory_store.clear_migrated();
+                }
+            }
+        }
 
         let round_log;
         let mut csprng;
