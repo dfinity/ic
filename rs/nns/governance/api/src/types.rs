@@ -4289,7 +4289,7 @@ pub enum NnsFunction {
     /// Set or unset the default subnet to which `SetupInitialDKG` management
     /// canister calls are routed when no subnet is specified explicitly. If unset,
     /// `SetupInitialDKG` requests without an explicit subnet id are routed to the
-    /// calling subnet (which historically has been the NNS subnet).
+    /// calling subnet (NNS).
     SetDefaultInitialDkgSubnet = 58,
 }
 impl NnsFunction {

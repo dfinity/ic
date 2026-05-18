@@ -79,7 +79,7 @@ impl Registry {
 /// If `subnet_id` is `Some(_)`, the registry entry is created or updated to
 /// point at the given subnet; if `subnet_id` is `None`, the registry entry is
 /// removed and `SetupInitialDKG` requests fall back to being routed to the
-/// calling subnet (which historically has been the NNS subnet).
+/// calling subnet (NNS).
 #[derive(Debug, Clone, Eq, PartialEq, CandidType, Serialize, Deserialize)]
 pub struct SetDefaultInitialDkgSubnetPayload {
     pub subnet_id: Option<PrincipalId>,

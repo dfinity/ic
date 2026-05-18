@@ -295,6 +295,12 @@ enum SubCommand {
     /// Get a DataCenterRecord
     GetDataCenter(GetDataCenterCmd),
 
+    /// Get the subnet to which `SetupInitialDKG` management canister calls
+    /// without an explicit subnet id are routed by default. Prints `None` if
+    /// no default is configured (in which case such calls fall back to the
+    /// calling subnet).
+    GetDefaultInitialDkgSubnet,
+
     /// Get the ECDSA key ids and their signing subnets
     GetEcdsaSigningSubnets,
 
@@ -1048,7 +1054,7 @@ struct ProposeToSetDefaultInitialDkgSubnetCmd {
     /// The subnet to which `SetupInitialDKG` calls without an explicit subnet
     /// id should be routed by default. If omitted, the registry entry is
     /// removed and `SetupInitialDKG` requests fall back to being routed to the
-    /// calling subnet (which historically has been the NNS subnet).
+    /// calling subnet (NNS).
     #[clap(long)]
     pub subnet_id: Option<PrincipalId>,
 }
@@ -4941,6 +4947,29 @@ async fn main() {
                 .unwrap();
             for (key_id, subnets) in chain_key_enabled_subnets.iter() {
                 println!("KeyId {key_id:?}: {subnets:?}");
+            }
+        }
+        SubCommand::GetDefaultInitialDkgSubnet => {
+            let registry_client = make_registry_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+            );
+
+            // maximum number of retries, let the user ctrl+c if necessary
+            registry_client
+                .try_polling_latest_version(usize::MAX)
+                .unwrap();
+
+            let default_initial_dkg_subnet_id = registry_client
+                .get_default_initial_dkg_subnet_id(registry_client.get_latest_version())
+                .unwrap();
+            match default_initial_dkg_subnet_id {
+                Some(subnet_id) => println!("Default initial DKG subnet: {subnet_id}"),
+                None => println!(
+                    "No default initial DKG subnet is configured; `SetupInitialDKG` calls \
+                    without an explicit subnet id fall back to the calling subnet (NNS)."
+                ),
             }
         }
         SubCommand::ProposeToReviseElectedGuestosVersions(cmd) => {
