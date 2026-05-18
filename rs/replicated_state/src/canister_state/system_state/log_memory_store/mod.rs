@@ -98,7 +98,10 @@ impl LogMemoryStore {
     /// explicitly resized to a non-zero capacity.
     pub fn new(feature_flag: FlagStatus) -> Self {
         const DEFAULT_NEXT_IDX: u64 = 0;
-        Self::new_inner(feature_flag, None, DEFAULT_NEXT_IDX, false)
+        // A freshly created canister has no legacy CanisterLog records to migrate,
+        // so migration is considered done from the start.
+        let migrated = feature_flag == FlagStatus::Enabled;
+        Self::new_inner(feature_flag, None, DEFAULT_NEXT_IDX, migrated)
     }
 
     /// Creates a new store from a checkpoint.
