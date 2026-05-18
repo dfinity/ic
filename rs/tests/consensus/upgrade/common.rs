@@ -263,6 +263,13 @@ pub fn upgrade(
         "Canister {} logs missing after upgrade",
         can_id_2
     );
+    // Storing msg_2 above guarantees a round was executed, so migration of canister_log to
+    // log_memory_store has run. Verify logs are still accessible after migration.
+    assert!(
+        can_fetch_logs(&logger, &faulty_node.get_public_url(), can_id, msg),
+        "Canister {} logs missing after upgrade (after migration)",
+        can_id
+    );
 
     if let Some((canister, public_keys)) = ecdsa_canister_key {
         for (key_id, old_public_key) in public_keys {
