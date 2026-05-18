@@ -589,7 +589,7 @@ opt-level = 3
 opt-level = 3
 
 [workspace.dependencies]
-actix-rt = "2.10.0"
+actix-rt = "2.11.0"
 actix-web = "4.9.0"
 actix-web-prom = "0.10.0"
 aide = { version = "^0.14.2", features = ["axum", "axum-json"] }
@@ -773,7 +773,7 @@ paste = "1.0.15"
 pem = { version = "^3", default-features = false, features = ["std"] }
 ping = "0.5.0"
 pkcs8 = "0.10.2"
-pprof = { version = "0.14.0", default-features = false, features = [
+pprof = { version = "0.14.1", default-features = false, features = [
     "criterion",
     "flamegraph",
     "prost-codec",
