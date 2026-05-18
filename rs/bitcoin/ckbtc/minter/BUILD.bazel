@@ -88,6 +88,7 @@ rust_doc_test(
         compile_data = [":ckbtc_minter.did"],
         crate_features = features,
         crate_name = "ic_ckbtc_minter_canister",
+        hidden_endpoints = hidden_endpoints,
         proc_macro_deps = [
             # Keep sorted.
         ],
@@ -108,16 +109,18 @@ rust_doc_test(
             "@crate_index//:serde_json",
         ],
     )
-    for (name, features) in [
+    for (name, features, hidden_endpoints) in [
         # Production version without debug assertions.
         (
             "ckbtc_minter",
             [],
+            "hidden_endpoints.conf",
         ),
         # Test version with internal consistency checks.
         (
             "ckbtc_minter_debug",
             ["self_check"],
+            "hidden_endpoints_debug.conf",
         ),
     ]
 ]

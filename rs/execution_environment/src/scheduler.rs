@@ -34,7 +34,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::SubnetSchedule;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
-use ic_replicated_state::metrics::ReplicatedStateMetrics;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     CanisterState, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
@@ -45,7 +44,7 @@ use ic_types::messages::{Ingress, MessageId, NO_DEADLINE, Response, SubnetMessag
 use ic_types::{
     CanisterId, ComputeAllocation, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, ExecutionRound,
     MemoryAllocation, NumBytes, NumInstructions, NumMessages, NumSlices, Randomness,
-    ReplicaVersion, SubnetId, Time,
+    ReplicaVersion, Time,
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
@@ -143,12 +142,10 @@ impl SchedulerRoundLimits {
 pub(crate) struct SchedulerImpl {
     config: SchedulerConfig,
     hypervisor_config: HypervisorConfig,
-    own_subnet_id: SubnetId,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     exec_env: Arc<ExecutionEnvironment>,
     cycles_account_manager: Arc<CyclesAccountManager>,
     metrics: Arc<SchedulerMetrics>,
-    state_metrics: ReplicatedStateMetrics,
     log: ReplicaLogger,
     thread_pool: RefCell<scoped_threadpool::Pool>,
     rate_limiting_of_heap_delta: FlagStatus,
@@ -161,7 +158,6 @@ impl SchedulerImpl {
     pub(crate) fn new(
         config: SchedulerConfig,
         hypervisor_config: HypervisorConfig,
-        own_subnet_id: SubnetId,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
         exec_env: Arc<ExecutionEnvironment>,
         cycles_account_manager: Arc<CyclesAccountManager>,
@@ -176,12 +172,10 @@ impl SchedulerImpl {
             config,
             hypervisor_config,
             thread_pool: RefCell::new(scoped_threadpool::Pool::new(scheduler_cores)),
-            own_subnet_id,
             ingress_history_writer,
             exec_env,
             cycles_account_manager,
             metrics: Arc::new(SchedulerMetrics::new(metrics_registry)),
-            state_metrics: ReplicatedStateMetrics::new(metrics_registry),
             log,
             rate_limiting_of_heap_delta,
             rate_limiting_of_instructions,
@@ -1099,17 +1093,12 @@ impl SchedulerImpl {
             }
         }
 
-        self.state_metrics.observe(
-            self.own_subnet_id,
-            state,
-            current_round.get().into(),
-            logger,
-        );
-
         self.check_invariants(state, current_round_type, current_round, logger);
     }
 
     /// Checks the DTS and subnet memory usage invariants at the end of the round.
+    //
+    // TODO(DSM-103): Move into ReplicatedStateMetrics.
     fn check_invariants(
         &self,
         state: &ReplicatedState,

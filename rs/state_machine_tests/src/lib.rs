@@ -126,6 +126,7 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
+use ic_state_manager::testing::StateManagerTesting;
 use ic_test_utilities_consensus::{FakeConsensusPoolCache, batch::MockBatchPayloadBuilder};
 use ic_test_utilities_metrics::{
     Labels, fetch_counter_vec, fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_counter,
@@ -1017,7 +1018,8 @@ impl StateManager for StateMachineStateManager {
         scope: CertificationScope,
         batch_summary: Option<BatchSummary>,
     ) {
-        self.deref().commit_and_certify(state, scope, batch_summary)
+        self.deref()
+            .commit_and_certify_sync(state, scope, batch_summary)
     }
 
     fn tip_height(&self) -> Height {
@@ -1131,6 +1133,9 @@ pub struct StateMachine {
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     pub registry_client: Arc<FakeRegistryClient>,
     pub state_manager: Arc<StateMachineStateManager>,
+    /// Whether to flush the replicated state metrics channel after each round.
+    /// Defaults to `true` but can be overridden, e.g. for benchmarks.
+    pub flush_replicated_state_metrics: bool,
     consensus_time: Arc<PocketConsensusTime>,
     ingress_pool: Arc<RwLock<PocketIngressPool>>,
     ingress_manager: Arc<IngressManager>,
@@ -2318,6 +2323,7 @@ impl StateMachine {
             registry_data_provider,
             registry_client: registry_client.clone(),
             state_manager,
+            flush_replicated_state_metrics: true,
             consensus_time,
             ingress_pool,
             ingress_manager: ingress_manager.clone(),
@@ -2481,6 +2487,11 @@ impl StateMachine {
                 b"subnet".into(),
                 subnet_id.get().into(),
                 b"canister_ranges".into(),
+            ]),
+            LabeledTreePath::new(vec![
+                b"subnet".into(),
+                subnet_id.get().into(),
+                b"type".into(),
             ]),
             LabeledTreePath::from(Label::from("time")),
         ];
@@ -3054,12 +3065,16 @@ impl StateMachine {
             .process_batch(batch)
             .expect("Could not process batch");
 
-        self.state_manager.flush_hash_channel();
         if self.remove_old_states {
             self.state_manager.remove_states_below(batch_number);
         }
         assert_eq!(self.state_manager.latest_state_height(), batch_number);
 
+        // Wait until the enqueued `ReplicatedStateMetrics::observe()` call has been
+        // processed by the background metrics thread.
+        if self.flush_replicated_state_metrics {
+            self.state_manager.flush_metrics_channel();
+        }
         self.check_critical_errors();
 
         self.set_time(time_of_next_round.into());
@@ -3159,7 +3174,6 @@ impl StateMachine {
         replicated_state.metadata.batch_time = time;
         self.state_manager
             .commit_and_certify(replicated_state, CertificationScope::Metadata, None);
-        self.state_manager.flush_hash_channel();
         self.set_time(time.into());
         *self.time_of_last_round.write().unwrap() = time;
     }
@@ -3360,7 +3374,6 @@ impl StateMachine {
 
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
-        self.state_manager.flush_hash_channel();
     }
 
     /// Enables checkpoints and makes a tick to write a checkpoint.
@@ -3401,7 +3414,6 @@ impl StateMachine {
         *state.canister_priority_mut(canister_id) = *source_state.canister_priority(&canister_id);
         self.state_manager
             .commit_and_certify(state, CertificationScope::Full, None);
-        self.state_manager.flush_hash_channel();
         self.state_manager.remove_states_below(h.increment());
     }
 
@@ -3427,7 +3439,6 @@ impl StateMachine {
         if state.take_canister_state(&canister_id).is_some() {
             self.state_manager
                 .commit_and_certify(state, CertificationScope::Full, None);
-            self.state_manager.flush_hash_channel();
 
             self.state_manager.flush_tip_channel();
 
@@ -3641,7 +3652,6 @@ impl StateMachine {
 
         self.state_manager
             .commit_and_certify(state, CertificationScope::Full, None);
-        self.state_manager.flush_hash_channel();
 
         // Perform the split on `env`, which requires preserving the `prev_state_hash`
         // (as opposed to MVP subnet splitting where it is adjusted manually).
@@ -3653,7 +3663,6 @@ impl StateMachine {
 
         env.state_manager
             .commit_and_certify(state, CertificationScope::Full, None);
-        env.state_manager.flush_hash_channel();
 
         Ok(env)
     }
@@ -4964,7 +4973,6 @@ impl StateMachine {
             .stable_memory = memory;
         self.state_manager
             .commit_and_certify(replicated_state, CertificationScope::Metadata, None);
-        self.state_manager.flush_hash_channel();
     }
 
     /// Returns the query stats of the specified canister.
@@ -4997,7 +5005,6 @@ impl StateMachine {
 
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
-        self.state_manager.flush_hash_channel();
     }
 
     /// Returns the cycle balance of the specified canister.
@@ -5029,7 +5036,6 @@ impl StateMachine {
         let balance = canister_state.system_state.balance().get();
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
-        self.state_manager.flush_hash_channel();
         balance
     }
 
@@ -5113,7 +5119,6 @@ impl StateMachine {
 
     /// Make sure the latest state is certified.
     pub fn certify_latest_state(&self) {
-        self.state_manager.flush_hash_channel();
         certify_latest_state_helper(self.state_manager.clone(), &self.secret_key, self.subnet_id)
     }
 
@@ -5250,7 +5255,6 @@ impl StateMachine {
         }
         self.state_manager
             .commit_and_certify(replicated_state, CertificationScope::Metadata, None);
-        self.state_manager.flush_hash_channel();
     }
 }
 
@@ -5263,7 +5267,6 @@ pub fn certify_latest_state_helper(
     if state_manager.latest_state_height() == Height::from(0) {
         let (_height, replicated_state) = state_manager.take_tip();
         state_manager.commit_and_certify(replicated_state, CertificationScope::Metadata, None);
-        state_manager.flush_hash_channel();
     }
     assert_ne!(state_manager.latest_state_height(), Height::from(0));
     if state_manager.latest_state_height() > state_manager.latest_certified_height() {

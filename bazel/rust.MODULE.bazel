@@ -775,6 +775,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     features = [
+        "check-endpoints",
         "exe",
     ],
     package = "ic-wasm",
@@ -2041,6 +2042,11 @@ crate.annotation(
 crate.annotation(
     crate = "canbench",
     gen_binaries = ["canbench"],
+)
+crate.annotation(
+    crate = "askama_derive",
+    patch_args = ["-p2"],
+    patches = ["@@//bazel:askama.patch"],
 )
 crate.annotation(
     crate = "cc",
