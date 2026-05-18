@@ -179,14 +179,15 @@ impl ProtoSecretKeyStore {
         self.zeroize_or_unlink_old_file()
     }
 
-    /// Disposes of `old_proto_file_to_zeroize` after a successful write.
+    /// Disposes of `old_proto_file_to_zeroize` during cleanup, whether after a
+    /// successful write, or when cleaning up stale files during startup.
     ///
     /// If `old_proto_file_to_zeroize` and `proto_file` share an inode, zeroing would
     /// overwrite the live keystore — so just unlink the extra link. The new content
     /// has already been written into that inode, so there is no separate old-inode
     /// copy left to scrub. Otherwise, zero-and-delete the old file as usual. If
     /// `old_proto_file_to_zeroize` does not exist (e.g. the first write to a fresh
-    /// keystore), this is a no-op.
+    /// keystore, or there is nothing left to clean up at startup), this is a no-op.
     ///
     /// Inode sharing is not expected on filesystems where `rename(2)` atomically
     /// swaps the destination directory entry to a new inode (Linux ext4 / xfs /
