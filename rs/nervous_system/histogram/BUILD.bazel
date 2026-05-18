@@ -4,14 +4,12 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 # In the meantime, allow everyone to use this.
 package(default_visibility = ["//visibility:public"])
 
-LIB_SRCS = glob(
-    ["src/**/*.rs"],
-    exclude = ["**/*tests*/**"],
-)
-
 rust_library(
     name = "histogram",
-    srcs = LIB_SRCS,
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["**/*tests*/**"],
+    ),
     crate_name = "ic_nervous_system_histogram",
     version = "0.0.1",
     deps = [
