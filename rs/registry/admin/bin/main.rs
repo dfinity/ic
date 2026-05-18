@@ -68,9 +68,9 @@ use ic_nns_governance_api::{
     subnet_rental::{RentalConditionId, SubnetRentalRequest},
 };
 use ic_nns_governance_conversions::convert_guest_launch_measurements_from_pb_to_api;
+use ic_nns_handler_lifeline_interface::{HardResetNnsRootToVersionPayload, UpgradeRootProposal};
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
-use ic_nns_test_utils::governance::{HardResetNnsRootToVersionPayload, UpgradeRootProposal};
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
     ai_node::v1::AiNodeRecord,

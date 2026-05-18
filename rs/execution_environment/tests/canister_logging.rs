@@ -1821,8 +1821,8 @@ fn test_metric_canister_log_retention_seconds() {
     // Advance simulated time and append another record.
     env.advance_time(TIME_ADVANCE);
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-
     let after = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+
     assert_eq!(after.count, before.count + 1);
     let sample = after.sum - before.sum;
     // The new sample should report at least the advanced wall-clock gap.
@@ -2440,10 +2440,9 @@ fn test_canister_log_resize_rejected_insufficient_cycles() {
                 .build(),
         )
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
     assert!(
-        err.description()
-            .contains("Cannot resize canister log memory due to insufficient cycles"),
+        err.description().contains("insufficient cycles"),
         "Unexpected error message: {}",
         err.description(),
     );
@@ -2634,8 +2633,10 @@ fn test_fetch_canister_logs_update_call_deducts_cycles() {
 
 #[test]
 fn test_log_memory_store_feature_flag_via_execution_test_builder() {
-    // With the flag disabled (default), canister creation does not allocate a ring buffer.
-    let mut test = ExecutionTestBuilder::new().build();
+    // With the flag disabled, canister creation does not allocate a ring buffer.
+    let mut test = ExecutionTestBuilder::new()
+        .with_log_memory_store_feature_disabled()
+        .build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
     assert_eq!(
         test.canister_status(canister_id)

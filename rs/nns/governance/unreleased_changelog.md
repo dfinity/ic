@@ -9,9 +9,11 @@ on the process that this file is part of, see
 
 ## Added
 
-* Daily timer task that fetches ICP/XDR rates from the Exchange Rate Canister, maintains a 365-day price history in Governance state, and computes Mission 70 maturity modulation locally. The computed value is not yet consumed by spawning or disbursement; that switchover will happen in a follow-up PR.
-
 ## Changed
+
+* Neuron spawning and maturity disbursement finalization now read the locally
+  computed Mission 70 maturity modulation (derived from the XRC-backed price
+  history) instead of the CMC-polled `cached_daily_maturity_modulation_basis_points`.
 
 ## Deprecated
 

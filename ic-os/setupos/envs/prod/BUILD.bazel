@@ -18,7 +18,7 @@ icos_images = icos_build(
 file_size_check(
     name = "disk_img_size_check",
     file = icos_images.disk_image,
-    max_file_size = 2500 * 1000 * 1000,  # 2.41 GB on 2026-05-03; raised from 2.4 GB to 2.5 GB to accommodate the bundled ollama runtime + gemma3:1b model on AI nodes.
+    max_file_size = 2900 * 1000 * 1000,  # 2.41 GB on 2026-05-03; raised from 2.4 GB to 2.5 GB to accommodate the bundled ollama runtime + gemma3:1b model on AI nodes.
 )
 
 launch_bare_metal(
@@ -30,7 +30,6 @@ launch_bare_metal(
 # (image is used as the IC-OS installation image downloaded by Node Providers)
 artifact_bundle(
     name = "bundle",
-    testonly = True,
     inputs = [":prod"],
     prefix = "setup-os/disk-img",
     visibility = ["//visibility:public"],

@@ -3,17 +3,6 @@ load("//bazel:defs.bzl", "rust_ic_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
-DEV_DATA = [
-    # Keep sorted.
-    ":replica_tests",
-    "//rs/universal_canister/impl:universal_canister.wasm.gz",
-]
-
-DEV_ENV = {
-    # Keep sorted.
-    "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
-}
-
 rust_library(
     name = "replica_tests",
     testonly = True,
@@ -65,8 +54,15 @@ rust_ic_test_suite(
     name = "replica_tests_integration",
     timeout = "long",
     srcs = glob(["tests/**/*.rs"]),
-    data = DEV_DATA,
-    env = DEV_ENV,
+    data = [
+        # Keep sorted.
+        ":replica_tests",
+        "//rs/universal_canister/impl:universal_canister.wasm.gz",
+    ],
+    env = {
+        # Keep sorted.
+        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+    },
     deps = [
         # Keep sorted.
         ":replica_tests",

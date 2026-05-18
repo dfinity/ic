@@ -45,6 +45,7 @@ rust_canister(
     compile_data = [
         "templates/dashboard.html",
     ],
+    hidden_endpoints = "hidden_endpoints.conf",
     service_file = "btc_checker_canister.did",
     deps = [
         # Keep sorted.

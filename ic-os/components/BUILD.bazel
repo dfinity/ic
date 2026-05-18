@@ -1,4 +1,4 @@
-load("//bazel:defs.bzl", "write_info_file_var")
+load("//bazel:defs.bzl", "write_stable_status_file_var")
 load("//ic-os/components/conformance_tests:defs.bzl", "check_unused_components_test")
 load("guestos.bzl", guestos_component_files = "component_files")
 load("hostos.bzl", hostos_component_files = "component_files")
@@ -26,7 +26,7 @@ exports_files(
     ],
 )
 
-write_info_file_var(
+write_stable_status_file_var(
     name = "commit_timestamp_txt",
     tags = ["manual"],
     varname = "STABLE_COMMIT_TIMESTAMP",
