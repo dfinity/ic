@@ -2734,7 +2734,7 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
 
     // Execute enough messages to cause wrap-around in the legacy canister_log storage
     // (capacity of ~74 records for a 15-byte message at DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT).
-    let num_pre_migration = 200usize;
+    let num_pre_migration = 200_usize;
     for i in 0..num_pre_migration {
         let msg = format!("hello migration {i}");
         let _ = env.execute_ingress(
