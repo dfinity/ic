@@ -99,12 +99,13 @@ where
             Arc::new(FakeVerifier::new()),
             subnet_test_id(0),
             SubnetType::Application,
-            no_op_logger(),
-            &metrics_registry,
             &StateManagerConfig::new(tmpdir.path().to_path_buf()),
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
             tokio::sync::watch::channel(ic_types::Height::from(0)).0,
+            None,
+            &metrics_registry,
+            no_op_logger(),
         );
         setup_ingress_state(now, &mut state_manager);
         let state_manager = Arc::new(state_manager);
