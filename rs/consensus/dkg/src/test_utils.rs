@@ -16,13 +16,12 @@ use ic_types::{
     Height, NumberOfNodes, RegistryVersion,
     consensus::{
         BlockPayload,
-        dkg::{DealingContent, DealingMessages, Message},
+        dkg::{DealingContent, DealingMessages, Message, RemoteTranscriptResult},
     },
     crypto::threshold_sig::ni_dkg::{
-        NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
+        NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         config::{NiDkgConfig, NiDkgConfigData},
     },
-    messages::CallbackId,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -103,7 +102,7 @@ pub(super) fn complement_state_manager_with_setup_initial_dkg_request(
 /// Extract the remote dkg transcripts from the current highest validated block
 pub(super) fn extract_remote_dkgs_from_highest_block(
     pool: &TestConsensusPool,
-) -> Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)> {
+) -> Vec<RemoteTranscriptResult> {
     let block: ic_types::consensus::Block = pool
         .validated()
         .block_proposal()

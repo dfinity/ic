@@ -115,9 +115,9 @@ impl From<&BlockPayload> for DkgPayloadStats {
                         .or_insert(1);
                 }
 
-                for (dkg_id, _, _) in &data_payload.dkg.transcripts_for_remote_subnets {
+                for transcript in &data_payload.dkg.transcripts_for_remote_subnets {
                     remote_transcripts_delivered
-                        .entry(dkg_id.dkg_tag.clone())
+                        .entry(transcript.dkg_id.dkg_tag.clone())
                         .and_modify(|count| *count += 1)
                         .or_insert(1);
                 }
