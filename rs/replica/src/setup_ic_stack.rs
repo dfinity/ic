@@ -482,12 +482,15 @@ pub fn construct_state_sync_only_stack(
         verifier,
         subnet_id,
         subnet_type,
-        log.clone(),
-        metrics_registry,
         &config.state_manager,
         Some(consensus_pool_cache.starting_height()),
         config.malicious_behavior.malicious_flags.clone(),
         max_certified_height_tx,
+        // State-sync-only path doesn't execute messages, so we skip the
+        // ReplicatedStateInvariants observer.
+        None,
+        metrics_registry,
+        log.clone(),
     ));
 
     // ---------- STATE SYNC + P2P (receive-only) --------------------------
