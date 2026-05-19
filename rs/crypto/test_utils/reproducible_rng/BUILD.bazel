@@ -2,35 +2,25 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:rand",
-    "@crate_index//:rand_chacha",
-]
-
-MACRO_DEPENDENCIES = []
-
-DEV_DEPENDENCIES = []
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_library(
     name = "reproducible_rng",
-    testonly = True,
     srcs = glob(["src/**"]),
-    aliases = ALIASES,
     crate_name = "ic_crypto_test_utils_reproducible_rng",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+    ],
 )
 
 rust_test_suite(
     name = "reproducible_rng_integration_test",
     srcs = glob(["tests/*.rs"]),
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":reproducible_rng"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":reproducible_rng",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+    ],
 )

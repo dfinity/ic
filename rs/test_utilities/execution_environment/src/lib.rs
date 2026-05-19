@@ -34,11 +34,12 @@ use ic_logger::{
     replica_logger::{no_op_logger, test_logger},
 };
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
-    CanisterUpgradeOptions, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs, InstallCodeArgsV2,
-    LoadCanisterSnapshotArgs, LogVisibilityV2, MasterPublicKeyId, Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, UpdateSettingsArgs,
+    CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterMetricsArgs,
+    CanisterMetricsResult, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
+    CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
+    InstallChunkedCodeArgs, InstallCodeArgs, InstallCodeArgsV2, LoadCanisterSnapshotArgs,
+    LogVisibilityV2, MasterPublicKeyId, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    SchnorrAlgorithm, UpdateSettingsArgs,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -891,6 +892,20 @@ impl ExecutionTest {
         let result = self.subnet_message(Method::CanisterStatus, payload);
         match result {
             Ok(WasmResult::Reply(bytes)) => Ok(CanisterStatusResultV2::decode(&bytes).unwrap()),
+            Ok(WasmResult::Reject(err)) => panic!("Unexpected reject: {}", err),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Returns the canister metrics by canister id.
+    pub fn canister_metrics(
+        &mut self,
+        canister_id: CanisterId,
+    ) -> Result<CanisterMetricsResult, UserError> {
+        let payload = CanisterMetricsArgs::new(canister_id).encode();
+        let result = self.subnet_message(Method::CanisterMetrics, payload);
+        match result {
+            Ok(WasmResult::Reply(bytes)) => Ok(CanisterMetricsResult::decode(&bytes).unwrap()),
             Ok(WasmResult::Reject(err)) => panic!("Unexpected reject: {}", err),
             Err(err) => Err(err),
         }
@@ -2625,6 +2640,16 @@ impl ExecutionTestBuilder {
 
     pub fn with_canister_sandboxing_disabled(mut self) -> Self {
         self.execution_config.canister_sandboxing_flag = FlagStatus::Disabled;
+        self
+    }
+
+    pub fn with_log_memory_store_feature_disabled(mut self) -> Self {
+        self.execution_config.log_memory_store_feature = FlagStatus::Disabled;
+        self
+    }
+
+    pub fn with_log_memory_store_feature_enabled(mut self) -> Self {
+        self.execution_config.log_memory_store_feature = FlagStatus::Enabled;
         self
     }
 

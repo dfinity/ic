@@ -190,6 +190,7 @@ pub struct CanisterStateBits {
     pub global_timer_nanos: Option<u64>,
     pub canister_version: u64,
     pub consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+    pub consumed_cycles_by_use_cases_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,
     pub instructions_executed: NumInstructions,
     pub ingress_messages_executed: u64,
     pub remote_subnet_messages_executed: u64,

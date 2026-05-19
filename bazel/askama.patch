@@ -1,0 +1,58 @@
+
+# Patch for build-determinism issues caused by `Path::canonicalize()` in
+# `find_template()` and `read_config_file()`.
+#
+# When the askama derive macro runs inside a hermetic build sandbox (Bazel,
+# Buck, etc.), the input source files live under a sandbox-specific path,
+# but they are symlinked to the real on-disk location of the repository.
+# `Path::canonicalize()` resolves the symlinks and returns the real path,
+# while `caller_dir` (used by `rel_path`) is derived from the sandbox cwd.
+# `diff_paths()` then produces a relative path with a `..`-component count
+# that depends on the depth of the sandbox path, so the same source builds
+# to byte-different rlibs whenever the sandbox path depth changes (e.g.
+# different `--output_base`s, different `nest` depths).
+#
+# The fix is to skip `canonicalize()` so both paths stay anchored to
+# `manifest_root()` (= CARGO_MANIFEST_DIR, the sandbox-relative root that
+# `--remap-path-prefix=${pwd}=.` normalizes).
+#
+# Upstream ticket: https://github.com/askama-rs/askama/issues/708
+diff --git a/askama_derive/src/config.rs b/askama_derive/src/config.rs
+index afc23b5..9eacbb0 100644
+--- a/askama_derive/src/config.rs
++++ b/askama_derive/src/config.rs
+@@ -212,14 +212,14 @@ impl Config {
+                 span,
+             ));
+         };
+-        match path.canonicalize() {
+-            Ok(path) => Ok(path.into()),
+-            Err(err) => Err(CompileError::new_with_span(
+-                format_args!("could not canonicalize path {path:?}: {err}"),
+-                file_info,
+-                span,
+-            )),
+-        }
++        // Avoid `canonicalize()` so the resulting path stays anchored to
++        // `manifest_root()` (CARGO_MANIFEST_DIR) instead of leaking the
++        // real on-disk location through symlinks. Symlink resolution would
++        // cause hermetic builds (e.g. Bazel sandboxes) to embed the repo's
++        // real path into `include_bytes!(...)` paths emitted by the
++        // template generator, making the rlib non-reproducible when the
++        // sandbox path depth changes between runs.
++        Ok(Arc::<Path>::from(path))
+     }
+ }
+
+@@ -358,7 +358,10 @@ pub(crate) fn read_config_file(
+                 span,
+             )
+         })?;
+-        Ok((content, filename.canonicalize().ok()))
++        // See the comment in `find_template`: avoid canonicalize() so the
++        // path stays anchored to manifest_root() rather than following
++        // symlinks into the real on-disk location.
++        Ok((content, Some(filename)))
+     } else if config_path.is_some() {
+         Err(CompileError::no_file_info(
+             format_args!("`{}` does not exist", filename.display()),

@@ -171,7 +171,6 @@ impl ExecutionServices {
         let scheduler = Box::new(SchedulerImpl::new(
             subnet_config.scheduler_config,
             config.embedders_config,
-            own_subnet_id,
             Arc::clone(&ingress_history_writer) as Arc<_>,
             Arc::clone(&execution_environment) as Arc<_>,
             Arc::clone(&cycles_account_manager),
@@ -374,6 +373,7 @@ fn setup_execution_helper(
         config.max_environment_variables,
         config.max_environment_variable_name_length,
         config.max_environment_variable_value_length,
+        config.log_memory_store_feature,
     );
     let canister_manager = Arc::new(CanisterManager::new(
         Arc::clone(&hypervisor),

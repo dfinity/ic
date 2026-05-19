@@ -41,6 +41,7 @@ def system_test(
         data = [],
         additional_colocate_tags = [],
         logs = True,
+        vm_allocation_mode = None,
         **kwargs):
     """Declares a system-test.
 
@@ -85,6 +86,12 @@ def system_test(
       logs: Specifies if vector vm for scraping logs should not be spawned.
       exclude_logs: Specifies uvm name patterns to exclude from streaming.
       data: List of files used by the test driver.
+      vm_allocation_mode: Optional VM allocation mode string forwarded to the
+        test driver via the `VM_ALLOCATION_MODE` environment variable. Must
+        match one of the serde rename strings of `VmAllocationMode`, e.g.
+        `"performanceOptimizedAllocation"`,
+        `"minIntraDistanceLoadBalanceAllocation"` or `"distributeAcrossDcs"`.
+        When None it defaults to `"minIntraDistanceLoadBalanceAllocation"`.
       **kwargs: additional arguments to pass to the rust_binary rule.
 
     Returns:
@@ -131,8 +138,6 @@ def system_test(
     env |= icos_config.env
     _runtime_deps |= icos_config.runtime_deps
     icos_images |= icos_config.icos_images
-
-    env_var_files["FARM_METADATA"] = "//rs/tests:farm_metadata.txt"
 
     extra_args_simple = []
     extra_args_colocated = []
@@ -187,6 +192,19 @@ def system_test(
         "PROMETHEUS_VM_SCRAPE_INTERVAL_SECS": json.encode(prometheus_vm_scrape_interval_secs),
     }
 
+    if vm_allocation_mode != None:
+        allowed_vm_allocation_modes = [
+            "minIntraDistanceLoadBalanceAllocation",
+            "performanceOptimizedAllocation",
+            "distributeAcrossDcs",
+        ]
+        if vm_allocation_mode not in allowed_vm_allocation_modes:
+            fail("Invalid vm_allocation_mode {}: must be one of {}".format(
+                repr(vm_allocation_mode),
+                allowed_vm_allocation_modes,
+            ))
+        env |= {"VM_ALLOCATION_MODE": vm_allocation_mode}
+
     # RUN_SCRIPT_ICOS_IMAGES:
     # Have the run script resolve repo based ICOS images.
     # The run script expects a map of enviromment variable prefixes to targets. e.g.
@@ -210,6 +228,9 @@ def system_test(
 
     tags = tags + ["requires-network", "system_test"]
 
+    env["RUN_SCRIPT_VOLATILE_STATUS_PATH"] = "$(rootpath //bazel:volatile-status.txt)"
+    data.append("//bazel:volatile-status.txt")
+
     sh_test(
         name = test_name,
         srcs = ["//rs/tests:run_systest.sh"],
@@ -225,8 +246,6 @@ def system_test(
         visibility = visibility,
     )
 
-    COLOCATED_RUNTIME_DEP_ENV_VARS = RUN_SCRIPT_RUNTIME_DEP_ENV_VARS
-
     # create a colocated version of the test (marked as manual _unless_ the test is tagged with "colocate")
     sh_test(
         srcs = ["//rs/tests:run_systest.sh"],
@@ -239,7 +258,6 @@ def system_test(
         env = env | {
                   "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath //rs/tests/idx:colocate_test_bin)",
                   "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_colocated),
-                  "COLOCATED_RUNTIME_DEP_ENV_VARS": COLOCATED_RUNTIME_DEP_ENV_VARS,
                   "COLOCATED_UVM_CONFIG_IMAGE_PATH": "$(rootpath //rs/tests:colocate_uvm_config_image)",
                   "COLOCATED_TEST_NAME": test_name,
                   "COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES": json.encode(colocated_test_driver_vm_required_host_features),

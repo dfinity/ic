@@ -1257,6 +1257,11 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .canister_metrics()
                 .consumed_cycles_by_use_cases()
                 .clone(),
+            consumed_cycles_by_use_cases_as_counters: canister_state
+                .system_state
+                .canister_metrics()
+                .consumed_cycles_by_use_cases_as_counters()
+                .clone(),
             canister_history: canister_state.system_state.get_canister_history().clone(),
             wasm_chunk_store_metadata: canister_state
                 .system_state

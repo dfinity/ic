@@ -22,9 +22,8 @@ use ic_management_canister_types_private::{
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
-use ic_replicated_state::canister_state::system_state::is_low_wasm_memory_hook_condition_satisfied;
 use ic_replicated_state::{
-    CallOrigin, ExecutionTask, NetworkTopology, SystemState, canister_state::DEFAULT_QUEUE_CAPACITY,
+    CallOrigin, NetworkTopology, SystemState, canister_state::DEFAULT_QUEUE_CAPACITY,
 };
 use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::{
@@ -145,7 +144,6 @@ pub struct SystemStateModifications {
     pub(super) requests: Vec<Request>,
     pub(super) new_global_timer: Option<CanisterTimer>,
     pub(super) canister_log: CanisterLog,
-    pub on_low_wasm_memory_hook_condition_check_result: Option<bool>,
     pub(super) should_bump_canister_version: bool,
 }
 
@@ -162,7 +160,6 @@ impl Default for SystemStateModifications {
             requests: vec![],
             new_global_timer: None,
             canister_log: CanisterLog::default_delta(),
-            on_low_wasm_memory_hook_condition_check_result: None,
             should_bump_canister_version: false,
         }
     }
@@ -357,7 +354,8 @@ impl SystemStateModifications {
             | Ok(Ic00Method::ReadCanisterSnapshotMetadata)
             | Ok(Ic00Method::ReadCanisterSnapshotData)
             | Ok(Ic00Method::UploadCanisterSnapshotMetadata)
-            | Ok(Ic00Method::UploadCanisterSnapshotData) => Ok(None),
+            | Ok(Ic00Method::UploadCanisterSnapshotData)
+            | Ok(Ic00Method::CanisterMetrics) => Ok(None),
             Err(_) => Err(UserError::new(
                 ErrorCode::CanisterMethodNotFound,
                 format!("Management canister has no method '{}'", msg.method_name),
@@ -421,20 +419,6 @@ impl SystemStateModifications {
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id() == CYCLES_MINTING_CANISTER_ID)?;
         self.apply_balance_changes(system_state);
-
-        if let Some(hook_condition_check_result) =
-            self.on_low_wasm_memory_hook_condition_check_result
-        {
-            if hook_condition_check_result {
-                system_state
-                    .task_queue
-                    .enqueue(ExecutionTask::OnLowWasmMemory);
-            } else {
-                system_state
-                    .task_queue
-                    .remove(ExecutionTask::OnLowWasmMemory);
-            }
-        }
 
         // Verify we don't accept more cycles than are available from call
         // context and update the call context balance.
@@ -1475,26 +1459,6 @@ impl SandboxSafeSystemState {
         Ok(())
     }
 
-    /// Condition for `OnLowWasmMemoryHook` is satisfied if the following holds:
-    ///
-    ///   `wasm_memory_threshold > wasm_memory_limit - wasm_memory_usage`
-    ///
-    /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
-    pub fn update_status_of_low_wasm_memory_hook_condition(
-        &mut self,
-        wasm_memory_limit: Option<NumBytes>,
-        wasm_memory_usage: NumBytes,
-    ) {
-        let is_condition_satisfied = is_low_wasm_memory_hook_condition_satisfied(
-            wasm_memory_usage,
-            wasm_memory_limit,
-            self.wasm_memory_threshold,
-        );
-
-        self.system_state_modifications
-            .on_low_wasm_memory_hook_condition_check_result = Some(is_condition_satisfied);
-    }
-
     /// Appends a log record to the system state changes.
     pub fn append_canister_log(&mut self, time: &Time, content: Vec<u8>) {
         self.system_state_modifications
@@ -1738,94 +1702,6 @@ mod tests {
 
         // Otherwise the correct `deadline` is returned.
         assert_eq!(helper_msg_deadline(Some(deadline)), deadline);
-    }
-
-    fn helper_create_state_for_hook_status(wasm_memory_threshold: u64) -> SandboxSafeSystemState {
-        SandboxSafeSystemState::new_internal(
-            canister_test_id(0),
-            CanisterStatusView::Running,
-            NumSeconds::from(3600),
-            MemoryAllocation::default(),
-            NumBytes::new(wasm_memory_threshold),
-            ComputeAllocation::default(),
-            Default::default(),
-            Cycles::new(1_000_000),
-            Cycles::zero(),
-            None,
-            None,
-            None,
-            None,
-            CyclesAccountManager::new(
-                NumInstructions::from(1_000_000_000),
-                SubnetType::Application,
-                subnet_test_id(0),
-                CyclesAccountManagerConfig::application_subnet(),
-            ),
-            Some(0),
-            0,
-            BTreeMap::new(),
-            0,
-            BTreeSet::new(),
-            SMALL_APP_SUBNET_MAX_SIZE,
-            CanisterCyclesCostSchedule::Normal,
-            SchedulerConfig::application_subnet().dirty_page_overhead,
-            CanisterTimer::Inactive,
-            0,
-            BTreeSet::new(),
-            RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
-            None,
-            0,
-            MAX_DELTA_LOG_MEMORY_LIMIT,
-            // Wasm32 execution environment. Sufficient in testing.
-            false,
-            NetworkTopology::default(),
-        )
-    }
-
-    const GIB: u64 = 1 << 30;
-
-    fn helper_is_condition_satisfied_for_on_low_wasm_memory_hook(
-        wasm_memory_threshold: u64,
-        wasm_memory_limit: Option<u64>,
-        wasm_memory_usage: u64,
-    ) -> bool {
-        let wasm_memory_limit = wasm_memory_limit.unwrap_or(4 * GIB);
-        wasm_memory_limit < wasm_memory_usage + wasm_memory_threshold
-    }
-    #[test]
-    fn test_on_low_wasm_memory_hook_condition_update() {
-        for wasm_memory_threshold in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
-            for wasm_memory_limit in [None, Some(GIB), Some(2 * GIB), Some(3 * GIB), Some(4 * GIB)]
-            {
-                for wasm_memory_usage in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
-                    let mut state = helper_create_state_for_hook_status(wasm_memory_threshold);
-
-                    assert_eq!(
-                        state
-                            .system_state_modifications
-                            .on_low_wasm_memory_hook_condition_check_result,
-                        None
-                    );
-
-                    state.update_status_of_low_wasm_memory_hook_condition(
-                        wasm_memory_limit.map(|m| m.into()),
-                        wasm_memory_usage.into(),
-                    );
-
-                    assert_eq!(
-                        state
-                            .system_state_modifications
-                            .on_low_wasm_memory_hook_condition_check_result
-                            .unwrap(),
-                        helper_is_condition_satisfied_for_on_low_wasm_memory_hook(
-                            wasm_memory_threshold,
-                            wasm_memory_limit,
-                            wasm_memory_usage
-                        )
-                    );
-                }
-            }
-        }
     }
 
     fn generate_inputs_expectations_for_use_case_both_some(

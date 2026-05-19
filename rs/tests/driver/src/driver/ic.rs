@@ -41,7 +41,6 @@ use std::time::Duration;
 pub struct InternetComputer {
     pub initial_version: Option<NodeSoftwareVersion>,
     pub vm_resource_overrides: VmResourceOverrides,
-    pub vm_allocation: Option<VmAllocationStrategy>,
     pub required_host_features: Vec<HostFeature>,
     pub subnets: Vec<Subnet>,
     pub node_operator: Option<PrincipalId>,
@@ -72,16 +71,6 @@ pub struct NodeOperatorConfig {
     pub rewardable_nodes: BTreeMap<String, u32>,
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
-pub enum VmAllocationStrategy {
-    #[serde(rename = "distributeToArbitraryHost")]
-    DistributeToArbitraryHost,
-    #[serde(rename = "distributeWithinSingleHost")]
-    DistributeWithinSingleHost,
-    #[serde(rename = "distributeAcrossDcs")]
-    DistributeAcrossDcs,
-}
-
 impl InternetComputer {
     pub fn new() -> Self {
         Self::default()
@@ -92,11 +81,6 @@ impl InternetComputer {
     /// Node > Subnet > IC > Group > Default
     pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
         self.vm_resource_overrides = vm_resource_overrides;
-        self
-    }
-
-    pub fn with_vm_allocation(mut self, vm_allocation: VmAllocationStrategy) -> Self {
-        self.vm_allocation = Some(vm_allocation);
         self
     }
 
@@ -116,7 +100,6 @@ impl InternetComputer {
     /// on the node is reduced.
     pub fn add_fast_single_node_subnet(mut self, subnet_type: SubnetType) -> Self {
         let mut subnet = Subnet::fast_single_node(subnet_type);
-        subnet.vm_allocation.clone_from(&self.vm_allocation);
         subnet
             .required_host_features
             .clone_from(&self.required_host_features);
@@ -164,7 +147,6 @@ impl InternetComputer {
         for _ in 0..no_of_nodes {
             self.unassigned_nodes.push(
                 Node::new()
-                    .with_vm_allocation(self.vm_allocation.clone())
                     .with_boot_image(BootImage::GroupDefault)
                     .with_required_host_features(self.required_host_features.clone()),
             );
@@ -184,7 +166,6 @@ impl InternetComputer {
         for idx in 0..no_of_nodes {
             self.api_boundary_nodes.push(
                 Node::new()
-                    .with_vm_allocation(self.vm_allocation.clone())
                     .with_boot_image(BootImage::GroupDefault)
                     .with_required_host_features(self.required_host_features.clone())
                     .with_domain(format!("apibn-{idx}.ic.net")),
@@ -202,7 +183,6 @@ impl InternetComputer {
         for _ in 0..no_of_nodes {
             self.api_boundary_nodes.push(
                 Node::new()
-                    .with_vm_allocation(self.vm_allocation.clone())
                     .with_boot_image(BootImage::GroupDefault)
                     .with_required_host_features(self.required_host_features.clone()),
             );
@@ -220,7 +200,6 @@ impl InternetComputer {
     pub fn with_ipv4_enabled_unassigned_node(mut self, ipv4_config: IPv4Config) -> Self {
         self.unassigned_nodes.push(
             Node::new()
-                .with_vm_allocation(self.vm_allocation.clone())
                 .with_boot_image(BootImage::GroupDefault)
                 .with_required_host_features(self.required_host_features.clone())
                 .with_ipv4_config(ipv4_config),
@@ -571,7 +550,6 @@ impl InternetComputer {
 #[derive(Clone, PartialEq, Debug, Deserialize)]
 pub struct Subnet {
     pub vm_resource_overrides: VmResourceOverrides,
-    pub vm_allocation: Option<VmAllocationStrategy>,
     pub boot_image: BootImage,
     pub required_host_features: Vec<HostFeature>,
     pub default_node_reward_type: Option<NodeRewardType>,
@@ -620,7 +598,6 @@ impl Subnet {
         };
         Self {
             vm_resource_overrides: Default::default(),
-            vm_allocation: Default::default(),
             boot_image: Default::default(),
             required_host_features: vec![],
             default_node_reward_type,
@@ -655,11 +632,6 @@ impl Subnet {
     /// Node > Subnet > IC > Group > Default
     pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
         self.vm_resource_overrides = vm_resource_overrides;
-        self
-    }
-
-    pub fn with_vm_allocation(mut self, vm_allocation: VmAllocationStrategy) -> Self {
-        self.vm_allocation = Some(vm_allocation);
         self
     }
 
@@ -734,12 +706,10 @@ impl Subnet {
     /// Add the given number of nodes to the subnet.
     pub fn add_nodes(self, no_of_nodes: usize) -> Self {
         (0..no_of_nodes).fold(self, |subnet, _| {
-            let vm_allocation = subnet.vm_allocation.clone();
             let boot_image = subnet.boot_image.clone();
             let required_host_features = subnet.required_host_features.clone();
             subnet.add_node(
                 Node::new()
-                    .with_vm_allocation(vm_allocation)
                     .with_boot_image(boot_image)
                     .with_required_host_features(required_host_features),
             )
@@ -764,13 +734,11 @@ impl Subnet {
         self,
         mut required_host_features: Vec<HostFeature>,
     ) -> Self {
-        let vm_allocation = self.vm_allocation.clone();
         let boot_image = self.boot_image.clone();
         required_host_features.extend_from_slice(&self.required_host_features);
 
         self.add_node(
             Node::new()
-                .with_vm_allocation(vm_allocation)
                 .with_boot_image(boot_image)
                 .with_required_host_features(required_host_features),
         )
@@ -858,12 +826,10 @@ impl Subnet {
         malicious_behavior: MaliciousBehavior,
     ) -> Self {
         (0..no_of_nodes).fold(self, |subnet, _| {
-            let vm_allocation = subnet.vm_allocation.clone();
             let boot_image = subnet.boot_image.clone();
             let required_host_features = subnet.required_host_features.clone();
             subnet.add_node(
                 Node::new()
-                    .with_vm_allocation(vm_allocation)
                     .with_boot_image(boot_image)
                     .with_required_host_features(required_host_features)
                     .with_malicious_behavior(malicious_behavior.clone()),
@@ -872,12 +838,10 @@ impl Subnet {
     }
 
     pub fn add_node_with_ipv4(self, ipv4_config: IPv4Config) -> Self {
-        let vm_allocation = self.vm_allocation.clone();
         let boot_image = self.boot_image.clone();
         let required_host_features = self.required_host_features.clone();
         self.add_node(
             Node::new()
-                .with_vm_allocation(vm_allocation)
                 .with_boot_image(boot_image)
                 .with_required_host_features(required_host_features)
                 .with_ipv4_config(ipv4_config),
@@ -899,7 +863,6 @@ impl Default for Subnet {
     fn default() -> Self {
         Self {
             vm_resource_overrides: Default::default(),
-            vm_allocation: Default::default(),
             boot_image: BootImage::GroupDefault,
             required_host_features: vec![],
             default_node_reward_type: None,
@@ -995,7 +958,6 @@ impl VmResourceOverrides {
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize)]
 pub struct Node {
     pub vm_resource_overrides: VmResourceOverrides,
-    pub vm_allocation: Option<VmAllocationStrategy>,
     pub required_host_features: Vec<HostFeature>,
     pub secret_key_store: Option<NodeSecretKeyStore>,
     pub ipv6: Option<Ipv6Addr>,
@@ -1025,11 +987,6 @@ impl Node {
     /// Node > Subnet > IC > Group > Default
     pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
         self.vm_resource_overrides = vm_resource_overrides;
-        self
-    }
-
-    pub fn with_vm_allocation(mut self, vm_allocation: Option<VmAllocationStrategy>) -> Self {
-        self.vm_allocation = vm_allocation;
         self
     }
 

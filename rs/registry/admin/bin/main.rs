@@ -68,9 +68,9 @@ use ic_nns_governance_api::{
     subnet_rental::{RentalConditionId, SubnetRentalRequest},
 };
 use ic_nns_governance_conversions::convert_guest_launch_measurements_from_pb_to_api;
+use ic_nns_handler_lifeline_interface::{HardResetNnsRootToVersionPayload, UpgradeRootProposal};
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
-use ic_nns_test_utils::governance::{HardResetNnsRootToVersionPayload, UpgradeRootProposal};
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord,
@@ -1606,6 +1606,11 @@ struct ProposeToFulfillSubnetRentalRequestCmd {
     /// Replica version ID (40 character hexadecimal git commit ID)
     #[clap(long)]
     replica_version_id: String,
+
+    /// Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+    /// If not set, handling defaults to the NNS subnet.
+    #[clap(long)]
+    initial_dkg_subnet_id: Option<PrincipalId>,
 }
 
 impl ProposalTitle for ProposeToFulfillSubnetRentalRequestCmd {
@@ -1628,6 +1633,7 @@ impl ProposalAction for ProposeToFulfillSubnetRentalRequestCmd {
                 user: Some(self.user),
                 node_ids: Some(self.node_ids.clone()),
                 replica_version_id: Some(self.replica_version_id.clone()),
+                initial_dkg_subnet_id: self.initial_dkg_subnet_id,
             },
         )
     }

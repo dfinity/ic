@@ -327,7 +327,8 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::ReadCanisterSnapshotData
                     | ic00::Method::UploadCanisterSnapshotMetadata
                     | ic00::Method::UploadCanisterSnapshotData
-                    | ic00::Method::RenameCanister => String::from("fast"),
+                    | ic00::Method::RenameCanister
+                    | ic00::Method::CanisterMetrics => String::from("fast"),
 
                     // "Slow" management methods that might require several execution
                     // rounds to be completed, either due to using DTS or due to

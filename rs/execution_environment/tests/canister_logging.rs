@@ -18,7 +18,9 @@ use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, SubmitIngressError, UserError,
 };
 use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
-use ic_test_utilities_execution_environment::{get_reject, get_reply, wat_canister, wat_fn};
+use ic_test_utilities_execution_environment::{
+    ExecutionTestBuilder, get_reject, get_reply, wat_canister, wat_fn,
+};
 use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
 use ic_types::{CanisterId, NumInstructions, ingress::WasmResult};
 use ic_types_cycles::Cycles;
@@ -1819,8 +1821,8 @@ fn test_metric_canister_log_retention_seconds() {
     // Advance simulated time and append another record.
     env.advance_time(TIME_ADVANCE);
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-
     let after = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+
     assert_eq!(after.count, before.count + 1);
     let sample = after.sum - before.sum;
     // The new sample should report at least the advanced wall-clock gap.
@@ -2438,10 +2440,9 @@ fn test_canister_log_resize_rejected_insufficient_cycles() {
                 .build(),
         )
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
     assert!(
-        err.description()
-            .contains("Cannot resize canister log memory due to insufficient cycles"),
+        err.description().contains("insufficient cycles"),
         "Unexpected error message: {}",
         err.description(),
     );
@@ -2627,5 +2628,34 @@ fn test_fetch_canister_logs_update_call_deducts_cycles() {
         2_000_000_000,
         "Expected most cycles to be refunded, but {} were spent",
         cycles_spent
+    );
+}
+
+#[test]
+fn test_log_memory_store_feature_flag_via_execution_test_builder() {
+    // With the flag disabled, canister creation does not allocate a ring buffer.
+    let mut test = ExecutionTestBuilder::new()
+        .with_log_memory_store_feature_disabled()
+        .build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    assert_eq!(
+        test.canister_status(canister_id)
+            .unwrap()
+            .log_memory_store_size()
+            .get(),
+        0,
+    );
+
+    // With the flag enabled, canister creation allocates the ring buffer.
+    let mut test = ExecutionTestBuilder::new()
+        .with_log_memory_store_feature_enabled()
+        .build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    assert_gt!(
+        test.canister_status(canister_id)
+            .unwrap()
+            .log_memory_store_size()
+            .get(),
+        0,
     );
 }
