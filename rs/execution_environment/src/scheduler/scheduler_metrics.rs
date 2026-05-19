@@ -12,8 +12,6 @@ use prometheus::{Gauge, Histogram, HistogramOpts, HistogramVec, IntCounter, IntC
 use std::collections::BTreeMap;
 
 pub(crate) const CANISTER_INVARIANT_BROKEN: &str = "scheduler_canister_invariant_broken";
-pub(crate) const SUBNET_MEMORY_USAGE_INVARIANT_BROKEN: &str =
-    "scheduler_subnet_memory_usage_invariant_broken";
 pub(crate) const SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN: &str =
     "scheduler_compute_allocation_invariant_broken";
 pub(crate) const SCHEDULER_CORES_INVARIANT_BROKEN: &str = "scheduler_cores_invariant_broken";
@@ -29,7 +27,7 @@ pub struct SchedulerMetrics {
     pub(super) expired_ingress_messages_count: IntCounter,
     pub(super) round_skipped_due_to_current_heap_delta_above_limit: IntCounter,
     pub(super) execute_round_called: IntCounter,
-    pub(super) inner_loop_consumed_non_zero_instructions_count: IntCounter,
+    pub(super) inner_loop_processed_non_zero_inputs_count: IntCounter,
     pub(super) inner_round_loop_consumed_max_instructions: IntCounter,
     pub(super) num_canisters_uninstalled_out_of_cycles: IntCounter,
     pub(super) round: ScopedMetrics,
@@ -58,7 +56,6 @@ pub struct SchedulerMetrics {
     pub(super) heap_delta_rate_limited_canisters_per_round: Histogram,
     pub(super) canister_install_code_debits: Histogram,
     pub(super) canister_invariants: IntCounter,
-    pub(super) subnet_memory_usage_invariant: IntCounter,
     pub(super) scheduler_compute_allocation_invariant_broken: IntCounter,
     pub(super) scheduler_cores_invariant_broken: IntCounter,
     pub(super) scheduler_accumulated_priority_deviation: Gauge,
@@ -146,9 +143,9 @@ impl SchedulerMetrics {
             // allows one to estimate how often we manage to execute multiple
             // loops of inner_round(), i.e. how often we manage to successfully
             // induct messages on the same subnet and make progress on them.
-            inner_loop_consumed_non_zero_instructions_count: metrics_registry.int_counter(
-                "inner_loop_consumed_non_zero_instructions_count",
-                "The number of times inner_round()'s loop consumed at least 1 instruction.",
+            inner_loop_processed_non_zero_inputs_count: metrics_registry.int_counter(
+                "inner_loop_processed_non_zero_inputs_count",
+                "The number of times inner_round()'s loop processed at least 1 canister input.",
             ),
             inner_round_loop_consumed_max_instructions: metrics_registry.int_counter(
                 "inner_round_loop_consumed_max_instructions",
@@ -306,7 +303,6 @@ impl SchedulerMetrics {
                 metrics_registry,
             ),
             canister_invariants: metrics_registry.error_counter(CANISTER_INVARIANT_BROKEN),
-            subnet_memory_usage_invariant: metrics_registry.error_counter(SUBNET_MEMORY_USAGE_INVARIANT_BROKEN),
             scheduler_compute_allocation_invariant_broken: metrics_registry.error_counter(SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN),
             scheduler_cores_invariant_broken: metrics_registry.error_counter(SCHEDULER_CORES_INVARIANT_BROKEN),
             scheduler_accumulated_priority_deviation: metrics_registry.gauge(

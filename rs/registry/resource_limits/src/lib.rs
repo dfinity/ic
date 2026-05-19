@@ -26,6 +26,17 @@ pub struct ResourceLimits {
     pub maximum_state_delta: Option<NumBytes>,
 }
 
+impl ResourceLimits {
+    /// Returns the subnet memory capacity.
+    ///
+    /// This is `maximum_state_size` if not `0`, otherwise the provided `default`.
+    pub fn maximum_state_size_or(&self, default: NumBytes) -> NumBytes {
+        self.maximum_state_size
+            .filter(|maximum_state_size| maximum_state_size.get() != 0)
+            .unwrap_or(default)
+    }
+}
+
 impl From<ResourceLimits> for pb::ResourceLimits {
     fn from(resource_limits: ResourceLimits) -> Self {
         Self {

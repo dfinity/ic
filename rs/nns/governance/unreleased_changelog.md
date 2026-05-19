@@ -11,10 +11,6 @@ on the process that this file is part of, see
 
 ## Changed
 
-* Neuron spawning and maturity disbursement finalization now read the locally
-  computed Mission 70 maturity modulation (derived from the XRC-backed price
-  history) instead of the CMC-polled `cached_daily_maturity_modulation_basis_points`.
-
 ## Deprecated
 
 ## Removed
