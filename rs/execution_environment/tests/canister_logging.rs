@@ -2751,7 +2751,13 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
     // next_idx advances for every produced record, including dropped ones.
     check_canister_log(&env, canister_many, num_pre_migration as u64);
     check_lms(&env, canister_many, false, false, true, 0);
-    check_records(&env, canister_many, pre_migration_len, num_pre_migration as u64 - 1, &last_pre_migration_msg);
+    check_records(
+        &env,
+        canister_many,
+        pre_migration_len,
+        num_pre_migration as u64 - 1,
+        &last_pre_migration_msg,
+    );
 
     let log_0 = b"log 0".to_vec();
     let _ = env.execute_ingress(
