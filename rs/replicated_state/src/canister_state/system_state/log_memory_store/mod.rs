@@ -409,10 +409,12 @@ impl LogMemoryStore {
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
         if delta_log.is_empty() {
             // No records to append, but still carry the monotone index forward.
-            // The canister_log can be empty after uninstalling a canister (uninstall
-            // clears the log records but preserves next_idx). Wrap-around alone will
-            // never evict all entries because truncation ensures every record fits
-            // within the capacity.
+            // This case is particularly relevant for migrating canister logs
+            // from the legacy `canister_log` which can be empty after uninstalling
+            // the canister in which case we still want to preserve `next_idx`.
+            // This way, a service can continuously fetch canister logs
+            // by keeping track of the last fetched index which is monotonically
+            // increasing.
             self.persistent_next_idx = self.persistent_next_idx.max(delta_log.next_idx());
             return;
         }
