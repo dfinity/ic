@@ -95,11 +95,9 @@ mod tests {
     };
     use ic_base_types::{NodeId, PrincipalId};
     use ic_nervous_system_time_helpers::now_system_time;
-    use ic_protobuf::registry::replica_version::v1::{
-        BlessedReplicaVersions, ReplicaVersionRecord,
-    };
-    use ic_registry_keys::{make_blessed_replica_versions_key, make_replica_version_key};
-    use ic_registry_transport::{insert, upsert};
+    use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
+    use ic_registry_keys::make_replica_version_key;
+    use ic_registry_transport::insert;
     use maplit::btreemap;
     use prost::Message;
     use std::str::FromStr;
@@ -243,9 +241,7 @@ mod tests {
             )
             .expect("Unexpected Err");
 
-        // create and bless version for the API boundary node
-        let blessed_versions = registry.get_blessed_replica_version_ids();
-
+        // create and elect version for the API boundary node
         registry.maybe_apply_mutation_internal(vec![
             // Mutation to insert ApiBoundaryNodeRecord
             insert(
@@ -254,14 +250,6 @@ mod tests {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
                     guest_launch_measurements: None,
-                }
-                .encode_to_vec(),
-            ),
-            // Mutation to insert BlessedReplicaVersions
-            upsert(
-                make_blessed_replica_versions_key(), // key
-                BlessedReplicaVersions {
-                    blessed_version_ids: [blessed_versions, vec!["version".into()]].concat(),
                 }
                 .encode_to_vec(),
             ),

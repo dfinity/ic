@@ -226,7 +226,7 @@ impl Registry {
 /// Note that `replica_version_id` and `membership`
 /// are intentionally left out as they are updated via other proposals and/or
 /// handlers because they are subject to invariants, e.g. the replica version
-/// must be "blessed".
+/// must be "elected".
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct UpdateSubnetPayload {
     pub subnet_id: SubnetId,

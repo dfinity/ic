@@ -42,6 +42,7 @@ DEPENDENCIES = [
     "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
+    "@crate_index//:tokio",
     "@crate_index//:url",
     "@crate_index//:x509-cert",
 ]
@@ -60,7 +61,6 @@ ALIASES = {}
 
 rust_library(
     name = "prep",
-    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_prep_lib",
@@ -70,7 +70,6 @@ rust_library(
 
 rust_binary(
     name = "ic-prep",
-    testonly = True,
     srcs = ["src/bin/prep.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -79,7 +78,6 @@ rust_binary(
 
 rust_binary(
     name = "ic-principal-id",
-    testonly = True,
     srcs = ["src/bin/principal_id.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,

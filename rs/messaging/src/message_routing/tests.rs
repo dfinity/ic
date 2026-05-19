@@ -12,12 +12,10 @@ use ic_interfaces_registry::RegistryValue;
 use ic_interfaces_state_manager::StateReader;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
+use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
 use ic_protobuf::registry::crypto::v1::{ChainKeyEnabledSubnetList, PublicKey as PublicKeyProto};
+use ic_protobuf::registry::node::v1::{IPv4InterfaceConfig, NodeRecord};
 use ic_protobuf::registry::subnet::v1::SubnetRecord as SubnetRecordProto;
-use ic_protobuf::registry::{
-    api_boundary_node::v1::ApiBoundaryNodeRecord, node::v1::IPv4InterfaceConfig,
-    node::v1::NodeRecord,
-};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{make_canister_ranges_key, make_chain_key_enabled_subnet_list_key};
 use ic_registry_local_registry::LocalRegistry;
@@ -32,19 +30,15 @@ use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec};
 use ic_test_utilities_registry::{SubnetRecordBuilder, get_mainnet_delta_00_6d_c1};
 use ic_test_utilities_state::CanisterStateBuilder;
-use ic_test_utilities_types::{
-    batch::BatchBuilder,
-    ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
-};
-use ic_types::batch::BlockmakerMetrics;
+use ic_test_utilities_types::batch::BatchBuilder;
+use ic_test_utilities_types::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
+use ic_types::batch::{Batch, BatchMessages, BlockmakerMetrics};
+use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
+use ic_types::time::Time;
 use ic_types::xnet::{StreamIndexedQueue, StreamSlice};
-use ic_types::{CanisterId, ExecutionRound, ReplicaVersion};
 use ic_types::{
-    NodeId, PrincipalId, Randomness,
-    batch::{Batch, BatchMessages},
-    crypto::AlgorithmId,
-    crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
-    time::Time,
+    CanisterId, ExecutionRound, NodeId, NumBytes, PrincipalId, Randomness, ReplicaVersion,
 };
 use maplit::{btreemap, btreeset};
 use std::{fmt::Debug, str::FromStr, sync::Arc, time::Duration};
@@ -2185,12 +2179,20 @@ fn process_batch_updates_subnet_metrics() {
         // Reading from the registry must succeed for fully specified records.
         let (batch_processor, _metrics, state_manager, _registry_settings) =
             make_batch_processor(fixture.registry.clone(), log);
-        let (height, mut state) = state_manager.take_tip();
-        state.metadata.own_subnet_id = own_subnet_id;
-        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
+
+        // Advance to just before the next multiple of 10 height. `canister_state_bytes`
+        // is only updated on rounds that are a multiple of 10.
+        loop {
+            let (height, mut state) = state_manager.take_tip();
+            state.metadata.own_subnet_id = own_subnet_id;
+            state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
+            if (height.get() + 2).is_multiple_of(10) {
+                break;
+            }
+        }
 
         batch_processor.process_batch(Batch {
-            batch_number: height.increment().increment(),
+            batch_number: state_manager.tip_height().increment(),
             batch_summary: None,
             content: BatchContent::Data {
                 batch_messages: BatchMessages::default(),
@@ -2206,13 +2208,13 @@ fn process_batch_updates_subnet_metrics() {
         });
 
         let latest_state = state_manager.get_latest_state().take();
-        let canister_state = latest_state
+        let canister_state_bytes = latest_state
             .canisters_iter()
             .map(|canister| canister.memory_usage())
             .sum();
         assert_eq!(
             latest_state.metadata.subnet_metrics.canister_state_bytes,
-            canister_state
+            canister_state_bytes
         );
     });
 }

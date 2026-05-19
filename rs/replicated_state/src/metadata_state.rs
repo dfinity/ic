@@ -230,6 +230,11 @@ pub struct NetworkTopology {
     /// Unfiltered topology for the certified state tree.
     /// Only set on the NNS subnet; `None` everywhere else.
     full_topology: Option<FullTopology>,
+
+    /// Subnet to which `SetupInitialDKG` management canister calls are routed
+    /// by default, i.e., when no subnet id is specified explicitly in the
+    /// request. If `None`, such requests are routed to the calling subnet.
+    pub default_initial_dkg_subnet_id: Option<SubnetId>,
 }
 
 /// Full description of the API Boundary Node, which is saved in the metadata.
@@ -258,6 +263,7 @@ impl Default for NetworkTopology {
             bitcoin_testnet_canister_id: None,
             bitcoin_mainnet_canister_id: None,
             full_topology: None,
+            default_initial_dkg_subnet_id: None,
         }
     }
 }
@@ -273,6 +279,7 @@ impl NetworkTopology {
         bitcoin_testnet_canister_id: Option<CanisterId>,
         bitcoin_mainnet_canister_id: Option<CanisterId>,
         full_topology: Option<FullTopology>,
+        default_initial_dkg_subnet_id: Option<SubnetId>,
     ) -> Self {
         Self {
             subnets,
@@ -283,6 +290,7 @@ impl NetworkTopology {
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
             full_topology,
+            default_initial_dkg_subnet_id,
         }
     }
 
@@ -476,8 +484,6 @@ impl SubnetMetrics {
                 CyclesUseCase::ECDSAOutcalls
                 | CyclesUseCase::HTTPOutcalls
                 | CyclesUseCase::DeletedCanisters => {}
-                // Non consumed cycles should not be counted towards the total consumed.
-                CyclesUseCase::NonConsumed => {}
                 // For the remaining use cases simply add the values to the total.
                 CyclesUseCase::Memory
                 | CyclesUseCase::ComputeAllocation
@@ -778,8 +784,6 @@ impl SystemMetadata {
     /// roll back `Stopping` states on all subnet B canisters.
     ///
     /// Notes:
-    ///  * `prev_state_hash` has just been set by `take_tip()` to the checkpoint
-    ///    hash (checked against the hash in the CUP). It must be preserved.
     ///  * `own_subnet_type` has just been set during `load_checkpoint()`, based on
     ///    the registry subnet record of the subnet that this node is part of.
     ///  * `batch_time`, `network_topology` and `own_subnet_features` will be set

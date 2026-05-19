@@ -1103,7 +1103,6 @@ pub(crate) fn arb_cycles_use_case() -> impl Strategy<Value = CyclesUseCase> {
         Just(CyclesUseCase::ECDSAOutcalls),
         Just(CyclesUseCase::HTTPOutcalls),
         Just(CyclesUseCase::DeletedCanisters),
-        Just(CyclesUseCase::NonConsumed),
     ]
 }
 

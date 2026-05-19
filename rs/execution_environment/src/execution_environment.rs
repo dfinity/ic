@@ -2449,7 +2449,7 @@ impl ExecutionEnvironment {
 
     /// Returns the subnet memory capacity.
     pub fn subnet_memory_capacity(&self, resource_limits: ResourceLimits) -> NumBytes {
-        subnet_memory_capacity(&self.config, resource_limits)
+        resource_limits.maximum_state_size_or(self.config.subnet_memory_capacity)
     }
 
     /// Builds execution parameters for the given canister with the given
@@ -3864,7 +3864,6 @@ impl ExecutionEnvironment {
                 request,
                 args,
                 derivation_path: Arc::new(derivation_path),
-                deprecated_pseudo_random_id: None,
                 batch_time: state.metadata.batch_time,
                 nonce: None,
             }),
@@ -4809,29 +4808,15 @@ impl CompilationCostHandling {
     }
 }
 
-/// Returns the subnet memory capacity.
-/// A value of `Some(0)` for a resource limit means that the default value from `ExecutionConfig`
-/// should be used.
-fn subnet_memory_capacity(config: &ExecutionConfig, resource_limits: ResourceLimits) -> NumBytes {
-    resource_limits
-        .maximum_state_size
-        .and_then(|maximum_state_size| {
-            if maximum_state_size.get() != 0 {
-                Some(maximum_state_size)
-            } else {
-                None
-            }
-        })
-        .unwrap_or(config.subnet_memory_capacity)
-}
-
 /// Returns the subnet's configured memory capacity (ignoring current usage).
 pub(crate) fn full_subnet_memory_capacity(
     config: &ExecutionConfig,
     resource_limits: ResourceLimits,
 ) -> SubnetAvailableMemory {
     SubnetAvailableMemory::new_scaled(
-        subnet_memory_capacity(config, resource_limits).get() as i64,
+        resource_limits
+            .maximum_state_size_or(config.subnet_memory_capacity)
+            .get() as i64,
         config.guaranteed_response_message_memory_capacity.get() as i64,
         config.subnet_wasm_custom_sections_memory_capacity.get() as i64,
         NonZeroU64::new(1).expect("scaling_factor must be non zero"),

@@ -28,7 +28,7 @@ fn test_submit_update_ssh_readonly_access_for_all_unassigned_nodes() {
             .build();
         let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
 
-        // first we need to make sure that the unassigned nodes config contains a blessed replica version
+        // first we need to make sure that the unassigned nodes config contains an elected replica version
         let replica_version = ReplicaVersion::default().to_string();
         let payload = DeployGuestosToAllUnassignedNodesPayload {
             elected_replica_version: replica_version.clone(),

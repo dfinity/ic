@@ -228,7 +228,7 @@ impl IDkgPayloadMetrics {
             .inc();
     }
 
-    pub(crate) fn payload_errors_inc(&self, label: &str) {
+    pub fn payload_errors_inc(&self, label: &str) {
         self.payload_errors.with_label_values(&[label]).inc();
     }
 }

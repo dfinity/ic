@@ -3,7 +3,7 @@
   <uuid>1ea49839-7f46-4560-a4c7-fce677bbfbbd</uuid>
   <metadata>
     <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
-      <libosinfo:os id="http://ubuntu.com/ubuntu/24.04"/>
+      <libosinfo:os id="http://ubuntu.com/ubuntu/26.04"/>
     </libosinfo:libosinfo>
   </metadata>
   <memory unit='GiB'>4</memory>
@@ -44,7 +44,7 @@
     <suspend-to-disk enabled='no'/>
   </pm>
   <devices>
-    <emulator>/usr/local/bin/qemu-system-x86_64</emulator>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
       <driver name='qemu' type='raw' cache='none' discard='unmap'/>
       <source dev='/dev/guest_disk' index='1'/>

@@ -1,6 +1,6 @@
 use crate::{
     RecoveryArgs, RecoveryResult,
-    cli::{consent_given, print_height_info, read_optional, read_optional_data_location},
+    cli::{consent_given, print_height_info, read, read_data_location, read_optional},
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
@@ -246,10 +246,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
         match step_type {
             StepType::StopReplica | StepType::DownloadState | StepType::UploadState => {
                 if self.params.admin_access_location.is_none() {
-                    self.params.admin_access_location = read_optional_data_location(
+                    self.params.admin_access_location = Some(read_data_location(
                         &self.logger,
                         "Enter state download/upload location (admin access required) [local/<ipv6>]:",
-                    );
+                    ));
                 }
             }
             _ => {}
@@ -265,10 +265,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         self.params.subnet_id,
                     );
 
-                    self.params.download_pool_node = read_optional(
+                    self.params.download_pool_node = Some(read(
                         &self.logger,
                         "Enter consensus pool download IP (backup access required):",
-                    );
+                    ));
                 }
             }
 

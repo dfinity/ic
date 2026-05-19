@@ -4,44 +4,6 @@ load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-http-types",
-    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
-    "//rs/ledger_suite/common/ledger_canister_core",
-    "//rs/ledger_suite/common/ledger_core",
-    "//rs/ledger_suite/icp:icp_ledger",
-    "//rs/ledger_suite/icrc1/index-ng",
-    "//rs/rust_canisters/canister_log",
-    "//rs/types/base_types",
-    "@crate_index//:candid",
-    "@crate_index//:ciborium",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:ic-cdk-timers",
-    "@crate_index//:ic-metrics-encoder",
-    "@crate_index//:ic-stable-structures",
-    "@crate_index//:num-traits",
-    "@crate_index//:scopeguard",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:serde_json",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/ledger_suite/icp/test_utils",
-    "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
-    "//rs/state_machine_tests",
-    "//rs/test_utilities/load_wasm",
-    "//rs/types/types",
-    "@crate_index//:candid_parser",
-    "@crate_index//:proptest",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-]
-
 rust_library(
     name = "ic-icp-index",
     srcs = glob(
@@ -49,8 +11,28 @@ rust_library(
         exclude = ["src/main.rs"],
     ),
     crate_name = "ic_icp_index",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-http-types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+        "//rs/ledger_suite/common/ledger_canister_core",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/ledger_suite/icrc1/index-ng",
+        "//rs/rust_canisters/canister_log",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:ciborium",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:num-traits",
+        "@crate_index//:scopeguard",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
+    ],
 )
 
 rust_canister(
@@ -58,7 +40,6 @@ rust_canister(
     srcs = ["src/main.rs"],
     compile_data = [":index.did"],
     crate_name = "ic_icp_index_canister",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     rustc_env = {
         "INDEX_DID_PATH": "$(location :index.did)",
     },
@@ -66,13 +47,60 @@ rust_canister(
     deps = [
         # Keep sorted.
         ":ic-icp-index",
-    ] + DEPENDENCIES,
+        "//packages/ic-http-types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+        "//rs/ledger_suite/common/ledger_canister_core",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/ledger_suite/icrc1/index-ng",
+        "//rs/rust_canisters/canister_log",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:ciborium",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:num-traits",
+        "@crate_index//:scopeguard",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
+    ],
 )
 
 rust_test(
     name = "ic-icp-index-crate-test",
     crate = ":ic-icp-index",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-http-types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+        "//rs/ledger_suite/common/ledger_canister_core",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/ledger_suite/icp/test_utils",
+        "//rs/ledger_suite/icrc1/index-ng",
+        "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
+        "//rs/rust_canisters/canister_log",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities/load_wasm",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:candid_parser",
+        "@crate_index//:ciborium",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:num-traits",
+        "@crate_index//:proptest",
+        "@crate_index//:scopeguard",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
+    ],
 )
 
 rust_test(
@@ -85,7 +113,16 @@ rust_test(
     env = {
         "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/index",
     },
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/ledger_suite/icp/test_utils",
+        "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities/load_wasm",
+        "//rs/types/types",
+        "@crate_index//:candid_parser",
+        "@crate_index//:proptest",
+    ],
 )
 
 rust_ic_test(
@@ -105,7 +142,36 @@ rust_ic_test(
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     },
     tags = ["cpu:4"],
-    deps = [":ic-icp-index"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":ic-icp-index",
+        "//packages/ic-http-types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+        "//rs/ledger_suite/common/ledger_canister_core",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/ledger_suite/icp/test_utils",
+        "//rs/ledger_suite/icrc1/index-ng",
+        "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
+        "//rs/rust_canisters/canister_log",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities/load_wasm",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:candid_parser",
+        "@crate_index//:ciborium",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:num-traits",
+        "@crate_index//:proptest",
+        "@crate_index//:scopeguard",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
+    ],
 )
 
 rust_ic_test(
@@ -122,5 +188,34 @@ rust_ic_test(
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     },
     tags = ["long_test"],
-    deps = [":ic-icp-index"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":ic-icp-index",
+        "//packages/ic-http-types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+        "//rs/ledger_suite/common/ledger_canister_core",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/ledger_suite/icp/test_utils",
+        "//rs/ledger_suite/icrc1/index-ng",
+        "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
+        "//rs/rust_canisters/canister_log",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities/load_wasm",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:candid_parser",
+        "@crate_index//:ciborium",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:num-traits",
+        "@crate_index//:proptest",
+        "@crate_index//:scopeguard",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
+    ],
 )
