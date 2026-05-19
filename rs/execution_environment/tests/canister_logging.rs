@@ -2725,8 +2725,9 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
     // canister_many: receives 200+ messages, exercises wrap-around in canister_log.
     let canister_many =
         create_and_install_canister(&env, canister_settings(), UNIVERSAL_CANISTER_WASM.to_vec());
-    // canister_empty: never receives any log messages.
-    let canister_empty =
+    // canister_cleared: receives 42 log messages then gets uninstalled, so logs are
+    // cleared but next_idx is preserved at 42.
+    let canister_cleared =
         create_and_install_canister(&env, canister_settings(), UNIVERSAL_CANISTER_WASM.to_vec());
     // canister_few: one log before migration, one after, one after downgrade (3 total).
     let canister_few =
@@ -2759,14 +2760,29 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
         &last_pre_migration_msg,
     );
 
+    let num_cleared_logs = 42_usize;
+    for i in 0..num_cleared_logs {
+        let msg = format!("to be cleared {i}");
+        let _ = env.execute_ingress(
+            canister_cleared,
+            "update",
+            wasm().debug_print(msg.as_bytes()).reply().build(),
+        );
+    }
+    let _ = env.uninstall_code(canister_cleared).unwrap();
+    // After uninstall: records are cleared but next_idx is preserved.
+    assert!(fetch_log_records(&env, controller, canister_cleared).is_empty());
+    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
+    check_lms(&env, canister_cleared, false, false, true, 0);
+
     let log_0 = b"log 0".to_vec();
     let _ = env.execute_ingress(
         canister_few,
         "update",
         wasm().debug_print(&log_0).reply().build(),
     );
-    check_canister_log(&env, canister_empty, 0);
-    check_lms(&env, canister_empty, false, false, true, 0);
+    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
+    check_lms(&env, canister_cleared, false, false, true, 0);
 
     check_canister_log(&env, canister_few, 1);
     check_lms(&env, canister_few, false, false, true, 0);
@@ -2795,8 +2811,8 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
         &last_pre_migration_msg,
     );
 
-    check_canister_log(&env, canister_empty, 0);
-    check_lms(&env, canister_empty, false, false, true, 0);
+    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
+    check_lms(&env, canister_cleared, false, false, true, 0);
 
     check_canister_log(&env, canister_few, 1);
     check_lms(&env, canister_few, false, false, true, 0);
@@ -2826,9 +2842,16 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
         &last_pre_migration_msg,
     );
 
-    // Empty canister: migrated and allocated but has no records.
-    check_canister_log(&env, canister_empty, 0);
-    check_lms(&env, canister_empty, true, true, true, 0);
+    // Cleared canister: migrated and allocated but has no records; next_idx carried over from uninstall.
+    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
+    check_lms(
+        &env,
+        canister_cleared,
+        true,
+        true,
+        true,
+        num_cleared_logs as u64,
+    );
 
     check_canister_log(&env, canister_few, 1);
     check_lms(&env, canister_few, true, true, false, 1);
@@ -2867,8 +2890,15 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
     );
     check_canister_log(&env, canister_many, num_pre_migration as u64 + 1);
 
-    check_lms(&env, canister_empty, true, true, true, 0);
-    check_canister_log(&env, canister_empty, 0);
+    check_lms(
+        &env,
+        canister_cleared,
+        true,
+        true,
+        true,
+        num_cleared_logs as u64,
+    );
+    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
 
     check_lms(&env, canister_few, true, true, false, 2);
     check_canister_log(&env, canister_few, 2);
@@ -2908,8 +2938,15 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
         &post_migration_msg,
     );
 
-    check_canister_log(&env, canister_empty, 0);
-    check_lms(&env, canister_empty, true, true, true, 0);
+    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
+    check_lms(
+        &env,
+        canister_cleared,
+        true,
+        true,
+        true,
+        num_cleared_logs as u64,
+    );
 
     check_canister_log(&env, canister_few, 2);
     check_lms(&env, canister_few, true, true, false, 2);
@@ -2919,7 +2956,7 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
     env.tick();
 
     // After downgrade, lms is deallocated, the migration flag is cleared,
-    // and persistent_next_idx is reset to zero.
+    // and persistent_next_idx is reset to zero in lms.
     check_canister_log(&env, canister_many, num_pre_migration as u64 + 1);
     check_lms(&env, canister_many, false, false, true, 0);
     // fetch_canister_logs falls back to canister_log after downgrade.
@@ -2933,8 +2970,8 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
         &post_migration_msg,
     );
 
-    check_canister_log(&env, canister_empty, 0);
-    check_lms(&env, canister_empty, false, false, true, 0);
+    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
+    check_lms(&env, canister_cleared, false, false, true, 0);
 
     check_canister_log(&env, canister_few, 2);
     check_lms(&env, canister_few, false, false, true, 0);
@@ -2966,8 +3003,8 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
         &post_downgrade_msg,
     );
 
-    check_canister_log(&env, canister_empty, 0);
-    check_lms(&env, canister_empty, false, false, true, 0);
+    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
+    check_lms(&env, canister_cleared, false, false, true, 0);
 
     check_canister_log(&env, canister_few, 3);
     check_lms(&env, canister_few, false, false, true, 0);
