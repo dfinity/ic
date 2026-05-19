@@ -448,7 +448,7 @@ mod tests {
         batch::ValidationContext,
         consensus::{
             Block, BlockPayload, BlockProposal, DataPayload, HasHeight, Payload,
-            dkg::{DkgDataPayload, RemoteTranscriptResult},
+            dkg::{DkgDataPayload, RemoteDkgAttempts, RemoteTranscriptResult},
         },
         crypto::{
             AlgorithmId, CryptoHash,
@@ -889,10 +889,10 @@ mod tests {
                         .as_ref()
                         .as_summary()
                         .dkg
-                        .initial_dkg_attempts
+                        .remote_dkg_attempts
                         .get(&target_id),
-                    Some(&0),
-                    "Expected initial_dkg_attempts[{target_id:?}] to be 0"
+                    Some(&RemoteDkgAttempts::Completed),
+                    "Expected remote_dkg_attempts[{target_id:?}] to be Completed"
                 );
                 let change_set = dkg.on_state_change(&*dkg_pool.read().unwrap());
                 match &change_set.as_slice() {
@@ -921,8 +921,11 @@ mod tests {
                 pool.advance_round_normal_operation_n(dkg_interval_length);
                 let latest_summary = PoolReader::new(&pool).get_highest_finalized_summary_block();
                 let dkg_summary = &latest_summary.payload.as_ref().as_summary().dkg;
-                let remote_dkg_attempts = &dkg_summary.initial_dkg_attempts;
-                assert_eq!(remote_dkg_attempts.get(&target_id), Some(&0));
+                let remote_dkg_attempts = &dkg_summary.remote_dkg_attempts;
+                assert_eq!(
+                    remote_dkg_attempts.get(&target_id),
+                    Some(&RemoteDkgAttempts::Completed)
+                );
                 assert_eq!(remote_dkg_attempts.len(), 1);
             });
         });
@@ -1010,9 +1013,12 @@ mod tests {
                     assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Local);
                 }
                 assert_eq!(summary.dkg.transcripts_for_remote_subnets.len(), 0);
-                // Verify that the initial_dkg_attempts are set to 0 (completed)
-                assert_eq!(summary.dkg.initial_dkg_attempts.get(&target_id), Some(&0),);
-                assert_eq!(summary.dkg.initial_dkg_attempts.len(), 1);
+                // Verify that the remote_dkg_attempts are set to `Completed`.
+                assert_eq!(
+                    summary.dkg.remote_dkg_attempts.get(&target_id),
+                    Some(&RemoteDkgAttempts::Completed),
+                );
+                assert_eq!(summary.dkg.remote_dkg_attempts.len(), 1);
             } else {
                 panic!(
                     "block at height {} is not a summary block",
