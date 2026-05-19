@@ -4,7 +4,7 @@ use crate::pb::v1::SubnetMetricsKey;
 use chrono::{Days, NaiveDate};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_cdk::call::{CallPerformFailed, CallResult, Error as CallError};
-use ic_management_canister_types::{NodeMetrics, NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
+use ic_cdk::management_canister::{NodeMetrics, NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
 use ic_stable_structures::DefaultMemoryImpl;
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use rewards_calculation::types::NodeMetricsDailyRaw;

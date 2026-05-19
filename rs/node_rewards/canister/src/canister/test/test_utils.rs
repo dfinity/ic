@@ -2,7 +2,7 @@
 use crate::canister::NodeRewardsCanister;
 use crate::metrics::MetricsManager;
 use crate::storage::{METRICS_MANAGER, NaiveDateStorable};
-use ic_management_canister_types::NodeMetricsHistoryRecord;
+use ic_cdk::management_canister::NodeMetricsHistoryRecord;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_registry_canister_client::RegistryDataStableMemory;
 use ic_registry_canister_client::{

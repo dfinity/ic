@@ -1,6 +1,7 @@
 use std::convert::Infallible;
 
 use candid::{CandidType, Principal, Reserved};
+use ic_cdk::management_canister::ListCanisterSnapshotsArgs;
 use ic_cdk::{
     api::{canister_self, canister_version},
     call::{Call, CallFailed, Error as CallError, RejectCode},
@@ -9,7 +10,6 @@ use ic_cdk::{
     },
     println,
 };
-use ic_management_canister_types::ListCanisterSnapshotsArgs;
 use serde::Deserialize;
 
 use crate::{ValidationError, processing::ProcessingResult};

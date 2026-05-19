@@ -9,7 +9,7 @@ use crate::storage::NaiveDateStorable;
 use candid::Principal;
 use chrono::{Datelike, NaiveDate};
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_management_canister_types::NodeMetrics;
+use ic_cdk::management_canister::NodeMetrics;
 use ic_stable_structures::Storable;
 use ic_stable_structures::storable::Bound;
 use prost::Message;

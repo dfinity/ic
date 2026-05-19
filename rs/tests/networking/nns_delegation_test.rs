@@ -251,7 +251,10 @@ async fn get_nns_delegation_timestamp(
     effective_canister_id: PrincipalId,
 ) -> Option<u64> {
     let delegation = agent
-        .read_state_raw(vec![vec!["time".into()]], effective_canister_id.into())
+        .read_state_raw(
+            vec![vec!["time".into()]],
+            candid::Principal::from(effective_canister_id),
+        )
         .await
         .expect("The node is up and running and should respond to the request")
         .delegation?;
@@ -450,6 +453,7 @@ fn call_v4_management_canister_returns_correct_delegation(env: TestEnv, subnet_t
         method_name: String::from("start_canister"),
         arg: Encode!(&Arg { canister_id }).unwrap(),
         nonce: None,
+        sender_info: None,
     };
 
     let response: SyncCallResponse = block_on(send(
@@ -550,6 +554,7 @@ fn call_content(canister_id: PrincipalId) -> EnvelopeContent {
         method_name: String::from("certificate_as_update"),
         arg: vec![],
         nonce: None,
+        sender_info: None,
     }
 }
 
@@ -562,6 +567,7 @@ fn query_content(canister_id: PrincipalId, arg: Vec<u8>) -> EnvelopeContent {
         method_name: String::from("certificate"),
         arg,
         nonce: None,
+        sender_info: None,
     }
 }
 

@@ -290,9 +290,11 @@ impl<'a> UniversalCanister<'a> {
 
         // Create a canister.
         let mgr = ManagementCanister::create(agent);
-        let canister_id = mgr
-            .create_canister()
-            .with_optional_compute_allocation(compute_allocation)
+        let mut create_builder = mgr.create_canister();
+        if let Some(ca) = compute_allocation {
+            create_builder = create_builder.with_compute_allocation(ca);
+        }
+        let canister_id = create_builder
             .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
@@ -660,9 +662,11 @@ impl<'a> MessageCanister<'a> {
     ) -> Result<MessageCanister<'a>, String> {
         // Create a canister.
         let mgr = ManagementCanister::create(agent);
-        let canister_id = mgr
-            .create_canister()
-            .with_optional_compute_allocation(compute_allocation)
+        let mut create_builder = mgr.create_canister();
+        if let Some(ca) = compute_allocation {
+            create_builder = create_builder.with_compute_allocation(ca);
+        }
+        let canister_id = create_builder
             .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
@@ -831,9 +835,11 @@ impl<'a> SignerCanister<'a> {
     ) -> SignerCanister<'a> {
         // Create a canister.
         let mgr = ManagementCanister::create(agent);
-        let canister_id = mgr
-            .create_canister()
-            .with_optional_compute_allocation(compute_allocation)
+        let mut create_builder = mgr.create_canister();
+        if let Some(ca) = compute_allocation {
+            create_builder = create_builder.with_compute_allocation(ca);
+        }
+        let canister_id = create_builder
             .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
@@ -2118,6 +2124,7 @@ pub fn sign_query(content: &HttpQueryContent, identity: &impl Identity) -> Signa
         method_name: content.method_name.clone(),
         arg: content.arg.0.clone(),
         nonce: None,
+        sender_info: None,
     };
     identity.sign(&msg).unwrap()
 }
@@ -2131,6 +2138,7 @@ pub fn sign_update(content: &HttpCallContent, identity: &impl Identity) -> Signa
         method_name: content.method_name.clone(),
         arg: content.arg.0.clone(),
         nonce: content.nonce.clone().map(|blob| blob.0),
+        sender_info: None,
     };
     identity.sign(&msg).unwrap()
 }
