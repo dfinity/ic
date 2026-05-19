@@ -602,6 +602,10 @@ impl RoundSchedule {
             {
                 canister_priority.accumulated_priority -=
                     ONE_HUNDRED_PERCENT.min(canister_priority.accumulated_priority);
+                // Don't distribute any free compute to idle canisters with positive AP.
+                // And don't bother with the exponential decay either.
+                total_ap += canister_priority.accumulated_priority;
+                continue;
             }
 
             // Apply an exponential decay to AP values outside the [AP_ROUNDS_MIN,

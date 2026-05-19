@@ -679,7 +679,7 @@ pub fn get_dkg_summary_from_cup_contents(
         interval_length,
         next_interval_length,
         height,
-        BTreeMap::new(), // initial_dkg_attempts
+        BTreeMap::new(), // remote_dkg_attempts
     ))
 }
 
@@ -902,6 +902,7 @@ mod tests {
         ids::{node_test_id, subnet_test_id},
         messages::RequestBuilder,
     };
+    use ic_types::consensus::dkg::RemoteDkgAttempts;
     use ic_types::{
         RegistryVersion,
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
@@ -1151,12 +1152,12 @@ mod tests {
                         PoolReader::new(&deps.pool).get_highest_finalized_summary_block();
                     let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
                     assert_eq!(
-                        dkg_summary.initial_dkg_attempts.get(&setup_target),
-                        Some(&attempt)
+                        dkg_summary.remote_dkg_attempts.get(&setup_target),
+                        Some(&RemoteDkgAttempts::from(attempt))
                     );
                     assert_eq!(
-                        dkg_summary.initial_dkg_attempts.get(&reshare_target),
-                        Some(&attempt)
+                        dkg_summary.remote_dkg_attempts.get(&reshare_target),
+                        Some(&RemoteDkgAttempts::from(attempt))
                     );
 
                     let callback_map = build_callback_map(dkg_summary);
@@ -1237,12 +1238,12 @@ mod tests {
                     PoolReader::new(&deps.pool).get_highest_finalized_summary_block();
                 let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
                 assert_eq!(
-                    dkg_summary.initial_dkg_attempts.get(&setup_target),
-                    Some(&0)
+                    dkg_summary.remote_dkg_attempts.get(&setup_target),
+                    Some(&RemoteDkgAttempts::Completed)
                 );
                 assert_eq!(
-                    dkg_summary.initial_dkg_attempts.get(&reshare_target),
-                    Some(&0)
+                    dkg_summary.remote_dkg_attempts.get(&reshare_target),
+                    Some(&RemoteDkgAttempts::Completed)
                 );
                 let callback_map = build_callback_map(dkg_summary);
                 assert!(callback_map.is_empty(), "{callback_map:?}");
@@ -1255,13 +1256,13 @@ mod tests {
                     None,
                 );
 
-                // It should no longer appear in `initial_dkg_attempts` of the next summary.
+                // It should no longer appear in `remote_dkg_attempts` of the next summary.
                 deps.pool
                     .advance_round_normal_operation_n(dkg_interval_length + 1);
                 let summary_block =
                     PoolReader::new(&deps.pool).get_highest_finalized_summary_block();
                 let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
-                assert!(dkg_summary.initial_dkg_attempts.is_empty());
+                assert!(dkg_summary.remote_dkg_attempts.is_empty());
             });
         });
     }

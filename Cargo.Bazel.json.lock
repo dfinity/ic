@@ -1,5 +1,5 @@
 {
-  "checksum": "3e6f16ce85eb213f262df4b0a98be37b67d3c2740785251676fa3b96ac1bdbb0",
+  "checksum": "ddac2d720fc4691942f74d2b72639088295a71537597bc299df5106eb1d3f6e2",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13198,45 +13198,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "cfg-if 0.1.10": {
-      "name": "cfg-if",
-      "version": "0.1.10",
-      "package_url": "https://github.com/alexcrichton/cfg-if",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/cfg-if/0.1.10/download",
-          "sha256": "4785bdd1c96b2a846b2bd7cc02e86b6b3dbf14e7e53446c4f54c92a361040822"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "cfg_if",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "cfg_if",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "version": "0.1.10"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "cfg-if 1.0.0": {
       "name": "cfg-if",
       "version": "1.0.0",
@@ -22612,10 +22573,6 @@
         "deps": {
           "common": [
             {
-              "id": "actix-http 3.12.1",
-              "target": "actix_http"
-            },
-            {
               "id": "actix-rt 2.10.0",
               "target": "actix_rt"
             },
@@ -23407,10 +23364,6 @@
               "target": "opentelemetry_otlp"
             },
             {
-              "id": "opentelemetry-prometheus 0.14.1",
-              "target": "opentelemetry_prometheus"
-            },
-            {
               "id": "opentelemetry_sdk 0.27.1",
               "target": "opentelemetry_sdk"
             },
@@ -23837,10 +23790,6 @@
               "target": "tempfile"
             },
             {
-              "id": "tester 0.7.0",
-              "target": "tester"
-            },
-            {
               "id": "textplots 0.8.4",
               "target": "textplots"
             },
@@ -24015,10 +23964,6 @@
             {
               "id": "warp 0.3.7",
               "target": "warp"
-            },
-            {
-              "id": "wasm-bindgen 0.2.121",
-              "target": "wasm_bindgen"
             },
             {
               "id": "wasm-encoder 0.248.0",
@@ -24215,58 +24160,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "dirs 2.0.2": {
-      "name": "dirs",
-      "version": "2.0.2",
-      "package_url": "https://github.com/soc/dirs-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/dirs/2.0.2/download",
-          "sha256": "13aea89a5c93364a98e9b37b2fa237effbb694d5cfe01c5b70941f7eb087d5e3"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "dirs",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "dirs",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "cfg-if 0.1.10",
-              "target": "cfg_if"
-            },
-            {
-              "id": "dirs-sys 0.3.7",
-              "target": "dirs_sys"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "2.0.2"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "dirs 6.0.0": {
       "name": "dirs",
       "version": "6.0.0",
@@ -24359,68 +24252,6 @@
         },
         "edition": "2018",
         "version": "2.0.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "dirs-sys 0.3.7": {
-      "name": "dirs-sys",
-      "version": "0.3.7",
-      "package_url": "https://github.com/dirs-dev/dirs-sys-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/dirs-sys/0.3.7/download",
-          "sha256": "1b1d1d91c932ef41c0f2663aa8b0ca0342d444d842c06914aa0a7e352d0bada6"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "dirs_sys",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "dirs_sys",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [],
-          "selects": {
-            "cfg(target_os = \"redox\")": [
-              {
-                "id": "redox_users 0.4.3",
-                "target": "redox_users"
-              }
-            ],
-            "cfg(unix)": [
-              {
-                "id": "libc 0.2.177",
-                "target": "libc"
-              }
-            ],
-            "cfg(windows)": [
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2015",
-        "version": "0.3.7"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -83969,67 +83800,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "term 0.6.1": {
-      "name": "term",
-      "version": "0.6.1",
-      "package_url": "https://github.com/Stebalien/term",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/term/0.6.1/download",
-          "sha256": "c0863a3345e70f61d613eab32ee046ccd1bcc5f9105fe402c61fcd0c13eeb8b5"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "term",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "term",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "dirs 2.0.2",
-              "target": "dirs"
-            }
-          ],
-          "selects": {
-            "cfg(windows)": [
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2018",
-        "version": "0.6.1"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "term 0.7.0": {
       "name": "term",
       "version": "0.7.0",
@@ -84413,62 +84183,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "tester 0.7.0": {
-      "name": "tester",
-      "version": "0.7.0",
-      "package_url": "https://github.com/messense/rustc-test",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/tester/0.7.0/download",
-          "sha256": "ee72ec31009a42b53de9a6b7d8f462b493ab3b1e4767bda1fcdbb52127f13b6c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "tester",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "tester",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "getopts 0.2.21",
-              "target": "getopts"
-            },
-            {
-              "id": "libc 0.2.177",
-              "target": "libc"
-            },
-            {
-              "id": "term 0.6.1",
-              "target": "term"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.7.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
     },
     "testing_table 0.3.0": {
       "name": "testing_table",
@@ -103912,7 +103626,6 @@
     "x86_64-uwp-windows-msvc": []
   },
   "direct_deps": [
-    "actix-http 3.12.1",
     "actix-rt 2.10.0",
     "actix-web 4.9.0",
     "actix-web-prom 0.10.0",
@@ -104116,7 +103829,6 @@
     "openssh-keys 0.5.0",
     "opentelemetry 0.27.0",
     "opentelemetry-otlp 0.27.0",
-    "opentelemetry-prometheus 0.14.1",
     "opentelemetry_sdk 0.27.1",
     "p256 0.13.2",
     "p384 0.13.1",
@@ -104230,7 +103942,6 @@
     "tarpc 0.34.0",
     "tempfile 3.23.0",
     "test-strategy 0.3.1",
-    "tester 0.7.0",
     "textplots 0.8.4",
     "thiserror 2.0.18",
     "thousands 0.2.0",
@@ -104275,7 +103986,6 @@
     "walkdir 2.5.0",
     "walrus 0.23.3",
     "warp 0.3.7",
-    "wasm-bindgen 0.2.121",
     "wasm-encoder 0.248.0",
     "wasm-smith 0.248.0",
     "wasmparser 0.248.0",

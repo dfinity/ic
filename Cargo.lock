@@ -14701,6 +14701,7 @@ dependencies = [
  "crossbeam-channel",
  "hex",
  "ic-base-types",
+ "ic-config",
  "ic-interfaces",
  "ic-logger",
  "ic-management-canister-types-private",
