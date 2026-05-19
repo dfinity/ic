@@ -25,7 +25,7 @@ libboost-dev
 gcc
 pkg-config
 libclang-18-dev
-libunwind-dev # required for the cargo build of ic-canister-sandbox-backend-lib crate (see: rs/canister_sandbox/src/backtrace.c)  
+libunwind-dev # required for the cargo build of ic-canister-sandbox-backend-lib crate (see: rs/canister_sandbox/src/backtrace.c)
 libusb-1.0-0-dev # required for HSM
 lld # required for ovmf_sev genrule
 protobuf-compiler
@@ -53,6 +53,17 @@ podman
 rsync
 zstd
 iputils-ping # for ping6 required by the bazel-test-bare-metal
+
+# Local system-test backend (libvirt/QEMU; see rs/tests/driver/src/driver/local_backend.rs).
+# Provides per-test libvirtd subprocess + KVM-accelerated QEMU + dnsmasq for the
+# libvirt network's DHCP. `virsh` is included as a debugging convenience.
+libvirt-daemon
+libvirt-daemon-driver-qemu
+libvirt-clients
+qemu-system-x86
+qemu-utils
+dnsmasq-base
+ovmf
 
 # Unknown
 containernetworking-plugins
