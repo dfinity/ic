@@ -2748,12 +2748,10 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
     let pre_migration_len = records.len();
     // Wrap-around dropped old records: fewer survive than were produced.
     assert!(pre_migration_len < num_pre_migration);
-    assert_eq!(
-        records.last().map(|r| (r.idx, &r.content)),
-        Some((num_pre_migration as u64 - 1, &last_pre_migration_msg))
-    );
     // next_idx advances for every produced record, including dropped ones.
     check_canister_log(&env, canister_many, num_pre_migration as u64);
+    check_lms(&env, canister_many, false, false, true, 0);
+    check_records(&env, canister_many, pre_migration_len, num_pre_migration as u64 - 1, &last_pre_migration_msg);
 
     let log_0 = b"log 0".to_vec();
     let _ = env.execute_ingress(
@@ -2762,7 +2760,10 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
         wasm().debug_print(&log_0).reply().build(),
     );
     check_canister_log(&env, canister_empty, 0);
+    check_lms(&env, canister_empty, false, false, true, 0);
+
     check_canister_log(&env, canister_few, 1);
+    check_lms(&env, canister_few, false, false, true, 0);
     check_records(&env, canister_few, 1, 0, &log_0);
 
     // Step 2: Restart with log_memory_store feature enabled. Before any round
@@ -2801,6 +2802,7 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
     env.tick();
 
     // After migration next_idx matches the canister_log next_idx.
+    check_canister_log(&env, canister_many, num_pre_migration as u64);
     check_lms(
         &env,
         canister_many,
@@ -2819,8 +2821,10 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
     );
 
     // Empty canister: migrated and allocated but has no records.
+    check_canister_log(&env, canister_empty, 0);
     check_lms(&env, canister_empty, true, true, true, 0);
 
+    check_canister_log(&env, canister_few, 1);
     check_lms(&env, canister_few, true, true, false, 1);
     check_records(&env, canister_few, 1, 0, &log_0);
 
@@ -2884,12 +2888,26 @@ fn test_log_migration_from_canister_log_to_log_memory_store() {
         false,
         num_pre_migration as u64 + 1,
     );
+    // With the feature disabled, fetch_canister_logs reads from canister_log, not lms.
+    // canister_log uses CanisterLogRecord
+    // while lms stores records more compactly (less overhead per record).
+    // Both have the same 4 KiB byte capacity, but canister_log fits fewer records before
+    // wrapping. By step 4, canister_log was already at its wrap point (pre_migration_len records),
+    // while lms had room for one more — so they now differ by one record.
+    check_records(
+        &env,
+        canister_many,
+        pre_migration_len,
+        num_pre_migration as u64,
+        &post_migration_msg,
+    );
 
     check_canister_log(&env, canister_empty, 0);
     check_lms(&env, canister_empty, true, true, true, 0);
 
     check_canister_log(&env, canister_few, 2);
     check_lms(&env, canister_few, true, true, false, 2);
+    check_records(&env, canister_few, 2, 1, &log_1);
 
     // Execute a round to trigger the downgrade.
     env.tick();
