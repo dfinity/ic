@@ -56,6 +56,7 @@ message NetworkTopology {
   repeated types.v1.CanisterId bitcoin_mainnet_canister_ids = 7;
   repeated ChainKeySubnetEntry chain_key_enabled_subnets = 8;
   FullTopology full_topology = 9;
+  types.v1.SubnetId default_initial_dkg_subnet_id = 10;
 }
 
 message FullTopology {

@@ -5,6 +5,8 @@ use super::test_utilities::{
 };
 use super::*;
 use ic_config::subnet_config::SchedulerConfig;
+use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
+use ic_replicated_state::canister_state::canister_snapshots::CanisterSnapshot;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_types::ComputeAllocation;
 use ic_types::methods::SystemMethod;
@@ -89,12 +91,7 @@ fn inner_loop_stops_when_no_instructions_consumed() {
     let metrics = &test.scheduler().metrics;
     assert_eq!(metrics.execute_round_called.get(), 1);
     assert_eq!(metrics.inner_round_loop_consumed_max_instructions.get(), 0);
-    assert_eq!(
-        metrics
-            .inner_loop_consumed_non_zero_instructions_count
-            .get(),
-        1
-    );
+    assert_eq!(metrics.inner_loop_processed_non_zero_inputs_count.get(), 1);
 
     assert_eq!(
         test.state()
@@ -140,12 +137,7 @@ fn test_multiple_iterations_of_inner_loop() {
         3
     );
     assert_eq!(metrics.inner_round_loop_consumed_max_instructions.get(), 0);
-    assert_eq!(
-        metrics
-            .inner_loop_consumed_non_zero_instructions_count
-            .get(),
-        3
-    );
+    assert_eq!(metrics.inner_loop_processed_non_zero_inputs_count.get(), 3);
 
     assert_eq!(
         test.state()
@@ -155,6 +147,62 @@ fn test_multiple_iterations_of_inner_loop() {
         3
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 2);
+}
+
+/// Ensures that `inner_round()` continues with another iteration after the
+/// previous iteration only processed messages that got rejected (e.g. because
+/// the callee was low on cycles), with zero Wasm instructions executed.
+#[test]
+fn inner_loop_continues_after_zero_instructions_iteration() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig::application_subnet())
+        .build();
+
+    // Two canisters:
+    //   - canister A (well funded) makes a call to canister B;
+    //   - canister B (low on cycles) cannot execute the incoming request, which is
+    //     rejected without executing any Wasm.
+    let canister_a = test.create_canister();
+    let canister_b = test.create_canister_with(
+        // Too few cycles to execute the incoming request.
+        Cycles::new(1),
+        ComputeAllocation::zero(),
+        MemoryAllocation::default(),
+        None,
+        None,
+        None,
+    );
+    let message = ingress(50).call(other_side(canister_b, 50), on_response(50));
+    test.send_ingress(canister_a, message);
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Expecting the full call tree to complete within one round:
+    //   - Iteration 1: A executes an ingress message that produces a request for B.
+    //   - Iteration 2: B cannot pay for executing the request so the DSM produces a
+    //                  reject response with no Wasm execution (zero instructions).
+    //   - Iteration 3: A executes the reject response.
+    //
+    // One round, 3 iterations that processed at least one input each.
+    let metrics = &test.scheduler().metrics;
+    assert_eq!(metrics.execute_round_called.get(), 1);
+    assert_eq!(metrics.inner_loop_processed_non_zero_inputs_count.get(), 3);
+
+    // Only A actually executed messages (the ingress and the reject response).
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
+        2
+    );
+
+    // Neither canister should have any inputs or outputs.
+    for canister in [canister_a, canister_b] {
+        let queues = test.canister_state(canister).system_state.queues();
+        assert_eq!(queues.input_queues_message_count(), 0);
+        assert_eq!(queues.output_queues_message_count(), 0);
+    }
 }
 
 #[test]
@@ -1013,12 +1061,12 @@ fn frozen_canisters_are_fully_executed() {
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores,
             max_instructions_per_round: (2 * slice).into(),
-            max_instructions_per_message: slice.into(),
+            max_instructions_per_message: (10 * slice).into(),
             max_instructions_per_slice: slice.into(),
             max_instructions_per_install_code_slice: slice.into(),
-            // Charge for every message execution enough to execute all but one canister on
-            // each core. And to prevent a second iteration.
-            instruction_overhead_per_execution: (slice / (canisters_per_core - 1) + 1).into(),
+            // Charge for every message execution more than the round limit, to ensure that.
+            // the overhead does not apply to executions skipped due to low cycles.
+            instruction_overhead_per_execution: (3 * slice).into(),
             instruction_overhead_per_canister: 0.into(),
             instruction_overhead_per_canister_for_finalization: 0.into(),
             ..SchedulerConfig::application_subnet()
@@ -1041,43 +1089,41 @@ fn frozen_canisters_are_fully_executed() {
             None,
         );
         test.send_ingress(frozen_canister_id, ingress(slice * 10));
+        // Give each canister enough AP to be able to observe charging without free
+        // compute distribution.
+        test.state_mut()
+            .canister_priority_mut(frozen_canister_id)
+            .accumulated_priority = ONE_HUNDRED_PERCENT * 2;
         canisters.push(frozen_canister_id);
     }
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // All but 2 canisters were "executed".
+    // All canisters were "executed".
     assert_eq!(
         test.scheduler()
             .metrics
             .instructions_consumed_per_message
             .get_sample_count(),
-        (canisters_per_core - 1) * 2
+        canisters_per_core * 2
+    );
+    assert_eq!(
+        zero_instruction_messages(test.metrics_registry()),
+        canisters_per_core * 2
     );
 
-    let canister_priority = |canister_id: &CanisterId| -> &ic_replicated_state::CanisterPriority {
-        test.state().canister_priority(canister_id)
-    };
     for (i, canister) in canisters.iter().enumerate() {
-        if (i as u64) < (canisters_per_core - 1) * 2 {
-            assert!(
-                test.was_fully_executed(*canister),
-                "Canister {i} should have been fully executed",
-            );
-            assert!(
-                canister_priority(canister).accumulated_priority.get() < 0,
-                "Canister {i} should have been charged"
-            );
-        } else {
-            assert!(
-                !test.was_fully_executed(*canister),
-                "Canister {i} should not have been executed",
-            );
-            assert!(
-                canister_priority(canister).accumulated_priority.get() > 0,
-                "Canister {i} should not have been charged"
-            );
-        }
+        assert!(
+            test.was_fully_executed(*canister),
+            "Canister {i} should have been fully executed",
+        );
+        assert_eq!(
+            test.state()
+                .canister_priority(canister)
+                .accumulated_priority,
+            ONE_HUNDRED_PERCENT,
+            "Canister {i} should have been charged"
+        );
     }
 }
 
@@ -1156,4 +1202,95 @@ fn frozen_canisters_with_heartbeats_or_timers_are_not_scheduled() {
             0
         );
     }
+}
+
+/// Exercises the recovery path for an `OnLowWasmMemory` hook that could
+/// not run because the canister was frozen: the live status is dropped to
+/// `ConditionNotSatisfied` so the per-canister loop terminates immediately,
+/// snapshots taken in that transient state still report `Ready` (since the
+/// memory condition is genuinely satisfied), and the next call to
+/// `update_on_low_wasm_memory_hook_condition` re-arms the live status to
+/// `Ready` ahead of the next round.
+#[test]
+fn frozen_canister_with_on_low_wasm_memory_hook() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig::application_subnet())
+        .build();
+
+    let canister = test.create_canister_with(
+        Cycles::new(1_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::default(),
+        Some(SystemMethod::CanisterOnLowWasmMemory),
+        None,
+        None,
+    );
+    // Make the hook condition genuinely satisfied.
+    let canister_state = test.canister_state_mut(canister);
+    canister_state.system_state.wasm_memory_limit = Some(NumBytes::new(4 * 1024 * 1024 * 1024));
+    canister_state.system_state.wasm_memory_threshold = NumBytes::new(4 * 1024 * 1024 * 1024 + 1);
+
+    canister_state
+        .system_state
+        .task_queue
+        .enqueue(ExecutionTask::OnLowWasmMemory);
+    assert_eq!(
+        test.canister_state(canister)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Ready
+    );
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // The frozen canister could not pay for the hook execution, so the hook
+    // was reset to `ConditionNotSatisfied` to break what would otherwise be
+    // an infinite loop in the scheduler's per-canister inner loop. The round
+    // therefore terminates without exhausting the round instruction budget.
+    assert_eq!(
+        test.canister_state(canister)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied
+    );
+    assert_eq!(
+        test.canister_state(canister)
+            .system_state
+            .canister_metrics()
+            .instructions_executed(),
+        NumInstructions::from(0)
+    );
+
+    // A snapshot taken while the canister is in the transient `(status =
+    // ConditionNotSatisfied, condition = true)` state must hide the
+    // inconsistency by lifting the recorded status to `Ready`. Otherwise a
+    // metadata round-trip via `upload_canister_snapshot_metadata` would be
+    // rejected by the `is_consistent_with` check.
+    let snapshot =
+        CanisterSnapshot::from_canister(test.canister_state(canister), test.state().time())
+            .unwrap();
+    assert_eq!(
+        snapshot.execution_snapshot().on_low_wasm_memory_hook_status,
+        Some(OnLowWasmMemoryHookStatus::Ready)
+    );
+
+    // Simulate the work done by `apply_canister_state_changes` /
+    // `finish_subnet_message_execution` after any completed execution / management
+    // call against this canister: re-evaluating the hook condition observes the
+    // live status as inconsistent with the actual memory condition and flips it
+    // back to `Ready`. The hook will then be re-enqueued and run in a subsequent
+    // round, once the canister is no longer frozen.
+    test.state_mut()
+        .canister_state_mut_arc(&canister)
+        .unwrap()
+        .update_on_low_wasm_memory_hook_condition();
+    assert_eq!(
+        test.canister_state(canister)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Ready
+    );
 }

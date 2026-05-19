@@ -90,6 +90,19 @@ impl Farm {
         Ok(playnet_cert)
     }
 
+    pub fn acquire_demo_certificate(
+        &self,
+        group_name: &str,
+        domain: &str,
+    ) -> FarmResult<DemoCertificate> {
+        let path = format!("group/{group_name}/domain/{domain}/certificate");
+        let rb = self.post(&path);
+        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let resp = self.retry_until_success_long(rbb)?;
+        let demo_cert = resp.json::<DemoCertificate>()?;
+        Ok(demo_cert)
+    }
+
     pub fn create_group(
         &self,
         group_base_name: &str,
@@ -268,6 +281,23 @@ impl Farm {
         dns_records: Vec<DnsRecord>,
     ) -> FarmResult<String> {
         let path = format!("group/{group_name}/playnet/dns");
+        let rb = Self::json(self.post(&path), &dns_records);
+        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let resp = self.retry_until_success_long(rbb)?;
+        let create_dns_records_result = resp.json::<CreateDnsRecordsResult>()?;
+        Ok(create_dns_records_result.suffix)
+    }
+
+    /// Creates DNS records under the suffix: `{domain}.demo.farm.dfinity.systems`
+    /// The records will be garbage collected some time after the group has expired.
+    /// The suffix will be returned from this function such that the FQDNs can be constructed.
+    pub fn create_demo_dns_records(
+        &self,
+        group_name: &str,
+        domain: &str,
+        dns_records: Vec<DnsRecord>,
+    ) -> FarmResult<String> {
+        let path = format!("group/{group_name}/domain/{domain}/dns");
         let rb = Self::json(self.post(&path), &dns_records);
         let rbb = || rb.try_clone().expect("could not clone a request builder");
         let resp = self.retry_until_success_long(rbb)?;
@@ -724,6 +754,12 @@ impl AttachImageSpec {
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct PlaynetCertificate {
     pub playnet: String,
+    pub cert: Certificate,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct DemoCertificate {
+    pub domain: String,
     pub cert: Certificate,
 }
 

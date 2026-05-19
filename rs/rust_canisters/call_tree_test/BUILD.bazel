@@ -2,23 +2,16 @@ load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:candid",
-    "@crate_index//:futures",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-]
-
 rust_canister(
     name = "call-tree-test-canister",
     srcs = ["src/main.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":call_tree_test.did",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+    ],
 )

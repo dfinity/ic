@@ -134,7 +134,7 @@
 use super::{
     config::NODES_INFO,
     driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR,
-    farm::{DnsRecord, PlaynetCertificate},
+    farm::{DemoCertificate, DnsRecord, HostFeature, PlaynetCertificate},
     test_setup::{GroupSetup, InfraProvider},
 };
 use crate::{
@@ -1485,19 +1485,39 @@ pub trait HasGroupSetup {
     fn create_group_setup(
         &self,
         group_base_name: String,
-        vm_allocation_mode: Option<VmAllocationMode>,
+        allocate_testnet_to_local_dc: bool,
         no_group_ttl: bool,
     );
+}
+
+/// Name of the environment variable that controls the VM allocation mode used
+/// when creating a Farm group. The value must match one of the serde rename
+/// strings of [`VmAllocationMode`] (e.g. `performanceOptimizedAllocation`).
+const VM_ALLOCATION_MODE_ENV_VAR: &str = "VM_ALLOCATION_MODE";
+
+fn vm_allocation_mode_from_env() -> Option<VmAllocationMode> {
+    let raw = match std::env::var(VM_ALLOCATION_MODE_ENV_VAR) {
+        Ok(v) if !v.is_empty() => v,
+        _ => return None,
+    };
+    let mode = serde_json::from_value::<VmAllocationMode>(serde_json::Value::String(raw.clone()))
+        .unwrap_or_else(|e| {
+            panic!(
+                "Invalid value {raw:?} for environment variable {VM_ALLOCATION_MODE_ENV_VAR}: {e}"
+            )
+        });
+    Some(mode)
 }
 
 impl HasGroupSetup for TestEnv {
     fn create_group_setup(
         &self,
         group_base_name: String,
-        vm_allocation_mode: Option<VmAllocationMode>,
+        allocate_testnet_to_local_dc: bool,
         no_group_ttl: bool,
     ) {
         let log = self.logger();
+        let vm_allocation_mode = vm_allocation_mode_from_env();
         if GroupSetup::attribute_exists(self) {
             let group_setup = GroupSetup::read_attribute(self);
             info!(
@@ -1511,11 +1531,24 @@ impl HasGroupSetup for TestEnv {
             let group_setup = GroupSetup::new(group_base_name.clone(), timeout);
             match InfraProvider::read_attribute(self) {
                 InfraProvider::Farm => {
+                    let required_host_features = allocate_testnet_to_local_dc
+                        .then(|| std::env::var("DC").ok())
+                        .flatten()
+                        .map(|dc| vec![HostFeature::DC(dc)])
+                        .unwrap_or_default();
+                    info!(
+                        log,
+                        "Creating group {} with required_host_features: {:?} and vm_allocation_mode: {:?} ...",
+                        group_setup.infra_group_name,
+                        required_host_features,
+                        vm_allocation_mode,
+                    );
+
                     let farm_base_url = FarmBaseUrl::read_attribute(self);
                     let farm = Farm::new(farm_base_url.into(), self.logger());
                     let group_spec = GroupSpec {
                         vm_allocation_mode,
-                        required_host_features: vec![],
+                        required_host_features,
                         preferred_network: None,
                         metadata: None,
                     };
@@ -2739,6 +2772,11 @@ pub trait CreateDnsRecords {
     /// The records will be garbage collected some time after the group has expired.
     /// The suffix will be returned from this function such that the FQDNs can be constructed.
     fn create_dns_records(&self, dns_records: Vec<DnsRecord>) -> String;
+
+    /// Creates DNS records under the suffix: `.<domain>.demo.farm.dfinity.systems`.
+    /// The records will be garbage collected some time after the group has expired.
+    /// The suffix will be returned from this function such that the FQDNs can be constructed.
+    fn create_demo_dns_records(&self, domain: &str, dns_records: Vec<DnsRecord>) -> String;
 }
 
 impl<T> CreateDnsRecords for T
@@ -2754,6 +2792,17 @@ where
         let group_name = group_setup.infra_group_name;
         farm.create_dns_records(&group_name, dns_records)
             .expect("Failed to create DNS records")
+    }
+
+    fn create_demo_dns_records(&self, domain: &str, dns_records: Vec<DnsRecord>) -> String {
+        let env = self.test_env();
+        let log = env.logger();
+        let farm_base_url = self.get_farm_url().unwrap();
+        let farm = Farm::new(farm_base_url, log);
+        let group_setup = GroupSetup::read_attribute(&env);
+        let group_name = group_setup.infra_group_name;
+        farm.create_demo_dns_records(&group_name, domain, dns_records)
+            .unwrap_or_else(|_| panic!("Failed to create demo DNS records for domain {}", domain))
     }
 }
 
@@ -2801,6 +2850,28 @@ where
         let group_name = group_setup.infra_group_name;
         farm.acquire_playnet_certificate(&group_name)
             .expect("Failed to acquire a certificate for a playnet")
+    }
+}
+
+pub trait AcquireDemoCertificate {
+    /// Get a certificate signed by Let's Encrypt from farm
+    /// for the domain `<domain>.demo.farm.dfinity.systems`.
+    fn acquire_demo_certificate(&self, domain: &str) -> DemoCertificate;
+}
+
+impl<T> AcquireDemoCertificate for T
+where
+    T: HasTestEnv,
+{
+    fn acquire_demo_certificate(&self, domain: &str) -> DemoCertificate {
+        let env = self.test_env();
+        let log = env.logger();
+        let farm_base_url = self.get_farm_url().unwrap();
+        let farm = Farm::new(farm_base_url, log);
+        let group_setup = GroupSetup::read_attribute(&env);
+        let group_name = group_setup.infra_group_name;
+        farm.acquire_demo_certificate(&group_name, domain)
+            .unwrap_or_else(|_| panic!("Failed to acquire a certificate for domain {}", domain))
     }
 }
 

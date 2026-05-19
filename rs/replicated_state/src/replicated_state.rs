@@ -940,6 +940,16 @@ impl ReplicatedState {
         canisters_memory_usage + subnet_memory_usage
     }
 
+    /// Returns the total memory usage of all canisters. Execution and wasm custom section
+    /// memory are included in `memory_usage()`, message memory is added separately.
+    pub fn total_canister_memory_usage(&self) -> NumBytes {
+        let mut total_memory_usage = NumBytes::new(0);
+        for canister in self.canisters_iter() {
+            total_memory_usage += canister.memory_usage() + canister.message_memory_usage().total();
+        }
+        total_memory_usage
+    }
+
     /// Returns the total memory taken by the ingress history in bytes.
     ///
     /// Time complexity: `O(1)`.

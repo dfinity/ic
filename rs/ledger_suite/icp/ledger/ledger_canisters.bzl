@@ -45,7 +45,7 @@ LEDGER_CANISTER_DEPS = [
     "@crate_index//:serde_bytes",
 ]
 
-def rust_ledger_canister(name, extra_deps = [":ledger"], crate_features = None):
+def rust_ledger_canister(name, extra_deps = [":ledger"], crate_features = None, hidden_endpoints = None):
     rust_canister(
         name = name,
         srcs = ["src/main.rs"],
@@ -55,6 +55,7 @@ def rust_ledger_canister(name, extra_deps = [":ledger"], crate_features = None):
         service_file = "//rs/ledger_suite/icp:ledger.did",
         deps = LEDGER_CANISTER_DEPS + extra_deps,
         crate_features = crate_features if crate_features else [],
+        hidden_endpoints = hidden_endpoints,
         proc_macro_deps = [
             # Keep sorted.
         ],
