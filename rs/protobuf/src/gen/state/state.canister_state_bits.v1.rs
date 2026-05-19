@@ -745,6 +745,10 @@ pub struct CanisterStateBits {
     /// The index of the next log record to be created.
     #[prost(uint64, tag = "44")]
     pub next_canister_log_record_idx: u64,
+    /// Whether the one-time migration from CanisterLog to LogMemoryStore has
+    /// already been performed for this canister.
+    #[prost(bool, tag = "66")]
+    pub log_memory_store_migrated: bool,
     /// The Wasm memory limit. This is a field in developer-visible canister
     /// settings that allows the developer to limit the usage of the Wasm memory
     /// by the canister to leave some room in 4GiB for upgrade calls.

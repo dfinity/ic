@@ -1103,6 +1103,7 @@ impl SchedulerTestBuilder {
             self.log,
             rate_limiting_of_heap_delta,
             rate_limiting_of_instructions,
+            config.log_memory_store_feature,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
 

@@ -2,7 +2,7 @@ use crate::{
     CallOrigin, CanisterState, CanisterStatus, ExecutionTask, ReplicatedState, num_bytes_try_from,
 };
 use ic_base_types::SubnetId;
-use ic_config::execution_environment::{Config, LOG_MEMORY_STORE_FEATURE_ENABLED};
+use ic_config::execution_environment::Config;
 use ic_logger::{ReplicaLogger, warn};
 use ic_management_canister_types_private::{CanisterStatusType, MasterPublicKeyId};
 use ic_metrics::MetricsRegistry;
@@ -647,7 +647,7 @@ impl ReplicatedStateMetrics {
         self.canister_compute_allocation
             .observe(canister.compute_allocation().as_percent() as f64 / 100.0);
 
-        let log_memory_usage = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        let log_memory_usage = if canister.system_state.log_memory_store.is_migrated() {
             canister.system_state.log_memory_store.memory_usage()
         } else {
             canister.system_state.canister_log.bytes_used()
@@ -656,7 +656,7 @@ impl ReplicatedStateMetrics {
             .observe(log_memory_usage as f64);
 
         // Observe retention from whichever log store is active.
-        let retention = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        let retention = if canister.system_state.log_memory_store.is_migrated() {
             canister.system_state.log_memory_store.retention()
         } else {
             canister.system_state.canister_log.retention()
