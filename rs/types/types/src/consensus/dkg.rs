@@ -216,7 +216,7 @@ impl std::hash::Hash for RemoteDkgAttempts {
         // Forward to `u32::hash` of the underlying count so that the hash
         // matches the prior representation that stored a raw `u32`.
         match self {
-            RemoteDkgAttempts::Completed => 0u32.hash(state),
+            RemoteDkgAttempts::Completed => 0_u32.hash(state),
             RemoteDkgAttempts::Attempt(n) => n.hash(state),
         }
     }
