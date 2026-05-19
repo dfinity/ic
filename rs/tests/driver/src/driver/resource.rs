@@ -323,10 +323,16 @@ pub fn allocate_resources(
                     )
                 }));
             }
+            InfraProvider::Local => {
+                unimplemented!("local backend: allocate_resources create_vm")
+            }
         }
     }
     let mut res_group = ResourceGroup::new(group_name.clone());
     match InfraProvider::read_attribute(env) {
+        InfraProvider::Local => {
+            unimplemented!("local backend: allocate_resources collect VMs")
+        }
         InfraProvider::Farm => {
             for thread in threads {
                 let (vm_name, created_vm) = thread

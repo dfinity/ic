@@ -353,6 +353,9 @@ chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
                 p8s_urls.write_attribute(env);
                 p8s_urls
             }
+            InfraProvider::Local => {
+                unimplemented!("local backend: PrometheusVm DNS URLs")
+            }
         };
         let prometheus_message = format!("Prometheus Web UI at {}", p8s_urls.prometheus_url);
         let grafana_message = format!("Grafana at {}", p8s_urls.grafana_url);

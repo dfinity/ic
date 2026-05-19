@@ -1560,6 +1560,9 @@ impl HasGroupSetup for TestEnv {
                     )
                     .unwrap();
                 }
+                InfraProvider::Local => {
+                    unimplemented!("local backend: create_group_setup")
+                }
             };
             group_setup.write_attribute(self);
             self.ssh_keygen().expect("ssh key generation failed");

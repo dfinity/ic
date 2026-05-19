@@ -1326,7 +1326,11 @@ impl SystemTestGroup {
             if let Some(required_args) = args.required_host_features {
                 required_args.write_attribute(&root_env);
             }
-            InfraProvider::Farm.write_attribute(&root_env);
+            let infra_provider = match std::env::var("SYSTEM_TEST_INFRA").as_deref() {
+                Ok("local") => InfraProvider::Local,
+                _ => InfraProvider::Farm,
+            };
+            infra_provider.write_attribute(&root_env);
             if with_farm {
                 root_env.create_group_setup(
                     group_ctx.group_base_name.clone(),

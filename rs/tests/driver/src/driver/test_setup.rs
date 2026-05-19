@@ -39,6 +39,7 @@ impl TestEnvAttribute for GroupSetup {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum InfraProvider {
     Farm,
+    Local,
 }
 
 impl TestEnvAttribute for InfraProvider {

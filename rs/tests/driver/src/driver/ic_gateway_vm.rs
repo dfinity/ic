@@ -284,6 +284,9 @@ sudo networkctl reconfigure enp2s0
                     },
                 ]
             }
+            InfraProvider::Local => {
+                unimplemented!("local backend: ic_gateway_vm configure_dns_records")
+            }
         };
 
         if !playnet.a_records.is_empty() {
@@ -426,6 +429,9 @@ docker run --name=ic-gateway -d \
                         records: vec![ic_gateway_fqdn.to_string()],
                     },
                 ]
+            }
+            InfraProvider::Local => {
+                unimplemented!("local backend: ic_gateway_vm configure_demo_domain_dns_records")
             }
         };
 

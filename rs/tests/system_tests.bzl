@@ -42,6 +42,7 @@ def system_test(
         additional_colocate_tags = [],
         logs = True,
         vm_allocation_mode = None,
+        local = False,
         **kwargs):
     """Declares a system-test.
 
@@ -92,6 +93,10 @@ def system_test(
         `"performanceOptimizedAllocation"`,
         `"minIntraDistanceLoadBalanceAllocation"` or `"distributeAcrossDcs"`.
         When None it defaults to `"minIntraDistanceLoadBalanceAllocation"`.
+      local: if True, select the local (libvirt-based) system-test backend
+        instead of Farm. Sets `SYSTEM_TEST_INFRA=local` in the test env,
+        drops the `requires-network` tag, and suppresses the colocated
+        variant of the test (colocation depends on Farm).
       **kwargs: additional arguments to pass to the rust_binary rule.
 
     Returns:
@@ -167,6 +172,10 @@ def system_test(
     extra_args_simple.extend(["--group-base-name", test_name])
     extra_args_colocated.extend(["--group-base-name", test_name + "_colocate"])
 
+    if local:
+        for image_name, image_path in icos_images.items():
+            _runtime_deps[image_name + "_PATH"] = image_path
+
     # Convert _runtime_deps into environment variables + data dependencies
     env |= {
         name: "$(rootpath {})".format(dep)
@@ -226,7 +235,11 @@ def system_test(
     RUN_SCRIPT_RUNTIME_DEP_ENV_VARS = ";".join(_runtime_deps.keys())
     env["RUN_SCRIPT_RUNTIME_DEP_ENV_VARS"] = RUN_SCRIPT_RUNTIME_DEP_ENV_VARS
 
-    tags = tags + ["requires-network", "system_test"]
+    tags = ["system_test"]
+    if local:
+        env["SYSTEM_TEST_INFRA"] = "local"
+    else:
+        tags.append("requires-network")
 
     env["RUN_SCRIPT_VOLATILE_STATUS_PATH"] = "$(rootpath //bazel:volatile-status.txt)"
     data.append("//bazel:volatile-status.txt")
@@ -247,6 +260,10 @@ def system_test(
     )
 
     # create a colocated version of the test (marked as manual _unless_ the test is tagged with "colocate")
+    # The colocated flow depends on Farm; skip it for local-backend tests.
+    if local:
+        return struct(test_driver_target = test_driver_target)
+
     sh_test(
         srcs = ["//rs/tests:run_systest.sh"],
         name = test_name + "_colocate",

@@ -325,6 +325,9 @@ pub fn setup_and_start_vms(
                     )?;
                     t_farm.start_vm(&group_name, &vm_name)?;
                 }
+                InfraProvider::Local => {
+                    unimplemented!("local backend: bootstrap attach/start vm")
+                }
             }
             std::fs::remove_file(conf_img_path)?;
             Ok(())
