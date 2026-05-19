@@ -2661,7 +2661,7 @@ fn test_log_memory_store_feature_flag_via_execution_test_builder() {
 }
 
 #[test]
-fn test_log_migration_from_canister_log_to_log_memory_store() {
+fn test_log_memory_store_upgrade_downgrade() {
     let controller = PrincipalId::new_anonymous();
     let subnet_type = SubnetType::Application;
 
