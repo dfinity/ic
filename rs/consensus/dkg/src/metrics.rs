@@ -3,7 +3,7 @@ use ic_metrics::{
     buckets::{decimal_buckets, linear_buckets},
 };
 use ic_types::{
-    consensus::BlockPayload,
+    consensus::{BlockPayload, dkg::RemoteDkgAttempts},
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetSubnet},
 };
 use prometheus::{Histogram, HistogramTimer, HistogramVec, IntCounterVec};
@@ -96,13 +96,16 @@ impl From<&BlockPayload> for DkgPayloadStats {
         let mut remote_transcripts_delivered = BTreeMap::new();
         let (remote_dkg_attempts_map_size, remote_dkg_attempts_map_sum) = match payload {
             BlockPayload::Summary(summary_payload) => (
-                Some(summary_payload.dkg.initial_dkg_attempts.len()),
+                Some(summary_payload.dkg.remote_dkg_attempts.len()),
                 Some(
                     summary_payload
                         .dkg
-                        .initial_dkg_attempts
+                        .remote_dkg_attempts
                         .values()
-                        .map(|attempts| *attempts as u64)
+                        .map(|attempts| match attempts {
+                            RemoteDkgAttempts::Completed => 0u64,
+                            RemoteDkgAttempts::Attempt(n) => *n as u64,
+                        })
                         .sum(),
                 ),
             ),
