@@ -796,7 +796,7 @@ fn test_next_idx_preserved_after_deallocate() {
 #[test]
 fn test_next_idx_preserved_when_appending_empty_delta_log() {
     // Simulates migration from a canister_log that has no records but a
-    // non-zero next_idx (e.g. all records were evicted by wrap-around).
+    // non-zero next_idx (e.g. all records were evicted after uninstalling).
     let log_size = 4096;
     let next_idx = TEST_NEXT_IDX;
 
