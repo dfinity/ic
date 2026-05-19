@@ -2,6 +2,7 @@
 
 use crate::artifact::IngressMessageId;
 use crate::batch::ChainKeyAgreement;
+use crate::consensus::dkg::RemoteDkgAttempts;
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::IDkgMasterPublicKeyId;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
@@ -1026,7 +1027,7 @@ impl HasId<IDkgReshareRequest> for ReshareOfUnmaskedParams {}
 impl HasId<IDkgReshareRequest> for CompletedReshareRequest {}
 impl HasId<NodeIndex> for BatchSignedIDkgDealing {}
 impl HasId<SubnetId> for CertifiedStreamSlice {}
-impl HasId<NiDkgTargetId> for u32 {}
+impl HasId<NiDkgTargetId> for RemoteDkgAttempts {}
 impl HasId<PreSigId> for PreSignatureInCreation {}
 impl HasId<PreSigId> for PreSignatureRef {}
 
