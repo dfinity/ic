@@ -27,9 +27,9 @@ rust_canister(
     version = "0.1.0",
     deps = [
         # Keep sorted.
+        "//rs/tests/test_canisters/message:lib",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
         "@crate_index//:serde",
-        "//rs/tests/test_canisters/message:lib",
     ],
 )
