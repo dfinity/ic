@@ -28,11 +28,10 @@ pub(crate) fn fetch_canister_logs(
 
     let s = &canister.system_state;
     let canister_log_records = match log_memory_store_feature {
-        FlagStatus::Disabled => filter_records(&args, s.canister_log.records())?,
         FlagStatus::Enabled if s.log_memory_store.is_migrated() => {
             s.log_memory_store.records(args.filter)
         }
-        FlagStatus::Enabled => filter_records(&args, s.canister_log.records())?,
+        _ => filter_records(&args, s.canister_log.records())?,
     };
 
     Ok(FetchCanisterLogsResponse {
