@@ -191,13 +191,6 @@ pub enum RemoteDkgAttempts {
     Attempt(u32),
 }
 
-impl RemoteDkgAttempts {
-    /// Returns `true` if `self` is [`RemoteDkgAttempts::Completed`].
-    pub fn is_completed(self) -> bool {
-        matches!(self, Self::Completed)
-    }
-}
-
 impl From<u32> for RemoteDkgAttempts {
     /// Construct a value from a raw attempt count: `0` becomes
     /// [`RemoteDkgAttempts::Completed`], `n > 0` becomes
