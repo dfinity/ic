@@ -510,13 +510,9 @@ impl CheckpointLoader {
             )
         });
 
-        for canister_state in results.into_iter() {
-            let (canister_state, durations) = canister_state?;
-            canister_states.insert(
-                canister_state.system_state.canister_id(),
-                Arc::new(canister_state),
-            );
-
+        for result in results.into_iter() {
+            let (canister_state, durations) = result?;
+            canister_states.insert(canister_state.canister_id(), Arc::new(canister_state));
             durations.apply(&self.metrics);
         }
 
