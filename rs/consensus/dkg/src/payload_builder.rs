@@ -267,35 +267,33 @@ pub(crate) fn create_remote_transcripts(
             });
             // Generate the transcript. We need to retry transient errors, as a payload containing
             // transient errors may not be verifiable by peers.
-            let transcript_result =
-                match NiDkgAlgorithm::create_transcript(crypto, config, dealings) {
-                    Ok(transcript) => Ok(transcript),
-                    // Note that we handled the reproducible error case of not having enough dealings
-                    // already beforehand.
-                    Err(err) if err.is_reproducible() => {
-                        dkg_payload_metrics
-                            .payload_errors_inc("remote_transcript_reproducible_error");
-                        // Including the error in the payload will cause the context to receive
-                        // a reject response.
-                        let error_message = format!(
-                            "Failed to create remote transcript for dkg id {:?} at height {}: {}",
-                            config.dkg_id(),
-                            parent.height.increment(),
-                            err
-                        );
-                        error!(logger, "{error_message}");
-                        Err(error_message)
-                    }
-                    Err(err) => {
-                        dkg_payload_metrics.payload_errors_inc("remote_transcript_transient_error");
-                        // Return on transient crypto errors
-                        return Err(DkgPayloadCreationError::DkgCreateTranscriptError(err));
-                    }
-                };
+            let result = match NiDkgAlgorithm::create_transcript(crypto, config, dealings) {
+                Ok(transcript) => Ok(transcript),
+                // Note that we handled the reproducible error case of not having enough dealings
+                // already beforehand.
+                Err(err) if err.is_reproducible() => {
+                    dkg_payload_metrics.payload_errors_inc("remote_transcript_reproducible_error");
+                    // Including the error in the payload will cause the context to receive
+                    // a reject response.
+                    let error_message = format!(
+                        "Failed to create remote transcript for dkg id {:?} at height {}: {}",
+                        config.dkg_id(),
+                        parent.height.increment(),
+                        err
+                    );
+                    error!(logger, "{error_message}");
+                    Err(error_message)
+                }
+                Err(err) => {
+                    dkg_payload_metrics.payload_errors_inc("remote_transcript_transient_error");
+                    // Return on transient crypto errors
+                    return Err(DkgPayloadCreationError::DkgCreateTranscriptError(err));
+                }
+            };
             selected_transcripts.push(RemoteTranscriptResult::new(
                 config.dkg_id().clone(),
                 callback_id,
-                transcript_result,
+                result,
             ));
         }
     }
