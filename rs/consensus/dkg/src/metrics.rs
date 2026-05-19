@@ -103,7 +103,7 @@ impl From<&BlockPayload> for DkgPayloadStats {
                         .remote_dkg_attempts
                         .values()
                         .map(|attempts| match attempts {
-                            RemoteDkgAttempts::Completed => 0u64,
+                            RemoteDkgAttempts::Completed => 0_u64,
                             RemoteDkgAttempts::Attempt(n) => *n as u64,
                         })
                         .sum(),
