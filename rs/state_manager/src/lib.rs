@@ -51,7 +51,7 @@ use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::{messaging::xnet::v1, state::v1 as pb};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
-use ic_replicated_state::metrics::ReplicatedStateMetrics;
+use ic_replicated_state::metrics::{ReplicatedStateInvariants, ReplicatedStateMetrics};
 use ic_replicated_state::page_map::{
     PageAllocatorFileDescriptor, PersistenceError, StorageMetrics,
 };
@@ -949,10 +949,10 @@ const EXTRA_CHECKPOINTS_TO_KEEP: usize = 0;
 pub struct StateManagerImpl {
     log: ReplicaLogger,
     metrics: StateManagerMetrics,
-    replicated_state_metrics: Arc<ReplicatedStateMetrics>,
-    /// Runs expensive `ReplicatedStateMetrics::observe` calls in the background,
-    /// so that `commit_and_certify` does not have to do it on the critical path.
-    replicated_state_metrics_thread: WorkerThread,
+    /// Runs expensive `ReplicatedStateMetrics::observe()` and
+    /// `ReplicatedStateInvariants::check()` calls in the background, so that
+    /// `commit_and_certify` does not have to do it on the critical path.
+    replicated_state_metrics_thread: ReplicatedStateMetricsThread,
     state_layout: StateLayout,
     /// The main metadata. Different threads will need to access this field.
     ///
@@ -1340,22 +1340,30 @@ impl StateManagerImpl {
         verifier: Arc<dyn Verifier>,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        log: ReplicaLogger,
-        metrics_registry: &MetricsRegistry,
         config: &Config,
         starting_height: Option<Height>,
         malicious_flags: MaliciousFlags,
         max_certified_height_tx: watch::Sender<Height>,
+        replicated_state_invariants: Option<ReplicatedStateInvariants>,
+        metrics_registry: &MetricsRegistry,
+        log: ReplicaLogger,
     ) -> Self {
         let metrics = StateManagerMetrics::new(metrics_registry, log.clone());
-        let replicated_state_metrics = Arc::new(ReplicatedStateMetrics::new(metrics_registry));
-        let replicated_state_metrics_thread =
-            WorkerThread::new("StateMetrics", metrics.skipped_state_observations.clone());
 
         let _timer = metrics
             .api_call_duration
             .with_label_values(&["new"])
             .start_timer();
+
+        let replicated_state_metrics = ReplicatedStateMetrics::new(metrics_registry);
+        let replicated_state_metrics_thread = ReplicatedStateMetricsThread {
+            metrics: Arc::new(replicated_state_metrics),
+            invariants: replicated_state_invariants.map(Arc::new),
+            worker_thread: WorkerThread::new(
+                "StateMetrics",
+                metrics.skipped_state_observations.clone(),
+            ),
+        };
 
         info!(
             log,
@@ -1648,7 +1656,6 @@ impl StateManagerImpl {
         Self {
             log,
             metrics,
-            replicated_state_metrics,
             replicated_state_metrics_thread,
             state_layout,
             states,
@@ -3561,15 +3568,12 @@ impl StateManager for StateManagerImpl {
                 .expect("failed to send tip request");
         }
 
-        // `ReplicatedStateMetrics::observe()` only updates Prometheus metrics, so defer
-        // it to a background thread to keep it off the critical path.
-        let replicated_state_metrics = Arc::clone(&self.replicated_state_metrics);
-        let own_subnet_id = self.own_subnet_id;
-        let log = self.log.clone();
+        // `ReplicatedStateMetrics::observe()` and `ReplicatedStateInvariants::check()`
+        // only update Prometheus metrics, so defer them to a background thread to keep
+        // them off the critical path.
+        let is_checkpoint_round = scope == CertificationScope::Full;
         self.replicated_state_metrics_thread
-            .enqueue(Box::new(move || {
-                replicated_state_metrics.observe(own_subnet_id, &state, height, &log);
-            }));
+            .enqueue_observe_and_check(state, height, is_checkpoint_round, &self.log);
     }
 
     fn report_diverged_checkpoint(&self, height: Height) {
@@ -4370,6 +4374,48 @@ impl PageAllocatorFileDescriptorImpl {
     }
 }
 
+/// A wrapper around a `ReplicatedStateMetrics`, an optional
+/// `ReplicatedStateInvariants` and a `WorkerThread` to run
+/// observations in the background.
+struct ReplicatedStateMetricsThread {
+    /// The metrics to be observed.
+    metrics: Arc<ReplicatedStateMetrics>,
+
+    /// Optional invariants to be checked.
+    ///
+    /// Always `Some` in the replica. May be `None` in tests or other binaries.
+    invariants: Option<Arc<ReplicatedStateInvariants>>,
+
+    /// Worker thread that runs the metrics observations and invariants checks.
+    worker_thread: WorkerThread,
+}
+
+impl ReplicatedStateMetricsThread {
+    /// Enqueues background metric observations and invariant checks for the given
+    /// state.
+    ///
+    /// No-op if the worker thread is backlogged with earlier enqueued tasks. Since
+    /// neither metrics nor invariant checks are critical to correct functioning of
+    /// the replica, this is preferable to blocking on the critical path.
+    fn enqueue_observe_and_check(
+        &self,
+        state: Arc<ReplicatedState>,
+        height: Height,
+        is_checkpoint_round: bool,
+        log: &ReplicaLogger,
+    ) {
+        let metrics = Arc::clone(&self.metrics);
+        let invariants = self.invariants.clone();
+        let log = log.clone();
+        self.worker_thread.enqueue(Box::new(move || {
+            metrics.observe(state.metadata.own_subnet_id, &state, height, &log);
+            if let Some(invariants) = invariants {
+                invariants.check(&state, is_checkpoint_round, height, &log);
+            }
+        }));
+    }
+}
+
 pub mod testing {
     use super::*;
 
@@ -4525,7 +4571,9 @@ pub mod testing {
         }
 
         fn flush_metrics_channel(&self) {
-            self.replicated_state_metrics_thread.flush_channel();
+            self.replicated_state_metrics_thread
+                .worker_thread
+                .flush_channel();
         }
 
         fn state_snapshot_heights(&self) -> Vec<Height> {

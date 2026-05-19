@@ -1,5 +1,5 @@
 {
-  "checksum": "bea41fe2e280736b74578a9d41f0deede34a954e2889bcab6de75c0aa0b51b85",
+  "checksum": "3e6f16ce85eb213f262df4b0a98be37b67d3c2740785251676fa3b96ac1bdbb0",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22728,10 +22728,6 @@
               "id": "bitcoin-dogecoin 0.32.7-doge.0",
               "target": "bitcoin",
               "alias": "bitcoin_dogecoin"
-            },
-            {
-              "id": "bitflags 1.3.2",
-              "target": "bitflags"
             },
             {
               "id": "bs58 0.5.0",
@@ -103947,7 +103943,6 @@
     "bit-vec 0.6.3",
     "bitcoin 0.28.2",
     "bitcoin-dogecoin 0.32.7-doge.0",
-    "bitflags 1.3.2",
     "bs58 0.5.0",
     "build-info 0.0.27",
     "build-info-build 0.0.27",
