@@ -561,7 +561,7 @@ impl BlockMaker {
             .ok()?;
 
             match subnet_splitting_status {
-                subnet_splitting::Status::NotScheduled => {}
+                subnet_splitting::Status::NotScheduled => return Some(version),
                 subnet_splitting::Status::Scheduled { scheduled_at, .. } => {
                     info!(
                         every_n_seconds => 30,
@@ -573,12 +573,8 @@ impl BlockMaker {
                     if parents_height.increment() == next_summary_block_height {
                         return Some(scheduled_at);
                     }
-
-                    continue;
                 }
             }
-
-            return Some(version);
         }
 
         // If parent's version is locally available, return that.
