@@ -29,7 +29,7 @@ PyGithub>=2.3.0
 python_gitlab
 requests>=2.26.0
 # TODO: Switch to a versioned release once available.
-sev-snp-measure @ git+https://github.com/virtee/sev-snp-measure.git@00a7883fa
+sev-snp-measure @ https://github.com/virtee/sev-snp-measure/archive/00a7883fa.zip
 simple-parsing
 toml>=0.10.2
 tqdm
