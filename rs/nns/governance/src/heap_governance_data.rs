@@ -468,6 +468,80 @@ mod tests {
         assert_eq!(reassembled_governance_proto, governance_proto);
     }
 
+    /// Demonstrates that dropping the `optional` keyword from the two fields of
+    /// `MaturityModulation` is wire-compatible with data previously serialized by the
+    /// `optional` version. This test is review-time scaffolding only: it proves the schema
+    /// migration is safe, but is not intended to live in the codebase long-term because the
+    /// `OldMaturityModulation` shape no longer exists in the source tree.
+    ///
+    /// Proto3 scalar fields with `optional` use explicit-presence (synthetic oneof); without
+    /// `optional` they use implicit presence (default 0 is not encoded). Both share the same
+    /// varint encoding for set values. The only semantic shift is:
+    ///   * old `None`     → new `0`     (decoder fills in default for missing fields)
+    ///   * new `0`        → old `None`  (encoder elides default values on the wire)
+    ///   * old `Some(0)`  → new `0`     (decoder reads the encoded 0)
+    ///   * old `Some(v)`  → new `v`     (round-trips)
+    ///   * new `v` (v≠0)  → old `Some(v)` (round-trips)
+    #[test]
+    fn maturity_modulation_optional_to_bare_wire_compat() {
+        use prost::Message;
+
+        #[derive(Clone, PartialEq, ::prost::Message)]
+        struct OldMaturityModulation {
+            #[prost(int32, optional, tag = "1")]
+            current_value_permyriad: Option<i32>,
+            #[prost(uint64, optional, tag = "2")]
+            updated_at_days_since_epoch: Option<u64>,
+        }
+
+        #[derive(Clone, PartialEq, ::prost::Message)]
+        struct NewMaturityModulation {
+            #[prost(int32, tag = "1")]
+            current_value_permyriad: i32,
+            #[prost(uint64, tag = "2")]
+            updated_at_days_since_epoch: u64,
+        }
+
+        // Forward: old serialized bytes decode under the new shape.
+        let cases = [
+            (Some(5_i32), Some(20_000_u64), 5_i32, 20_000_u64),
+            (None, None, 0, 0),
+            (Some(0), None, 0, 0),
+            (Some(0), Some(0), 0, 0),
+            (Some(-37), Some(u64::MAX), -37, u64::MAX),
+        ];
+        for (old_v, old_d, expect_v, expect_d) in cases {
+            let bytes = OldMaturityModulation {
+                current_value_permyriad: old_v,
+                updated_at_days_since_epoch: old_d,
+            }
+            .encode_to_vec();
+            let new = NewMaturityModulation::decode(bytes.as_slice()).unwrap();
+            assert_eq!(new.current_value_permyriad, expect_v);
+            assert_eq!(new.updated_at_days_since_epoch, expect_d);
+        }
+
+        // Reverse: new serialized bytes decode under the old shape.
+        // Non-zero values round-trip; zero values are elided on the wire and read back as None.
+        let cases = [
+            (7_i32, 30_000_u64, Some(7), Some(30_000)),
+            (0, 0, None, None),
+            (-37, u64::MAX, Some(-37), Some(u64::MAX)),
+            (0, 30_000, None, Some(30_000)),
+            (7, 0, Some(7), None),
+        ];
+        for (new_v, new_d, expect_v, expect_d) in cases {
+            let bytes = NewMaturityModulation {
+                current_value_permyriad: new_v,
+                updated_at_days_since_epoch: new_d,
+            }
+            .encode_to_vec();
+            let old = OldMaturityModulation::decode(bytes.as_slice()).unwrap();
+            assert_eq!(old.current_value_permyriad, expect_v);
+            assert_eq!(old.updated_at_days_since_epoch, expect_d);
+        }
+    }
+
     #[test]
     fn initialize_governance_fills_in_missing_fields() {
         let now_seconds = 1749068771;
