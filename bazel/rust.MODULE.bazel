@@ -506,6 +506,66 @@ crate.spec(
     package = "getrandom",
     version = "^0.2",
 )
+# ring 0.17.x declares `wasm32_unknown_unknown_js = ["getrandom/js"]`, which causes
+# cargo-bazel to enable wasm-bindgen in getrandom 0.2.x for wasm32-unknown-unknown —
+# even for canister targets that never depend on ring.  We override the getrandom lib
+# target with an identical copy that simply omits the wasm-bindgen deps/features on
+# wasm32, bypassing the lock-file feature resolution entirely.
+crate.annotation(
+    crate = "getrandom",
+    version = "^0.2",
+    additive_build_file_content = """\
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+rust_library(
+    name = "getrandom_no_wasm_bindgen",
+    srcs = glob(
+        allow_empty = True,
+        include = ["**/*.rs"],
+    ),
+    compile_data = glob(
+        allow_empty = True,
+        include = ["**"],
+        exclude = [
+            "**/* *",
+            ".tmp_git_root/**/*",
+            "BUILD",
+            "BUILD.bazel",
+            "WORKSPACE",
+            "WORKSPACE.bazel",
+        ],
+    ),
+    crate_features = ["custom", "std"],
+    crate_name = "getrandom",
+    crate_root = "src/lib.rs",
+    deps = [
+        "@crate_index__cfg-if-1.0.0//:cfg_if",
+    ] + select({
+        "@rules_rust//rust/platform:aarch64-apple-darwin": ["@crate_index__libc-0.2.177//:libc"],
+        "@rules_rust//rust/platform:aarch64-unknown-linux-gnu": ["@crate_index__libc-0.2.177//:libc"],
+        "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+        "@rules_rust//rust/platform:x86_64-apple-darwin": ["@crate_index__libc-0.2.177//:libc"],
+        "@rules_rust//rust/platform:x86_64-unknown-linux-gnu": ["@crate_index__libc-0.2.177//:libc"],
+        "//conditions:default": [],
+    }),
+    edition = "2018",
+    rustc_env_files = [":cargo_toml_env_vars"],
+    rustc_flags = ["--cap-lints=allow"],
+    tags = ["cargo-bazel", "crate-name=getrandom", "manual", "noclippy", "norustfmt"],
+    target_compatible_with = select({
+        "@rules_rust//rust/platform:aarch64-apple-darwin": [],
+        "@rules_rust//rust/platform:aarch64-unknown-linux-gnu": [],
+        "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+        "@rules_rust//rust/platform:x86_64-apple-darwin": [],
+        "@rules_rust//rust/platform:x86_64-unknown-linux-gnu": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    version = "0.2.10",
+    visibility = ["//visibility:public"],
+)
+""",
+    override_target_lib = "@@rules_rust++crate+crate_index__getrandom-0.2.10//:getrandom_no_wasm_bindgen",
+)
 crate.spec(
     package = "gpt",
     version = "4.1",

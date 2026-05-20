@@ -1,5 +1,5 @@
 {
-  "checksum": "d8ddb5961dfd7c3bd8a3b324250181727d6bcb8a852803824e4e8da316dac8a6",
+  "checksum": "eaa87c2ad4618b22263716f0e8b2ec3659103393fb3bf2e4bcf29298b35472fe",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -31019,7 +31019,11 @@
         "Apache-2.0",
         "MIT"
       ],
-      "license_file": "LICENSE-APACHE"
+      "license_file": "LICENSE-APACHE",
+      "additive_build_file_content": "load(\"@rules_rust//rust:defs.bzl\", \"rust_library\")\n\nrust_library(\n    name = \"getrandom_no_wasm_bindgen\",\n    srcs = glob(\n        allow_empty = True,\n        include = [\"**/*.rs\"],\n    ),\n    compile_data = glob(\n        allow_empty = True,\n        include = [\"**\"],\n        exclude = [\n            \"**/* *\",\n            \".tmp_git_root/**/*\",\n            \"BUILD\",\n            \"BUILD.bazel\",\n            \"WORKSPACE\",\n            \"WORKSPACE.bazel\",\n        ],\n    ),\n    crate_features = [\"custom\", \"std\"],\n    crate_name = \"getrandom\",\n    crate_root = \"src/lib.rs\",\n    deps = [\n        \"@crate_index__cfg-if-1.0.0//:cfg_if\",\n    ] + select({\n        \"@rules_rust//rust/platform:aarch64-apple-darwin\": [\"@crate_index__libc-0.2.177//:libc\"],\n        \"@rules_rust//rust/platform:aarch64-unknown-linux-gnu\": [\"@crate_index__libc-0.2.177//:libc\"],\n        \"@rules_rust//rust/platform:wasm32-unknown-unknown\": [],\n        \"@rules_rust//rust/platform:x86_64-apple-darwin\": [\"@crate_index__libc-0.2.177//:libc\"],\n        \"@rules_rust//rust/platform:x86_64-unknown-linux-gnu\": [\"@crate_index__libc-0.2.177//:libc\"],\n        \"//conditions:default\": [],\n    }),\n    edition = \"2018\",\n    rustc_env_files = [\":cargo_toml_env_vars\"],\n    rustc_flags = [\"--cap-lints=allow\"],\n    tags = [\"cargo-bazel\", \"crate-name=getrandom\", \"manual\", \"noclippy\", \"norustfmt\"],\n    target_compatible_with = select({\n        \"@rules_rust//rust/platform:aarch64-apple-darwin\": [],\n        \"@rules_rust//rust/platform:aarch64-unknown-linux-gnu\": [],\n        \"@rules_rust//rust/platform:wasm32-unknown-unknown\": [],\n        \"@rules_rust//rust/platform:x86_64-apple-darwin\": [],\n        \"@rules_rust//rust/platform:x86_64-unknown-linux-gnu\": [],\n        \"//conditions:default\": [\"@platforms//:incompatible\"],\n    }),\n    version = \"0.2.10\",\n    visibility = [\"//visibility:public\"],\n)\n",
+      "override_targets": {
+        "lib": "@@rules_rust++crate+crate_index__getrandom-0.2.10//:getrandom_no_wasm_bindgen"
+      }
     },
     "getrandom 0.3.4": {
       "name": "getrandom",
