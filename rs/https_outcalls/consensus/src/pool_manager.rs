@@ -2501,7 +2501,7 @@ pub mod test {
                 let change_set = pool_manager.create_shares_from_responses(Height::from(1));
 
                 // Only the response for the active context produces a share; the
-                // stale one is silently dropped.
+                // stale one is dropped.
                 assert_eq!(change_set.len(), 1);
                 assert_matches!(
                     &change_set[0],
