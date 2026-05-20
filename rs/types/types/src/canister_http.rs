@@ -76,7 +76,7 @@ use strum::FromRepr;
 use strum_macros::EnumIter;
 
 /// Time after which a response is considered timed out and a timeout error will be returned to execution
-pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(60);
+pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(120);
 
 /// Number of CanisterHttpResponses to be included in a block.
 ///
