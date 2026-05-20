@@ -23,9 +23,12 @@ pub struct ReplicaConfig {
     pub ipv6_user_output_rule_template: String,
     #[cfg_attr(test, proptest(strategy = "any::<String>().prop_map(|_x| vec![])"))]
     pub default_rules: Vec<FirewallRule>,
-    /// A map from protocol, UDP or TCP, to a list of ports that the node will use to whitelist for other nodes in the subnet.
-    pub tcp_ports_for_node_whitelist: Vec<u32>,
-    pub udp_ports_for_node_whitelist: Vec<u32>,
+    /// Ports opened to whitelisted (trusted) nodes in the network.
+    pub trusted_tcp_ports_for_node_whitelist: Vec<u32>,
+    pub trusted_udp_ports_for_node_whitelist: Vec<u32>,
+    /// Ports opened to all nodes in the network (trusted and untrusted alike).
+    pub untrusted_tcp_ports_for_node_whitelist: Vec<u32>,
+    pub untrusted_udp_ports_for_node_whitelist: Vec<u32>,
     pub ports_for_http_adapter_blacklist: Vec<u32>,
     /// We allow a maximum of `max_simultaneous_connections_per_ip_address` persistent connections to any ip address.
     /// Any ip address with `max_simultaneous_connections_per_ip_address` connections will be dropped if a new connection is attempted.
@@ -45,8 +48,10 @@ impl ReplicaConfig {
             ipv4_user_output_rule_template: "".to_string(),
             ipv6_user_output_rule_template: "".to_string(),
             default_rules: vec![],
-            tcp_ports_for_node_whitelist: vec![],
-            udp_ports_for_node_whitelist: vec![],
+            trusted_tcp_ports_for_node_whitelist: vec![],
+            trusted_udp_ports_for_node_whitelist: vec![],
+            untrusted_tcp_ports_for_node_whitelist: vec![],
+            untrusted_udp_ports_for_node_whitelist: vec![],
             ports_for_http_adapter_blacklist: vec![],
             max_simultaneous_connections_per_ip_address: 0,
         }
