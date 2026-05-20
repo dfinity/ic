@@ -1,6 +1,6 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
-load("//bazel:defs.bzl", "write_info_file_var")
+load("//bazel:defs.bzl", "volatile_status", "write_stable_status_file_var")
 
 bool_flag(
     name = "enable_malicious_code",
@@ -60,15 +60,42 @@ string_flag(
     visibility = ["//visibility:public"],
 )
 
-write_info_file_var(
+write_stable_status_file_var(
     name = "version.txt",
     varname = "STABLE_VERSION",
     visibility = ["//visibility:public"],
 )
 
-write_info_file_var(
+write_stable_status_file_var(
     name = "commit_date_iso_8601.txt",
     varname = "STABLE_COMMIT_DATE_ISO_8601",
+    visibility = ["//visibility:public"],
+)
+
+# This is the contents of the ctx.version_file,
+# i.e. all non-STABLE_, volatile key value pairs outputted from ./workspace_status.sh.
+#
+# Targets that need to use volatile keys should depend on this directly.
+# When volatile keys change the target remains cached.
+# When the target has to be rebuilt it will always use the latest volatile keys.
+volatile_status(
+    name = "volatile-status.txt",
+    visibility = ["//visibility:public"],
+)
+
+# Prebuilt protoc binary, selected by exec platform.
+# Used instead of @protobuf//:protoc to avoid
+# compiling protoc from C++ source on every build.
+# Platform config_settings are defined in //:BUILD.bazel alongside platform() rules.
+# Inspired by: https://github.com/protocolbuffers/protobuf/issues/19558
+alias(
+    name = "protoc",
+    actual = select({
+        "@bazel_tools//src/conditions:linux_x86_64": "@toolchains_protoc_hub.linux_x86_64//:bin/protoc",
+        "@bazel_tools//src/conditions:linux_aarch64": "@toolchains_protoc_hub.linux_aarch_64//:bin/protoc",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@toolchains_protoc_hub.osx_x86_64//:bin/protoc",
+        "@bazel_tools//src/conditions:darwin_arm64": "@toolchains_protoc_hub.osx_aarch_64//:bin/protoc",
+    }),
     visibility = ["//visibility:public"],
 )
 
@@ -77,6 +104,7 @@ exports_files(
         "prost_generator.sh",
         "generic_rust_bench.sh",
         "canbench.sh",
+        "check_endpoints_test.sh",
         "file_size_test.sh",
     ],
     visibility = ["//visibility:public"],

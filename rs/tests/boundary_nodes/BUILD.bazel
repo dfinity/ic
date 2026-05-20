@@ -31,6 +31,7 @@ system_test_nns(
         "colocate",
     ],
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
@@ -111,6 +112,7 @@ system_test_nns(
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
     tags = ["manual"],
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -135,6 +137,7 @@ system_test(
     tags = [
         "manual",
     ],
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -158,6 +161,7 @@ system_test(
     tags = [
         "manual",
     ],
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.

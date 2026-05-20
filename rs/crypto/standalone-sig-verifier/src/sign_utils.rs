@@ -18,6 +18,7 @@ pub enum KeyBytesContentType {
     EcdsaSecp256k1PublicKeyDer,
     RsaSha256PublicKeyDer,
     EcdsaP256PublicKeyDerWrappedCose,
+    Ed25519PublicKeyDerWrappedCose,
     RsaSha256PublicKeyDerWrappedCose,
     IcCanisterSignatureAlgPublicKeyDer,
 }
@@ -25,6 +26,7 @@ pub enum KeyBytesContentType {
 fn cose_key_bytes_content_type(alg_id: AlgorithmId) -> Option<KeyBytesContentType> {
     match alg_id {
         AlgorithmId::EcdsaP256 => Some(KeyBytesContentType::EcdsaP256PublicKeyDerWrappedCose),
+        AlgorithmId::Ed25519 => Some(KeyBytesContentType::Ed25519PublicKeyDerWrappedCose),
         AlgorithmId::RsaSha256 => Some(KeyBytesContentType::RsaSha256PublicKeyDerWrappedCose),
         _ => None,
     }

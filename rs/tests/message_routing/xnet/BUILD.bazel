@@ -12,6 +12,7 @@ system_test_nns(
         "system_test_large",
     ],
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
@@ -28,6 +29,7 @@ system_test_nns(
         "colocate",
         "system_test_large",
     ],
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
@@ -44,6 +46,7 @@ system_test_nns(
         "colocate",
         "system_test_large",
     ],
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
@@ -61,6 +64,7 @@ system_test_nns(
         "system_test_large",
     ],
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",

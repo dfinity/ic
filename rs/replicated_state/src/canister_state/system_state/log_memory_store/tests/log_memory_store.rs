@@ -756,21 +756,21 @@ fn test_resize_down_preserves_records_and_next_idx() {
 }
 
 #[test]
-fn test_from_checkpoint_feature_enabled() {
+fn test_from_checkpoint_migrated() {
     let some_page_map = Some(PageMap::new_for_testing());
 
-    let s = LogMemoryStore::from_checkpoint(FlagStatus::Enabled, some_page_map, TEST_NEXT_IDX);
+    let s = LogMemoryStore::from_checkpoint(some_page_map, TEST_NEXT_IDX, true);
     assert!(s.maybe_page_map().is_some());
     assert_eq!(s.next_idx(), TEST_NEXT_IDX);
 }
 
 #[test]
-fn test_from_checkpoint_feature_disabled() {
+fn test_from_checkpoint_not_migrated() {
     let some_page_map = Some(PageMap::new_for_testing());
 
-    let s = LogMemoryStore::from_checkpoint(FlagStatus::Disabled, some_page_map, TEST_NEXT_IDX);
+    let s = LogMemoryStore::from_checkpoint(some_page_map, TEST_NEXT_IDX, false);
     assert!(s.maybe_page_map().is_none());
-    // When feature is disabled, next_idx should be initialized to 0 regardless of the provided value.
+    // When not yet migrated, next_idx should be initialized to 0 regardless of the provided value.
     assert_eq!(s.next_idx(), 0);
 }
 
@@ -791,4 +791,59 @@ fn test_next_idx_preserved_after_deallocate() {
 
     // The next_idx should be preserved even if deallocated
     assert_eq!(store.next_idx(), TEST_NEXT_IDX + 2);
+}
+
+#[test]
+fn test_next_idx_preserved_when_appending_empty_delta_log() {
+    // Simulates migration from a canister_log that has no records but a
+    // non-zero next_idx (e.g. all records were evicted after uninstalling).
+    let log_size = 4096;
+    let next_idx = TEST_NEXT_IDX;
+
+    let mut store = LogMemoryStore::new(FlagStatus::Enabled);
+    store.resize_for_testing(log_size);
+    assert_eq!(store.next_idx(), 0);
+
+    // Delta log with no records but next_idx > 0, as produced by CanisterLog
+    // after uninstalling a canister (uninstall clears records but keeps next_idx).
+    let mut empty_delta = ic_types::CanisterLog::new_aggregate(next_idx, vec![]);
+    assert!(empty_delta.is_empty());
+
+    store.append_delta_log(&mut empty_delta);
+
+    assert_eq!(store.next_idx(), next_idx);
+}
+
+fn assert_memory_usage_for_limit(feature_flag: FlagStatus, limit: usize) {
+    let mut s = LogMemoryStore::new(feature_flag);
+    s.resize_for_testing(limit);
+    assert_eq!(
+        s.memory_usage_for_limit(NumBytes::new(limit as u64)).get() as usize,
+        s.memory_usage(),
+    );
+}
+
+#[test]
+fn memory_usage_for_limit_feature_disabled() {
+    assert_memory_usage_for_limit(FlagStatus::Disabled, 1);
+}
+
+#[test]
+fn memory_usage_for_limit_zero_limit() {
+    assert_memory_usage_for_limit(TEST_LOG_MEMORY_STORE_FEATURE, 0);
+}
+
+#[test]
+fn memory_usage_for_limit_below_minimum() {
+    assert_memory_usage_for_limit(TEST_LOG_MEMORY_STORE_FEATURE, 1); // below DATA_CAPACITY_MIN
+}
+
+#[test]
+fn memory_usage_for_limit_at_minimum() {
+    assert_memory_usage_for_limit(TEST_LOG_MEMORY_STORE_FEATURE, EXPECTED_DATA_CAPACITY_MIN);
+}
+
+#[test]
+fn memory_usage_for_limit_above_minimum() {
+    assert_memory_usage_for_limit(TEST_LOG_MEMORY_STORE_FEATURE, TEST_LOG_MEMORY_LIMIT);
 }

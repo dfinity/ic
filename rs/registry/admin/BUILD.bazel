@@ -40,7 +40,6 @@ cargo_build_script(
 
 rust_binary(
     name = "ic-admin",
-    testonly = True,
     srcs = glob(["bin/**/*.rs"]),
     proc_macro_deps = [
         # Keep sorted.
@@ -69,10 +68,10 @@ rust_binary(
         "//rs/nns/constants",
         "//rs/nns/governance/api",
         "//rs/nns/governance/conversions",
+        "//rs/nns/handlers/lifeline/interface",
         "//rs/nns/handlers/root/impl:root",
         "//rs/nns/init",
         "//rs/nns/sns-wasm",
-        "//rs/nns/test_utils",
         "//rs/prep",
         "//rs/protobuf",
         "//rs/registry/canister",

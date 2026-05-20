@@ -1821,8 +1821,8 @@ fn test_metric_canister_log_retention_seconds() {
     // Advance simulated time and append another record.
     env.advance_time(TIME_ADVANCE);
     let _ = env.execute_ingress(canister_id, "test", vec![]);
-
     let after = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
+
     assert_eq!(after.count, before.count + 1);
     let sample = after.sum - before.sum;
     // The new sample should report at least the advanced wall-clock gap.
@@ -2440,10 +2440,9 @@ fn test_canister_log_resize_rejected_insufficient_cycles() {
                 .build(),
         )
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
     assert!(
-        err.description()
-            .contains("Cannot resize canister log memory due to insufficient cycles"),
+        err.description().contains("insufficient cycles"),
         "Unexpected error message: {}",
         err.description(),
     );
@@ -2634,8 +2633,10 @@ fn test_fetch_canister_logs_update_call_deducts_cycles() {
 
 #[test]
 fn test_log_memory_store_feature_flag_via_execution_test_builder() {
-    // With the flag disabled (default), canister creation does not allocate a ring buffer.
-    let mut test = ExecutionTestBuilder::new().build();
+    // With the flag disabled, canister creation does not allocate a ring buffer.
+    let mut test = ExecutionTestBuilder::new()
+        .with_log_memory_store_feature_disabled()
+        .build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
     assert_eq!(
         test.canister_status(canister_id)
@@ -2657,4 +2658,355 @@ fn test_log_memory_store_feature_flag_via_execution_test_builder() {
             .get(),
         0,
     );
+}
+
+#[test]
+fn test_log_memory_store_upgrade_downgrade() {
+    let controller = PrincipalId::new_anonymous();
+    let subnet_type = SubnetType::Application;
+
+    let check_records = |env: &StateMachine,
+                         canister_id: CanisterId,
+                         expected_len: usize,
+                         expected_last_idx: u64,
+                         expected_last_content: &Vec<u8>| {
+        let records = fetch_log_records(env, controller, canister_id);
+        assert_eq!(records.len(), expected_len);
+        assert_eq!(
+            records.last().map(|r| (r.idx, &r.content)),
+            Some((expected_last_idx, expected_last_content))
+        );
+    };
+    let check_canister_log =
+        |env: &StateMachine, canister_id: CanisterId, expected_next_idx: u64| {
+            let state = env.get_latest_state();
+            let ss = &state.canister_state(&canister_id).unwrap().system_state;
+            assert_eq!(ss.canister_log.next_idx(), expected_next_idx);
+        };
+    let check_lms = |env: &StateMachine,
+                     canister_id: CanisterId,
+                     expected_migrated: bool,
+                     expected_allocated: bool,
+                     expected_empty: bool,
+                     expected_next_idx: u64| {
+        let state = env.get_latest_state();
+        let lms = &state
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .log_memory_store;
+        assert_eq!(lms.is_migrated(), expected_migrated);
+        assert_eq!(lms.is_allocated(), expected_allocated);
+        assert_eq!(lms.is_empty(), expected_empty);
+        assert_eq!(lms.next_idx(), expected_next_idx);
+    };
+
+    // Step 1: StateMachine with log_memory_store feature disabled. Install canisters
+    // and produce log entries that land in canister_log (legacy storage).
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(subnet_type),
+            ExecutionConfig {
+                log_memory_store_feature: FlagStatus::Disabled,
+                ..Default::default()
+            },
+        )))
+        .with_subnet_type(subnet_type)
+        .with_checkpoints_enabled(true)
+        .build();
+
+    let canister_settings = || {
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Public)
+            .with_controllers(vec![controller])
+            .build()
+    };
+
+    // canister_many: receives 200+ messages, exercises wrap-around in canister_log.
+    let canister_many =
+        create_and_install_canister(&env, canister_settings(), UNIVERSAL_CANISTER_WASM.to_vec());
+    // canister_cleared: receives 42 log messages then gets uninstalled, so logs are
+    // cleared but next_idx is preserved at 42.
+    let canister_cleared =
+        create_and_install_canister(&env, canister_settings(), UNIVERSAL_CANISTER_WASM.to_vec());
+    // canister_few: one log before migration, one after, one after downgrade (3 total).
+    let canister_few =
+        create_and_install_canister(&env, canister_settings(), UNIVERSAL_CANISTER_WASM.to_vec());
+
+    // Execute enough messages to cause wrap-around in the legacy canister_log storage.
+    let num_pre_migration = 200_usize;
+    for i in 0..num_pre_migration {
+        let msg = format!("hello migration {i}");
+        let _ = env.execute_ingress(
+            canister_many,
+            "update",
+            wasm().debug_print(msg.as_bytes()).reply().build(),
+        );
+    }
+    let last_pre_migration_msg = format!("hello migration {}", num_pre_migration - 1).into_bytes();
+
+    let records = fetch_log_records(&env, controller, canister_many);
+    let pre_migration_len = records.len();
+    // Wrap-around dropped old records: fewer survive than were produced.
+    assert!(pre_migration_len < num_pre_migration);
+    // next_idx advances for every produced record, including dropped ones.
+    check_canister_log(&env, canister_many, num_pre_migration as u64);
+    check_lms(&env, canister_many, false, false, true, 0);
+    check_records(
+        &env,
+        canister_many,
+        pre_migration_len,
+        num_pre_migration as u64 - 1,
+        &last_pre_migration_msg,
+    );
+
+    let num_cleared_logs = 42_usize;
+    for i in 0..num_cleared_logs {
+        let msg = format!("to be cleared {i}");
+        let _ = env.execute_ingress(
+            canister_cleared,
+            "update",
+            wasm().debug_print(msg.as_bytes()).reply().build(),
+        );
+    }
+    let _ = env.uninstall_code(canister_cleared).unwrap();
+    // After uninstall: records are cleared but next_idx is preserved.
+    assert!(fetch_log_records(&env, controller, canister_cleared).is_empty());
+    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
+    check_lms(&env, canister_cleared, false, false, true, 0);
+
+    let log_0 = b"log 0".to_vec();
+    let _ = env.execute_ingress(
+        canister_few,
+        "update",
+        wasm().debug_print(&log_0).reply().build(),
+    );
+    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
+    check_lms(&env, canister_cleared, false, false, true, 0);
+
+    check_canister_log(&env, canister_few, 1);
+    check_lms(&env, canister_few, false, false, true, 0);
+    check_records(&env, canister_few, 1, 0, &log_0);
+
+    // Step 2: Restart with log_memory_store feature enabled. Before any round
+    // executes, migration has not run yet: is_migrated=false, is_allocated=false,
+    // but fetch_canister_logs still works via the canister_log fallback.
+    let env = env.restart_node_with_config(StateMachineConfig::new(
+        SubnetConfig::new(subnet_type),
+        ExecutionConfig {
+            log_memory_store_feature: FlagStatus::Enabled,
+            ..Default::default()
+        },
+    ));
+
+    // canister_log next_idx survives the restart via the checkpoint.
+    check_canister_log(&env, canister_many, num_pre_migration as u64);
+    // log_memory_store is not yet migrated; next_idx is 0 until migration runs.
+    check_lms(&env, canister_many, false, false, true, 0);
+    check_records(
+        &env,
+        canister_many,
+        pre_migration_len,
+        num_pre_migration as u64 - 1,
+        &last_pre_migration_msg,
+    );
+
+    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
+    check_lms(&env, canister_cleared, false, false, true, 0);
+
+    check_canister_log(&env, canister_few, 1);
+    check_lms(&env, canister_few, false, false, true, 0);
+    check_records(&env, canister_few, 1, 0, &log_0);
+
+    // Step 3: Execute a round to trigger migration. Afterwards is_migrated=true,
+    // is_allocated=true, log_memory_store contains the migrated records, and
+    // fetch_canister_logs reads from log_memory_store.
+    env.tick();
+
+    // After migration next_idx matches the canister_log next_idx.
+    check_canister_log(&env, canister_many, num_pre_migration as u64);
+    check_lms(
+        &env,
+        canister_many,
+        true,
+        true,
+        false,
+        num_pre_migration as u64,
+    );
+    // Migration must preserve exactly the records that survived wrap-around.
+    check_records(
+        &env,
+        canister_many,
+        pre_migration_len,
+        num_pre_migration as u64 - 1,
+        &last_pre_migration_msg,
+    );
+
+    // Cleared canister: migrated and allocated but has no records; next_idx carried over from uninstall.
+    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
+    check_lms(
+        &env,
+        canister_cleared,
+        true,
+        true,
+        true,
+        num_cleared_logs as u64,
+    );
+
+    check_canister_log(&env, canister_few, 1);
+    check_lms(&env, canister_few, true, true, false, 1);
+    check_records(&env, canister_few, 1, 0, &log_0);
+
+    // Step 4: After migration, produce new log entries and verify they can be queried
+    // from log_memory_store together with the migrated records.
+    let post_migration_msg = format!("hello migration {num_pre_migration}").into_bytes();
+    let _ = env.execute_ingress(
+        canister_many,
+        "update",
+        wasm().debug_print(&post_migration_msg).reply().build(),
+    );
+
+    let log_1 = b"log 1".to_vec();
+    let _ = env.execute_ingress(
+        canister_few,
+        "update",
+        wasm().debug_print(&log_1).reply().build(),
+    );
+
+    check_records(
+        &env,
+        canister_many,
+        pre_migration_len + 1,
+        num_pre_migration as u64,
+        &post_migration_msg,
+    );
+    check_lms(
+        &env,
+        canister_many,
+        true,
+        true,
+        false,
+        num_pre_migration as u64 + 1,
+    );
+    check_canister_log(&env, canister_many, num_pre_migration as u64 + 1);
+
+    check_lms(
+        &env,
+        canister_cleared,
+        true,
+        true,
+        true,
+        num_cleared_logs as u64,
+    );
+    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
+
+    check_lms(&env, canister_few, true, true, false, 2);
+    check_canister_log(&env, canister_few, 2);
+    check_records(&env, canister_few, 2, 1, &log_1);
+
+    // Step 5: Downgrade — restart with log_memory_store feature disabled.
+    // The checkpoint still has migrated=true since it was saved after step 3.
+    let env = env.restart_node_with_config(StateMachineConfig::new(
+        SubnetConfig::new(subnet_type),
+        ExecutionConfig {
+            log_memory_store_feature: FlagStatus::Disabled,
+            ..Default::default()
+        },
+    ));
+
+    // Before any round, lms is still marked migrated as loaded from the checkpoint.
+    check_canister_log(&env, canister_many, num_pre_migration as u64 + 1);
+    check_lms(
+        &env,
+        canister_many,
+        true,
+        true,
+        false,
+        num_pre_migration as u64 + 1,
+    );
+    // With the feature disabled, fetch_canister_logs reads from canister_log, not lms.
+    // canister_log uses CanisterLogRecord
+    // while lms stores records more compactly (less overhead per record).
+    // Both have the same 4 KiB byte capacity, but canister_log fits fewer records before
+    // wrapping. By step 4, canister_log was already at its wrap point (pre_migration_len records),
+    // while lms had room for one more — so they now differ by one record.
+    check_records(
+        &env,
+        canister_many,
+        pre_migration_len,
+        num_pre_migration as u64,
+        &post_migration_msg,
+    );
+
+    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
+    check_lms(
+        &env,
+        canister_cleared,
+        true,
+        true,
+        true,
+        num_cleared_logs as u64,
+    );
+
+    check_canister_log(&env, canister_few, 2);
+    check_lms(&env, canister_few, true, true, false, 2);
+    check_records(&env, canister_few, 2, 1, &log_1);
+
+    // Execute a round to trigger the downgrade.
+    env.tick();
+
+    // After downgrade, lms is deallocated, the migration flag is cleared,
+    // and persistent_next_idx is reset to zero in lms.
+    check_canister_log(&env, canister_many, num_pre_migration as u64 + 1);
+    check_lms(&env, canister_many, false, false, true, 0);
+    // fetch_canister_logs falls back to canister_log after downgrade.
+    // canister_log was at capacity before step 4, so it wrapped around and still
+    // holds pre_migration_len records with the post-migration message at the tail.
+    check_records(
+        &env,
+        canister_many,
+        pre_migration_len,
+        num_pre_migration as u64,
+        &post_migration_msg,
+    );
+
+    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
+    check_lms(&env, canister_cleared, false, false, true, 0);
+
+    check_canister_log(&env, canister_few, 2);
+    check_lms(&env, canister_few, false, false, true, 0);
+    check_records(&env, canister_few, 2, 1, &log_1);
+
+    // Execute messages after downgrade: new logs go only to canister_log since
+    // lms is not migrated. canister_log wraps around again, keeping pre_migration_len records.
+    let post_downgrade_msg = format!("hello migration {}", num_pre_migration + 1).into_bytes();
+    let _ = env.execute_ingress(
+        canister_many,
+        "update",
+        wasm().debug_print(&post_downgrade_msg).reply().build(),
+    );
+
+    let log_2 = b"log 2".to_vec();
+    let _ = env.execute_ingress(
+        canister_few,
+        "update",
+        wasm().debug_print(&log_2).reply().build(),
+    );
+
+    check_canister_log(&env, canister_many, num_pre_migration as u64 + 2);
+    check_lms(&env, canister_many, false, false, true, 0);
+    check_records(
+        &env,
+        canister_many,
+        pre_migration_len,
+        num_pre_migration as u64 + 1,
+        &post_downgrade_msg,
+    );
+
+    check_canister_log(&env, canister_cleared, num_cleared_logs as u64);
+    check_lms(&env, canister_cleared, false, false, true, 0);
+
+    check_canister_log(&env, canister_few, 3);
+    check_lms(&env, canister_few, false, false, true, 0);
+    check_records(&env, canister_few, 3, 2, &log_2);
 }

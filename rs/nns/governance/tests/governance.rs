@@ -59,10 +59,10 @@ use ic_nns_governance::{
     pb::v1::{
         AddOrRemoveNodeProvider, Ballot, BallotInfo, CreateServiceNervousSystem, Empty,
         ExecuteNnsFunction, Followees, GovernanceError, IdealMatchedParticipationFunction,
-        InstallCode, KnownNeuron, KnownNeuronData, ManageNeuron, MonthlyNodeProviderRewards,
-        Motion, NetworkEconomics, NeuronType, NeuronsFundData, NeuronsFundEconomics,
-        NeuronsFundMatchedFundingCurveCoefficients, NeuronsFundParticipation, NeuronsFundSnapshot,
-        NnsFunction, NodeProvider, Proposal, ProposalData,
+        InstallCode, KnownNeuron, KnownNeuronData, ManageNeuron, MaturityModulation,
+        MonthlyNodeProviderRewards, Motion, NetworkEconomics, NeuronType, NeuronsFundData,
+        NeuronsFundEconomics, NeuronsFundMatchedFundingCurveCoefficients, NeuronsFundParticipation,
+        NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal, ProposalData,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders,
@@ -5723,6 +5723,14 @@ fn run_periodic_tasks_often_enough_to_update_maturity_modulation(gov: &mut Gover
     for _i in 0..5 {
         gov.run_periodic_tasks().now_or_never();
     }
+    // The CMC periodic task populates `cached_daily_maturity_modulation_basis_points`, but the
+    // XRC-fed `maturity_modulation` field that spawning and disbursement now read isn't populated
+    // in unit tests (no XRC mock). Set it directly so consumers see a value consistent with
+    // the FakeDriver's 100 bp.
+    gov.heap_data.maturity_modulation = Some(MaturityModulation {
+        current_value_permyriad: Some(100),
+        updated_at_days_since_epoch: Some(gov.env.now() / ONE_DAY_SECONDS),
+    });
 }
 
 /// Checks that:

@@ -73,6 +73,9 @@ pub struct NetworkTopology {
     pub chain_key_enabled_subnets: ::prost::alloc::vec::Vec<ChainKeySubnetEntry>,
     #[prost(message, optional, tag = "9")]
     pub full_topology: ::core::option::Option<FullTopology>,
+    #[prost(message, optional, tag = "10")]
+    pub default_initial_dkg_subnet_id:
+        ::core::option::Option<super::super::super::types::v1::SubnetId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FullTopology {
@@ -162,8 +165,6 @@ pub struct SignWithThresholdContext {
     pub args: ::core::option::Option<ThresholdArguments>,
     #[prost(bytes = "vec", repeated, tag = "3")]
     pub derivation_path_vec: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
-    #[prost(bytes = "vec", tag = "4")]
-    pub deprecated_pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "5")]
     pub batch_time: u64,
     #[prost(bytes = "vec", optional, tag = "8")]
