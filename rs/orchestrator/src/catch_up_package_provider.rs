@@ -634,13 +634,10 @@ pub(crate) mod tests {
                 .unwrap(),
         );
 
-        let mut tls_cfg =
-            ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-                .with_safe_default_protocol_versions()
-                .expect("ring provider supports default TLS versions")
-                .with_no_client_auth()
-                .with_single_cert(vec![cert.clone()], priv_key.into())
-                .unwrap();
+        let mut tls_cfg = ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(vec![cert.clone()], priv_key.into())
+            .unwrap();
         tls_cfg.alpn_protocols = vec![
             b"h2".to_vec(), // HTTP/2
         ];
@@ -754,13 +751,10 @@ pub(crate) mod tests {
             }
         }
 
-        let accept_any_config =
-            ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-                .with_safe_default_protocol_versions()
-                .expect("ring provider supports default TLS versions")
-                .dangerous()
-                .with_custom_certificate_verifier(Arc::new(NoVerify))
-                .with_no_client_auth();
+        let accept_any_config = ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(NoVerify))
+            .with_no_client_auth();
 
         let mut tls_config = MockTlsConfig::new();
         let expectation = tls_config

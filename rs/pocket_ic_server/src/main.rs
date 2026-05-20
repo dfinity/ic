@@ -141,10 +141,6 @@ fn increase_nofile_limit(mut new_limit: u64) -> io::Result<()> {
 }
 
 fn main() {
-    rustls::crypto::ring::default_provider()
-        .install_default()
-        .expect("Failed to install rustls ring crypto provider");
-
     let current_binary_path = current_binary_path().unwrap();
     let current_binary_name = current_binary_path.file_name().unwrap().to_str().unwrap();
     let allowed_binary_names = ["pocket-ic", "pocket-ic-server", "pocket-ic-server-head-nns"];

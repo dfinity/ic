@@ -1138,13 +1138,10 @@ fn test_http_alpn_header_is_set(
         }
     }
 
-    let mut accept_any_config =
-        ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-            .with_safe_default_protocol_versions()
-            .expect("ring provider supports default TLS versions")
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(NoVerify))
-            .with_no_client_auth();
+    let mut accept_any_config = ClientConfig::builder()
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(NoVerify))
+        .with_no_client_auth();
 
     accept_any_config.alpn_protocols = client_advertised_alpn_protocols;
 

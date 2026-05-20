@@ -283,14 +283,10 @@ mod tests {
 
             endpoint.set_default_client_config(ClientConfig::new(Arc::new(
                 QuicClientConfig::try_from(
-                    rustls::ClientConfig::builder_with_provider(Arc::new(
-                        rustls::crypto::ring::default_provider(),
-                    ))
-                    .with_safe_default_protocol_versions()
-                    .expect("ring provider supports default TLS versions")
-                    .dangerous()
-                    .with_custom_certificate_verifier(SkipServerVerification::new())
-                    .with_no_client_auth(),
+                    rustls::ClientConfig::builder()
+                        .dangerous()
+                        .with_custom_certificate_verifier(SkipServerVerification::new())
+                        .with_no_client_auth(),
                 )
                 .unwrap(),
             )));
