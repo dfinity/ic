@@ -83,7 +83,7 @@ pub struct PostSplitAssignment {
 pub enum PostSplitAssignmentError {
     #[error("Error while getting the subnet id from the registry at version {0}: {1}")]
     FailedToGetSubnetIdFromTheRegistry(RegistryVersion, RegistryClientError),
-    #[error("The node is unassigned to any subnet at registry version {0}")]
+    #[error("The node is unassigned at registry version {0}")]
     Unassigned(RegistryVersion),
     #[error("The subnet is not being split according to the summary block")]
     NotSplitting,
