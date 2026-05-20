@@ -15,6 +15,7 @@ use crate::{
         health::health,
         run::run,
         sessions::{delete_all as delete_all_sessions, delete_one as delete_one_session},
+        tools::{get_tools, set_tools},
     },
     state::AppState,
 };
@@ -23,6 +24,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/v1/health", get(health))
         .route("/v1/config", post(configure))
+        // Read / replace the server-wide default tool set. Tools are
+        // disabled by default; POST a JSON `{"tools": ["calculator", ...]}`
+        // to enable, or `{"tools": []}` to disable.
+        .route("/v1/tools", get(get_tools).post(set_tools))
         .route("/v1/agent/run", post(run))
         .route("/v1/agent/chat", post(chat))
         // Drop a single chat session (404 if unknown).

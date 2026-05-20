@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
-use rig::completion::Prompt;
 use slog::warn;
 
 use crate::{
+    handlers::tools::read_defaults as read_default_tools,
     models::{ErrorBody, RunRequest, RunResponse},
     providers::provider_not_configured,
     state::AppState,
@@ -34,7 +34,14 @@ pub async fn run(
         )
             .into_response();
     }
-    if let Err(unknown) = validate_tool_names(&req.tools) {
+    // Resolve the effective tool list: per-request override (including
+    // an explicit empty list) wins; otherwise fall back to the
+    // server-wide default (`POST /v1/tools`, empty out of the box).
+    let tools = req
+        .tools
+        .clone()
+        .unwrap_or_else(|| read_default_tools(&state));
+    if let Err(unknown) = validate_tool_names(&tools) {
         return (
             StatusCode::BAD_REQUEST,
             Json(ErrorBody::new(format!("unknown tool: {unknown}"))),
@@ -74,28 +81,25 @@ pub async fn run(
         .unwrap_or(state.config.default_preamble.as_str());
     let max_turns = req.max_turns.unwrap_or(state.config.default_max_turns);
 
-    let agent = match provider.build_agent(&state, preamble, &req.context).await {
-        Ok(a) => a,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody::new(format!("agent build failed: {e}"))),
-            )
-                .into_response();
-        }
-    };
-
-    let result = agent
-        .prompt(req.prompt.as_str())
-        .max_turns(max_turns)
-        .extended_details()
+    // `AiProvider::prompt` matches on the variant internally and returns
+    // a unified `ProviderRun` regardless of the underlying provider.
+    let result = provider
+        .prompt(
+            &state,
+            preamble,
+            &req.context,
+            &tools,
+            req.prompt.as_str(),
+            Vec::new(),
+            max_turns,
+        )
         .await;
 
     match result {
-        Ok(resp) => {
-            let turns_used = resp.messages.as_ref().map(Vec::len).unwrap_or(1);
+        Ok(run) => {
+            let turns_used = run.new_messages.len().max(1);
             let body = RunResponse {
-                response: resp.output,
+                response: run.output,
                 turns_used,
                 provider: provider.name().to_string(),
                 model: provider.model().to_string(),
@@ -108,7 +112,9 @@ pub async fn run(
             // source chain. Walk `Error::source()` ourselves so the
             // failing transport-level cause makes it into the log /
             // response body where it can actually be debugged.
-            let chain = error_chain(&e);
+            // `anyhow::Error` doesn't impl `std::error::Error` directly;
+            // deref it to the inner trait object so we can walk `.source()`.
+            let chain = error_chain(e.as_ref());
             warn!(state.log, "agent run failed"; "error" => %e, "chain" => &chain);
             let msg = format!("Agent failed: {e}: {chain}");
             (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorBody::new(msg))).into_response()

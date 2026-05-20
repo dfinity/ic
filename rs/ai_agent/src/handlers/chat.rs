@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
-use rig::completion::Prompt;
 use slog::{info, warn};
 
 use crate::{
+    handlers::tools::read_defaults as read_default_tools,
     models::{ChatRequest, ChatResponse, ErrorBody},
     providers::{AiProvider, provider_not_configured},
     state::AppState,
@@ -38,7 +38,14 @@ pub async fn chat(
         )
             .into_response();
     }
-    if let Err(unknown) = validate_tool_names(&req.tools) {
+    // Resolve the effective tool list: per-request override (including
+    // an explicit empty list) wins; otherwise fall back to the
+    // server-wide default (`POST /v1/tools`, empty out of the box).
+    let tools = req
+        .tools
+        .clone()
+        .unwrap_or_else(|| read_default_tools(&state));
+    if let Err(unknown) = validate_tool_names(&tools) {
         return (
             StatusCode::BAD_REQUEST,
             Json(ErrorBody::new(format!("unknown tool: {unknown}"))),
@@ -74,40 +81,28 @@ pub async fn chat(
         .unwrap_or(state.config.default_preamble.as_str());
     let max_turns = req.max_turns.unwrap_or(state.config.default_max_turns);
 
-    let agent = match provider.build_agent(&state, preamble, &[]).await {
-        Ok(a) => a,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody::new(format!("agent build failed: {e}"))),
-            )
-                .into_response();
-        }
-    };
-
-    // We use `prompt(...).with_history(...).extended_details()` rather
-    // than `Chat::chat(...)` because the former returns a
-    // `PromptResponse` whose `messages` field carries the new turns
-    // (user prompt + tool calls/results + final assistant) in the
-    // right order. That's exactly what we need to append to the
-    // cached transcript so the next turn sees a faithful history,
-    // including any tool-call interleavings.
-    let result = agent
-        .prompt(req.prompt.as_str())
-        .with_history(history.clone())
-        .max_turns(max_turns)
-        .extended_details()
+    // `AiProvider::prompt` matches on the variant internally to construct
+    // the right concretely-typed `rig::Agent<M>` and return a unified
+    // `ProviderRun { output, new_messages }` (new_messages carries the
+    // user prompt + tool-call interleavings + assistant reply, in the
+    // order needed to extend the cached transcript).
+    let result = provider
+        .prompt(
+            &state,
+            preamble,
+            &[],
+            &tools,
+            req.prompt.as_str(),
+            history.clone(),
+            max_turns,
+        )
         .await;
 
     match result {
-        Ok(resp) => {
+        Ok(run) => {
             // Extend the snapshot with the new turns produced by this
-            // request. `messages` is `Option<Vec<Message>>`; rig only
-            // sets `None` when no new turn happened (defensive — in
-            // practice it's always populated for prompt requests).
-            if let Some(new_turns) = resp.messages.as_ref() {
-                history.extend(new_turns.iter().cloned());
-            }
+            // request.
+            history.extend(run.new_messages.into_iter());
 
             // Persist the updated transcript. For new sessions this
             // is the first `put`; for existing ones it's an
@@ -133,7 +128,7 @@ pub async fn chat(
             }
 
             let body = ChatResponse {
-                response: resp.output,
+                response: run.output,
                 session_id,
                 provider: provider.name().to_string(),
                 model: provider.model().to_string(),

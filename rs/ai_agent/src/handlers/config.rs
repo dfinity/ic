@@ -18,7 +18,7 @@ pub async fn configure(
     State(state): State<Arc<AppState>>,
     Json(req): Json<ConfigRequest>,
 ) -> impl IntoResponse {
-    match AiProvider::from_request(&req, &state.config.default_model) {
+    match AiProvider::from_request(&req, &state.config) {
         Ok(provider) => {
             let resp = ConfigResponse {
                 status: "ok",
