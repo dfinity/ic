@@ -685,8 +685,8 @@ hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.12", features = ["full"] }
 ic0 = "1.0.0"
 ic-agent = { version = "0.47.3", features = ["pem", "ring"] }
-ic-bn-lib = { version = "0.1.19", features = ["acme-alpn"] }
-ic-bn-lib-common = "0.1.8"
+ic-bn-lib = { version = "0.1.14", features = ["acme-alpn"] }
+ic-bn-lib-common = "0.1.4"
 ic-btc-interface = "0.4.0"
 ic-canister-runtime = "0.2.0"
 ic-canister-sig-creation = "1.3.1"
@@ -696,7 +696,7 @@ ic-cdk-timers = "1.0.0"
 ic-certificate-verification = "3.0.3"
 ic-certification = "3"
 ic-doge-interface = "0.3.0"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "d36997b96e82a40ba4c894910739b6b09cfb763b", default-features = false }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "f33afac2aa47b8760090c93823b7fa7f5ba67dc4", default-features = false }
 ic-http-certification = "3.0.3"
 ic-identity-hsm = "0.47.3"
 ic-management-canister-types = "0.7.1"
@@ -806,12 +806,13 @@ rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
 regex-lite = "0.1.8"
 rexpect = "0.6"
-reqwest = { version = "0.13.0", default-features = false, features = [
+reqwest = { version = "0.12.24", default-features = false, features = [
     "blocking",
     "http2",
     "json",
     "multipart",
-    "rustls",
+    "rustls-tls",
+    "rustls-tls-native-roots",
     "socks",
     "stream",
 ] }

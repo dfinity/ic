@@ -487,7 +487,7 @@ fn method_name_edge_cases(env: TestEnv) {
             .map(|(url, is_api_bn)| {
                 let logger = logger.clone();
                 async move {
-                let client = reqwest::Client::builder()
+                let client = ic_agent::export::reqwest::Client::builder()
                     .danger_accept_invalid_certs(true)
                     .build()
                     .unwrap();

@@ -1,5 +1,5 @@
 {
-  "checksum": "4a133620e7aafdb0f3dcc833e0e9d38ea4cf796330c531bcdd36c6f6643649c3",
+  "checksum": "d8ddb5961dfd7c3bd8a3b324250181727d6bcb8a852803824e4e8da316dac8a6",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -6027,7 +6027,6 @@
         "crate_features": {
           "common": [
             "default",
-            "middleware",
             "tracing"
           ],
           "selects": {}
@@ -23529,7 +23528,7 @@
               "target": "regex_lite"
             },
             {
-              "id": "reqwest 0.13.3",
+              "id": "reqwest 0.12.24",
               "target": "reqwest"
             },
             {
@@ -30972,7 +30971,13 @@
             "custom",
             "std"
           ],
-          "selects": {}
+          "selects": {
+            "wasm32-unknown-unknown": [
+              "js",
+              "js-sys",
+              "wasm-bindgen"
+            ]
+          }
         },
         "deps": {
           "common": [
@@ -30992,6 +30997,16 @@
               {
                 "id": "libc 0.2.177",
                 "target": "libc"
+              }
+            ],
+            "wasm32-unknown-unknown": [
+              {
+                "id": "js-sys 0.3.98",
+                "target": "js_sys"
+              },
+              {
+                "id": "wasm-bindgen 0.2.121",
+                "target": "wasm_bindgen"
               }
             ]
           }
@@ -35975,6 +35990,232 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "ic-agent 0.45.0": {
+      "name": "ic-agent",
+      "version": "0.45.0",
+      "package_url": "https://github.com/dfinity/agent-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-agent/0.45.0/download",
+          "sha256": "20a6173286a80fc478462fc45de42faf37a79b0109a489743aeffb3e4a2fc772"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_agent",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_agent",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "pem"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "arc-swap 1.7.1",
+              "target": "arc_swap"
+            },
+            {
+              "id": "async-channel 2.5.0",
+              "target": "async_channel"
+            },
+            {
+              "id": "async-lock 3.4.2",
+              "target": "async_lock"
+            },
+            {
+              "id": "async-watch 0.3.1",
+              "target": "async_watch"
+            },
+            {
+              "id": "backoff 0.4.0",
+              "target": "backoff"
+            },
+            {
+              "id": "bytes 1.11.1",
+              "target": "bytes"
+            },
+            {
+              "id": "cached 0.56.0",
+              "target": "cached"
+            },
+            {
+              "id": "candid 0.10.27",
+              "target": "candid"
+            },
+            {
+              "id": "der 0.7.7",
+              "target": "der"
+            },
+            {
+              "id": "ecdsa 0.16.9",
+              "target": "ecdsa"
+            },
+            {
+              "id": "ed25519-consensus 2.1.0",
+              "target": "ed25519_consensus"
+            },
+            {
+              "id": "elliptic-curve 0.13.8",
+              "target": "elliptic_curve"
+            },
+            {
+              "id": "futures-util 0.3.31",
+              "target": "futures_util"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "http 1.3.1",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.1",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.3",
+              "target": "http_body_util"
+            },
+            {
+              "id": "ic-certification 3.1.0",
+              "target": "ic_certification"
+            },
+            {
+              "id": "ic-ed25519 0.5.0",
+              "target": "ic_ed25519"
+            },
+            {
+              "id": "ic-transport-types 0.45.0",
+              "target": "ic_transport_types"
+            },
+            {
+              "id": "ic-verify-bls-signature 0.6.0",
+              "target": "ic_verify_bls_signature"
+            },
+            {
+              "id": "k256 0.13.4",
+              "target": "k256"
+            },
+            {
+              "id": "leb128 0.2.5",
+              "target": "leb128"
+            },
+            {
+              "id": "p256 0.13.2",
+              "target": "p256"
+            },
+            {
+              "id": "pem 3.0.6",
+              "target": "pem"
+            },
+            {
+              "id": "pkcs8 0.10.2",
+              "target": "pkcs8"
+            },
+            {
+              "id": "rand 0.8.5",
+              "target": "rand"
+            },
+            {
+              "id": "rangemap 1.7.1",
+              "target": "rangemap"
+            },
+            {
+              "id": "reqwest 0.12.24",
+              "target": "reqwest"
+            },
+            {
+              "id": "sec1 0.7.3",
+              "target": "sec1"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            },
+            {
+              "id": "serde_cbor 0.11.2",
+              "target": "serde_cbor"
+            },
+            {
+              "id": "sha2 0.10.9",
+              "target": "sha2"
+            },
+            {
+              "id": "stop-token 0.7.0",
+              "target": "stop_token"
+            },
+            {
+              "id": "thiserror 2.0.18",
+              "target": "thiserror"
+            },
+            {
+              "id": "time 0.3.47",
+              "target": "time"
+            },
+            {
+              "id": "tower-service 0.3.3",
+              "target": "tower_service"
+            },
+            {
+              "id": "url 2.5.4",
+              "target": "url"
+            }
+          ],
+          "selects": {
+            "cfg(not(target_family = \"wasm\"))": [
+              {
+                "id": "tokio 1.50.0",
+                "target": "tokio"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.89",
+              "target": "async_trait"
+            },
+            {
+              "id": "serde_repr 0.1.19",
+              "target": "serde_repr"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.45.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
     "ic-agent 0.47.3": {
       "name": "ic-agent",
       "version": "0.47.3",
@@ -38335,6 +38576,92 @@
       ],
       "license_file": null
     },
+    "ic-ed25519 0.5.0": {
+      "name": "ic-ed25519",
+      "version": "0.5.0",
+      "package_url": "https://github.com/dfinity/ic",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-ed25519/0.5.0/download",
+          "sha256": "6b73f85d01b7a3d538353050f1eda546f827ffe7f3ffa35f8e80faa8cff1da10"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_ed25519",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_ed25519",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "rand"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "curve25519-dalek 4.1.3",
+              "target": "curve25519_dalek"
+            },
+            {
+              "id": "ed25519-dalek 2.2.0",
+              "target": "ed25519_dalek"
+            },
+            {
+              "id": "hex-literal 0.4.1",
+              "target": "hex_literal"
+            },
+            {
+              "id": "hkdf 0.12.4",
+              "target": "hkdf"
+            },
+            {
+              "id": "ic_principal 0.1.3",
+              "target": "ic_principal"
+            },
+            {
+              "id": "pem 3.0.6",
+              "target": "pem"
+            },
+            {
+              "id": "rand 0.8.5",
+              "target": "rand"
+            },
+            {
+              "id": "thiserror 2.0.18",
+              "target": "thiserror"
+            },
+            {
+              "id": "zeroize 1.8.1",
+              "target": "zeroize"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.5.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "ic-ed25519 0.6.0": {
       "name": "ic-ed25519",
       "version": "0.6.0",
@@ -38489,7 +38816,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-gateway",
           "commitish": {
-            "Rev": "d36997b96e82a40ba4c894910739b6b09cfb763b"
+            "Rev": "f33afac2aa47b8760090c93823b7fa7f5ba67dc4"
           }
         }
       },
@@ -38531,7 +38858,7 @@
               "target": "axum"
             },
             {
-              "id": "axum-extra 0.12.6",
+              "id": "axum-extra 0.10.1",
               "target": "axum_extra"
             },
             {
@@ -38603,16 +38930,12 @@
               "target": "ic_custom_domains_base"
             },
             {
-              "id": "ic-http-gateway-protocol 0.0.0-git",
-              "target": "ic_http_gateway_protocol"
+              "id": "ic-http-gateway 0.0.0-git",
+              "target": "ic_http_gateway"
             },
             {
-              "id": "ic-transport-types 0.47.3",
+              "id": "ic-transport-types 0.45.0",
               "target": "ic_transport_types"
-            },
-            {
-              "id": "isbot 0.1.3",
-              "target": "isbot"
             },
             {
               "id": "itertools 0.14.0",
@@ -38623,7 +38946,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "maxminddb 0.28.1",
+              "id": "maxminddb 0.27.3",
               "target": "maxminddb"
             },
             {
@@ -38643,7 +38966,7 @@
               "target": "regex"
             },
             {
-              "id": "reqwest 0.13.3",
+              "id": "reqwest 0.12.24",
               "target": "reqwest"
             },
             {
@@ -38655,19 +38978,15 @@
               "target": "serde"
             },
             {
-              "id": "serde_cbor 0.11.2",
-              "target": "serde_cbor"
-            },
-            {
               "id": "serde_json 1.0.145",
               "target": "serde_json"
             },
             {
-              "id": "sha2 0.11.0",
+              "id": "sha2 0.10.9",
               "target": "sha2"
             },
             {
-              "id": "strum 0.28.0",
+              "id": "strum 0.27.2",
               "target": "strum"
             },
             {
@@ -38717,10 +39036,6 @@
             {
               "id": "url 2.5.4",
               "target": "url"
-            },
-            {
-              "id": "urlencoding 2.1.3",
-              "target": "urlencoding"
             },
             {
               "id": "uuid 1.12.1",
@@ -38832,23 +39147,23 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-http-gateway-protocol 0.0.0-git": {
-      "name": "ic-http-gateway-protocol",
+    "ic-http-gateway 0.0.0-git": {
+      "name": "ic-http-gateway",
       "version": "0.0.0-git",
-      "package_url": "https://github.com/dfinity/ic-http-gateway-protocol",
+      "package_url": "https://github.com/dfinity/http-gateway",
       "repository": {
         "Git": {
-          "remote": "https://github.com/dfinity/ic-http-gateway-protocol",
+          "remote": "https://github.com/dfinity/http-gateway",
           "commitish": {
-            "Rev": "ec1a288ec9f02cd3a398be429a30399844bca2e4"
+            "Rev": "252f2b10c0c18b0d24c9e54d84d1862e5183ac75"
           },
-          "strip_prefix": "packages/ic-http-gateway-protocol"
+          "strip_prefix": "packages/ic-http-gateway"
         }
       },
       "targets": [
         {
           "Library": {
-            "crate_name": "ic_http_gateway_protocol",
+            "crate_name": "ic_http_gateway",
             "crate_root": "src/lib.rs",
             "srcs": {
               "allow_empty": true,
@@ -38859,7 +39174,7 @@
           }
         }
       ],
-      "library_target_name": "ic_http_gateway_protocol",
+      "library_target_name": "ic_http_gateway",
       "common_attrs": {
         "compile_data_glob": [
           "**"
@@ -38891,7 +39206,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "ic-agent 0.47.3",
+              "id": "ic-agent 0.45.0",
               "target": "ic_agent"
             },
             {
@@ -38903,7 +39218,7 @@
               "target": "ic_response_verification"
             },
             {
-              "id": "ic-utils 0.47.3",
+              "id": "ic-utils 0.45.0",
               "target": "ic_utils"
             },
             {
@@ -39688,6 +40003,94 @@
       ],
       "license_file": null
     },
+    "ic-transport-types 0.45.0": {
+      "name": "ic-transport-types",
+      "version": "0.45.0",
+      "package_url": "https://github.com/dfinity/agent-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-transport-types/0.45.0/download",
+          "sha256": "4a775244756a5d97ff19b08071a946a4b4896904e35deb036bf215e80f2e703d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_transport_types",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_transport_types",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.27",
+              "target": "candid"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "ic-certification 3.1.0",
+              "target": "ic_certification"
+            },
+            {
+              "id": "leb128 0.2.5",
+              "target": "leb128"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            },
+            {
+              "id": "serde_cbor 0.11.2",
+              "target": "serde_cbor"
+            },
+            {
+              "id": "sha2 0.10.9",
+              "target": "sha2"
+            },
+            {
+              "id": "thiserror 2.0.18",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "serde_repr 0.1.19",
+              "target": "serde_repr"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.45.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
     "ic-transport-types 0.47.3": {
       "name": "ic-transport-types",
       "version": "0.47.3",
@@ -39769,6 +40172,110 @@
           "selects": {}
         },
         "version": "0.47.3"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
+    "ic-utils 0.45.0": {
+      "name": "ic-utils",
+      "version": "0.45.0",
+      "package_url": "https://github.com/dfinity/agent-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-utils/0.45.0/download",
+          "sha256": "30c22aaa2924df0321705dc01d408c8b75d1e1deb40b65defd2ff04008a720be"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_utils",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_utils",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.27",
+              "target": "candid"
+            },
+            {
+              "id": "futures-util 0.3.31",
+              "target": "futures_util"
+            },
+            {
+              "id": "ic-agent 0.45.0",
+              "target": "ic_agent"
+            },
+            {
+              "id": "ic-management-canister-types 0.5.0",
+              "target": "ic_management_canister_types"
+            },
+            {
+              "id": "once_cell 1.21.3",
+              "target": "once_cell"
+            },
+            {
+              "id": "semver 1.0.27",
+              "target": "semver"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            },
+            {
+              "id": "sha2 0.10.9",
+              "target": "sha2"
+            },
+            {
+              "id": "strum 0.27.2",
+              "target": "strum"
+            },
+            {
+              "id": "thiserror 2.0.18",
+              "target": "thiserror"
+            },
+            {
+              "id": "time 0.3.47",
+              "target": "time"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.89",
+              "target": "async_trait"
+            },
+            {
+              "id": "strum_macros 0.27.1",
+              "target": "strum_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.45.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -43455,60 +43962,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "isbot 0.1.3": {
-      "name": "isbot",
-      "version": "0.1.3",
-      "package_url": "https://github.com/BryanMorgan/isbot",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/isbot/0.1.3/download",
-          "sha256": "f98d665d8689fd01bd1572c10fd58cf38a811f56c2d00b5ec5c0c50dc1eee956"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "isbot",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "isbot",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "include-default-bots"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "regex 1.12.2",
-              "target": "regex"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.1.3"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
     },
     "isocountry 0.3.2": {
       "name": "isocountry",
@@ -50043,14 +50496,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "maxminddb 0.28.1": {
+    "maxminddb 0.27.3": {
       "name": "maxminddb",
-      "version": "0.28.1",
+      "version": "0.27.3",
       "package_url": "https://github.com/oschwald/maxminddb-rust",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/maxminddb/0.28.1/download",
-          "sha256": "faf6467428ad055b71e588bcedcbaf2ff605b3251deb0c52be4a04b674c546dd"
+          "url": "https://static.crates.io/crates/maxminddb/0.27.3/download",
+          "sha256": "76371bd37ce742f8954daabd0fde7f1594ee43ac2200e20c003ba5c3d65e2192"
         }
       },
       "targets": [
@@ -50104,7 +50557,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.28.1"
+        "version": "0.27.3"
       },
       "license": "ISC",
       "license_ids": [
@@ -69097,6 +69550,7 @@
             "__tls",
             "blocking",
             "h2",
+            "hickory-dns",
             "http2",
             "json",
             "multipart",
@@ -69168,8 +69622,16 @@
                 "target": "h2"
               },
               {
+                "id": "hickory-resolver 0.25.2",
+                "target": "hickory_resolver"
+              },
+              {
                 "id": "hyper-rustls 0.27.7",
                 "target": "hyper_rustls"
+              },
+              {
+                "id": "once_cell 1.21.3",
+                "target": "once_cell"
               },
               {
                 "id": "rustls 0.23.27",
@@ -69206,8 +69668,16 @@
                 "target": "h2"
               },
               {
+                "id": "hickory-resolver 0.25.2",
+                "target": "hickory_resolver"
+              },
+              {
                 "id": "hyper-rustls 0.27.7",
                 "target": "hyper_rustls"
+              },
+              {
+                "id": "once_cell 1.21.3",
+                "target": "once_cell"
               },
               {
                 "id": "rustls 0.23.27",
@@ -69314,8 +69784,16 @@
                 "target": "h2"
               },
               {
+                "id": "hickory-resolver 0.25.2",
+                "target": "hickory_resolver"
+              },
+              {
                 "id": "hyper-rustls 0.27.7",
                 "target": "hyper_rustls"
+              },
+              {
+                "id": "once_cell 1.21.3",
+                "target": "once_cell"
               },
               {
                 "id": "rustls 0.23.27",
@@ -69352,8 +69830,16 @@
                 "target": "h2"
               },
               {
+                "id": "hickory-resolver 0.25.2",
+                "target": "hickory_resolver"
+              },
+              {
                 "id": "hyper-rustls 0.27.7",
                 "target": "hyper_rustls"
+              },
+              {
+                "id": "once_cell 1.21.3",
+                "target": "once_cell"
               },
               {
                 "id": "rustls 0.23.27",
@@ -69431,9 +69917,7 @@
             "hickory-dns",
             "http2",
             "json",
-            "multipart",
             "rustls",
-            "socks",
             "stream"
           ],
           "selects": {}
@@ -69459,10 +69943,6 @@
             {
               "id": "http 1.3.1",
               "target": "http"
-            },
-            {
-              "id": "mime_guess 2.0.4",
-              "target": "mime_guess"
             },
             {
               "id": "serde 1.0.228",
@@ -70250,7 +70730,11 @@
             "dev_urandom_fallback",
             "std"
           ],
-          "selects": {}
+          "selects": {
+            "wasm32-unknown-unknown": [
+              "wasm32_unknown_unknown_js"
+            ]
+          }
         },
         "deps": {
           "common": [
@@ -103852,7 +104336,7 @@
     "rcgen 0.13.1",
     "regex 1.12.2",
     "regex-lite 0.1.8",
-    "reqwest 0.13.3",
+    "reqwest 0.12.24",
     "rexpect 0.6.2",
     "rgb 0.8.37",
     "ring 0.17.14",

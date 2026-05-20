@@ -17,6 +17,15 @@ Success::
 end::catalog[] */
 
 use anyhow::{Error, anyhow, bail};
+use ic_agent::export::reqwest::{
+    ClientBuilder, Method, Request, StatusCode,
+    header::{
+        ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN,
+        ACCESS_CONTROL_MAX_AGE, CACHE_CONTROL, CONTENT_TYPE, COOKIE, DNT, IF_MODIFIED_SINCE,
+        IF_NONE_MATCH, RANGE, USER_AGENT,
+    },
+    redirect::Policy,
+};
 use ic_agent::{Agent, export::Principal};
 use ic_boundary_nodes_system_test_utils::{
     constants::COUNTER_CANISTER_WAT,
@@ -31,15 +40,6 @@ use ic_system_test_driver::{
     util::{agent_observes_canister_module, assert_create_agent, block_on},
 };
 use ic_types::PrincipalId;
-use reqwest::{
-    ClientBuilder, Method, Request, StatusCode,
-    header::{
-        ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN,
-        ACCESS_CONTROL_MAX_AGE, CACHE_CONTROL, CONTENT_TYPE, COOKIE, DNT, IF_MODIFIED_SINCE,
-        IF_NONE_MATCH, RANGE, USER_AGENT,
-    },
-    redirect::Policy,
-};
 use serde::Deserialize;
 use slog::{Logger, info};
 use std::net::SocketAddr;
@@ -88,7 +88,7 @@ async fn install_counter_canister(env: TestEnv, logger: Logger) -> Result<Princi
     Ok::<_, Error>(cid)
 }
 
-fn setup_client(env: TestEnv) -> Result<(reqwest::Client, String), Error> {
+fn setup_client(env: TestEnv) -> Result<(ic_agent::export::reqwest::Client, String), Error> {
     let api_boundary_node = env
         .topology_snapshot()
         .api_boundary_nodes()
