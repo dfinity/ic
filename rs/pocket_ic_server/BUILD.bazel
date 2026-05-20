@@ -302,6 +302,7 @@ MAINNET_NNS_CANISTER_ENV = {
             ":pocket-ic-server-lib" + name_suffix,
             "//rs/canister_sandbox:build_script",
             "//rs/registry/admin",
+            "@crate_index//:rustls",
             "@crate_index//:url",
         ],
     )

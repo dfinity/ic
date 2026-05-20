@@ -87,6 +87,7 @@ libc = { workspace = true }
 pocket-ic = { path = "../../packages/pocket-ic" }
 registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
+rustls = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
