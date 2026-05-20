@@ -2037,9 +2037,9 @@ dependencies = [
 
 [[package]]
 name = "candid"
-version = "0.10.27"
+version = "0.10.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ba5b4833b63bf7b785fecdd2cc918ed90d988fd974825d5c48e7b407c39ef38"
+checksum = "f39b6abc5caef7fdedbeaadb2136c27337c1625765bcf3f2ad07112fe838d492"
 dependencies = [
  "anyhow",
  "binread",
@@ -2060,9 +2060,9 @@ dependencies = [
 
 [[package]]
 name = "candid_derive"
-version = "0.10.27"
+version = "0.10.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b60664b6324832dfb4863f3b19eb4d58819cd38fba6d3941b101213cea0d9ec"
+checksum = "fca85cd61b91271bd44fee6c4a8fff316791aea6aca59fb2752e6fef8617f854"
 dependencies = [
  "lazy_static",
  "proc-macro2",
@@ -11852,7 +11852,7 @@ dependencies = [
  "quinn",
  "rustls 0.23.27",
  "rustls-pki-types",
- "rustls-platform-verifier 0.6.2",
+ "rustls-platform-verifier 0.7.0",
  "serde",
  "serde_json",
  "sync_wrapper 1.0.2",

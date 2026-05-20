@@ -1315,7 +1315,7 @@ dependencies = [
  "bitflags 2.11.0",
  "cexpr",
  "clang-sys",
- "itertools 0.10.5",
+ "itertools 0.13.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -1997,9 +1997,9 @@ dependencies = [
 
 [[package]]
 name = "candid"
-version = "0.10.24"
+version = "0.10.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "601b519700ec333a2a2c7eb3e8e1eca89177055e3e1fb24ca42cbbb025986696"
+checksum = "f39b6abc5caef7fdedbeaadb2136c27337c1625765bcf3f2ad07112fe838d492"
 dependencies = [
  "anyhow",
  "binread",
@@ -2029,9 +2029,9 @@ dependencies = [
 
 [[package]]
 name = "candid_derive"
-version = "0.10.24"
+version = "0.10.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f195a40cd3d199191fc8b534165fadd78c08a1f9666222addaf9f58593002a73"
+checksum = "fca85cd61b91271bd44fee6c4a8fff316791aea6aca59fb2752e6fef8617f854"
 dependencies = [
  "lazy_static",
  "proc-macro2",
@@ -6309,7 +6309,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.4.10",
+ "socket2 0.5.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -20780,7 +20780,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22505a5c94da8e3b7c2996394d1c933236c4d743e81a410bcca4e6989fc066a4"
 dependencies = [
  "bytes",
- "heck 0.4.1",
+ "heck 0.5.0",
  "itertools 0.12.1",
  "log",
  "multimap",
@@ -20800,12 +20800,12 @@ version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
- "heck 0.4.1",
- "itertools 0.10.5",
+ "heck 0.5.0",
+ "itertools 0.14.0",
  "log",
  "multimap",
  "once_cell",
- "petgraph 0.6.5",
+ "petgraph 0.7.1",
  "prettyplease",
  "prost 0.13.5",
  "prost-types 0.13.5",
@@ -20834,7 +20834,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.10.5",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -20847,7 +20847,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27c6023962132f4b30eb4c172c91ce92d933da334c59c23cddee82358ddafb0b"
 dependencies = [
  "anyhow",
- "itertools 0.10.5",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -23787,7 +23787,7 @@ version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1c97747dbf44bb1ca44a561ece23508e99cb592e862f22222dcf42f51d1e451"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
