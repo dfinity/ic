@@ -506,14 +506,13 @@ crate.spec(
     package = "getrandom",
     version = "^0.2",
 )
+
 # ring 0.17.x declares `wasm32_unknown_unknown_js = ["getrandom/js"]`, which causes
 # cargo-bazel to enable wasm-bindgen in getrandom 0.2.x for wasm32-unknown-unknown —
 # even for canister targets that never depend on ring.  We override the getrandom lib
 # target with an identical copy that simply omits the wasm-bindgen deps/features on
 # wasm32, bypassing the lock-file feature resolution entirely.
 crate.annotation(
-    crate = "getrandom",
-    version = "^0.2",
     additive_build_file_content = """\
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
@@ -564,7 +563,9 @@ rust_library(
     visibility = ["//visibility:public"],
 )
 """,
+    crate = "getrandom",
     override_target_lib = "@@rules_rust++crate+crate_index__getrandom-0.2.10//:getrandom_no_wasm_bindgen",
+    version = "^0.2",
 )
 crate.spec(
     package = "gpt",
