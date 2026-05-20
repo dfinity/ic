@@ -159,10 +159,14 @@ impl HttpClient {
             HyperConnector::new_with_resolver(DnsResolverWithOverrides::new(config.overrides));
         http_connector.enforce_http(false);
 
-        let mut rustls_config = rustls::ClientConfig::builder()
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(DangerAcceptInvalidCerts {}))
-            .with_no_client_auth();
+        let mut rustls_config = rustls::ClientConfig::builder_with_provider(Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()
+        .expect("ring provider supports default TLS versions")
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(DangerAcceptInvalidCerts {}))
+        .with_no_client_auth();
         rustls_config.enable_sni = false;
         let https_connector = HttpsConnectorBuilder::new()
             .with_tls_config(rustls_config)

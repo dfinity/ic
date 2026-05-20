@@ -485,9 +485,13 @@ async fn connect(
 
             let root_store =
                 rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-            let tls_client_config = rustls::ClientConfig::builder()
-                .with_root_certificates(root_store)
-                .with_no_client_auth();
+            let tls_client_config = rustls::ClientConfig::builder_with_provider(Arc::new(
+                rustls::crypto::ring::default_provider(),
+            ))
+            .with_safe_default_protocol_versions()
+            .expect("ring provider supports default TLS versions")
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
 
             let server_name = ServerName::try_from(domain.clone())
                 .map_err(|err| format!("Invalid API BN domain {domain}: {err}"))?;
@@ -985,10 +989,13 @@ mod tests {
             }
         }
 
-        let accept_any_config = ClientConfig::builder()
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(NoVerify))
-            .with_no_client_auth();
+        let accept_any_config =
+            ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+                .with_safe_default_protocol_versions()
+                .expect("ring provider supports default TLS versions")
+                .dangerous()
+                .with_custom_certificate_verifier(Arc::new(NoVerify))
+                .with_no_client_auth();
 
         let mut tls_config = MockTlsConfig::new();
         tls_config

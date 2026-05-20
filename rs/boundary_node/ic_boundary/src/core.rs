@@ -725,7 +725,15 @@ fn setup_tls_resolver_acme(
         .ok_or(anyhow!("hostname not specified"))?;
 
     let tls_config = if cli.tls_acme_disable_tls_cert_verification {
-        let cfg = ic_bn_lib::rustls_acme::futures_rustls::rustls::ClientConfig::builder()
+        let cfg =
+            ic_bn_lib::rustls_acme::futures_rustls::rustls::ClientConfig::builder_with_provider(
+                Arc::new(
+                    ic_bn_lib::rustls_acme::futures_rustls::rustls::crypto::ring::default_provider(
+                    ),
+                ),
+            )
+            .with_safe_default_protocol_versions()
+            .expect("ring provider supports default TLS versions")
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(NoopServerCertVerifier::default()))
             .with_no_client_auth();

@@ -825,10 +825,14 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                         .unwrap()
                         .unwrap();
 
-                    let mut server_config = ServerConfig::builder()
-                        .with_no_client_auth()
-                        .with_single_cert(certs, key)
-                        .unwrap();
+                    let mut server_config = ServerConfig::builder_with_provider(Arc::new(
+                        rustls::crypto::ring::default_provider(),
+                    ))
+                    .with_safe_default_protocol_versions()
+                    .expect("ring provider supports default TLS versions")
+                    .with_no_client_auth()
+                    .with_single_cert(certs, key)
+                    .unwrap();
 
                     server_config.alpn_protocols = server_advertised_alpn_protocols;
 

@@ -298,9 +298,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let key_file = tokio::fs::read(key_file).await?;
             let key = rustls_pemfile::private_key(&mut key_file.as_ref())?.unwrap();
 
-            let mut config = ServerConfig::builder()
-                .with_no_client_auth()
-                .with_single_cert(certs, key)?;
+            let mut config = ServerConfig::builder_with_provider(Arc::new(
+                rustls::crypto::ring::default_provider(),
+            ))
+            .with_safe_default_protocol_versions()
+            .map_err(|e| format!("TLS version error: {e}"))?
+            .with_no_client_auth()
+            .with_single_cert(certs, key)?;
 
             config.alpn_protocols =
                 vec![b"h2".to_vec(), b"http/1.1".to_vec(), b"http/1.0".to_vec()];
