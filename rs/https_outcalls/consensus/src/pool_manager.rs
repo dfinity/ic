@@ -341,6 +341,19 @@ impl CanisterHttpPoolManagerImpl {
             match self.http_adapter_shim.lock().unwrap().try_receive() {
                 Err(TryReceiveError::Empty) => break,
                 Ok(mut response) => {
+                    // Drop the response if its context is no longer present in the replicated state
+                    // (e.g. the request has timed out or has already been answered by enough other nodes).
+                    let Some(context) = active_contexts.get(&response.id) else {
+                        warn!(
+                            self.log,
+                            "Dropping http response for request ID {}: \
+                             corresponding context is no longer in the replicated state.",
+                            response.id,
+                        );
+                        self.requested_id_cache.borrow_mut().remove(&response.id);
+                        continue;
+                    };
+
                     // Truncate the reject message if it's too long.
                     //
                     // The "happy path" response is organically bounded by max_response_bytes, however we need to set a
@@ -362,19 +375,6 @@ impl CanisterHttpPoolManagerImpl {
                             .message
                             .ellipsize(MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES, 90);
                     }
-
-                    // Drop the response if its context is no longer present in the replicated state
-                    // (e.g. the request has timed out or has already been answered by enough other nodes).
-                    let Some(context) = active_contexts.get(&response.id) else {
-                        warn!(
-                            self.log,
-                            "Dropping http response for request ID {}: \
-                             corresponding context is no longer in the replicated state.",
-                            response.id,
-                        );
-                        self.requested_id_cache.borrow_mut().remove(&response.id);
-                        continue;
-                    };
 
                     let response_metadata = CanisterHttpResponseMetadata {
                         id: response.id,
