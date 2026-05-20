@@ -318,62 +318,56 @@ impl Firewall {
 
         info!(
             self.logger,
-            "Whitelisting ({} v4, {} v6 trusted out of {} v4, {} v6 total) node IP addresses on the firewall",
+            "Whitelisting ({} v4, {} v6 out of {} v4, {} v6 total) node IP addresses on the firewall",
             whitelisted_ipv4s.len(),
             whitelisted_ipv6s.len(),
             all_ipv4s.len(),
             all_ipv6s.len(),
         );
 
-        // Build TCP and UDP rules to open trusted ports to whitelisted nodes only.
-        let trusted_tcp_node_whitelisting_rule = FirewallRule {
+        // Build TCP and UDP rules to open ports to whitelisted nodes only.
+        let whitelisted_nodes_tcp_whitelisting_rule = FirewallRule {
             ipv4_prefixes: whitelisted_ipv4s.clone(),
             ipv6_prefixes: whitelisted_ipv6s.clone(),
             ports: self
                 .replica_config
-                .trusted_tcp_ports_for_node_whitelist
+                .whitelisted_nodes_tcp_ports_whitelist
                 .clone(),
             action: FirewallAction::Allow as i32,
-            comment: "Automatic trusted node whitelisting".to_string(),
+            comment: "Automatic whitelisted nodes whitelisting".to_string(),
             user: None,
             direction: Some(FirewallRuleDirection::Inbound as i32),
         };
-        let trusted_udp_node_whitelisting_rule = FirewallRule {
+        let whitelisted_nodes_udp_whitelisting_rule = FirewallRule {
             ipv4_prefixes: whitelisted_ipv4s,
             ipv6_prefixes: whitelisted_ipv6s,
             ports: self
                 .replica_config
-                .trusted_udp_ports_for_node_whitelist
+                .whitelisted_nodes_udp_ports_whitelist
                 .clone(),
             action: FirewallAction::Allow as i32,
-            comment: "Automatic trusted node whitelisting".to_string(),
+            comment: "Automatic whitelisted nodes whitelisting".to_string(),
             user: None,
             direction: Some(FirewallRuleDirection::Inbound as i32),
         };
 
-        // Build TCP and UDP rules to open untrusted ports to all nodes in the network.
-        let untrusted_tcp_node_whitelisting_rule = FirewallRule {
+        // Build TCP and UDP rules to open ports to all nodes in the network.
+        let all_nodes_tcp_whitelisting_rule = FirewallRule {
             ipv4_prefixes: all_ipv4s.clone(),
             ipv6_prefixes: all_ipv6s.clone(),
-            ports: self
-                .replica_config
-                .untrusted_tcp_ports_for_node_whitelist
-                .clone(),
+            ports: self.replica_config.all_nodes_tcp_ports_whitelist.clone(),
             action: FirewallAction::Allow as i32,
-            comment: "Automatic untrusted node whitelisting".to_string(),
+            comment: "Automatic all nodes whitelisting".to_string(),
             user: None,
             direction: Some(FirewallRuleDirection::Inbound as i32),
         };
 
-        let untrusted_udp_node_whitelisting_rule = FirewallRule {
+        let all_nodes_udp_whitelisting_rule = FirewallRule {
             ipv4_prefixes: all_ipv4s.clone(),
             ipv6_prefixes: all_ipv6s.clone(),
-            ports: self
-                .replica_config
-                .untrusted_udp_ports_for_node_whitelist
-                .clone(),
+            ports: self.replica_config.all_nodes_udp_ports_whitelist.clone(),
             action: FirewallAction::Allow as i32,
-            comment: "Automatic untrusted node whitelisting".to_string(),
+            comment: "Automatic all nodes whitelisting".to_string(),
             user: None,
             direction: Some(FirewallRuleDirection::Inbound as i32),
         };
@@ -405,12 +399,12 @@ impl Firewall {
         (
             vec![
                 tcp_ic_http_adapter_rule,
-                trusted_tcp_node_whitelisting_rule,
-                untrusted_tcp_node_whitelisting_rule,
+                whitelisted_nodes_tcp_whitelisting_rule,
+                all_nodes_tcp_whitelisting_rule,
             ],
             vec![
-                trusted_udp_node_whitelisting_rule,
-                untrusted_udp_node_whitelisting_rule,
+                whitelisted_nodes_udp_whitelisting_rule,
+                all_nodes_udp_whitelisting_rule,
             ],
         )
     }
@@ -1011,10 +1005,10 @@ mod tests {
             ipv4_user_output_rule_template: "".to_string(),
             ipv6_user_output_rule_template: "".to_string(),
             default_rules: vec![],
-            trusted_tcp_ports_for_node_whitelist: vec![],
-            trusted_udp_ports_for_node_whitelist: vec![],
-            untrusted_tcp_ports_for_node_whitelist: vec![],
-            untrusted_udp_ports_for_node_whitelist: vec![],
+            whitelisted_nodes_tcp_ports_whitelist: vec![],
+            whitelisted_nodes_udp_ports_whitelist: vec![],
+            all_nodes_tcp_ports_whitelist: vec![],
+            all_nodes_udp_ports_whitelist: vec![],
             ports_for_http_adapter_blacklist: vec![],
             max_simultaneous_connections_per_ip_address,
         };
