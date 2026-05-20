@@ -1332,6 +1332,7 @@ impl Validator {
             )
             .map_err(ValidationFailure::SubnetSplittingStatusError)?
             {
+                subnet_splitting::Status::NotScheduled => {}
                 subnet_splitting::Status::Scheduled { .. } => {
                     return Err(
                         InvalidArtifactReason::RegistryVersionNotFrozenDuringSubnetSplitting {
@@ -1340,8 +1341,6 @@ impl Validator {
                         .into(),
                     );
                 }
-                subnet_splitting::Status::AlreadyDone => {}
-                subnet_splitting::Status::NotScheduled => {}
             }
         }
 

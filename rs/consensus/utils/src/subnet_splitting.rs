@@ -12,13 +12,12 @@ use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Status {
+    NotScheduled,
     Scheduled {
         destination_subnet_id: SubnetId,
         /// The registry version at which the subnet was scheduled to be split
         scheduled_at: RegistryVersion,
     },
-    AlreadyDone,
-    NotScheduled,
 }
 
 #[derive(Debug, Error)]
@@ -60,7 +59,8 @@ pub fn get_status(
     };
 
     if versioned_record.version <= last_summary_block_registry_version {
-        return Ok(Status::AlreadyDone);
+        // This record corresponds to a past subnet split
+        return Ok(Status::NotScheduled);
     }
 
     let subnet_splitting_args: SubnetSplittingArgs = subnet_splitting_args_proto
@@ -156,7 +156,7 @@ mod tests {
     use super::*;
 
     #[rstest]
-    fn should_return_not_scheduled_test(
+    fn should_return_not_scheduled_when_latest_cup_is_not_subnet_splitting_test(
         #[values(
             None,
             Some(CupType::Genesis(GenesisArgs { height: 0 })),
@@ -211,7 +211,7 @@ mod tests {
     }
 
     #[test]
-    fn should_return_already_done_test() {
+    fn should_return_not_scheduled_when_subnet_splitting_was_already_done_test() {
         let registry = set_up_registry(Some(CupType::SubnetSplitting(
             ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
                 destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
@@ -228,7 +228,7 @@ mod tests {
         )
         .expect("Should succeed given correct inputs");
 
-        assert_eq!(status, Status::AlreadyDone);
+        assert_eq!(status, Status::NotScheduled);
     }
 
     fn set_up_registry(cup_type: Option<CupType>) -> Arc<dyn RegistryClient> {

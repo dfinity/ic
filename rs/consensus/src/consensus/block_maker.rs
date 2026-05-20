@@ -561,6 +561,7 @@ impl BlockMaker {
             .ok()?;
 
             match subnet_splitting_status {
+                subnet_splitting::Status::NotScheduled => {}
                 subnet_splitting::Status::Scheduled { scheduled_at, .. } => {
                     info!(
                         every_n_seconds => 30,
@@ -575,7 +576,6 @@ impl BlockMaker {
 
                     continue;
                 }
-                subnet_splitting::Status::AlreadyDone | subnet_splitting::Status::NotScheduled => {}
             }
 
             return Some(version);

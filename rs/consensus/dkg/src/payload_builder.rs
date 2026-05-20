@@ -508,6 +508,7 @@ pub(super) fn create_summary_payload(
     // )
     // .map_err(|err| DkgPayloadCreationError::SubnetSplittingStatusError(err.to_string()))?
     // {
+    //     subnet_splitting::Status::NotScheduled => Some(SubnetSplittingStatus::NotScheduled),
     //     subnet_splitting::Status::Scheduled {
     //         destination_subnet_id,
     //         scheduled_at: _,
@@ -515,8 +516,6 @@ pub(super) fn create_summary_payload(
     //         destination_subnet_id,
     //         source_subnet_id: subnet_id,
     //     }),
-    //     subnet_splitting::Status::AlreadyDone => Some(SubnetSplittingStatus::NotScheduled),
-    //     subnet_splitting::Status::NotScheduled => Some(SubnetSplittingStatus::NotScheduled),
     // };
 
     // New configs are created using the new stable registry version proposed by this
