@@ -1,5 +1,5 @@
 {
-  "checksum": "ddac2d720fc4691942f74d2b72639088295a71537597bc299df5106eb1d3f6e2",
+  "checksum": "b35a4881f8069d0f2e4eedbacba977476f90a4bdc56fd48d3fdf6f1c97403d4c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -30972,13 +30972,7 @@
             "custom",
             "std"
           ],
-          "selects": {
-            "wasm32-unknown-unknown": [
-              "js",
-              "js-sys",
-              "wasm-bindgen"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -30998,16 +30992,6 @@
               {
                 "id": "libc 0.2.177",
                 "target": "libc"
-              }
-            ],
-            "wasm32-unknown-unknown": [
-              {
-                "id": "js-sys 0.3.98",
-                "target": "js_sys"
-              },
-              {
-                "id": "wasm-bindgen 0.2.121",
-                "target": "wasm_bindgen"
               }
             ]
           }
@@ -70085,7 +70069,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/ring/0.16.20/download",
-          "sha256": "3053cf52e236a3ed746dfc745aa9cacf1b791d846bdaf412f60a8d7d6e17c8fc"
+          "sha256": "3053cf52e236a3ed746dfc745aa9cacf1b791d846bdaf412f60a8d7d6e17c8fc",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:ring.patch"
+          ]
         }
       },
       "targets": [
@@ -70225,7 +70215,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/ring/0.17.14/download",
-          "sha256": "a4689e6c2294d81e88dc6261c768b63bc4fcdb852be6d1352498b114f61383b7"
+          "sha256": "a4689e6c2294d81e88dc6261c768b63bc4fcdb852be6d1352498b114f61383b7",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:ring.patch"
+          ]
         }
       },
       "targets": [
@@ -70266,11 +70262,7 @@
             "dev_urandom_fallback",
             "std"
           ],
-          "selects": {
-            "wasm32-unknown-unknown": [
-              "wasm32_unknown_unknown_js"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [

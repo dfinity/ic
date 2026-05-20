@@ -1,0 +1,11 @@
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -177,7 +177,7 @@
+ test_logging = []
+ unstable-testing-arm-no-hw = []
+ unstable-testing-arm-no-neon = []
+-wasm32_unknown_unknown_js = ["getrandom/js"]
++wasm32_unknown_unknown_js = []
+
+ [lib]
+ name = "ring"

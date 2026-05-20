@@ -2132,6 +2132,10 @@ crate.annotation(
         "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
     },
     crate = "ring",
+    # Prevent wasm32_unknown_unknown_js from cascading to getrandom/js, which
+    # would add wasm-bindgen imports rejected by IC's wasm validator.
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:ring.patch"],
 )
 crate.annotation(
     crate = "ic-wasm",
