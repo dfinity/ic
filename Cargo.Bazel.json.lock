@@ -1,5 +1,5 @@
 {
-  "checksum": "88fa6b4ffd3bceabd00715f99a17d7bc90e449e25c63369a1c78cf35f4c3f0f7",
+  "checksum": "4a133620e7aafdb0f3dcc833e0e9d38ea4cf796330c531bcdd36c6f6643649c3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -70069,13 +70069,7 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/ring/0.16.20/download",
-          "sha256": "3053cf52e236a3ed746dfc745aa9cacf1b791d846bdaf412f60a8d7d6e17c8fc",
-          "patch_args": [
-            "-p1"
-          ],
-          "patches": [
-            "@@//bazel:ring.patch"
-          ]
+          "sha256": "3053cf52e236a3ed746dfc745aa9cacf1b791d846bdaf412f60a8d7d6e17c8fc"
         }
       },
       "targets": [
@@ -70215,13 +70209,7 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/ring/0.17.14/download",
-          "sha256": "a4689e6c2294d81e88dc6261c768b63bc4fcdb852be6d1352498b114f61383b7",
-          "patch_args": [
-            "-p1"
-          ],
-          "patches": [
-            "@@//bazel:ring.patch"
-          ]
+          "sha256": "a4689e6c2294d81e88dc6261c768b63bc4fcdb852be6d1352498b114f61383b7"
         }
       },
       "targets": [
