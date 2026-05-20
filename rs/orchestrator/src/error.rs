@@ -39,7 +39,7 @@ pub(crate) enum OrchestratorError {
     /// The genesis or recovery CUP failed to be constructed
     MakeRegistryCupError(SubnetId, RegistryVersion, RegistryCupCreationError),
 
-    /// No cup found at the registry version
+    /// No CUP found at the registry version
     CupMissing(SubnetId, RegistryVersion),
 
     /// The CUP at the given height failed to be deserialized
