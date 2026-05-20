@@ -119,9 +119,7 @@ impl RegistryHelper {
 
                 Ok(VersionedValue {
                     record_version: versioned_record.version,
-                    // TODO:
-                    // value: if record.synchronous_binary_replacement {
-                    value: if false {
+                    value: if record.synchronous_binary_replacement {
                         SubnetUpgrade::Fast(replica_version)
                     } else {
                         SubnetUpgrade::Slow(GuestosVersion(replica_version))
@@ -268,9 +266,7 @@ impl RegistryHelper {
         let replica_version = ReplicaVersion::try_from(subnet_record.replica_version_id.as_ref())
             .map_err(OrchestratorError::ReplicaVersionParseError)?;
 
-        // TODO:
-        // if subnet_record.synchronous_binary_replacement {
-        if false {
+        if subnet_record.synchronous_binary_replacement {
             Ok(SubnetUpgrade::Fast(replica_version))
         } else {
             Ok(SubnetUpgrade::Slow(GuestosVersion(replica_version)))

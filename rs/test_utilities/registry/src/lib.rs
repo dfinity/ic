@@ -279,6 +279,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         subnet_admins: vec![],
         resource_limits: Default::default(),
         recalled_replica_version_ids: vec![],
+        synchronous_binary_replacement: false,
     }
 }
 
@@ -413,6 +414,11 @@ impl SubnetRecordBuilder {
         recalled_replica_version_ids: &[String],
     ) -> Self {
         self.record.recalled_replica_version_ids = recalled_replica_version_ids.to_vec();
+        self
+    }
+
+    pub fn with_synchronous_binary_replacement(mut self, synchronous: bool) -> Self {
+        self.record.synchronous_binary_replacement = synchronous;
         self
     }
 

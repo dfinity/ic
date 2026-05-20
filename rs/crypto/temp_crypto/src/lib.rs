@@ -1139,6 +1139,7 @@ impl EcdsaSubnetConfig {
                 subnet_admins: vec![],
                 resource_limits: None,
                 recalled_replica_version_ids: vec![],
+                synchronous_binary_replacement: false,
             },
         }
     }

@@ -1962,8 +1962,7 @@ mod tests {
             .with_membership(membership.as_ref())
             .with_replica_version(upgrade_version.as_ref().as_ref())
             .with_recalled_replica_version_ids(recalled_replica_versions.as_ref())
-            // TODO: skip until SubnetRecordBuilder gains with_synchronous_binary_replacement
-            // .with_synchronous_binary_replacement(matches!(upgrade_version, SubnetUpgrade::Fast(_)))
+            .with_synchronous_binary_replacement(matches!(upgrade_version, SubnetUpgrade::Fast(_)))
             .build();
 
         data_provider
