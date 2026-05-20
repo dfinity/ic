@@ -521,6 +521,9 @@ impl HttpEndpointBuilder {
     }
 
     pub fn run(self) -> HttpEndpointHandles {
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .ok();
         let metrics = MetricsRegistry::new();
         let log = no_op_logger();
 
