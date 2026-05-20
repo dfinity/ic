@@ -39,6 +39,18 @@ pub struct ClearResponse {
     pub cleared: usize,
 }
 
+/// Body of `GET /v1/tools` and `POST /v1/tools` — echoes the current
+/// default tool set plus the full list of names the server recognises,
+/// so clients can discover what's available.
+#[derive(Debug, Serialize)]
+pub struct ToolsConfigResponse {
+    /// Tools applied when a request omits its own `tools` field.
+    pub default_tools: Vec<String>,
+    /// Every tool name the server knows about. A subset of these is
+    /// considered valid in `default_tools` and per-request overrides.
+    pub available_tools: Vec<&'static str>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ErrorBody {
     pub error: String,

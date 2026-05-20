@@ -3,5 +3,7 @@
 pub mod request;
 pub mod response;
 
-pub use request::{ChatRequest, RunRequest};
-pub use response::{ChatResponse, ClearResponse, ErrorBody, HealthResponse, RunResponse};
+pub use request::{ChatRequest, RunRequest, ToolsConfigRequest};
+pub use response::{
+    ChatResponse, ClearResponse, ErrorBody, HealthResponse, RunResponse, ToolsConfigResponse,
+};

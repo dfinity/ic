@@ -2,7 +2,7 @@
 //!
 //! v1 tools are statically defined Rust types implementing `rig::tool::Tool`.
 //! New tools are added by creating a new sibling module and re-exporting it
-//! here. The agent in `providers::AiProvider::build_agent` wires every entry
+//! here. The agent in `providers::AiProvider::prompt` wires every entry
 //! returned by [`registered_tool_names`] into the agent at construction
 //! time.
 

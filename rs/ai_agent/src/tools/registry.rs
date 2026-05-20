@@ -1,5 +1,5 @@
 //! Tool name registry. The actual tool *types* are wired into the agent
-//! via [`crate::providers::AiProvider::build_agent`]; this module just
+//! via [`crate::providers::AiProvider::prompt`]; this module just
 //! exposes their *names* so requests can be validated against the set of
 //! supported tools.
 

@@ -7,8 +7,13 @@ pub struct RunRequest {
     pub preamble: Option<String>,
     #[serde(default)]
     pub context: Vec<String>,
-    #[serde(default)]
-    pub tools: Vec<String>,
+    /// Tool selection. Three states:
+    /// * omitted (`None`) — fall back to the currently-configured default
+    ///   (see `POST /v1/tools`; empty out of the box).
+    /// * empty list (`Some([])`) — explicitly disable all tools for this
+    ///   request.
+    /// * non-empty list — wire only the named tools.
+    pub tools: Option<Vec<String>>,
     pub max_turns: Option<usize>,
 }
 
@@ -30,7 +35,15 @@ pub struct ChatRequest {
     /// the id is returned in the response.
     pub session_id: Option<String>,
     pub preamble: Option<String>,
-    #[serde(default)]
-    pub tools: Vec<String>,
+    /// Tool selection. Same three-state semantics as `RunRequest::tools`.
+    pub tools: Option<Vec<String>>,
     pub max_turns: Option<usize>,
+}
+
+/// Body of `POST /v1/tools` — replaces the server-wide default tool set
+/// used when a request omits its own `tools` field. Pass an empty list
+/// to disable tools by default.
+#[derive(Debug, Deserialize)]
+pub struct ToolsConfigRequest {
+    pub tools: Vec<String>,
 }

@@ -6,12 +6,13 @@
 
 use clap::Parser;
 use ic_ai_agent::{
-    config::{AppConfig, DEFAULT_IC_CONFIG_PATH},
+    config::{AppConfig, DEFAULT_IC_CONFIG_PATH, DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL},
+    providers::AiProvider,
     router::build_router,
     sessions::{DEFAULT_IDLE_TTL, DEFAULT_MAX_SESSIONS},
     state::AppState,
 };
-use slog::{Drain, Logger, info, o};
+use slog::{Drain, Logger, info, o, warn};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
 #[derive(Debug, Parser)]
@@ -36,6 +37,17 @@ struct Cli {
     /// than this are evicted on next access.
     #[arg(long, env = "IC_AI_AGENT_SESSION_IDLE_TTL_SECS", default_value_t = DEFAULT_IDLE_TTL.as_secs())]
     session_idle_ttl_secs: u64,
+
+    /// Default Ollama base URL. Points at the local plaintext loopback
+    /// that `ollama.service` binds to on a deployed AiNode.
+    #[arg(long, env = "IC_AI_AGENT_OLLAMA_BASE_URL", default_value = DEFAULT_OLLAMA_BASE_URL)]
+    ollama_base_url: String,
+
+    /// Default Ollama model. Must match a model pre-pulled into
+    /// `/opt/ollama-models` (see `ollama-pull-gemma.sh`) or one
+    /// otherwise made available to `ollama.service`.
+    #[arg(long, env = "IC_AI_AGENT_OLLAMA_MODEL", default_value = DEFAULT_OLLAMA_MODEL)]
+    ollama_model: String,
 }
 
 fn make_logger() -> Logger {
@@ -68,9 +80,35 @@ async fn main() -> anyhow::Result<()> {
         ic_config_path: cli.ic_config.clone(),
         max_sessions: cli.max_sessions,
         session_idle_ttl: Duration::from_secs(cli.session_idle_ttl_secs),
+        default_ollama_base_url: cli.ollama_base_url.clone(),
+        default_ollama_model: cli.ollama_model.clone(),
         ..AppConfig::default()
     };
     let state = Arc::new(AppState::new(config, log.clone()));
+
+    // Pre-install the default Ollama provider so the agent is usable
+    // without a prior `/v1/config` call. A failure here only means the
+    // initial provider couldn't be constructed (e.g. malformed URL);
+    // callers can still install a working provider via `/v1/config`,
+    // so we log a warning and continue rather than abort startup.
+    match AiProvider::default_ollama(&state.config) {
+        Ok(p) => {
+            info!(
+                log, "default ollama provider installed";
+                "model" => p.model(), "base_url" => &cli.ollama_base_url
+            );
+            match state.provider.write() {
+                Ok(mut g) => *g = Some(p),
+                Err(poisoned) => *poisoned.into_inner() = Some(p),
+            }
+        }
+        Err(e) => warn!(
+            log, "failed to install default ollama provider; \
+                  /v1/config will be required before the agent is usable";
+            "error" => %e
+        ),
+    }
+
     let app = build_router(state);
 
     info!(log, "ic-ai-agent listening"; "addr" => %cli.addr);

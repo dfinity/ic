@@ -26,6 +26,12 @@ pub struct AppState {
     /// one in. None of them `.await` while the guard is alive, which
     /// is the criterion for using a blocking lock under tokio.
     pub provider: RwLock<Option<AiProvider>>,
+    /// Tools wired into the agent when a request omits the `tools`
+    /// field. Starts empty — many open-weight models (including some
+    /// gemma3 variants served via ollama) reject tool-augmented prompts
+    /// outright, so tools are opt-in by default. Mutable at runtime via
+    /// `POST /v1/tools`.
+    pub default_tools: RwLock<Vec<String>>,
     /// Lazily constructed registry-backed node lookup. Built on first
     /// use because (a) it touches the filesystem and we want
     /// `AppState::new` to stay infallible, and (b) on a fresh AiNode
@@ -43,6 +49,7 @@ impl AppState {
             config,
             log,
             provider: RwLock::new(None),
+            default_tools: RwLock::new(Vec::new()),
             node_directory: OnceCell::new(),
             sessions,
         }

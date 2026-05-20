@@ -16,6 +16,23 @@ use crate::sessions::{DEFAULT_IDLE_TTL, DEFAULT_MAX_SESSIONS};
 /// version. Callers can still override per-config via the `model` field.
 pub const DEFAULT_GEMINI_MODEL: &str = "gemini-flash-latest";
 
+/// Default Ollama model. Matches the model pre-pulled into
+/// `/opt/ollama-models` at GuestOS base-image build time (see
+/// `ic-os/guestos/context/ollama-pull-gemma.sh`). Callers can override
+/// per-config via the `model` field.
+pub const DEFAULT_OLLAMA_MODEL: &str = "gemma3:1b";
+
+/// Default Ollama base URL. Points at the plaintext loopback that
+/// `ollama.service` binds to on a deployed AiNode (see
+/// `ic-os/components/guestos/ollama/ollama.service`). Public traffic
+/// reaches ollama through the stunnel TLS proxy on `:11434`; the agent
+/// process talks to the backend directly to skip TLS entirely.
+pub const DEFAULT_OLLAMA_BASE_URL: &str = "http://127.0.0.1:11435";
+
+/// Default provider used when the service starts and when `/v1/config`
+/// is called without an explicit `provider` field.
+pub const DEFAULT_PROVIDER: &str = "ollama";
+
 /// Default agent system prompt.
 ///
 /// IC observability tools (`ic_state`, `ic_metrics`) are described here so
@@ -50,7 +67,15 @@ pub const DEFAULT_IC_CONFIG_PATH: &str = "/run/ic-node/config/ic.json5";
 /// created later, when `/v1/config` is invoked with the API key.
 #[derive(Clone, Debug)]
 pub struct AppConfig {
-    pub default_model: String,
+    /// Default Gemini model used when `/v1/config` selects gemini without
+    /// an explicit `model` field.
+    pub default_gemini_model: String,
+    /// Default Ollama model used at startup and when `/v1/config` selects
+    /// ollama without an explicit `model` field.
+    pub default_ollama_model: String,
+    /// Default Ollama base URL used at startup and when `/v1/config`
+    /// selects ollama without an explicit `base_url` field.
+    pub default_ollama_base_url: String,
     pub default_preamble: String,
     pub default_max_turns: usize,
     /// Path to the replica `ic.json5` config. Used by `ic_state` to discover
@@ -69,7 +94,9 @@ pub struct AppConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            default_model: DEFAULT_GEMINI_MODEL.to_string(),
+            default_gemini_model: DEFAULT_GEMINI_MODEL.to_string(),
+            default_ollama_model: DEFAULT_OLLAMA_MODEL.to_string(),
+            default_ollama_base_url: DEFAULT_OLLAMA_BASE_URL.to_string(),
             default_preamble: DEFAULT_PREAMBLE.to_string(),
             default_max_turns: DEFAULT_MAX_TURNS,
             ic_config_path: PathBuf::from(DEFAULT_IC_CONFIG_PATH),
@@ -79,22 +106,28 @@ impl Default for AppConfig {
     }
 }
 
-/// Body of `POST /v1/config`. Currently only Gemini is supported.
+/// Body of `POST /v1/config`. Supports `ollama` (default) and `gemini`.
 #[derive(Debug, Deserialize)]
 pub struct ConfigRequest {
-    /// Provider name. Defaults to `gemini`.
+    /// Provider name. Defaults to `ollama`.
     #[serde(default = "default_provider")]
     pub provider: String,
-    /// Provider API key. Required for `gemini`.
-    pub api_key: String,
-    /// Optional model override.
+    /// Provider API key. Required for `gemini`; optional for `ollama`
+    /// (only needed when talking to a proxied/secured ollama instance).
+    #[serde(default)]
+    pub api_key: Option<String>,
+    /// Optional model override. Defaults depend on the provider; see
+    /// `DEFAULT_GEMINI_MODEL` / `DEFAULT_OLLAMA_MODEL`.
     pub model: Option<String>,
+    /// Optional ollama base URL override (ignored for other providers).
+    /// Defaults to `DEFAULT_OLLAMA_BASE_URL`.
+    pub base_url: Option<String>,
     /// Optional default preamble override.
     pub preamble: Option<String>,
 }
 
 fn default_provider() -> String {
-    "gemini".to_string()
+    DEFAULT_PROVIDER.to_string()
 }
 
 #[derive(Debug, Serialize)]

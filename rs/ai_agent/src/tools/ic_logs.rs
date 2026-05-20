@@ -24,7 +24,7 @@
 //!   chrony) — this is the only thing keeping the LLM from being able
 //!   to ask for arbitrary host logs.
 //! * Re-add the registration in `tools/mod.rs`, `tools/registry.rs`,
-//!   `providers/mod.rs::build_agent`, and the preamble in `config.rs`.
+//!   `providers/mod.rs::AiProvider::prompt`, and the preamble in `config.rs`.
 //!
 //! The shared `NodeDirectory` (in `tools/node_directory.rs`) is
 //! already wired up for this — `ic_logs` will resolve `node_id ->
