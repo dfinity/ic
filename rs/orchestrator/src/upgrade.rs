@@ -490,7 +490,7 @@ impl Upgrade {
         // persist it if necessary.
         let latest_cup = self
             .cup_provider
-            .get_latest_cup(maybe_local_cup_proto, subnet_id)
+            .get_latest_cup(maybe_local_cup_proto, subnet_id, latest_registry_version)
             .await?;
 
         // If we replaced the previous local CUP, compare potential threshold master public keys with

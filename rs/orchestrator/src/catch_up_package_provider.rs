@@ -443,8 +443,8 @@ impl CatchUpPackageProvider {
         &mut self,
         local_cup: Option<pb::CatchUpPackage>,
         subnet_id: SubnetId,
+        registry_version: RegistryVersion,
     ) -> OrchestratorResult<CatchUpPackage> {
-        let registry_version = self.registry.get_latest_version();
         let local_cup_height = local_cup
             .as_ref()
             .map(|cup| {
