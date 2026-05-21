@@ -381,6 +381,19 @@ impl CanisterHttpPoolManagerImpl {
             match self.http_adapter_shim.lock().unwrap().try_receive() {
                 Err(TryReceiveError::Empty) => break,
                 Ok((mut response, payment_metadata)) => {
+                    // Drop the response if its context is no longer present in the replicated state
+                    // (e.g. the request has timed out or has already been answered by enough other nodes).
+                    let Some(context) = active_contexts.get(&response.id) else {
+                        warn!(
+                            self.log,
+                            "Dropping http response for request ID {}: \
+                             corresponding context is no longer in the replicated state.",
+                            response.id,
+                        );
+                        self.requested_id_cache.borrow_mut().remove(&response.id);
+                        continue;
+                    };
+
                     // Truncate the reject message if it's too long.
                     //
                     // The "happy path" response is organically bounded by max_response_bytes, however we need to set a
@@ -430,12 +443,10 @@ impl CanisterHttpPoolManagerImpl {
                     self.requested_id_cache.borrow_mut().remove(&response.id);
                     self.metrics.shares_signed.inc();
 
-                    if let Some(context) = active_contexts.get(&response.id)
-                        && matches!(
-                            context.replication,
-                            Replication::NonReplicated(_) | Replication::Flexible { .. }
-                        )
-                    {
+                    if matches!(
+                        context.replication,
+                        Replication::NonReplicated(_) | Replication::Flexible { .. }
+                    ) {
                         if let Err(err) =
                             validate_response_size(&response, context.max_response_bytes)
                         {
@@ -456,7 +467,6 @@ impl CanisterHttpPoolManagerImpl {
                         continue;
                     }
 
-                    //TODO(IC-1967): don't create this share if relevant context is no longer in the replicated state.
                     change_set.push(CanisterHttpChangeAction::AddToValidated(
                         share,
                         payment_share,
@@ -2508,15 +2518,33 @@ pub mod test {
                     ..
                 } = dependencies(pool_config.clone(), 4);
 
+                // There are 2 contexts in the replicated state.
+                let contexts = (3..5)
+                    .map(|i| {
+                        (
+                            CallbackId::from(i),
+                            test_request_context(
+                                Replication::FullyReplicated,
+                                PricingVersion::Legacy,
+                                None,
+                            ),
+                        )
+                    })
+                    .collect();
+
                 state_manager
                     .get_mut()
                     .expect_get_latest_state()
                     .return_const(Labeled::new(
                         Height::from(1),
-                        Arc::new(state_with_pending_http_calls(BTreeMap::from([]))),
+                        Arc::new(state_with_pending_http_calls(contexts)),
                     ));
 
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+
+                // `make_new_requests` will try to dispatch contexts to the adapter shim.
+                // Accept any number of `send` calls and treat them as no-ops.
+                shim_mock.expect_send().returning(|_| Ok(()));
 
                 let mut sequence = Sequence::new();
                 for i in 3..5 {
@@ -2553,6 +2581,109 @@ pub mod test {
                 );
                 let change_set = pool_manager.generate_change_set(&canister_http_pool);
                 assert_eq!(change_set.len(), 2);
+                for change in &change_set {
+                    assert_matches!(change, CanisterHttpChangeAction::AddToValidated(_, _));
+                }
+            });
+        });
+    }
+
+    /// Verifies that the pool manager drops adapter responses whose corresponding
+    /// request context is no longer present in the replicated state (e.g. because
+    /// the request has already been answered by enough peers, or has timed out)
+    /// instead of signing a useless share.
+    #[test]
+    pub fn test_response_without_context_is_dropped() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 4);
+
+                let stale_callback_id = CallbackId::from(3);
+                let active_callback_id = CallbackId::from(4);
+
+                // Only the second callback has a context in the replicated state.
+                // The first one models a stale response whose context has already
+                // been removed.
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            active_callback_id,
+                            test_request_context(
+                                Replication::FullyReplicated,
+                                PricingVersion::Legacy,
+                                None,
+                            ),
+                        )]))),
+                    ));
+
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                let mut sequence = Sequence::new();
+                for id in [stale_callback_id, active_callback_id] {
+                    shim_mock
+                        .expect_try_receive()
+                        .times(1)
+                        .returning(move || Ok(empty_canister_http_response(id.get())))
+                        .in_sequence(&mut sequence);
+                }
+                shim_mock
+                    .expect_try_receive()
+                    .times(1)
+                    .returning(|| Err(TryReceiveError::Empty))
+                    .in_sequence(&mut sequence);
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager,
+                    shim,
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                // Pre-populate the in-flight tracking with the stale callback id
+                // so we can also verify that it gets cleaned up.
+                pool_manager
+                    .requested_id_cache
+                    .borrow_mut()
+                    .insert(stale_callback_id);
+
+                let change_set = pool_manager.create_shares_from_responses(Height::from(1));
+
+                // Only the response for the active context produces a share; the
+                // stale one is dropped.
+                assert_eq!(change_set.len(), 1);
+                assert_matches!(
+                    &change_set[0],
+                    CanisterHttpChangeAction::AddToValidated(share, response) => {
+                        assert_eq!(share.content.id, active_callback_id);
+                        assert_eq!(response.id, active_callback_id);
+                    }
+                );
+
+                // The in-flight tracking entry for the dropped response is cleared.
+                assert!(
+                    !pool_manager
+                        .requested_id_cache
+                        .borrow()
+                        .contains(&stale_callback_id),
+                    "stale callback id should have been removed from the in-flight cache",
+                );
             });
         });
     }
