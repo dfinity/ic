@@ -98,17 +98,11 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     # Keep sorted.
     "//rs/nns/governance:governance--test_feature",
+    "//rs/nns/gtc:gtc--test_feature",
     "//rs/nns/handlers/root/impl:root--test_feature",
+    "//rs/nns/test_utils:test_utils--test_feature",
     "//rs/sns/init:init--test_feature",
-] + select({
-    "@rules_rust//rust/platform:wasm32-unknown-unknown": [
-        "//rs/nns/gtc:gtc",
-    ],
-    "//conditions:default": [
-        "//rs/nns/test_utils:test_utils--test_feature",
-        "//rs/nns/gtc:gtc--test_feature",
-    ],
-})
+]
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
@@ -139,10 +133,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:serde_cbor",
     "@crate_index//:tempfile",
 ]
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
 
 DEV_DATA = [
     # Keep sorted.
@@ -214,7 +204,6 @@ rust_canister(
     name = "mem-utils-test-canister",
     testonly = True,
     srcs = ["test_canisters/mem_utils_test.rs"],
-    aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test_canisters/empty.did",
     deps = DEPENDENCIES,
@@ -224,7 +213,6 @@ rust_canister(
     name = "canister-playground-canister",
     testonly = True,
     srcs = ["test_canisters/canister_playground_canister.rs"],
-    aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test_canisters/empty.did",
     deps = DEPENDENCIES,
@@ -234,7 +222,6 @@ rust_canister(
     name = "unstoppable-canister",
     testonly = True,
     srcs = ["test_canisters/unstoppable_canister.rs"],
-    aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test_canisters/empty.did",
     deps = DEPENDENCIES,
@@ -244,7 +231,6 @@ rust_canister(
     name = "unstoppable-sns-root-canister",
     testonly = True,
     srcs = ["test_canisters/unstoppable_sns_root_canister.rs"],
-    aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test_canisters/empty.did",
     deps = DEPENDENCIES + [
@@ -268,7 +254,6 @@ rust_ic_test_suite_with_extra_srcs(
             "src/node_provider_remuneration_with_golden_nns_state.rs",
         ],
     ),
-    aliases = ALIASES,
     crate_features = select({
         "//rs/nns/governance:tla_disabled": [],
         "//conditions:default": ["tla"],
@@ -284,7 +269,7 @@ rust_ic_test_suite_with_extra_srcs(
         "JAVABASE": "$(JAVABASE)",
     },
     extra_srcs = ["src/lib.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],  # for TLA/Apalache
     deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
@@ -297,11 +282,10 @@ rust_ic_test(
         "src/canister_playground.rs",
         "src/lib.rs",
     ],
-    aliases = ALIASES,
     crate_root = "src/canister_playground.rs",
     data = DEV_DATA,
     env = DEV_ENV,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["manual"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -318,7 +302,6 @@ rust_ic_test(
         "src/canister_snapshot.rs",
         "src/lib.rs",
     ],
-    aliases = ALIASES,
     crate_root = "src/canister_snapshot.rs",
     data = DEV_DATA + [
         "//rs/registry/admin:ic-admin",
@@ -326,7 +309,7 @@ rust_ic_test(
     env = DEV_ENV | {
         "IC_ADMIN_PATH": "$(rootpath //rs/registry/admin:ic-admin)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -379,11 +362,10 @@ rust_ic_test(
     srcs = [
         "src/upgrade_canisters_with_golden_nns_state.rs",
     ],
-    aliases = ALIASES,
     crate_root = "src/upgrade_canisters_with_golden_nns_state.rs",
     data = DEV_DATA,
     env = DEV_ENV,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
         "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
