@@ -2,7 +2,9 @@ syntax = "proto3";
 
 package types.v1;
 
+import "state/queues/v1/queues.proto";
 import "types/v1/errors.proto";
+import "types/v1/signature.proto";
 import "types/v1/types.proto";
 
 message HttpHeader {
@@ -116,7 +118,31 @@ message CanisterHttpResponseMessage {
   }
 }
 
+// A receipt describing the per-replica cycles accounting outcome for a single
+// canister HTTP outcall. Unlike `CanisterHttpResponseMetadata`, this is not
+// part of the metadata over which consensus must be reached, and is therefore
+// signed separately.
+message CanisterHttpPaymentReceipt {
+  state.queues.v1.Cycles refund = 1;
+}
+
+// Per-replica payment metadata for a canister HTTP outcall. Identified by the
+// callback id of the originating request and carries the receipt produced by
+// the replica after the outcall completed.
+message CanisterHttpPaymentMetadata {
+  uint64 id = 1;
+  CanisterHttpPaymentReceipt receipt = 2;
+}
+
+// `CanisterHttpPaymentMetadata` together with the issuing replica's basic
+// signature. Gossiped alongside the response share in `CanisterHttpArtifact`.
+message CanisterHttpPaymentShare {
+  CanisterHttpPaymentMetadata metadata = 1;
+  BasicSignature signature = 2;
+}
+
 message CanisterHttpArtifact {
   CanisterHttpShare share = 1;
   optional CanisterHttpResponse response = 2;
+  CanisterHttpPaymentShare payment_share = 3;
 }

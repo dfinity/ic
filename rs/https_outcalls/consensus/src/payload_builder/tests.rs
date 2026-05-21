@@ -45,6 +45,7 @@ use ic_types::{
     },
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL, CanisterHttpMethod,
+        CanisterHttpPaymentMetadata, CanisterHttpPaymentReceipt, CanisterHttpPaymentShare,
         CanisterHttpReject, CanisterHttpRequestContext, CanisterHttpResponse,
         CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
         CanisterHttpResponseMetadata, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
@@ -854,10 +855,12 @@ fn non_replicated_request_response_coming_in_gossip_payload_created() {
         // Add the artifact to the pool.
         {
             let mut pool_access = canister_http_pool.write().unwrap();
+            let payment_share = payment_share_from_response_share(&share);
             add_received_artifacts_to_pool(
                 pool_access.deref_mut(),
                 vec![CanisterHttpResponseArtifact {
                     share,
+                    payment_share,
                     response: Some(response),
                 }],
             );
@@ -1446,8 +1449,10 @@ pub(crate) fn add_own_share_to_pool(
     share: &CanisterHttpResponseShare,
     content: &CanisterHttpResponse,
 ) {
+    let payment_share = payment_share_from_response_share(share);
     pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
         share.clone(),
+        payment_share,
         content.clone(),
     )]);
 }
@@ -1456,9 +1461,30 @@ pub(crate) fn artifact_from_share(
     share: CanisterHttpResponseShare,
 ) -> CanisterHttpResponseArtifact {
     // Fully replicated behaviour.
+    let payment_share = payment_share_from_response_share(&share);
     CanisterHttpResponseArtifact {
         share,
+        payment_share,
         response: None,
+    }
+}
+
+/// Returns a default payment share that matches the (signer, callback id) of
+/// the given response share. Used by test helpers that need to assemble a
+/// well-formed [`CanisterHttpResponseArtifact`] but don't care about the
+/// refund amount.
+pub(crate) fn payment_share_from_response_share(
+    share: &CanisterHttpResponseShare,
+) -> CanisterHttpPaymentShare {
+    Signed {
+        content: CanisterHttpPaymentMetadata {
+            id: share.content.id,
+            receipt: CanisterHttpPaymentReceipt::default(),
+        },
+        signature: BasicSignature {
+            signature: BasicSigOf::new(BasicSig(vec![])),
+            signer: share.signature.signer,
+        },
     }
 }
 

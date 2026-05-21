@@ -128,7 +128,9 @@ use ic_replicated_state::{
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
 use ic_state_manager::testing::StateManagerTesting;
-use ic_test_utilities_consensus::{FakeConsensusPoolCache, batch::MockBatchPayloadBuilder};
+use ic_test_utilities_consensus::{
+    FakeConsensusPoolCache, batch::MockBatchPayloadBuilder, fake::FakeContentSigner,
+};
 use ic_test_utilities_metrics::{
     Labels, fetch_counter_vec, fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_counter,
     fetch_int_gauge, fetch_int_gauge_vec, labels,
@@ -149,6 +151,7 @@ use ic_types::{
         ValidationContext, XNetPayload,
     },
     canister_http::{
+        CanisterHttpPaymentMetadata, CanisterHttpPaymentReceipt, CanisterHttpPaymentShare,
         CanisterHttpRequestContext, CanisterHttpRequestId, CanisterHttpResponse,
         CanisterHttpResponseContent, CanisterHttpResponseMetadata,
     },
@@ -2712,8 +2715,22 @@ impl StateMachine {
                 content: response_metadata,
                 signature,
             };
+            // Mock pricing always produces an empty payment receipt; the payment share is
+            // attached to the response share so that the artifact is well-formed for the
+            // downstream pool.
+            let payment_share = CanisterHttpPaymentShare::fake(
+                CanisterHttpPaymentMetadata {
+                    id: CallbackId::from(request_id),
+                    receipt: CanisterHttpPaymentReceipt::default(),
+                },
+                node.node_id,
+            );
             self.canister_http_pool.write().unwrap().apply(vec![
-                CanisterHttpChangeAction::AddToValidated(share.clone(), response.clone()),
+                CanisterHttpChangeAction::AddToValidated(
+                    share.clone(),
+                    payment_share,
+                    response.clone(),
+                ),
             ]);
         }
     }

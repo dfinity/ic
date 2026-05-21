@@ -16,7 +16,8 @@ use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::{CanisterHttpResponseId, IdentifiableArtifact},
     canister_http::{
-        CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseShare,
+        CanisterHttpPaymentShare, CanisterHttpResponse, CanisterHttpResponseArtifact,
+        CanisterHttpResponseShare,
     },
     crypto::CryptoHashOf,
 };
@@ -25,7 +26,14 @@ use prometheus::IntCounter;
 const POOL_CANISTER_HTTP: &str = "canister_http";
 const POOL_CANISTER_HTTP_CONTENT: &str = "canister_http_content";
 
-type ValidatedCanisterHttpPoolSection = PoolSection<CanisterHttpResponseShare, ()>;
+/// Validated section of the pool.
+///
+/// The value stored alongside each [`CanisterHttpResponseShare`] is the
+/// matching [`CanisterHttpPaymentShare`] received from gossip (or locally
+/// produced). This is needed so that the artifact can be reconstructed (e.g.
+/// for re-broadcasting) without consulting the unvalidated pool.
+type ValidatedCanisterHttpPoolSection =
+    PoolSection<CanisterHttpResponseShare, CanisterHttpPaymentShare>;
 
 type UnvalidatedCanisterHttpPoolSection =
     PoolSection<CanisterHttpResponseShare, CanisterHttpResponseArtifact>;
@@ -101,7 +109,7 @@ impl CanisterHttpPool for CanisterHttpPoolImpl {
         &self,
         share: &CanisterHttpResponseShare,
     ) -> Option<CanisterHttpResponseShare> {
-        self.validated.get(share).map(|()| share.clone())
+        self.validated.get(share).map(|_| share.clone())
     }
 }
 
@@ -125,29 +133,35 @@ impl MutablePool<CanisterHttpResponseArtifact> for CanisterHttpPoolImpl {
         let mut transmits = vec![];
         for action in change_set {
             match action {
-                CanisterHttpChangeAction::AddToValidatedAndGossipResponse(share, content) => {
+                CanisterHttpChangeAction::AddToValidatedAndGossipResponse(
+                    share,
+                    payment_share,
+                    content,
+                ) => {
                     let artifact = CanisterHttpResponseArtifact {
                         share: share.clone(),
+                        payment_share: payment_share.clone(),
                         response: Some(content.clone()),
                     };
                     transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
                         artifact,
                         is_latency_sensitive: true,
                     }));
-                    self.validated.insert(share, ());
+                    self.validated.insert(share, payment_share);
                     self.content
                         .insert(ic_types::crypto::crypto_hash(&content), content);
                 }
-                CanisterHttpChangeAction::AddToValidated(share, content) => {
+                CanisterHttpChangeAction::AddToValidated(share, payment_share, content) => {
                     let artifact = CanisterHttpResponseArtifact {
                         share: share.clone(),
+                        payment_share: payment_share.clone(),
                         response: None,
                     };
                     transmits.push(ArtifactTransmit::Deliver(ArtifactWithOpt {
                         artifact,
                         is_latency_sensitive: true,
                     }));
-                    self.validated.insert(share, ());
+                    self.validated.insert(share, payment_share);
                     self.content
                         .insert(ic_types::crypto::crypto_hash(&content), content);
                 }
@@ -159,7 +173,7 @@ impl MutablePool<CanisterHttpResponseArtifact> for CanisterHttpPoolImpl {
                             self.content
                                 .insert(ic_types::crypto::crypto_hash(&content), content);
                         }
-                        self.validated.insert(share, ());
+                        self.validated.insert(share, artifact.payment_share);
                     }
                 }
                 CanisterHttpChangeAction::RemoveValidated(id) => {
@@ -174,10 +188,21 @@ impl MutablePool<CanisterHttpResponseArtifact> for CanisterHttpPoolImpl {
                     self.content.remove(&id);
                 }
                 CanisterHttpChangeAction::HandleInvalid(id, reason) => {
+                    // Log the payment share (if any) of the unvalidated artifact alongside the
+                    // share itself. This is useful when investigating disputes about replica
+                    // refund amounts.
+                    let payment_share = self
+                        .unvalidated
+                        .get(&id)
+                        .map(|artifact| &artifact.payment_share);
+
                     self.invalidated_artifacts.inc();
                     warn!(
                         self.log,
-                        "Invalid CanisterHttp message ({:?}): {:?}", reason, id
+                        "Invalid CanisterHttp message ({:?}): {:?}, payment_share: {:?}",
+                        reason,
+                        id,
+                        payment_share
                     );
                     self.remove(&id);
                 }
@@ -200,8 +225,9 @@ impl ValidatedPoolReader<CanisterHttpResponseArtifact> for CanisterHttpPoolImpl 
         // This is to avoid sending the response in full in the fully replicated case.
         self.validated
             .get(id)
-            .map(|()| CanisterHttpResponseArtifact {
+            .map(|payment_share| CanisterHttpResponseArtifact {
                 share: id.clone(),
+                payment_share: payment_share.clone(),
                 response: None,
             })
     }
@@ -226,15 +252,24 @@ impl HasLabel for CanisterHttpResponseArtifact {
     }
 }
 
+impl HasLabel for CanisterHttpPaymentShare {
+    fn label(&self) -> &str {
+        "canister_http_payment_share"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities_consensus::fake::FakeSigner;
+    use ic_test_utilities_consensus::fake::{FakeContentSigner, FakeSigner};
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
         CanisterId, RegistryVersion, ReplicaVersion,
         artifact::IdentifiableArtifact,
-        canister_http::{CanisterHttpResponseContent, CanisterHttpResponseMetadata},
+        canister_http::{
+            CanisterHttpPaymentMetadata, CanisterHttpPaymentReceipt, CanisterHttpResponseContent,
+            CanisterHttpResponseMetadata,
+        },
         crypto::{CryptoHash, Signed},
         messages::CallbackId,
         signature::BasicSignature,
@@ -245,9 +280,11 @@ mod tests {
 
     fn to_unvalidated(
         message: CanisterHttpResponseShare,
+        payment_share: CanisterHttpPaymentShare,
     ) -> UnvalidatedArtifact<CanisterHttpResponseArtifact> {
         let artifact = CanisterHttpResponseArtifact {
             share: message,
+            payment_share,
             response: None,
         };
         UnvalidatedArtifact::<CanisterHttpResponseArtifact> {
@@ -271,6 +308,16 @@ mod tests {
         }
     }
 
+    fn fake_payment_share(id: u64) -> CanisterHttpPaymentShare {
+        CanisterHttpPaymentShare::fake(
+            CanisterHttpPaymentMetadata {
+                id: CallbackId::from(id),
+                receipt: CanisterHttpPaymentReceipt::default(),
+            },
+            node_test_id(id),
+        )
+    }
+
     fn fake_response(id: u64) -> CanisterHttpResponse {
         CanisterHttpResponse {
             id: CallbackId::from(id),
@@ -283,9 +330,10 @@ mod tests {
     fn test_canister_http_pool_insert_and_remove() {
         let mut pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         let share = fake_share(123);
+        let payment_share = fake_payment_share(123);
         let id = share.clone();
 
-        pool.insert(to_unvalidated(share.clone()));
+        pool.insert(to_unvalidated(share.clone(), payment_share));
         assert!(pool.get(&id).is_none());
 
         assert_eq!(share, pool.get_unvalidated_artifact(&id).unwrap().share);
@@ -298,13 +346,22 @@ mod tests {
     fn test_canister_http_pool_add_and_remove_validated() {
         let mut pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         let share = fake_share(123);
+        let payment_share = fake_payment_share(123);
         let id = share.clone();
         let response = fake_response(123);
         let content_hash = ic_types::crypto::crypto_hash(&response);
 
         let result = pool.apply(vec![
-            CanisterHttpChangeAction::AddToValidated(share.clone(), response.clone()),
-            CanisterHttpChangeAction::AddToValidated(fake_share(456), fake_response(456)),
+            CanisterHttpChangeAction::AddToValidated(
+                share.clone(),
+                payment_share,
+                response.clone(),
+            ),
+            CanisterHttpChangeAction::AddToValidated(
+                fake_share(456),
+                fake_payment_share(456),
+                fake_response(456),
+            ),
         ]);
 
         assert!(
@@ -338,6 +395,7 @@ mod tests {
     fn test_canister_http_pool_add_to_validated_and_gossip_response() {
         let mut pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         let share = fake_share(123);
+        let payment_share = fake_payment_share(123);
         let id = share.clone();
         let response = fake_response(123);
         let content_hash = ic_types::crypto::crypto_hash(&response);
@@ -345,12 +403,14 @@ mod tests {
         let result = pool.apply(vec![
             CanisterHttpChangeAction::AddToValidatedAndGossipResponse(
                 share.clone(),
+                payment_share.clone(),
                 response.clone(),
             ),
         ]);
 
         let expected_artifact = CanisterHttpResponseArtifact {
             share: share.clone(),
+            payment_share,
             response: Some(response.clone()),
         };
 
@@ -371,11 +431,12 @@ mod tests {
     fn test_canister_http_pool_move_to_validated() {
         let mut pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         let share1 = fake_share(123);
+        let payment_share1 = fake_payment_share(123);
         let id1 = share1.clone();
         let share2 = fake_share(456);
         let id2 = share2.clone();
 
-        pool.insert(to_unvalidated(share1.clone()));
+        pool.insert(to_unvalidated(share1.clone(), payment_share1.clone()));
 
         let result = pool.apply(vec![
             CanisterHttpChangeAction::MoveToValidated(share2.clone()),
@@ -391,15 +452,19 @@ mod tests {
                 .any(|x| matches!(x, ArtifactTransmit::Abort(_)))
         );
         assert_eq!(share1, pool.lookup_validated(&id1).unwrap());
+        // The payment share that was attached to the unvalidated artifact must be carried
+        // over into the validated section so the artifact remains reconstructable.
+        assert_eq!(payment_share1, pool.get(&id1).unwrap().payment_share);
     }
 
     #[test]
     fn test_canister_http_pool_remove_unvalidated() {
         let mut pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         let share = fake_share(123);
+        let payment_share = fake_payment_share(123);
         let id = share.clone();
 
-        pool.insert(to_unvalidated(share.clone()));
+        pool.insert(to_unvalidated(share.clone(), payment_share));
         assert_eq!(share, pool.get_unvalidated_artifact(&id).unwrap().share);
 
         let result = pool.apply(vec![CanisterHttpChangeAction::RemoveUnvalidated(
@@ -415,9 +480,10 @@ mod tests {
     fn test_canister_http_pool_handle_invalid() {
         let mut pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         let share = fake_share(123);
+        let payment_share = fake_payment_share(123);
         let id = share.clone();
 
-        pool.insert(to_unvalidated(share.clone()));
+        pool.insert(to_unvalidated(share.clone(), payment_share));
         assert_eq!(share, pool.get_unvalidated_artifact(&id).unwrap().share);
 
         let result = pool.apply(vec![CanisterHttpChangeAction::HandleInvalid(
