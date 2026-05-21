@@ -381,6 +381,19 @@ impl CanisterHttpPoolManagerImpl {
             match self.http_adapter_shim.lock().unwrap().try_receive() {
                 Err(TryReceiveError::Empty) => break,
                 Ok((mut response, payment_metadata)) => {
+                    // Drop the response if its context is no longer present in the replicated state
+                    // (e.g. the request has timed out or has already been answered by enough other nodes).
+                    let Some(context) = active_contexts.get(&response.id) else {
+                        warn!(
+                            self.log,
+                            "Dropping http response for request ID {}: \
+                             corresponding context is no longer in the replicated state.",
+                            response.id,
+                        );
+                        self.requested_id_cache.borrow_mut().remove(&response.id);
+                        continue;
+                    };
+
                     // Truncate the reject message if it's too long.
                     //
                     // The "happy path" response is organically bounded by max_response_bytes, however we need to set a
@@ -2570,7 +2583,7 @@ pub mod test {
                 let change_set = pool_manager.generate_change_set(&canister_http_pool);
                 assert_eq!(change_set.len(), 2);
                 for change in &change_set {
-                    assert_matches!(change, CanisterHttpChangeAction::AddToValidated(_, _));
+                    assert_matches!(change, CanisterHttpChangeAction::AddToValidated(_, _, _));
                 }
             });
         });
@@ -2620,7 +2633,12 @@ pub mod test {
                     shim_mock
                         .expect_try_receive()
                         .times(1)
-                        .returning(move || Ok(empty_canister_http_response(id.get())))
+                        .returning(move || {
+                            Ok((
+                                empty_canister_http_response(id.get()),
+                                fake_payment_metadata(id.get()),
+                            ))
+                        })
                         .in_sequence(&mut sequence);
                 }
                 shim_mock
@@ -2658,7 +2676,7 @@ pub mod test {
                 assert_eq!(change_set.len(), 1);
                 assert_matches!(
                     &change_set[0],
-                    CanisterHttpChangeAction::AddToValidated(share, response) => {
+                    CanisterHttpChangeAction::AddToValidated(share, _payment_share, response) => {
                         assert_eq!(share.content.id, active_callback_id);
                         assert_eq!(response.id, active_callback_id);
                     }
