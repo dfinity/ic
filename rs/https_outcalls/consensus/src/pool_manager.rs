@@ -553,7 +553,8 @@ impl CanisterHttpPoolManagerImpl {
                 // A replica that asks for a larger refund than the per-replica allowance is
                 // misbehaving: by construction, no honest replica would have access to more
                 // cycles than that to refund.
-                if payment_share.content.receipt.refund > context.refund_status.per_replica_allowance
+                if payment_share.content.receipt.refund
+                    > context.refund_status.per_replica_allowance
                 {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
                         share.clone(),

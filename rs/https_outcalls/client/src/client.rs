@@ -397,16 +397,17 @@ fn validate_response(
         headers,
         content: body,
     } = response;
-    let canister_http_payload = CanisterHttpResponsePayload {
-        status: status as u128,
-        headers: headers
-            .into_iter()
-            .map(|HttpHeader { name, value }| {
-                ic_management_canister_types_private::HttpHeader { name, value }
-            })
-            .collect(),
-        body,
-    };
+    let canister_http_payload =
+        CanisterHttpResponsePayload {
+            status: status as u128,
+            headers: headers
+                .into_iter()
+                .map(|HttpHeader { name, value }| {
+                    ic_management_canister_types_private::HttpHeader { name, value }
+                })
+                .collect(),
+            body,
+        };
     validate_http_headers_and_body(&canister_http_payload.headers, &canister_http_payload.body)
         .map_err(|e| {
             (

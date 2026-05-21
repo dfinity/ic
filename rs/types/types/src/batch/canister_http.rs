@@ -605,8 +605,10 @@ impl TryFrom<pb::CanisterHttpArtifact> for CanisterHttpResponseArtifact {
 
     fn try_from(artifact: pb::CanisterHttpArtifact) -> Result<Self, Self::Error> {
         let share = try_from_option_field(artifact.share, "CanisterHttpArtifact::share")?;
-        let payment_share =
-            try_from_option_field(artifact.payment_share, "CanisterHttpArtifact::payment_share")?;
+        let payment_share = try_from_option_field(
+            artifact.payment_share,
+            "CanisterHttpArtifact::payment_share",
+        )?;
 
         Ok(CanisterHttpResponseArtifact {
             share,
