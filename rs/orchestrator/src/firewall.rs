@@ -258,6 +258,10 @@ impl Firewall {
         }
     }
 
+    /// Get TCP and UDP firewall rules to whitelist node IP addresses for the protocol
+    /// communication, based on the node reward type.
+    /// Rules are returned in the order of priority (higher priority rules are returned first). TCP
+    /// and UDP rules are returned separately.
     fn get_node_whitelisting_rules(
         &mut self,
         registry_version: RegistryVersion,
@@ -398,6 +402,7 @@ impl Firewall {
 
         (
             vec![
+                // Insert the ic-http-adapter rule at the top of the list (highest priority)
                 tcp_ic_http_adapter_rule,
                 whitelisted_nodes_tcp_whitelisting_rule,
                 all_nodes_tcp_whitelisting_rule,
