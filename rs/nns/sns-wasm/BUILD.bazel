@@ -43,20 +43,18 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
 ]
 
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:async-trait",
-]
-
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/interfaces/registry",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1",
     "//rs/ledger_suite/icrc1/ledger",
     "//rs/nervous_system/common/test_utils",
     "//rs/nns/sns-wasm/protobuf_generator:lib",
     "//rs/nns/test_utils",
+    "//rs/registry/canister",
     "//rs/registry/helpers",
+    "//rs/registry/keys",
     "//rs/rust_canisters/canister_test",
     "//rs/sns/swap",  # FIXME
     "//rs/state_machine_tests",
@@ -67,27 +65,18 @@ DEV_DEPENDENCIES = [
     "@crate_index//:pretty_assertions",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
-] + select({
-    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
-    "//conditions:default": [
-        "//rs/registry/canister",
-        "//rs/registry/keys",
-        "//rs/interfaces/registry",
-    ],
-})
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
+]
 
 rust_library(
     name = "sns-wasm",
     srcs = glob([
         "src/**",
     ]),
-    aliases = ALIASES,
     crate_name = "ic_sns_wasm",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     version = "1.0.0",
     deps = DEPENDENCIES,
 )
@@ -95,9 +84,11 @@ rust_library(
 rust_canister(
     name = "sns-wasm-canister",
     srcs = ["canister/canister.rs"],
-    aliases = ALIASES,
     compile_data = ["canister/sns-wasm.did"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     service_file = ":canister/sns-wasm.did",
     deps = DEPENDENCIES + [":sns-wasm"],
 )
@@ -107,15 +98,20 @@ rust_test(
     srcs = glob(["canister/**/*.rs"]),
     compile_data = ["canister/sns-wasm.did"],
     crate_root = "canister/canister.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":sns-wasm"],
 )
 
 rust_test(
     name = "sns-wasm_test",
-    aliases = ALIASES,
     crate = ":sns-wasm",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -131,7 +127,6 @@ rust_ic_test_suite_with_extra_srcs(
             "tests/check_generated_files.rs",
         ],
     ),
-    aliases = ALIASES,
     data = [
         # Keep sorted.
         ":sns-wasm-canister",
@@ -177,7 +172,10 @@ rust_ic_test_suite_with_extra_srcs(
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
     extra_srcs = ["tests/common/mod.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     deps = [":sns-wasm"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
