@@ -21,6 +21,7 @@ rust_canister(
     srcs = glob(["src/*.rs"]),
     crate_features = ["heartbeat"],
     service_file = ":interface.did",
+    opt = "z",
     deps = [
         # Keep sorted.
         ":lib",
@@ -57,6 +58,7 @@ rust_canister(
     name = "universal_canister_no_heartbeat",
     srcs = glob(["src/*.rs"]),
     service_file = ":interface.did",
+    opt = "z",
     deps = [
         # Keep sorted.
         ":lib",
