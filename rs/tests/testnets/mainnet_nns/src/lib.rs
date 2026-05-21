@@ -651,8 +651,9 @@ async fn test_recovered_nns(env: &TestEnv, nns_node: &IcNodeSnapshot) {
     let logger = env.logger();
     info!(logger, "Testing recovered NNS ...");
 
-    ProposalWithMainnetState::bless_replica_version(
+    ProposalWithMainnetState::elect_replica_version(
         nns_node,
+        &env.topology_snapshot(),
         &ReplicaVersion::try_from("1111111111111111111111111111111111111111").unwrap(),
         &logger,
         "2222222222222222222222222222222222222222222222222222222222222222".to_string(),
