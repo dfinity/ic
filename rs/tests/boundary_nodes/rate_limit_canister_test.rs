@@ -41,11 +41,7 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::runtime::Runtime;
 
 use bytes::Bytes;
-use ic_agent::{
-    Agent, AgentError, Identity,
-    agent::{HttpService, http_transport::reqwest_transport::reqwest::Client},
-    identity::Secp256k1Identity,
-};
+use ic_agent::{Agent, AgentError, Identity, agent::HttpService, identity::Secp256k1Identity};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
@@ -64,6 +60,7 @@ use rate_limits_api::{
     AddConfigResponse, InitArg, InputConfig, InputRule,
     v1::{Action, RateLimitRule},
 };
+use reqwest::Client;
 
 const RATE_LIMIT_CANISTER_ID: &str = "u637p-5aaaa-aaaaq-qaaca-cai";
 

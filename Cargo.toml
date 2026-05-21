@@ -644,7 +644,7 @@ curve25519-dalek = { version = "4.1.3", features = [
 der = { version = "0.7", default-features = false, features = ["derive"] }
 derive-new = "0.7.0"
 devicemapper = "0.34"
-dfx-core = { version = "0.3.0" }
+dfx-core = { git = "https://github.com/dfinity/sdk", rev = "fbd3a78eb1d16c1e21531e16d1020ba917c8d9aa" }
 ed25519-dalek = { version = "2.2.0", features = [
     "std",
     "zeroize",
@@ -684,7 +684,7 @@ hyper-rustls = { version = "0.27.5", default-features = false, features = [
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.12", features = ["full"] }
 ic0 = "1.0.0"
-ic-agent = { version = "0.45.0", features = ["pem", "ring"] }
+ic-agent = { git = "https://github.com/dfinity/agent-rs", rev = "01b6b2ce96ceb44871b2a4273166e8d1cd5440ca", features = ["pem", "ring", "tls-ring"] }
 ic-bn-lib = { version = "0.1.14", features = ["acme-alpn"] }
 ic-bn-lib-common = "0.1.4"
 ic-btc-interface = "0.4.0"
@@ -698,13 +698,13 @@ ic-certification = "3"
 ic-doge-interface = "0.3.0"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "f33afac2aa47b8760090c93823b7fa7f5ba67dc4", default-features = false }
 ic-http-certification = "3.0.3"
-ic-identity-hsm = "0.45.0"
+ic-identity-hsm = { git = "https://github.com/dfinity/agent-rs", rev = "01b6b2ce96ceb44871b2a4273166e8d1cd5440ca" }
 ic-management-canister-types = "0.5.0"
 ic-response-verification = "3.1.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
-ic-transport-types = { version = "0.45.0" }
-ic-utils = { version = "0.45.0", features = ["raw"] }
+ic-transport-types = { git = "https://github.com/dfinity/agent-rs", rev = "01b6b2ce96ceb44871b2a4273166e8d1cd5440ca" }
+ic-utils = { git = "https://github.com/dfinity/agent-rs", rev = "01b6b2ce96ceb44871b2a4273166e8d1cd5440ca", features = ["raw"] }
 ic-vetkeys = "0.6.0"
 ic-xrc-types = "1.2.0"
 ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
@@ -714,7 +714,7 @@ ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
     "experimental",
     "zeroize",
 ] }
-ic_principal = { version = "0.1.1", default-features = false }
+ic_principal = { version = "0.1.2", default-features = false }
 idna = "1.0.2"
 indexmap = "2.10.0"
 indoc = "1.0.9"
@@ -806,13 +806,12 @@ rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
 regex-lite = "0.1.8"
 rexpect = "0.6"
-reqwest = { version = "0.12.24", default-features = false, features = [
+reqwest = { version = "0.13.3", default-features = false, features = [
     "blocking",
     "http2",
     "json",
     "multipart",
-    "rustls-tls",
-    "rustls-tls-native-roots",
+    "rustls",
     "socks",
     "stream",
 ] }

@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use axum::Router;
 use clap::Parser;
 use ic_base_types::NodeId;
-use ic_bn_lib::prometheus::Registry;
+use ic_bn_lib::{prometheus::Registry, reqwest};
 use ic_bn_lib_common::{traits::http::Client as HttpClient, types::http::ConnInfo};
 use ic_certification_test_utils::CertificateBuilder;
 use ic_certification_test_utils::CertificateData::*;

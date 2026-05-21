@@ -35,11 +35,7 @@ use registry_canister::mutations::{
 
 use ic_agent::{
     Agent,
-    agent::{
-        ApiBoundaryNode,
-        http_transport::reqwest_transport::reqwest::{Client, ClientBuilder, redirect::Policy},
-        route_provider::RouteProvider,
-    },
+    agent::{ApiBoundaryNode, route_provider::RouteProvider},
     export::Principal,
     identity::{AnonymousIdentity, Secp256k1Identity},
 };
@@ -50,6 +46,7 @@ use ic_boundary_nodes_system_test_utils::{
     },
     setup::{TEST_PRIVATE_KEY, setup_ic},
 };
+use reqwest::{Client, ClientBuilder, redirect::Policy};
 
 const CANISTER_RETRY_TIMEOUT: Duration = Duration::from_secs(30);
 const CANISTER_RETRY_BACKOFF: Duration = Duration::from_secs(2);

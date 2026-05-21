@@ -12,6 +12,7 @@ use candid::Principal;
 use derive_new::new;
 use http::Method;
 use ic_agent::Agent;
+use ic_bn_lib::reqwest;
 use ic_bn_lib_common::traits::{Run, http::Client};
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;

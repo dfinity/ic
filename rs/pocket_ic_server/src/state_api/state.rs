@@ -52,6 +52,7 @@ use pocket_ic::common::rest::{
     AutoProgressConfig, CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig,
     HttpGatewayDetails, HttpGatewayInfo, InstanceHttpGatewayConfig, Topology,
 };
+use ic_gateway::ic_bn_lib::reqwest as ic_bn_reqwest;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -494,17 +495,20 @@ impl IntoResponse for ErrorCause {
 }
 
 #[derive(Debug)]
-struct ReqwestClient(reqwest::Client);
+struct ReqwestClient(ic_bn_reqwest::Client);
 
 impl ReqwestClient {
-    pub fn new(client: reqwest::Client) -> Self {
+    pub fn new(client: ic_bn_reqwest::Client) -> Self {
         Self(client)
     }
 }
 
 #[async_trait]
 impl Client for ReqwestClient {
-    async fn execute(&self, req: reqwest::Request) -> Result<reqwest::Response, reqwest::Error> {
+    async fn execute(
+        &self,
+        req: ic_bn_reqwest::Request,
+    ) -> Result<ic_bn_reqwest::Response, ic_bn_reqwest::Error> {
         self.0.execute(req).await
     }
 }
@@ -870,7 +874,7 @@ impl ApiState {
 
                 tasks.start();
 
-                let backend_client = Arc::new(ReqwestClient::new(reqwest::Client::new()));
+                let backend_client = Arc::new(ReqwestClient::new(ic_bn_reqwest::Client::new()));
                 let cors_get = layer(&[Method::HEAD, Method::GET]);
                 Router::new()
                     .nest(

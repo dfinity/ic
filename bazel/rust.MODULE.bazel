@@ -25,6 +25,10 @@ ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
 BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
 
+IC_AGENT_REV = "01b6b2ce96ceb44871b2a4273166e8d1cd5440ca"
+
+DFX_CORE_REV = "fbd3a78eb1d16c1e21531e16d1020ba917c8d9aa"
+
 crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
 
 # Rust crates.
@@ -401,8 +405,9 @@ crate.spec(
     version = "0.34",
 )
 crate.spec(
+    git = "https://github.com/dfinity/sdk",
     package = "dfx-core",
-    version = "^0.3.0",
+    rev = DFX_CORE_REV,
 )
 crate.spec(
     package = "dyn-clone",
@@ -609,9 +614,11 @@ crate.spec(
     features = [
         "pem",
         "ring",
+        "tls-ring",
     ],
+    git = "https://github.com/dfinity/agent-rs",
     package = "ic-agent",
-    version = "^0.45.0",
+    rev = IC_AGENT_REV,
 )
 crate.spec(
     features = [
@@ -696,8 +703,9 @@ crate.spec(
     version = "3.0.3",
 )
 crate.spec(
+    git = "https://github.com/dfinity/agent-rs",
     package = "ic-identity-hsm",
-    version = "^0.45.0",
+    rev = IC_AGENT_REV,
 )
 crate.spec(
     package = "ic-metrics-encoder",
@@ -710,7 +718,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     package = "ic_principal",
-    version = "^0.1.1",
+    version = "^0.1.2",
 )
 crate.spec(
     package = "ic-response-verification",
@@ -744,13 +752,15 @@ crate.spec(
     version = "^3.0.0",
 )
 crate.spec(
+    git = "https://github.com/dfinity/agent-rs",
     package = "ic-transport-types",
-    version = "^0.45.0",
+    rev = IC_AGENT_REV,
 )
 crate.spec(
     features = ["raw"],
+    git = "https://github.com/dfinity/agent-rs",
     package = "ic-utils",
-    version = "^0.45.0",
+    rev = IC_AGENT_REV,
 )
 crate.spec(
     default_features = False,
@@ -1279,12 +1289,11 @@ crate.spec(
         "http2",
         "json",
         "multipart",
-        "rustls-tls",
-        "rustls-tls-native-roots",
+        "rustls",
         "stream",
     ],
     package = "reqwest",
-    version = "^0.12.24",
+    version = "^0.13.3",
 )
 crate.spec(
     package = "rexpect",

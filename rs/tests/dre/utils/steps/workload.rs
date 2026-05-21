@@ -1,12 +1,7 @@
 use super::Step;
 
 use anyhow::bail;
-use ic_agent::{
-    Agent,
-    agent::http_transport::reqwest_transport::reqwest::{Client, ClientBuilder, redirect::Policy},
-    export::Principal,
-    identity::AnonymousIdentity,
-};
+use ic_agent::{Agent, export::Principal, identity::AnonymousIdentity};
 use ic_boundary_nodes_system_test_utils::constants::COUNTER_CANISTER_WAT;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_system_test_driver::{
@@ -16,6 +11,7 @@ use ic_system_test_driver::{
     retry_with_msg_async,
 };
 use ic_utils::interfaces::ManagementCanister;
+use reqwest::{Client, ClientBuilder, redirect::Policy};
 use slog::{Logger, info};
 use std::{net::SocketAddr, time::Duration};
 

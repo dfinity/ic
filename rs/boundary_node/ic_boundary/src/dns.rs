@@ -3,7 +3,7 @@ use std::{net::SocketAddr, sync::Arc};
 use arc_swap::ArcSwapOption;
 use futures_util::future::ready;
 use ic_bn_lib_common::traits::dns::CloneableDnsResolver;
-use reqwest::dns::{Addrs, Name, Resolve, Resolving};
+use ic_bn_lib::reqwest::dns::{Addrs, Name, Resolve, Resolving};
 
 use crate::snapshot::RegistrySnapshot;
 
@@ -71,7 +71,7 @@ mod test {
     // Check that resolver yields correct IPs
     #[tokio::test]
     async fn test_resolve() -> Result<(), Error> {
-        use reqwest::dns::Name;
+        use ic_bn_lib::reqwest::dns::Name;
 
         let (reg, nodes, _) = create_fake_registry_client(4, 1, None);
         let reg = Arc::new(reg);

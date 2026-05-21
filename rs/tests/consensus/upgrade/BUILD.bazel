@@ -20,7 +20,7 @@ rust_library(
         "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:ic-agent",
-        "@crate_index//:ic-management-canister-types",
+        "@@rules_rust++crate+crate_index__ic-management-canister-types-0.7.1//:ic_management_canister_types",
         "@crate_index//:ic-utils",
         "@crate_index//:regex",
         "@crate_index//:slog",
