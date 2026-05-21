@@ -265,7 +265,7 @@ impl CatchUpPackageMaker {
         }
 
         let cup_block = self
-            .get_cup_block(start_block.clone(), cup_type)
+            .get_cup_block(start_block, cup_type)
             .inspect_err(|err| warn!(self.log, "Can't get a block for a CUP: {err}"))
             .ok()?;
 

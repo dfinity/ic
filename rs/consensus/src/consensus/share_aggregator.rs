@@ -149,8 +149,12 @@ impl ShareAggregator {
         let mut start_block = pool.get_highest_finalized_summary_block();
         let current_cup_height = pool.get_catch_up_height();
 
-        while start_block.height() > current_cup_height {
-            match self.aggregate_catch_up_package_shares_for_summary_block(pool, &start_block) {
+        loop {
+            let start_block_height = start_block.height();
+            if start_block_height <= current_cup_height {
+                break;
+            }
+            match self.aggregate_catch_up_package_shares_for_summary_block(pool, start_block) {
                 Ok(Some(cup)) => {
                     return vec![ConsensusMessage::CatchUpPackage(cup)];
                 }
@@ -158,20 +162,20 @@ impl ShareAggregator {
                     debug!(
                         self.log,
                         "Not enough shares to be able to create a full CUP at height{}",
-                        start_block.height()
+                        start_block_height
                     );
                 }
                 Err(err) => {
                     warn!(
                         self.log,
                         "Encountered an error while aggregating CUP shares at height {}: {err}",
-                        start_block.height()
+                        start_block_height
                     );
                 }
             }
 
             let Some(block_from_last_interval) =
-                pool.get_finalized_block(start_block.height.decrement())
+                pool.get_finalized_block(start_block_height.decrement())
             else {
                 break;
             };
@@ -193,12 +197,12 @@ impl ShareAggregator {
     fn aggregate_catch_up_package_shares_for_summary_block(
         &self,
         pool: &PoolReader<'_>,
-        summary_block: &Block,
+        summary_block: Block,
     ) -> Result<Option<CatchUpPackage>, String> {
         let (threshold, dkg_id, block) = match catchup_package_maker::get_catch_up_package_type(
             self.registry.as_ref(),
             self.replica_config.node_id,
-            summary_block,
+            &summary_block,
         )
         .map_err(|err| format!("Failed to determine the cup type: {err}"))?
         {
@@ -212,12 +216,12 @@ impl ShareAggregator {
                     active_high_threshold_nidkg_id(pool.as_cache(), summary_block.height())
                         .ok_or_else(|| String::from("Couldn't get the high dkg id"))?;
 
-                (threshold, dkg_id, summary_block.clone())
+                (threshold, dkg_id, summary_block)
             }
             CatchUpPackageType::PostSplit { new_subnet_id } => {
                 let post_split_summary_block =
                     catchup_package_maker::create_post_split_summary_block(
-                        summary_block,
+                        &summary_block,
                         new_subnet_id,
                         self.registry.as_ref(),
                     )
@@ -240,16 +244,24 @@ impl ShareAggregator {
             }
         };
 
-        let shares = pool
+        let mut shares = pool
             .get_catch_up_package_shares(block.height())
             .collect::<Vec<_>>();
 
+        // The validation logic of CUP shares ensures that all of them have the same content for a
+        // given height, and it matches the content of the summary block.
         if shares.len() < threshold {
             return Ok(None);
         }
+        let share_content = shares.pop().unwrap().content;
 
-        let cup_content =
-            CatchUpContent::from_share_content(shares[0].content.clone(), block.clone());
+        let subnet_splitting_status = block
+            .payload
+            .as_ref()
+            .as_summary()
+            .dkg
+            .subnet_splitting_status();
+        let cup_content = CatchUpContent::from_share_content(share_content, block);
         let signatures = shares.iter().map(|share| &share.signature).collect();
 
         let cup = self
@@ -261,16 +273,7 @@ impl ShareAggregator {
                 signature,
             })?;
 
-        if let SubnetSplittingStatus::Done { new_subnet_id } = cup
-            .content
-            .block
-            .get_value()
-            .payload
-            .as_ref()
-            .as_summary()
-            .dkg
-            .subnet_splitting_status()
-        {
+        if let SubnetSplittingStatus::Done { new_subnet_id } = subnet_splitting_status {
             info!(
                 self.log,
                 "Aggregated a Post-Split CUP for subnet {new_subnet_id} at height {}",
