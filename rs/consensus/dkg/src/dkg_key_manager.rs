@@ -246,26 +246,36 @@ impl DkgKeyManager {
             // next transcript key irrelevant and remove it).
             self.delete_inactive_keys(pool_reader);
             self.load_transcripts_from_summary(&summary.dkg);
-
-            if let Ok(PostSplitAssignment {
-                new_subnet_id,
-                other_subnet_id: _,
-            }) = subnet_splitting::get_post_split_subnet_assignment(
-                self.replica_config.node_id,
-                &summary_block,
-                self.registry.as_ref(),
-            ) {
-                let next_summary = get_post_split_dkg_summary(
-                    new_subnet_id,
-                    self.registry.as_ref(),
-                    &summary_block,
-                )
-                .expect("FIXME");
-                info!(self.logger, "Adding post split dkg transcripts");
-                self.load_transcripts_from_summary(&next_summary);
-            }
-
             self.last_dkg_summary_height = Some(summary_block.height);
+        }
+
+        // Always try to create the summary following a potential subnet split and load its
+        // transcripts. This is needed as a special case, to let the replica sign and verify CUP
+        // shares corresponding to that post-split summary using the new DKG transcripts.
+        if let Ok(PostSplitAssignment {
+            new_subnet_id,
+            other_subnet_id: _,
+        }) = subnet_splitting::get_post_split_subnet_assignment(
+            self.replica_config.node_id,
+            &summary_block,
+            self.registry.as_ref(),
+        ) {
+            match get_post_split_dkg_summary(new_subnet_id, self.registry.as_ref(), &summary_block)
+            {
+                Ok(next_summary) => {
+                    info!(self.logger, "Adding post-split DKG transcripts");
+
+                    self.load_transcripts_from_summary(&next_summary);
+                    self.last_dkg_summary_height = Some(next_summary.height);
+                }
+                Err(err) => {
+                    error!(
+                        self.logger,
+                        "Couldn't get the next DKG summary for the new subnet {new_subnet_id:?} \
+                        after the split: {err:?}"
+                    );
+                }
+            }
         }
     }
 
