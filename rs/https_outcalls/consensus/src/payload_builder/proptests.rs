@@ -6,34 +6,42 @@ use ic_error_types::RejectCode;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload};
 use ic_test_utilities_types::ids::{canister_test_id, node_test_id};
 use ic_types::{
-    CountBytes, Height, NodeId, NumBytes, RegistryVersion, ReplicaVersion,
+    CountBytes, Height, NodeId, NumBytes, RegistryVersion, ReplicaVersion, Time,
     batch::ValidationContext,
     canister_http::{
-        CanisterHttpReject, CanisterHttpRequestContext, CanisterHttpResponse,
-        CanisterHttpResponseContent, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
-        Replication,
+        CANISTER_HTTP_TIMEOUT_INTERVAL, CanisterHttpReject, CanisterHttpRequestContext,
+        CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
+        CanisterHttpResponseShare, Replication,
     },
     crypto::{CryptoHash, CryptoHashOf, crypto_hash},
     messages::CallbackId,
     time::UNIX_EPOCH,
 };
 use proptest::{arbitrary::any, prelude::*};
-use std::{collections::BTreeSet, ops::DerefMut, time::Duration};
+use std::{
+    collections::BTreeSet,
+    ops::DerefMut,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 const SUBNET_SIZE: usize = 13;
 const MAX_PAYLOAD_SIZE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_RESPONSE_BODY_BYTES: usize = 4_000;
 
-/// Validation context time used by the proptest. Picked large enough that
-/// requests timestamped at `UNIX_EPOCH` time out (since
-/// `CANISTER_HTTP_TIMEOUT_INTERVAL` is 60 seconds), while requests timestamped
-/// at `UNIX_EPOCH + NOT_TIMED_OUT_OFFSET_SECS` do not.
-const VALIDATION_TIME_SECS: u64 = 200;
-const NOT_TIMED_OUT_OFFSET_SECS: u64 = 150;
+/// Validation context time used by the proptest
+/// - a request timestamped at `UNIX_EPOCH` is considered timed out, since
+///   `UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL < validation_time()`;
+/// - a request timestamped at `validation_time()` is not, since
+///   `validation_time() + CANISTER_HTTP_TIMEOUT_INTERVAL > validation_time()`.
+fn validation_time() -> Time {
+    UNIX_EPOCH + 2 * CANISTER_HTTP_TIMEOUT_INTERVAL
+}
+
+const PROPTEST_CASES: u32 = 256;
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        cases: 256,
+        cases: PROPTEST_CASES,
         max_shrink_time: 60000,
         ..ProptestConfig::default()
     })]
@@ -84,8 +92,8 @@ enum ScenarioKind {
         designated_node: u64,
         /// If `Some`, add the designated node's share together with its
         /// content. If `None`, nothing is added (e.g. simulating the case
-        /// where the local node hasn't received any response yet).
-        own_content: Option<CanisterHttpResponseContent>,
+        /// where no response has reached the local node's pool yet).
+        designated_content: Option<CanisterHttpResponseContent>,
     },
     Flexible {
         /// Committee size; the committee is `0..committee_size`.
@@ -104,12 +112,18 @@ enum ScenarioKind {
 /// [`build_scenario`].
 struct Scenario {
     request_context: CanisterHttpRequestContext,
-    /// `(response, share)` pairs that should be added to the pool with content
-    /// (as if the local node had produced them).
-    own: Vec<(CanisterHttpResponse, CanisterHttpResponseShare)>,
-    /// Shares that should be added to the pool without content (as if they had
-    /// been received from peers).
-    received: Vec<CanisterHttpResponseShare>,
+    /// `(response, share)` pairs to load into the pool so that the share is
+    /// validated and its body lands in the `content` section. In production
+    /// this corresponds either to the local node having produced the share
+    /// itself, or — for `NonReplicated`/`Flexible` — to a peer gossiping the
+    /// share bundled with its content.
+    with_content: Vec<(CanisterHttpResponse, CanisterHttpResponseShare)>,
+    /// Shares to load into the pool with no associated content body. In
+    /// production this is what `FullyReplicated` peer-gossip looks like (the
+    /// content is expected to be reachable via the local node's own copy by
+    /// hash). The other modes never gossip content-less shares, so this is
+    /// always empty.
+    share_only: Vec<CanisterHttpResponseShare>,
 }
 
 fn run_proptest(
@@ -120,7 +134,7 @@ fn run_proptest(
     let context = ValidationContext {
         registry_version: RegistryVersion::new(1),
         certified_height: Height::new(0),
-        time: UNIX_EPOCH + Duration::from_secs(VALIDATION_TIME_SECS),
+        time: validation_time(),
     };
 
     test_config_with_http_feature(
@@ -146,16 +160,16 @@ fn run_proptest(
             {
                 let mut pool_access = canister_http_pool.write().unwrap();
                 for scenario in &scenarios {
-                    for (response, share) in &scenario.own {
+                    for (response, share) in &scenario.with_content {
                         add_own_share_to_pool(pool_access.deref_mut(), share, response);
                     }
                 }
-                let received_shares: Vec<_> = scenarios
+                let share_only: Vec<_> = scenarios
                     .iter()
-                    .flat_map(|s| s.received.iter().cloned())
+                    .flat_map(|s| s.share_only.iter().cloned())
                     .chain(extra_random_shares)
                     .collect();
-                add_received_shares_to_pool(pool_access.deref_mut(), received_shares);
+                add_received_shares_to_pool(pool_access.deref_mut(), share_only);
             }
 
             let mut past_payloads: Vec<Vec<u8>> = vec![];
@@ -195,18 +209,26 @@ fn run_proptest(
 
                 past_payloads.push(payload);
             }
+
+            // Sanity check: Across all cases, at least one must have produced a non-empty payload.
+            static CASES_RUN: AtomicUsize = AtomicUsize::new(0);
+            static CASES_NONEMPTY: AtomicUsize = AtomicUsize::new(0);
+            if past_payloads.iter().any(|p| !p.is_empty()) {
+                CASES_NONEMPTY.fetch_add(1, Ordering::Relaxed);
+            }
+            let cases = CASES_RUN.fetch_add(1, Ordering::Relaxed) + 1;
+            if cases == PROPTEST_CASES as usize {
+                assert!(
+                    CASES_NONEMPTY.load(Ordering::Relaxed) > 0,
+                    "all {PROPTEST_CASES} proptest cases produced empty payloads",
+                );
+            }
         },
     );
 }
 
 fn build_scenario(callback_id: CallbackId, input: ScenarioInput) -> Scenario {
-    let request_time = if input.timed_out {
-        UNIX_EPOCH
-    } else {
-        UNIX_EPOCH + Duration::from_secs(NOT_TIMED_OUT_OFFSET_SECS)
-    };
-
-    let (replication, own, received) = match input.kind {
+    let mut scenario = match input.kind {
         ScenarioKind::FullyReplicated {
             num_main_shares,
             content,
@@ -221,8 +243,8 @@ fn build_scenario(callback_id: CallbackId, input: ScenarioInput) -> Scenario {
         ),
         ScenarioKind::NonReplicated {
             designated_node,
-            own_content,
-        } => build_non_replicated(callback_id, designated_node, own_content),
+            designated_content,
+        } => build_non_replicated(callback_id, designated_node, designated_content),
         ScenarioKind::Flexible {
             committee_size,
             min_responses,
@@ -237,28 +259,21 @@ fn build_scenario(callback_id: CallbackId, input: ScenarioInput) -> Scenario {
         ),
     };
 
-    let mut request_context = request_context(replication);
-    request_context.time = request_time;
-
-    Scenario {
-        request_context,
-        own,
-        received,
-    }
+    scenario.request_context.time = if input.timed_out {
+        UNIX_EPOCH
+    } else {
+        validation_time()
+    };
+    scenario
 }
 
-#[allow(clippy::type_complexity)]
 fn build_fully_replicated(
     callback_id: CallbackId,
     num_main_shares: usize,
     content: CanisterHttpResponseContent,
     num_divergent_shares: usize,
     divergent_hash: [u8; 32],
-) -> (
-    Replication,
-    Vec<(CanisterHttpResponse, CanisterHttpResponseShare)>,
-    Vec<CanisterHttpResponseShare>,
-) {
+) -> Scenario {
     let response = CanisterHttpResponse {
         id: callback_id,
         canister_id: canister_test_id(0),
@@ -277,75 +292,76 @@ fn build_fully_replicated(
         .map(|id| metadata_to_share(id as u64, &divergent_metadata))
         .collect();
 
-    let mut own = vec![];
-    let mut received = vec![];
-    if let Some(own_share) = main_shares.first().cloned() {
-        own.push((response, own_share));
-        received.extend(main_shares.into_iter().skip(1));
+    let mut with_content = vec![];
+    let mut share_only = vec![];
+    if let Some(first_share) = main_shares.first().cloned() {
+        with_content.push((response, first_share));
+        share_only.extend(main_shares.into_iter().skip(1));
     }
-    received.extend(divergent_shares);
+    share_only.extend(divergent_shares);
 
-    (Replication::FullyReplicated, own, received)
+    Scenario {
+        request_context: request_context(Replication::FullyReplicated),
+        with_content,
+        share_only,
+    }
 }
 
-#[allow(clippy::type_complexity)]
 fn build_non_replicated(
     callback_id: CallbackId,
     designated_node: u64,
-    own_content: Option<CanisterHttpResponseContent>,
-) -> (
-    Replication,
-    Vec<(CanisterHttpResponse, CanisterHttpResponseShare)>,
-    Vec<CanisterHttpResponseShare>,
-) {
-    let mut own = vec![];
-    if let Some(content) = own_content {
-        let response = CanisterHttpResponse {
-            id: callback_id,
-            canister_id: canister_test_id(0),
-            content,
-        };
-        let metadata = make_metadata(&response);
-        let share = metadata_to_share(designated_node, &metadata);
-        own.push((response, share));
+    designated_content: Option<CanisterHttpResponseContent>,
+) -> Scenario {
+    let with_content = designated_content
+        .map(|content| {
+            let response = CanisterHttpResponse {
+                id: callback_id,
+                canister_id: canister_test_id(0),
+                content,
+            };
+            let share = metadata_to_share(designated_node, &make_metadata(&response));
+            (response, share)
+        })
+        .into_iter()
+        .collect();
+    Scenario {
+        request_context: request_context(Replication::NonReplicated(node_test_id(designated_node))),
+        with_content,
+        share_only: vec![],
     }
-    let replication = Replication::NonReplicated(node_test_id(designated_node));
-    (replication, own, vec![])
 }
 
-#[allow(clippy::type_complexity)]
 fn build_flexible(
     callback_id: CallbackId,
     committee_size: usize,
     min_responses: u32,
     max_responses: u32,
     member_contents: Vec<Option<CanisterHttpResponseContent>>,
-) -> (
-    Replication,
-    Vec<(CanisterHttpResponse, CanisterHttpResponseShare)>,
-    Vec<CanisterHttpResponseShare>,
-) {
+) -> Scenario {
+    let with_content: Vec<_> = member_contents
+        .into_iter()
+        .enumerate()
+        .filter_map(|(idx, maybe_content)| {
+            let content = maybe_content?;
+            let response = CanisterHttpResponse {
+                id: callback_id,
+                canister_id: canister_test_id(0),
+                content,
+            };
+            let share = metadata_to_share(idx as u64, &make_metadata(&response));
+            Some((response, share))
+        })
+        .collect();
     let committee: BTreeSet<NodeId> = (0..committee_size as u64).map(node_test_id).collect();
-    let mut own = vec![];
-    for (idx, maybe_content) in member_contents.into_iter().enumerate() {
-        let Some(content) = maybe_content else {
-            continue;
-        };
-        let response = CanisterHttpResponse {
-            id: callback_id,
-            canister_id: canister_test_id(0),
-            content,
-        };
-        let metadata = make_metadata(&response);
-        let share = metadata_to_share(idx as u64, &metadata);
-        own.push((response, share));
+    Scenario {
+        request_context: request_context(Replication::Flexible {
+            committee,
+            min_responses,
+            max_responses,
+        }),
+        with_content,
+        share_only: vec![],
     }
-    let replication = Replication::Flexible {
-        committee,
-        min_responses,
-        max_responses,
-    };
-    (replication, own, vec![])
 }
 
 fn make_metadata(response: &CanisterHttpResponse) -> CanisterHttpResponseMetadata {
@@ -378,13 +394,11 @@ fn prop_artifacts(
         prop::collection::vec(prop_divergence(subnet_size), 0..=max_divergence_groups),
     )
         .prop_map(|(scenarios, random_share_groups, divergence_groups)| {
-            let mut random_shares = vec![];
-            for shares in random_share_groups {
-                random_shares.extend(shares);
-            }
-            for shares in divergence_groups {
-                random_shares.extend(shares);
-            }
+            let random_shares = random_share_groups
+                .into_iter()
+                .chain(divergence_groups)
+                .flatten()
+                .collect();
             (scenarios, random_shares)
         })
 }
@@ -412,18 +426,17 @@ fn prop_fully_replicated_kind(
     // Generate `num_main_shares` first, then `num_divergent_shares` constrained
     // to the remaining signer budget so signer sets between the two groups stay
     // disjoint.
-    (prop_content(max_size), any::<[u8; 32]>(), 0..=subnet_size)
-        .prop_flat_map(move |(content, divergent_hash, num_main_shares)| {
-            let remaining = subnet_size - num_main_shares;
+    (0..=subnet_size)
+        .prop_flat_map(move |num_main_shares| {
             (
-                Just(content),
-                Just(divergent_hash),
                 Just(num_main_shares),
-                0..=remaining,
+                0..=subnet_size - num_main_shares,
+                prop_content(max_size),
+                any::<[u8; 32]>(),
             )
         })
         .prop_map(
-            |(content, divergent_hash, num_main_shares, num_divergent_shares)| {
+            |(num_main_shares, num_divergent_shares, content, divergent_hash)| {
                 ScenarioKind::FullyReplicated {
                     num_main_shares,
                     content,
@@ -443,9 +456,9 @@ fn prop_non_replicated_kind(
         prop::option::of(prop_content(max_size)),
     )
         .prop_map(
-            |(designated_node, own_content)| ScenarioKind::NonReplicated {
+            |(designated_node, designated_content)| ScenarioKind::NonReplicated {
                 designated_node,
-                own_content,
+                designated_content,
             },
         )
 }
@@ -453,7 +466,7 @@ fn prop_non_replicated_kind(
 fn prop_flexible_kind(max_size: usize, subnet_size: usize) -> impl Strategy<Value = ScenarioKind> {
     // committee_size -> min_responses -> max_responses -> member_contents.
     (1..=subnet_size)
-        .prop_flat_map(move |committee_size| (Just(committee_size), 0_u32..=committee_size as u32))
+        .prop_flat_map(|committee_size| (Just(committee_size), 0_u32..=committee_size as u32))
         .prop_flat_map(move |(committee_size, min_responses)| {
             (
                 Just(committee_size),
@@ -510,20 +523,16 @@ fn prop_random_metadata() -> impl Strategy<Value = CanisterHttpResponseMetadata>
 }
 
 /// Generates a number of [`CanisterHttpResponseShare`]s for the same random
-/// callback id but with a single (different) content hash. As with
-/// [`prop_random_shares`] the callback id won't match any known request
+/// callback id but with a freshly randomized content hash. As with
+/// [`prop_random_shares`], the callback id won't match any known request
 /// context, so the payload builder is expected to ignore them.
 fn prop_divergence(subnet_size: usize) -> impl Strategy<Value = Vec<CanisterHttpResponseShare>> {
     (1..subnet_size, prop_random_metadata(), any::<[u8; 32]>()).prop_map(
-        |(num_nodes, metadata, new_hash)| {
+        |(num_nodes, mut metadata, new_hash)| {
+            metadata.content_hash = CryptoHashOf::new(CryptoHash(new_hash.to_vec()));
             (1..=num_nodes)
-                .map(|node_id| {
-                    let mut metadata = metadata.clone();
-                    metadata.content_hash =
-                        CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(new_hash.to_vec()));
-                    metadata_to_share(node_id as u64, &metadata)
-                })
-                .collect::<Vec<CanisterHttpResponseShare>>()
+                .map(|node_id| metadata_to_share(node_id as u64, &metadata))
+                .collect()
         },
     )
 }
