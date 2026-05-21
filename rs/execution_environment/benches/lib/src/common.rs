@@ -124,8 +124,6 @@ where
     let subnet_type = exec_env.own_subnet_type();
     let hypervisor = exec_env.hypervisor_for_testing();
 
-    let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-    let canister_root = tmpdir.path().to_path_buf();
     // Create Canister state
     let canister_id = canister_test_id(LOCAL_CANISTER_ID);
     let mut round_limits = RoundLimits {
@@ -138,7 +136,6 @@ where
     let execution_state = hypervisor
         .create_execution_state(
             CanisterModule::new(wat::parse_str(wat.as_ref()).unwrap()),
-            canister_root,
             canister_id,
             &mut round_limits,
             CompilationCostHandling::CountFullAmount,
