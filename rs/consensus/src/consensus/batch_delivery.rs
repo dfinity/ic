@@ -230,7 +230,9 @@ pub(crate) fn deliver_batches_with_result_processor(
                             registry_client,
                         ) {
                             Ok(assignment) => assignment,
-                            Err(PostSplitAssignmentError::NotSplitting) => unreachable!(),
+                            Err(PostSplitAssignmentError::NotSplitting) => {
+                                panic!("Expected subnet splitting to be scheduled, but it is not")
+                            }
                             Err(err) => {
                                 warn!(
                                     every_n_seconds => 30,

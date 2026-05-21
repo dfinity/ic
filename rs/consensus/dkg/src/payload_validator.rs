@@ -636,6 +636,7 @@ mod tests {
             });
 
             let last_summary_block = PoolReader::new(&pool).dkg_summary_block(&parent).unwrap();
+
             validate_payload(
                 subnet_id,
                 registry.as_ref(),

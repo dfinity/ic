@@ -413,8 +413,8 @@ impl CatchUpPackageMaker {
                 {
                     Some(transcript) => Ok(transcript
                         .committee
-                        .position(self.replica_config.node_id)
-                        .is_some()),
+                        .get()
+                        .contains(&self.replica_config.node_id)),
                     None => Err(format!(
                         "Couldn't find post-split transcript at height {}",
                         cup_block.height
