@@ -31,6 +31,7 @@ use ic_bn_lib_common::{
     traits::http::Client,
     types::http::{ClientOptions, ConnInfo},
 };
+use ic_gateway::ic_bn_lib::reqwest as ic_bn_reqwest;
 use ic_gateway::{
     Cli, ProvidesCustomDomains,
     ic_bn_lib::{
@@ -52,7 +53,6 @@ use pocket_ic::common::rest::{
     AutoProgressConfig, CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig,
     HttpGatewayDetails, HttpGatewayInfo, InstanceHttpGatewayConfig, Topology,
 };
-use ic_gateway::ic_bn_lib::reqwest as ic_bn_reqwest;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use std::{
