@@ -589,14 +589,20 @@ mod tests {
     //! Finalizer unit tests
     use super::*;
     use crate::consensus::batch_delivery::generate_responses_to_remote_dkgs;
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{SetupInitialDKGResponse, VetKdCurve, VetKdKeyId};
+    use ic_test_utilities::message_routing::FakeMessageRouting;
+    use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         PrincipalId, RegistryVersion, SubnetId,
         batch::{BatchPayload, ValidationContext},
-        consensus::{DataPayload, Payload as ConsensusPayload, Rank, dkg::DkgDataPayload},
+        consensus::{
+            DataPayload, HashedBlock, Payload as ConsensusPayload, Rank,
+            backwards_compatibility::BackwardsCompatibleOption, dkg::DkgDataPayload,
+        },
         crypto::{
             CryptoHash, CryptoHashOf,
             threshold_sig::ni_dkg::{
@@ -604,9 +610,14 @@ mod tests {
             },
         },
         messages::{CallbackId, Payload},
+        replica_config::ReplicaConfig,
         time::UNIX_EPOCH,
     };
+    use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_1, SUBNET_2};
     use std::str::FromStr;
+
+    const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
+    const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
 
     const TARGET_ID: NiDkgTargetId = NiDkgTargetId::new([8; 32]);
 
@@ -767,5 +778,113 @@ mod tests {
             initial_response.fresh_subnet_id,
             SubnetId::from(PrincipalId::from_str(EXPECTED_FRESH_SUBNET_ID_STR).unwrap())
         );
+    }
+
+    fn deliver_splitting_batch(node_id: NodeId) -> (SubnetId, SubnetId) {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            const SPLITTING_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
+            const INTERVAL_LENGTH: u64 = 9;
+            let summary_height = Height::from(INTERVAL_LENGTH + 1);
+
+            let Dependencies {
+                mut pool,
+                membership,
+                registry,
+                ..
+            } = DependenciesBuilder::new(
+                pool_config,
+                vec![
+                    (
+                        1,
+                        SOURCE_SUBNET_ID,
+                        SubnetRecordBuilder::from(&[NODE_1, NODE_2, NODE_3, NODE_4])
+                            .with_dkg_interval_length(INTERVAL_LENGTH)
+                            .build(),
+                    ),
+                    (
+                        SPLITTING_REGISTRY_VERSION.get(),
+                        SOURCE_SUBNET_ID,
+                        SubnetRecordBuilder::from(&[NODE_1, NODE_3])
+                            .with_dkg_interval_length(INTERVAL_LENGTH)
+                            .build(),
+                    ),
+                    (
+                        SPLITTING_REGISTRY_VERSION.get(),
+                        DESTINATION_SUBNET_ID,
+                        SubnetRecordBuilder::from(&[NODE_2, NODE_4])
+                            .with_dkg_interval_length(INTERVAL_LENGTH)
+                            .build(),
+                    ),
+                ],
+            )
+            .with_replica_config(ReplicaConfig {
+                node_id: NODE_1,
+                subnet_id: SOURCE_SUBNET_ID,
+            })
+            .with_mocked_state_manager()
+            .build();
+
+            pool.advance_round_normal_operation_n(INTERVAL_LENGTH);
+
+            let mut proposal = pool.make_next_block();
+            let block = proposal.content.as_mut();
+            block.context.registry_version = SPLITTING_REGISTRY_VERSION;
+            let mut payload = block.payload.as_ref().as_summary().clone();
+            payload.dkg.subnet_splitting_status = BackwardsCompatibleOption::new_for_test_only(
+                Some(SubnetSplittingStatus::Scheduled {
+                    source_subnet_id: SOURCE_SUBNET_ID,
+                    destination_subnet_id: DESTINATION_SUBNET_ID,
+                }),
+            );
+            block.payload = ConsensusPayload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Summary(payload),
+            );
+            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+            pool.insert_validated(proposal.clone());
+            pool.notarize(&proposal);
+            pool.finalize(&proposal);
+            pool.insert_random_tape(summary_height);
+
+            let message_routing = FakeMessageRouting::new();
+            *message_routing.next_batch_height.write().unwrap() = summary_height;
+
+            let result = deliver_batches_with_result_processor(
+                &message_routing,
+                &membership,
+                &PoolReader::new(&pool),
+                registry.as_ref(),
+                SOURCE_SUBNET_ID,
+                Some(node_id),
+                &no_op_logger(),
+                None,
+                None,
+            );
+
+            assert_eq!(result, Ok(summary_height));
+            let batches = message_routing.batches.read().unwrap();
+            assert_eq!(batches.len(), 1);
+            match &batches[0].content {
+                BatchContent::Splitting {
+                    new_subnet_id,
+                    other_subnet_id,
+                } => (*new_subnet_id, *other_subnet_id),
+                other => panic!("Expected BatchContent::Splitting, got: {other:?}"),
+            }
+        })
+    }
+
+    #[test]
+    fn test_deliver_splitting_batch_node_on_source_subnet() {
+        let (new_subnet_id, other_subnet_id) = deliver_splitting_batch(NODE_1);
+        assert_eq!(new_subnet_id, SOURCE_SUBNET_ID);
+        assert_eq!(other_subnet_id, DESTINATION_SUBNET_ID);
+    }
+
+    #[test]
+    fn test_deliver_splitting_batch_node_on_destination_subnet() {
+        let (new_subnet_id, other_subnet_id) = deliver_splitting_batch(NODE_4);
+        assert_eq!(new_subnet_id, DESTINATION_SUBNET_ID);
+        assert_eq!(other_subnet_id, SOURCE_SUBNET_ID);
     }
 }
