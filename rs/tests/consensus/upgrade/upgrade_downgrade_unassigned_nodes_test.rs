@@ -24,7 +24,7 @@ end::catalog[] */
 
 use anyhow::Result;
 use anyhow::bail;
-use ic_consensus_system_test_upgrade_common::bless_target_version;
+use ic_consensus_system_test_upgrade_common::elect_target_version;
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     upgrade::{deploy_guestos_to_all_unassigned_nodes, fetch_unassigned_node_version},
@@ -83,7 +83,7 @@ fn upgrade_downgrade_unassigned_nodes(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
     let unassigned_node = env.topology_snapshot().unassigned_nodes().next().unwrap();
 
-    let target_version = bless_target_version(&env, &nns_node);
+    let target_version = elect_target_version(&env, &nns_node);
     info!(log, "Upgrading unassigned nodes to {} ...", target_version);
     upgrade_unassigned_nodes(&log, &nns_node, &unassigned_node, &target_version);
     let initial_version = get_guestos_img_version();
