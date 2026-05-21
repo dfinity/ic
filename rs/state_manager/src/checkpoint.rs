@@ -510,13 +510,9 @@ impl CheckpointLoader {
             )
         });
 
-        for canister_state in results.into_iter() {
-            let (canister_state, durations) = canister_state?;
-            canister_states.insert(
-                canister_state.system_state.canister_id(),
-                Arc::new(canister_state),
-            );
-
+        for result in results.into_iter() {
+            let (canister_state, durations) = result?;
+            canister_states.insert(canister_state.canister_id(), Arc::new(canister_state));
             durations.apply(&self.metrics);
         }
 
@@ -866,6 +862,7 @@ pub fn load_canister_state(
         canister_state_bits.canister_log,
         canister_state_bits.next_canister_log_record_idx,
         log_memory_store_data,
+        canister_state_bits.log_memory_store_migrated,
         canister_state_bits.wasm_memory_limit,
         canister_state_bits.next_snapshot_id,
         canister_state_bits.environment_variables,

@@ -178,6 +178,7 @@ impl ExecutionServices {
             logger,
             config.rate_limiting_of_heap_delta,
             config.rate_limiting_of_instructions,
+            config.log_memory_store_feature,
             Arc::clone(&fd_factory),
         ));
 
