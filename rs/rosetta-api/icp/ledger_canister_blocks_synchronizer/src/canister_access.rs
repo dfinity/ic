@@ -51,11 +51,11 @@ pub async fn make_agent(
     let is_exchanges_testnet = url.host_str() == Some("exchanges.testnet.dfinity.network");
 
     let http_client = match timeout {
-        Some(timeout) => ic_agent::export::reqwest::Client::builder()
+        Some(timeout) => reqwest::Client::builder()
             .timeout(timeout)
             .build()
             .expect("failed to build http client"),
-        None => ic_agent::export::reqwest::Client::new(),
+        None => reqwest::Client::new(),
     };
 
     let agent = Agent::builder()

@@ -162,7 +162,7 @@ fn new_update_call(
     let agent = Agent::builder()
         .with_identity(AnonymousIdentity)
         .with_url(format!("http://{}", addr))
-        .with_http_client(ic_agent::export::reqwest::Client::new())
+        .with_http_client(reqwest::Client::new())
         .build()
         .unwrap();
     let update = UpdateBuilder::new(&agent, effective_canister_id, content.method_name)

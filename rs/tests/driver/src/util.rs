@@ -970,7 +970,7 @@ pub async fn agent_with_identity_mapping(
     addr_mapping: Option<IpAddr>,
     identity: impl Identity + 'static,
 ) -> Result<Agent, AgentError> {
-    let builder = ic_agent::export::reqwest::Client::builder()
+    let builder = reqwest::Client::builder()
         .timeout(AGENT_REQUEST_TIMEOUT)
         //.http2_prior_knowledge()
         .danger_accept_invalid_certs(true);

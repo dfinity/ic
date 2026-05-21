@@ -42,7 +42,7 @@ pub async fn get_custom_agent(basic_identity: Arc<dyn Identity>, port: u16) -> A
     let agent = Agent::builder()
         .with_url(replica_url.clone())
         .with_identity(basic_identity)
-        .with_http_client(ic_agent::export::reqwest::Client::new())
+        .with_http_client(reqwest::Client::new())
         .build()
         .unwrap();
 

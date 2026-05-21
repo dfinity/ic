@@ -1,5 +1,4 @@
 use anyhow::bail;
-use ic_agent::export::reqwest::{StatusCode, header::CONTENT_TYPE};
 use ic_crypto_tree_hash::{LookupStatus, MixedHashTree, Path};
 use ic_types::{
     PrincipalId,
@@ -9,6 +8,7 @@ use ic_types::{
     },
     time::current_time,
 };
+use reqwest::{StatusCode, header::CONTENT_TYPE};
 use slog::{Logger, info};
 use std::time::Duration;
 use tokio::time::sleep;
@@ -19,17 +19,13 @@ const SENDER: PrincipalId = PrincipalId::new_anonymous();
 const ARG: Vec<u8> = vec![];
 
 pub(crate) struct V2CallAgent {
-    client: ic_agent::export::reqwest::Client,
+    client: reqwest::Client,
     addr: String,
     logger: Logger,
 }
 
 impl V2CallAgent {
-    pub(crate) fn new(
-        client: ic_agent::export::reqwest::Client,
-        addr: String,
-        logger: Logger,
-    ) -> Self {
+    pub(crate) fn new(client: reqwest::Client, addr: String, logger: Logger) -> Self {
         Self {
             client,
             addr,
