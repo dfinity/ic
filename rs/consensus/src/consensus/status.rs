@@ -88,22 +88,20 @@ pub(crate) fn should_halt(
             .map(|replica_version| replica_version != ReplicaVersion::default())
             .warn_if_none(logger, "Failed to check if the upgrade is pending!");
 
-    let should_halt_due_to_subnet_splitting = last_summary_block
-        .map(|summary_block| {
-            match summary_block
-                .payload
-                .as_ref()
-                .as_summary()
-                .dkg
-                .subnet_splitting_status()
-            {
-                SubnetSplittingStatus::NotScheduled => false,
-                // After the split, don't produce any blocks until we are on the right subnet.
-                SubnetSplittingStatus::Done { new_subnet_id } => subnet_id != new_subnet_id,
-                SubnetSplittingStatus::Scheduled { .. } => height >= summary_block.height,
-            }
-        })
-        .unwrap_or_default();
+    let should_halt_due_to_subnet_splitting = last_summary_block.map(|summary_block| {
+        match summary_block
+            .payload
+            .as_ref()
+            .as_summary()
+            .dkg
+            .subnet_splitting_status()
+        {
+            SubnetSplittingStatus::NotScheduled => false,
+            // After the split, don't produce any blocks until we are on the right subnet.
+            SubnetSplittingStatus::Done { new_subnet_id } => subnet_id != new_subnet_id,
+            SubnetSplittingStatus::Scheduled { .. } => height >= summary_block.height,
+        }
+    });
 
     let should_halt_by_subnet_record = registry_client
         .get_halt_at_cup_height(subnet_id, registry_version)
@@ -125,8 +123,8 @@ pub(crate) fn should_halt(
 
     any(&[
         should_halt_due_to_upgrading,
+        should_halt_due_to_subnet_splitting,
         should_halt_by_subnet_record,
-        Some(should_halt_due_to_subnet_splitting),
     ])
 }
 
