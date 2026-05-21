@@ -3,12 +3,7 @@ use crate::pb::v1::ExecuteNnsFunction;
 use crate::storage::with_voting_history_store;
 use crate::test_utils::MockRandomness;
 use crate::{
-    governance::{
-        MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70,
-        RELAXED_EIGHT_YEAR_GANG_MAX_AGING_SINCE_TIMESTAMP_SECONDS,
-    },
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::{NeuronDissolveStateSnapshot, neuron_dissolve_state_snapshot},
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use ic_base_types::PrincipalId;
@@ -29,6 +24,7 @@ use lazy_static::lazy_static;
 use maplit::hashmap;
 use std::{convert::TryFrom, time::Duration};
 
+mod get_maturity_modulation;
 mod get_neuron_index;
 mod list_neurons;
 mod list_proposals;
@@ -1724,174 +1720,6 @@ fn test_record_known_neuron_abstentions() {
             vec![]
         );
     });
-}
-
-#[test]
-fn test_maybe_set_eight_year_gang_bonus_base() {
-    // Step 1: Create governance with a neuron.
-    let mut governance = Governance::new(
-        Default::default(),
-        Arc::<MockEnvironment>::default(),
-        Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
-        Box::new(MockRandomness::new()),
-    );
-
-    // Add a neuron with MAX dissolve delay (8 years).
-    let neuron = NeuronBuilder::new_for_test(
-        1,
-        DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70,
-            aging_since_timestamp_seconds: 0,
-        },
-    )
-    .with_cached_neuron_stake_e8s(100 * E8)
-    .with_staked_maturity_e8s_equivalent(50 * E8)
-    .with_neuron_fees_e8s(10 * E8)
-    .build();
-    governance.add_neuron(1, neuron).unwrap();
-
-    // Initially, the migration flag is false (not done).
-    assert!(!governance.heap_data.eight_year_gang_bonus_migration_done);
-
-    // Step 2: Simulate pre-upgrade (take_heap_proto).
-    let extracted_proto = governance.take_heap_proto();
-
-    // Step 3: Simulate post-upgrade (new_restored) - this should run the migration.
-    let mut governance = Governance::new_restored(
-        extracted_proto,
-        Arc::<MockEnvironment>::default(),
-        Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
-        Box::new(MockRandomness::new()),
-    );
-
-    // Step 4: Verify the migration flag is now true.
-    assert!(governance.heap_data.eight_year_gang_bonus_migration_done);
-
-    // Step 5: Verify the neuron has the bonus set to stake - fees + staked maturity.
-    let bonus = governance
-        .neuron_store
-        .with_neuron(&NeuronId { id: 1 }, |n| n.eight_year_gang_bonus_base_e8s)
-        .unwrap();
-    assert_eq!(bonus, 140 * E8); // 100 stake - 10 fees + 50 staked maturity
-
-    // Step 6: Modify the neuron's stake (this would change the bonus if migration ran again).
-    governance
-        .with_neuron_mut(&NeuronId { id: 1 }, |n| {
-            n.cached_neuron_stake_e8s = 500 * E8;
-        })
-        .unwrap();
-
-    // Step 7: Simulate another upgrade cycle - migration should NOT run again.
-    let extracted_proto = governance.take_heap_proto();
-    assert!(extracted_proto.eight_year_gang_bonus_migration_done);
-
-    let governance = Governance::new_restored(
-        extracted_proto,
-        Arc::<MockEnvironment>::default(),
-        Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
-        Box::new(MockRandomness::new()),
-    );
-
-    // The flag should still be true.
-    assert!(governance.heap_data.eight_year_gang_bonus_migration_done);
-
-    // The bonus should remain unchanged (140 * E8), not updated to 540 * E8.
-    let bonus = governance
-        .neuron_store
-        .with_neuron(&NeuronId { id: 1 }, |n| n.eight_year_gang_bonus_base_e8s)
-        .unwrap();
-    assert_eq!(bonus, 140 * E8);
-}
-
-#[test]
-fn test_maybe_set_relaxed_eight_year_gang_bonus_base() {
-    let mut governance = Governance::new(
-        Default::default(),
-        Arc::<MockEnvironment>::default(),
-        Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
-        Box::new(MockRandomness::new()),
-    );
-
-    // This is not exactly eight years per our (admittedly unintuitive) definition of "year",
-    // because we define 1 year to be = 365.25 days.
-    let nearly_eight_years_seconds = 8 * 365 * ONE_DAY_SECONDS;
-    let neuron_id_to_pre_clamp_dissolve_state = hashmap! {
-        // Neuron 1 will get inducted into the eight year gange.
-        1 => NeuronDissolveStateSnapshot {
-            dissolve_state: Some(
-                neuron_dissolve_state_snapshot::DissolveState::DissolveDelaySeconds(nearly_eight_years_seconds),
-            ),
-        },
-
-        2 => NeuronDissolveStateSnapshot {
-            dissolve_state: Some(
-                neuron_dissolve_state_snapshot::DissolveState::DissolveDelaySeconds(nearly_eight_years_seconds - 1),
-            ),
-        },
-    };
-
-    for neuron_id in [1, 2] {
-        let neuron = NeuronBuilder::new_for_test(
-            neuron_id,
-            DissolveStateAndAge::NotDissolving {
-                dissolve_delay_seconds: 2 * ONE_YEAR_SECONDS,
-                aging_since_timestamp_seconds:
-                    RELAXED_EIGHT_YEAR_GANG_MAX_AGING_SINCE_TIMESTAMP_SECONDS,
-            },
-        )
-        // "net stake" = 100 - 30 + 10 = 80
-        .with_cached_neuron_stake_e8s(100 * E8)
-        .with_neuron_fees_e8s(30 * E8)
-        .with_staked_maturity_e8s_equivalent(10 * E8)
-        .build();
-
-        governance.add_neuron(neuron_id, neuron).unwrap();
-    }
-
-    let mut proto = governance.take_heap_proto();
-
-    // Simulate having already run first round of induction into the eight year gang
-    // but not the second.
-    proto.eight_year_gang_bonus_migration_done = true;
-    proto.relaxed_eight_year_gang_bonus_migration_done = false;
-
-    proto.neuron_id_to_pre_clamp_dissolve_state = neuron_id_to_pre_clamp_dissolve_state;
-
-    // Step 2: Call code under test (indirectly).
-
-    let governance = Governance::new_restored(
-        proto,
-        Arc::<MockEnvironment>::default(),
-        Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
-        Box::new(MockRandomness::new()),
-    );
-
-    // Step 3: Verify results.
-
-    // Did the second round of induction occur?
-    assert!(
-        governance
-            .heap_data
-            .relaxed_eight_year_gang_bonus_migration_done
-    );
-
-    let assert_eight_year_gang_bonus_base_e8s = |neuron_id, expected| {
-        let bonus = governance
-            .neuron_store
-            .with_neuron(&NeuronId { id: neuron_id }, |n| {
-                n.eight_year_gang_bonus_base_e8s
-            })
-            .unwrap();
-        assert_eq!(bonus, expected);
-    };
-
-    assert_eight_year_gang_bonus_base_e8s(1, 80 * E8);
-    assert_eight_year_gang_bonus_base_e8s(2, 0);
 }
 
 #[test]

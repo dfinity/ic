@@ -9,6 +9,7 @@ anyhow = { workspace = true }
 attestation = { path = "../../sev/attestation" }
 config_types = { path = "../../config/types" }
 futures = { workspace = true }
+guest_disk = { path = "../../os_tools/guest_disk" }
 guest_upgrade_client = { path = "../client" }
 guest_upgrade_server = { path = "../server" }
 guest_upgrade_shared = { path = "../shared" }
@@ -17,6 +18,8 @@ ic-protobuf = { path = "../../../protobuf" }
 ic-registry-client-fake = { path = "../../../registry/fake" }
 ic-registry-proto-data-provider = { path = "../../../registry/proto_data_provider" }
 ic-test-utilities-registry = { path = "../../../test_utilities/registry" }
+ic-types = { path = "../../../types/types" }
+rand = { workspace = true }
 rustls = { workspace = true }
 sev_guest = { path = "../../sev/guest" }
 sev_guest_testing = { path = "../../sev/guest/testing" }

@@ -23,8 +23,8 @@ use pocket_ic::common::rest::{
     InstanceHttpGatewayConfig, SubnetSpec,
 };
 use pocket_ic::{
-    PocketIc, PocketIcBuilder, PocketIcState, StartServerParams, start_server, update_candid,
-    update_candid_as,
+    CreateCanisterParams, PocketIc, PocketIcBuilder, PocketIcState, StartServerParams,
+    start_server, update_candid, update_candid_as,
 };
 use registry_canister::pb::v1::{GetSubnetForCanisterRequest, SubnetForCanister};
 use reqwest::StatusCode;
@@ -613,13 +613,20 @@ fn test_cycles_ledger() {
         .with_application_subnet()
         .build();
 
-    let canister_id = pic.create_canister();
+    let init_cycles = u128::MAX / 2;
+    let canister_id = pic
+        .create_canister_with_params(
+            None,
+            CreateCanisterParams {
+                cycles: Some(init_cycles),
+                ..Default::default()
+            },
+        )
+        .unwrap();
     assert_eq!(
         pic.get_subnet(canister_id).unwrap(),
         pic.topology().get_app_subnets()[0]
     );
-    let init_cycles = u128::MAX / 2;
-    pic.add_cycles(canister_id, init_cycles);
     pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
 
     let check_balance = |owner: Principal, expected_balance: u128| {

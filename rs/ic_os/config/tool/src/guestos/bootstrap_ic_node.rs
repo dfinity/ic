@@ -81,15 +81,20 @@ fn populate_nns_public_key_impl(
 /// Bootstrap IC Node from a bootstrap package
 #[cfg(target_os = "linux")]
 pub fn bootstrap_ic_node(bootstrap_dir: &Path, guestos_config: GuestOSConfig) -> Result<()> {
-    let is_sev_active = sev_guest::is_sev_active()?;
-    bootstrap_ic_node_impl(bootstrap_dir, Path::new("/"), guestos_config, is_sev_active)
+    let is_tee_enabled = sev_guest::is_tee_enabled()?;
+    bootstrap_ic_node_impl(
+        bootstrap_dir,
+        Path::new("/"),
+        guestos_config,
+        is_tee_enabled,
+    )
 }
 
 fn bootstrap_ic_node_impl(
     bootstrap_dir: &Path,
     root: &Path,
     guestos_config: GuestOSConfig,
-    is_sev_active: bool,
+    is_tee_enabled: bool,
 ) -> Result<()> {
     let config_root = root.join(CONFIG_ROOT_PATH);
     let state_root = root.join(STATE_ROOT_PATH);
@@ -106,7 +111,7 @@ fn bootstrap_ic_node_impl(
         &config_root,
         &state_root,
         guestos_config,
-        is_sev_active,
+        is_tee_enabled,
     )
     .context("bootstrap failed")?;
 
@@ -123,9 +128,9 @@ fn process_bootstrap(
     config_root: &Path,
     state_root: &Path,
     guestos_config: GuestOSConfig,
-    is_sev_active: bool,
+    is_tee_enabled: bool,
 ) -> Result<()> {
-    copy_bootstrap_files(bootstrap_dir, config_root, state_root, is_sev_active)?;
+    copy_bootstrap_files(bootstrap_dir, config_root, state_root, is_tee_enabled)?;
 
     // Write the node operator key if it was configured
     let node_op_key_dst = state_root.join(NODE_OPERATOR_KEY_PATH);
@@ -180,7 +185,7 @@ fn copy_bootstrap_files(
     bootstrap_dir: &Path,
     config_root: &Path,
     state_root: &Path,
-    is_sev_active: bool,
+    is_tee_enabled: bool,
 ) -> Result<()> {
     // set up initial ssh authorized keys
     let ssh_keys_src = bootstrap_dir.join("accounts_ssh_authorized_keys");
@@ -191,7 +196,7 @@ fn copy_bootstrap_files(
     }
 
     // Restrict state injection on SEV production nodes
-    if is_sev_active {
+    if is_tee_enabled {
         #[cfg(not(feature = "dev"))]
         {
             println!("SEV is active - blocking state injection files for production variant");
@@ -361,7 +366,7 @@ mod tests {
             bootstrap_dir.path(),
             test_root.root_path(),
             guestos_config,
-            /*is_sev_active*/ false,
+            /*is_tee_enabled*/ false,
         );
         assert!(result.is_ok());
 
@@ -416,7 +421,7 @@ mod tests {
             bootstrap_dir.path(),
             test_root.root_path(),
             guestos_config,
-            /*is_sev_active*/ false,
+            /*is_tee_enabled*/ false,
         )
         .unwrap();
 
@@ -575,7 +580,7 @@ mod tests {
             bootstrap_dir.path(),
             test_root.root_path(),
             GuestOSConfig::default(),
-            /*is_sev_active*/ false,
+            /*is_tee_enabled*/ false,
         )
         .unwrap();
 
@@ -600,7 +605,7 @@ mod tests {
 
     #[test]
     #[cfg(not(feature = "dev"))]
-    fn test_sev_active_prod_state_injection_blocked() {
+    fn test_tee_enabled_prod_state_injection_blocked() {
         // Create extracted directory structure
         let temp_dir = TempDir::new().unwrap();
         let extracted_dir = temp_dir.path().join("extracted");

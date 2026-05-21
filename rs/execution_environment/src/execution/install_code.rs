@@ -29,7 +29,7 @@ use ic_types::{
     CanisterLog, CanisterTimer, Height, MemoryAllocation, NumInstructions, Time,
     messages::CanisterCall,
 };
-use ic_types_cycles::{CompoundCycles, Cycles, Instructions};
+use ic_types_cycles::{CompoundCycles, Cycles, CyclesUseCase, Instructions};
 use ic_wasm_types::WasmHash;
 
 use crate::{
@@ -285,12 +285,24 @@ impl InstallCodeHelper {
         let message_instruction_limit = original.execution_parameters.instruction_limits.message();
         let instructions_left = self.instructions_left();
 
-        // The balance should not change because `install_code` cannot accept or
-        // send cycles. The execution cycles have already been accounted for in
-        // the clean canister state.
+        // The balance should only change due to cycles explicitly burned via
+        // `ic0.cycles_burn128`. The execution cycles are already accounted for
+        // in the clean canister state, and `install_code` cannot accept or send
+        // cycles.
+        let get_burned = |state: &CanisterState| {
+            state
+                .system_state
+                .canister_metrics()
+                .consumed_cycles_by_use_cases()
+                .get(&CyclesUseCase::BurnedCycles)
+                .map(|c| c.get())
+                .unwrap_or(0)
+        };
+        let burned_cycles_delta =
+            Cycles::new(get_burned(&self.canister).saturating_sub(get_burned(&clean_canister)));
         debug_assert_eq!(
             clean_canister.system_state.balance(),
-            self.canister.system_state.balance()
+            self.canister.system_state.balance() + burned_cycles_delta
         );
 
         let instructions_used = NumInstructions::from(
@@ -670,6 +682,7 @@ impl InstallCodeHelper {
                 round.network_topology,
                 round.hypervisor.subnet_id(),
                 false, // Install cannot happen in composite_query.
+                round.hypervisor.metrics(),
                 round.log,
             );
 

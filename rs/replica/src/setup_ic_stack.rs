@@ -24,7 +24,7 @@ use ic_pprof::Pprof;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replica_setup_ic_network::setup_consensus_and_p2p;
-use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::{ReplicatedState, metrics::ReplicatedStateInvariants};
 use ic_state_manager::{StateManagerImpl, state_sync::StateSync};
 use ic_tracing::ReloadHandles;
 use ic_types::{
@@ -166,18 +166,23 @@ pub fn construct_ic_stack(
     // ---------- REPLICATED STATE DEPS FOLLOW ----------
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
     let verifier = Arc::new(VerifierImpl::new(crypto.clone()));
+    let (max_certified_height_tx, max_certified_height_rx) = watch::channel(Height::from(0));
+    let replicated_state_invariants =
+        ReplicatedStateInvariants::new(metrics_registry, &config.hypervisor);
     let state_manager = Arc::new(StateManagerImpl::new(
         verifier,
         subnet_id,
         subnet_type,
-        log.clone(),
-        metrics_registry,
         &config.state_manager,
         // In order for the state manager to start, it needs to know the height of the last
         // CUP and/or certification. This information part of the persisted consensus pool.
         // Hence the need of the dependency on consensus here.
         Some(consensus_pool_cache.starting_height()),
         config.malicious_behavior.malicious_flags.clone(),
+        max_certified_height_tx,
+        Some(replicated_state_invariants),
+        metrics_registry,
+        log.clone(),
     ));
     // ---------- EXECUTION DEPS FOLLOW ----------
 
@@ -305,7 +310,6 @@ pub fn construct_ic_stack(
     );
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
     let state_sync = StateSync::new(state_manager.clone(), log.clone());
-    let (max_certified_height_tx, max_certified_height_rx) = watch::channel(Height::from(0));
 
     let (ingress_throttler, ingress_tx, p2p_runner) = setup_consensus_and_p2p(
         log,
@@ -336,7 +340,6 @@ pub fn construct_ic_stack(
         execution_services.cycles_account_manager,
         canister_http_adapter_client,
         config.nns_registry_replicator.poll_delay_duration_ms,
-        max_certified_height_tx,
     );
 
     // ---------- PUBLIC ENDPOINT DEPS FOLLOW ----------

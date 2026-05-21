@@ -363,7 +363,7 @@ fn validate_data_payload(
                 if data_payload.is_none() {
                     return Err(InvalidIDkgPayloadReason::MissingIDkgDataPayload.into());
                 }
-                (idkg_summary.clone(), data_payload.as_ref().unwrap())
+                (idkg_summary, data_payload.as_ref().unwrap())
             }
         }
     } else {
@@ -379,7 +379,7 @@ fn validate_data_payload(
                 if data_payload.is_none() {
                     return Err(InvalidIDkgPayloadReason::MissingIDkgDataPayload.into());
                 }
-                (payload.clone(), data_payload.as_ref().unwrap())
+                (payload, data_payload.as_ref().unwrap())
             }
         }
     };
@@ -408,7 +408,7 @@ fn validate_data_payload(
                 crypto,
                 thread_pool,
                 &block_reader,
-                &prev_payload,
+                prev_payload,
                 curr_payload,
                 curr_height,
             )
@@ -417,7 +417,7 @@ fn validate_data_payload(
     )?;
     let dealings = timed_call(
         "validate_reshare_dealings",
-        || validate_reshare_dealings(crypto, &block_reader, &prev_payload, curr_payload),
+        || validate_reshare_dealings(crypto, &block_reader, prev_payload, curr_payload),
         metrics,
     )?;
 

@@ -42,6 +42,7 @@ use ic_replicated_state::{
     ReplicatedState,
     canister_state::execution_state::{self, WasmExecutionMode, WasmMetadata},
     metadata_state::testing::NetworkTopologyTesting,
+    metrics::ReplicatedStateMetrics,
     num_bytes_try_from,
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
@@ -112,25 +113,26 @@ pub(crate) struct SchedulerTest {
     round_summary: Option<ExecutionRoundSummary>,
     /// The amount of cycles that new canisters have by default.
     initial_canister_cycles: Cycles,
-    /// The id of the user that sends ingress messages.
+    /// The ID of the user that sends ingress messages.
     user_id: UserId,
-    /// The id of a canister that is guaranteed to be xnet.
+    /// The ID of a canister that is guaranteed to be XNet.
     xnet_canister_id: CanisterId,
     /// The actual scheduler.
     scheduler: SchedulerImpl,
     /// The fake Wasm executor.
     wasm_executor: Arc<TestWasmExecutor>,
-    /// Registry Execution Settings.
     registry_settings: RegistryExecutionSettings,
-    /// Metrics Registry.
     metrics_registry: MetricsRegistry,
-    /// Chain key subnet public keys.
+    /// Replicated state metrics, updated by `SchedulerTest` after every round.
+    ///
+    /// These used to be updated by the scheduler, but state instrumentation was
+    /// moved into the State Manager.
+    state_metrics: ReplicatedStateMetrics,
     chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     /// Available pre-signatures.
     idkg_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
     /// Version of the running replica, not the registry's Entry
     replica_version: ReplicaVersion,
-    /// Hypervisor config.
     hypervisor_config: HypervisorConfig,
 }
 
@@ -169,6 +171,10 @@ impl SchedulerTest {
         &self.metrics_registry
     }
 
+    pub fn state_metrics(&self) -> &ReplicatedStateMetrics {
+        &self.state_metrics
+    }
+
     pub fn canister_state_mut(&mut self, canister_id: CanisterId) -> &mut CanisterState {
         self.state_mut()
             .canister_state_make_mut(&canister_id)
@@ -198,11 +204,13 @@ impl SchedulerTest {
         &self.scheduler
     }
 
+    #[cfg(debug_assertions)]
     pub fn was_fully_executed(&self, canister_id: CanisterId) -> bool {
         self.state()
-            .canister_priority(&canister_id)
-            .last_full_execution_round
-            == self.last_round()
+            .metadata
+            .subnet_schedule
+            .fully_executed_canisters
+            .contains(&canister_id)
     }
 
     pub fn xnet_canister_id(&self) -> CanisterId {
@@ -593,6 +601,18 @@ impl SchedulerTest {
             round_type,
             self.registry_settings(),
         );
+
+        // Explicitly observe the Replicated State metrics after every round. This used
+        // to be done by the scheduler, so there are a number of tests depending on
+        // various state metrics, but instrumentation was moved into the State Manager.
+        // So we "manually" update the metrics after every round.
+        self.state_metrics.observe(
+            state.metadata.own_subnet_id,
+            &state,
+            self.round.get().into(),
+            &self.scheduler.log,
+        );
+
         self.state = Some(state);
         self.check_invariants();
         self.increment_round();
@@ -808,13 +828,15 @@ impl Default for SchedulerTestBuilder {
         let subnet_type = SubnetType::Application;
         let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
         let config = ic_config::execution_environment::Config::default();
+        let mut hypervisor_config = config.embedders_config;
+        hypervisor_config.create_execution_state_base_cost = NumInstructions::from(0);
         Self {
             own_subnet_id: subnet_test_id(1),
             nns_subnet_id: subnet_test_id(2),
             subnet_type,
             batch_time: UNIX_EPOCH,
             scheduler_config,
-            hypervisor_config: config.embedders_config,
+            hypervisor_config,
             initial_canister_cycles: Cycles::new(1_000_000_000_000_000_000),
             subnet_memory_capacity: config.subnet_memory_capacity.get(),
             subnet_guaranteed_response_message_memory: config
@@ -1047,6 +1069,7 @@ impl SchedulerTestBuilder {
             canister_guaranteed_callback_quota: self.canister_guaranteed_callback_quota,
             rate_limiting_of_instructions,
             rate_limiting_of_heap_delta,
+            embedders_config: self.hypervisor_config.clone(),
             ..ic_config::execution_environment::Config::default()
         };
         let wasm_executor = Arc::new(TestWasmExecutor::new(
@@ -1073,7 +1096,6 @@ impl SchedulerTestBuilder {
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,
             self.hypervisor_config.clone(),
-            self.own_subnet_id,
             execution_services.ingress_history_writer,
             execution_services.execution_environment,
             execution_services.cycles_account_manager,
@@ -1081,8 +1103,11 @@ impl SchedulerTestBuilder {
             self.log,
             rate_limiting_of_heap_delta,
             rate_limiting_of_instructions,
+            config.log_memory_store_feature,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
+
+        let state_metrics = ReplicatedStateMetrics::new(&self.metrics_registry);
 
         SchedulerTest {
             state: Some(state),
@@ -1096,6 +1121,7 @@ impl SchedulerTestBuilder {
             wasm_executor,
             registry_settings,
             metrics_registry: self.metrics_registry,
+            state_metrics,
             chain_key_subnet_public_keys,
             idkg_pre_signatures: BTreeMap::new(),
             replica_version: self.replica_version,

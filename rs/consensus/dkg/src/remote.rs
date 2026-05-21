@@ -8,18 +8,20 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_replicated_state::{
     ReplicatedState,
-    metadata_state::subnet_call_context_manager::{ReshareChainKeyContext, SetupInitialDkgContext},
+    metadata_state::subnet_call_context_manager::{
+        ReshareChainKeyContext, SetupInitialDkgContext, SubnetCallContextManager,
+    },
 };
 use ic_types::{
     Height, RegistryVersion, SubnetId,
-    consensus::dkg::{DkgPayloadCreationError, DkgSummary},
+    consensus::dkg::{DkgPayloadCreationError, DkgSummary, RemoteDkgAttempts},
     crypto::threshold_sig::ni_dkg::{
         NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         config::NiDkgConfig,
     },
     messages::CallbackId,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The result of creating DKG configs for a given request context.
 pub(crate) type ConfigResult = Result<Vec<NiDkgConfig>, Vec<(NiDkgId, String)>>;
@@ -37,6 +39,27 @@ impl<'a> TryFrom<&'a ReshareChainKeyContext> for NiDkgReshareChainKeyContext<'a>
         let key_id = NiDkgMasterPublicKeyId::try_from(context.key_id.clone())?;
         Ok(NiDkgReshareChainKeyContext { context, key_id })
     }
+}
+
+fn remote_dkg_contexts<'a>(
+    call_contexts: &'a SubnetCallContextManager,
+) -> impl Iterator<Item = (CallbackId, RemoteDkgContext<'a>)> + 'a {
+    let setup_contexts = call_contexts
+        .setup_initial_dkg_contexts
+        .iter()
+        .map(|(&callback_id, context)| (callback_id, RemoteDkgContext::SetupInitialDKG(context)));
+    let reshare_contexts =
+        call_contexts
+            .reshare_chain_key_contexts
+            .iter()
+            .filter_map(|(&callback_id, context)| {
+                // Filter out IDKG contexts.
+                NiDkgReshareChainKeyContext::try_from(context)
+                    .ok()
+                    .map(|context| (callback_id, RemoteDkgContext::ReshareChainKey(context)))
+            });
+
+    setup_contexts.chain(reshare_contexts)
 }
 
 enum RemoteDkgContext<'a> {
@@ -155,45 +178,29 @@ pub(crate) fn build_callback_id_config_map(
 ) -> Result<BTreeMap<CallbackId, ConfigResult>, DkgPayloadCreationError> {
     let mut callback_id_config_map = BTreeMap::new();
     let call_contexts = &state.metadata.subnet_call_context_manager;
-    let remote_dkg_attempts = &dkg_summary.initial_dkg_attempts;
+    let remote_dkg_attempts = &dkg_summary.remote_dkg_attempts;
 
-    // Iterate over all context types
-    let setup_contexts = call_contexts
-        .setup_initial_dkg_contexts
-        .iter()
-        .map(|(&callback_id, context)| (callback_id, RemoteDkgContext::SetupInitialDKG(context)));
-    let reshare_contexts =
-        call_contexts
-            .reshare_chain_key_contexts
-            .iter()
-            .filter_map(|(&callback_id, context)| {
-                // Filter out IDKG contexts.
-                NiDkgReshareChainKeyContext::try_from(context)
-                    .ok()
-                    .map(|context| (callback_id, RemoteDkgContext::ReshareChainKey(context)))
-            });
-
-    for (callback_id, context) in setup_contexts.chain(reshare_contexts) {
+    // Iterate over all remote DKG contexts
+    for (callback_id, context) in remote_dkg_contexts(call_contexts) {
         if context.registry_version() > registry_version {
             // Skip contexts with a registry version that hasn't been reached yet
             continue;
         }
 
-        if let Some(&attempts) = remote_dkg_attempts.get(context.target_id()) {
-            if attempts == 0 {
-                // An attempt count of 0 means that the context has already been completed
-                // in the last interval. We skip the context to avoid handling it again in
-                // the current interval.
-                continue;
-            }
-            if attempts >= MAX_REMOTE_DKG_ATTEMPTS {
-                // Add timeout errors for contexts that have been attempted too many times
+        match remote_dkg_attempts.get(context.target_id()) {
+            // A `Completed` status means that the context has already been completed in the last
+            // interval. We skip the context to avoid handling it again in the current interval.
+            Some(RemoteDkgAttempts::Completed) => continue,
+            // Add timeout errors for contexts that have been attempted too many times.
+            Some(RemoteDkgAttempts::Attempt(n)) if *n >= MAX_REMOTE_DKG_ATTEMPTS => {
                 callback_id_config_map.insert(
                     callback_id,
                     Err(context.generate_timeout_errors(dkg_summary.height, dealer_subnet)),
                 );
                 continue;
             }
+            // For all other cases, we proceed to create configs.
+            Some(RemoteDkgAttempts::Attempt(_)) | None => {}
         }
 
         // Create configs for the context and insert them into the map
@@ -218,6 +225,39 @@ pub(crate) fn merge_configs<'a>(
         }
     }
     merged_configs
+}
+
+/// Update the remote DKG attempts for the given target IDs based on the previous attempts and the
+/// newly completed target IDs.
+pub(crate) fn get_updated_remote_dkg_attempts(
+    summary: &DkgSummary,
+    state: &ReplicatedState,
+    completed_target_ids: BTreeSet<NiDkgTargetId>,
+) -> BTreeMap<NiDkgTargetId, RemoteDkgAttempts> {
+    let call_contexts = &state.metadata.subnet_call_context_manager;
+    let previous_remote_dkg_attempts = &summary.remote_dkg_attempts;
+    let mut remote_dkg_attempts = BTreeMap::new();
+
+    // Iterate over all remote DKG contexts
+    for (_, context) in remote_dkg_contexts(call_contexts) {
+        let target_id = *context.target_id();
+        let new_attempts = match previous_remote_dkg_attempts.get(&target_id) {
+            // Carry forward completed contexts that still appear in the state.
+            Some(RemoteDkgAttempts::Completed) => RemoteDkgAttempts::Completed,
+            // Increment the attempt count for non-completed contexts.
+            Some(RemoteDkgAttempts::Attempt(n)) => RemoteDkgAttempts::from(n.saturating_add(1)),
+            // For new contexts, set the attempt count to 1.
+            None => RemoteDkgAttempts::from(1),
+        };
+        remote_dkg_attempts.insert(target_id, new_attempts);
+    }
+
+    // Completed target IDs remain tracked with attempt counter set to `Completed`.
+    for target_id in completed_target_ids {
+        remote_dkg_attempts.insert(target_id, RemoteDkgAttempts::Completed);
+    }
+
+    remote_dkg_attempts
 }
 
 #[cfg(test)]
@@ -247,18 +287,17 @@ mod tests {
         height: Height,
         current_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
         next_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
-        initial_dkg_attempts: BTreeMap<NiDkgTargetId, u32>,
+        remote_dkg_attempts: BTreeMap<NiDkgTargetId, RemoteDkgAttempts>,
     ) -> DkgSummary {
         DkgSummary::new(
             vec![],
             current_transcripts,
             next_transcripts,
-            vec![],
             RegistryVersion::from(1),
             Height::from(10),
             Height::from(10),
             height,
-            initial_dkg_attempts,
+            remote_dkg_attempts,
         )
     }
 
@@ -385,12 +424,16 @@ mod tests {
                 && config.dkg_id().target_subnet == NiDkgTargetSubnet::Remote(target_id)
         }));
 
-        // Zero attempts => context must be skipped.
+        // Completed status => context must be skipped.
         let zero_attempts_summary = test_dkg_summary(
             Height::from(101),
             BTreeMap::new(),
             BTreeMap::new(),
-            BTreeMap::from([(target_id, 0), (target_id2, 0), (target_id3, 0)]),
+            BTreeMap::from([
+                (target_id, RemoteDkgAttempts::Completed),
+                (target_id2, RemoteDkgAttempts::Completed),
+                (target_id3, RemoteDkgAttempts::Completed),
+            ]),
         );
         let zero_attempts_map = build_callback_id_config_map(
             dealer_subnet,
@@ -409,9 +452,18 @@ mod tests {
             BTreeMap::new(),
             BTreeMap::new(),
             BTreeMap::from([
-                (target_id, MAX_REMOTE_DKG_ATTEMPTS),
-                (target_id2, MAX_REMOTE_DKG_ATTEMPTS),
-                (target_id3, MAX_REMOTE_DKG_ATTEMPTS),
+                (
+                    target_id,
+                    RemoteDkgAttempts::from(MAX_REMOTE_DKG_ATTEMPTS + 1),
+                ),
+                (
+                    target_id2,
+                    RemoteDkgAttempts::from(MAX_REMOTE_DKG_ATTEMPTS + 1),
+                ),
+                (
+                    target_id3,
+                    RemoteDkgAttempts::from(MAX_REMOTE_DKG_ATTEMPTS + 1),
+                ),
             ]),
         );
         let max_attempts_map = build_callback_id_config_map(
@@ -441,6 +493,11 @@ mod tests {
                 .map(|(id, _)| id.dkg_tag.clone())
                 .collect::<BTreeSet<_>>(),
             BTreeSet::from([NiDkgTag::LowThreshold, NiDkgTag::HighThreshold])
+        );
+        assert!(
+            timeout_errors
+                .iter()
+                .all(|(id, _)| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
         );
 
         // Setup context creation error should be propagated.
@@ -594,7 +651,7 @@ mod tests {
             Height::from(103),
             BTreeMap::new(),
             BTreeMap::new(),
-            BTreeMap::from([(target_id, MAX_REMOTE_DKG_ATTEMPTS)]),
+            BTreeMap::from([(target_id, RemoteDkgAttempts::from(MAX_REMOTE_DKG_ATTEMPTS))]),
         );
         let max_attempts_map = build_callback_id_config_map(
             dealer_subnet,
@@ -614,6 +671,10 @@ mod tests {
         assert_eq!(
             timeout_errors[0].0.dkg_tag,
             NiDkgTag::HighThresholdForKey(ni_dkg_key_id)
+        );
+        assert_eq!(
+            timeout_errors[0].0.target_subnet,
+            NiDkgTargetSubnet::Remote(target_id)
         );
         assert_eq!(timeout_errors[0].1, REMOTE_DKG_REPEATED_FAILURE_ERROR);
     }
@@ -653,5 +714,124 @@ mod tests {
         assert!(merged.contains_key(&overlap_id));
         assert!(merged.contains_key(&context_only_id));
         assert!(!merged.contains_key(&error_only_id));
+    }
+
+    #[test]
+    fn test_update_remote_dkg_attempts() {
+        let persisted_target = NiDkgTargetId::new([1_u8; 32]);
+        let removed_target = NiDkgTargetId::new([2_u8; 32]);
+        let new_target = NiDkgTargetId::new([3_u8; 32]);
+        let completed_target = NiDkgTargetId::new([4_u8; 32]);
+        let filtered_idkg_target = NiDkgTargetId::new([5_u8; 32]);
+        let zero_attempts_persisted_target = NiDkgTargetId::new([6_u8; 32]);
+        let zero_attempts_removed_target = NiDkgTargetId::new([7_u8; 32]);
+
+        let previous_attempts = BTreeMap::from([
+            (persisted_target, RemoteDkgAttempts::from(2)),
+            (removed_target, RemoteDkgAttempts::from(7)),
+            (completed_target, RemoteDkgAttempts::from(3)),
+            (filtered_idkg_target, RemoteDkgAttempts::from(11)),
+            (zero_attempts_persisted_target, RemoteDkgAttempts::Completed),
+            (zero_attempts_removed_target, RemoteDkgAttempts::Completed),
+        ]);
+        let summary = test_dkg_summary(
+            Height::from(42),
+            BTreeMap::new(),
+            BTreeMap::new(),
+            previous_attempts,
+        );
+
+        let mut state = ReplicatedStateBuilder::new()
+            .with_subnet_id(subnet_test_id(42))
+            .build();
+        state
+            .metadata
+            .subnet_call_context_manager
+            .setup_initial_dkg_contexts
+            .insert(
+                CallbackId::from(1),
+                test_setup_initial_dkg_context(
+                    persisted_target,
+                    RegistryVersion::from(1),
+                    (10..14).map(node_test_id).collect(),
+                ),
+            );
+        state
+            .metadata
+            .subnet_call_context_manager
+            .setup_initial_dkg_contexts
+            .insert(
+                CallbackId::from(2),
+                test_setup_initial_dkg_context(
+                    completed_target,
+                    RegistryVersion::from(1),
+                    (20..24).map(node_test_id).collect(),
+                ),
+            );
+        state
+            .metadata
+            .subnet_call_context_manager
+            .reshare_chain_key_contexts
+            .insert(
+                CallbackId::from(3),
+                test_reshare_chain_key_context(
+                    MasterPublicKeyId::VetKd(VetKdKeyId {
+                        curve: VetKdCurve::Bls12_381_G2,
+                        name: "key_a".to_string(),
+                    }),
+                    new_target,
+                    RegistryVersion::from(1),
+                    (30..34).map(node_test_id).collect(),
+                ),
+            );
+        state
+            .metadata
+            .subnet_call_context_manager
+            .setup_initial_dkg_contexts
+            .insert(
+                CallbackId::from(5),
+                test_setup_initial_dkg_context(
+                    zero_attempts_persisted_target,
+                    RegistryVersion::from(1),
+                    (50..54).map(node_test_id).collect(),
+                ),
+            );
+        state
+            .metadata
+            .subnet_call_context_manager
+            .reshare_chain_key_contexts
+            .insert(
+                CallbackId::from(4),
+                test_reshare_chain_key_context(
+                    MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                        curve: EcdsaCurve::Secp256k1,
+                        name: "idkg_key".to_string(),
+                    }),
+                    filtered_idkg_target,
+                    RegistryVersion::from(1),
+                    (40..44).map(node_test_id).collect(),
+                ),
+            );
+
+        let completed_target_ids = BTreeSet::from([completed_target]);
+
+        let attempts = get_updated_remote_dkg_attempts(&summary, &state, completed_target_ids);
+
+        assert_eq!(
+            attempts.get(&persisted_target),
+            Some(&RemoteDkgAttempts::from(3))
+        );
+        assert_eq!(attempts.get(&new_target), Some(&RemoteDkgAttempts::from(1)));
+        assert_eq!(
+            attempts.get(&completed_target),
+            Some(&RemoteDkgAttempts::Completed)
+        );
+        assert_eq!(
+            attempts.get(&zero_attempts_persisted_target),
+            Some(&RemoteDkgAttempts::Completed)
+        );
+        assert!(!attempts.contains_key(&zero_attempts_removed_target));
+        assert!(!attempts.contains_key(&removed_target));
+        assert!(!attempts.contains_key(&filtered_idkg_target));
     }
 }

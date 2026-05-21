@@ -59,10 +59,10 @@ use ic_nns_governance::{
     pb::v1::{
         AddOrRemoveNodeProvider, Ballot, BallotInfo, CreateServiceNervousSystem, Empty,
         ExecuteNnsFunction, Followees, GovernanceError, IdealMatchedParticipationFunction,
-        InstallCode, KnownNeuron, KnownNeuronData, ManageNeuron, MonthlyNodeProviderRewards,
-        Motion, NetworkEconomics, NeuronType, NeuronsFundData, NeuronsFundEconomics,
-        NeuronsFundMatchedFundingCurveCoefficients, NeuronsFundParticipation, NeuronsFundSnapshot,
-        NnsFunction, NodeProvider, Proposal, ProposalData,
+        InstallCode, KnownNeuron, KnownNeuronData, ManageNeuron, MaturityModulation,
+        MonthlyNodeProviderRewards, Motion, NetworkEconomics, NeuronType, NeuronsFundData,
+        NeuronsFundEconomics, NeuronsFundMatchedFundingCurveCoefficients, NeuronsFundParticipation,
+        NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal, ProposalData,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders,
@@ -2627,7 +2627,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     );
     set_governance_for_tests(gov);
     let gov = governance_mut();
-    schedule_tasks();
+    schedule_tasks(None);
 
     let expected_initial_event = RewardEvent {
         day_after_genesis: 0,
@@ -2850,7 +2850,7 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
     );
     set_governance_for_tests(gov);
     let gov = governance_mut();
-    schedule_tasks();
+    schedule_tasks(None);
 
     run_pending_timers().await;
     // Initial reward event
@@ -3206,7 +3206,7 @@ async fn test_reward_distribution_skips_deleted_neurons() {
 
     set_governance_for_tests(gov);
     let gov = governance_mut();
-    schedule_tasks();
+    schedule_tasks(None);
 
     // Make sure that the fixture function indeed did not create a neuron 999.
     assert_matches!(gov.neuron_store.with_neuron(&NeuronId { id: 999 }, |n| n.clone()).map_err(|e| {
@@ -3286,7 +3286,7 @@ async fn test_genesis_in_the_future_is_supported() {
     );
     set_governance_for_tests(gov);
     let gov = governance_mut();
-    schedule_tasks();
+    schedule_tasks(None);
 
     gov.run_periodic_tasks().now_or_never();
     // At genesis, we should create an empty reward event
@@ -3521,7 +3521,7 @@ fn compute_maturities(
     );
     set_governance_for_tests(gov);
     let gov = governance_mut();
-    schedule_tasks();
+    schedule_tasks(None);
 
     let expected_initial_event = RewardEvent {
         day_after_genesis: 0,
@@ -5723,6 +5723,14 @@ fn run_periodic_tasks_often_enough_to_update_maturity_modulation(gov: &mut Gover
     for _i in 0..5 {
         gov.run_periodic_tasks().now_or_never();
     }
+    // The CMC periodic task populates `cached_daily_maturity_modulation_basis_points`, but the
+    // XRC-fed `maturity_modulation` field that spawning and disbursement now read isn't populated
+    // in unit tests (no XRC mock). Set it directly so consumers see a value consistent with
+    // the FakeDriver's 100 bp.
+    gov.heap_data.maturity_modulation = Some(MaturityModulation {
+        current_value_permyriad: Some(100),
+        updated_at_days_since_epoch: Some(gov.env.now() / ONE_DAY_SECONDS),
+    });
 }
 
 /// Checks that:
@@ -6363,7 +6371,7 @@ async fn test_staked_maturity() {
 
     set_governance_for_tests(gov);
     let gov = governance_mut();
-    schedule_tasks();
+    schedule_tasks(None);
 
     gov.neuron_store
         .with_neuron_mut(&id, |neuron| {
@@ -8012,7 +8020,7 @@ async fn test_max_number_of_proposals_with_ballots() {
     );
     set_governance_for_tests(gov);
     let gov = governance_mut();
-    schedule_tasks();
+    schedule_tasks(None);
 
     // Vote with neuron 1. It is smaller, so proposals are not auto-accepted.
     for i in 0..MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS {
@@ -12890,7 +12898,7 @@ async fn distribute_rewards_test() {
 
     set_governance_for_tests(governance);
     let governance = governance_mut();
-    schedule_tasks();
+    schedule_tasks(None);
     // Prevent gc.
     governance.latest_gc_timestamp_seconds = now;
 

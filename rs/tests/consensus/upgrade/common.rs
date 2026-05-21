@@ -15,13 +15,16 @@ end::catalog[] */
 use candid::Principal;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
-    can_read_msg, cert_state_makes_progress_with_retries, store_message_with_retries,
+    can_fetch_logs, can_read_msg, cert_state_makes_progress_with_retries,
+    store_message_with_retries,
 };
 use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
 };
-use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
+use ic_consensus_threshold_sig_system_test_utils::{
+    get_public_key_with_retries, run_chain_key_signature_test,
+};
 use ic_management_canister_types::{CanisterId, TakeCanisterSnapshotArgs};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_type::SubnetType;
@@ -235,6 +238,11 @@ pub fn upgrade(
         msg
     ));
     info!(logger, "After upgrade could read message '{}'", msg);
+    assert!(
+        can_fetch_logs(&logger, &faulty_node.get_public_url(), can_id, msg),
+        "Canister {} logs missing after upgrade",
+        can_id
+    );
 
     let msg_2 = &format!("hello after upgrade to {upgrade_version}");
     let can_id_2 = store_message_with_retries(
@@ -250,10 +258,24 @@ pub fn upgrade(
         msg_2
     ));
     info!(logger, "Could store and read message '{}'", msg_2);
+    assert!(
+        can_fetch_logs(&logger, &faulty_node.get_public_url(), can_id_2, msg_2),
+        "Canister {} logs missing after upgrade",
+        can_id_2
+    );
+    // Storing msg_2 above guarantees a round was executed, so migration of canister_log to
+    // log_memory_store has run. Verify logs are still accessible after migration.
+    assert!(
+        can_fetch_logs(&logger, &faulty_node.get_public_url(), can_id, msg),
+        "Canister {} logs missing after upgrade (after migration)",
+        can_id
+    );
 
     if let Some((canister, public_keys)) = ecdsa_canister_key {
-        for (key_id, public_key) in public_keys {
-            run_chain_key_signature_test(canister, &logger, key_id, public_key.clone());
+        for (key_id, old_public_key) in public_keys {
+            let new_public_key =
+                block_on(get_public_key_with_retries(key_id, canister, &logger, 100)).unwrap();
+            assert_eq!(old_public_key, &new_public_key);
         }
     }
 

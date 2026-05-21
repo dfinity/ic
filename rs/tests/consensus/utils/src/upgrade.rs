@@ -6,10 +6,11 @@ use ic_protobuf::registry::replica_version::v1::{BlessedReplicaVersions, GuestLa
 use ic_registry_keys::make_blessed_replica_versions_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_system_test_driver::{
-    driver::test_env_api::*,
+    driver::{group::assert_no_critical_errors, test_env_api::*},
     nns::{
         get_governance_canister, submit_deploy_guestos_to_all_subnet_nodes_proposal,
-        submit_update_elected_replica_versions_proposal, vote_execute_proposal_assert_executed,
+        submit_update_elected_replica_versions_proposal,
+        submit_update_unassigned_node_version_proposal, vote_execute_proposal_assert_executed,
     },
     util::runtime_from_url,
 };
@@ -196,16 +197,35 @@ pub async fn deploy_guestos_to_all_subnet_nodes(
     new_replica_version: &ReplicaVersion,
     subnet_id: SubnetId,
 ) {
+    assert_no_critical_errors(&nns_node.test_env());
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance_canister = get_governance_canister(&nns);
     let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
     let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
     let proposal_id = submit_deploy_guestos_to_all_subnet_nodes_proposal(
         &governance_canister,
-        proposal_sender.clone(),
+        proposal_sender,
         test_neuron_id,
         new_replica_version.clone(),
         subnet_id,
+    )
+    .await;
+    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
+}
+
+pub async fn deploy_guestos_to_all_unassigned_nodes(
+    nns_node: &IcNodeSnapshot,
+    new_replica_version: &ReplicaVersion,
+) {
+    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let governance_canister = get_governance_canister(&nns);
+    let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
+    let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
+    let proposal_id = submit_update_unassigned_node_version_proposal(
+        &governance_canister,
+        proposal_sender,
+        test_neuron_id,
+        new_replica_version,
     )
     .await;
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;

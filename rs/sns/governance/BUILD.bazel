@@ -34,7 +34,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-http-types",
     "//packages/icrc-ledger-client:icrc_ledger_client",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
     "//rs/crypto/sha2",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
@@ -91,14 +91,6 @@ DEPENDENCIES = [
     "@crate_index//:thiserror",
 ]
 
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/nervous_system/common/build_metadata",
-    "@crate_index//:async-trait",
-    "@crate_index//:rust_decimal_macros",
-    "@crate_index//:strum_macros",
-]
-
 BUILD_DEPENDENCIES = [
     # Keep sorted.
     "//rs/types/base_types",
@@ -124,10 +116,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:tokio-test",
 ]
 
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 LIB_SRCS = glob(
     ["src/**"],
     # Ensures that we do not need to rebuild just because a _test.rs file
@@ -138,7 +126,6 @@ LIB_SRCS = glob(
 cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
-    aliases = ALIASES,
     data = [],  # build script data (e.g. template files) goes here
     version = "0.9.0",
     deps = BUILD_DEPENDENCIES,
@@ -147,9 +134,14 @@ cargo_build_script(
 rust_library(
     name = "governance",
     srcs = LIB_SRCS,
-    aliases = ALIASES,
     crate_name = "ic_sns_governance",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "//rs/nervous_system/common/build_metadata",
+        "@crate_index//:async-trait",
+        "@crate_index//:rust_decimal_macros",
+        "@crate_index//:strum_macros",
+    ],
     version = "0.9.0",
     deps = DEPENDENCIES + [":build_script"],
 )
@@ -157,10 +149,15 @@ rust_library(
 rust_library(
     name = "governance--test_feature",
     srcs = LIB_SRCS,
-    aliases = ALIASES,
     crate_features = ["test"],
     crate_name = "ic_sns_governance",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "//rs/nervous_system/common/build_metadata",
+        "@crate_index//:async-trait",
+        "@crate_index//:rust_decimal_macros",
+        "@crate_index//:strum_macros",
+    ],
     version = "0.9.0",
     deps = DEPENDENCIES + [":build_script"],
 )
@@ -168,10 +165,15 @@ rust_library(
 rust_library(
     name = "governance--canbench_feature",
     srcs = LIB_SRCS,
-    aliases = ALIASES,
     crate_features = ["canbench-rs"],
     crate_name = "ic_sns_governance",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "//rs/nervous_system/common/build_metadata",
+        "@crate_index//:async-trait",
+        "@crate_index//:rust_decimal_macros",
+        "@crate_index//:strum_macros",
+    ],
     version = "0.9.0",
     deps = DEPENDENCIES + [
         ":build_script",
@@ -182,9 +184,14 @@ rust_library(
 rust_canister(
     name = "sns-governance-canister",
     srcs = ["canister/canister.rs"],
-    aliases = ALIASES,
     compile_data = [":canister/governance.did"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "//rs/nervous_system/common/build_metadata",
+        "@crate_index//:async-trait",
+        "@crate_index//:rust_decimal_macros",
+        "@crate_index//:strum_macros",
+    ],
     service_file = ":canister/governance.did",
     deps = DEPENDENCIES + [
         ":build_script",
@@ -196,10 +203,15 @@ rust_canister(
     name = "sns-governance-canister-test",
     testonly = True,
     srcs = ["canister/canister.rs"],
-    aliases = ALIASES,
     compile_data = [":test_did"],
     crate_features = ["test"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "//rs/nervous_system/common/build_metadata",
+        "@crate_index//:async-trait",
+        "@crate_index//:rust_decimal_macros",
+        "@crate_index//:strum_macros",
+    ],
     service_file = ":test_did",
     deps = DEPENDENCIES + [
         ":build_script",
@@ -210,17 +222,27 @@ rust_canister(
 rust_test(
     name = "governance_test",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "//rs/nervous_system/common/build_metadata",
+        "@crate_index//:async-trait",
+        "@crate_index//:rust_decimal_macros",
+        "@crate_index//:strum_macros",
+    ],
     deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
 
 rust_test(
     name = "governance_test--test-feature",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_features = ["test"],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "//rs/nervous_system/common/build_metadata",
+        "@crate_index//:async-trait",
+        "@crate_index//:rust_decimal_macros",
+        "@crate_index//:strum_macros",
+    ],
     deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
 
@@ -229,7 +251,13 @@ rust_test(
     srcs = glob(["canister/**/*.rs"]),
     compile_data = [":canister/governance.did"],
     crate_root = "canister/canister.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "//rs/nervous_system/common/build_metadata",
+        "@crate_index//:async-trait",
+        "@crate_index//:rust_decimal_macros",
+        "@crate_index//:strum_macros",
+    ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
         ":governance",
@@ -242,7 +270,13 @@ rust_test(
     compile_data = [":test_did"],
     crate_features = ["test"],
     crate_root = "canister/canister.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "//rs/nervous_system/common/build_metadata",
+        "@crate_index//:async-trait",
+        "@crate_index//:rust_decimal_macros",
+        "@crate_index//:strum_macros",
+    ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
         ":governance--test_feature",
@@ -259,12 +293,17 @@ rust_test_suite_with_extra_srcs(
             "tests/fixtures/environment_fixture.rs",
         ],
     ),
-    aliases = ALIASES,
     extra_srcs = [
         "tests/fixtures/mod.rs",
         "tests/fixtures/environment_fixture.rs",
     ],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "//rs/nervous_system/common/build_metadata",
+        "@crate_index//:async-trait",
+        "@crate_index//:rust_decimal_macros",
+        "@crate_index//:strum_macros",
+    ],
     deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
 

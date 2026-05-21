@@ -26,7 +26,7 @@ package(default_visibility = ["//visibility:public"])
         deps = [
             # Keep sorted.
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
@@ -111,6 +111,14 @@ package(default_visibility = ["//visibility:public"])
         srcs = ["src/main.rs"] + glob(["src/benches/**/*.rs"]),
         crate_features = features,
         crate_name = "ic_icrc1_ledger_canister" + name_suffix,
+        # The `_getblocksdisabled` variants compile without `get_blocks`
+        # but share the same `ledger.did` (which still declares it). The
+        # `_canbench` variants compile in benchmark-only `__canbench__*`
+        # and `__tracing__*` query endpoints from canbench-rs that aren't
+        # in `ledger.did` either, and replace `canister_init` with the
+        # canbench harness's own. Opt both kinds of variants out of
+        # check-endpoints — they're test-only and not production canisters.
+        hidden_endpoints = None if ("get-blocks-disabled" in features or "canbench-rs" in features) else "hidden_endpoints.conf",
         opt = "z",
         proc_macro_deps = [
             # Keep sorted.
@@ -119,7 +127,7 @@ package(default_visibility = ["//visibility:public"])
         deps = [
             # Keep sorted.
             "//packages/ic-http-types",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
@@ -286,7 +294,7 @@ package(default_visibility = ["//visibility:public"])
             # Keep sorted.
             ":ledger",
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/icrc1",
             "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests" + name_suffix,
             "//rs/ledger_suite/common/ledger_canister_core",
@@ -340,7 +348,7 @@ package(default_visibility = ["//visibility:public"])
         deps = [
             # Keep sorted.
             ":ledger" + name_suffix,
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
@@ -387,7 +395,7 @@ package(default_visibility = ["//visibility:public"])
         deps = [
             # Keep sorted.
             "//packages/ic-http-types",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
@@ -449,7 +457,7 @@ rust_ic_test(
     deps = [
         # Keep sorted.
         ":ledger",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/ledger_suite/common/ledger_canister_core",
         "//rs/ledger_suite/icrc1/test_utils",
         "//rs/state_machine_tests",

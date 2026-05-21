@@ -87,7 +87,14 @@ impl Setup {
                     .with_icp_features(icp_features)
                     .build();
                 pic.set_time(SystemTime::now().into());
-                Arc::new(pic)
+                let env = Arc::new(pic);
+                let dogecoind = DogecoinDaemon {
+                    env: env.clone(),
+                    daemon: daemon.clone(),
+                };
+                // Ensure that dogecoin canister is up and running.
+                dogecoind.mine_blocks(1);
+                env
             }
             None => Arc::new(
                 PocketIcBuilder::new()
