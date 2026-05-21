@@ -675,8 +675,8 @@ crate.spec(
     default_features = False,
     features = [
         "rustls-no-provider",
-	"pem",
-	"ring",
+        "pem",
+        "ring",
     ],
     git = "https://github.com/dfinity/agent-rs",
     package = "ic-agent",
