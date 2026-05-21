@@ -3471,9 +3471,6 @@ enum FreeSubnet {
 }
 
 async fn test_subnet_admins(free_subnet: FreeSubnet) {
-    // for ic-agent
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     // Create a PocketIC instance with a single subnet on the "free" cost schedule.
     let admin = Principal::anonymous();
     let subnet_spec = SubnetSpec::default()

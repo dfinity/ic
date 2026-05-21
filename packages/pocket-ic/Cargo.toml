@@ -68,7 +68,6 @@ ic-vetkeys = { workspace = true }
 icrc-ledger-types = { path = "../icrc-ledger-types" }
 k256 = { workspace = true }
 registry-canister = { path = "../../rs/registry/canister" }
-rustls = { workspace = true }
 wat = { workspace = true }
 
 [target.'cfg(not(windows))'.dev-dependencies]

@@ -337,7 +337,7 @@ version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2477554ebf38aea815a9c4729100cfc32f766876c45b9c9c38ef221b9d1a703"
 dependencies = [
- "axum 0.8.9",
+ "axum 0.8.8",
  "bytes",
  "cfg-if",
  "http 1.4.0",
@@ -972,9 +972,9 @@ dependencies = [
 
 [[package]]
 name = "axum"
-version = "0.8.9"
+version = "0.8.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31b698c5f9a010f6573133b09e0de5408834d0c82f8d7475a89fc1867a71cd90"
+checksum = "8b52af3cb4058c895d37317bb27508dccc8e5f2d39454016b297bf4a400597b8"
 dependencies = [
  "axum-core 0.5.6",
  "axum-macros",
@@ -1000,7 +1000,7 @@ dependencies = [
  "sha1 0.10.6",
  "sync_wrapper",
  "tokio",
- "tokio-tungstenite 0.29.0",
+ "tokio-tungstenite 0.28.0",
  "tower 0.5.3",
  "tower-layer",
  "tower-service",
@@ -1052,7 +1052,7 @@ version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9963ff19f40c6102c76756ef0a46004c0d58957d87259fc9208ff8441c12ab96"
 dependencies = [
- "axum 0.8.9",
+ "axum 0.8.8",
  "axum-core 0.5.6",
  "bytes",
  "futures-util",
@@ -1071,9 +1071,9 @@ dependencies = [
 
 [[package]]
 name = "axum-macros"
-version = "0.5.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7aa268c23bfbbd2c4363b9cd302a4f504fb2a9dfe7e3451d66f35dd392e20aca"
+checksum = "604fde5e028fea851ce1d8570bbdc034bec850d157f7569d10f347d06808c05c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6216,7 +6216,7 @@ checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 name = "httpbin-rs"
 version = "0.9.0"
 dependencies = [
- "axum 0.8.9",
+ "axum 0.8.8",
  "clap 4.6.0",
  "hyper 1.8.1",
  "hyper-util",
@@ -6633,7 +6633,7 @@ name = "ic-artifact-downloader"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "axum 0.8.9",
+ "axum 0.8.8",
  "backoff",
  "bytes",
  "criterion",
@@ -6830,7 +6830,7 @@ dependencies = [
  "arc-swap",
  "async-channel 2.5.0",
  "async-trait",
- "axum 0.8.9",
+ "axum 0.8.8",
  "axum-extra",
  "base64 0.22.1",
  "bytes",
@@ -6912,7 +6912,7 @@ checksum = "33384b6a13e4aba516cab14aaa9cefa930aa56489fb0807b3ee926badde01a0a"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum 0.8.9",
+ "axum 0.8.8",
  "candid",
  "clap 4.6.0",
  "cloudflare",
@@ -6948,7 +6948,7 @@ dependencies = [
  "anyhow",
  "arc-swap",
  "async-trait",
- "axum 0.8.9",
+ "axum 0.8.8",
  "axum-extra",
  "bytes",
  "candid",
@@ -8227,7 +8227,7 @@ dependencies = [
 name = "ic-consensus-manager"
 version = "0.9.0"
 dependencies = [
- "axum 0.8.9",
+ "axum 0.8.8",
  "backoff",
  "bytes",
  "futures",
@@ -9481,7 +9481,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e603fa920301c665ecb8fad5d62d776354c3a4553ce6629783d637cab6adc45d"
 dependencies = [
  "anyhow",
- "axum 0.8.9",
+ "axum 0.8.8",
  "axum-extra",
  "axum-server",
  "base64 0.22.1",
@@ -9514,7 +9514,7 @@ checksum = "4c477e38054978fb7621865f0c17ae9cee9adcc1cd8dace2c2ab50440b901b41"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum 0.8.9",
+ "axum 0.8.8",
  "candid",
  "chacha20poly1305",
  "chrono",
@@ -9946,7 +9946,7 @@ dependencies = [
  "anyhow",
  "arc-swap",
  "async-trait",
- "axum 0.8.9",
+ "axum 0.8.8",
  "axum-extra",
  "bytes",
  "candid",
@@ -10064,7 +10064,7 @@ dependencies = [
 name = "ic-http-endpoints-metrics"
 version = "0.9.0"
 dependencies = [
- "axum 0.8.9",
+ "axum 0.8.8",
  "ic-config",
  "ic-http-endpoints-async-utils",
  "ic-metrics",
@@ -10082,7 +10082,7 @@ version = "0.9.0"
 dependencies = [
  "askama",
  "async-trait",
- "axum 0.8.9",
+ "axum 0.8.8",
  "bytes",
  "cfg-if",
  "crossbeam",
@@ -10181,7 +10181,7 @@ dependencies = [
 name = "ic-http-endpoints-xnet"
 version = "0.9.0"
 dependencies = [
- "axum 0.8.9",
+ "axum 0.8.8",
  "bytes",
  "hyper 1.8.1",
  "hyper-util",
@@ -10511,7 +10511,7 @@ name = "ic-icrc-rosetta"
 version = "1.2.9"
 dependencies = [
  "anyhow",
- "axum 0.8.9",
+ "axum 0.8.8",
  "candid",
  "ciborium",
  "clap 4.6.0",
@@ -11372,7 +11372,7 @@ name = "ic-memory-transport"
 version = "0.9.0"
 dependencies = [
  "async-trait",
- "axum 0.8.9",
+ "axum 0.8.8",
  "bytes",
  "ic-quic-transport",
  "ic-types",
@@ -12195,7 +12195,7 @@ name = "ic-nns-delegation-manager"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "axum 0.8.9",
+ "axum 0.8.8",
  "axum-server",
  "criterion",
  "futures",
@@ -12838,7 +12838,7 @@ name = "ic-p2p-test-utils"
 version = "0.9.0"
 dependencies = [
  "async-trait",
- "axum 0.8.9",
+ "axum 0.8.8",
  "bytes",
  "futures",
  "ic-artifact-downloader",
@@ -13049,7 +13049,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
- "axum 0.8.9",
+ "axum 0.8.8",
  "bytes",
  "criterion",
  "futures",
@@ -14887,7 +14887,7 @@ dependencies = [
 name = "ic-state-sync-manager"
 version = "0.9.0"
 dependencies = [
- "axum 0.8.9",
+ "axum 0.8.8",
  "bytes",
  "futures",
  "ic-base-types",
@@ -16005,7 +16005,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
- "axum 0.8.9",
+ "axum 0.8.8",
  "http-body-util",
  "hyper 1.8.1",
  "hyper-util",
@@ -18732,7 +18732,7 @@ name = "nns-system-tests"
 version = "0.9.0"
 dependencies = [
  "anyhow",
- "axum 0.8.9",
+ "axum 0.8.8",
  "candid",
  "canister-test",
  "cycles-minting-canister",
@@ -20156,7 +20156,6 @@ dependencies = [
  "prost 0.13.5",
  "registry-canister",
  "reqwest",
- "rustls 0.23.37",
  "schemars 0.8.22",
  "semver",
  "serde",
@@ -20181,10 +20180,9 @@ name = "pocket-ic-server"
 version = "13.0.0"
 dependencies = [
  "aide",
- "arc-swap",
  "askama",
  "async-trait",
- "axum 0.8.9",
+ "axum 0.8.8",
  "axum-extra",
  "axum-server",
  "backoff",
@@ -22065,7 +22063,7 @@ version = "0.9.0"
 dependencies = [
  "actix-web-prom",
  "anyhow",
- "axum 0.8.9",
+ "axum 0.8.8",
  "bytes",
  "candid",
  "hex",
@@ -23021,7 +23019,7 @@ version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b417bedc008acbdf6d6b4bc482d29859924114bbe2650b7921fb68a261d0aa6"
 dependencies = [
- "axum 0.8.9",
+ "axum 0.8.8",
  "futures",
  "percent-encoding",
  "serde",
@@ -24834,14 +24832,14 @@ dependencies = [
 
 [[package]]
 name = "tokio-tungstenite"
-version = "0.29.0"
+version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f72a05e828585856dacd553fba484c242c46e391fb0e58917c942ee9202915c"
+checksum = "d25a406cddcc431a75d3d9afc6a7c0f7428d4891dd973e4d54c56b46127bf857"
 dependencies = [
  "futures-util",
  "log",
  "tokio",
- "tungstenite 0.29.0",
+ "tungstenite 0.28.0",
 ]
 
 [[package]]
@@ -24928,7 +24926,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fec7c61a0695dc1887c1b53952990f3ad2e3a31453e1f49f10e75424943a93ec"
 dependencies = [
  "async-trait",
- "axum 0.8.9",
+ "axum 0.8.8",
  "base64 0.22.1",
  "bytes",
  "h2 0.4.13",
@@ -25073,7 +25071,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "84e6672c7510df74859726427edea641674dad1aeeb30057b87335b1ba23b843"
 dependencies = [
- "axum 0.8.9",
+ "axum 0.8.8",
  "forwarded-header-value",
  "governor 0.8.1",
  "http 1.4.0",
@@ -25089,7 +25087,7 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44de9b94d849d3c46e06a883d72d408c2de6403367b39df2b1c9d9e7b6736fe6"
 dependencies = [
- "axum 0.8.9",
+ "axum 0.8.8",
  "forwarded-header-value",
  "governor 0.10.4",
  "http 1.4.0",
@@ -25338,9 +25336,9 @@ dependencies = [
 
 [[package]]
 name = "tungstenite"
-version = "0.29.0"
+version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c01152af293afb9c7c2a57e4b559c5620b421f6d133261c60dd2d0cdb38e6b8"
+checksum = "8628dcc84e5a09eb3d8423d6cb682965dea9133204e8fb3efee74c2a0c259442"
 dependencies = [
  "bytes",
  "data-encoding",
@@ -25350,6 +25348,7 @@ dependencies = [
  "rand 0.9.3",
  "sha1 0.10.6",
  "thiserror 2.0.18",
+ "utf-8",
 ]
 
 [[package]]

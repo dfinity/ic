@@ -883,6 +883,7 @@ fn test_specified_id_call_v3() {
     rt.block_on(async {
         let agent = ic_agent::Agent::builder()
             .with_url(endpoint)
+            .with_http_client(reqwest::Client::new())
             .build()
             .unwrap();
         agent.fetch_root_key().await.unwrap();
