@@ -871,8 +871,7 @@ mod metrics_tests {
         },
         test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
     };
-
-    const ONE_DAY_SECONDS: u64 = 86_400;
+    use ic_nervous_system_common::ONE_DAY_SECONDS;
 
     #[test]
     fn test_metrics_total_voting_power() {

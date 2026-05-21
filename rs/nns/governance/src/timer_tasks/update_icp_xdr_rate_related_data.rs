@@ -7,13 +7,12 @@ use ic_cdk::println;
 use ic_nervous_system_clients::exchange_rate_canister_client::{
     ExchangeRateCanisterClient, exchange_rate_to_permyriad, validate_exchange_rate,
 };
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nervous_system_timer_task::RecurringAsyncTask;
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::thread::LocalKey;
 use std::time::Duration;
-
-pub(crate) const ONE_DAY_SECONDS: u64 = 86_400;
 
 // ---- Maturity modulation algorithm ----
 //

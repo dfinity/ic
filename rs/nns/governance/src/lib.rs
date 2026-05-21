@@ -131,6 +131,7 @@ use crate::{
     },
 };
 use candid::DecoderConfig;
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 use ic_nervous_system_temporary::Temporary;
 use mockall::automock;
@@ -141,7 +142,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 use storage::VOTING_POWER_SNAPSHOTS;
-use timer_tasks::{ONE_DAY_SECONDS, encode_timer_task_metrics};
+use timer_tasks::encode_timer_task_metrics;
 
 #[cfg(any(test, feature = "canbench-rs"))]
 pub mod test_utils;
