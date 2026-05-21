@@ -3181,7 +3181,7 @@ fn creating_canisters_always_works_if_limit_is_set_to_zero() {
         .with_own_subnet_id(own_subnet)
         .with_caller(own_subnet, caller)
         .build();
-    for _ in 0..1_000 {
+    for i in 1..=1_000 {
         test.inject_call_to_ic00(
             Method::CreateCanister,
             CreateCanisterArgs {
@@ -3195,7 +3195,9 @@ fn creating_canisters_always_works_if_limit_is_set_to_zero() {
             .encode(),
             test.canister_creation_fee().real(),
         );
-        test.execute_all();
+        if i % 500 == 0 {
+            test.execute_all();
+        }
     }
     assert_eq!(test.state().num_canisters() as u64, 1_000);
 }
