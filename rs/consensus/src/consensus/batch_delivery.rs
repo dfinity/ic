@@ -243,7 +243,7 @@ pub(crate) fn deliver_batches_with_result_processor(
 
                         info!(
                             log,
-                            "Deliverying splitting block. New subnet assignment: {new_subnet_id}"
+                            "Delivering splitting block. New subnet assignment: {new_subnet_id}"
                         );
 
                         BatchContent::Splitting {
