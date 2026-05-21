@@ -1,7 +1,7 @@
 //! The crypto public interface.
 mod keygen;
 
-use ic_types::canister_http::CanisterHttpResponseMetadata;
+use ic_types::canister_http::{CanisterHttpPaymentMetadata, CanisterHttpResponseMetadata};
 pub use keygen::*;
 
 mod errors;
@@ -82,6 +82,9 @@ pub trait Crypto:
     // CanisterHttpResponse
     + BasicSigner<CanisterHttpResponseMetadata>
     + BasicSigVerifier<CanisterHttpResponseMetadata>
+    // CanisterHttpPayment
+    + BasicSigner<CanisterHttpPaymentMetadata>
+    + BasicSigVerifier<CanisterHttpPaymentMetadata>
     // Signed Queries
     + BasicSigner<QueryResponseHash>
     // RequestId/WebAuthn
@@ -143,6 +146,8 @@ impl<T> Crypto for T where
         + BasicSigVerifier<IDkgOpeningContent>
         + BasicSigner<CanisterHttpResponseMetadata>
         + BasicSigVerifier<CanisterHttpResponseMetadata>
+        + BasicSigner<CanisterHttpPaymentMetadata>
+        + BasicSigVerifier<CanisterHttpPaymentMetadata>
         + BasicSigner<QueryResponseHash>
         + IDkgProtocol
         + ThresholdEcdsaSigner

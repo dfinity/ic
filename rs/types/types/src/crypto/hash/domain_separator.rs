@@ -61,6 +61,7 @@ pub enum DomainSeparator {
     CanisterHttpResponse,
     CryptoHashOfCanisterHttpResponseMetadata,
     CanisterHttpResponseShare,
+    CanisterHttpPaymentMetadata,
 }
 
 impl DomainSeparator {
@@ -127,6 +128,9 @@ impl DomainSeparator {
                 "ic-crypto-hash-of-canister-http-response-metadata-domain"
             }
             DomainSeparator::CanisterHttpResponseShare => "ic-canister-http-response-share-domain",
+            DomainSeparator::CanisterHttpPaymentMetadata => {
+                "ic-canister-http-payment-metadata-domain"
+            }
         }
     }
 }
@@ -252,6 +256,10 @@ fn domain_separators_are_stable() {
         (
             "CanisterHttpResponseShare",
             "ic-canister-http-response-share-domain",
+        ),
+        (
+            "CanisterHttpPaymentMetadata",
+            "ic-canister-http-payment-metadata-domain",
         ),
     ];
 

@@ -689,11 +689,32 @@ pub mod canister_http_response_message {
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpPaymentReceipt {
+    #[prost(message, optional, tag = "1")]
+    pub refund: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpPaymentMetadata {
+    #[prost(uint64, tag = "1")]
+    pub id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub receipt: ::core::option::Option<CanisterHttpPaymentReceipt>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpPaymentShare {
+    #[prost(message, optional, tag = "1")]
+    pub metadata: ::core::option::Option<CanisterHttpPaymentMetadata>,
+    #[prost(message, optional, tag = "2")]
+    pub signature: ::core::option::Option<BasicSignature>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpArtifact {
     #[prost(message, optional, tag = "1")]
     pub share: ::core::option::Option<CanisterHttpShare>,
     #[prost(message, optional, tag = "2")]
     pub response: ::core::option::Option<CanisterHttpResponse>,
+    #[prost(message, optional, tag = "3")]
+    pub payment_share: ::core::option::Option<CanisterHttpPaymentShare>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgPayload {

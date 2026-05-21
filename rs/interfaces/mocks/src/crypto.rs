@@ -25,7 +25,7 @@ use ic_interfaces::crypto::{
     ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner,
     ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner, VetKdProtocol,
 };
-use ic_types::canister_http::CanisterHttpResponseMetadata;
+use ic_types::canister_http::{CanisterHttpPaymentMetadata, CanisterHttpResponseMetadata};
 use ic_types::consensus::{
     BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
     NotarizationContent, RandomBeaconContent, RandomTapeContent,
@@ -290,6 +290,10 @@ mockall::mock! {
             &self, message: &CanisterHttpResponseMetadata,
         ) -> CryptoResult<BasicSigOf<CanisterHttpResponseMetadata>>;
 
+        pub fn sign_basic_payment(
+            &self, message: &CanisterHttpPaymentMetadata,
+        ) -> CryptoResult<BasicSigOf<CanisterHttpPaymentMetadata>>;
+
         pub fn sign_basic_query(
             &self, message: &QueryResponseHash,
         ) -> CryptoResult<BasicSigOf<QueryResponseHash>>;
@@ -427,6 +431,27 @@ mockall::mock! {
             &self,
             signature_batch: &BasicSignatureBatch<CanisterHttpResponseMetadata>,
             message: &CanisterHttpResponseMetadata,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        // CanisterHttpPaymentMetadata
+        pub fn verify_basic_sig_payment(
+            &self,
+            signature: &BasicSigOf<CanisterHttpPaymentMetadata>,
+            message: &CanisterHttpPaymentMetadata, signer: NodeId,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        pub fn combine_basic_sig_payment(
+            &self,
+            signatures: BTreeMap<NodeId, BasicSigOf<CanisterHttpPaymentMetadata>>,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<BasicSignatureBatch<CanisterHttpPaymentMetadata>>;
+
+        pub fn verify_basic_sig_batch_payment(
+            &self,
+            signature_batch: &BasicSignatureBatch<CanisterHttpPaymentMetadata>,
+            message: &CanisterHttpPaymentMetadata,
             registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
@@ -726,6 +751,7 @@ impl_basic_signer!(IDkgDealing, sign_basic_idkg_dealing);
 impl_basic_signer!(IDkgComplaintContent, sign_basic_idkg_complaint);
 impl_basic_signer!(IDkgOpeningContent, sign_basic_idkg_opening);
 impl_basic_signer!(CanisterHttpResponseMetadata, sign_basic_http);
+impl_basic_signer!(CanisterHttpPaymentMetadata, sign_basic_payment);
 impl_basic_signer!(QueryResponseHash, sign_basic_query);
 
 impl_basic_sig_verifier!(
@@ -769,6 +795,12 @@ impl_basic_sig_verifier!(
     verify_basic_sig_http,
     combine_basic_sig_http,
     verify_basic_sig_batch_http
+);
+impl_basic_sig_verifier!(
+    CanisterHttpPaymentMetadata,
+    verify_basic_sig_payment,
+    combine_basic_sig_payment,
+    verify_basic_sig_batch_payment
 );
 
 impl_threshold_signer!(CertificationContent, sign_threshold_certification);

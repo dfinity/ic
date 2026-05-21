@@ -1007,6 +1007,64 @@ impl CountBytes for CanisterHttpResponseDivergence {
     }
 }
 
+/// A receipt summarizing the cycles accounting outcome for a single canister
+/// HTTP outcall as reported by an individual replica.
+///
+/// Unlike [`CanisterHttpResponseMetadata`], which captures the content shared
+/// by all honest replicas (and over which consensus must be reached), the
+/// receipt may legitimately differ across replicas since each replica
+/// independently tracks its own resource usage. It is therefore signed and
+/// gossiped separately as a [`CanisterHttpPaymentShare`].
+#[derive(Clone, Default, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpPaymentReceipt {
+    /// The amount of cycles, out of the per-replica allowance, that the
+    /// replica did not use and wishes to refund to the caller.
+    pub refund: Cycles,
+}
+
+impl CountBytes for CanisterHttpPaymentReceipt {
+    fn count_bytes(&self) -> usize {
+        let Self { refund } = self;
+        size_of_val(refund)
+    }
+}
+
+/// Per-replica payment metadata for a canister HTTP outcall.
+///
+/// This metadata is created by the replica after the outcall completes and
+/// before the corresponding share is gossiped. It is signed independently
+/// from [`CanisterHttpResponseMetadata`] because consensus on it is not
+/// required (and not possible in general) — the receipt summarizes a
+/// per-replica accounting outcome.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpPaymentMetadata {
+    pub id: CallbackId,
+    pub receipt: CanisterHttpPaymentReceipt,
+}
+
+impl CountBytes for CanisterHttpPaymentMetadata {
+    fn count_bytes(&self) -> usize {
+        let Self { id, receipt } = self;
+        size_of_val(id) + receipt.count_bytes()
+    }
+}
+
+impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpPaymentMetadata {
+    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
+        serde_cbor::to_vec(&self).unwrap()
+    }
+}
+
+/// A signed [`CanisterHttpPaymentMetadata`].
+///
+/// The signer is the replica that produced the receipt; the resulting share
+/// is gossiped alongside the [`CanisterHttpResponseShare`] inside a
+/// [`CanisterHttpResponseArtifact`].
+pub type CanisterHttpPaymentShare =
+    Signed<CanisterHttpPaymentMetadata, BasicSignature<CanisterHttpPaymentMetadata>>;
+
 /// Metadata about some [`CanisterHttpResponseContent`].
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
@@ -1056,6 +1114,13 @@ pub struct CanisterHttpResponseArtifact {
     pub share: CanisterHttpResponseShare,
     // The response should not be included in the case of fully replicated outcalls.
     pub response: Option<CanisterHttpResponse>,
+    /// Per-replica payment information for the corresponding outcall.
+    ///
+    /// The payment share is kept separate from [`Self::share`] because the
+    /// underlying [`CanisterHttpPaymentMetadata`] may legitimately differ
+    /// across replicas and therefore is not part of the metadata over which
+    /// consensus must be reached.
+    pub payment_share: CanisterHttpPaymentShare,
 }
 
 impl IdentifiableArtifact for CanisterHttpResponseArtifact {

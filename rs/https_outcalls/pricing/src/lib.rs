@@ -2,7 +2,10 @@ mod legacy;
 
 use std::time::Duration;
 
-use ic_types::{NumBytes, NumInstructions, canister_http::CanisterHttpRequestContext};
+use ic_types::{
+    NumBytes, NumInstructions,
+    canister_http::{CanisterHttpPaymentReceipt, CanisterHttpRequestContext},
+};
 use legacy::LegacyTracker;
 
 pub trait BudgetTracker: Send {
@@ -23,6 +26,14 @@ pub trait BudgetTracker: Send {
     /// # Invariants
     ///  - This method returns `Ok(())` if and only if `usage <= get_transform_limit()`.
     fn subtract_transform_usage(&mut self, usage: NumInstructions) -> Result<(), PricingError>;
+
+    /// Builds a payment receipt that summarizes the cycles accounting for the
+    /// outcall driven by this tracker.
+    ///
+    /// Called by the replica after the outcall has completed, so that the
+    /// resulting [`CanisterHttpPaymentReceipt`] can be packaged into the
+    /// payment share gossiped alongside the response share.
+    fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt;
 }
 
 pub struct AdapterLimits {

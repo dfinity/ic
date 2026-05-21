@@ -4,7 +4,9 @@
 //! and eventually make it into consensus.
 use crate::metrics::CanisterHttpPoolManagerMetrics;
 use ic_consensus_utils::{
-    crypto::ConsensusCrypto, is_current_protocol_version, membership::Membership,
+    crypto::{ConsensusCrypto, SignVerify},
+    is_current_protocol_version,
+    membership::Membership,
     registry_version_at_height,
 };
 use ic_interfaces::{
@@ -21,8 +23,13 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CountBytes, Height, NumBytes, ReplicaVersion, canister_http::*, consensus::HasHeight,
-    crypto::Signed, messages::CallbackId, replica_config::ReplicaConfig,
+    CountBytes, Height, NumBytes, RegistryVersion, ReplicaVersion,
+    canister_http::*,
+    consensus::HasHeight,
+    crypto::Signed,
+    messages::CallbackId,
+    replica_config::ReplicaConfig,
+    signature::{BasicSignature, BasicSigned},
 };
 use ic_utils::str::StrEllipsize;
 use std::{
@@ -32,8 +39,12 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-pub type CanisterHttpAdapterClient =
-    Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
+pub type CanisterHttpAdapterClient = Box<
+    dyn NonBlockingChannel<
+            CanisterHttpRequest,
+            Response = (CanisterHttpResponse, CanisterHttpPaymentMetadata),
+        > + Send,
+>;
 
 /// [`CanisterHttpPoolManagerImpl`] implements the pool and state monitoring
 /// functionality that is necessary to ensure that http requests are made and
@@ -133,6 +144,35 @@ impl CanisterHttpPoolManagerImpl {
             log,
             requested_id_cache: RefCell::new(BTreeSet::new()),
         }
+    }
+
+    /// Signs a piece of canister HTTP metadata (either a
+    /// [`CanisterHttpResponseMetadata`] or [`CanisterHttpPaymentMetadata`])
+    /// and wraps it into a [`Signed`] share.
+    ///
+    /// Returns [`None`] if signing fails, in which case `error_context` is
+    /// logged together with the underlying error so callers can decide how
+    /// to handle the failure (typically by skipping the corresponding
+    /// outcall).
+    fn sign_canister_http_metadata<M>(
+        &self,
+        metadata: M,
+        registry_version: RegistryVersion,
+        error_context: &str,
+    ) -> Option<BasicSigned<M>>
+    where
+        M: ic_types::crypto::Signable,
+        dyn ConsensusCrypto: SignVerify<M, BasicSignature<M>, RegistryVersion>,
+    {
+        let signature = self
+            .crypto
+            .sign(&metadata, self.replica_config.node_id, registry_version)
+            .map_err(|err| error!(self.log, "{} {}", error_context, err))
+            .ok()?;
+        Some(Signed {
+            content: metadata,
+            signature,
+        })
     }
 
     /// Purge shares of responses for requests that have already been processed.
@@ -340,7 +380,7 @@ impl CanisterHttpPoolManagerImpl {
         loop {
             match self.http_adapter_shim.lock().unwrap().try_receive() {
                 Err(TryReceiveError::Empty) => break,
-                Ok(mut response) => {
+                Ok((mut response, payment_metadata)) => {
                     // Truncate the reject message if it's too long.
                     //
                     // The "happy path" response is organically bounded by max_response_bytes, however we need to set a
@@ -371,23 +411,22 @@ impl CanisterHttpPoolManagerImpl {
                         is_reject: response.content.is_reject(),
                         replica_version: ReplicaVersion::default(),
                     };
-                    let signature = if let Ok(signature) = self
-                        .crypto
-                        .sign(
-                            &response_metadata,
-                            self.replica_config.node_id,
-                            registry_version,
-                        )
-                        .map_err(|err| error!(self.log, "Failed to sign http response {}", err))
-                    {
-                        signature
-                    } else {
+                    let Some(share) = self.sign_canister_http_metadata(
+                        response_metadata,
+                        registry_version,
+                        "Failed to sign http response",
+                    ) else {
                         continue;
                     };
-                    let share = Signed {
-                        content: response_metadata,
-                        signature,
+
+                    let Some(payment_share) = self.sign_canister_http_metadata(
+                        payment_metadata,
+                        registry_version,
+                        "Failed to sign payment metadata",
+                    ) else {
+                        continue;
                     };
+
                     self.requested_id_cache.borrow_mut().remove(&response.id);
                     self.metrics.shares_signed.inc();
 
@@ -410,13 +449,19 @@ impl CanisterHttpPoolManagerImpl {
                         }
 
                         change_set.push(CanisterHttpChangeAction::AddToValidatedAndGossipResponse(
-                            share, response,
+                            share,
+                            payment_share,
+                            response,
                         ));
                         continue;
                     }
 
                     //TODO(IC-1967): don't create this share if relevant context is no longer in the replicated state.
-                    change_set.push(CanisterHttpChangeAction::AddToValidated(share, response));
+                    change_set.push(CanisterHttpChangeAction::AddToValidated(
+                        share,
+                        payment_share,
+                        response,
+                    ));
                 }
             }
         }
@@ -467,6 +512,19 @@ impl CanisterHttpPoolManagerImpl {
             .filter(|artifact| artifact.share.content.id < next_callback_id)
             .filter_map(|artifact| {
                 let share = &artifact.share;
+                let payment_share = &artifact.payment_share;
+
+                // The response share and the payment share are gossiped together as part of the
+                // same artifact. They must therefore agree on signer and request id, otherwise
+                // the sender is misbehaving.
+                if (share.signature.signer, share.content.id)
+                    != (payment_share.signature.signer, payment_share.content.id)
+                {
+                    return Some(CanisterHttpChangeAction::HandleInvalid(
+                        share.clone(),
+                        "Share and payment share have different keys".to_string(),
+                    ));
+                }
 
                 if existing_signed_requests.contains(&key_from_share(share)) {
                     return match is_current_protocol_version(&share.content.replica_version) {
@@ -481,6 +539,18 @@ impl CanisterHttpPoolManagerImpl {
                 let Some(context) = active_contexts.get(&share.content.id) else {
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
                 };
+
+                // A replica that asks for a larger refund than the per-replica allowance is
+                // misbehaving: by construction, no honest replica would have access to more
+                // cycles than that to refund.
+                if payment_share.content.receipt.refund
+                    > context.refund_status.per_replica_allowance
+                {
+                    return Some(CanisterHttpChangeAction::HandleInvalid(
+                        share.clone(),
+                        "Refund is greater than replica allowance".to_string(),
+                    ));
+                }
 
                 match &context.replication {
                     Replication::FullyReplicated => {
@@ -575,16 +645,30 @@ impl CanisterHttpPoolManagerImpl {
                     error!(self.log, "Unable to verify signature of share, {}", err);
 
                     self.metrics.shares_marked_invalid.inc();
-                    Some(CanisterHttpChangeAction::HandleInvalid(
+                    return Some(CanisterHttpChangeAction::HandleInvalid(
                         share.clone(),
                         format!("Unable to verify signature of share, {err}"),
-                    ))
-                } else {
-                    // Update the set of existing signed requests.
-                    existing_signed_requests.insert(key_from_share(share));
-                    self.metrics.shares_validated.inc();
-                    Some(CanisterHttpChangeAction::MoveToValidated(share.clone()))
+                    ));
                 }
+                // Verify the payment share signature as well. Without this check a malicious
+                // relayer could swap a peer's payment share for one claiming a smaller refund
+                // (since both keys would still agree with the response share's signer/id).
+                if let Err(err) = self.crypto.verify(payment_share, registry_version) {
+                    error!(
+                        self.log,
+                        "Unable to verify signature of payment share, {}", err
+                    );
+
+                    self.metrics.shares_marked_invalid.inc();
+                    return Some(CanisterHttpChangeAction::HandleInvalid(
+                        share.clone(),
+                        format!("Unable to verify signature of payment share, {err}"),
+                    ));
+                }
+                // Update the set of existing signed requests.
+                existing_signed_requests.insert(key_from_share(share));
+                self.metrics.shares_validated.inc();
+                Some(CanisterHttpChangeAction::MoveToValidated(share.clone()))
             })
             .collect()
     }
@@ -680,13 +764,13 @@ pub mod test {
     use assert_matches::assert_matches;
     use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
     use ic_consensus_mocks::{Dependencies, dependencies};
-    use ic_consensus_utils::crypto::SignVerify;
     use ic_error_types::RejectCode;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_interfaces_state_manager::Labeled;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SubnetCallContext;
+    use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::CountBytes;
@@ -697,6 +781,7 @@ pub mod test {
         messages::CallbackId,
         time::UNIX_EPOCH,
     };
+    use ic_types_cycles::Cycles;
     use mockall::predicate::*;
     use mockall::*;
     use std::{collections::BTreeMap, str::FromStr};
@@ -706,10 +791,10 @@ pub mod test {
         }
 
         impl<Request> NonBlockingChannel<Request> for NonBlockingChannel<Request> {
-            type Response = CanisterHttpResponse;
+            type Response = (CanisterHttpResponse, CanisterHttpPaymentMetadata);
 
             fn send(&self, request: Request) -> Result<(), SendError<Request>>;
-            fn try_receive(&mut self) -> Result<CanisterHttpResponse, TryReceiveError>;
+            fn try_receive(&mut self) -> Result<(CanisterHttpResponse, CanisterHttpPaymentMetadata), TryReceiveError>;
         }
     }
 
@@ -738,6 +823,34 @@ pub mod test {
             canister_id: ic_types::CanisterId::from(0),
             content: CanisterHttpResponseContent::Success(Vec::new()),
         }
+    }
+
+    /// Returns a [`CanisterHttpPaymentMetadata`] with a small non-zero refund
+    /// that can be used to assert that the payment metadata is properly
+    /// propagated through the pool manager.
+    fn fake_payment_metadata(id: u64) -> CanisterHttpPaymentMetadata {
+        CanisterHttpPaymentMetadata {
+            id: CallbackId::from(id),
+            receipt: CanisterHttpPaymentReceipt {
+                refund: Cycles::new(123),
+            },
+        }
+    }
+
+    /// Builds a default payment share for the same (signer, callback id) as
+    /// the given response share, with an empty receipt. This is sufficient for
+    /// tests that don't care about the refund amount but need to assemble a
+    /// well-formed [`CanisterHttpResponseArtifact`].
+    fn payment_share_from_response_share(
+        share: &CanisterHttpResponseShare,
+    ) -> CanisterHttpPaymentShare {
+        CanisterHttpPaymentShare::fake(
+            CanisterHttpPaymentMetadata {
+                id: share.content.id,
+                receipt: CanisterHttpPaymentReceipt::default(),
+            },
+            share.signature.signer,
+        )
     }
 
     fn test_request_context(
@@ -822,8 +935,10 @@ pub mod test {
                         signature,
                     };
 
+                    let payment_share = payment_share_from_response_share(&share);
                     let artifact = CanisterHttpResponseArtifact {
                         share,
+                        payment_share,
                         response: None,
                     };
 
@@ -925,6 +1040,7 @@ pub mod test {
                 // add a share (plus content) to the validated pool
                 canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
                     share.clone(),
+                    payment_share_from_response_share(&share),
                     empty_canister_http_response(7),
                 )]);
 
@@ -932,8 +1048,10 @@ pub mod test {
                 share.content.replica_version =
                     ReplicaVersion::from_str("outdated_version").unwrap();
 
+                let payment_share = payment_share_from_response_share(&share);
                 let artifact = CanisterHttpResponseArtifact {
                     share,
+                    payment_share,
                     response: None,
                 };
 
@@ -1032,7 +1150,9 @@ pub mod test {
 
                     let content = empty_canister_http_response(7);
                     canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
-                        share, content,
+                        share.clone(),
+                        payment_share_from_response_share(&share),
+                        content,
                     )]);
                 }
 
@@ -1051,8 +1171,10 @@ pub mod test {
                         signature,
                     };
 
+                    let payment_share = payment_share_from_response_share(&share);
                     let artifact = CanisterHttpResponseArtifact {
                         share,
+                        payment_share,
                         response: None,
                     };
 
@@ -1173,8 +1295,10 @@ pub mod test {
                 {
                     let mut canister_http_pool =
                         CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+                    let payment_share = payment_share_from_response_share(&share);
                     let artifact_without_response = CanisterHttpResponseArtifact {
                         share: share.clone(),
+                        payment_share,
                         response: None, // Missing response
                     };
                     canister_http_pool.insert(UnvalidatedArtifact {
@@ -1201,8 +1325,10 @@ pub mod test {
                     let mut bad_share = share.clone();
                     bad_share.content.content_hash = CryptoHashOf::new(CryptoHash(vec![1, 2, 3]));
 
+                    let payment_share = payment_share_from_response_share(&bad_share);
                     let artifact_with_mismatched_hash = CanisterHttpResponseArtifact {
                         share: bad_share,
+                        payment_share,
                         response: Some(response),
                     };
                     canister_http_pool.insert(UnvalidatedArtifact {
@@ -1233,8 +1359,10 @@ pub mod test {
                     let mut bad_share = share.clone();
                     bad_share.content.content_size = bad_share.content.content_size.wrapping_add(1);
 
+                    let payment_share = payment_share_from_response_share(&bad_share);
                     let artifact_with_mismatched_size = CanisterHttpResponseArtifact {
                         share: bad_share,
+                        payment_share,
                         response: Some(response),
                     };
                     canister_http_pool.insert(UnvalidatedArtifact {
@@ -1265,8 +1393,10 @@ pub mod test {
                     let mut bad_share = share.clone();
                     bad_share.content.is_reject = !bad_share.content.is_reject;
 
+                    let payment_share = payment_share_from_response_share(&bad_share);
                     let artifact_with_mismatched_is_reject = CanisterHttpResponseArtifact {
                         share: bad_share,
+                        payment_share,
                         response: Some(response),
                     };
                     canister_http_pool.insert(UnvalidatedArtifact {
@@ -1350,9 +1480,11 @@ pub mod test {
 
                 let mut canister_http_pool =
                     CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+                let payment_share = payment_share_from_response_share(&share);
                 canister_http_pool.insert(UnvalidatedArtifact {
                     message: CanisterHttpResponseArtifact {
                         share,
+                        payment_share,
                         response: Some(response),
                     },
                     peer_id: wrong_signer_id, // The artifact comes from the wrong signer.
@@ -1452,8 +1584,10 @@ pub mod test {
                     CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
 
                 // Create an artifact that incorrectly includes a response for a fully replicated request.
+                let payment_share = payment_share_from_response_share(&share);
                 let artifact_with_response = CanisterHttpResponseArtifact {
                     share,
+                    payment_share,
                     response: Some(response), // This should NOT be here for a fully replicated request
                 };
 
@@ -1582,9 +1716,11 @@ pub mod test {
                             )
                             .unwrap(),
                     };
+                    let payment_share = payment_share_from_response_share(&share);
                     canister_http_pool.insert(UnvalidatedArtifact {
                         message: CanisterHttpResponseArtifact {
                             share,
+                            payment_share,
                             response: Some(response),
                         },
                         peer_id: delegated_node_id,
@@ -1648,9 +1784,11 @@ pub mod test {
                             )
                             .unwrap(),
                     };
+                    let payment_share = payment_share_from_response_share(&share);
                     canister_http_pool.insert(UnvalidatedArtifact {
                         message: CanisterHttpResponseArtifact {
                             share,
+                            payment_share,
                             response: Some(response),
                         },
                         peer_id: delegated_node_id,
@@ -1754,9 +1892,11 @@ pub mod test {
                         .unwrap(),
                 };
 
+                let payment_share = payment_share_from_response_share(&share);
                 canister_http_pool.insert(UnvalidatedArtifact {
                     message: CanisterHttpResponseArtifact {
                         share,
+                        payment_share,
                         response: Some(response),
                     },
                     peer_id: delegated_node_id,
@@ -1829,10 +1969,12 @@ pub mod test {
                 // 4. MOCK ADAPTER: Mock the adapter to return the oversized response once.
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
                 let mut sequence = Sequence::new();
+                let payment_metadata = fake_payment_metadata(callback_id.get());
+                let expected_payment_metadata = payment_metadata.clone();
                 shim_mock
                     .expect_try_receive()
                     .times(1)
-                    .returning(move || Ok(oversized_response.clone()))
+                    .returning(move || Ok((oversized_response.clone(), payment_metadata.clone())))
                     .in_sequence(&mut sequence);
                 shim_mock
                     .expect_try_receive()
@@ -1848,7 +1990,7 @@ pub mod test {
                     shim,
                     crypto,
                     pool.get_cache(),
-                    replica_config,
+                    replica_config.clone(),
                     SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
@@ -1868,7 +2010,11 @@ pub mod test {
                 // Check that the action contains the *pruned* response and a share with the correct hash.
                 assert_matches!(
                     &change_set[0],
-                    CanisterHttpChangeAction::AddToValidatedAndGossipResponse(share, response) => {
+                    CanisterHttpChangeAction::AddToValidatedAndGossipResponse(
+                        share,
+                        payment_share,
+                        response,
+                    ) => {
                         // Assert that the response message was indeed truncated.
                         let pruned_message_len = if let CanisterHttpResponseContent::Reject(r) = &response.content {
                             r.message.len()
@@ -1886,6 +2032,10 @@ pub mod test {
                             share.content.content_hash, expected_hash,
                             "The share's content hash must match the pruned response"
                         );
+                        // The payment share must carry the metadata reported by the adapter
+                        // and be signed by the local replica.
+                        assert_eq!(payment_share.content, expected_payment_metadata);
+                        assert_eq!(payment_share.signature.signer, replica_config.node_id);
                     }
                 );
             })
@@ -1951,10 +2101,12 @@ pub mod test {
 
                 // 4. MOCK ADAPTER: Mock the adapter to return this specific response.
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                let payment_metadata = fake_payment_metadata(callback_id.get());
+                let expected_payment_metadata = payment_metadata.clone();
                 shim_mock
                     .expect_try_receive()
                     .times(1)
-                    .return_once(move || Ok(oversized_response.clone()));
+                    .return_once(move || Ok((oversized_response.clone(), payment_metadata)));
                 shim_mock
                     .expect_try_receive()
                     .return_const(Err(TryReceiveError::Empty));
@@ -1967,7 +2119,7 @@ pub mod test {
                     shim,
                     crypto,
                     pool.get_cache(),
-                    replica_config,
+                    replica_config.clone(),
                     SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
@@ -1987,7 +2139,11 @@ pub mod test {
 
                 assert_matches!(
                     &change_set[0],
-                    CanisterHttpChangeAction::AddToValidatedAndGossipResponse(share, response) => {
+                    CanisterHttpChangeAction::AddToValidatedAndGossipResponse(
+                        share,
+                        payment_share,
+                        response,
+                    ) => {
                         let pruned_message = if let CanisterHttpResponseContent::Reject(r) = &response.content {
                             &r.message
                         } else {
@@ -2013,6 +2169,8 @@ pub mod test {
                             share.content.content_hash, expected_hash,
                             "The share's content hash must match the pruned response"
                         );
+                        assert_eq!(payment_share.content, expected_payment_metadata);
+                        assert_eq!(payment_share.signature.signer, replica_config.node_id);
                     }
                 );
             })
@@ -2087,9 +2245,11 @@ pub mod test {
 
                 let mut canister_http_pool =
                     CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+                let payment_share = payment_share_from_response_share(&share);
                 canister_http_pool.insert(UnvalidatedArtifact {
                     message: CanisterHttpResponseArtifact {
                         share,
+                        payment_share,
                         response: Some(dishonest_response.clone()),
                     },
                     peer_id: delegated_node_id,
@@ -2225,9 +2385,11 @@ pub mod test {
                         .unwrap(),
                 };
 
+                let payment_share = payment_share_from_response_share(&share);
                 canister_http_pool.insert(UnvalidatedArtifact {
                     message: CanisterHttpResponseArtifact {
                         share,
+                        payment_share,
                         response: Some(response),
                     },
                     peer_id: delegated_node_id,
@@ -2309,7 +2471,9 @@ pub mod test {
                 let mut canister_http_pool =
                     CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
                 canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
-                    share, content,
+                    share.clone(),
+                    payment_share_from_response_share(&share),
+                    content,
                 )]);
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
                     state_manager as Arc<_>,
@@ -2360,7 +2524,9 @@ pub mod test {
                     shim_mock
                         .expect_try_receive()
                         .times(1)
-                        .returning(move || Ok(empty_canister_http_response(i)))
+                        .returning(move || {
+                            Ok((empty_canister_http_response(i), fake_payment_metadata(i)))
+                        })
                         .in_sequence(&mut sequence);
                 }
 
@@ -2428,10 +2594,17 @@ pub mod test {
                 // 2. Mock the adapter shim to return a response matching the non-replicated request.
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
                 let mut sequence = Sequence::new();
+                let payment_metadata = fake_payment_metadata(callback_id.get());
+                let expected_payment_metadata = payment_metadata.clone();
                 shim_mock
                     .expect_try_receive()
                     .times(1)
-                    .returning(move || Ok(empty_canister_http_response(callback_id.get())))
+                    .returning(move || {
+                        Ok((
+                            empty_canister_http_response(callback_id.get()),
+                            payment_metadata.clone(),
+                        ))
+                    })
                     .in_sequence(&mut sequence);
                 shim_mock
                     .expect_try_receive()
@@ -2460,8 +2633,11 @@ pub mod test {
                 // 4. Assert that the correct change action for gossiping the response was produced.
                 assert_eq!(change_set.len(), 1);
 
-                if let CanisterHttpChangeAction::AddToValidatedAndGossipResponse(share, response) =
-                    &change_set[0]
+                if let CanisterHttpChangeAction::AddToValidatedAndGossipResponse(
+                    share,
+                    payment_share,
+                    response,
+                ) = &change_set[0]
                 {
                     let expected_response = empty_canister_http_response(callback_id.get());
                     assert_eq!(*response, expected_response);
@@ -2473,6 +2649,8 @@ pub mod test {
                     );
                     assert_eq!(share.content.registry_version, RegistryVersion::from(1));
                     assert_eq!(share.signature.signer, replica_config.node_id);
+                    assert_eq!(payment_share.content, expected_payment_metadata);
+                    assert_eq!(payment_share.signature.signer, replica_config.node_id);
                 } else {
                     panic!(
                         "Expected CanisterHttpChangeAction::AddToValidatedAndGossipResponse, but got {:?}",
@@ -2572,7 +2750,9 @@ pub mod test {
                 };
 
                 canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
-                    share, content,
+                    share.clone(),
+                    payment_share_from_response_share(&share),
+                    content,
                 )]);
 
                 // Now that there are shares in the pool, we should be able to
@@ -2733,9 +2913,11 @@ pub mod test {
 
                 let mut canister_http_pool =
                     CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+                let payment_share = payment_share_from_response_share(&share);
                 canister_http_pool.insert(UnvalidatedArtifact {
                     message: CanisterHttpResponseArtifact {
                         share,
+                        payment_share,
                         response: Some(response),
                     },
                     peer_id: wrong_signer_id, // The artifact comes from the wrong signer.
@@ -2856,9 +3038,11 @@ pub mod test {
                 {
                     let mut canister_http_pool =
                         CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+                    let payment_share = payment_share_from_response_share(&share);
                     canister_http_pool.insert(UnvalidatedArtifact {
                         message: CanisterHttpResponseArtifact {
                             share: share.clone(),
+                            payment_share,
                             response: None,
                         },
                         peer_id: committee_member,
@@ -2886,9 +3070,11 @@ pub mod test {
                     let mut bad_share = share.clone();
                     bad_share.content.content_hash = CryptoHashOf::new(CryptoHash(vec![1, 2, 3]));
 
+                    let payment_share = payment_share_from_response_share(&bad_share);
                     canister_http_pool.insert(UnvalidatedArtifact {
                         message: CanisterHttpResponseArtifact {
                             share: bad_share,
+                            payment_share,
                             response: Some(response),
                         },
                         peer_id: committee_member,
@@ -2917,9 +3103,11 @@ pub mod test {
                     let mut bad_share = share.clone();
                     bad_share.content.content_size = bad_share.content.content_size.wrapping_add(1);
 
+                    let payment_share = payment_share_from_response_share(&bad_share);
                     canister_http_pool.insert(UnvalidatedArtifact {
                         message: CanisterHttpResponseArtifact {
                             share: bad_share,
+                            payment_share,
                             response: Some(response),
                         },
                         peer_id: committee_member,
@@ -2948,9 +3136,11 @@ pub mod test {
                     let mut bad_share = share.clone();
                     bad_share.content.is_reject = !bad_share.content.is_reject;
 
+                    let payment_share = payment_share_from_response_share(&bad_share);
                     canister_http_pool.insert(UnvalidatedArtifact {
                         message: CanisterHttpResponseArtifact {
                             share: bad_share,
+                            payment_share,
                             response: Some(response),
                         },
                         peer_id: committee_member,
@@ -3062,9 +3252,11 @@ pub mod test {
                             )
                             .unwrap(),
                     };
+                    let payment_share = payment_share_from_response_share(&share);
                     canister_http_pool.insert(UnvalidatedArtifact {
                         message: CanisterHttpResponseArtifact {
                             share,
+                            payment_share,
                             response: Some(response),
                         },
                         peer_id: committee_member,
@@ -3126,9 +3318,11 @@ pub mod test {
                             )
                             .unwrap(),
                     };
+                    let payment_share = payment_share_from_response_share(&share);
                     canister_http_pool.insert(UnvalidatedArtifact {
                         message: CanisterHttpResponseArtifact {
                             share,
+                            payment_share,
                             response: Some(response),
                         },
                         peer_id: committee_member,
@@ -3186,12 +3380,14 @@ pub mod test {
 
                 // 2. Mock the adapter shim to return a response matching the flexible request.
                 let empty_response = empty_canister_http_response(callback_id.get());
+                let payment_metadata = fake_payment_metadata(callback_id.get());
+                let expected_payment_metadata = payment_metadata.clone();
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
                 let mut sequence = Sequence::new();
                 shim_mock
                     .expect_try_receive()
                     .times(1)
-                    .return_const(Ok(empty_response.clone()))
+                    .return_const(Ok((empty_response.clone(), payment_metadata)))
                     .in_sequence(&mut sequence);
                 shim_mock
                     .expect_try_receive()
@@ -3221,7 +3417,11 @@ pub mod test {
                 assert_eq!(change_set.len(), 1);
                 assert_matches!(
                     &change_set[0],
-                    CanisterHttpChangeAction::AddToValidatedAndGossipResponse(share, response) => {
+                    CanisterHttpChangeAction::AddToValidatedAndGossipResponse(
+                        share,
+                        payment_share,
+                        response,
+                    ) => {
                         let expected_response = empty_response;
                         assert_eq!(*response, expected_response);
                         assert_eq!(share.content.id, callback_id);
@@ -3230,9 +3430,247 @@ pub mod test {
                             share.content.content_hash,
                             crypto_hash(&expected_response)
                         );
+                        assert_eq!(payment_share.content, expected_payment_metadata);
+                        assert_eq!(payment_share.signature.signer, replica_config.node_id);
                     }
                 );
             });
+        });
+    }
+
+    /// A response share and payment share within the same artifact must agree
+    /// on `(signer, callback id)`. If they don't, the entire artifact is
+    /// rejected with a specific error.
+    #[test]
+    fn test_share_and_payment_share_different_keys_are_invalid() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 5);
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                shim_mock
+                    .expect_try_receive()
+                    .return_const(Err(TryReceiveError::Empty));
+
+                let request = test_request_context(
+                    Replication::FullyReplicated,
+                    PricingVersion::Legacy,
+                    None,
+                );
+
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            CallbackId::from(0),
+                            request,
+                        )]))),
+                    ));
+
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                let response_metadata = CanisterHttpResponseMetadata {
+                    id: CallbackId::from(0),
+                    registry_version: RegistryVersion::from(1),
+                    content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                    content_size: 0,
+                    is_reject: false,
+                    replica_version: ReplicaVersion::default(),
+                };
+                let signature = crypto
+                    .sign(
+                        &response_metadata,
+                        replica_config.node_id,
+                        RegistryVersion::from(1),
+                    )
+                    .unwrap();
+                let share = Signed {
+                    content: response_metadata,
+                    signature,
+                };
+
+                // The payment share uses the same signer as the response share but a
+                // different callback id, so the (signer, id) keys disagree.
+                let payment_share = CanisterHttpPaymentShare::fake(
+                    CanisterHttpPaymentMetadata {
+                        id: CallbackId::from(1),
+                        receipt: CanisterHttpPaymentReceipt::default(),
+                    },
+                    replica_config.node_id,
+                );
+
+                canister_http_pool.insert(UnvalidatedArtifact {
+                    message: CanisterHttpResponseArtifact {
+                        share,
+                        payment_share,
+                        response: None,
+                    },
+                    peer_id: replica_config.node_id,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager as Arc<_>,
+                    shim,
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                let changes = pool_manager.validate_shares(
+                    pool.get_cache().as_ref(),
+                    &canister_http_pool,
+                    Height::from(0),
+                );
+
+                assert_eq!(changes.len(), 1);
+                assert_matches!(
+                    &changes[0],
+                    CanisterHttpChangeAction::HandleInvalid(_, reason)
+                        if reason == "Share and payment share have different keys"
+                );
+            })
+        });
+    }
+
+    /// If the refund reported in the payment receipt exceeds the per-replica
+    /// allowance configured on the request context, the share is rejected as
+    /// invalid: an honest replica cannot legitimately refund more than its
+    /// allowance.
+    #[test]
+    fn test_refund_greater_than_replica_allowance_is_invalid() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 5);
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                shim_mock
+                    .expect_try_receive()
+                    .return_const(Err(TryReceiveError::Empty));
+
+                // Use a context with a small per-replica allowance.
+                let request = CanisterHttpRequestContext {
+                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
+                    url: "".to_string(),
+                    max_response_bytes: None,
+                    headers: vec![],
+                    body: None,
+                    http_method: CanisterHttpMethod::GET,
+                    transform: None,
+                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
+                    refund_status: RefundStatus {
+                        refundable_cycles: Cycles::new(1000),
+                        per_replica_allowance: Cycles::new(100),
+                        refunded_cycles: Cycles::new(0),
+                        refunding_nodes: BTreeSet::new(),
+                    },
+                };
+
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            CallbackId::from(0),
+                            request,
+                        )]))),
+                    ));
+
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                let response_metadata = CanisterHttpResponseMetadata {
+                    id: CallbackId::from(0),
+                    registry_version: RegistryVersion::from(1),
+                    content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                    content_size: 0,
+                    is_reject: false,
+                    replica_version: ReplicaVersion::default(),
+                };
+                let signature = crypto
+                    .sign(
+                        &response_metadata,
+                        replica_config.node_id,
+                        RegistryVersion::from(1),
+                    )
+                    .unwrap();
+                let share = Signed {
+                    content: response_metadata,
+                    signature,
+                };
+
+                // Refund (200) exceeds the per-replica allowance (100).
+                let payment_share = CanisterHttpPaymentShare::fake(
+                    CanisterHttpPaymentMetadata {
+                        id: share.content.id,
+                        receipt: CanisterHttpPaymentReceipt {
+                            refund: Cycles::new(200),
+                        },
+                    },
+                    replica_config.node_id,
+                );
+
+                canister_http_pool.insert(UnvalidatedArtifact {
+                    message: CanisterHttpResponseArtifact {
+                        share,
+                        payment_share,
+                        response: None,
+                    },
+                    peer_id: replica_config.node_id,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager as Arc<_>,
+                    shim,
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                let changes = pool_manager.validate_shares(
+                    pool.get_cache().as_ref(),
+                    &canister_http_pool,
+                    Height::from(0),
+                );
+
+                assert_eq!(changes.len(), 1);
+                assert_matches!(
+                    &changes[0],
+                    CanisterHttpChangeAction::HandleInvalid(_, reason)
+                        if reason == "Refund is greater than replica allowance"
+                );
+            })
         });
     }
 }

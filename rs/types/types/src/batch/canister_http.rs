@@ -1,6 +1,7 @@
 use crate::{
     CanisterId, CountBytes, ReplicaVersion,
     canister_http::{
+        CanisterHttpPaymentMetadata, CanisterHttpPaymentReceipt, CanisterHttpPaymentShare,
         CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponse,
         CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
         CanisterHttpResponseMetadata, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
@@ -538,16 +539,80 @@ impl From<CanisterHttpResponse> for pb::CanisterHttpResponse {
     }
 }
 
+impl From<CanisterHttpPaymentReceipt> for pb::CanisterHttpPaymentReceipt {
+    fn from(receipt: CanisterHttpPaymentReceipt) -> Self {
+        pb::CanisterHttpPaymentReceipt {
+            refund: Some(receipt.refund.into()),
+        }
+    }
+}
+
+impl TryFrom<pb::CanisterHttpPaymentReceipt> for CanisterHttpPaymentReceipt {
+    type Error = ProxyDecodeError;
+    fn try_from(receipt: pb::CanisterHttpPaymentReceipt) -> Result<Self, Self::Error> {
+        Ok(CanisterHttpPaymentReceipt {
+            refund: try_from_option_field(receipt.refund, "CanisterHttpPaymentReceipt::refund")?,
+        })
+    }
+}
+
+impl From<CanisterHttpPaymentMetadata> for pb::CanisterHttpPaymentMetadata {
+    fn from(metadata: CanisterHttpPaymentMetadata) -> Self {
+        pb::CanisterHttpPaymentMetadata {
+            id: metadata.id.get(),
+            receipt: Some(metadata.receipt.into()),
+        }
+    }
+}
+
+impl TryFrom<pb::CanisterHttpPaymentMetadata> for CanisterHttpPaymentMetadata {
+    type Error = ProxyDecodeError;
+    fn try_from(metadata: pb::CanisterHttpPaymentMetadata) -> Result<Self, Self::Error> {
+        let id = CanisterHttpRequestId::new(metadata.id);
+        let receipt =
+            try_from_option_field(metadata.receipt, "CanisterHttpPaymentMetadata::receipt")?;
+        Ok(CanisterHttpPaymentMetadata { id, receipt })
+    }
+}
+
+impl From<CanisterHttpPaymentShare> for pb::CanisterHttpPaymentShare {
+    fn from(share: CanisterHttpPaymentShare) -> Self {
+        // Reuses the generic `BasicSignature` proto via the
+        // `From<BasicSignature<T>> for pb::BasicSignature` impl, so the payment share
+        // doesn't need its own signature proto.
+        pb::CanisterHttpPaymentShare {
+            metadata: Some(share.content.into()),
+            signature: Some(share.signature.into()),
+        }
+    }
+}
+
+impl TryFrom<pb::CanisterHttpPaymentShare> for CanisterHttpPaymentShare {
+    type Error = ProxyDecodeError;
+    fn try_from(share: pb::CanisterHttpPaymentShare) -> Result<Self, Self::Error> {
+        Ok(Signed {
+            content: try_from_option_field(share.metadata, "CanisterHttpPaymentShare::metadata")?,
+            signature: try_from_option_field(
+                share.signature,
+                "CanisterHttpPaymentShare::signature",
+            )?,
+        })
+    }
+}
+
 impl TryFrom<pb::CanisterHttpArtifact> for CanisterHttpResponseArtifact {
     type Error = ProxyDecodeError;
 
     fn try_from(artifact: pb::CanisterHttpArtifact) -> Result<Self, Self::Error> {
-        let share = artifact.share.ok_or(ProxyDecodeError::MissingField(
-            "CanisterHttpArtifact::share",
-        ))?;
+        let share = try_from_option_field(artifact.share, "CanisterHttpArtifact::share")?;
+        let payment_share = try_from_option_field(
+            artifact.payment_share,
+            "CanisterHttpArtifact::payment_share",
+        )?;
 
         Ok(CanisterHttpResponseArtifact {
-            share: share.try_into()?,
+            share,
+            payment_share,
             response: artifact
                 .response
                 .map(|response| response.try_into())
@@ -560,6 +625,7 @@ impl From<CanisterHttpResponseArtifact> for pb::CanisterHttpArtifact {
     fn from(artifact: CanisterHttpResponseArtifact) -> Self {
         pb::CanisterHttpArtifact {
             share: Some(artifact.share.into()),
+            payment_share: Some(artifact.payment_share.into()),
             response: artifact.response.map(|response| response.into()),
         }
     }
@@ -609,6 +675,16 @@ mod tests {
                 signature: BasicSigOf::new(BasicSig(vec![4, 5, 6, 7])),
             },
         };
+        let payment_share = Signed {
+            content: CanisterHttpPaymentMetadata {
+                id: CanisterHttpRequestId::new(2),
+                receipt: CanisterHttpPaymentReceipt::default(),
+            },
+            signature: BasicSignature {
+                signer: NodeId::from(PrincipalId::new_node_test_id(2)),
+                signature: BasicSigOf::new(BasicSig(vec![4, 5, 6, 7])),
+            },
+        };
 
         let response = CanisterHttpResponse {
             id: CanisterHttpRequestId::new(2),
@@ -619,6 +695,7 @@ mod tests {
         // Case 1: Artifact with both share and response
         let artifact_with_response = CanisterHttpResponseArtifact {
             share: share.clone(),
+            payment_share: payment_share.clone(),
             response: Some(response.clone()),
         };
 
@@ -631,6 +708,7 @@ mod tests {
         // Case 2: Artifact with only a share
         let artifact_without_response = CanisterHttpResponseArtifact {
             share,
+            payment_share,
             response: None,
         };
 
