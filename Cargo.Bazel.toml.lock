@@ -3734,9 +3734,9 @@ dependencies = [
  "handlebars 4.5.0",
  "hex",
  "humantime-serde",
- "ic-agent 0.47.3",
+ "ic-agent",
  "ic-identity-hsm",
- "ic-utils 0.47.3",
+ "ic-utils",
  "itertools 0.10.5",
  "k256 0.11.6",
  "keyring",
@@ -3932,7 +3932,7 @@ dependencies = [
  "hyper-rustls 0.27.7",
  "hyper-socks2",
  "hyper-util",
- "ic-agent 0.47.3",
+ "ic-agent",
  "ic-bn-lib",
  "ic-bn-lib-common",
  "ic-btc-interface",
@@ -3961,7 +3961,7 @@ dependencies = [
  "ic-stable-structures 0.7.0",
  "ic-test-state-machine-client",
  "ic-transport-types 0.47.3",
- "ic-utils 0.47.3",
+ "ic-utils",
  "ic-verify-bls-signature",
  "ic-vetkeys",
  "ic-wasm",
@@ -4066,7 +4066,7 @@ dependencies = [
  "rcgen 0.13.1",
  "regex",
  "regex-lite",
- "reqwest 0.12.24",
+ "reqwest 0.13.3",
  "rexpect",
  "rgb",
  "ring 0.17.14",
@@ -6178,56 +6178,6 @@ dependencies = [
 
 [[package]]
 name = "ic-agent"
-version = "0.45.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20a6173286a80fc478462fc45de42faf37a79b0109a489743aeffb3e4a2fc772"
-dependencies = [
- "arc-swap",
- "async-channel 2.5.0",
- "async-lock",
- "async-trait",
- "async-watch",
- "backoff",
- "bytes",
- "cached 0.56.0",
- "candid",
- "der 0.7.7",
- "ecdsa 0.16.9",
- "ed25519-consensus",
- "elliptic-curve 0.13.8",
- "futures-util",
- "hex",
- "http 1.3.1",
- "http-body 1.0.1",
- "http-body-util",
- "ic-certification",
- "ic-ed25519 0.5.0",
- "ic-transport-types 0.45.0",
- "ic-verify-bls-signature",
- "k256 0.13.4",
- "leb128",
- "p256",
- "pem",
- "pkcs8 0.10.2",
- "rand 0.8.5",
- "rangemap",
- "reqwest 0.12.24",
- "sec1 0.7.3",
- "serde",
- "serde_bytes",
- "serde_cbor",
- "serde_repr",
- "sha2 0.10.9",
- "stop-token",
- "thiserror 2.0.18",
- "time",
- "tokio",
- "tower-service",
- "url",
-]
-
-[[package]]
-name = "ic-agent"
 version = "0.47.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85dbab284eac1806b77833cff143d66ae97aae74d34b0e60fb4ab4edf3d6fa12"
@@ -6250,7 +6200,7 @@ dependencies = [
  "http-body 1.0.1",
  "http-body-util",
  "ic-certification",
- "ic-ed25519 0.6.0",
+ "ic-ed25519",
  "ic-transport-types 0.47.3",
  "ic-verify-bls-signature",
  "ic_principal",
@@ -6312,7 +6262,7 @@ dependencies = [
  "hyper 1.8.1",
  "hyper-rustls 0.27.7",
  "hyper-util",
- "ic-agent 0.47.3",
+ "ic-agent",
  "ic-bn-lib-common",
  "indoc 2.0.7",
  "instant-acme 0.8.4",
@@ -6382,7 +6332,7 @@ dependencies = [
  "humantime",
  "hyper 1.8.1",
  "hyper-util",
- "ic-agent 0.47.3",
+ "ic-agent",
  "instant-acme 0.8.4",
  "parse-size",
  "prometheus 0.14.0",
@@ -6716,23 +6666,6 @@ dependencies = [
 
 [[package]]
 name = "ic-ed25519"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b73f85d01b7a3d538353050f1eda546f827ffe7f3ffa35f8e80faa8cff1da10"
-dependencies = [
- "curve25519-dalek",
- "ed25519-dalek",
- "hex-literal 0.4.1",
- "hkdf",
- "ic_principal",
- "pem",
- "rand 0.8.5",
- "thiserror 2.0.18",
- "zeroize",
-]
-
-[[package]]
-name = "ic-ed25519"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ad3d86f2e35cb99ae7497b3e4fa92ad751a8e8978f0680d37b86dd51ef91714"
@@ -6762,14 +6695,14 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.2.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=f33afac2aa47b8760090c93823b7fa7f5ba67dc4#f33afac2aa47b8760090c93823b7fa7f5ba67dc4"
+source = "git+https://github.com/dfinity/ic-gateway?rev=d36997b96e82a40ba4c894910739b6b09cfb763b#d36997b96e82a40ba4c894910739b6b09cfb763b"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
  "arc-swap",
  "async-trait",
  "axum 0.8.9",
- "axum-extra 0.10.1",
+ "axum-extra 0.12.6",
  "bytes",
  "candid",
  "clap 4.5.53",
@@ -6788,21 +6721,23 @@ dependencies = [
  "ic-bn-lib-common",
  "ic-custom-domains-backend",
  "ic-custom-domains-base",
- "ic-http-gateway",
- "ic-transport-types 0.45.0",
+ "ic-http-gateway-protocol",
+ "ic-transport-types 0.47.3",
+ "isbot",
  "itertools 0.14.0",
  "lazy_static",
- "maxminddb 0.27.3",
+ "maxminddb 0.28.1",
  "moka",
  "prometheus 0.14.0",
  "rand 0.8.5",
  "regex",
- "reqwest 0.12.24",
+ "reqwest 0.13.3",
  "rustls 0.23.27",
  "serde",
+ "serde_cbor",
  "serde_json",
- "sha2 0.10.9",
- "strum 0.27.2",
+ "sha2 0.11.0",
+ "strum 0.28.0",
  "tikv-jemalloc-ctl",
  "tikv-jemallocator",
  "time",
@@ -6815,6 +6750,7 @@ dependencies = [
  "tracing-serde 0.2.0",
  "tracing-subscriber",
  "url",
+ "urlencoding",
  "uuid",
  "woothee",
 ]
@@ -6837,9 +6773,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-http-gateway"
+name = "ic-http-gateway-protocol"
 version = "0.0.0-git"
-source = "git+https://github.com/dfinity/http-gateway?tag=v0.4.2#252f2b10c0c18b0d24c9e54d84d1862e5183ac75"
+source = "git+https://github.com/dfinity/ic-http-gateway-protocol?tag=v0.5.1#ec1a288ec9f02cd3a398be429a30399844bca2e4"
 dependencies = [
  "bytes",
  "candid",
@@ -6847,10 +6783,10 @@ dependencies = [
  "http 1.3.1",
  "http-body 1.0.1",
  "http-body-util",
- "ic-agent 0.45.0",
+ "ic-agent",
  "ic-http-certification",
  "ic-response-verification",
- "ic-utils 0.45.0",
+ "ic-utils",
  "thiserror 1.0.68",
 ]
 
@@ -6861,7 +6797,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "577e4411ea208f0bf7e6bf13535660df682fada94f45fbbc79b7e34c946a06ae"
 dependencies = [
  "hex",
- "ic-agent 0.47.3",
+ "ic-agent",
  "pkcs11",
  "sha2 0.10.9",
  "simple_asn1",
@@ -7000,24 +6936,6 @@ dependencies = [
 
 [[package]]
 name = "ic-transport-types"
-version = "0.45.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a775244756a5d97ff19b08071a946a4b4896904e35deb036bf215e80f2e703d"
-dependencies = [
- "candid",
- "hex",
- "ic-certification",
- "leb128",
- "serde",
- "serde_bytes",
- "serde_cbor",
- "serde_repr",
- "sha2 0.10.9",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "ic-transport-types"
 version = "0.47.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2116182b3ec5a831d579db0a205b6cf9c2ca96616493bef99480532d0b3c2f5"
@@ -7036,28 +6954,6 @@ dependencies = [
 
 [[package]]
 name = "ic-utils"
-version = "0.45.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30c22aaa2924df0321705dc01d408c8b75d1e1deb40b65defd2ff04008a720be"
-dependencies = [
- "async-trait",
- "candid",
- "futures-util",
- "ic-agent 0.45.0",
- "ic-management-canister-types 0.5.0",
- "once_cell",
- "semver",
- "serde",
- "serde_bytes",
- "sha2 0.10.9",
- "strum 0.27.2",
- "strum_macros 0.27.1",
- "thiserror 2.0.18",
- "time",
-]
-
-[[package]]
-name = "ic-utils"
 version = "0.47.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f793db5d338dd9d0b659c2ce40080d7c9811cff6f171560f781cd2d6a43b7353"
@@ -7065,7 +6961,7 @@ dependencies = [
  "async-trait",
  "candid",
  "futures-util",
- "ic-agent 0.47.3",
+ "ic-agent",
  "ic-management-canister-types 0.7.1",
  "once_cell",
  "semver",
@@ -7707,6 +7603,15 @@ name = "is_terminal_polyfill"
 version = "1.70.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7943c866cc5cd64cbc25b2e01621d07fa8eb2a1a23160ee81ce38704e97b8ecf"
+
+[[package]]
+name = "isbot"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f98d665d8689fd01bd1572c10fd58cf38a811f56c2d00b5ec5c0c50dc1eee956"
+dependencies = [
+ "regex",
+]
 
 [[package]]
 name = "isocountry"
@@ -8716,9 +8621,9 @@ dependencies = [
 
 [[package]]
 name = "maxminddb"
-version = "0.27.3"
+version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76371bd37ce742f8954daabd0fde7f1594ee43ac2200e20c003ba5c3d65e2192"
+checksum = "faf6467428ad055b71e588bcedcbaf2ff605b3251deb0c52be4a04b674c546dd"
 dependencies = [
  "ipnetwork 0.21.1",
  "log",
@@ -11790,7 +11695,6 @@ dependencies = [
  "futures-core",
  "futures-util",
  "h2 0.4.4",
- "hickory-resolver",
  "http 1.3.1",
  "http-body 1.0.1",
  "http-body-util",
@@ -11800,7 +11704,6 @@ dependencies = [
  "js-sys",
  "log",
  "mime_guess",
- "once_cell",
  "percent-encoding",
  "pin-project-lite",
  "quinn",
@@ -11846,13 +11749,14 @@ dependencies = [
  "hyper-util",
  "js-sys",
  "log",
+ "mime_guess",
  "once_cell",
  "percent-encoding",
  "pin-project-lite",
  "quinn",
  "rustls 0.23.27",
  "rustls-pki-types",
- "rustls-platform-verifier 0.7.0",
+ "rustls-platform-verifier 0.6.2",
  "serde",
  "serde_json",
  "sync_wrapper 1.0.2",
