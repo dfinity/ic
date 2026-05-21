@@ -580,6 +580,7 @@ pub fn extract_effective_canister_id(
         | Ok(Method::SetupInitialDKG)
         | Ok(Method::DepositCycles)
         | Ok(Method::HttpRequest)
+        | Ok(Method::FlexibleHttpRequest)
         | Ok(Method::RawRand)
         | Ok(Method::ECDSAPublicKey)
         | Ok(Method::SignWithECDSA)

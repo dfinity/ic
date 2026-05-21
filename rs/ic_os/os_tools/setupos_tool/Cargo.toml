@@ -15,3 +15,9 @@ config_types = { path = "../../config/types" }
 network = { path = "../../networking/network" }
 deterministic_ips = { path = "../../networking/deterministic_ips" }
 utils = { path = "../../utils" }
+ic-registry-nns-data-provider = { path = "../../../registry/nns_data_provider" }
+ic-registry-keys = { path = "../../../registry/keys" }
+ic-protobuf = { path = "../../../protobuf" }
+prost = { workspace = true }
+tokio = { workspace = true }
+url = { workspace = true }

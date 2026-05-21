@@ -1,0 +1,141 @@
+= The ckDOGE Minter Canister +
+
+
+The ckDOGE Minter canister converts DOGE to ckDOGE and back.
+It works with a link:../../../ledger_suite/icrc1/README.md[Ledger Canister], handling the _ckDOGE_ token transfers, and a link:https://github.com/dfinity/dogecoin-canister[Dogecoin Canister], interfacing with the Dogecoin network.
+The ckDOGE Minter canister is a https://github.com/dfinity/ICRC-1/blob/8c526e1dae38622eb0940643996e8187d2063513/standards/ICRC-1/README.md#minting-account-[minter] for the ckDOGE Ledger canister: it can mint and burn ckDOGE tokens.
+
+== Interact with the ckDOGE minter
+
+TIP: To interact with the minter or ledger as exemplified below with `dfx`, make sure to navigate to `rs/dogecoin/ckdoge/mainnet`.
+
+NOTE: Dogecoin testnet is not supported.
+
+=== Deposit: Dogecoin to ckDOGE
+```
+ ┌────┐                    ┌──────┐┌────────────────┐
+ │User│                    │Minter││DogecoinNetwork │
+ └─┬──┘                    └──┬───┘└───────┬────────┘
+   │                          │            │
+   │ get_doge_address(account)│            │
+   │─────────────────────────>│            │
+   │                          │            │
+   │       address            │            │
+   │<─────────────────────────│            │
+   │                          │            │
+   │    Send DOGE to address  │            │
+   │───────────────────────────────────── >│
+   │                          │            │
+   │ update_balance(account)  │            │
+   │─────────────────────────>│            │
+ ┌─┴──┐                    ┌──┴───┐┌───────┴────────┐
+ │User│                    │Minter││DogecoinNetwork │
+ └────┘                    └──────┘└────────────────┘
+```
+
+1. Obtain the deposit address:
++
+[source,shell]
+----
+dfx canister --network ic call minter get_doge_address "(record {})"
+----
++
+2. Send dogecoin to the DOGE address the minter gave you, which by default is identified by the principal id of your dfx identity if the account argument is left unspecified, as shown in the `get_doge_address` call above.
+3. Wait until your Dogecoin transaction got enough confirmations.
+   Mainnet ckDOGE can require up to 60 confirmations (which depends on the minter's latest setting), corresponding to a 1-hour waiting period on average.
+4. Notify the minter about the transfer.
++
+[source,shell]
+----
+dfx canister --network ic call minter update_balance "(record {})"
+----
+
+If you want to get the deposit address of a different account than your dfx identity, you may specify full account details including both owner principal and subaccount like this:
+[source,shell]
+----
+dfx canister --network ic call minter get_doge_address '(record { owner = opt principal ".."; subaccount = opt blob ".." })'
+----
+Similarly, the argument to `update_balance` can specify full account details too:
+[source,shell]
+----
+dfx canister --network ic call minter update_balance '(record { owner = opt principal ".."; subaccount = opt blob ".." })'
+----
+
+You now have some ckDOGE and can enjoy the Internet Computer speed and low fees!
+
+If you would like to transfer them to your wallet (plug, stoic, ...), copy the principal of your wallet and paste it over PRINCIPAL and change AMOUNT to the desired amount (in koinus) in the following command:
+[source,shell]
+----
+dfx canister --network ic call ledger icrc1_transfer "(record { to = record { owner = principal "PRINCIPAL" }; amount = AMOUNT; })"
+----
+If you want to override the default transfer arguments (for more information on the supported parameters, see the https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md[ICRC-1 Token Standard]), you can modify the following command:
+[source,shell]
+----
+dfx canister --network ic call ledger icrc1_transfer "(record { from_subaccount = null; to = record { owner = principal "PRINCIPAL"; subaccount = null; }; amount = AMOUNT; fee = null; memo = null; created_at_time = null;})"
+----
+
+=== Withdrawal: ckDOGE to Dogecoin
+```
+ ┌────┐                   ┌─────────────┐                            ┌──────┐                  ┌────────────────┐
+ │User│                   │ckDOGE Ledger│                            │Minter│                  │Dogecoin Network│
+ └─┬──┘                   └─────┬───────┘                            └──┬───┘                  └────────┬───────┘
+   │                            │                                       │                               │
+   │icrc2_approve(minter,amount)│                                       │                               │
+   │───────────────────────────>│                                       │                               │
+   │                            │                                       │                               │
+   │        retrieve_doge_with_approval(address,amount)                 │                               │
+   │───────────────────────────────────────────────────────────────────>│                               │
+   │                            │                                       │                               │
+   │                            │icrc2_transfer_from(user,minter,amount)│                               │
+   │                            │<──────────────────────────────────────│                               │
+   │                            │                                       │                               │
+   │                            │                                       │Send DOGE to withdrawal address│
+   │                            │                                       │──────────────────────────────>│
+ ┌─┴──┐                   ┌─────┴───────┐                            ┌──┴───┐                  ┌────────┴───────┐
+ │User│                   │ckDOGE Ledger│                            │Minter│                  │Dogecoin Network│
+ └────┘                   └─────────────┘                            └──────┘                  └────────────────┘
+```
+1. Approve the minter's principal:
++
+[source,shell]
+----
+dfx canister --network ic call ledger icrc2_approve "(record {spender=record{owner=principal \"eqltq-xqaaa-aaaar-qb3vq-cai\"}; amount=AMOUNT})"
+----
++
+2. Call the `retrieve_doge_with_approval` endpoint with the desired DOGE destination address where you want to receive your Dogecoin.
+   Replace DOGE_ADDRESS with your DOGE address (the minter supports all address formats) and AMOUNT with the desired amount to withdraw.
++
+[source,shell]
+----
+dfx canister --network ic call minter retrieve_doge_with_approval "(record {address=\"DOGE_ADDRESS\"; amount=AMOUNT;})"
+----
++
+You now have your DOGE back on the Dogecoin network (caution: transaction finalization may take a while).
+
+[TIP]
+.Status of Withdrawal
+====
+You can query the status of your `retrieve_doge_with_approval` request using the following command (replace `BLOCK_INDEX` with the block index you get when calling `retrieve_doge_with_approval`):
+[source,shell]
+----
+dfx canister --network ic call minter retrieve_doge_status "(record { block_index = BLOCK_INDEX; })"
+----
+====
+
+=== Ledger Memos
+
+All ckDOGE transactions issued by the ckDOGE minter and recorded on the ledger use a memo field to store additional information about the transaction. The ckDOGE minter records a transaction on the ledger in the following cases:
+
+. minting ckDOGE after a deposit of DOGE,
+. burning ckDOGE after a withdrawal request to DOGE,
+
+==== Design
+The general idea is to encode the memo as a https://cbor.io/[CBOR] message and use the transaction type to select the message type. The messages follow the compact encoding described in the https://twittner.gitlab.io/minicbor/minicbor_derive/index.html[minicbor] package documentation.
+
+.Example Implementation in Typescript
+====
+The ckDOGE ledger memos use the same syntax as the https://github.com/dfinity/ic/blob/c8237d1822d9c6ede27c1b89621c05dfe2e33f35/rs/ethereum/cketh/minter/src/memo.rs#L25[ckBTC ledger memos] and there is an example implementation of how to decode the ckBTC ledger memos in Typescript in the https://github.com/dfinity/oisy-wallet/tree/main[Oisy Wallet] repository:
+
+* https://github.com/dfinity/oisy-wallet/blob/384013a67a994555b6bd1cd6baeba0a83c444839/src/frontend/src/icp/utils/ckbtc-memo.utils.ts[Decode ckBTC ledger burn and mint memo]
+* https://github.com/dfinity/oisy-wallet/blob/384013a67a994555b6bd1cd6baeba0a83c444839/src/frontend/src/tests/icp/utils/ckbtc-memo.utils.spec.ts[Tests to decode ckBTC ledger memo]
+====

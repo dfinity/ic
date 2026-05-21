@@ -51,4 +51,10 @@ pub fn setup_ic(env: TestEnv, num_api_bns: usize) {
         node.await_can_login_as_admin_via_ssh()
             .expect("Unassigned node didn't come up healthy");
     }
+    info!(&log, "Checking health of API boundary nodes ...");
+    for api_bn in env.topology_snapshot().api_boundary_nodes() {
+        api_bn
+            .await_api_bn_healthy()
+            .expect("API Boundary Node didn't come up healthy");
+    }
 }

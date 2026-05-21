@@ -1715,7 +1715,6 @@ fn push_output_request_respects_memory_limits() {
     let callback_id = sandbox_safe_system_state
         .register_callback(Callback::new(
             call_context_test_id(0),
-            own_canister_id,
             canister_test_id(0),
             Cycles::zero(),
             Cycles::zero(),
@@ -1827,7 +1826,6 @@ fn push_output_request_oversized_request_memory_limits() {
     let callback_id = sandbox_safe_system_state
         .register_callback(Callback::new(
             call_context_test_id(0),
-            own_canister_id,
             canister_test_id(0),
             Cycles::zero(),
             Cycles::zero(),

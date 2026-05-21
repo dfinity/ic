@@ -16,7 +16,7 @@ const INVALID_INDEX_ENTRY: u64 = u64::MAX;
 pub(super) struct IndexEntry {
     /// Start position of the record within the data region.
     pub position: MemoryPosition,
-    /// Record unituque sequential index.
+    /// Record unique sequential index.
     pub idx: u64,
     /// Record timestamp.
     pub timestamp: u64,
@@ -549,6 +549,52 @@ mod tests {
                 }))
                 .expect("start present");
             assert_le!(start.idx, filter_start_idx); // Beginning is not trimmed.
+        }
+    }
+
+    #[test]
+    fn big_log_filter_by_timestamp() {
+        for start_position in [TEST_NO_WRAP_POSITION, TEST_WRAP_POSITION] {
+            let start_idx = 0;
+            // Record at idx 10 has timestamp 10 * 1_000_000 = 10_000_000
+            let filter_start_ts = 10_000_000;
+            let table = make_table_with_config(
+                TEST_DATA_CAPACITY,
+                TEST_INDEX_TABLE_PAGES,
+                TEST_RESULT_MAX_SIZE,
+                TEST_RECORD_CONTENT_SIZE,
+                TEST_LOG_SIZE_BIG,
+                start_position,
+                start_idx,
+            );
+
+            // Short range query within max result size.
+            // 180 records * 10 KB < 2 MB limit
+            // 180 records duration = 180 * 1_000_000 = 180_000_000
+            let start = table
+                .find_approx_start(FetchCanisterLogsFilter::ByTimestampNanos(
+                    FetchCanisterLogsRange {
+                        start: filter_start_ts,
+                        end: filter_start_ts + 180_000_000,
+                    },
+                ))
+                .expect("start present");
+            // The found entry should be at or before the requested start time.
+            let start_entry_ts = start.timestamp;
+            assert_le!(start_entry_ts, filter_start_ts);
+
+            // Long range query exceeding max result size.
+            // 220 records * 10 KB > 2 MB limit
+            let start = table
+                .find_approx_start(FetchCanisterLogsFilter::ByTimestampNanos(
+                    FetchCanisterLogsRange {
+                        start: filter_start_ts,
+                        end: filter_start_ts + 220_000_000,
+                    },
+                ))
+                .expect("start present");
+            let start_entry_ts = start.timestamp;
+            assert_le!(start_entry_ts, filter_start_ts);
         }
     }
 }

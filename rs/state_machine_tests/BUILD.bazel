@@ -123,19 +123,18 @@ rust_binary(
 )
 
 rust_ic_test(
-    name = "state_machine_multi_subnet_test",
-    srcs = ["tests/multi_subnet.rs"],
+    name = "state_machine_integration_tests",
+    srcs = [
+        "tests/dts.rs",
+        "tests/mod.rs",
+        "tests/multi_subnet.rs",
+        "tests/reject_remote_callbacks.rs",
+    ],
+    crate_root = "tests/mod.rs",
     data = ["//rs/universal_canister/impl:universal_canister.wasm.gz"],
     env = {
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [":state_machine_tests"] + DEPENDENCIES + DEV_DEPENDENCIES,
-)
-
-rust_ic_test(
-    name = "state_machine_dts_test",
-    srcs = ["tests/dts.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":state_machine_tests"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

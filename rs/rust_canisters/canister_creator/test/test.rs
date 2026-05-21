@@ -1,16 +1,21 @@
 use canister_test::*;
 use ic_state_machine_tests::StateMachine;
 
-// This constant has been obtained empirically by running the tests.
+// 1. This constant has been obtained empirically by running the tests.
 // The old value of the const was 1_820_000.
-// Since, we updated the default stack size for Wasm from 1MiB to 3MiB
+//
+// 2. Since, we updated the default stack size for Wasm from 1MiB to 3MiB
 // The new memory usage is 1_820_000 - 1_048_576 + 3_145_728 = 3_991_081
-// After increasing the size of a canister history entry by 32B,
+//
+// 3. After increasing the size of a canister history entry by 32B,
 // and having a total of 1_001 canister creation entries and
 // 1 canister code deployment entry (for the creator canister),
 // the memory usage grew by extra 1_002 x 32 = 32_064B
 // to 3_991_081 + 32_064 = 4_023_145.
-const CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES: u64 = 4_023_145;
+//
+// 4. Bumping the candid version to v.0.10.22 increased the memory
+// further from 4_023_145 to 4_024_201 which is 1_056 bytes.
+const CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES: u64 = 4_024_201;
 
 const HELLO_WORLD_WAT: &str = r#"
 (module

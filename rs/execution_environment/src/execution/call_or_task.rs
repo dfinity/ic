@@ -616,7 +616,6 @@ impl CallOrTaskHelper {
             .system_state
             .on_canister_result(
                 self.call_context_id,
-                None,
                 output.wasm_result.clone(),
                 instructions_used,
             )

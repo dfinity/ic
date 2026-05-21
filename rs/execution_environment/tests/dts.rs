@@ -1135,6 +1135,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             // No effective canister id.
             Method::CreateCanister
             | Method::HttpRequest
+            | Method::FlexibleHttpRequest
             | Method::ECDSAPublicKey
             | Method::RawRand
             | Method::SetupInitialDKG

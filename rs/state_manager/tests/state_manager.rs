@@ -1039,9 +1039,9 @@ fn populates_prev_state_hash() {
         let hashes = state_manager.list_state_hashes_to_certify();
 
         assert_eq!(2, hashes.len());
-        assert_ne!(hashes[0].1, hashes[1].1);
+        assert_ne!(hashes[0].hash, hashes[1].hash);
         assert_eq!(
-            Some(hashes[0].1.clone()),
+            Some(hashes[0].hash.clone()),
             state_2.system_metadata().prev_state_hash
         );
     });
@@ -2424,7 +2424,7 @@ fn recomputes_metadata_on_restart_if_missing() {
             .expect("Failed to remove states metadata");
         let cert_hashes = state_manager.list_state_hashes_to_certify();
         assert_eq!(1, cert_hashes.len());
-        assert_eq!(height(1), cert_hashes[0].0);
+        assert_eq!(height(1), cert_hashes[0].height);
 
         let state_manager = restart_fn(state_manager, None);
 
@@ -2515,11 +2515,11 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
 
 /// Asserts that all error counters in the state manager are still 0
 fn assert_error_counters(metrics: &MetricsRegistry) {
+    let critical_errors = fetch_int_counter_vec(metrics, "critical_errors");
     assert_eq!(
         0,
-        fetch_int_counter_vec(metrics, "critical_errors")
-            .values()
-            .sum::<u64>()
+        critical_errors.values().sum::<u64>(),
+        "critical_errors: {critical_errors:?}"
     );
 }
 
@@ -8155,11 +8155,11 @@ fn can_split_with_inflight_restore_snapshot() {
             if subnet_id == SUBNET_A {
                 other_subnet_id = SUBNET_B;
                 // `SUBNET_A` should only host `CANISTER_1` (and preserve its snapshot).
-                expected.canister_states.remove(&CANISTER_2);
+                expected.remove_canister(&CANISTER_2);
             } else if subnet_id == SUBNET_B {
                 other_subnet_id = SUBNET_A;
                 // `SUBNET_B` should only host `CANISTER_2`.
-                expected.canister_states.remove(&CANISTER_1);
+                expected.remove_canister(&CANISTER_1);
                 // And the snapshot of `CANISTER_1` should be deleted.
                 expected.canister_snapshots = Default::default();
             } else {
@@ -8208,6 +8208,12 @@ fn can_split_with_inflight_restore_snapshot() {
 fn migrate_canister(state: &mut ReplicatedState, old_id: CanisterId, new_id: CanisterId) {
     // Take canister out.
     let mut canister = state.take_canister_state(&old_id).unwrap();
+
+    // Migrate the canister priority.
+    state
+        .metadata
+        .subnet_schedule
+        .rename_canister(&old_id, new_id);
 
     canister.system_state.set_canister_id(new_id);
     state

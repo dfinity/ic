@@ -1,11 +1,10 @@
 use crate::registry::Registry;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::{
-    replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetListRecord,
-    unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
+    subnet::v1::SubnetListRecord, unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_keys::{
-    make_api_boundary_node_record_key, make_blessed_replica_versions_key, make_node_record_key,
+    make_api_boundary_node_record_key, make_node_record_key,
     make_unassigned_nodes_config_record_key,
 };
 use prost::Message;
@@ -19,8 +18,8 @@ pub fn get_subnet_ids_from_subnet_list(subnet_list: SubnetListRecord) -> Vec<Sub
         .collect()
 }
 
-fn blessed_versions_to_string(blessed: &BlessedReplicaVersions) -> String {
-    format!("[{}]", blessed.blessed_version_ids.join(", "))
+fn blessed_versions_to_string(blessed: &[String]) -> String {
+    format!("[{}]", blessed.join(", "))
 }
 
 pub(crate) fn check_api_boundary_nodes_exist(registry: &Registry, node_ids: &[NodeId]) {
@@ -36,42 +35,14 @@ pub(crate) fn check_api_boundary_nodes_exist(registry: &Registry, node_ids: &[No
     });
 }
 
-pub(crate) fn get_blessed_replica_versions(
-    registry: &Registry,
-) -> Result<BlessedReplicaVersions, String> {
-    let blessed_replica_key = make_blessed_replica_versions_key();
-    registry
-        .get(blessed_replica_key.as_bytes(), registry.latest_version())
-        .map_or(
-            Err("Failed to retrieve the blessed replica versions.".to_string()),
-            |result| {
-                let decoded = BlessedReplicaVersions::decode(result.value.as_slice()).unwrap();
-                Ok(decoded)
-            },
-        )
-}
-
 pub(crate) fn check_replica_version_is_blessed(registry: &Registry, replica_version_id: &str) {
-    match get_blessed_replica_versions(registry) {
-        Ok(blessed_list) => {
-            // Verify that the new one is blessed
-            assert!(
-                blessed_list
-                    .blessed_version_ids
-                    .iter()
-                    .any(|v| v == replica_version_id),
-                "Attempt to check if the replica version to '{}' is blessed was rejected, \
-                because that version is NOT blessed. The list of blessed replica versions is: {}.",
-                replica_version_id,
-                blessed_versions_to_string(&blessed_list)
-            );
-        }
-        Err(_) => {
-            panic!(
-                "Error while fetching the list of blessed replica versions record: {replica_version_id}"
-            )
-        }
-    }
+    let blessed_version_ids = registry.get_blessed_replica_version_ids();
+    assert!(
+        blessed_version_ids.contains(&replica_version_id.to_string()),
+        "Replica version '{}' is NOT blessed. The blessed versions are: {}.",
+        replica_version_id,
+        blessed_versions_to_string(&blessed_version_ids)
+    );
 }
 
 pub(crate) fn node_exists_or_panic(registry: &Registry, node_id: NodeId) {

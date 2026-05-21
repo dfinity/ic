@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/consensus/features",
     "//rs/crypto/interfaces/sig_verification",
     "//rs/cycles_account_manager",
     "//rs/interfaces",
@@ -43,6 +44,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:proptest",
     "@crate_index//:rand",
+    "@crate_index//:rstest",
     "@crate_index//:tokio",
 ]
 

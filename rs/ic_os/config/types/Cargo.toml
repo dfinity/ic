@@ -7,6 +7,7 @@ edition.workspace = true
 ic-types = { path = "../../../types/types" }
 macaddr = { workspace = true }
 url = { workspace = true }
+securefmt = { workspace = true }
 serde = { workspace = true }
 serde_with = { workspace = true }
 thiserror = { workspace = true }

@@ -1247,6 +1247,18 @@ message NervousSystemParameters {
   // Whether to automatically advance the SNS target version after a new upgrade is published
   // by the NNS. If not specified, defaults to false for backward compatibility.
   optional bool automatically_advance_target_version = 23;
+
+  // Custom proposal criticality configuration. Allows specifying additional native function IDs
+  // that should be treated as critical. If not specified, defaults to None (no custom criticality).
+  optional CustomProposalCriticality custom_proposal_criticality = 24;
+}
+
+// Defines custom proposal criticality settings for the nervous system.
+message CustomProposalCriticality {
+  // List of native function IDs that should be treated as critical.
+  // These functions will require a higher level of consensus to be executed.
+  // Only non-critical native function IDs can be added to this list.
+  repeated uint64 additional_critical_native_action_ids = 1;
 }
 
 message VotingRewardsParameters {

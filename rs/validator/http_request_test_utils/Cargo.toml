@@ -25,5 +25,5 @@ strum_macros = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-ic-crypto-internal-basic-sig-ed25519 = { path = "../../crypto/internal/crypto_lib/basic_sig/ed25519" }
+ic-ed25519 = { path = "../../../packages/ic-ed25519" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }

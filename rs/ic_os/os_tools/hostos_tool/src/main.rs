@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use config_tool::{DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
+use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use manual_guestos_recovery::GuestOSRecoveryApp;
 use network::generate_network_config;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
@@ -79,7 +79,6 @@ pub fn main() -> Result<()> {
             let generated_mac = calculate_deterministic_mac(
                 &hostos_config.icos_settings.mgmt_mac,
                 hostos_config.icos_settings.deployment_environment,
-                IpVariant::V6,
                 NodeType::HostOS,
             );
 
@@ -100,7 +99,6 @@ pub fn main() -> Result<()> {
             let generated_mac = calculate_deterministic_mac(
                 &hostos_config.icos_settings.mgmt_mac,
                 hostos_config.icos_settings.deployment_environment,
-                IpVariant::V6,
                 node_type,
             );
 
@@ -130,7 +128,6 @@ pub fn main() -> Result<()> {
             let generated_mac = calculate_deterministic_mac(
                 &hostos_config.icos_settings.mgmt_mac,
                 hostos_config.icos_settings.deployment_environment,
-                IpVariant::V6,
                 node_type,
             );
             println!("{generated_mac}");

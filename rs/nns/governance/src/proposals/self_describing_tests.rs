@@ -262,6 +262,7 @@ fn test_create_service_nervous_system_to_self_describing() {
                         "seconds".to_string() => SelfDescribingValue::from(378025_u64),
                     }),
                 }),
+                "custom_proposal_criticality".to_string() => SelfDescribingValue::Null,
             }),
             "swap_parameters".to_string() => SelfDescribingValue::Map(hashmap! {
                 "minimum_participants".to_string() => SelfDescribingValue::from(50_u64),

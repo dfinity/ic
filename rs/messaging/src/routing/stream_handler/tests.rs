@@ -1844,7 +1844,7 @@ fn check_stream_handler_generated_reject_signal_canister_not_found() {
     check_stream_handler_generated_reject_signal_impl(
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
-            state.canister_states.remove(&LOCAL_CANISTER).unwrap();
+            state.remove_canister(&LOCAL_CANISTER).unwrap();
         },
         RejectReason::CanisterNotFound,
     );
@@ -2056,7 +2056,7 @@ fn inducting_best_effort_response_addressed_to_non_existent_canister_does_not_ra
     failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(
         |state| {
             // Remove the `LOCAL_CANISTER`.
-            state.canister_states.remove(&LOCAL_CANISTER).unwrap();
+            state.remove_canister(&LOCAL_CANISTER).unwrap();
         },
         |expected_state, refund| {
             // Cycles attached to the dropped response are lost.
@@ -3322,12 +3322,8 @@ fn with_test_setup_and_config(
                     // corresponds to `LOCAL_CANISTER`; else use a dummy callback id.
                     if originator == *LOCAL_CANISTER {
                         // Register a `Callback` and get a `CallbackId`.
-                        let callback_id = register_callback(
-                            &mut canister_state,
-                            originator,
-                            respondent,
-                            deadline,
-                        );
+                        let callback_id =
+                            register_callback(&mut canister_state, respondent, deadline);
 
                         // Make an input queue reservation.
                         canister_state

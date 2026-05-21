@@ -6,7 +6,8 @@ use crate::{
 pub use ic_dashboard::Dashboard;
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_types::{
-    NodeId, RegistryVersion, ReplicaVersion, consensus::HasHeight, hostos_version::HostosVersion,
+    NodeId, RegistryVersion, ReplicaVersion, Time, consensus::HasHeight,
+    hostos_version::HostosVersion,
 };
 use std::{
     process::Command,
@@ -22,6 +23,7 @@ pub(crate) struct OrchestratorDashboard {
     last_applied_ssh_parameters: Arc<RwLock<SshAccessParameters>>,
     last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
     last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
+    last_poll_certified_time: Arc<RwLock<Time>>,
     replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
@@ -40,6 +42,7 @@ impl Dashboard for OrchestratorDashboard {
             "node id: {}\n\
              DC id: {}\n\
              last registry version: {}\n\
+             last poll's certified time: {}\n\
              subnet id: {}\n\
              replica process id: {}\n\
              replica version: {}\n\
@@ -55,6 +58,7 @@ impl Dashboard for OrchestratorDashboard {
             self.node_id,
             self.registry.dc_id().unwrap_or_default(),
             self.registry.get_latest_version().get(),
+            self.get_last_poll_certified_time(),
             self.get_subnet_id(),
             self.get_pid(),
             self.replica_version,
@@ -85,6 +89,7 @@ impl OrchestratorDashboard {
         last_applied_ssh_parameters: Arc<RwLock<SshAccessParameters>>,
         last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
         last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
+        last_poll_certified_time: Arc<RwLock<Time>>,
         replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
@@ -98,6 +103,7 @@ impl OrchestratorDashboard {
             last_applied_ssh_parameters,
             last_applied_firewall_version,
             last_applied_ipv4_config_version,
+            last_poll_certified_time,
             replica_process,
             subnet_assignment,
             replica_version,
@@ -175,13 +181,8 @@ impl OrchestratorDashboard {
                 let signed = cup.is_signed();
                 let hash = cup.content.state_hash.get().0;
 
-                let unix_timestamp = cup.content.block.get_value().context.time;
-                // UNIX timestamp in nanoseconds followed by the human-readable representation
-                let timestamp_str = format!(
-                    "{} ({})",
-                    unix_timestamp.as_nanos_since_unix_epoch(),
-                    unix_timestamp
-                );
+                let timestamp = cup.content.block.get_value().context.time;
+                let timestamp_str = timestamp_to_string(timestamp);
 
                 (height, signed.to_string(), hex::encode(hash), timestamp_str)
             }
@@ -189,6 +190,11 @@ impl OrchestratorDashboard {
         format!(
             "cup height: {height}\ncup signed: {signed}\ncup state hash: {hash}\ncup timestamp: {timestamp}"
         )
+    }
+
+    fn get_last_poll_certified_time(&self) -> String {
+        let time = *self.last_poll_certified_time.read().unwrap();
+        timestamp_to_string(time)
     }
 }
 
@@ -207,4 +213,9 @@ fn try_to_get_authorized_keys(account: &str) -> Result<String, String> {
         true => Ok(stringify(&output.stdout)?),
         false => Err(stringify(&output.stderr)?),
     }
+}
+
+fn timestamp_to_string(time: Time) -> String {
+    // UNIX timestamp in nanoseconds followed by the human-readable representation
+    format!("{} ({})", time.as_nanos_since_unix_epoch(), time)
 }

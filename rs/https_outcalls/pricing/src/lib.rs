@@ -3,10 +3,16 @@ mod legacy;
 use std::time::Duration;
 
 use ic_types::{
-    NumBytes, NumInstructions,
-    canister_http::{CanisterHttpPaymentReceipt, CanisterHttpRequestContext},
+    Cycles, NumBytes, NumInstructions,
+    canister_http::{CanisterHttpPaymentReceipt, CanisterHttpRequestContext, CanisterHttpResponse},
 };
 use legacy::LegacyTracker;
+
+use crate::legacy::LegacyCalculator;
+
+pub trait PricingCalculator {
+    fn consensus_cost(&self, response: &CanisterHttpResponse) -> Cycles;
+}
 
 pub trait BudgetTracker: Send {
     /// Returns the maximum network resources the Adapter is allowed to consume.
@@ -56,5 +62,11 @@ impl PricingFactory {
         // TODO(IC-1937): This should take into account context.pricing_version and a replica config.
         // Currently, we only support the legacy pricing version.
         Box::new(LegacyTracker::new(context.max_response_bytes))
+    }
+
+    pub fn new_calculator(_context: &CanisterHttpRequestContext) -> Box<dyn PricingCalculator> {
+        // TODO(IC-1937): This should take into account context.pricing_version and a replica config.
+        // Currently, we only support the legacy pricing version.
+        Box::new(LegacyCalculator {})
     }
 }

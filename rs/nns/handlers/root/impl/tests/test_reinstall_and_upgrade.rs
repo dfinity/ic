@@ -12,8 +12,8 @@ use ic_nervous_system_clients::{
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_nns_test_utils::itest_helpers::{
-    forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_root_canister,
-    set_up_universal_canister,
+    forward_call_via_universal_canister, set_up_root_canister, set_up_universal_canister,
+    state_machine_test_on_nns_subnet,
 };
 use ic_test_utilities::{
     stable_memory_reader::{STABLE_MEMORY_READER_SHA256, STABLE_MEMORY_READER_WASM},
@@ -121,7 +121,7 @@ async fn install_stable_memory_reader(
 
 #[test]
 fn test_upgrade_preserves_stable_memory_dont_stop() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         install_stable_memory_reader(&runtime, Upgrade, false).await;
         Ok(())
     });
@@ -129,7 +129,7 @@ fn test_upgrade_preserves_stable_memory_dont_stop() {
 
 #[test]
 fn test_upgrade_preserves_stable_memory_stop() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         install_stable_memory_reader(&runtime, Upgrade, true).await;
         Ok(())
     });
@@ -137,7 +137,7 @@ fn test_upgrade_preserves_stable_memory_stop() {
 
 #[test]
 fn test_reinstall_loses_stable_memory_dont_stop() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         install_stable_memory_reader(&runtime, Reinstall, false).await;
         Ok(())
     });
@@ -145,7 +145,7 @@ fn test_reinstall_loses_stable_memory_dont_stop() {
 
 #[test]
 fn test_reinstall_loses_stable_memory_stop() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         install_stable_memory_reader(&runtime, Reinstall, true).await;
         Ok(())
     });
@@ -158,7 +158,7 @@ fn test_init_payload_is_passed_through_upgrades() {
     let test_wasm_sha256 = ic_crypto_sha2::Sha256::hash(&test_wasm);
     let test_byte_array = b"just_testing";
 
-    local_test_on_nns_subnet(move |runtime| async move {
+    state_machine_test_on_nns_subnet(move |runtime| async move {
         let root = set_up_root_canister(&runtime, RootCanisterInitPayload {}).await;
 
         // Install the universal canister in place of the governance canister

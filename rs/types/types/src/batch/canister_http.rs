@@ -1,8 +1,8 @@
 use crate::{
     ReplicaVersion, Time,
     canister_http::{
-        CanisterHttpPaymentMetadata, CanisterHttpPaymentReceipt, CanisterHttpPaymentShare,
-        CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponse,
+        CanisterHttpPaymentMetadata, CanisterHttpPaymentProof, CanisterHttpPaymentReceipt,
+        CanisterHttpPaymentShare, CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponse,
         CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
         CanisterHttpResponseMetadata, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
     },
@@ -73,6 +73,13 @@ impl From<&CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithCo
                     signature: signature.clone().get().0,
                 })
                 .collect(),
+            payment_shares: payload
+                .payment_proof
+                .payment_shares
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .collect(),
         }
     }
 }
@@ -98,6 +105,11 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
             response.canister_id,
             "CanisterHttpResponseWithConsensus::canister_id",
         )?;
+        let payment_shares = payload
+            .payment_shares
+            .into_iter()
+            .map(TryFrom::try_from)
+            .collect::<Result<Vec<CanisterHttpPaymentShare>, ProxyDecodeError>>()?;
 
         Ok(CanisterHttpResponseWithConsensus {
             content: CanisterHttpResponse {
@@ -133,6 +145,7 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
                         .collect::<Result<BTreeMap<NodeId, BasicSigOf<_>>, ProxyDecodeError>>()?,
                 },
             },
+            payment_proof: CanisterHttpPaymentProof { payment_shares },
         })
     }
 }
@@ -446,6 +459,18 @@ mod tests {
                     .into_iter()
                     .collect(),
                 },
+            },
+            payment_proof: CanisterHttpPaymentProof {
+                payment_shares: vec![CanisterHttpPaymentShare {
+                    content: CanisterHttpPaymentMetadata {
+                        id: CanisterHttpRequestId::new(1),
+                        receipt: CanisterHttpPaymentReceipt::default(),
+                    },
+                    signature: BasicSignature {
+                        signer: NodeId::from(PrincipalId::new_node_test_id(1)),
+                        signature: BasicSigOf::new(BasicSig(vec![0, 1, 2, 3])),
+                    },
+                }],
             },
         };
         let pb_payload = pb::CanisterHttpResponseWithConsensus::from(&payload);

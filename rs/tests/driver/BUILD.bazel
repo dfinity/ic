@@ -35,6 +35,7 @@ rust_library(
         "//rs/crypto/tree_hash",
         "//rs/ic_os/config/tool:config_lib_dev",
         "//rs/ic_os/config/types:config_types",
+        "//rs/ic_os/dev_test_tools/bare_metal_deployment",
         "//rs/ic_os/dev_test_tools/setupos-image-config",
         "//rs/ic_os/networking/deterministic_ips",
         "//rs/interfaces/registry",

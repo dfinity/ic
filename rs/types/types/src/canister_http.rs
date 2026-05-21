@@ -773,12 +773,18 @@ impl TryFrom<pb_metadata::HttpMethod> for CanisterHttpMethod {
 pub struct CanisterHttpResponseWithConsensus {
     pub content: CanisterHttpResponse,
     pub proof: CanisterHttpResponseProof,
+    pub payment_proof: CanisterHttpPaymentProof,
 }
 
 impl CountBytes for CanisterHttpResponseWithConsensus {
     fn count_bytes(&self) -> usize {
-        let CanisterHttpResponseWithConsensus { content, proof } = &self;
-        proof.count_bytes() + content.count_bytes()
+        let CanisterHttpResponseWithConsensus {
+            content,
+            proof,
+            payment_proof,
+        } = &self;
+        //TODO(urgent): what happens if we add payment_proof to the size calculation?
+        proof.count_bytes() + content.count_bytes() + payment_proof.count_bytes()
     }
 }
 
@@ -895,6 +901,18 @@ pub type CanisterHttpResponseProof =
 impl CountBytes for CanisterHttpResponseProof {
     fn count_bytes(&self) -> usize {
         size_of::<CanisterHttpResponseProof>()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpPaymentProof {
+    pub payment_shares: Vec<CanisterHttpPaymentShare>,
+}
+
+impl CountBytes for CanisterHttpPaymentProof {
+    fn count_bytes(&self) -> usize {
+        size_of::<CanisterHttpPaymentProof>()
     }
 }
 

@@ -153,9 +153,9 @@ pub async fn retrieve_btc<R: CanisterRuntime>(
         .map_err(RetrieveBtcError::TemporarilyUnavailable)?;
 
     let _ecdsa_public_key = init_ecdsa_public_key().await;
-    let main_address = state::read_state(|s| runtime.derive_minter_address(s));
+    let main_address_str = state::read_state(|s| runtime.derive_minter_address_str(s));
 
-    if args.address == main_address.display(state::read_state(|s| s.btc_network)) {
+    if args.address == main_address_str {
         ic_cdk::trap("illegal retrieve_btc target");
     }
 
@@ -251,9 +251,9 @@ pub async fn retrieve_btc_with_approval<R: CanisterRuntime>(
         .map_err(RetrieveBtcWithApprovalError::TemporarilyUnavailable)?;
 
     let _ecdsa_public_key = init_ecdsa_public_key().await;
-    let main_address = state::read_state(|s| runtime.derive_minter_address(s));
+    let main_address_str = state::read_state(|s| runtime.derive_minter_address_str(s));
 
-    if args.address == main_address.display(state::read_state(|s| s.btc_network)) {
+    if args.address == main_address_str {
         ic_cdk::trap("illegal retrieve_btc target");
     }
     let caller_account = Account {

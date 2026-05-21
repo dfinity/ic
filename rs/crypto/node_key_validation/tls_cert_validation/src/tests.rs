@@ -334,15 +334,16 @@ fn valid_cert_builder(node_id: NodeId) -> CertBuilder {
 fn replace_tls_certificate_pubkey_with_invalid_one(cert: &mut X509PublicKeyCert) {
     let x509_cert_der = &cert.certificate_der;
     let (_, x509_cert) = x509_parser::parse_x509_certificate(x509_cert_der).unwrap();
-    let pubkey_raw = x509_cert
+    let mut pubkey_raw = x509_cert
         .tbs_certificate
         .subject_pki
         .subject_public_key
-        .data;
+        .data
+        .to_vec();
     let range_of_pubkey_raw_in_der = range_of_needle_in_haystack(&pubkey_raw, x509_cert_der);
-    let invalid_pubkey = invalidate_valid_ed25519_pubkey_bytes(&pubkey_raw);
+    invalidate_ed25519_pubkey(&mut pubkey_raw);
     cert.certificate_der
-        .splice(range_of_pubkey_raw_in_der, invalid_pubkey.0.iter().copied());
+        .splice(range_of_pubkey_raw_in_der, pubkey_raw.iter().copied());
 }
 
 fn range_of_needle_in_haystack(needle: &[u8], haystack: &[u8]) -> Range<usize> {
@@ -357,21 +358,19 @@ fn find_needle_in_haystack(needle: &[u8], haystack: &[u8]) -> Option<usize> {
     haystack.windows(needle.len()).position(|win| win == needle)
 }
 
-fn invalidate_valid_ed25519_pubkey(
-    valid_pubkey: BasicSigEd25519PublicKeyBytes,
-) -> BasicSigEd25519PublicKeyBytes {
+fn invalidate_ed25519_pubkey(key: &mut Vec<u8>) {
+    assert_eq!(key.len(), 32);
+
+    let mut key_arr = [0u8; 32];
+    key_arr.copy_from_slice(key);
+
     use curve25519_dalek::edwards::CompressedEdwardsY;
-    let point_of_prime_order = CompressedEdwardsY(valid_pubkey.0).decompress().unwrap();
+    let point_of_prime_order = CompressedEdwardsY(key_arr).decompress().unwrap();
     let point_of_order_8 = CompressedEdwardsY([0; 32]).decompress().unwrap();
     let point_of_composite_order = point_of_prime_order + point_of_order_8;
     assert!(!point_of_composite_order.is_torsion_free());
-    BasicSigEd25519PublicKeyBytes(point_of_composite_order.compress().0)
-}
 
-fn invalidate_valid_ed25519_pubkey_bytes(pubkey_bytes: &[u8]) -> BasicSigEd25519PublicKeyBytes {
-    let mut buf = [0u8; BasicSigEd25519PublicKeyBytes::SIZE];
-    buf.copy_from_slice(pubkey_bytes);
-    invalidate_valid_ed25519_pubkey(BasicSigEd25519PublicKeyBytes(buf))
+    *key = point_of_composite_order.compress().0.to_vec();
 }
 
 /// Returns hard-coded

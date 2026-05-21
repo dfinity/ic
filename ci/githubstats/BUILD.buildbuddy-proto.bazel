@@ -1,0 +1,35 @@
+load("@protobuf//bazel:proto_library.bzl", "proto_library")
+load("@protobuf//bazel:py_proto_library.bzl", "py_proto_library")
+
+package(default_visibility = ["//visibility:public"])
+
+proto_library(
+    name = "buildbuddy_proto",
+    srcs = [
+        # @buildbuddy_proto contains many .proto files but we only need:
+        "proto/target.proto",
+        # and its dependencies:
+        "proto/action_cache.proto",
+        "proto/api/v1/common.proto",
+        "proto/build_event_stream.proto",
+        "proto/command_line.proto",
+        "proto/context.proto",
+        "proto/failure_details.proto",
+        "proto/invocation_policy.proto",
+        "proto/option_filters.proto",
+        "proto/package_load_metrics.proto",
+        "proto/strategy_policy.proto",
+        "proto/user_id.proto",
+    ],
+    deps = [
+        "@protobuf//:any_proto",
+        "@protobuf//:descriptor_proto",
+        "@protobuf//:duration_proto",
+        "@protobuf//:timestamp_proto",
+    ],
+)
+
+py_proto_library(
+    name = "buildbuddy_py_proto",
+    deps = [":buildbuddy_proto"],
+)

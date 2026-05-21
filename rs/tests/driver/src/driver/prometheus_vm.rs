@@ -93,6 +93,18 @@ pub struct PrometheusVm {
     scrape_interval: Duration,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PrometheusUrls {
+    pub prometheus_url: String,
+    pub grafana_url: String,
+}
+
+impl TestEnvAttribute for PrometheusUrls {
+    fn attribute_name() -> String {
+        String::from("prometheus_urls")
+    }
+}
+
 /// Stores a hash of the Prometheus scraping target JSON files
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PrometheusConfigHash {
@@ -303,7 +315,7 @@ chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
             .with_config_dir(config_dir)
             .start(env)?;
 
-        let (prometheus_fqdn, grafana_fqdn) = match InfraProvider::read_attribute(env) {
+        let p8s_urls = match InfraProvider::read_attribute(env) {
             InfraProvider::Farm => {
                 // Log the Prometheus URL so users can browse to it while the test is running.
                 let deployed_prometheus_vm = env.get_deployed_universal_vm(vm_name).unwrap();
@@ -336,16 +348,21 @@ chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
                         },
                     ]);
                 }
-                (
-                    format!("{PROMETHEUS_DOMAIN_NAME}.{suffix}"),
-                    format!("{GRAFANA_DOMAIN_NAME}.{suffix}"),
-                )
+                let prometheus_url = format!("http://{PROMETHEUS_DOMAIN_NAME}.{suffix}");
+                let grafana_url = format!("http://{GRAFANA_DOMAIN_NAME}.{suffix}");
+                let p8s_urls = PrometheusUrls {
+                    prometheus_url: prometheus_url.clone(),
+                    grafana_url: grafana_url.clone(),
+                };
+                p8s_urls.write_attribute(env);
+                p8s_urls
             }
         };
-        let prometheus_message = format!("Prometheus Web UI at http://{prometheus_fqdn}");
-        let grafana_message = format!("Grafana at http://{grafana_fqdn}");
+        let prometheus_message = format!("Prometheus Web UI at {}", p8s_urls.prometheus_url);
+        let grafana_message = format!("Grafana at {}", p8s_urls.grafana_url);
         let ic_progress_clock_message = format!(
-            "IC Progress Clock at http://{grafana_fqdn}/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now"
+            "IC Progress Clock at {}/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now",
+            p8s_urls.grafana_url
         );
         emit_event(&log, &prometheus_message, PROMETHEUS_VM_CREATED_EVENT_NAME);
         emit_event(&log, &grafana_message, GRAFANA_INSTANCE_CREATED_EVENT_NAME);

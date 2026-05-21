@@ -5,9 +5,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## Unreleased
 
+## [2.1.9] - 2026-02-02
 ### Added
 - Added support for legacy `SignedTransaction` format from pre-v2.1.0 for the `construction/submit` endpoint. ([#7416](https://github.com/dfinity/ic/pull/7416))
 - Added new `self_describing_action` field in the `Proposal` struct, returned e.g, by the `get_pending_proposals` endpoint. ([#7643](https://github.com/dfinity/ic/pull/7643))
+- Return errors immediately during initial sync ([#7203](https://github.com/dfinity/ic/pull/7203)).
+- Display DB index optimizations status ([#8196](https://github.com/dfinity/ic/pull/8196)).
+- Display progress bar during ICP block syncing ([#8195](https://github.com/dfinity/ic/pull/8195)).
+
+### Fixed
+- Avoid panicking when trying to increment metrics ([#7417](https://github.com/dfinity/ic/pull/7417)).
+- Bump ICP Rosetta ic-agent timeout from 1 to 10 seconds ([#7435](https://github.com/dfinity/ic/pull/7435)).
 
 ## [2.1.8] - 2025-10-09
 ### Added

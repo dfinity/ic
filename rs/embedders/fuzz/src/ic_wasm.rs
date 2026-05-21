@@ -5,7 +5,7 @@ use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::wasm_utils::validation::{
     RESERVED_SYMBOLS, WASM_FUNCTION_SIZE_LIMIT, WASM_VALID_SYSTEM_FUNCTIONS,
 };
-use ic_management_canister_types_private::Global;
+use ic_embedders::wasmtime_embedder::system_api::ApiType;
 use ic_types::methods::WasmMethod;
 use lazy_static::lazy_static;
 use std::collections::BTreeSet;
@@ -19,11 +19,17 @@ use wasm_encoder::{
 use wasm_smith::{Config, Module};
 use wasmparser::*;
 
+use ic_test_utilities_types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::user_test_id;
+use ic_types::Cycles;
+use ic_types::messages::CallContextId;
+use ic_types::time::UNIX_EPOCH;
+
 lazy_static! {
     static ref SYSTEM_API_IMPORTS_WASM32: SystemApiImportStore =
-        system_api_imports(EmbeddersConfig::default());
+        system_api_imports(EmbeddersConfig::default(), false);
     static ref SYSTEM_API_IMPORTS_WASM64: SystemApiImportStore =
-        system_api_imports(EmbeddersConfig::default());
+        system_api_imports(EmbeddersConfig::default(), true);
 }
 
 const CANISTER_EXPORT_FUNCTION_PREFIX: &[&str] = &[
@@ -39,8 +45,6 @@ pub struct ICWasmModule {
     // for clippy to not complain.
     #[allow(dead_code)]
     pub config: Config,
-    #[allow(dead_code)]
-    pub exported_globals: Vec<Global>,
     #[allow(dead_code)]
     pub exported_functions: BTreeSet<WasmMethod>,
 }
@@ -163,91 +167,84 @@ impl ICWasmModule {
     fn new(config: Config, module: Module) -> Self {
         let module_bytes = module.to_bytes();
         let mut wasm_methods: BTreeSet<WasmMethod> = BTreeSet::new();
-        let mut exported_globals_index: Vec<u32> = vec![];
-        let mut global_section: Vec<wasmparser::Global> = vec![];
-        let mut persisted_globals: Vec<Global> = vec![];
 
         for payload in wasmparser::Parser::new(0).parse_all(&module_bytes) {
-            match payload.expect("Failed to parse wasm-smith generated module") {
-                wasmparser::Payload::ExportSection(export_reader) => {
-                    for export in export_reader.into_iter() {
-                        let export = export.expect("Failed to read export");
-                        match export.kind {
-                            ExternalKind::Func => {
-                                let func_name = export.name;
-                                if let Ok(wasm_method) = WasmMethod::try_from(func_name.to_string())
-                                {
-                                    match wasm_method {
-                                        WasmMethod::Query(_)
-                                        | WasmMethod::CompositeQuery(_)
-                                        | WasmMethod::Update(_) => {
-                                            wasm_methods.insert(wasm_method);
-                                        }
-                                        _ => (),
-                                    }
+            if let wasmparser::Payload::ExportSection(export_reader) =
+                payload.expect("Failed to parse wasm-smith generated module")
+            {
+                for export in export_reader.into_iter() {
+                    let export = export.expect("Failed to read export");
+                    if export.kind == ExternalKind::Func {
+                        let func_name = export.name;
+                        if let Ok(wasm_method) = WasmMethod::try_from(func_name.to_string()) {
+                            match wasm_method {
+                                WasmMethod::Query(_)
+                                | WasmMethod::CompositeQuery(_)
+                                | WasmMethod::Update(_) => {
+                                    wasm_methods.insert(wasm_method);
                                 }
+                                _ => (),
                             }
-                            ExternalKind::Global => {
-                                exported_globals_index.push(export.index);
-                            }
-                            _ => (),
                         }
                     }
                 }
-                wasmparser::Payload::GlobalSection(global_reader) => {
-                    for global in global_reader.into_iter() {
-                        // Temporarily collect globals since we need the exported
-                        // index of globals to construct the persisted globals
-                        global_section.push(global.expect("Failed to read global"));
-                    }
-                }
-                _ => (),
             }
         }
-        for index in &exported_globals_index {
-            if let Some(global) =
-                get_persisted_global(global_section.get(*index as usize).unwrap().clone())
-            {
-                persisted_globals.push(global);
-            }
-        }
-
-        persisted_globals.extend(
-            global_section
-                .iter()
-                .enumerate()
-                .filter(|(i, _)| !exported_globals_index.contains(&(*i as u32)))
-                .filter(|(_, global)| global.ty.mutable)
-                .filter_map(|(_, global)| get_persisted_global(global.clone()))
-                .collect::<Vec<Global>>(),
-        );
-
-        // An extra global is added for instruction counter.
-        // On the exporting logic, two other globals must be exported
-        // but they are not persisted across ExecutionState.
-        // const TO_IGNORE: &[&str] = &[
-        //     DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-        //     ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
-        // ];
-        //
-        // Instruction counter shouldn't be persisted as well since
-        // it's overwritten with instruction limit every round.
-        // However, this is currently not done in the embedders library
-        // and we have to persist it to pass a validation check.
-        // It can be removed once instruction counter isn't persisted
-        // in our library.
-        persisted_globals.push(Global::I64(i64::MAX));
 
         Self {
             config,
             module,
-            exported_globals: persisted_globals,
             exported_functions: wasm_methods,
         }
     }
 }
 
 pub fn ic_wasm_config(embedder_config: EmbeddersConfig, is_wasm64: bool) -> Config {
+    // Default values. If you are adding a new field here, make sure
+    // the default value will generate a ICP valid wasm module.
+    // else, define the value in Config below.
+    let Config {
+        exports,
+        module_shape,
+        allowed_instructions,
+        allow_floats,
+        disallow_traps,
+        custom_descriptors_enabled,
+        custom_page_sizes_enabled,
+        max_aliases,
+        max_components,
+        max_element_segments,
+        max_elements,
+        max_exports,
+        max_imports,
+        max_instances,
+        max_memories,
+        max_memory32_bytes,
+        max_memory64_bytes,
+        max_modules,
+        max_nesting_depth,
+        max_table_elements,
+        max_tables,
+        max_tags,
+        max_type_size,
+        max_types,
+        max_values,
+        memory_max_size_required,
+        memory_offset_choices,
+        min_element_segments,
+        min_elements,
+        min_globals,
+        min_imports,
+        min_memories,
+        min_tables,
+        min_tags,
+        min_types,
+        min_uleb_size,
+        table_max_size_required,
+        allow_invalid_funcs,
+        ..
+    } = Config::default();
+
     Config {
         min_funcs: 10,
         min_exports: 10,
@@ -264,42 +261,67 @@ pub fn ic_wasm_config(embedder_config: EmbeddersConfig, is_wasm64: bool) -> Conf
         bulk_memory_enabled: true,
         reference_types_enabled: true,
         simd_enabled: true,
+        tail_call_enabled: true,
         memory64_enabled: is_wasm64,
 
-        threads_enabled: false,
-        relaxed_simd_enabled: false,
+        // Disabled by ICP
         canonicalize_nans: false,
         exceptions_enabled: false,
+        extended_const_enabled: false,
+        gc_enabled: false,
+        multi_value_enabled: false,
+        relaxed_simd_enabled: false,
+        saturating_float_to_int_enabled: false,
+        shared_everything_threads_enabled: false,
+        sign_extension_ops_enabled: false,
+        threads_enabled: false,
+        wide_arithmetic_enabled: false,
 
         available_imports: Some(if is_wasm64 {
             SYSTEM_API_IMPORTS_WASM64.module.to_vec()
         } else {
             SYSTEM_API_IMPORTS_WASM32.module.to_vec()
         }),
-        ..Default::default()
-    }
-}
 
-fn get_persisted_global(g: wasmparser::Global) -> Option<Global> {
-    match (
-        g.ty.content_type,
-        g.init_expr
-            .get_operators_reader()
-            .read()
-            .expect("Unable to read operator for ConstExpr"),
-    ) {
-        (ValType::I32, Operator::I32Const { value }) => Some(Global::I32(value)),
-        (ValType::I64, Operator::I64Const { value }) => Some(Global::I64(value)),
-        (ValType::F32, Operator::F32Const { value }) => {
-            Some(Global::F32(f32::from_bits(value.bits())))
-        }
-        (ValType::F64, Operator::F64Const { value }) => {
-            Some(Global::F64(f64::from_bits(value.bits())))
-        }
-        (ValType::V128, Operator::V128Const { value }) => {
-            Some(Global::V128(u128::from_le_bytes(*value.bytes())))
-        }
-        (_, _) => None,
+        // Defaults (compiler-enforced)
+        exports,
+        module_shape,
+        allowed_instructions,
+        allow_floats,
+        disallow_traps,
+        custom_descriptors_enabled,
+        custom_page_sizes_enabled,
+        max_aliases,
+        max_components,
+        max_element_segments,
+        max_elements,
+        max_exports,
+        max_imports,
+        max_instances,
+        max_memories,
+        max_memory32_bytes,
+        max_memory64_bytes,
+        max_modules,
+        max_nesting_depth,
+        max_table_elements,
+        max_tables,
+        max_tags,
+        max_type_size,
+        max_types,
+        max_values,
+        memory_max_size_required,
+        memory_offset_choices,
+        min_element_segments,
+        min_elements,
+        min_globals,
+        min_imports,
+        min_memories,
+        min_tables,
+        min_tags,
+        min_types,
+        min_uleb_size,
+        table_max_size_required,
+        allow_invalid_funcs,
     }
 }
 
@@ -434,5 +456,34 @@ fn limited_str<'a>(max_size: usize, u: &mut Unstructured<'a>) -> Result<&'a str>
             let s = std::str::from_utf8(valid).unwrap();
             Ok(s)
         }
+    }
+}
+
+pub fn get_system_api_type_for_wasm_method(wasm_method: WasmMethod) -> ApiType {
+    match wasm_method {
+        // System methods are temporarily used under Update
+        WasmMethod::Update(_) => ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            user_test_id(1).get(),
+            CallContextId::from(1),
+        ),
+        WasmMethod::Query(_) => ApiType::non_replicated_query(
+            UNIX_EPOCH,
+            user_test_id(1).get(),
+            subnet_test_id(1),
+            vec![],
+            Some(vec![1]),
+        ),
+        WasmMethod::CompositeQuery(_) => ApiType::composite_query(
+            UNIX_EPOCH,
+            user_test_id(1).get(),
+            subnet_test_id(1),
+            vec![],
+            Some(vec![1]),
+            CallContextId::from(1),
+        ),
+        WasmMethod::System(_) => unimplemented!(),
     }
 }

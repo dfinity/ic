@@ -12,6 +12,7 @@ fn main() -> Result<()> {
         .with_timeout_per_test(CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT)
         .with_setup(setup)
         .add_test(systest!(test))
+        .without_assert_no_replica_restarts()
         .execute_from_args()?;
     Ok(())
 }

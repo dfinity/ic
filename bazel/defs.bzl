@@ -85,12 +85,24 @@ def _mcopy(ctx):
     out = ctx.actions.declare_file(ctx.label.name)
 
     command = "cp -p {fs} {output} && chmod +w {output} ".format(fs = ctx.file.fs.path, output = out.path)
-    for src in ctx.files.srcs:
-        command += "&& mcopy -mi {output} -sQ {src_path} ::/{filename} ".format(output = out.path, src_path = src.path, filename = ctx.attr.remap_paths.get(src.basename, src.basename))
+    inputs = []
+    for srcs, dest in ctx.attr.srcmap.items():
+        src_files = srcs[DefaultInfo].files.to_list()
+        for src_file in src_files:
+            inputs.append(src_file)
+            if dest.endswith("/"):
+                dest_path = dest + src_file.basename
+            else:
+                dest_path = dest
+            command += "&& mcopy -mi {output} -sQ {src_path} ::/{dest} ".format(
+                output = out.path,
+                src_path = src_file.path,
+                dest = dest_path.removeprefix("/"),
+            )
 
     ctx.actions.run_shell(
         command = command,
-        inputs = ctx.files.srcs + [ctx.file.fs],
+        inputs = inputs + [ctx.file.fs],
         outputs = [out],
     )
     return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
@@ -98,9 +110,8 @@ def _mcopy(ctx):
 mcopy = rule(
     implementation = _mcopy,
     attrs = {
-        "srcs": attr.label_list(allow_files = True),
+        "srcmap": attr.label_keyed_string_dict(allow_files = True),
         "fs": attr.label(allow_single_file = True),
-        "remap_paths": attr.string_dict(),
     },
 )
 

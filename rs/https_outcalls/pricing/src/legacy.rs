@@ -2,11 +2,22 @@ use std::time::Duration;
 
 use ic_config::subnet_config::MAX_INSTRUCTIONS_PER_QUERY_MESSAGE;
 use ic_types::{
-    NumBytes, NumInstructions,
-    canister_http::{CanisterHttpPaymentReceipt, MAX_CANISTER_HTTP_RESPONSE_BYTES},
+    Cycles, NumBytes, NumInstructions,
+    canister_http::{
+        CanisterHttpPaymentReceipt, CanisterHttpResponse, MAX_CANISTER_HTTP_RESPONSE_BYTES,
+    },
 };
 
-use crate::{AdapterLimits, BudgetTracker, NetworkUsage, PricingError};
+use crate::{AdapterLimits, BudgetTracker, NetworkUsage, PricingCalculator, PricingError};
+
+pub struct LegacyCalculator;
+
+impl PricingCalculator for LegacyCalculator {
+    fn consensus_cost(&self, _response: &CanisterHttpResponse) -> Cycles {
+        // Note: the legacy pricing calculator does not calculate the cost of the response.
+        Cycles::zero()
+    }
+}
 
 pub struct LegacyTracker {
     max_response_size: NumBytes,

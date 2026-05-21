@@ -1,9 +1,15 @@
 use crate::driver::ic_gateway_vm::HasIcGatewayVm;
 use crate::driver::ic_gateway_vm::IC_GATEWAY_VM_NAME;
-use crate::driver::test_env_api::get_guestos_launch_measurements;
+use crate::driver::ic_images::try_get_setupos_img_version;
+use crate::driver::nested::NestedVm;
+use crate::driver::test_env_api::{
+    SshSession, get_guestos_img_url, get_guestos_launch_measurements,
+    get_hostos_initial_update_img_url,
+};
 use crate::driver::{
     config::NODES_INFO,
-    driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
+    constants::SSH_USERNAME,
+    driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
     farm::{AttachImageSpec, Farm, FarmResult, FileId},
     ic::{InternetComputer, Node},
     nested::{HasNestedVms, NESTED_CONFIG_IMAGE_PATH, UnassignedRecordConfig},
@@ -15,12 +21,13 @@ use crate::driver::{
         HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo,
         get_build_setupos_config_image_tool, get_guestos_img_version,
         get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
-        get_setupos_img_sha256, get_setupos_img_url, get_setupos_img_version,
-        try_get_guestos_img_version,
+        get_setupos_img_sha256, get_setupos_img_url, try_get_guestos_img_version,
     },
     test_setup::InfraProvider,
 };
 use anyhow::{Context, Result, bail};
+use bare_metal_deployment::SshAuthMethod;
+use bare_metal_deployment::deploy::{DeploymentConfig, ImageSource, deploy_to_bare_metal};
 use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_tool::setupos::{
     config_ini::ConfigIniSettings,
@@ -325,10 +332,6 @@ pub fn setup_and_start_nested_vms(
         });
     let nns_public_key_override = env.prep_dir("").map(|v| v.root_public_key_path());
 
-    let setupos_url = get_setupos_img_url();
-    let setupos_hash = get_setupos_img_sha256();
-    let setupos_image_spec = AttachImageSpec::via_url(setupos_url, setupos_hash);
-
     let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
     for node in env.get_all_nested_vms()? {
         let t_env = env.clone();
@@ -336,7 +339,6 @@ pub fn setup_and_start_nested_vms(
         let t_group_name = group_name.to_string();
         let t_ic_gateway_url = ic_gateway_url.clone();
         let t_nns_public_key_override = nns_public_key_override.clone();
-        let t_setupos_image_spec = setupos_image_spec.clone();
         join_handles.push(thread::spawn(move || {
             let vm_name = node.vm_name();
 
@@ -346,21 +348,27 @@ pub fn setup_and_start_nested_vms(
                 &t_ic_gateway_url,
                 t_nns_public_key_override.as_deref(),
             )?;
-            let config_image_spec = AttachImageSpec::new(t_farm.upload_file(
-                &t_group_name,
-                config_image,
-                NESTED_CONFIG_IMAGE_PATH,
-            )?);
 
-            t_farm.attach_disk_images(
-                &t_group_name,
-                &vm_name,
-                "usb-storage",
-                vec![t_setupos_image_spec, config_image_spec],
-            )?;
-            t_farm.start_vm(&t_group_name, &vm_name)?;
-
-            Ok(())
+            if node.get_vm()?.bare_metal {
+                setup_baremetal_instance(&t_env, &node, &config_image)
+                    .context("Setting up baremetal instance failed")
+            } else {
+                let config_image_spec = AttachImageSpec::new(t_farm.upload_file(
+                    &t_group_name,
+                    &config_image,
+                    NESTED_CONFIG_IMAGE_PATH,
+                )?);
+                let setupos_image =
+                    AttachImageSpec::via_url(get_setupos_img_url(), get_setupos_img_sha256());
+                t_farm.attach_disk_images(
+                    &t_group_name,
+                    &vm_name,
+                    "usb-storage",
+                    vec![setupos_image, config_image_spec],
+                )?;
+                t_farm.start_vm(&t_group_name, &vm_name)?;
+                Ok(())
+            }
         }));
     }
 
@@ -379,29 +387,34 @@ pub fn setup_and_start_nested_vms(
         }
     }
 
-    info!(logger, "Nested VM(s) setup complete!");
+    if result.is_ok() {
+        info!(logger, "Nested VM(s) setup complete!");
+    } else {
+        warn!(logger, "Nested VM(s) setup failed!");
+    }
 
     result
 }
 
 fn validate_version_config(env: &TestEnv) {
     // When a GuestOS image is also in use...
-    if let Ok(guestos_version) = try_get_guestos_img_version() {
+    if let Ok(guestos_version) = try_get_guestos_img_version() &&
+        let Ok(setupos_version) = try_get_setupos_img_version() &&
         // ...and the versions do not match...
-        if guestos_version != get_setupos_img_version() {
-            // ...panic, unless an appropriate UnassignedRecordConfig is set.
-            if let Ok(config) = UnassignedRecordConfig::try_read_attribute(env) {
-                info!(
-                    env.logger(),
-                    "Version mismatch allowed by UnassignedRecordConfig: '{config:?}'"
-                );
-            } else {
-                panic!(
-                    "Initial GuestOS and SetupOS versions do not match! \
+        guestos_version != setupos_version
+    {
+        // ...panic, unless an appropriate UnassignedRecordConfig is set.
+        if let Ok(config) = UnassignedRecordConfig::try_read_attribute(env) {
+            info!(
+                env.logger(),
+                "Version mismatch allowed by UnassignedRecordConfig: '{config:?}'"
+            );
+        } else {
+            panic!(
+                "Initial GuestOS and SetupOS versions do not match! \
                     If this is intended, set `without_unassigned_config` (avoid) \
                     or `with_unassigned_config` (ignore) on your IC."
-                );
-            }
+            );
         }
     }
 }
@@ -529,12 +542,20 @@ fn create_guestos_config_for_node(
         vec![Url::parse("https://cloudflare.com/cdn-cgi/trace")?]
     };
 
+    let nns_pub_key_override_path = test_env.prep_dir("").map(|v| v.root_public_key_path());
+    let nns_pub_key_override = if let Some(v) = nns_pub_key_override_path {
+        Some(fs::read_to_string(&v).context("unable to read NNS public key override")?)
+    } else {
+        None
+    };
+
     let icos_settings = ICOSSettings {
         node_reward_type: None,
         mgmt_mac,
         deployment_environment,
         nns_urls,
-        use_node_operator_private_key: true,
+        use_node_operator_private_key: false,
+        node_operator_private_key: None,
         enable_trusted_execution_environment: false,
         use_ssh_authorized_keys: true,
         icos_dev_settings: ICOSDevSettings::default(),
@@ -559,6 +580,7 @@ fn create_guestos_config_for_node(
             .ok(),
         hostname: Some(node.node_id.to_string()),
         generate_ic_boundary_tls_cert: node.node_config.domain.clone(),
+        nns_pub_key_override,
     };
 
     let guestos_settings = GuestOSSettings {
@@ -596,6 +618,29 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
         domain: node.domain.clone(),
         node_reward_type: None,
     }
+}
+
+pub fn setup_baremetal_instance(
+    env: &TestEnv,
+    nested_vm: &NestedVm,
+    config_image: &Path,
+) -> Result<()> {
+    let host_ip = nested_vm.get_host_ip()?;
+    let private_key_path = env
+        .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
+        .join(SSH_USERNAME);
+
+    let hostos_url = get_hostos_initial_update_img_url().as_str().parse()?;
+    let guestos_url = get_guestos_img_url().as_str().parse()?;
+
+    let config = DeploymentConfig {
+        hostos_upgrade_image: Some(ImageSource::Url(hostos_url)),
+        guestos_image: Some(ImageSource::Url(guestos_url)),
+        setupos_config_image: Some(ImageSource::File(config_image.to_path_buf())),
+    };
+
+    deploy_to_bare_metal(&config, host_ip, &SshAuthMethod::KeyFile(private_key_path))?;
+    Ok(())
 }
 
 fn create_setupos_config_image(
@@ -651,6 +696,18 @@ fn create_setupos_config_image(
 
     let vm_spec = nested_vm.get_vm_spec()?;
 
+    let bare_metal = nested_vm.get_vm()?.bare_metal;
+    let config = nested_vm.get_nested_vm_config()?;
+    let nr_of_cpus = if bare_metal {
+        vm_spec.v_cpus
+    } else {
+        vm_spec.v_cpus / 2
+    };
+    let memory = if bare_metal {
+        vm_spec.memory_ki_b / 1024 / 1024
+    } else {
+        vm_spec.memory_ki_b / 2 / 1024 / 1024
+    };
     setupos_image_config::create_setupos_config(
         &config_dir,
         &data_dir,
@@ -664,7 +721,7 @@ fn create_setupos_config_image(
             domain_name: Default::default(),
             verbose: Default::default(),
             node_reward_type: Some("type3.1".to_string()),
-            enable_trusted_execution_environment: Default::default(),
+            enable_trusted_execution_environment: config.enable_trusted_execution_environment,
         },
         node_operator_private_key.as_deref(),
         nns_public_key_override,
@@ -678,9 +735,9 @@ fn create_setupos_config_image(
                 urls: vec![nns_url.clone()],
             },
             dev_vm_resources: deployment_json::VmResources {
-                memory: (vm_spec.memory_ki_b / 2 / 1024 / 1024) as u32,
+                memory: memory as u32,
                 cpu: cpu.to_string(),
-                nr_of_vcpus: (vm_spec.v_cpus / 2) as u32,
+                nr_of_vcpus: nr_of_cpus as u32,
             },
         },
     )

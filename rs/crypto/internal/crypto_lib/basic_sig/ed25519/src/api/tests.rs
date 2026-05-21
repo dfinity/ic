@@ -59,8 +59,6 @@ mod serialization {
         assert!(pk_result.is_err());
         assert!(pk_result.unwrap_err().is_malformed_public_key());
     }
-
-    // TODO(CRP-616) Add more failure tests with corrupted DER-keys.
 }
 
 mod ed25519_cr_yp_to {

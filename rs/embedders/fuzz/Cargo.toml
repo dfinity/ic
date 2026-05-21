@@ -1,0 +1,52 @@
+[package]
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+name = "wasm_fuzzers"
+version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+arbitrary = { workspace = true }
+clap = { workspace = true }
+futures = { workspace = true }
+ic-config = { path = "../../config" }
+ic-cycles-account-manager = { path = "../../cycles_account_manager" }
+ic-embedders = { path = "../../embedders" }
+ic-interfaces = { path = "../../interfaces" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-replicated-state = { path = "../../replicated_state" }
+ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-embedders = { path = "../../test_utilities/embedders" }
+ic-test-utilities-state = { path = "../../test_utilities/state" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
+ic-types = { path = "../../types/types" }
+ic-wasm-types = { path = "../../types/wasm_types" }
+lazy_static = { workspace = true }
+num-traits = { workspace = true }
+tokio = { workspace = true }
+wasm-encoder = { workspace = true }
+wasmparser = { workspace = true }
+wasmprinter = { workspace = true }
+libfuzzer-sys = "0.4"
+wasm-smith = { version = "0.243.0", features = [ "wasmparser" ]}
+wasmtime = { version = "41.0.2", default-features = false, features = [
+    'cranelift',
+    'gc',
+    'gc-null',
+    'parallel-compilation',
+    'runtime',
+] }
+
+[features]
+fuzzing_code = []
+
+[[bin]]
+name = "ws2wasm"
+path = "src/ws2wasm.rs"

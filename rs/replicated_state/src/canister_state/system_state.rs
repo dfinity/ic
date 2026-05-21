@@ -37,7 +37,7 @@ use ic_types::messages::{
     Ingress, NO_DEADLINE, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse,
     Response, StopCanisterContext,
 };
-use ic_types::methods::Callback;
+use ic_types::methods::{Callback, WasmClosure};
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
@@ -448,7 +448,7 @@ impl CanisterStatus {
     }
 }
 
-/// The id of a paused execution stored in the execution environment.
+/// The ID of a paused execution stored in the execution environment.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct PausedExecutionId(pub u64);
 
@@ -914,13 +914,12 @@ impl SystemState {
     pub fn on_canister_result(
         &mut self,
         call_context_id: CallContextId,
-        callback_id: Option<CallbackId>,
         result: Result<Option<WasmResult>, HypervisorError>,
         instructions_used: NumInstructions,
     ) -> Result<(CallContextAction, Option<CallContext>), StateError> {
         Ok(call_context_manager_mut(&mut self.status)
             .ok_or(StateError::CanisterStopped(self.canister_id))?
-            .on_canister_result(call_context_id, callback_id, result, instructions_used))
+            .on_canister_result(call_context_id, result, instructions_used))
     }
 
     /// Marks all call contexts as deleted and produces reject responses for the
@@ -945,23 +944,6 @@ impl SystemState {
         Ok(call_context_manager_mut(&mut self.status)
             .ok_or(StateError::CanisterStopped(self.canister_id))?
             .register_callback(callback))
-    }
-
-    /// Inserts a callback under the given ID. Returns an error if the canister is
-    /// `Stopped`.
-    //
-    // TODO(DSM-95) Drop this when we drop the legacy `CanisterMessage::Response`
-    // variant and no longer need forward compatible decoding.
-    #[doc(hidden)]
-    pub fn insert_callback(
-        &mut self,
-        callback_id: CallbackId,
-        callback: Callback,
-    ) -> Result<(), StateError> {
-        call_context_manager_mut(&mut self.status)
-            .ok_or(StateError::CanisterStopped(self.canister_id))?
-            .insert_callback(callback_id, callback);
-        Ok(())
     }
 
     /// Unregisters the callback with the given ID (when a response was received for
@@ -1042,15 +1024,26 @@ impl SystemState {
 
     /// Extracts the next inter-canister or ingress message (round-robin).
     pub(crate) fn pop_input(&mut self) -> Option<CanisterMessage> {
+        // Should not pop another input while there exists a paused or aborted task.
+        assert!(!self.task_queue.has_paused_or_aborted_task());
+
         Some(match self.queues.pop_input()? {
             CanisterInput::Ingress(msg) => CanisterMessage::Ingress(msg),
             CanisterInput::Request(msg) => CanisterMessage::Request(msg),
-            CanisterInput::Response(msg) => CanisterMessage::Response(msg),
+            CanisterInput::Response(response) => {
+                let callback_id = response.originator_reply_callback;
+                CanisterMessage::Response {
+                    response,
+                    callback: call_context_manager_mut(&mut self.status)
+                        .and_then(|ccm| ccm.unregister_callback(callback_id))
+                        .unwrap_or_else(invalid_callback),
+                }
+            }
             CanisterInput::DeadlineExpired(callback_id) => {
-                self.to_reject_response(callback_id, "Call deadline has expired.")
+                self.make_reject_response(callback_id, "Call deadline has expired.")
             }
             CanisterInput::ResponseDropped(callback_id) => {
-                self.to_reject_response(callback_id, "Response was dropped.")
+                self.make_reject_response(callback_id, "Response was dropped.")
             }
         })
     }
@@ -1062,26 +1055,25 @@ impl SystemState {
     /// `CallbackId`, generates a reject response with arbitrary values (but
     /// matching `CallbackId`). The missing callback will generate a critical error
     /// when the response is about to be executed, regardless.
-    fn to_reject_response(&self, callback_id: CallbackId, message: &str) -> CanisterMessage {
+    fn make_reject_response(&mut self, callback_id: CallbackId, message: &str) -> CanisterMessage {
         const UNKNOWN_CANISTER_ID: CanisterId =
             CanisterId::unchecked_from_principal(PrincipalId::new_anonymous());
         const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
 
         let call_context_manager = self.call_context_manager().unwrap();
-        let (originator, respondent, deadline) =
-            match call_context_manager.callbacks().get(&callback_id) {
-                // Populate reject responses from the callback.
-                Some(callback) => (callback.originator, callback.respondent, callback.deadline),
+        let (respondent, deadline) = match call_context_manager.callbacks().get(&callback_id) {
+            // Populate reject responses from the callback.
+            Some(callback) => (callback.respondent, callback.deadline),
 
-                // This should be unreachable, but if we somehow end up here, we can populate
-                // the reject response with arbitrary values, as trying to execute it it will
-                // fail anyway and produce a critical error. This is safer than panicking.
-                None => (UNKNOWN_CANISTER_ID, UNKNOWN_CANISTER_ID, SOME_DEADLINE),
-            };
+            // This should be unreachable, but if we somehow end up here, we can populate
+            // the reject response with arbitrary values, as trying to execute it will
+            // fail anyway and produce a critical error. This is safer than panicking.
+            None => (UNKNOWN_CANISTER_ID, SOME_DEADLINE),
+        };
 
-        CanisterMessage::Response(
-            Response {
-                originator,
+        CanisterMessage::Response {
+            response: Response {
+                originator: self.canister_id,
                 respondent,
                 originator_reply_callback: callback_id,
                 refund: Cycles::zero(),
@@ -1093,7 +1085,10 @@ impl SystemState {
                 deadline,
             }
             .into(),
-        )
+            callback: call_context_manager_mut(&mut self.status)
+                .and_then(|ccm| ccm.unregister_callback(callback_id))
+                .unwrap_or_else(invalid_callback),
+        }
     }
 
     /// Returns true if there are messages in the input queues, false otherwise.
@@ -1213,12 +1208,8 @@ impl SystemState {
                 },
             ) => {
                 if let RequestOrResponse::Response(response) = &msg
-                    && !has_callback(
-                        response,
-                        call_context_manager,
-                        self.aborted_or_paused_response(),
-                    )
-                    .map_err(|err| (err, msg.clone()))?
+                    && !has_callback(response, call_context_manager, &self.canister_id)
+                        .map_err(|err| (err, msg.clone()))?
                 {
                     // Best effort response whose callback is gone. Silently drop it.
                     self.credit_refund(response);
@@ -1456,10 +1447,19 @@ impl SystemState {
         }
     }
 
+    /// Returns `true` if there are any ingress messages in the queue that satisfy
+    /// the filter, `false` otherwise.
+    pub fn any_ingress_messages<F>(&self, filter: F) -> bool
+    where
+        F: FnMut(&Ingress) -> bool,
+    {
+        self.queues.any_ingress_messages(filter)
+    }
+
     /// See `IngressQueue::filter_messages()` for documentation.
     pub fn filter_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
     where
-        F: FnMut(&Arc<Ingress>) -> bool,
+        F: FnMut(&Ingress) -> bool,
     {
         self.queues.filter_ingress_messages(filter)
     }
@@ -1546,11 +1546,7 @@ impl SystemState {
 
             // Protect against enqueuing duplicate responses.
             if let RequestOrResponse::Response(response) = &msg {
-                match has_callback(
-                    response,
-                    call_context_manager,
-                    self.aborted_or_paused_response(),
-                ) {
+                match has_callback(response, call_context_manager, &self.canister_id) {
                     // Safe to induct.
                     Ok(true) => {}
 
@@ -1592,6 +1588,13 @@ impl SystemState {
                 self.queues.guaranteed_response_memory_usage() as i64;
             *subnet_available_guaranteed_response_memory -= guaranteed_response_memory_usage;
         }
+    }
+
+    /// Returns `true` if calling `garbage_collect_canister_queues()` would actually
+    /// mutate the canister queues.
+    #[allow(dead_code)]
+    pub(crate) fn can_garbage_collect_canister_queues(&self) -> bool {
+        self.queues.can_garbage_collect()
     }
 
     /// Garbage collects empty input and output queue pairs.
@@ -1658,10 +1661,6 @@ impl SystemState {
             return (0, Vec::new());
         }
 
-        let aborted_or_paused_callback_id = self
-            .aborted_or_paused_response()
-            .map(|response| response.originator_reply_callback);
-
         // Safe to unwrap because we just checked that the status is not `Stopped`.
         let call_context_manager = call_context_manager_mut(&mut self.status).unwrap();
 
@@ -1671,11 +1670,6 @@ impl SystemState {
             .expire_callbacks(current_time)
             .collect::<Vec<_>>();
         for callback_id in expired_callbacks {
-            if Some(callback_id) == aborted_or_paused_callback_id {
-                // This callback is already executing, don't produce a second response for it.
-                continue;
-            }
-
             // Safe to unwrap because this is a callback ID we just got from the
             // `CallContextManager`.
             let callback = call_context_manager.callbacks().get(&callback_id).unwrap();
@@ -1694,7 +1688,7 @@ impl SystemState {
                 .unwrap_or_else(|err_str| {
                     errors.push(StateError::NonMatchingResponse {
                         err_str,
-                        originator: callback.originator,
+                        originator: self.canister_id,
                         callback_id,
                         respondent: callback.respondent,
                         deadline: callback.deadline,
@@ -1939,7 +1933,7 @@ impl SystemState {
         // Callbacks still awaiting a (potentially already enqueued) response.
         let pending_callbacks = self
             .call_context_manager()
-            .map(|ccm| ccm.unresponded_callback_count(self.aborted_or_paused_response()))
+            .map(|ccm| ccm.unresponded_callback_count())
             .unwrap_or_default();
 
         let input_queue_responses = self.queues.input_queues_response_count();
@@ -1974,22 +1968,6 @@ impl SystemState {
         }
 
         Ok(())
-    }
-
-    /// Returns the aborted or paused `Response` at the head of the task queue, if
-    /// any.
-    fn aborted_or_paused_response(&self) -> Option<&Response> {
-        match self.task_queue.front() {
-            Some(ExecutionTask::AbortedExecution {
-                input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
-                ..
-            })
-            | Some(ExecutionTask::PausedExecution {
-                input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
-                ..
-            }) => Some(response),
-            _ => None,
-        }
     }
 
     /// Returns the aborted or paused `Request` at the head of the task queue, if
@@ -2130,30 +2108,18 @@ pub(crate) fn push_input(
 fn has_callback(
     response: &Response,
     call_context_manager: &CallContextManager,
-    aborted_or_paused_response: Option<&Response>,
+    own_canister_id: &CanisterId,
 ) -> Result<bool, StateError> {
-    let callback = match aborted_or_paused_response {
-        Some(aborted_or_paused_response)
-            if response.originator_reply_callback
-                == aborted_or_paused_response.originator_reply_callback =>
-        {
-            // A response for the same callback as `aborted_or_paused_response`. In other
-            // words, it does not match any unresponded callback.
-            None
-        }
-        _ => call_context_manager.callback(response.originator_reply_callback),
-    };
-
-    match callback {
+    match call_context_manager.callback(response.originator_reply_callback) {
         Some(callback)
             if response.respondent != callback.respondent
-                || response.originator != callback.originator
+                || &response.originator != own_canister_id
                 || response.deadline != callback.deadline =>
         {
             Err(StateError::non_matching_response(
                 format!(
                     "invalid details, expected => [originator => {}, respondent => {}, deadline => {}], but got response with",
-                    callback.originator,
+                    own_canister_id,
                     callback.respondent,
                     Time::from(callback.deadline)
                 ),
@@ -2194,6 +2160,29 @@ fn call_context_manager_mut(status: &mut CanisterStatus) -> Option<&mut CallCont
     }
 }
 
+/// Produces an invalid `Callback` (pointing to a non-existent `CallContext`)
+/// to be returned when popping an inbound `Request` with no matching callback.
+///
+/// This is technically unreachable code but, just in case, it is preferable to
+/// panicking. Execution will fail to load the `Callback`, bump a critical error
+/// and move on.
+fn invalid_callback() -> Arc<Callback> {
+    debug_assert!(false, "Unreachable code: callback not found.");
+
+    Callback::new(
+        CallContextId::from(u64::MAX), // Non-existent CallContext
+        CanisterId::from_u64(0),
+        Cycles::zero(),
+        Cycles::zero(),
+        Cycles::zero(),
+        WasmClosure::new(0, 0),
+        WasmClosure::new(0, 0),
+        None,
+        NO_DEADLINE,
+    )
+    .into()
+}
+
 pub mod testing {
     pub use super::call_context_manager::testing::*;
     use super::*;
@@ -2213,10 +2202,16 @@ pub mod testing {
         /// Testing only: pops next input message
         fn pop_input(&mut self) -> Option<CanisterMessage>;
 
+        /// Testing only: Registers a call context and returns its ID.
         fn with_call_context(&mut self, call_context: CallContext) -> CallContextId;
 
-        /// Registers a callback for the given respondent, with the given deadline.
-        fn with_callback(&mut self, respondent: CanisterId, deadline: CoarseTime) -> CallbackId;
+        /// Testing only: Registers a callback for the given respondent, with the given
+        /// deadline.
+        fn with_callback(
+            &mut self,
+            respondent: CanisterId,
+            deadline: CoarseTime,
+        ) -> (CallbackId, Arc<Callback>);
 
         /// Testing only: sets the canister status.
         fn set_status(&mut self, status: CanisterStatus);
@@ -2264,7 +2259,11 @@ pub mod testing {
                 .with_call_context(call_context)
         }
 
-        fn with_callback(&mut self, respondent: CanisterId, deadline: CoarseTime) -> CallbackId {
+        fn with_callback(
+            &mut self,
+            respondent: CanisterId,
+            deadline: CoarseTime,
+        ) -> (CallbackId, Arc<Callback>) {
             let call_context_manager = call_context_manager_mut(&mut self.status).unwrap();
             let time = Time::from_nanos_since_unix_epoch(1);
             let call_context_id = call_context_manager.new_call_context(
@@ -2274,18 +2273,20 @@ pub mod testing {
                 RequestMetadata::new(0, time),
             );
 
-            call_context_manager.register_callback(Callback::new(
+            let callback = Callback::new(
                 call_context_id,
-                self.canister_id,
                 respondent,
-                Cycles::zero(),
+                Cycles::new(13),
                 Cycles::new(42),
                 Cycles::new(84),
                 WasmClosure::new(0, 2),
                 WasmClosure::new(0, 2),
                 None,
                 deadline,
-            ))
+            );
+            let callback_id = call_context_manager.register_callback(callback.clone());
+
+            (callback_id, Arc::new(callback))
         }
 
         fn add_stop_context(&mut self, stop_context: StopCanisterContext) {

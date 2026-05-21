@@ -61,8 +61,21 @@ pub const MEGABYTE: u64 = KILOBYTE * KILOBYTE;
 pub const UNIT_DELAY_APP_SUBNET: Duration = Duration::from_millis(1000);
 pub const UNIT_DELAY_NNS_SUBNET: Duration = Duration::from_millis(3000);
 pub const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(300);
-pub const MAX_INGRESS_MESSAGES_PER_BLOCK: u64 = 1000;
+/// Default value for the maximum size, in bytes, a [`BatchPayload`] can have *when sent over wire*.
+/// Increasing this value too much could result in longer delivery times of blocks to peers, which
+/// could lead to forks as higher rank blocks could be proposed meanwhile. See the comment about
+/// [`UNIT_DELAY_APP_SUBNET`].
+/// Note that with hashes-in-blocks feature enabled, the blocks sent over wire are typically smaller
+/// than their representation in memory, because we strip some of the data before broadcasting them
+/// to peers.
 pub const MAX_BLOCK_PAYLOAD_SIZE: u64 = 4 * MEGABYTE;
+/// How big an ingress payload can be *when stored in memory*. Increasing this value could lead to
+/// increased memory usage of replicas.
+/// Note that with hashes-in-blocks feature enabled, increasing this value doesn't necessarily mean
+/// that we would send more data to peers when transmitting a block, because ingress messages are
+/// stripped before disseminating blocks.
+pub const MAX_INGRESS_BYTES_PER_BLOCK: u64 = 4 * MEGABYTE;
+pub const MAX_INGRESS_MESSAGES_PER_BLOCK: u64 = 1000;
 /// This sets the upper bound on how big a single ingress message can be, as
 /// allowing messages larger than around 3.5MB has various security and
 /// performance impacts on the network.  More specifically, large messages can

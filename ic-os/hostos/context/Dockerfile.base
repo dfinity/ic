@@ -40,7 +40,9 @@ RUN cd /tmp/ && \
 # Download pre-built QEMU 10.2 (Ubuntu 24.04 comes with only version 8)
 # Note: file name is confusing but it's actually QEMU 10.2
 RUN cd /tmp/ && \
-    curl -L -O https://github.com/dfinity/sev-snp-deps/releases/download/qemu-936aeb8/qemu_10-1_amd64.deb
+    curl -L -O https://github.com/dfinity/sev-snp-deps/releases/download/qemu-02944cc/qemu_10-1_amd64.deb && \
+    echo "d9a6c76e2a58db9a504e24dc652b05c24b85a0c343842a94327d0707308ecef6  qemu_10-1_amd64.deb" > qemu.sha256 && \
+    sha256sum -c qemu.sha256
 
 #
 # Second build stage:

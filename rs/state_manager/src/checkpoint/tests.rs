@@ -334,7 +334,7 @@ fn can_recover_an_empty_state() {
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         )
         .unwrap();
-        assert!(recovered_state.canisters_iter().next().is_none());
+        assert!(recovered_state.canister_states().is_empty());
     });
 }
 

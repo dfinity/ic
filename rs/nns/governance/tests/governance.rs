@@ -3257,7 +3257,7 @@ async fn test_reward_distribution_skips_deleted_neurons() {
 /// long proposal created before genesis should only be considered in the second
 /// reward event after genesis, not the first.
 #[tokio::test]
-async fn test_genesis_in_the_future_in_supported() {
+async fn test_genesis_in_the_future_is_supported() {
     let mut fake_driver = fake::FakeDriver::default()
         .at(78)
         // To make assertion easy to sanity-check, the total supply of ICPs is chosen

@@ -1420,3 +1420,36 @@ fn test_validate_table64() {
         Ok(WasmValidationDetails::default())
     );
 }
+
+#[test]
+fn wasm_with_funcref_table_section_is_valid() {
+    let wasm = wat2wasm(r#"(module (table 1 funcref))"#).unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Ok(WasmValidationDetails::default())
+    );
+}
+
+#[test]
+fn wasm_with_externref_table_section_is_invalid() {
+    let wasm = wat2wasm(r#"(module (table 1 externref))"#).unwrap();
+    assert_matches!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidTableSection(_))
+    );
+}
+
+#[test]
+fn can_validate_table_section_with_mixed_tables() {
+    let wasm = wat2wasm(
+        r#"(module
+            (table 1 funcref)
+            (table 1 externref)
+        )"#,
+    )
+    .unwrap();
+    assert_matches!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidTableSection(_))
+    );
+}

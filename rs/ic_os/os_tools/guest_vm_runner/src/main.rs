@@ -9,7 +9,7 @@ use clap::{Parser, ValueEnum};
 use command_runner::{AsyncCommandRunner, RealAsyncCommandRunner};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
+use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use ic_device::device_mapping::MappedDevice;
 use ic_device::mount::{GptPartitionProvider, PartitionProvider};
 use ic_metrics_tool::{Metric, MetricsWriter};
@@ -93,9 +93,16 @@ pub async fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    match args.vm_type {
-        GuestVMType::Default => println!("Starting GuestOS service"),
-        GuestVMType::Upgrade => println!("Starting Upgrade GuestOS service"),
+    let startup_message = match args.vm_type {
+        GuestVMType::Default => "Launching GuestOS Virtual Machine...",
+        GuestVMType::Upgrade => "Launching Upgrade GuestOS Virtual Machine...",
+    };
+    println!("{startup_message}");
+    for path in [CONSOLE_TTY1_PATH, CONSOLE_TTY_SERIAL_PATH] {
+        if let Ok(mut tty) = File::options().write(true).open(path) {
+            let _ = writeln!(tty, "\n{startup_message}\n");
+            let _ = tty.flush();
+        }
     }
 
     let termination_token = CancellationToken::new();
@@ -634,7 +641,6 @@ impl GuestVmService {
         let generated_mac = calculate_deterministic_mac(
             &self.hostos_config.icos_settings.mgmt_mac,
             self.hostos_config.icos_settings.deployment_environment,
-            IpVariant::V6,
             NodeType::HostOS,
         );
 

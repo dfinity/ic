@@ -6,10 +6,7 @@ use crate::algorithm_identifiers::{
 };
 use ic_crypto_iccsa as iccsa;
 use ic_crypto_internal_basic_sig_cose as cose;
-use ic_crypto_internal_basic_sig_der_utils as der_utils;
-use ic_crypto_internal_basic_sig_ecdsa_secp256k1 as ecdsa_secp256k1;
-use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
-use ic_crypto_internal_basic_sig_ed25519 as ed25519;
+use ic_crypto_internal_basic_sig_der_utils::algo_id_and_public_key_bytes_from_der;
 use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
 use ic_types::crypto::{AlgorithmId, BasicSig, CryptoError, CryptoResult, UserPublicKey};
 
@@ -40,33 +37,53 @@ fn cose_key_bytes_content_type(alg_id: AlgorithmId) -> Option<KeyBytesContentTyp
 pub fn user_public_key_from_bytes(
     bytes: &[u8],
 ) -> CryptoResult<(UserPublicKey, KeyBytesContentType)> {
-    let (pkix_algo_id, pk_bytes) = der_utils::algo_id_and_public_key_bytes_from_der(bytes)
-        .map_err(|e| CryptoError::MalformedPublicKey {
+    let (pkix_algo_id, pk_der) = algo_id_and_public_key_bytes_from_der(bytes).map_err(|e| {
+        CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::Unspecified,
             key_bytes: Some(bytes.to_vec()),
             internal_error: e.internal_error,
-        })?;
+        }
+    })?;
 
     let (key, algorithm_id, content_type) = if pkix_algo_id == ed25519_algorithm_identifier() {
         (
-            ed25519::api::public_key_from_der(bytes)?.0.to_vec(),
+            ic_ed25519::PublicKey::deserialize_rfc8410_der(bytes)
+                .map_err(|e| CryptoError::MalformedPublicKey {
+                    algorithm: AlgorithmId::Ed25519,
+                    key_bytes: Some(bytes.to_vec()),
+                    internal_error: format!("{:?}", e),
+                })?
+                .serialize_raw()
+                .to_vec(),
             AlgorithmId::Ed25519,
             KeyBytesContentType::Ed25519PublicKeyDer,
         )
     } else if pkix_algo_id == ecdsa_secp256k1_algorithm_identifier() {
         (
-            ecdsa_secp256k1::api::public_key_from_der(bytes)?.0,
+            ic_secp256k1::PublicKey::deserialize_canonical_der(bytes)
+                .map_err(|e| CryptoError::MalformedPublicKey {
+                    algorithm: AlgorithmId::EcdsaSecp256k1,
+                    key_bytes: Some(pk_der.to_vec()),
+                    internal_error: format!("{e:?}"),
+                })?
+                .serialize_sec1(false),
             AlgorithmId::EcdsaSecp256k1,
             KeyBytesContentType::EcdsaSecp256k1PublicKeyDer,
         )
     } else if pkix_algo_id == ecdsa_p256_algorithm_identifier() {
         (
-            ecdsa_secp256r1::public_key_from_der(bytes)?.0,
+            ic_secp256r1::PublicKey::deserialize_canonical_der(bytes)
+                .map_err(|e| CryptoError::MalformedPublicKey {
+                    algorithm: AlgorithmId::EcdsaP256,
+                    key_bytes: Some(pk_der.to_vec()),
+                    internal_error: format!("{e:?}"),
+                })?
+                .serialize_sec1(false),
             AlgorithmId::EcdsaP256,
             KeyBytesContentType::EcdsaP256PublicKeyDer,
         )
     } else if pkix_algo_id == cose_algorithm_identifier() {
-        let (alg_id, bytes) = cose::parse_cose_public_key(&pk_bytes)?;
+        let (alg_id, bytes) = cose::parse_cose_public_key(&pk_der)?;
         let key_bytes = user_public_key_from_bytes(&bytes)?;
         let key_contents_type = cose_key_bytes_content_type(alg_id).ok_or_else(|| {
             CryptoError::AlgorithmNotSupported {
@@ -104,20 +121,13 @@ pub fn user_public_key_from_bytes(
 /// # Errors
 /// * `CryptoError::MalformedPublicKey`: if the raw public key is malformed.
 pub fn ed25519_public_key_to_der(raw_key: Vec<u8>) -> CryptoResult<Vec<u8>> {
-    let key: [u8; 32] = raw_key.as_slice().try_into().map_err(|_| {
-        let key_length = raw_key.len();
-        CryptoError::MalformedPublicKey {
+    Ok(ic_ed25519::PublicKey::deserialize_raw(&raw_key)
+        .map_err(|e| CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::Ed25519,
-            key_bytes: Some(raw_key),
-            internal_error: format!(
-                "Incorrect length. Expected 32 bytes but found {key_length} bytes"
-            ),
-        }
-    })?;
-
-    Ok(ed25519::public_key_to_der(ed25519::types::PublicKeyBytes(
-        key,
-    )))
+            key_bytes: Some(raw_key.to_vec()),
+            internal_error: format!("{:?}", e),
+        })?
+        .serialize_rfc8410_der())
 }
 
 /// Decodes an ECDSA P-256 signature from DER.
@@ -127,14 +137,15 @@ pub fn ed25519_public_key_to_der(raw_key: Vec<u8>) -> CryptoResult<Vec<u8>> {
 /// # Errors
 /// * `CryptoError::MalformedSignature`: if the signature cannot be DER decoded.
 pub fn ecdsa_p256_signature_from_der_bytes(sig_der: &[u8]) -> CryptoResult<BasicSig> {
-    let sig =
-        p256::ecdsa::Signature::from_der(sig_der).map_err(|e| CryptoError::MalformedSignature {
+    let sig = ic_secp256r1::Signature::deserialize_der(sig_der).map_err(|e| {
+        CryptoError::MalformedSignature {
             algorithm: AlgorithmId::EcdsaP256,
             sig_bytes: sig_der.to_vec(),
-            internal_error: format!("Error parsing DER signature: {e}"),
-        })?;
+            internal_error: format!("Error parsing DER signature: {:?}", e),
+        }
+    })?;
 
-    Ok(BasicSig(sig.to_bytes().to_vec()))
+    Ok(BasicSig(sig.serialize().to_vec()))
 }
 
 /// Decodes an RSA signature from binary data.

@@ -48,8 +48,8 @@
     "sha256": "9637743e1215a4db376a62ee807a0986faf20833be2b332df09b3d5dbdd7339e"
   },
   "cycles-minting": {
-    "rev": "1bc0a59539613f6ec273a59a172ae43dfabb1ce0",
-    "sha256": "beb44ce1ea1540373a4d4f45fb3a5f4045d0e0bd162b3a621f3b551324175e28"
+    "rev": "6f1ce3bb4c253f1bc4c5f432c7c47b06dccdba7e",
+    "sha256": "40a204bf4abc14bd61553b2b56413709a2fc7175227253d2809ffdb977c934de"
   },
   "cycles_ledger": {
     "sha256": "ed99402535bb4f58e4ab469acc40c903f2fdeea409be16623d5c6a9131cbf120",
@@ -80,8 +80,8 @@
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_test": {
-    "sha256": "4cf076320ad3e87a0041212aae6d1de2a22927b4c829da472cbf507fefd30b61",
-    "tag": "release-2026-01-26-v2"
+    "sha256": "b54127064a6792ee419bfe41c9909c370817d9e02768383028aefc39c16b1d67",
+    "tag": "release-2026-02-06"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
@@ -96,16 +96,16 @@
     "sha256": "a7c87d163a0cc69f6a5e4ed11f9a99618bde8658d21e8d84207963bb2400347c"
   },
   "nns_dapp_test": {
-    "sha256": "fefa040b4e98dbd18f383ee5985b84e79a73fc7c06e27c783dc0ce37222c3669",
-    "tag": "proposal-140007"
+    "sha256": "93f3614c96ba8427a34d0f6fc8a8148766e11657fd34674f3febd1d119ceab38",
+    "tag": "proposal-140184"
   },
   "node-rewards": {
-    "rev": "2f21d74c33949bf556a980c85f8c1ddf85a78439",
-    "sha256": "19b893f2e17ec04a17e21c386fa62b8b9a55f98a4f4d9753c5c065bd21513fe4"
+    "rev": "6f1ce3bb4c253f1bc4c5f432c7c47b06dccdba7e",
+    "sha256": "4511bdb31e19a1ab304d897075abba82f46cc0629e6bc0f036f364f1fd7b26b7"
   },
   "registry": {
-    "rev": "1b25ff7b66627df8413677f55919010c4d6719d0",
-    "sha256": "0f4a7386dd0d9a2cada8d215788f53a1a4c2f33544bee77e3687df845eb819e8"
+    "rev": "6f1ce3bb4c253f1bc4c5f432c7c47b06dccdba7e",
+    "sha256": "3f04216742318f1ac9648b10cce5e459e83720abb523966374be5e2be3a2d02b"
   },
   "root": {
     "rev": "11cd53599b79ea96e651ab7d3a12d5562fb48a83",

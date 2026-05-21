@@ -12,6 +12,7 @@ rust_library(
         # Keep sorted.
         "//rs/bitcoin/replica_types",
         "//rs/config",
+        "//rs/consensus/features",
         "//rs/crypto/sha2",
         "//rs/crypto/tree_hash",
         "//rs/cycles_account_manager",

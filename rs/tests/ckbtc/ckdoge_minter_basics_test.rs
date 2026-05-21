@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use bitcoin::{Amount, dogecoin, dogecoin::Address};
+use bitcoin::{Amount, Txid, dogecoin, dogecoin::Address};
 use candid::Nat;
 use candid::{Decode, Encode, Principal};
 use ic_ckdoge_agent::CkDogeMinterAgent;
@@ -98,10 +98,16 @@ pub fn test_ckdoge_minter_agent(env: TestEnv) {
         .await;
 
         info!(logger, "Call retrieve_doge_status...");
-        test_retrieve_doge_status(&minter_agent, &logger, block_index, || {
-            doge_rpc
-                .generate_to_address(DOGE_MIN_CONFIRMATIONS, default_address)
-                .unwrap();
+        test_retrieve_doge_status(&minter_agent, &logger, block_index, |txid: Txid| {
+            // Only generate blocks after the transaction exists in mempool.
+            if doge_rpc.get_mempool_entry(&txid).is_ok() {
+                doge_rpc
+                    .generate_to_address(DOGE_MIN_CONFIRMATIONS, default_address)
+                    .unwrap();
+                true
+            } else {
+                false
+            }
         })
         .await;
         let new_balance = doge_rpc.get_balance_of(None, &receiver_address).unwrap();
@@ -263,7 +269,7 @@ async fn test_retrieve_doge_with_approval(
     (fee, retrieve_response.block_index)
 }
 
-async fn test_retrieve_doge_status<F: Fn()>(
+async fn test_retrieve_doge_status<F: Fn(Txid) -> bool>(
     minter_agent: &CkDogeMinterAgent,
     logger: &Logger,
     block_index: u64,
@@ -292,10 +298,10 @@ async fn test_retrieve_doge_status<F: Fn()>(
             RetrieveDogeStatus::Confirmed { txid } => {
                 return txid;
             }
-            RetrieveDogeStatus::Submitted { .. } => {
+            RetrieveDogeStatus::Submitted { txid } => {
                 if !blocks_generated {
-                    generate_blocks();
-                    blocks_generated = true;
+                    use bitcoin::hashes::Hash;
+                    blocks_generated = generate_blocks(Txid::from_byte_array(txid.into()));
                 }
             }
             RetrieveDogeStatus::AmountTooLow => break,

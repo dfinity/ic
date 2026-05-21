@@ -1,14 +1,65 @@
+use ic_https_outcalls_pricing::PricingFactory;
 use ic_interfaces::canister_http::InvalidCanisterHttpPayloadReason;
 use ic_types::{
     NodeId, RegistryVersion,
     batch::ValidationContext,
     canister_http::{
-        CanisterHttpResponseMetadata, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
+        CanisterHttpPaymentShare, CanisterHttpRequestContext, CanisterHttpResponseMetadata,
+        CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
     },
     crypto::crypto_hash,
     messages::CallbackId,
 };
 use std::collections::{BTreeMap, BTreeSet};
+
+pub fn check_payment_shares_against_context(
+    payment_shares: &[CanisterHttpPaymentShare],
+    context: &CanisterHttpRequestContext,
+) -> bool {
+    for share in payment_shares.iter() {
+        if share.content.receipt.refund > context.refund_status.per_replica_allowance {
+            return false;
+        }
+    }
+    true
+}
+
+pub fn check_total_cost(
+    response: &CanisterHttpResponseWithConsensus,
+    context: &CanisterHttpRequestContext,
+) -> Result<(), InvalidCanisterHttpPayloadReason> {
+    let calculator = PricingFactory::new_calculator(context);
+    let consensus_cost = calculator.consensus_cost(&response.content);
+    let total_refunded = response
+        .payment_proof
+        .payment_shares
+        .iter()
+        .map(|s| s.content.receipt.refund)
+        .sum();
+    if consensus_cost > total_refunded {
+        return Err(InvalidCanisterHttpPayloadReason::InsufficientCycles {
+            expected: consensus_cost,
+            received: total_refunded,
+        });
+    }
+    if total_refunded - consensus_cost > context.refund_status.refundable_cycles {
+        return Err(
+            InvalidCanisterHttpPayloadReason::TotalRefundExceedsRefundableCycles {
+                refundable_cycles: context.refund_status.refundable_cycles,
+                initial_refunded: total_refunded - consensus_cost,
+            },
+        );
+    }
+    if !check_payment_shares_against_context(&response.payment_proof.payment_shares, context) {
+        return Err(
+            InvalidCanisterHttpPayloadReason::RefundShareExceedsAllowance {
+                share_refund: total_refunded - consensus_cost,
+                per_replica_allowance: context.refund_status.per_replica_allowance,
+            },
+        );
+    }
+    Ok(())
+}
 
 /// Checks whether the response is consistent
 ///

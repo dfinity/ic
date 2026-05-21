@@ -596,6 +596,8 @@ pub struct CanisterHttpResponseWithConsensus {
     pub replica_version: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "7")]
     pub signatures: ::prost::alloc::vec::Vec<CanisterHttpResponseSignature>,
+    #[prost(message, repeated, tag = "9")]
+    pub payment_shares: ::prost::alloc::vec::Vec<CanisterHttpPaymentShare>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpShare {

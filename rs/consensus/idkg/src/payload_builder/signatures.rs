@@ -37,7 +37,6 @@ pub(crate) fn update_signature_agreements(
     payload: &mut idkg::IDkgPayload,
     valid_keys: &BTreeSet<IDkgMasterPublicKeyId>,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
-    store_pre_signatures_in_state: bool,
 ) {
     let all_random_ids = all_requests
         .values()
@@ -84,26 +83,6 @@ pub(crate) fn update_signature_agreements(
             continue;
         }
 
-        let pre_sig_id = if !store_pre_signatures_in_state {
-            // If pre-signatures are stored on the blockchain, then that means
-            // we can only reject expired requests once the request was matched with a
-            // pre-signature. Otherwise the context may be matched with a pre-signature
-            // at a subsequent state height (before the rejection here is executed).
-            // In that case, the pre-signature would not be removed from the payload,
-            // and would be used again for a different request, which shouldn't to happen.
-            match context.matched_pre_signature {
-                Some((pre_sig_id, _)) => Some(pre_sig_id),
-                None => continue,
-            }
-        } else {
-            // If pre-signatures are stored in the state, then it is safe to reject
-            // the request even if it hasn't been paired yet. While it may be paired
-            // by the time this reject is executed, the paired pre-signature is consumed
-            // from the stash, so there is no risk of using it again for a different
-            // request.
-            None
-        };
-
         if request_expiry_time.is_some_and(|expiry| context.batch_time < expiry) {
             payload.signature_agreements.insert(
                 context.pseudo_random_id,
@@ -113,10 +92,6 @@ pub(crate) fn update_signature_agreements(
                     "Signature request expired",
                 )),
             );
-            if let Some(pre_sig_id) = pre_sig_id.as_ref() {
-                payload.available_pre_signatures.remove(pre_sig_id);
-            }
-
             if let Some(metrics) = idkg_payload_metrics {
                 metrics.payload_errors_inc("expired_requests");
             }
@@ -150,9 +125,6 @@ pub(crate) fn update_signature_agreements(
             context.pseudo_random_id,
             idkg::CompletedSignature::Unreported(response),
         );
-        if let Some(pre_sig_id) = pre_sig_id.as_ref() {
-            payload.available_pre_signatures.remove(pre_sig_id);
-        }
     }
 }
 
@@ -160,8 +132,7 @@ pub(crate) fn update_signature_agreements(
 mod tests {
     use super::*;
     use crate::test_utils::{
-        TestThresholdSignatureBuilder, create_available_pre_signature, into_idkg_contexts,
-        set_up_idkg_payload,
+        TestThresholdSignatureBuilder, into_idkg_contexts, set_up_idkg_payload,
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -208,12 +179,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_signature_agreements_reporting_with_flags() {
-        test_update_signature_agreements_reporting(false);
-        test_update_signature_agreements_reporting(true);
-    }
-
-    fn test_update_signature_agreements_reporting(store_pre_signatures_in_state: bool) {
+    fn test_update_signature_agreements_reporting() {
         let delivered_pseudo_random_id = pseudo_random_id(0);
         let old_pseudo_random_id = pseudo_random_id(1);
         let new_pseudo_random_id = pseudo_random_id(2);
@@ -243,7 +209,6 @@ mod tests {
             &mut idkg_payload,
             &BTreeSet::from([key_id]),
             None,
-            store_pre_signatures_in_state,
         );
 
         assert_eq!(idkg_payload.signature_agreements.len(), 1);
@@ -260,30 +225,16 @@ mod tests {
     fn test_update_signature_agreements_success_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_update_signature_agreements_success(&key_id, false);
-            test_update_signature_agreements_success(&key_id, true);
+            test_update_signature_agreements_success(&key_id);
         }
     }
 
-    fn test_update_signature_agreements_success(
-        key_id: &IDkgMasterPublicKeyId,
-        store_pre_signatures_in_state: bool,
-    ) {
+    fn test_update_signature_agreements_success(key_id: &IDkgMasterPublicKeyId) {
         let subnet_id = subnet_test_id(0);
         let mut idkg_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let valid_keys = BTreeSet::from_iter([key_id.clone()]);
         let pre_sig_ids = (0..4)
-            .map(|i| {
-                if !store_pre_signatures_in_state {
-                    // If pre-signatures aren't stored in the state, then we expect them to exist
-                    // in the payload
-                    create_available_pre_signature(&mut idkg_payload, key_id.clone(), i as u8)
-                } else {
-                    // If pre-signatures are stored in the state, they are not expected to still be
-                    // in the payload
-                    idkg_payload.uid_generator.next_pre_signature_id()
-                }
-            })
+            .map(|_| idkg_payload.uid_generator.next_pre_signature_id())
             .collect::<Vec<_>>();
         let ids = (0..4)
             .map(|i| request_id(i, Height::from(0)))
@@ -336,20 +287,7 @@ mod tests {
             &mut idkg_payload,
             &valid_keys,
             None,
-            store_pre_signatures_in_state,
         );
-
-        if !store_pre_signatures_in_state {
-            // If pre-signatures are stored on the blockchain, then the pre-signature
-            // for the completed request should be removed, after a response to the
-            // request is generated.
-            assert_eq!(idkg_payload.available_pre_signatures.len(), 3);
-            assert!(
-                !idkg_payload
-                    .available_pre_signatures
-                    .contains_key(&pre_sig_ids[1])
-            );
-        }
 
         assert_eq!(idkg_payload.signature_agreements.len(), 2);
         let Some(idkg::CompletedSignature::Unreported(response_1)) =
@@ -366,14 +304,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_signature_agreements_ignores_vetkd_contexts_with_flags() {
-        test_update_signature_agreements_ignores_vetkd_contexts(false);
-        test_update_signature_agreements_ignores_vetkd_contexts(true);
-    }
-
-    fn test_update_signature_agreements_ignores_vetkd_contexts(
-        store_pre_signatures_in_state: bool,
-    ) {
+    fn test_update_signature_agreements_ignores_vetkd_contexts() {
         let subnet_id = subnet_test_id(0);
         let ecdsa_key_id = fake_ecdsa_idkg_master_public_key_id();
         let vet_key_id = fake_vetkd_master_public_key_id();
@@ -381,17 +312,7 @@ mod tests {
             empty_idkg_payload_with_key_ids(subnet_id, vec![ecdsa_key_id.clone()]);
         let valid_keys = BTreeSet::from_iter([ecdsa_key_id.clone()]);
         let pre_sig_ids = (0..2)
-            .map(|i| {
-                if !store_pre_signatures_in_state {
-                    // If pre-signatures aren't stored in the state, then we expect them to exist
-                    // in the payload
-                    create_available_pre_signature(&mut idkg_payload, ecdsa_key_id.clone(), i as u8)
-                } else {
-                    // If pre-signatures are stored in the state, they are not expected to still be
-                    // in the payload
-                    idkg_payload.uid_generator.next_pre_signature_id()
-                }
-            })
+            .map(|_| idkg_payload.uid_generator.next_pre_signature_id())
             .collect::<Vec<_>>();
         let ids = (0..2)
             .map(|i| request_id(i, Height::from(0)))
@@ -438,20 +359,7 @@ mod tests {
             &mut idkg_payload,
             &valid_keys,
             None,
-            store_pre_signatures_in_state,
         );
-
-        if !store_pre_signatures_in_state {
-            // If pre-signatures are stored on the blockchain, then the pre-signature
-            // for the completed request should be removed, after a response to the
-            // request is generated.
-            assert_eq!(idkg_payload.available_pre_signatures.len(), 1);
-            assert!(
-                !idkg_payload
-                    .available_pre_signatures
-                    .contains_key(&pre_sig_ids[0])
-            );
-        }
 
         assert_eq!(idkg_payload.signature_agreements.len(), 1);
         let Some(idkg::CompletedSignature::Unreported(response_1)) =

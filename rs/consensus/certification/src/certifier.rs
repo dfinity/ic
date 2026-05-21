@@ -10,7 +10,7 @@ use ic_interfaces::{
     validation::ValidationError,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::{StateHashMetadata, StateManager};
 use ic_logger::{ReplicaLogger, debug, error, trace};
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_replicated_state::ReplicatedState;
@@ -144,10 +144,11 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
             .state_manager
             .list_state_hashes_to_certify()
             .into_iter()
-            .filter_map(
-                |(height, hash)| match certification_pool.certification_at_height(height) {
+            .filter_map(|state_hash_metadata| {
+                let height = state_hash_metadata.height;
+                match certification_pool.certification_at_height(height) {
                     // if we have a valid certification, deliver it to the state manager and skip
-                    // the pair
+                    // the metadata
                     Some(certification) => {
                         // TODO[NET-1711]: Remove deliver_state_certification(), and include them in the
                         // change set for the artifact processor to handle.
@@ -166,10 +167,10 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
                         });
                         None
                     }
-                    // return this pair to be signed by the current replica
-                    _ => Some((height, hash)),
-                },
-            )
+                    // return the metadata to be signed by the current replica
+                    _ => Some(state_hash_metadata),
+                }
+            })
             .collect();
         trace!(
             &self.log,
@@ -216,7 +217,9 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
 
         let certifications = state_hashes_to_certify
             .iter()
-            .flat_map(|(height, _)| self.aggregate(certification_pool, *height))
+            .flat_map(|state_hash_metadata| {
+                self.aggregate(certification_pool, state_hash_metadata.height)
+            })
             .collect::<Vec<_>>();
 
         if !certifications.is_empty() {
@@ -309,17 +312,17 @@ impl CertifierImpl {
     fn sign(
         &self,
         certification_pool: &dyn CertificationPool,
-        state_hashes: &[(Height, CryptoHashOfPartialState)],
+        state_hashes: &[StateHashMetadata],
     ) -> Vec<CertificationMessage> {
         state_hashes
             .iter()
             // Filter out all heights, where the current replica does not belong to the committee
             // and, hence, should not sign.
-            .filter(|&(height, _)| {
+            .filter(|state_hash_metadata| {
                 self.membership
                     .node_belongs_to_threshold_committee(
                         self.replica_config.node_id,
-                        *height,
+                        state_hash_metadata.height,
                         Certification::committee(),
                     )
                     .unwrap_or_else(|err| {
@@ -332,22 +335,24 @@ impl CertifierImpl {
             })
             // Filter out all heights if we have a share signed by us already (this is a linear scan
             // through all shares of the same height, but is bound by the number of replicas).
-            .filter(|&(height, _)| {
+            .filter(|state_hash_metadata| {
                 certification_pool
-                    .shares_at_height(*height)
+                    .shares_at_height(state_hash_metadata.height)
                     .all(|share| share.signed.signature.signer != self.replica_config.node_id)
             })
             .cloned()
-            .filter_map(|(height, hash)| {
-                let content = CertificationContent::new(hash);
-                let dkg_id =
-                    active_high_threshold_nidkg_id(self.consensus_pool_cache.as_ref(), height)?;
+            .filter_map(|state_hash_metadata| {
+                let content = CertificationContent::new(state_hash_metadata.hash);
+                let dkg_id = active_high_threshold_nidkg_id(
+                    self.consensus_pool_cache.as_ref(),
+                    state_hash_metadata.height,
+                )?;
                 match self
                     .crypto
                     .sign(&content, self.replica_config.node_id, dkg_id)
                 {
                     Ok(signature) => Some(CertificationShare {
-                        height,
+                        height: state_hash_metadata.height,
                         signed: Signed { content, signature },
                     }),
                     Err(err) => {
@@ -414,44 +419,52 @@ impl CertifierImpl {
     fn validate(
         &self,
         certification_pool: &dyn CertificationPool,
-        state_hashes: &[(Height, CryptoHashOfPartialState)],
+        state_hashes: &[StateHashMetadata],
     ) -> Mutations {
         // Iterate over all state hashes, obtain list of corresponding unvalidated
         // artifacts by the height and try to verify their signatures.
 
         state_hashes
             .iter()
-            .flat_map(|(height, hash)| -> Box<dyn Iterator<Item = ChangeAction>> {
-                // First we check if we have any valid full certification available for the
-                // given height and if yes, our job is done for this height.
-                let mut cert_change_set = Vec::new();
-                for certification in
-                    certification_pool.unvalidated_certifications_at_height(*height)
-                {
-                    if let Some(val) = self.validate_certification(hash, certification) {
-                        match val {
-                            ChangeAction::MoveToValidated(_) => {
-                                cert_change_set.push(val);
-                                // We have found one valid certification for the given height, so
-                                // our job is done.
-                                return Box::new(cert_change_set.into_iter());
-                            }
-                            _ => {
-                                cert_change_set.push(val);
+            .flat_map(
+                |state_hash_metadata| -> Box<dyn Iterator<Item = ChangeAction>> {
+                    // First we check if we have any valid full certification available for the
+                    // given height and if yes, our job is done for this height.
+                    let mut cert_change_set = Vec::new();
+                    for certification in certification_pool
+                        .unvalidated_certifications_at_height(state_hash_metadata.height)
+                    {
+                        if let Some(val) =
+                            self.validate_certification(&state_hash_metadata.hash, certification)
+                        {
+                            match val {
+                                ChangeAction::MoveToValidated(_) => {
+                                    cert_change_set.push(val);
+                                    // We have found one valid certification for the given height, so
+                                    // our job is done.
+                                    return Box::new(cert_change_set.into_iter());
+                                }
+                                _ => {
+                                    cert_change_set.push(val);
+                                }
                             }
                         }
                     }
-                }
 
-                Box::new(
-                    certification_pool
-                        .unvalidated_shares_at_height(*height)
-                        .filter_map(move |share| {
-                            self.validate_share(certification_pool, hash, share)
-                        })
-                        .chain(cert_change_set),
-                )
-            })
+                    Box::new(
+                        certification_pool
+                            .unvalidated_shares_at_height(state_hash_metadata.height)
+                            .filter_map(move |share| {
+                                self.validate_share(
+                                    certification_pool,
+                                    &state_hash_metadata.hash,
+                                    share,
+                                )
+                            })
+                            .chain(cert_change_set),
+                    )
+                },
+            )
             .collect()
     }
 
@@ -597,6 +610,7 @@ mod tests {
         certification::CertificationPool,
         p2p::consensus::{MutablePool, UnvalidatedArtifact},
     };
+    use ic_interfaces_state_manager::StateHashMetadata;
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
@@ -676,13 +690,11 @@ mod tests {
             .expect_list_state_hashes_to_certify()
             .return_const(
                 (from..=to)
-                    .map(move |h| {
-                        (
-                            Height::from(h),
-                            CryptoHashOfPartialState::from(CryptoHash(Vec::new())),
-                        )
+                    .map(move |h| StateHashMetadata {
+                        height: Height::from(h),
+                        hash: CryptoHashOfPartialState::from(CryptoHash(Vec::new())),
                     })
-                    .collect::<Vec<(Height, CryptoHashOfPartialState)>>(),
+                    .collect::<Vec<StateHashMetadata>>(),
             );
     }
 
@@ -1072,14 +1084,14 @@ mod tests {
                 let shares = certifier.sign(
                     &cert_pool,
                     &[
-                        (
-                            Height::from(1),
-                            CryptoHashOfPartialState::from(CryptoHash(vec![0])),
-                        ),
-                        (
-                            Height::from(2),
-                            CryptoHashOfPartialState::from(CryptoHash(vec![1, 2])),
-                        ),
+                        StateHashMetadata {
+                            height: Height::from(1),
+                            hash: CryptoHashOfPartialState::from(CryptoHash(vec![0])),
+                        },
+                        StateHashMetadata {
+                            height: Height::from(2),
+                            hash: CryptoHashOfPartialState::from(CryptoHash(vec![1, 2])),
+                        },
                     ],
                 );
 
@@ -1380,11 +1392,9 @@ mod tests {
                 let state_hashes = |heights: Vec<u64>| {
                     heights
                         .into_iter()
-                        .map(|h| {
-                            (
-                                Height::from(h),
-                                CryptoHashOfPartialState::from(CryptoHash(Vec::new())),
-                            )
+                        .map(|h| StateHashMetadata {
+                            height: Height::from(h),
+                            hash: CryptoHashOfPartialState::from(CryptoHash(Vec::new())),
                         })
                         .collect::<Vec<_>>()
                 };

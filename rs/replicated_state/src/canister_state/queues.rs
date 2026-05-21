@@ -697,10 +697,19 @@ impl CanisterQueues {
         CanisterOutputQueuesIterator::new(&mut self.canister_queues, &mut self.store)
     }
 
+    /// Returns `true` if there are any ingress messages in the queue that satisfy
+    /// the filter, `false` otherwise.
+    pub fn any_ingress_messages<F>(&self, filter: F) -> bool
+    where
+        F: FnMut(&Ingress) -> bool,
+    {
+        self.ingress_queue.any_messages(filter)
+    }
+
     /// See `IngressQueue::filter_messages()` for documentation.
     pub fn filter_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
     where
-        F: FnMut(&Arc<Ingress>) -> bool,
+        F: FnMut(&Ingress) -> bool,
     {
         self.ingress_queue.filter_messages(filter)
     }
@@ -1362,6 +1371,23 @@ impl CanisterQueues {
         self.message_stats().cycles
     }
 
+    /// Returns `true` if calling `garbage_collect()` would actually garbage collect
+    /// anything.
+    ///
+    /// Time complexity: `O(|canister_queues|)`.
+    pub(crate) fn can_garbage_collect(&self) -> bool {
+        // Can garbage collect if any input queue / output queue pair are both empty...
+        self.canister_queues
+            .iter()
+            .any(|(_, (input_queue, output_queue))| {
+                !input_queue.has_used_slots() && !output_queue.has_used_slots()
+            })
+            // ...or if all queues are empty but not all struct fields are reset to default.
+            || self.canister_queues.is_empty()
+                && self.ingress_queue.is_empty()
+                && pb_queues::CanisterQueues::from(self as &Self).encoded_len() != 0
+    }
+
     /// Garbage collects all input and output queue pairs that are both empty.
     ///
     /// Because there is no useful information in an empty queue, there is no
@@ -1372,7 +1398,7 @@ impl CanisterQueues {
     /// every round; but not e.g. when deserializing, which may happen at
     /// different times on restarting or state syncing replicas).
     ///
-    /// Time complexity: `O(num_queues)`.
+    /// Time complexity: `O(|canister_queues|)`.
     pub fn garbage_collect(&mut self) {
         self.garbage_collect_impl();
 
@@ -1741,6 +1767,14 @@ impl CanisterQueues {
             input_queues_reserved_slots,
             output_queues_reserved_slots,
         }
+    }
+
+    /// Checks if a given callback has a response already enqueued.
+    /// Public for use in `StateMachine` tests when producing
+    /// synthetic reject responses.
+    pub fn has_enqueued_response(&self, callback_id: &CallbackId) -> bool {
+        self.callbacks_with_enqueued_response
+            .contains_key(callback_id)
     }
 }
 
