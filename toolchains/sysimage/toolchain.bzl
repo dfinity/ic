@@ -345,9 +345,17 @@ def _ext4_image_impl(ctx):
         ctx.executable._dflate.path,
         "--mkfs-ext4",
         ctx.file._mkfs_ext4.path,
+        "--libfaketime",
+        ctx.file._libfaketime.path,
+        "--faked-sysv",
+        ctx.file._faked_sysv.path,
+        "--libfakeroot",
+        ctx.file._libfakeroot.path,
     ])
 
     inputs.extend(ctx.files._mkfs_ext4_runfiles)
+    inputs.extend(ctx.files._libfaketime_runfiles)
+    inputs.extend(ctx.files._fakeroot_runfiles)
 
     if ctx.attr.file_contexts:
         args.extend(["-S", ctx.files.file_contexts[0].path])
@@ -413,6 +421,26 @@ ext4_image = _icos_build_rule(
         ),
         "_mkfs_ext4_runfiles": attr.label(
             default = "//toolchains/sysimage:mkfs_ext4_runfiles",
+            allow_files = True,
+        ),
+        "_libfaketime": attr.label(
+            default = "//toolchains/sysimage:faketime.d/libfaketime.so.1",
+            allow_single_file = True,
+        ),
+        "_libfaketime_runfiles": attr.label(
+            default = "//toolchains/sysimage:libfaketime_runfiles",
+            allow_files = True,
+        ),
+        "_faked_sysv": attr.label(
+            default = "//toolchains/sysimage:fakeroot.d/faked-sysv",
+            allow_single_file = True,
+        ),
+        "_libfakeroot": attr.label(
+            default = "//toolchains/sysimage:fakeroot.d/libfakeroot-sysv.so",
+            allow_single_file = True,
+        ),
+        "_fakeroot_runfiles": attr.label(
+            default = "//toolchains/sysimage:fakeroot_runfiles",
             allow_files = True,
         ),
     },

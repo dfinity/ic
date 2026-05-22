@@ -987,6 +987,84 @@
 			"arch": "amd64",
 			"dependencies": [
 				{
+					"key": "libc6_2.39-0ubuntu8.6_amd64",
+					"name": "libc6",
+					"version": "2.39-0ubuntu8.6"
+				},
+				{
+					"key": "libgcc-s1_14.2.0-4ubuntu2_24.04_amd64",
+					"name": "libgcc-s1",
+					"version": "14.2.0-4ubuntu2~24.04"
+				},
+				{
+					"key": "gcc-14-base_14.2.0-4ubuntu2_24.04_amd64",
+					"name": "gcc-14-base",
+					"version": "14.2.0-4ubuntu2~24.04"
+				},
+				{
+					"key": "libfakeroot_1.33-1_amd64",
+					"name": "libfakeroot",
+					"version": "1.33-1"
+				}
+			],
+			"key": "fakeroot_1.33-1_amd64",
+			"name": "fakeroot",
+			"sha256": "d58b7fc73f0b7ae8b9441b0aa41e44ead0d7e4deedf5aaf5696db182eac71031",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20260131T000000Z/pool/main/f/fakeroot/fakeroot_1.33-1_amd64.deb",
+			"version": "1.33-1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libfakeroot_1.33-1_amd64",
+			"name": "libfakeroot",
+			"sha256": "a78087f50586595375f850b4445261f7a47a83005b05ce521331929fab49df4b",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20260131T000000Z/pool/main/f/fakeroot/libfakeroot_1.33-1_amd64.deb",
+			"version": "1.33-1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [
+				{
+					"key": "libc6_2.39-0ubuntu8.6_amd64",
+					"name": "libc6",
+					"version": "2.39-0ubuntu8.6"
+				},
+				{
+					"key": "libgcc-s1_14.2.0-4ubuntu2_24.04_amd64",
+					"name": "libgcc-s1",
+					"version": "14.2.0-4ubuntu2~24.04"
+				},
+				{
+					"key": "gcc-14-base_14.2.0-4ubuntu2_24.04_amd64",
+					"name": "gcc-14-base",
+					"version": "14.2.0-4ubuntu2~24.04"
+				},
+				{
+					"key": "libfaketime_0.9.10-2.1_amd64",
+					"name": "libfaketime",
+					"version": "0.9.10-2.1"
+				}
+			],
+			"key": "faketime_0.9.10-2.1_amd64",
+			"name": "faketime",
+			"sha256": "665f136637004d2f1c9af0cef03b9070ea6a68087c167b83ec6417095530d3f5",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20260131T000000Z/pool/universe/f/faketime/faketime_0.9.10-2.1_amd64.deb",
+			"version": "0.9.10-2.1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libfaketime_0.9.10-2.1_amd64",
+			"name": "libfaketime",
+			"sha256": "25fc8987f1f700c58603f68edd93ac03a1b7dea35da1e84509f29f444d5b11e9",
+			"url": "https://snapshot.ubuntu.com/ubuntu/20260131T000000Z/pool/universe/f/faketime/libfaketime_0.9.10-2.1_amd64.deb",
+			"version": "0.9.10-2.1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [
+				{
 					"key": "libsigsegv2_2.14-1ubuntu2_amd64",
 					"name": "libsigsegv2",
 					"version": "2.14-1ubuntu2"

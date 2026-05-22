@@ -8,10 +8,84 @@
 #   build_ext4_image -s 10M -o partition.img.tzst -p boot -i dockerimg.tar -S file_contexts
 #
 import argparse
+import contextlib
 import os
+import signal
 import subprocess
 import sys
 import tempfile
+import time
+
+
+def faketime_env(libfaketime, base_env=None):
+    """
+    Return an env that LD_PRELOADs our hermetic libfaketime.so.1 and pins
+    the wall clock to the Unix epoch. Equivalent to what the `faketime
+    -f '1970-1-1 0:0:0'` wrapper does, but without invoking the wrapper
+    binary, which hard-codes /usr/$LIB/faketime/libfaketime.so.1.
+    """
+    env = dict(base_env if base_env is not None else os.environ)
+    env["FAKETIME"] = "@1970-01-01 00:00:00"
+    existing = env.get("LD_PRELOAD", "")
+    env["LD_PRELOAD"] = f"{libfaketime}:{existing}" if existing else libfaketime
+    return env
+
+
+@contextlib.contextmanager
+def fakeroot_session(faked_sysv, libfakeroot, statefile=None, load_state=False):
+    """
+    Spawn the hermetic faked-sysv daemon and yield (env, statefile).
+
+    The env contains FAKEROOTKEY + LD_PRELOAD set so that subprocess calls
+    appear to run as root and have their stat/chmod/chown operations
+    intercepted and recorded by the daemon. If `statefile` is given the
+    daemon's state will be written there when the daemon exits; if
+    `load_state` is True it will additionally be pre-loaded from the same
+    file. This mirrors the `-s` and `-i` options of the `fakeroot` wrapper
+    but bypasses the wrapper itself, which performs host-specific library
+    lookups.
+    """
+    faked_cmd = [faked_sysv]
+    faked_input = None
+    if statefile is not None:
+        faked_cmd += ["--save-file", statefile]
+    if load_state:
+        assert statefile is not None
+        faked_cmd += ["--load"]
+        with open(statefile, "rb") as f:
+            faked_input = f.read()
+    # faked-sysv prints "KEY:PID\n" then forks into the background.
+    proc = subprocess.run(faked_cmd, input=faked_input, capture_output=True, check=True)
+    key, pid_str = proc.stdout.decode().strip().split(":")
+    pid = int(pid_str)
+    env = dict(os.environ)
+    env["FAKEROOTKEY"] = key
+    env["LD_PRELOAD"] = libfakeroot
+    try:
+        yield env
+        # When asked to save state, force the daemon to flush by issuing a
+        # final stat() call against it (matches what the fakeroot wrapper's
+        # WAITINTRAP trap does to ensure --save-file is written).
+        if statefile is not None:
+            subprocess.run(
+                ["/bin/ls", "-l", "/"],
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+    finally:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        # Wait for the daemon to actually exit so --save-file is complete.
+        for _ in range(100):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.05)
 
 
 def limit_file_contexts(file_contexts, base_path):
@@ -81,7 +155,7 @@ def read_fakeroot_state(statefile):
     return entry_by_inode
 
 
-def strip_files(fs_basedir, fakeroot_statefile, strip_paths):
+def strip_files(faked_sysv, libfakeroot, fs_basedir, fakeroot_statefile, strip_paths):
     flattened_paths = []
     for path in strip_paths:
         if path[0] == "/":
@@ -99,14 +173,17 @@ def strip_files(fs_basedir, fakeroot_statefile, strip_paths):
     BATCH_SIZE = 100
     for batch_start in range(0, len(flattened_paths), BATCH_SIZE):
         batch_end = min(batch_start + BATCH_SIZE, len(flattened_paths))
-        subprocess.run(
-            ["fakeroot", "-s", fakeroot_statefile, "-i", fakeroot_statefile, "rm", "-rf"]
-            + flattened_paths[batch_start:batch_end],
-            check=True,
-        )
+        with fakeroot_session(faked_sysv, libfakeroot, statefile=fakeroot_statefile, load_state=True) as env:
+            subprocess.run(
+                ["rm", "-rf"] + flattened_paths[batch_start:batch_end],
+                env=env,
+                check=True,
+            )
 
 
-def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extract, extra_files):
+def prepare_tree_from_tar(
+    faked_sysv, libfakeroot, in_file, fakeroot_statefile, fs_basedir, dir_to_extract, extra_files
+):
     # We batch all commands together and run them under bash. This is significantly faster than invoking fakeroot
     # multiple times.
     commands = "set -euo pipefail\n"
@@ -123,7 +200,8 @@ def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extrac
     else:
         commands += f"""chown root:root "{fs_basedir}";\n"""
 
-    subprocess.run(["fakeroot", "-s", fakeroot_statefile, "bash"], input=commands.encode(), check=True)
+    with fakeroot_session(faked_sysv, libfakeroot, statefile=fakeroot_statefile) as env:
+        subprocess.run(["bash"], input=commands.encode(), env=env, check=True)
 
 
 def make_argparser():
@@ -170,6 +248,24 @@ def make_argparser():
         type=str,
         required=True,
     )
+    parser.add_argument(
+        "--libfaketime",
+        help="Path to our hermetic libfaketime.so.1, LD_PRELOADed in place of the faketime wrapper.",
+        type=str,
+        required=True,
+    )
+    parser.add_argument(
+        "--faked-sysv",
+        help="Path to our hermetic faked-sysv daemon, used in place of the fakeroot wrapper.",
+        type=str,
+        required=True,
+    )
+    parser.add_argument(
+        "--libfakeroot",
+        help="Path to our hermetic libfakeroot-sysv.so, LD_PRELOADed in place of the fakeroot wrapper.",
+        type=str,
+        required=True,
+    )
     return parser
 
 
@@ -206,23 +302,37 @@ def main():
     # Prepare a filesystem tree that represents what will go into
     # the fs image. Wrap everything in fakeroot so permissions and
     # ownership will be preserved while unpacking (see below).
-    prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix, extra_files)
-    strip_files(fs_basedir, fakeroot_statefile, strip_paths)
+    prepare_tree_from_tar(
+        args.faked_sysv,
+        args.libfakeroot,
+        in_file,
+        fakeroot_statefile,
+        fs_basedir,
+        limit_prefix,
+        extra_files,
+    )
+    strip_files(
+        args.faked_sysv,
+        args.libfakeroot,
+        fs_basedir,
+        fakeroot_statefile,
+        strip_paths,
+    )
 
     # Now build the basic filesystem image. Wrap again in fakeroot
     # so correct permissions are read for all files etc.
     mke2fs_dir = os.path.dirname(args.mkfs_ext4)
-    mke2fs_env = {
-        "E2FSPROGS_FAKE_TIME": "0",
-        # Point mke2fs at our bundled libraries and config so its output does
-        # not depend on the host's installed e2fsprogs version.
-        "LD_LIBRARY_PATH": os.path.join(mke2fs_dir, "lib"),
-        "MKE2FS_CONFIG": os.path.join(mke2fs_dir, "mke2fs.conf"),
-    }
+    mke2fs_env = faketime_env(
+        args.libfaketime,
+        base_env={
+            "E2FSPROGS_FAKE_TIME": "0",
+            # Point mke2fs at our bundled libraries and config so its output does
+            # not depend on the host's installed e2fsprogs version.
+            "LD_LIBRARY_PATH": os.path.join(mke2fs_dir, "lib"),
+            "MKE2FS_CONFIG": os.path.join(mke2fs_dir, "mke2fs.conf"),
+        },
+    )
     mke2fs_args = [
-        "faketime",
-        "-f",
-        "1970-1-1 0:0:0",
         args.mkfs_ext4,
         "-E",
         "hash_seed=c61251eb-100b-48fe-b089-57dea7368612",
@@ -251,12 +361,6 @@ def main():
     subprocess.run(diroid_args, check=True)
 
     e2fsdroid_args = [
-        "faketime",
-        "-f",
-        "1970-1-1 0:0:0",
-        "fakeroot",
-        "-i",
-        fakeroot_statefile,
         "e2fsdroid",
         "-e",
         "-a",
@@ -268,7 +372,10 @@ def main():
     if file_contexts_file:
         e2fsdroid_args += ["-S", file_contexts_file]
     e2fsdroid_args += [image_file]
-    subprocess.run(e2fsdroid_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
+    with fakeroot_session(args.faked_sysv, args.libfakeroot, statefile=fakeroot_statefile, load_state=True) as fr_env:
+        e2fsdroid_env = faketime_env(args.libfaketime, base_env=fr_env)
+        e2fsdroid_env["E2FSPROGS_FAKE_TIME"] = "0"
+        subprocess.run(e2fsdroid_args, check=True, env=e2fsdroid_env)
 
     # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
     # If dflate is ever misbehaving, it can be replaced with:
