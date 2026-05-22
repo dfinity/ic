@@ -14989,6 +14989,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-systest-firewall"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-nns-governance-api",
+ "ic-protobuf",
+ "ic-registry-keys",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic_consensus_system_test_utils",
+ "registry-canister",
+ "reqwest",
+ "slog",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "ic-test-artifact-pool"
 version = "0.9.0"
 dependencies = [

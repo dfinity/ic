@@ -925,6 +925,11 @@ impl IcNodeSnapshot {
         node_record.domain
     }
 
+    pub fn node_reward_type(&self) -> pb_node::NodeRewardType {
+        let node_record = self.raw_node_record();
+        node_record.node_reward_type()
+    }
+
     pub fn subnet_id(&self) -> Option<SubnetId> {
         let registry_version = self.registry_version;
         self.local_registry

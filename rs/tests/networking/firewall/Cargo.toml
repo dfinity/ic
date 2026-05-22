@@ -1,0 +1,38 @@
+[package]
+name = "ic-systest-firewall"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[lib]
+name = "ic_firewall_system_test_utils"
+path = "utils.rs"
+
+[[bin]]
+name = "ic-systest-firewall-correctness-test"
+path = "firewall_correctness_test.rs"
+
+[[bin]]
+name = "ic-systest-firewall-max-connections-test"
+path = "firewall_max_connections_test.rs"
+
+[[bin]]
+name = "ic-systest-firewall-priority-test"
+path = "firewall_priority_test.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+ic_consensus_system_test_utils = { path = "../../consensus/utils" }
+ic-nns-governance-api = { path = "../../../nns/governance/api" }
+ic-protobuf = { path = "../../../protobuf" }
+ic-registry-keys = { path = "../../../registry/keys" }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-system-test-driver = { path = "../../driver" }
+registry-canister = { path = "../../../registry/canister" }
+reqwest = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
+url = { workspace = true }
