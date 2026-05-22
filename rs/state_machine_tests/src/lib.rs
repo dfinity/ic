@@ -2715,9 +2715,6 @@ impl StateMachine {
                 content: response_metadata,
                 signature,
             };
-            // Mock pricing always produces an empty payment receipt; the payment share is
-            // attached to the response share so that the artifact is well-formed for the
-            // downstream pool.
             let payment_share = CanisterHttpPaymentShare::fake(
                 CanisterHttpPaymentMetadata {
                     id: CallbackId::from(request_id),

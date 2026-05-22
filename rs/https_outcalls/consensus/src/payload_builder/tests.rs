@@ -32,6 +32,7 @@ use ic_management_canister_types_private::{
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_test_utilities::state_manager::RefMockStateManager;
+use ic_test_utilities_consensus::fake::FakeContentSigner;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_test_utilities_types::{
     ids::{canister_test_id, node_id_to_u64, node_test_id, subnet_test_id},
@@ -782,13 +783,7 @@ fn divergence_error_message() {
 
             sample.content_hash = CryptoHashOf::from(CryptoHash(new_hash.to_vec()));
 
-            Signed {
-                content: sample,
-                signature: BasicSignature {
-                    signature: BasicSigOf::new(BasicSig(vec![])),
-                    signer: node_test_id(node_id),
-                },
-            }
+            CanisterHttpResponseShare::fake(sample, node_test_id(node_id))
         })
         .collect::<Vec<_>>();
 
@@ -1469,23 +1464,16 @@ pub(crate) fn artifact_from_share(
     }
 }
 
-/// Returns a default payment share that matches the (signer, callback id) of
-/// the given response share. Used by test helpers that need to assemble a
-/// well-formed [`CanisterHttpResponseArtifact`] but don't care about the
-/// refund amount.
 pub(crate) fn payment_share_from_response_share(
     share: &CanisterHttpResponseShare,
 ) -> CanisterHttpPaymentShare {
-    Signed {
-        content: CanisterHttpPaymentMetadata {
+    CanisterHttpPaymentShare::fake(
+        CanisterHttpPaymentMetadata {
             id: share.content.id,
             receipt: CanisterHttpPaymentReceipt::default(),
         },
-        signature: BasicSignature {
-            signature: BasicSigOf::new(BasicSig(vec![])),
-            signer: share.signature.signer,
-        },
-    }
+        share.signature.signer,
+    )
 }
 
 /// Creates a [`CanisterHttpResponseShare`] from [`CanisterHttpResponseMetadata`]

@@ -26,12 +26,6 @@ use prometheus::IntCounter;
 const POOL_CANISTER_HTTP: &str = "canister_http";
 const POOL_CANISTER_HTTP_CONTENT: &str = "canister_http_content";
 
-/// Validated section of the pool.
-///
-/// The value stored alongside each [`CanisterHttpResponseShare`] is the
-/// matching [`CanisterHttpPaymentShare`] received from gossip (or locally
-/// produced). This is needed so that the artifact can be reconstructed (e.g.
-/// for re-broadcasting) without consulting the unvalidated pool.
 type ValidatedCanisterHttpPoolSection =
     PoolSection<CanisterHttpResponseShare, CanisterHttpPaymentShare>;
 
@@ -103,13 +97,6 @@ impl CanisterHttpPool for CanisterHttpPoolImpl {
         hash: &CryptoHashOf<CanisterHttpResponse>,
     ) -> Option<CanisterHttpResponse> {
         self.content.get(hash).cloned()
-    }
-
-    fn lookup_validated(
-        &self,
-        share: &CanisterHttpResponseShare,
-    ) -> Option<CanisterHttpResponseShare> {
-        self.validated.get(share).map(|_| share.clone())
     }
 }
 
@@ -188,9 +175,6 @@ impl MutablePool<CanisterHttpResponseArtifact> for CanisterHttpPoolImpl {
                     self.content.remove(&id);
                 }
                 CanisterHttpChangeAction::HandleInvalid(id, reason) => {
-                    // Log the payment share (if any) of the unvalidated artifact alongside the
-                    // share itself. This is useful when investigating disputes about replica
-                    // refund amounts.
                     let payment_share = self
                         .unvalidated
                         .get(&id)
@@ -295,8 +279,8 @@ mod tests {
     }
 
     fn fake_share(id: u64) -> CanisterHttpResponseShare {
-        Signed {
-            content: CanisterHttpResponseMetadata {
+        CanisterHttpResponseShare::fake(
+            CanisterHttpResponseMetadata {
                 id: CallbackId::from(id),
                 content_hash: CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
                 content_size: 42,
@@ -304,8 +288,8 @@ mod tests {
                 registry_version: RegistryVersion::from(id),
                 replica_version: ReplicaVersion::default(),
             },
-            signature: BasicSignature::fake(node_test_id(id)),
-        }
+            node_test_id(id),
+        )
     }
 
     fn fake_payment_share(id: u64) -> CanisterHttpPaymentShare {
@@ -333,10 +317,12 @@ mod tests {
         let payment_share = fake_payment_share(123);
         let id = share.clone();
 
-        pool.insert(to_unvalidated(share.clone(), payment_share));
+        pool.insert(to_unvalidated(share.clone(), payment_share.clone()));
         assert!(pool.get(&id).is_none());
 
-        assert_eq!(share, pool.get_unvalidated_artifact(&id).unwrap().share);
+        let unvalidated = pool.get_unvalidated_artifact(&id).unwrap();
+        assert_eq!(share, unvalidated.share);
+        assert_eq!(payment_share, unvalidated.payment_share);
 
         pool.remove(&id);
         assert!(pool.get_unvalidated_artifact(&id).is_none());
@@ -351,15 +337,19 @@ mod tests {
         let response = fake_response(123);
         let content_hash = ic_types::crypto::crypto_hash(&response);
 
+        let share2 = fake_share(456);
+        let id2 = share2.clone();
+        let payment_share2 = fake_payment_share(456);
+
         let result = pool.apply(vec![
             CanisterHttpChangeAction::AddToValidated(
                 share.clone(),
-                payment_share,
+                payment_share.clone(),
                 response.clone(),
             ),
             CanisterHttpChangeAction::AddToValidated(
-                fake_share(456),
-                fake_payment_share(456),
+                share2,
+                payment_share2.clone(),
                 fake_response(456),
             ),
         ]);
@@ -370,8 +360,10 @@ mod tests {
         assert!(matches!(&result.transmits[1], ArtifactTransmit::Deliver(_)));
         assert!(result.poll_immediately);
         assert_eq!(result.transmits.len(), 2);
-        assert_eq!(share, pool.lookup_validated(&id).unwrap());
-        assert_eq!(share, pool.get(&id).unwrap().share);
+        assert!(pool.validated.contains_key(&id));
+        let validated = pool.get(&id).unwrap();
+        assert_eq!(share, validated.share);
+        assert_eq!(payment_share, validated.payment_share);
         assert_eq!(
             response,
             pool.get_response_content_by_hash(&content_hash).unwrap()
@@ -385,10 +377,11 @@ mod tests {
         assert_eq!(result.transmits.len(), 1);
         assert!(result.poll_immediately);
         assert!(matches!(&result.transmits[0], ArtifactTransmit::Abort(x) if *x == id));
-        assert!(pool.lookup_validated(&id).is_none());
+        assert!(!pool.validated.contains_key(&id));
         assert!(pool.get_response_content_by_hash(&content_hash).is_none());
         assert_eq!(pool.get_validated_shares().count(), 1);
         assert_eq!(pool.get_response_content_items().count(), 1);
+        assert_eq!(payment_share2, pool.get(&id2).unwrap().payment_share);
     }
 
     #[test]
@@ -419,7 +412,7 @@ mod tests {
         );
         assert!(result.poll_immediately);
         assert_eq!(result.transmits.len(), 1);
-        assert_eq!(share, pool.lookup_validated(&id).unwrap());
+        assert!(pool.validated.contains_key(&id));
         assert_eq!(share, pool.get(&id).unwrap().share);
         assert_eq!(
             response,
@@ -443,7 +436,7 @@ mod tests {
             CanisterHttpChangeAction::MoveToValidated(share1.clone()),
         ]);
 
-        assert!(pool.lookup_validated(&id2).is_none());
+        assert!(!pool.validated.contains_key(&id2));
         assert!(result.poll_immediately);
         assert!(
             !result
@@ -451,9 +444,7 @@ mod tests {
                 .iter()
                 .any(|x| matches!(x, ArtifactTransmit::Abort(_)))
         );
-        assert_eq!(share1, pool.lookup_validated(&id1).unwrap());
-        // The payment share that was attached to the unvalidated artifact must be carried
-        // over into the validated section so the artifact remains reconstructable.
+        assert!(pool.validated.contains_key(&id1));
         assert_eq!(payment_share1, pool.get(&id1).unwrap().payment_share);
     }
 

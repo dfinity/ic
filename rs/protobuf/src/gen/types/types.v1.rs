@@ -688,11 +688,14 @@ pub mod canister_http_response_message {
         FlexibleError(super::FlexibleCanisterHttpError),
     }
 }
+/// A receipt describing the per-replica cycles accounting outcome for a single
+/// canister HTTP outcall.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpPaymentReceipt {
     #[prost(message, optional, tag = "1")]
     pub refund: ::core::option::Option<super::super::state::queues::v1::Cycles>,
 }
+/// Per-replica payment metadata for a canister HTTP outcall.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpPaymentMetadata {
     #[prost(uint64, tag = "1")]

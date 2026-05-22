@@ -119,23 +119,17 @@ message CanisterHttpResponseMessage {
 }
 
 // A receipt describing the per-replica cycles accounting outcome for a single
-// canister HTTP outcall. Unlike `CanisterHttpResponseMetadata`, this is not
-// part of the metadata over which consensus must be reached, and is therefore
-// signed separately.
+// canister HTTP outcall.
 message CanisterHttpPaymentReceipt {
   state.queues.v1.Cycles refund = 1;
 }
 
-// Per-replica payment metadata for a canister HTTP outcall. Identified by the
-// callback id of the originating request and carries the receipt produced by
-// the replica after the outcall completed.
+// Per-replica payment metadata for a canister HTTP outcall.
 message CanisterHttpPaymentMetadata {
   uint64 id = 1;
   CanisterHttpPaymentReceipt receipt = 2;
 }
 
-// `CanisterHttpPaymentMetadata` together with the issuing replica's basic
-// signature. Gossiped alongside the response share in `CanisterHttpArtifact`.
 message CanisterHttpPaymentShare {
   CanisterHttpPaymentMetadata metadata = 1;
   BasicSignature signature = 2;

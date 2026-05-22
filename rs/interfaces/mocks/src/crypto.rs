@@ -290,7 +290,7 @@ mockall::mock! {
             &self, message: &CanisterHttpResponseMetadata,
         ) -> CryptoResult<BasicSigOf<CanisterHttpResponseMetadata>>;
 
-        pub fn sign_basic_payment(
+        pub fn sign_basic_http_payment(
             &self, message: &CanisterHttpPaymentMetadata,
         ) -> CryptoResult<BasicSigOf<CanisterHttpPaymentMetadata>>;
 
@@ -435,20 +435,20 @@ mockall::mock! {
         ) -> CryptoResult<()>;
 
         // CanisterHttpPaymentMetadata
-        pub fn verify_basic_sig_payment(
+        pub fn verify_basic_sig_http_payment(
             &self,
             signature: &BasicSigOf<CanisterHttpPaymentMetadata>,
             message: &CanisterHttpPaymentMetadata, signer: NodeId,
             registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
-        pub fn combine_basic_sig_payment(
+        pub fn combine_basic_sig_http_payment(
             &self,
             signatures: BTreeMap<NodeId, BasicSigOf<CanisterHttpPaymentMetadata>>,
             registry_version: RegistryVersion,
         ) -> CryptoResult<BasicSignatureBatch<CanisterHttpPaymentMetadata>>;
 
-        pub fn verify_basic_sig_batch_payment(
+        pub fn verify_basic_sig_batch_http_payment(
             &self,
             signature_batch: &BasicSignatureBatch<CanisterHttpPaymentMetadata>,
             message: &CanisterHttpPaymentMetadata,
@@ -751,7 +751,7 @@ impl_basic_signer!(IDkgDealing, sign_basic_idkg_dealing);
 impl_basic_signer!(IDkgComplaintContent, sign_basic_idkg_complaint);
 impl_basic_signer!(IDkgOpeningContent, sign_basic_idkg_opening);
 impl_basic_signer!(CanisterHttpResponseMetadata, sign_basic_http);
-impl_basic_signer!(CanisterHttpPaymentMetadata, sign_basic_payment);
+impl_basic_signer!(CanisterHttpPaymentMetadata, sign_basic_http_payment);
 impl_basic_signer!(QueryResponseHash, sign_basic_query);
 
 impl_basic_sig_verifier!(
@@ -798,9 +798,9 @@ impl_basic_sig_verifier!(
 );
 impl_basic_sig_verifier!(
     CanisterHttpPaymentMetadata,
-    verify_basic_sig_payment,
-    combine_basic_sig_payment,
-    verify_basic_sig_batch_payment
+    verify_basic_sig_http_payment,
+    combine_basic_sig_http_payment,
+    verify_basic_sig_batch_http_payment
 );
 
 impl_threshold_signer!(CertificationContent, sign_threshold_certification);

@@ -149,18 +149,11 @@ pub type CanisterHttpPayloadValidationError =
 
 #[derive(Debug)]
 pub enum CanisterHttpChangeAction {
-    /// Add a (response share, payment share, response) triple to the validated
-    /// section of the pool. The response is kept locally for use in the
-    /// payload builder; only the shares are gossiped.
     AddToValidated(
         CanisterHttpResponseShare,
         CanisterHttpPaymentShare,
         CanisterHttpResponse,
     ),
-    /// Same as [`Self::AddToValidated`], except that the full response is also
-    /// gossiped to other replicas alongside the shares. This is used for
-    /// non-replicated and flexible outcalls, where other replicas cannot
-    /// independently obtain the response.
     AddToValidatedAndGossipResponse(
         CanisterHttpResponseShare,
         CanisterHttpPaymentShare,
@@ -194,9 +187,4 @@ pub trait CanisterHttpPool: Send + Sync {
         &self,
         hash: &CryptoHashOf<CanisterHttpResponse>,
     ) -> Option<CanisterHttpResponse>;
-
-    fn lookup_validated(
-        &self,
-        msg_id: &CanisterHttpResponseId,
-    ) -> Option<CanisterHttpResponseShare>;
 }

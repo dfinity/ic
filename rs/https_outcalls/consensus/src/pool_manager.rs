@@ -146,14 +146,8 @@ impl CanisterHttpPoolManagerImpl {
         }
     }
 
-    /// Signs a piece of canister HTTP metadata (either a
-    /// [`CanisterHttpResponseMetadata`] or [`CanisterHttpPaymentMetadata`])
-    /// and wraps it into a [`Signed`] share.
-    ///
-    /// Returns [`None`] if signing fails, in which case `error_context` is
-    /// logged together with the underlying error so callers can decide how
-    /// to handle the failure (typically by skipping the corresponding
-    /// outcall).
+    /// Attempts to sign canister HTTP metadata (either [`CanisterHttpResponseMetadata`]
+    /// or [`CanisterHttpPaymentMetadata`]) and wraps it into a [`Signed`] share.
     fn sign_canister_http_metadata<M>(
         &self,
         metadata: M,
@@ -167,7 +161,7 @@ impl CanisterHttpPoolManagerImpl {
         let signature = self
             .crypto
             .sign(&metadata, self.replica_config.node_id, registry_version)
-            .map_err(|err| error!(self.log, "{} {}", error_context, err))
+            .inspect_err(|err| error!(self.log, "{} {}", error_context, err))
             .ok()?;
         Some(Signed {
             content: metadata,
@@ -524,9 +518,7 @@ impl CanisterHttpPoolManagerImpl {
                 let share = &artifact.share;
                 let payment_share = &artifact.payment_share;
 
-                // The response share and the payment share are gossiped together as part of the
-                // same artifact. They must therefore agree on signer and request id, otherwise
-                // the sender is misbehaving.
+                // Response share and payment share must agree on signer and request id
                 if (share.signature.signer, share.content.id)
                     != (payment_share.signature.signer, payment_share.content.id)
                 {
@@ -550,9 +542,7 @@ impl CanisterHttpPoolManagerImpl {
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
                 };
 
-                // A replica that asks for a larger refund than the per-replica allowance is
-                // misbehaving: by construction, no honest replica would have access to more
-                // cycles than that to refund.
+                // Invalidate receipts refunding more than the per-replica allowance
                 if payment_share.content.receipt.refund
                     > context.refund_status.per_replica_allowance
                 {
@@ -660,9 +650,6 @@ impl CanisterHttpPoolManagerImpl {
                         format!("Unable to verify signature of share, {err}"),
                     ));
                 }
-                // Verify the payment share signature as well. Without this check a malicious
-                // relayer could swap a peer's payment share for one claiming a smaller refund
-                // (since both keys would still agree with the response share's signer/id).
                 if let Err(err) = self.crypto.verify(payment_share, registry_version) {
                     error!(
                         self.log,
@@ -835,9 +822,6 @@ pub mod test {
         }
     }
 
-    /// Returns a [`CanisterHttpPaymentMetadata`] with a small non-zero refund
-    /// that can be used to assert that the payment metadata is properly
-    /// propagated through the pool manager.
     fn fake_payment_metadata(id: u64) -> CanisterHttpPaymentMetadata {
         CanisterHttpPaymentMetadata {
             id: CallbackId::from(id),
@@ -847,10 +831,6 @@ pub mod test {
         }
     }
 
-    /// Builds a default payment share for the same (signer, callback id) as
-    /// the given response share, with an empty receipt. This is sufficient for
-    /// tests that don't care about the refund amount but need to assemble a
-    /// well-formed [`CanisterHttpResponseArtifact`].
     fn payment_share_from_response_share(
         share: &CanisterHttpResponseShare,
     ) -> CanisterHttpPaymentShare {

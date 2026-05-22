@@ -577,9 +577,6 @@ impl TryFrom<pb::CanisterHttpPaymentMetadata> for CanisterHttpPaymentMetadata {
 
 impl From<CanisterHttpPaymentShare> for pb::CanisterHttpPaymentShare {
     fn from(share: CanisterHttpPaymentShare) -> Self {
-        // Reuses the generic `BasicSignature` proto via the
-        // `From<BasicSignature<T>> for pb::BasicSignature` impl, so the payment share
-        // doesn't need its own signature proto.
         pb::CanisterHttpPaymentShare {
             metadata: Some(share.content.into()),
             signature: Some(share.signature.into()),
@@ -636,6 +633,7 @@ mod tests {
     use super::*;
     use crate::exhaustive::ExhaustiveSet;
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+    use ic_types_cycles::Cycles;
 
     /// Tests that a roundtrip of protobuf conversions for `CanisterHttpResponse`
     /// works correctly.
@@ -678,7 +676,9 @@ mod tests {
         let payment_share = Signed {
             content: CanisterHttpPaymentMetadata {
                 id: CanisterHttpRequestId::new(2),
-                receipt: CanisterHttpPaymentReceipt::default(),
+                receipt: CanisterHttpPaymentReceipt {
+                    refund: Cycles::from(42),
+                },
             },
             signature: BasicSignature {
                 signer: NodeId::from(PrincipalId::new_node_test_id(2)),
