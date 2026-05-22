@@ -344,15 +344,15 @@ impl RoundSchedule {
                         if self.long_execution_canisters.contains(canister_id) {
                             return None;
                         }
-                        CanisterRoundState::new(canister, subnet_schedule.get_mut(*canister_id))
+                        CanisterRoundState::new(canister, subnet_schedule.get(canister_id))
                     }
 
                     NextExecution::ContinueLong => {
                         if is_first_iteration {
                             self.long_execution_canisters.insert(*canister_id);
                         }
-                        let priority = subnet_schedule.get_mut(*canister_id);
-                        let rs = CanisterRoundState::new(canister, priority);
+                        let rs =
+                            CanisterRoundState::new(canister, subnet_schedule.get(canister_id));
                         long_executions_count += 1;
                         long_executions_compute_allocation += rs.compute_allocation;
                         rs
