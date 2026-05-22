@@ -1034,7 +1034,8 @@ mod metrics_tests {
         let current_day: u64 = 20_000;
         let now_seconds = current_day * ONE_DAY_SECONDS;
 
-        // Case 1: both states are None — neither gauge should be emitted.
+        // Case 1: freshly-installed canister — `maturity_modulation.updated_at_days_since_epoch`
+        // is `None` and `icp_price_history` is `None`. Neither gauge should be emitted.
         let governance = Governance::new(
             Default::default(),
             Arc::new(MockEnvironment::new(Default::default(), now_seconds)),
