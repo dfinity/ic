@@ -38,7 +38,6 @@ rust_library(
         "//rs/crypto/standalone-sig-verifier",
         "//rs/crypto/tls_interfaces",
         "//rs/crypto/utils/basic_sig",
-        "//rs/crypto/utils/canister_threshold_sig",
         "//rs/crypto/utils/tls",
         "//rs/interfaces",
         "//rs/interfaces/registry",
