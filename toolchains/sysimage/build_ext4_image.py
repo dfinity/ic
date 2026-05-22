@@ -25,7 +25,10 @@ def faketime_env(libfaketime, base_env=None):
     binary, which hard-codes /usr/$LIB/faketime/libfaketime.so.1.
     """
     env = dict(base_env if base_env is not None else os.environ)
-    env["FAKETIME"] = "@1970-01-01 00:00:00"
+    # The `x0` speed multiplier freezes the fake clock so the time does not
+    # advance during the program's lifetime; otherwise e2fsdroid would record
+    # different i_crtime values for inodes created in different real seconds.
+    env["FAKETIME"] = "@1970-01-01 00:00:00 x0"
     existing = env.get("LD_PRELOAD", "")
     env["LD_PRELOAD"] = f"{libfaketime}:{existing}" if existing else libfaketime
     return env
@@ -266,6 +269,12 @@ def make_argparser():
         type=str,
         required=True,
     )
+    parser.add_argument(
+        "--e2fsdroid",
+        help="Path to our hermetic e2fsdroid binary (pinned Android platform-tools).",
+        type=str,
+        required=True,
+    )
     return parser
 
 
@@ -361,7 +370,7 @@ def main():
     subprocess.run(diroid_args, check=True)
 
     e2fsdroid_args = [
-        "e2fsdroid",
+        args.e2fsdroid,
         "-e",
         "-a",
         "/",
