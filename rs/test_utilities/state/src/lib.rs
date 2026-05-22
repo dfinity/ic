@@ -608,7 +608,6 @@ impl Default for ExecutionStateBuilder {
 
         ExecutionStateBuilder {
             execution_state: ExecutionState::new(
-                "NOT_USED".into(),
                 WasmBinary::new(CanisterModule::new(vec![])),
                 ExportedFunctions::new(BTreeSet::new()),
                 Memory::new_for_testing(),

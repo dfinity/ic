@@ -1,11 +1,11 @@
 use crate::{Args, Partition, crypt_name, metrics_file_path, run};
-use anyhow::Result;
-use config_types::{GuestOSConfig, ICOSSettings};
+use anyhow::{Result, anyhow};
+use config_types::{GuestOSConfig, GuestVMType, ICOSSettings};
 use guest_disk::crypt::{
     LuksHeaderLocation, activate_crypt_device, backup_luks_header_to_file, check_encryption_key,
     deactivate_crypt_device, format_crypt_device, open_luks2_device,
 };
-use guest_disk::sev::can_open_store;
+use guest_disk::sev::{SevDiskEncryption, can_open_store};
 use ic_device::device_mapping::{Bytes, TempDevice};
 use ic_os_logging::init_logging;
 use itertools::Either::Right;
@@ -364,6 +364,41 @@ fn test_fail_to_open_if_device_is_not_formatted() {
 }
 
 #[test]
+fn test_format_store_refuses_existing_detached_header() {
+    let temp_dir = tempdir().unwrap();
+    let store_luks_header_path = temp_dir.path().join("store.header");
+    let metrics_file = temp_dir.path().join("metrics.prom");
+
+    fs::write(&store_luks_header_path, b"stale header")
+        .expect("Failed to write stale detached Store header");
+
+    let mut encryption = SevDiskEncryption {
+        sev_firmware: Box::new(MockSevGuestFirmwareBuilder::new()),
+        previous_key_path: temp_dir.path().join("previous_key"),
+        store_luks_header_path: store_luks_header_path.clone(),
+        guest_vm_type: GuestVMType::Default,
+        metrics_file,
+    };
+
+    let err = guest_disk::DiskEncryption::format(
+        &mut encryption,
+        &temp_dir.path().join("dummy_device"),
+        Partition::Store,
+    )
+    .expect_err("formatting Store should fail when a detached header already exists");
+
+    assert!(
+        format!("{err:#}").contains("Refusing to format Store because detached LUKS header"),
+        "Unexpected error: {err:#}"
+    );
+    assert_eq!(
+        fs::read(&store_luks_header_path).unwrap(),
+        b"stale header",
+        "existing detached Store header should be left untouched"
+    );
+}
+
+#[test]
 fn test_sev_unlock_store_partition_with_previous_key() {
     const PREVIOUS_KEY: &[u8] = b"previous key";
     const DEPRECATED_KEY: &[u8] = b"deprecated key";
@@ -513,6 +548,44 @@ fn test_sev_unlock_store_partition_with_previous_key() {
         }
     }
     assert_eq!(active_keyslot_count, 2);
+}
+
+#[test]
+fn test_sev_upgrade_vm_keeps_previous_key_file() {
+    const PREVIOUS_KEY: &[u8] = b"previous key";
+
+    let mut fixture = TestFixture::new(true);
+    fixture.guestos_config.guest_vm_type = GuestVMType::Upgrade;
+
+    fs::write(&fixture.previous_key_path, PREVIOUS_KEY)
+        .expect("Failed to write previous key for testing");
+
+    format_crypt_device(
+        &fixture.device.path().unwrap(),
+        LuksHeaderLocation::Attached,
+        PREVIOUS_KEY,
+    )
+    .unwrap();
+
+    backup_luks_header_to_file(
+        &fixture.device.path().unwrap(),
+        &fixture.store_luks_header_path,
+    )
+    .expect("Failed to back up detached Store header");
+
+    fixture
+        .open(Partition::Store)
+        .expect("opening Store with previous key should succeed during upgrade");
+
+    assert!(
+        fixture.previous_key_path.exists(),
+        "Upgrade Guest VM should preserve previous key file"
+    );
+    assert_eq!(
+        fs::read(&fixture.previous_key_path).unwrap(),
+        PREVIOUS_KEY,
+        "Upgrade Guest VM should keep the previous key file contents unchanged"
+    );
 }
 
 #[test]
@@ -735,16 +808,16 @@ fn test_format_store_populates_detached_header_and_sets_permissions() {
     fixture.format(Partition::Store).unwrap();
 
     assert!(fixture.store_luks_header_path.exists());
+    let metadata = fixture.store_luks_header_path.metadata().unwrap();
     assert_eq!(
-        fixture
-            .store_luks_header_path
-            .metadata()
-            .unwrap()
-            .permissions()
-            .mode()
-            & 0o777,
+        metadata.len(),
+        16 * 1024 * 1024,
+        "detached Store LUKS header should be 16 MiB"
+    );
+    assert_eq!(
+        metadata.permissions().mode() & 0o777,
         0o644,
-        "detached Store LUKS header should be readable and writable by owner only"
+        "detached Store LUKS header should be world-readable and owner-writable"
     );
 }
 
@@ -936,5 +1009,36 @@ fn test_metrics_export() {
     assert!(
         metrics_content.contains("passes_verification=\"true\""),
         "Missing or incorrect passes_verification label: {metrics_content}"
+    );
+}
+
+#[test]
+fn test_run_returns_sev_firmware_factory_error() {
+    let temp_dir = tempdir().unwrap();
+    let guestos_config = TestFixture::create_guestos_config(true);
+    let device_path = temp_dir.path().join("dummy_device");
+
+    let err = run(
+        Args::CryptOpen {
+            partition: Partition::Store,
+            device_path,
+        },
+        &guestos_config,
+        true,
+        || Err(anyhow!("boom")),
+        &temp_dir.path().join("previous_key"),
+        &temp_dir.path().join("store.header"),
+        &temp_dir.path().join("generated_key"),
+        temp_dir.path(),
+    )
+    .expect_err("run should fail when SEV firmware cannot be opened");
+
+    assert!(
+        format!("{err:#}").contains("Failed to open SEV firmware"),
+        "Unexpected error: {err:#}"
+    );
+    assert!(
+        format!("{err:#}").contains("boom"),
+        "Unexpected error: {err:#}"
     );
 }

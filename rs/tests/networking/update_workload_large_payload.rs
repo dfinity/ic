@@ -1,6 +1,5 @@
 use anyhow::Result;
 use ic_system_test_driver::driver::farm::HostFeature;
-use ic_system_test_driver::driver::farm::VmAllocationMode;
 use std::time::Duration;
 
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -30,7 +29,6 @@ fn main() -> Result<()> {
         )
     };
     SystemTestGroup::new()
-        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(|env| {
             setup(
                 env,

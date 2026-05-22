@@ -4,14 +4,14 @@ use crate::driver::{
     context::{GroupContext, ProcessContext},
     dsl::{SubprocessFn, TestFunction},
     event::TaskId,
-    farm::{Farm, HostFeature, VmAllocationMode},
+    farm::{Farm, HostFeature},
     plan::{EvalOrder, Plan},
     report::Outcome,
     task::{DebugKeepaliveTask, EmptyTask},
     task_scheduler::{TaskScheduler, TaskTable},
     test_env_api::{
         FarmBaseUrl, HasFarmUrl, HasGroupSetup, HasTopologySnapshot, IcNodeContainer,
-        ORCHESTRATOR_METRICS_PORT, REPLICA_METRICS_PORT,
+        ORCHESTRATOR_METRICS_PORT, REPLICA_METRICS_PORT, TopologySnapshot,
     },
 };
 use crate::driver::{
@@ -647,9 +647,50 @@ impl SystemTestSubGroup {
     }
 }
 
+fn default_replica_metrics() -> BTreeMap<&'static str, u64> {
+    BTreeMap::from([
+        ("critical_errors", 0),
+        ("consensus_invalidated_artifacts", 0),
+        ("dkg_invalidated_artifacts", 0),
+        ("idkg_invalidated_artifacts", 0),
+        ("certification_invalidated_artifacts", 0),
+        ("canister_http_invalidated_artifacts", 0),
+    ])
+}
+
+fn default_orchestrator_metrics() -> BTreeMap<&'static str, u64> {
+    BTreeMap::from([
+        ("orchestrator_cup_deserialization_failed_total", 0),
+        ("orchestrator_state_removal_failed_total", 0),
+        ("orchestrator_tasks_failed_total", 0),
+        ("orchestrator_replica_process_start_attempts_total", 1),
+    ])
+}
+
+fn check_metrics_for_nodes(
+    topology: &TopologySnapshot,
+    replica_metrics: &BTreeMap<&str, u64>,
+    orchestrator_metrics: &BTreeMap<&str, u64>,
+) {
+    for node in topology.subnets().flat_map(|subnet| subnet.nodes()) {
+        node.assert_metrics_values(replica_metrics, REPLICA_METRICS_PORT);
+        node.assert_metrics_values(orchestrator_metrics, ORCHESTRATOR_METRICS_PORT);
+    }
+}
+
+/// Checks replica and orchestrator error metrics on all subnet nodes, using the
+/// same thresholds as the default `SystemTestGroup` teardown. Call this before
+/// replica restart so that errors accumulated in the current process are not lost.
+pub fn assert_no_critical_errors(env: &TestEnv) {
+    check_metrics_for_nodes(
+        &env.topology_snapshot(),
+        &default_replica_metrics(),
+        &default_orchestrator_metrics(),
+    );
+}
+
 pub struct SystemTestGroup {
     allocate_testnet_to_local_dc: bool,
-    vm_allocation_mode: Option<VmAllocationMode>,
     setup: Option<Box<dyn PotSetupFn>>,
     teardowns: Vec<Box<dyn PotSetupFn>>,
     tests: Vec<SystemTestSubGroup>,
@@ -695,27 +736,14 @@ impl SystemTestGroup {
     pub fn new() -> Self {
         Self {
             allocate_testnet_to_local_dc: false,
-            vm_allocation_mode: Default::default(),
             setup: Default::default(),
             teardowns: Default::default(),
             tests: Default::default(),
             timeout_per_test: None,
             overall_timeout: None,
             with_farm: true,
-            replica_metrics_to_check: BTreeMap::from([
-                ("critical_errors", 0),
-                ("consensus_invalidated_artifacts", 0),
-                ("dkg_invalidated_artifacts", 0),
-                ("idkg_invalidated_artifacts", 0),
-                ("certification_invalidated_artifacts", 0),
-                ("canister_http_invalidated_artifacts", 0),
-            ]),
-            orchestrator_metrics_to_check: BTreeMap::from([
-                ("orchestrator_cup_deserialization_failed_total", 0),
-                ("orchestrator_state_removal_failed_total", 0),
-                ("orchestrator_tasks_failed_total", 0),
-                ("orchestrator_replica_process_start_attempts_total", 1),
-            ]),
+            replica_metrics_to_check: default_replica_metrics(),
+            orchestrator_metrics_to_check: default_orchestrator_metrics(),
             unallowed_log_patterns: BTreeMap::from([
                 ("This is a bug".to_string(), BTreeSet::new()),
                 (
@@ -750,11 +778,6 @@ impl SystemTestGroup {
 
     pub fn allocate_testnet_to_local_dc(mut self) -> Self {
         self.allocate_testnet_to_local_dc = true;
-        self
-    }
-
-    pub fn with_vm_allocation_mode(mut self, mode: VmAllocationMode) -> Self {
-        self.vm_allocation_mode = Some(mode);
         self
     }
 
@@ -1050,16 +1073,11 @@ impl SystemTestGroup {
                         }
                     };
 
-                    for node in topology.subnets().flat_map(|subnet| subnet.nodes()) {
-                        node.assert_metrics_values(
-                            &self.replica_metrics_to_check,
-                            REPLICA_METRICS_PORT,
-                        );
-                        node.assert_metrics_values(
-                            &self.orchestrator_metrics_to_check,
-                            ORCHESTRATOR_METRICS_PORT,
-                        );
-                    }
+                    check_metrics_for_nodes(
+                        &topology,
+                        &self.replica_metrics_to_check,
+                        &self.orchestrator_metrics_to_check,
+                    );
                 };
                 Some((
                     ASSERT_NO_METRICS_ERRORS_TASK_NAME.to_string(),
@@ -1313,7 +1331,6 @@ impl SystemTestGroup {
                 root_env.create_group_setup(
                     group_ctx.group_base_name.clone(),
                     self.allocate_testnet_to_local_dc,
-                    self.vm_allocation_mode.clone(),
                     args.no_group_ttl,
                 );
             }

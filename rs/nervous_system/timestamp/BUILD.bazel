@@ -2,15 +2,13 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-LIB_SRCS = glob(
-    ["src/**/*.rs"],
-    # Ensures that we do not need to rebuild just because a _test.rs file changed.
-    exclude = ["**/*tests.rs"],
-)
-
 rust_library(
     name = "timestamp",
-    srcs = LIB_SRCS,
+    srcs = glob(
+        ["src/**/*.rs"],
+        # Ensures that we do not need to rebuild just because a _test.rs file changed.
+        exclude = ["**/*tests.rs"],
+    ),
     crate_name = "ic_nervous_system_timestamp",
     version = "0.0.1",
     deps = [

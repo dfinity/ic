@@ -71,7 +71,6 @@ use num_traits::{SaturatingAdd, SaturatingSub};
 use prometheus::IntCounter;
 use std::collections::BTreeSet;
 use std::iter::zip;
-use std::path::PathBuf;
 use std::{convert::TryFrom, str::FromStr, sync::Arc};
 
 use types::*;
@@ -535,7 +534,9 @@ impl CanisterManager {
         }
 
         // Log memory limit: validate, charge cycles for resize, and apply.
-        if let Some(requested_limit) = settings.log_memory_limit() {
+        if canister.system_state.log_memory_store.is_migrated()
+            && let Some(requested_limit) = settings.log_memory_limit()
+        {
             let max_limit = NumBytes::new(MAX_AGGREGATE_LOG_MEMORY_LIMIT as u64);
             if requested_limit > max_limit {
                 return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooHigh {
@@ -824,7 +825,6 @@ impl CanisterManager {
         prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
         mut canister: CanisterState,
         time: Time,
-        canister_layout_path: PathBuf,
         network_topology: &NetworkTopology,
         execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
@@ -881,7 +881,6 @@ impl CanisterManager {
         let original: OriginalContext = OriginalContext {
             execution_parameters,
             mode: context.mode,
-            canister_layout_path,
             config: self.config.clone(),
             message,
             call_id,
@@ -2241,7 +2240,6 @@ impl CanisterManager {
             let (instructions_for_execution, new_execution_state) =
                 self.hypervisor.create_execution_state(
                     execution_snapshot.wasm_binary.clone(),
-                    "NOT_USED".into(),
                     canister_id,
                     round_limits,
                     compilation_cost_handling,

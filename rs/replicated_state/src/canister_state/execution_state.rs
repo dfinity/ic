@@ -19,7 +19,6 @@ use std::{
     collections::BTreeSet,
     convert::{From, TryFrom},
     iter::FromIterator,
-    path::PathBuf,
     sync::{Arc, Mutex},
 };
 use strum_macros::EnumIter;
@@ -304,11 +303,6 @@ impl NextScheduledMethod {
 // Deserialization for `ExecutionState`.
 #[derive(Clone, Debug, ValidateEq)]
 pub struct ExecutionState {
-    /// The path where Canister memory is located. Needs to be stored in
-    /// ExecutionState in order to perform the exec system call.
-    #[validate_eq(Ignore)]
-    pub canister_root: std::path::PathBuf,
-
     /// The wasm executable associated with this state. It represented here as
     /// a reference-counted object such that:
     /// - it is "shallow-copied" when cloning the execution state
@@ -360,7 +354,6 @@ impl PartialEq for ExecutionState {
         // field is added to 'ExecutionState' compiler will throw
         // an error. Hence pointing to appropriate change here.
         let ExecutionState {
-            canister_root: _,
             wasm_binary,
             wasm_memory,
             stable_memory,
@@ -404,7 +397,6 @@ impl ExecutionState {
     /// default next_scheduled_method, and wasm_execution_mode = WasmExecutionMode::Wasm32.
     /// Be sure to change these if needed.
     pub fn new(
-        canister_root: PathBuf,
         wasm_binary: Arc<WasmBinary>,
         exports: ExportedFunctions,
         wasm_memory: Memory,
@@ -413,7 +405,6 @@ impl ExecutionState {
         wasm_metadata: WasmMetadata,
     ) -> Self {
         Self {
-            canister_root,
             wasm_binary,
             exports,
             wasm_memory,

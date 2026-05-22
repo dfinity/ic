@@ -8,51 +8,51 @@ filegroup(
     srcs = glob(["proto/**/*.proto"]),
 )
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/sha2",
-    "//rs/protobuf",
-    "//rs/types/base_types",
-    "@crate_index//:candid",
-    "@crate_index//:mockall",
-    "@crate_index//:prost",
-    "@crate_index//:serde",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:async-trait",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/nervous_system/common/test_keys",
-    "//rs/registry/keys",
-    "@crate_index//:lazy_static",
-    "@crate_index//:pretty_assertions",
-    "@crate_index//:tokio",
-]
-
-MACRO_DEV_DEPENDENCIES = [
-    # Keep sorted.
-]
-
 rust_library(
     name = "transport",
     srcs = glob([
         "src/**",
     ]),
     crate_name = "ic_registry_transport",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/sha2",
+        "//rs/protobuf",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:mockall",
+        "@crate_index//:prost",
+        "@crate_index//:serde",
+    ],
 )
 
 rust_test(
     name = "lib_tests",
     crate = ":transport",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEV_DEPENDENCIES + DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/sha2",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/protobuf",
+        "//rs/registry/keys",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:lazy_static",
+        "@crate_index//:mockall",
+        "@crate_index//:pretty_assertions",
+        "@crate_index//:prost",
+        "@crate_index//:serde",
+        "@crate_index//:tokio",
+    ],
 )
 
 generated_files_check(

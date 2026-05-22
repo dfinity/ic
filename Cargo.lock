@@ -5643,6 +5643,7 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-test-utilities-registry",
  "ic-types",
+ "rand 0.8.5",
  "rustls 0.23.37",
  "sev_guest",
  "sev_guest_testing",
@@ -6481,6 +6482,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-nns-governance-conversions",
+ "ic-nns-handler-lifeline-interface",
  "ic-nns-handler-root",
  "ic-nns-init",
  "ic-nns-test-utils",
@@ -14590,6 +14592,7 @@ dependencies = [
  "crossbeam-channel",
  "hex",
  "ic-base-types",
+ "ic-config",
  "ic-interfaces",
  "ic-logger",
  "ic-management-canister-types-private",
@@ -14629,6 +14632,7 @@ dependencies = [
  "ic-base-types",
  "ic-btc-adapter-client",
  "ic-btc-consensus",
+ "ic-certification 0.9.0",
  "ic-config",
  "ic-consensus",
  "ic-consensus-cup-utils",
@@ -15306,7 +15310,6 @@ dependencies = [
  "ic-nns-test-utils",
  "ic-protobuf",
  "ic-registry-keys",
- "ic-registry-nns-data-provider",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
@@ -15604,6 +15607,8 @@ name = "ic-utils-thread"
 version = "0.9.0"
 dependencies = [
  "crossbeam-channel",
+ "ic-metrics",
+ "prometheus",
 ]
 
 [[package]]
@@ -16047,7 +16052,6 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-protobuf",
  "ic-registry-keys",
- "ic-registry-nns-data-provider",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",

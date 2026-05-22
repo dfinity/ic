@@ -2,60 +2,60 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/canister_client",
-    "//rs/interfaces/registry",
-    "//rs/ledger_suite/icp:icp_ledger",
-    "//rs/nns/common",
-    "//rs/nns/constants",
-    "//rs/nns/test_utils",
-    "//rs/registry/local_store",
-    "//rs/registry/proto_data_provider",
-    "//rs/registry/transport",
-    "//rs/rust_canisters/canister_test",
-    "//rs/sys",
-    "//rs/test_utilities/identity",
-    "//rs/types/base_types",
-    "@crate_index//:clap",
-    "@crate_index//:tokio",
-    "@crate_index//:url",
-]
-
-MACRO_DEPENDENCIES = []
-
-ALIASES = {}
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:tempfile",
-]
-
-MACRO_DEV_DEPENDENCIES = []
-
 rust_library(
     name = "init",
-    testonly = True,
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_name = "ic_nns_init",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/canister_client",
+        "//rs/interfaces/registry",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nns/common",
+        "//rs/nns/constants",
+        "//rs/registry/local_store",
+        "//rs/registry/proto_data_provider",
+        "//rs/registry/transport",
+        "//rs/sys",
+        "//rs/types/base_types",
+        "@crate_index//:clap",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
+    ],
 )
 
 rust_binary(
     name = "ic-nns-init",
     testonly = True,
     srcs = ["src/main.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":init"],
+    deps = [
+        # Keep sorted.
+        ":init",
+        "//rs/canister_client",
+        "//rs/interfaces/registry",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nns/common",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
+        "//rs/registry/local_store",
+        "//rs/registry/proto_data_provider",
+        "//rs/registry/transport",
+        "//rs/rust_canisters/canister_test",
+        "//rs/sys",
+        "//rs/test_utilities/identity",
+        "//rs/types/base_types",
+        "@crate_index//:clap",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
+    ],
 )
 
 rust_test(
     name = "init_test",
     crate = ":init",
-    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:tempfile",
+    ],
 )

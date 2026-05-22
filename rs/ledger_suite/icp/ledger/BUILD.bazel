@@ -77,21 +77,27 @@ rust_test(
     deps = ["@crate_index//:proptest"],
 )
 
-rust_ledger_canister(name = "ledger-canister-wasm")
+rust_ledger_canister(
+    name = "ledger-canister-wasm",
+    hidden_endpoints = "hidden_endpoints.conf",
+)
 
 rust_ledger_canister(
     name = "ledger-canister-wasm-allowance-getter",
     crate_features = ["icp-allowance-getter"],
+    hidden_endpoints = "hidden_endpoints_allowance_getter.conf",
 )
 
 rust_ledger_canister(
     name = "ledger-canister-wasm-next-version",
     extra_deps = [":ledger_next_version"],
+    hidden_endpoints = "hidden_endpoints.conf",
 )
 
 rust_ledger_canister(
     name = "ledger-canister-wasm-prev-version",
     extra_deps = [":ledger_prev_version"],
+    hidden_endpoints = "hidden_endpoints.conf",
 )
 
 rust_test(
