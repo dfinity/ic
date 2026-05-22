@@ -13,7 +13,6 @@ mod execution_tests {
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
     use std::collections::BTreeSet;
-    use std::path::PathBuf;
     use std::sync::Arc;
 
     const WAT_EMPTY: &str = "(module)";
@@ -330,7 +329,6 @@ mod execution_tests {
         let canister_state = test.canister_state_mut(canister_id);
         assert!(canister_state.execution_state.is_none());
         canister_state.execution_state = Some(ExecutionState::new(
-            PathBuf::new(),
             WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
             ExportedFunctions::new(
                 vec![WasmMethod::Update("go".to_string())]
@@ -384,7 +382,6 @@ mod execution_tests {
         let canister_state = test.canister_state_mut(canister_id1);
         assert!(canister_state.execution_state.is_none());
         canister_state.execution_state = Some(ExecutionState::new(
-            PathBuf::new(),
             WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
             ExportedFunctions::new(
                 vec![WasmMethod::Update("go".to_string())]
@@ -400,7 +397,6 @@ mod execution_tests {
         let canister_state = test.canister_state_mut(canister_id2);
         assert!(canister_state.execution_state.is_none());
         canister_state.execution_state = Some(ExecutionState::new(
-            PathBuf::new(),
             WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
             ExportedFunctions::new(
                 vec![WasmMethod::Update("go".to_string())]
@@ -451,7 +447,6 @@ mod execution_tests {
         let canister_state = test.canister_state_mut(canister_id1);
         assert!(canister_state.execution_state.is_none());
         canister_state.execution_state = Some(ExecutionState::new(
-            PathBuf::new(),
             WasmBinary::new(CanisterModule::new(b"\x00asm invalid wasm".to_vec())),
             ExportedFunctions::new(
                 vec![WasmMethod::Update("go".to_string())]
@@ -508,7 +503,6 @@ mod execution_tests {
         let canister_state = test.canister_state_mut(canister_id1);
         assert!(canister_state.execution_state.is_none());
         canister_state.execution_state = Some(ExecutionState::new(
-            PathBuf::new(),
             // Without the '\x00asm' prefix, the check for wasm code length will fail.
             WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
             ExportedFunctions::new(

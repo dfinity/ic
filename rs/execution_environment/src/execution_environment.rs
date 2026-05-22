@@ -4103,7 +4103,6 @@ impl ExecutionEnvironment {
             prepaid_execution_cycles,
             old_canister,
             state.time(),
-            "NOT_USED".into(),
             &state.metadata.network_topology,
             execution_parameters,
             round_limits,
