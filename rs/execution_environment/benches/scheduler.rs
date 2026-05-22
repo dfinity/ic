@@ -8,7 +8,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::canister_snapshots::CanisterSnapshots;
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_replicated_state::{
-    CanisterState, ExecutionTask, InputQueueType, ReplicatedState, SchedulerState, SystemState,
+    CanisterState, CanisterStates, ExecutionTask, InputQueueType, ReplicatedState, SchedulerState,
+    SystemState,
 };
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
@@ -64,7 +65,7 @@ fn main() {
         canisters.insert(canister_id, Arc::new(canister_state));
     }
     let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-    state.put_canister_states(canisters);
+    state.put_canister_states(CanisterStates::new(canisters));
 
     let scheduler_cores = 4;
     let heap_delta_rate_limit = NumBytes::from(1_000_000);

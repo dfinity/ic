@@ -4422,7 +4422,7 @@ impl StateMachine {
             .get_latest_state()
             .take()
             .canister_states()
-            .keys()
+            .all_keys()
             .cloned()
             .collect()
     }
@@ -5219,7 +5219,7 @@ impl StateMachine {
             .collect();
         let (_height, mut replicated_state) = self.state_manager.take_tip();
         let mut synthetic_responses = vec![];
-        for canister_state in replicated_state.canisters_iter_mut() {
+        for canister_state in replicated_state.hot_canisters_iter_mut() {
             let Some(call_context_manager) = canister_state.system_state.call_context_manager()
             else {
                 continue;

@@ -296,7 +296,7 @@ fn respect_max_paused_executions(
     test.execute_all_with(|test| {
         let (canister_states, subnet_schedule) = test.state_mut().canisters_and_schedule_mut();
         let paused_executions = canister_states
-            .values()
+            .hot_values()
             .filter(|canister| {
                 let priority = subnet_schedule.get(&canister.canister_id());
                 if canister.has_paused_execution() {
