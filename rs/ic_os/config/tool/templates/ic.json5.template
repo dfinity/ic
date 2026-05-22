@@ -321,7 +321,7 @@ table ip6 filter {\n\
           comment: "Default rule from template",
           direction: 1,
         }],
-        whitelisted_nodes_tcp_ports_whitelist: [22, 4100, 8080],
+        whitelisted_nodes_tcp_ports_whitelist: [22, 8080],
         whitelisted_nodes_udp_ports_whitelist: [4100],
         all_nodes_tcp_ports_whitelist: [2497],
         all_nodes_udp_ports_whitelist: [],
