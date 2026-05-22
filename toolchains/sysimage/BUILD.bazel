@@ -84,6 +84,7 @@ genrule(
     cmd = "tar -xzOf $(location @noble//dosfstools/amd64:data) ./usr/sbin/mkfs.fat > $@ && chmod +x $@",
     executable = True,
 )
+
 # Hermetic mkfs.ext4 extracted from the apt-snapshot-pinned e2fsprogs .deb and
 # its dynamic-library dependencies (libext2fs, libcom_err, libblkid, libuuid,
 # libe2p). The on-disk binary mkfs.ext4 is itself a symlink to mke2fs; we
@@ -128,6 +129,7 @@ filegroup(
     name = "mkfs_ext4_runfiles",
     srcs = [":mkfs_ext4_files"],
 )
+
 py_binary(
     name = "verity_sign",
     srcs = ["verity_sign.py"],
