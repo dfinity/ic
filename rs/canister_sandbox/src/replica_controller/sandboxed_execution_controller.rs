@@ -41,7 +41,6 @@ use std::collections::{HashMap, VecDeque};
 #[cfg(target_os = "linux")]
 use std::convert::TryInto;
 use std::os::fd::AsRawFd;
-use std::path::PathBuf;
 use std::process::ExitStatus;
 use std::sync::Weak;
 use std::sync::mpsc::Receiver;
@@ -1056,7 +1055,6 @@ impl WasmExecutor for SandboxedExecutionController {
     fn create_execution_state(
         &self,
         canister_module: CanisterModule,
-        canister_root: PathBuf,
         canister_id: CanisterId,
         compilation_cache: Arc<CompilationCache>,
     ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
@@ -1238,7 +1236,6 @@ impl WasmExecutor for SandboxedExecutionController {
 
         let initial_state_data = serialized_module.initial_state_data();
         let execution_state = ExecutionState {
-            canister_root,
             wasm_binary,
             exports: ExportedFunctions::new(initial_state_data.exported_functions),
             wasm_memory,
@@ -2224,6 +2221,7 @@ mod tests {
     use std::{
         collections::BTreeMap,
         fs::{self, File},
+        path::PathBuf,
     };
 
     use super::*;
@@ -2307,7 +2305,6 @@ mod tests {
         controller
             .create_execution_state(
                 canister_module,
-                PathBuf::new(),
                 canister_id,
                 Arc::new(CompilationCacheBuilder::new().build()),
             )

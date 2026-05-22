@@ -3046,7 +3046,6 @@ fn canister_snapshot_change_guard_do_not_modify_without_reading_doc_comment() {
     // DO NOT MODIFY WITHOUT READING DOC COMMENT!
     //
     let ExecutionState {
-        canister_root: _,
         wasm_binary,
         wasm_memory: _,
         stable_memory: _,
