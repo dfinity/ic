@@ -1,6 +1,5 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -61,7 +60,6 @@ pub trait WasmExecutor: Send + Sync {
     fn create_execution_state(
         &self,
         canister_module: CanisterModule,
-        canister_root: PathBuf,
         canister_id: CanisterId,
         compilation_cache: Arc<CompilationCache>,
     ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)>;
@@ -281,7 +279,6 @@ impl WasmExecutor for WasmExecutorImpl {
     fn create_execution_state(
         &self,
         canister_module: CanisterModule,
-        canister_root: PathBuf,
         canister_id: CanisterId,
         compilation_cache: Arc<CompilationCache>,
     ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
@@ -312,7 +309,6 @@ impl WasmExecutor for WasmExecutorImpl {
 
         // Create the execution state.
         let execution_state = ExecutionState {
-            canister_root,
             wasm_binary,
             exports: ExportedFunctions::new(initial_state_data.exported_functions),
             wasm_memory: Memory::new(wasm_page_map, wasm_memory_size),
