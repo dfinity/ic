@@ -3,7 +3,7 @@ use crate::{
     governance::Governance,
     node_provider_rewards::DateRangeFilter,
     pb::v1::MonthlyNodeProviderRewards,
-    test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
+    test_utils::{MockEnvironment, StubIcpLedger},
 };
 use std::sync::Arc;
 
@@ -38,7 +38,6 @@ fn test_node_provider_rewards_read_from_correct_sources() {
         Default::default(),
         Arc::new(MockEnvironment::new(vec![], 100)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 
@@ -95,7 +94,6 @@ fn test_list_node_provider_rewards_api() {
         Default::default(),
         Arc::new(MockEnvironment::new(vec![], 100)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 
@@ -114,7 +112,6 @@ fn test_list_node_provider_rewards_api_with_paging_and_filters() {
         Default::default(),
         Arc::new(MockEnvironment::new(vec![], 100)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 

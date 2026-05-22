@@ -2,7 +2,7 @@ use crate::neuron::{DissolveStateAndAge, NeuronBuilder};
 use crate::test_utils::MockRandomness;
 use crate::{
     governance::Governance,
-    test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
+    test_utils::{MockEnvironment, StubIcpLedger},
 };
 use ic_base_types::PrincipalId;
 use ic_nns_governance_api::{
@@ -39,7 +39,6 @@ fn test_list_neurons_with_paging() {
         },
         Arc::new(MockEnvironment::new(Default::default(), 0)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 
@@ -136,7 +135,6 @@ fn test_list_neurons_by_subaccounts_and_ids() {
         },
         Arc::new(MockEnvironment::new(Default::default(), 0)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 

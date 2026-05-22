@@ -4,7 +4,7 @@ use crate::storage::with_voting_history_store;
 use crate::test_utils::MockRandomness;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
+    test_utils::{MockEnvironment, StubIcpLedger},
 };
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::{
@@ -866,7 +866,7 @@ mod metrics_tests {
         encode_metrics,
         governance::Governance,
         pb::v1::{Motion, Proposal, ProposalData, Tally, Topic, proposal},
-        test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
+        test_utils::{MockEnvironment, StubIcpLedger},
     };
 
     #[test]
@@ -875,7 +875,6 @@ mod metrics_tests {
             Default::default(),
             Arc::new(MockEnvironment::new(Default::default(), 0)),
             Arc::new(StubIcpLedger {}),
-            Arc::new(StubCMC {}),
             Box::new(MockRandomness::new()),
         );
 
@@ -937,7 +936,6 @@ mod metrics_tests {
             Default::default(),
             Arc::<MockEnvironment>::default(),
             Arc::new(StubIcpLedger {}),
-            Arc::new(StubCMC {}),
             Box::new(MockRandomness::new()),
         );
 
@@ -1167,7 +1165,6 @@ fn test_pre_and_post_upgrade_first_time() {
         Default::default(),
         Arc::<MockEnvironment>::default(),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 
@@ -1193,7 +1190,6 @@ fn test_pre_and_post_upgrade_first_time() {
         extracted_proto,
         Arc::<MockEnvironment>::default(),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 
@@ -1211,7 +1207,6 @@ fn can_spawn_neurons_only_true_when_not_spawning_and_neurons_ready_to_spawn() {
         Default::default(),
         Arc::new(mock_env),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
     // No neurons to spawn...
@@ -1259,7 +1254,6 @@ fn test_validate_execute_nns_function() {
         },
         Arc::new(MockEnvironment::new(vec![], 100)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 
@@ -1488,7 +1482,6 @@ fn test_update_neuron_errors_out_expectedly() {
         Default::default(),
         Arc::<MockEnvironment>::default(),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
     let neuron = new_neuron(vec![1; 32]);
@@ -1539,7 +1532,6 @@ fn test_compute_ballots_for_manage_neuron_proposal() {
         Default::default(),
         Arc::<MockEnvironment>::default(),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 
@@ -1584,7 +1576,6 @@ fn test_compute_ballots_for_standard_proposal() {
         Default::default(),
         Arc::<MockEnvironment>::default(),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 

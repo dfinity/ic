@@ -6,7 +6,6 @@ use crate::{
 
 use async_trait::async_trait;
 use ic_base_types::CanisterId;
-use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nervous_system_runtime::Runtime;
@@ -25,7 +24,6 @@ thread_local! {
     pub(crate) static GOVERNANCE: RefCell<Governance> = RefCell::new(Governance::new_uninitialized(
         Arc::new(CanisterEnv::new()),
         Arc::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
-        Arc::new(CMCCanister::<CdkRuntime>::new()),
         Box::new(CanisterRandomnessGenerator::new()),
     ));
 }

@@ -86,7 +86,7 @@ mod tests {
     use super::*;
     use crate::canister_state::{CanisterRandomnessGenerator, set_governance_for_tests};
     use crate::governance::Governance;
-    use crate::test_utils::{MockEnvironment, StubCMC, StubIcpLedger};
+    use crate::test_utils::{MockEnvironment, StubIcpLedger};
     use ic_nns_governance_api as api;
     use std::sync::Arc;
 
@@ -177,7 +177,6 @@ mod tests {
             },
             Arc::new(MockEnvironment::new(vec![], now)),
             Arc::new(StubIcpLedger {}),
-            Arc::new(StubCMC {}),
             Box::new(CanisterRandomnessGenerator::new()),
         );
         set_governance_for_tests(gov);

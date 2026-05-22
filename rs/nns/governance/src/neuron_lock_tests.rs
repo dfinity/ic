@@ -2,7 +2,7 @@ use super::*;
 
 use crate::{
     pb::v1::{governance::neuron_in_flight_command::SyncCommand, manage_neuron::Split},
-    test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
+    test_utils::{MockEnvironment, MockRandomness, StubIcpLedger},
 };
 
 use std::sync::Arc;
@@ -16,7 +16,6 @@ fn new_governance_for_test() -> Governance {
         Default::default(),
         Arc::new(MockEnvironment::new(Default::default(), 0)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     )
 }

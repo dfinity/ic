@@ -93,7 +93,6 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
-use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::{
     NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS, ledger,
@@ -1103,9 +1102,6 @@ pub struct Governance {
     /// Implementation of the interface with the Ledger canister.
     ledger: Arc<dyn IcpLedger>,
 
-    /// Implementation of the interface with the CMC canister.
-    cmc: Arc<dyn CMC>,
-
     /// Implementation of a randomness generator
     randomness: Box<dyn RandomnessGenerator>,
 
@@ -1278,7 +1274,6 @@ impl Governance {
     pub fn new_uninitialized(
         env: Arc<dyn Environment>,
         ledger: Arc<dyn IcpLedger>,
-        cmc: Arc<dyn CMC>,
         randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
         Self {
@@ -1286,7 +1281,6 @@ impl Governance {
             neuron_store: NeuronStore::new(BTreeMap::new()),
             env,
             ledger,
-            cmc,
             randomness,
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
@@ -1302,7 +1296,6 @@ impl Governance {
         initial_governance: api::Governance,
         env: Arc<dyn Environment>,
         ledger: Arc<dyn IcpLedger>,
-        cmc: Arc<dyn CMC>,
         randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
         let (neurons, heap_governance_proto) = initialize_governance(initial_governance, env.now());
@@ -1312,7 +1305,6 @@ impl Governance {
             neuron_store: NeuronStore::new(neurons),
             env,
             ledger,
-            cmc,
             randomness,
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
@@ -1327,7 +1319,6 @@ impl Governance {
         governance_proto: GovernanceProto,
         env: Arc<dyn Environment>,
         ledger: Arc<dyn IcpLedger>,
-        cmc: Arc<dyn CMC>,
         mut randomness: Box<dyn RandomnessGenerator>,
     ) -> Self {
         let (mut heap_governance_proto, maybe_rng_seed) = split_governance_proto(governance_proto);
@@ -1349,7 +1340,6 @@ impl Governance {
             neuron_store: NeuronStore::new_restored(),
             env,
             ledger,
-            cmc,
             randomness,
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,

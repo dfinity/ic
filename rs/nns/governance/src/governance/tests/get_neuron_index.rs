@@ -5,7 +5,7 @@ use crate::neuron_store::MAX_NEURON_PAGE_SIZE;
 use crate::test_utils::MockRandomness;
 use crate::{
     governance::Governance,
-    test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
+    test_utils::{MockEnvironment, StubIcpLedger},
 };
 use crate::{
     temporarily_disable_comprehensive_neuron_list, temporarily_enable_comprehensive_neuron_list,
@@ -26,7 +26,6 @@ fn make_governance_for_neuron_index() -> Governance {
         },
         Arc::new(MockEnvironment::new(Default::default(), 0)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 

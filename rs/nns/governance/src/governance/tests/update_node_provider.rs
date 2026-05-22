@@ -1,4 +1,4 @@
-use crate::governance::tests::{MockEnvironment, StubCMC, StubIcpLedger};
+use crate::governance::tests::{MockEnvironment, StubIcpLedger};
 use crate::test_utils::MockRandomness;
 use crate::{
     governance::Governance,
@@ -146,7 +146,6 @@ fn create_governance_with_node_provider(node_provider_id: PrincipalId) -> Govern
         initial_governance,
         Arc::new(MockEnvironment::new(vec![], 0)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     )
 }

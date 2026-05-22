@@ -8,7 +8,7 @@ use crate::{
 };
 use candid::Encode;
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::{E8, cmc::MockCMC, ledger::MockIcpLedger};
+use ic_nervous_system_common::{E8, ledger::MockIcpLedger};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance_api as api;
 use icp_ledger::Subaccount;
@@ -49,7 +49,6 @@ fn test_can_tag_seed_neurons_handles_corrupted_state() {
         Default::default(),
         Arc::new(create_mock_environment(None)),
         Arc::<MockIcpLedger>::default(),
-        Arc::<MockCMC>::default(),
         Box::new(MockRandomness::new()),
     );
 
@@ -112,7 +111,6 @@ fn test_can_tag_seed_neurons_transitions() {
         Default::default(),
         Arc::new(create_mock_environment(None)),
         Arc::<MockIcpLedger>::default(),
-        Arc::<MockCMC>::default(),
         Box::new(MockRandomness::new()),
     );
 
@@ -143,7 +141,6 @@ fn test_can_tag_seed_neurons_exits_early_if_data_is_processed() {
         Default::default(),
         Arc::new(create_mock_environment(None)),
         Arc::<MockIcpLedger>::default(),
-        Arc::<MockCMC>::default(),
         Box::new(MockRandomness::new()),
     );
 
@@ -197,7 +194,6 @@ async fn test_tag_seed_neurons_happy() {
         },
         Arc::new(environment),
         Arc::<MockIcpLedger>::default(),
-        Arc::<MockCMC>::default(),
         Box::new(MockRandomness::new()),
     );
 
@@ -289,7 +285,6 @@ async fn test_tag_neuron_sad() {
         },
         Arc::new(environment),
         Arc::<MockIcpLedger>::default(),
-        Arc::<MockCMC>::default(),
         Box::new(MockRandomness::new()),
     );
 
@@ -389,7 +384,6 @@ async fn test_tag_seed_neurons_handles_neuron_splits() {
         },
         Arc::new(environment),
         Arc::<MockIcpLedger>::default(),
-        Arc::<MockCMC>::default(),
         Box::new(MockRandomness::new()),
     );
 
@@ -458,7 +452,6 @@ async fn test_tag_seed_neurons_doesnt_over_tag_seed_neurons() {
         },
         Arc::new(environment),
         Arc::<MockIcpLedger>::default(),
-        Arc::<MockCMC>::default(),
         Box::new(MockRandomness::new()),
     );
     governance
@@ -510,7 +503,6 @@ fn test_calculate_genesis_account_expected_stake_e8s() {
         },
         Arc::new(create_mock_environment(None)),
         Arc::<MockIcpLedger>::default(),
-        Arc::<MockCMC>::default(),
         Box::new(MockRandomness::new()),
     );
 

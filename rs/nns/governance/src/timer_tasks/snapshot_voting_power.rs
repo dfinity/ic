@@ -96,7 +96,7 @@ mod tests {
 
     use crate::{
         neuron::{DissolveStateAndAge, NeuronBuilder},
-        test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
+        test_utils::{MockEnvironment, MockRandomness, StubIcpLedger},
     };
 
     thread_local! {
@@ -127,7 +127,6 @@ mod tests {
             },
             MOCK_ENVIRONMENT.with(|env| env.clone()),
             Arc::new(StubIcpLedger {}),
-            Arc::new(StubCMC {}),
             Box::new(MockRandomness::new()),
         );
         let dissolve_delay_seconds =

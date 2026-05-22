@@ -1,6 +1,6 @@
 use crate::governance::{
     Governance,
-    tests::{MockEnvironment, StubCMC, StubIcpLedger},
+    tests::{MockEnvironment, StubIcpLedger},
 };
 use crate::pb::v1::MaturityModulation;
 use crate::test_utils::MockRandomness;
@@ -15,7 +15,6 @@ fn make_governance() -> Governance {
         Default::default(),
         Arc::new(MockEnvironment::new(vec![], 0)),
         Arc::new(StubIcpLedger {}),
-        Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     )
 }

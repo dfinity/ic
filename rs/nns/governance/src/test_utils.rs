@@ -10,7 +10,6 @@ use async_trait::async_trait;
 use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::{E8, NervousSystemError};
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
@@ -136,14 +135,6 @@ impl IcpLedger for StubIcpLedger {
         &self,
         _args: Vec<GetBlocksRequest>,
     ) -> Result<GetBlocksResult, NervousSystemError> {
-        unimplemented!()
-    }
-}
-
-pub(crate) struct StubCMC {}
-#[async_trait]
-impl CMC for StubCMC {
-    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
         unimplemented!()
     }
 }
