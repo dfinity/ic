@@ -732,7 +732,6 @@ pub fn load_canister_state(
     canister_layout: &CanisterLayout<ReadOnly>,
     canister_id: &CanisterId,
     canister_snapshots: CanisterSnapshots,
-    height: Height,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     metrics: &dyn CheckpointLoadingMetrics,
 ) -> Result<(CanisterState, LoadCanisterMetrics), CheckpointError> {
@@ -782,12 +781,7 @@ pub fn load_canister_state(
             );
             durations.insert("wasm_binary", starting_time.elapsed());
 
-            let canister_root =
-                CheckpointLayout::<ReadOnly>::new_untracked("NOT_USED".into(), height)?
-                    .canister(canister_id)?
-                    .raw_path();
             Some(ExecutionState {
-                canister_root,
                 wasm_binary,
                 exports: execution_state_bits.exports,
                 wasm_memory,
@@ -928,7 +922,6 @@ fn load_canister_state_from_checkpoint(
         &canister_layout,
         canister_id,
         canister_snapshots,
-        checkpoint_layout.height(),
         Arc::clone(&fd_factory),
         metrics,
     )

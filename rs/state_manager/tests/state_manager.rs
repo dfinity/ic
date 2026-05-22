@@ -7403,7 +7403,6 @@ fn restore_snapshot(snapshot_id: SnapshotId, canister_id: CanisterId, state: &mu
 
     canister.system_state.wasm_chunk_store = snapshot.chunk_store().clone();
     canister.execution_state = Some(ExecutionState::new(
-        Default::default(),
         WasmBinary::new(snapshot.execution_snapshot().wasm_binary.clone()),
         ExportedFunctions::new(Default::default()),
         Memory::from(&snapshot.execution_snapshot().wasm_memory),
