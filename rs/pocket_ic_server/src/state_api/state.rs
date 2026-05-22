@@ -7,6 +7,7 @@ use crate::pocket_ic::{
     SetCertifiedTime,
 };
 use crate::{InstanceId, OpId, Operation};
+use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
     Router,
@@ -44,6 +45,7 @@ use ic_gateway::{
         ic_agent::agent::route_provider::RoundRobinRouteProvider,
         utils::health_manager::HealthManager,
     },
+    routing::ic::subnets_info::SubnetsInfo,
     setup_router,
 };
 use ic_types::{CanisterId, NodeId, PrincipalId, SubnetId, canister_http::CanisterHttpRequestId};
@@ -868,6 +870,7 @@ impl ApiState {
                     None,
                     None,
                     None,
+                    Arc::new(ArcSwapOption::<SubnetsInfo>::const_empty()),
                 )
                 .await
                 .unwrap();
