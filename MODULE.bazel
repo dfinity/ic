@@ -322,6 +322,18 @@ http_archive(
     url = "https://github.com/apalache-mc/apalache/releases/download/v0.52.2/apalache-0.52.2.tgz",
 )
 
+# Android SDK platform-tools, for the hermetic `e2fsdroid` binary used while
+# assembling ext4 filesystem images. This is the same statically-linked binary
+# that Ubuntu's `google-android-platform-tools-installer` package downloads at
+# install time; pinning it here removes the host dependence.
+http_archive(
+    name = "android_platform_tools",
+    build_file_content = """exports_files(["e2fsdroid"], visibility = ["//visibility:public"])""",
+    sha256 = "defcee9da1f22fe5c2324ec0edf612122f1c6ffe01a7b124191e07fcc74f8fff",
+    strip_prefix = "platform-tools",
+    url = "https://dl.google.com/android/repository/platform-tools_r33.0.2-linux.zip",
+)
+
 # Official WebAssembly test suite.
 # To be used for testing libraries that handle canister Wasm code.
 http_archive(

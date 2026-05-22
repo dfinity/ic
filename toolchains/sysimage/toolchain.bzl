@@ -351,11 +351,14 @@ def _ext4_image_impl(ctx):
         ctx.file._faked_sysv.path,
         "--libfakeroot",
         ctx.file._libfakeroot.path,
+        "--e2fsdroid",
+        ctx.file._e2fsdroid.path,
     ])
 
     inputs.extend(ctx.files._mkfs_ext4_runfiles)
     inputs.extend(ctx.files._libfaketime_runfiles)
     inputs.extend(ctx.files._fakeroot_runfiles)
+    inputs.append(ctx.file._e2fsdroid)
 
     if ctx.attr.file_contexts:
         args.extend(["-S", ctx.files.file_contexts[0].path])
@@ -442,6 +445,10 @@ ext4_image = _icos_build_rule(
         "_fakeroot_runfiles": attr.label(
             default = "//toolchains/sysimage:fakeroot_runfiles",
             allow_files = True,
+        ),
+        "_e2fsdroid": attr.label(
+            default = "//toolchains/sysimage:e2fsdroid",
+            allow_single_file = True,
         ),
     },
 )

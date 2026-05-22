@@ -179,6 +179,19 @@ filegroup(
     srcs = [":fakeroot_files"],
 )
 
+# Hermetic e2fsdroid: re-export the statically-linked binary from the pinned
+# Android SDK platform-tools zip. The host's /usr/bin/e2fsdroid (provided by
+# Ubuntu's google-android-platform-tools-installer) comes from the very same
+# upstream zip, so pinning it via http_archive removes the host dependence
+# without changing the binary or its output.
+genrule(
+    name = "e2fsdroid_bin",
+    srcs = ["@android_platform_tools//:e2fsdroid"],
+    outs = ["e2fsdroid"],
+    cmd = "cp $(location @android_platform_tools//:e2fsdroid) $@ && chmod +x $@",
+    executable = True,
+)
+
 py_binary(
     name = "verity_sign",
     srcs = ["verity_sign.py"],
