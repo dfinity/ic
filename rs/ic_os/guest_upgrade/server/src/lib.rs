@@ -80,7 +80,7 @@ impl DiskEncryptionKeyExchangeServerAgent {
     }
 
     /// Runs the key exchange flow for upgrading to `replica_version`.
-    /// Note that the implementation does not verify that `replica_version` is a blessed version,
+    /// Note that the implementation does not verify that `replica_version` is an elected version,
     /// it is the caller's responsibility to select the right target version.
     pub async fn exchange_keys(
         &self,

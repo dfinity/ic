@@ -32,10 +32,6 @@ crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
 # Use particular version with `@crate_index//:mycrate-3.14.16`
 
 crate.spec(
-    package = "actix-http",
-    version = "^3.12.1",
-)
-crate.spec(
     package = "actix-rt",
     version = "^2.10.0",
 )
@@ -186,10 +182,6 @@ crate.spec(
     package = "bitcoin",
     package_alias = "bitcoin-0-28",
     version = "^0.28.2",
-)
-crate.spec(
-    package = "bitflags",
-    version = "^1.2.1",
 )
 crate.spec(
     package = "bs58",
@@ -775,6 +767,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     features = [
+        "check-endpoints",
         "exe",
     ],
     package = "ic-wasm",
@@ -1061,10 +1054,6 @@ crate.spec(
     ],
     package = "opentelemetry_sdk",
     version = "^0.27.1",
-)
-crate.spec(
-    package = "opentelemetry-prometheus",
-    version = "^0.14.1",
 )
 crate.spec(
     default_features = False,
@@ -1633,10 +1622,6 @@ crate.spec(
     version = "3.20",
 )
 crate.spec(
-    package = "tester",
-    version = "^0.7.0",
-)
-crate.spec(
     package = "test-strategy",
     version = "^0.3.1",
 )
@@ -1859,10 +1844,6 @@ crate.spec(
     features = ["tls"],
     package = "warp",
     version = "^0.3.7",
-)
-crate.spec(
-    package = "wasm-bindgen",
-    version = "^0.2",
 )
 crate.spec(
     features = [

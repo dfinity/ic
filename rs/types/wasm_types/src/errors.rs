@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 /// Create a link to this section of the Execution Errors documentation.
 pub fn doc_ref(section: &str) -> String {
-    format!("https://internetcomputer.org/docs/current/references/execution-errors#{section}")
+    format!("https://docs.internetcomputer.org/references/execution-errors#{section}")
 }
 
 pub enum ErrorHelp {

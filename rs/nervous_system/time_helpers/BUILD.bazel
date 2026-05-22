@@ -2,14 +2,12 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
-LIB_SRCS = glob(
-    ["src/**"],
-    exclude = ["**/*tests.rs"],
-)
-
 rust_library(
     name = "time_helpers",
-    srcs = LIB_SRCS,
+    srcs = glob(
+        ["src/**"],
+        exclude = ["**/*tests.rs"],
+    ),
     crate_name = "ic_nervous_system_time_helpers",
     version = "0.0.1",
     deps = [

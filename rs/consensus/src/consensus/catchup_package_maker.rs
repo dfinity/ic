@@ -208,26 +208,21 @@ impl CatchUpPackageMaker {
                 panic!("Height {height} is not a fully certified height. This should not happen.",);
             }
             Ok(state_hash) => {
-                let summary = start_block.payload.as_ref().as_summary();
-                let registry_version = if summary.idkg.is_some() {
-                    // Should succeed as we already got the hash above
-                    let state = self
-                        .state_manager
-                        .get_state_at(height)
-                        .map_err(|err| {
-                            error!(
-                                self.log,
-                                "Cannot make IDKG CUP at height {}: `get_state_hash_at` \
-                                succeeded but `get_state_at` failed with {}. Will retry",
-                                height,
-                                err,
-                            )
-                        })
-                        .ok()?;
-                    get_oldest_state_registry_version(state.get_ref())
-                } else {
-                    None
-                };
+                // Should succeed as we already got the hash above
+                let state = self
+                    .state_manager
+                    .get_state_at(height)
+                    .map_err(|err| {
+                        error!(
+                            self.log,
+                            "Cannot make CUP at height {}: `get_state_hash_at` \
+                            succeeded but `get_state_at` failed with {}. Will retry",
+                            height,
+                            err,
+                        )
+                    })
+                    .ok()?;
+                let registry_version = get_oldest_state_registry_version(state.get_ref());
                 let content = CatchUpContent::new(
                     HashedBlock::new(ic_types::crypto::crypto_hash, start_block),
                     HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon),
@@ -272,10 +267,17 @@ mod tests {
         dependencies_with_subnet_records_with_raw_state_manager,
     };
     use ic_logger::replica_logger::no_op_logger;
+    use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+        SetupInitialDkgContext, SignWithThresholdContext,
+    };
     use ic_test_utilities::message_routing::FakeMessageRouting;
-    use ic_test_utilities_consensus::idkg::{
-        empty_idkg_payload, fake_ecdsa_idkg_master_public_key_id,
-        fake_signature_request_context_with_registry_version, fake_state_with_signature_requests,
+    use ic_test_utilities_consensus::{
+        dkg::fake_setup_initial_dkg_context,
+        fake_state_with_contexts,
+        idkg::{
+            empty_idkg_payload, fake_ecdsa_idkg_master_public_key_id,
+            fake_signature_request_context_with_registry_version,
+        },
     };
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
@@ -283,8 +285,8 @@ mod tests {
         CryptoHashOfState, Height, RegistryVersion,
         consensus::{BlockPayload, Payload, SummaryPayload, idkg::PreSigId},
         crypto::CryptoHash,
-        messages::CallbackId,
     };
+    use rstest::rstest;
     use std::sync::{Arc, RwLock};
 
     #[test]
@@ -365,8 +367,59 @@ mod tests {
         })
     }
 
-    #[test]
-    fn test_catch_up_package_maker_with_registry_version() {
+    /// Build a vector of signature contexts where the oldest matched
+    /// pre-signature is pinned at `RegistryVersion(2)`. The unmatched context
+    /// at `RegistryVersion(1)` should be ignored.
+    fn signature_contexts_with_oldest_v2() -> Vec<SignWithThresholdContext> {
+        let key_id = fake_ecdsa_idkg_master_public_key_id();
+        vec![
+            fake_signature_request_context_with_registry_version(
+                Some(PreSigId(1)),
+                key_id.inner(),
+                RegistryVersion::from(3),
+            ),
+            fake_signature_request_context_with_registry_version(
+                None,
+                key_id.inner(),
+                RegistryVersion::from(1),
+            ),
+            fake_signature_request_context_with_registry_version(
+                Some(PreSigId(3)),
+                key_id.inner(),
+                RegistryVersion::from(2),
+            ),
+        ]
+    }
+
+    /// A single signature context pinning `RegistryVersion(5)`.
+    fn signature_contexts_pinning_v5() -> Vec<SignWithThresholdContext> {
+        let key_id = fake_ecdsa_idkg_master_public_key_id();
+        vec![fake_signature_request_context_with_registry_version(
+            Some(PreSigId(1)),
+            key_id.inner(),
+            RegistryVersion::from(5),
+        )]
+    }
+
+    #[rstest]
+    #[case::sign_requests_only(signature_contexts_with_oldest_v2(), vec![])]
+    #[case::setup_initial_dkg_only(
+        vec![],
+        vec![fake_setup_initial_dkg_context(RegistryVersion::from(2))],
+    )]
+    #[case::signature_older_than_setup_initial_dkg(
+        signature_contexts_with_oldest_v2(),
+        vec![fake_setup_initial_dkg_context(RegistryVersion::from(5))],
+    )]
+    #[case::setup_initial_dkg_older_than_signature(
+        signature_contexts_pinning_v5(),
+        vec![fake_setup_initial_dkg_context(RegistryVersion::from(2))],
+    )]
+    fn test_catch_up_package_maker_with_registry_version(
+        #[case] signature_contexts: Vec<SignWithThresholdContext>,
+        #[case] setup_initial_dkg_contexts: Vec<SetupInitialDkgContext>,
+        #[values(true, false)] with_idkg_payload: bool,
+    ) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let interval_length = 5;
             let committee: Vec<_> = (0..4).map(node_test_id).collect();
@@ -394,45 +447,13 @@ mod tests {
                 .expect_get_state_hash_at()
                 .return_const(Ok(CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]))));
 
-            let key_id = fake_ecdsa_idkg_master_public_key_id();
-
-            // Create three quadruple Ids and contexts, context "2" will remain unmatched.
-            let pre_sig_id1 = PreSigId(1);
-            let pre_sig_id3 = PreSigId(3);
-
-            let contexts = vec![
-                (
-                    CallbackId::new(1),
-                    fake_signature_request_context_with_registry_version(
-                        Some(pre_sig_id1),
-                        key_id.inner(),
-                        RegistryVersion::from(3),
-                    ),
-                ),
-                (
-                    CallbackId::new(2),
-                    fake_signature_request_context_with_registry_version(
-                        None,
-                        key_id.inner(),
-                        RegistryVersion::from(1),
-                    ),
-                ),
-                (
-                    CallbackId::new(3),
-                    fake_signature_request_context_with_registry_version(
-                        Some(pre_sig_id3),
-                        key_id.inner(),
-                        RegistryVersion::from(2),
-                    ),
-                ),
-            ];
-
             state_manager
                 .get_mut()
                 .expect_get_state_at()
-                .return_const(Ok(fake_state_with_signature_requests(
+                .return_const(Ok(fake_state_with_contexts(
                     height,
-                    contexts.clone(),
+                    signature_contexts,
+                    setup_initial_dkg_contexts,
                 )
                 .get_labeled_state()));
 
@@ -459,15 +480,17 @@ mod tests {
             let block = proposal.content.as_mut();
             block.context.certified_height = block.height();
 
-            let idkg = empty_idkg_payload(subnet_test_id(0));
-            let dkg = block.payload.as_ref().as_summary().dkg.clone();
-            block.payload = Payload::new(
-                ic_types::crypto::crypto_hash,
-                BlockPayload::Summary(SummaryPayload {
-                    dkg,
-                    idkg: Some(idkg),
-                }),
-            );
+            if with_idkg_payload {
+                let idkg = empty_idkg_payload(subnet_test_id(0));
+                let dkg = block.payload.as_ref().as_summary().dkg.clone();
+                block.payload = Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Summary(SummaryPayload {
+                        dkg,
+                        idkg: Some(idkg),
+                    }),
+                );
+            }
             proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
 
             pool.advance_round_with_block(&proposal);
@@ -481,8 +504,6 @@ mod tests {
                 share.content.state_hash,
                 state_manager.get_state_hash_at(height).unwrap()
             );
-            // Since the quadruple using registry version 1 wasn't matched, the oldest one in use
-            // by the replicated state should be the registry version of quadruple 3, which is 2.
             assert_eq!(
                 share
                     .content

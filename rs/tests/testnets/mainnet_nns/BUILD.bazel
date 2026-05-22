@@ -24,7 +24,6 @@ rust_library(
         "//rs/protobuf",
         "//rs/registry/canister",
         "//rs/registry/keys",
-        "//rs/registry/nns_data_provider",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
