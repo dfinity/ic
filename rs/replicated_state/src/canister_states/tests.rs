@@ -5,8 +5,11 @@ use ic_base_types::NumSeconds;
 use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_test_utilities_types::messages::RequestBuilder;
-use ic_types::messages::RequestOrResponse;
-use ic_types_cycles::Cycles;
+use ic_types::messages::{CallContextId, NO_DEADLINE, RequestOrResponse};
+use ic_types::methods::{Callback, WasmClosure};
+use ic_types::time::CoarseTime;
+use ic_types::{ComputeAllocation, NumBytes};
+use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
 use std::sync::Arc;
 
 fn make_canister(id: u64) -> Arc<CanisterState> {
@@ -124,7 +127,7 @@ fn insert_classifies_on_the_fly() {
 }
 
 #[test]
-fn insert_replaces_existing_canister() {
+fn insert_replaces_existing_canister_and_updates_cold_stats() {
     let mut states = CanisterStates::default();
     let cold = cold_canister(1);
 
@@ -132,21 +135,24 @@ fn insert_replaces_existing_canister() {
     assert!(states.insert(Arc::clone(&cold)).is_none());
     assert_eq!(states.hot.len(), 0);
     assert_eq!(states.cold.len(), 1);
+    assert_eq!(states.cold_stats.count, 1);
 
     // Replace with a hot version of the same canister: returns the cold one,
-    // partition is updated.
+    // `cold_stats` reflects the new (empty) cold pool.
     let hot = hot_canister(1);
     let prev = states.insert(Arc::clone(&hot)).expect("upsert");
     assert!(Arc::ptr_eq(&prev, &cold));
     assert_eq!(states.hot.len(), 1);
     assert_eq!(states.cold.len(), 0);
+    assert_eq!(states.cold_stats.count, 0);
 
-    // Replace again with a cold version: partition flips back.
+    // Replace again with a cold version: cold_stats picks it back up.
     let cold_again = cold_canister(1);
     let prev = states.insert(Arc::clone(&cold_again)).expect("upsert");
     assert!(Arc::ptr_eq(&prev, &hot));
     assert_eq!(states.hot.len(), 0);
     assert_eq!(states.cold.len(), 1);
+    assert_eq!(states.cold_stats.count, 1);
 }
 
 #[test]
@@ -164,7 +170,7 @@ fn get_mut_heats_a_cold_canister() {
 }
 
 #[test]
-fn remove_takes_canister_from_either_pool() {
+fn remove_updates_cold_stats() {
     let mut states = CanisterStates::default();
     let canister = cold_canister(1);
     states.insert(Arc::clone(&canister));
@@ -266,8 +272,11 @@ fn for_each_mut_visits_every_canister_and_repartitions() {
 fn for_each_mut_demotes_a_hot_canister_that_became_cold() {
     let mut states = CanisterStates::default();
 
-    // c1: hot (has an input message).
-    let c1 = hot_canister(1);
+    // c1: hot (has an input message). Tag it with a distinguishable compute
+    // allocation so that we can verify it lands in `cold_stats` after demotion.
+    let mut c1 = hot_canister(1);
+    Arc::make_mut(&mut c1).system_state.compute_allocation =
+        ComputeAllocation::try_from(42).unwrap();
     // c2: already cold, kept untouched as a partition witness.
     let c2 = cold_canister(2);
 
@@ -275,6 +284,10 @@ fn for_each_mut_demotes_a_hot_canister_that_became_cold() {
     states.insert(Arc::clone(&c2));
     assert_eq!(states.hot.len(), 1);
     assert_eq!(states.cold.len(), 1);
+
+    // c1 is in hot, so its 42% compute allocation is not yet in `cold_stats`.
+    assert_eq!(states.cold_stats.total_compute_allocation_percent, 0);
+    assert_eq!(states.total_compute_allocation(), 42);
 
     // Drain c1's input queue inside the closure: this flips c1 from non-cold
     // back to cold. `for_each_mut` must demote it as part of its final
@@ -290,9 +303,32 @@ fn for_each_mut_demotes_a_hot_canister_that_became_cold() {
     });
     assert_eq!(visited, vec![c1.canister_id(), c2.canister_id()]);
 
-    // Both canisters end up in cold.
+    // Both canisters end up in cold; cold_stats picks up c1's 42% compute.
     assert_eq!(states.hot.len(), 0);
     assert_eq!(states.cold.len(), 2);
+    assert_eq!(states.cold_stats.total_compute_allocation_percent, 42);
+    assert_eq!(states.total_compute_allocation(), 42);
+}
+
+#[test]
+fn for_each_mut_updates_cold_stats_in_place() {
+    let mut states = CanisterStates::default();
+    let c = cold_canister(1);
+    states.insert(c);
+    // Sanity: c is cold and contributes 0% compute allocation.
+    assert_eq!(states.cold.len(), 1);
+    assert_eq!(states.total_compute_allocation(), 0);
+
+    // Mutate `compute_allocation` on the cold canister without affecting
+    // `is_cold()`. The in-place iteration must update `cold_stats` accordingly.
+    states.for_each_mut(|_id, canister| {
+        Arc::make_mut(canister).system_state.compute_allocation =
+            ComputeAllocation::try_from(42).unwrap();
+    });
+
+    assert_eq!(states.hot.len(), 0);
+    assert_eq!(states.cold.len(), 1);
+    assert_eq!(states.total_compute_allocation(), 42);
 }
 
 #[test]
@@ -378,7 +414,7 @@ fn try_for_each_mut_short_circuits_on_cold_error_and_promotes_visited() {
             Ok(())
         } else if *id == c2.canister_id() {
             // Mutate AND return Err on the same canister: c2's mutation must
-            // still be reflected in the partition.
+            // still be reflected in the partition / cold_stats.
             push_input(canister);
             Err("boom")
         } else {
@@ -390,25 +426,34 @@ fn try_for_each_mut_short_circuits_on_cold_error_and_promotes_visited() {
     // Iteration stopped at c2; c3 never visited.
     assert_eq!(visited, vec![c1.canister_id(), c2.canister_id()]);
     // c1 and c2 both became non-cold during iteration: both end up in hot.
-    // c3 remains in cold.
+    // c3 remains in cold. `debug_assert_invariants` (run inside
+    // `try_for_each_mut`) covers the matching `cold_stats` invariant.
     assert!(states.hot.contains_key(&c1.canister_id()));
     assert!(states.hot.contains_key(&c2.canister_id()));
     assert!(states.cold.contains_key(&c3.canister_id()));
 }
 
 #[test]
-fn retain_drops_canisters_from_both_pools() {
+fn retain_updates_cold_stats_for_removed_cold_canisters() {
     let mut states = CanisterStates::default();
-    let c1 = cold_canister(1);
-    let c2 = cold_canister(2);
-    let c3 = hot_canister(3);
-    let c4 = hot_canister(4);
+    let mut c1 = cold_canister(1);
+    let mut c2 = cold_canister(2);
+    let mut c3 = hot_canister(3);
+    let mut c4 = hot_canister(4);
+    // Give every canister a distinguishable compute allocation so we can spot
+    // bookkeeping errors via `total_compute_allocation()`.
+    for (i, canister) in [&mut c1, &mut c2, &mut c3, &mut c4].into_iter().enumerate() {
+        Arc::make_mut(canister).system_state.compute_allocation =
+            ComputeAllocation::try_from(10 + 10 * i as u64).unwrap();
+    }
     states.insert(Arc::clone(&c1));
     states.insert(Arc::clone(&c2));
     states.insert(Arc::clone(&c3));
     states.insert(Arc::clone(&c4));
     assert_eq!(states.hot.len(), 2);
     assert_eq!(states.cold.len(), 2);
+    // 10% + 20% + 30% + 40% = 100%.
+    assert_eq!(states.total_compute_allocation(), 100);
 
     let keep = [c1.canister_id(), c3.canister_id()];
     states.retain(|id, _| keep.contains(id));
@@ -419,6 +464,133 @@ fn retain_drops_canisters_from_both_pools() {
     assert!(!states.contains_key(&c2.canister_id()));
     assert!(states.contains_key(&c3.canister_id()));
     assert!(!states.contains_key(&c4.canister_id()));
+    // 10% (c1) + 30% (c3) = 40%.
+    assert_eq!(states.total_compute_allocation(), 40);
+}
+
+#[test]
+fn memory_aggregators_combine_hot_and_cold() {
+    let mut c1 = cold_canister(1);
+    let mut c2 = hot_canister(2);
+    // Distinguishable memory allocation reservations so that `execution`
+    // depends visibly on both canisters.
+    Arc::make_mut(&mut c1).system_state.memory_allocation = NumBytes::new(10_000_000).into();
+    Arc::make_mut(&mut c2).system_state.memory_allocation = NumBytes::new(20_000_000).into();
+
+    let mut states = CanisterStates::default();
+    states.insert(Arc::clone(&c1));
+    states.insert(Arc::clone(&c2));
+    // Both pools must be exercised, otherwise this test does not cover the
+    // hot-iteration + cold-aggregate combination.
+    assert_eq!(states.hot.len(), 1);
+    assert_eq!(states.cold.len(), 1);
+
+    // Expected values, computed by summing over every canister independently
+    // of the hot/cold split.
+    let canisters = [&c1, &c2];
+    let expected_memory_usage: NumBytes = canisters
+        .iter()
+        .map(|c| c.memory_usage() + c.message_memory_usage().total())
+        .sum();
+    let expected_guaranteed: NumBytes = canisters
+        .iter()
+        .map(|c| c.system_state.guaranteed_response_message_memory_usage())
+        .sum();
+    let expected_best_effort: NumBytes = canisters
+        .iter()
+        .map(|c| c.system_state.best_effort_message_memory_usage())
+        .sum();
+    let expected_execution: NumBytes = canisters.iter().map(|c| c.memory_allocated_bytes()).sum();
+    let expected_wasm_sections: NumBytes = canisters
+        .iter()
+        .map(|c| c.wasm_custom_sections_memory_usage())
+        .sum();
+    let expected_history: NumBytes = canisters
+        .iter()
+        .map(|c| c.canister_history_memory_usage())
+        .sum();
+
+    // Sanity: the hot canister contributes non-zero guaranteed-response message
+    // memory (from `push_input`) and both canisters contribute to `execution`
+    // (from `memory_allocation`); otherwise a broken aggregator returning 0 could
+    // trivially pass.
+    assert!(expected_guaranteed > NumBytes::new(0));
+    assert!(expected_execution == NumBytes::new(30_000_000));
+    // Also ensure that message memory usage contributes a non-zero amount to
+    // `total_canister_memory_usage`.
+    let total_message_memory: NumBytes = canisters
+        .iter()
+        .map(|c| c.message_memory_usage().total())
+        .sum();
+    assert!(total_message_memory > NumBytes::new(0));
+    // The actual `total_canister_memory_usage` only includes message memory
+    // (canisters have no execution state).
+    assert_eq!(expected_memory_usage, total_message_memory);
+
+    assert_eq!(states.total_canister_memory_usage(), expected_memory_usage);
+    assert_eq!(
+        states.guaranteed_response_message_memory_taken(),
+        expected_guaranteed
+    );
+    assert_eq!(
+        states.best_effort_message_memory_taken(),
+        expected_best_effort
+    );
+
+    let mt = states.memory_taken();
+    assert_eq!(mt.execution, expected_execution);
+    assert_eq!(mt.guaranteed_response_messages, expected_guaranteed);
+    assert_eq!(mt.best_effort_messages, expected_best_effort);
+    assert_eq!(mt.wasm_custom_sections, expected_wasm_sections);
+    assert_eq!(mt.canister_history, expected_history);
+}
+
+#[test]
+fn callback_count_combines_hot_and_cold() {
+    fn make_callback(deadline: CoarseTime) -> Callback {
+        Callback::new(
+            CallContextId::from(1),
+            canister_test_id(999),
+            Cycles::zero(),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+            WasmClosure::new(0, 0),
+            WasmClosure::new(0, 0),
+            None,
+            deadline,
+        )
+    }
+
+    // A canister with only guaranteed-response (never-expiring) callbacks is
+    // still cold by definition (see `CanisterState::is_cold`), which lets us
+    // exercise the `cold_stats.callback_count` aggregate.
+    let mut cold = cold_canister(1);
+    Arc::make_mut(&mut cold)
+        .system_state
+        .register_callback(make_callback(NO_DEADLINE))
+        .unwrap();
+    assert!(cold.is_cold());
+
+    // A hot canister with two callbacks (one guaranteed, one best-effort).
+    let mut hot = hot_canister(2);
+    Arc::make_mut(&mut hot)
+        .system_state
+        .register_callback(make_callback(NO_DEADLINE))
+        .unwrap();
+    Arc::make_mut(&mut hot)
+        .system_state
+        .register_callback(make_callback(CoarseTime::from_secs_since_unix_epoch(1)))
+        .unwrap();
+    assert!(!hot.is_cold());
+
+    let mut states = CanisterStates::default();
+    states.insert(cold);
+    states.insert(hot);
+
+    // Total = 1 (cold contribution, via cold_stats) + 2 (hot, via iteration).
+    assert_eq!(states.cold_stats.callback_count, 1);
+    assert_eq!(states.callback_count(), 3);
 }
 
 #[test]
@@ -439,7 +611,7 @@ fn validate_strict_split_rejects_stale_hot_canister() {
     states.insert(Arc::clone(&c));
     // `get_mut` promotes c to hot without actually mutating anything, so c
     // ends up cold-by-predicate but in the `hot` pool — exactly the stale
-    // state that `try_cool_all` is supposed to clean up.
+    // state that `try_cool_all` / `repartition` are supposed to clean up.
     let _ = states.get_mut(&c.canister_id());
     assert_eq!(states.hot.len(), 1);
     assert_eq!(states.cold.len(), 0);

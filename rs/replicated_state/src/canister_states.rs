@@ -14,12 +14,17 @@
 //! [`CanisterStates::try_cool`] for single canisters or
 //! [`CanisterStates::try_cool_all`] for a bulk pass.
 //!
-//! This module currently only provides the partitioning machinery. The
-//! `ReplicatedState` integration and the `O(1)` cold-pool aggregates are
-//! introduced in follow-up changes; right now `CanisterStates` is not yet
-//! wired into `ReplicatedState`.
+//! Internally, `CanisterStates` also maintains `ColdStats`, a small set of
+//! aggregates over the cold pool that lets several aggregated queries (e.g.
+//! [`CanisterStates::total_compute_allocation`],
+//! [`CanisterStates::total_canister_memory_usage`],
+//! [`CanisterStates::callback_count`]) become `O(|hot|)` instead of
+//! `O(|all canisters|)`. These aggregates are an implementation detail: callers
+//! always go through the public aggregator methods.
 
 use crate::CanisterState;
+use crate::replicated_state::MemoryTaken;
+use ic_base_types::NumBytes;
 use ic_types::CanisterId;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -31,6 +36,100 @@ use std::sync::Arc;
 #[cfg(test)]
 mod tests;
 
+/// O(1) aggregates over the canisters currently in the `cold` pool.
+///
+/// Maintained incrementally: every transition into / out of `cold` adds or
+/// subtracts the contributing canister's values. The aggregates here are
+/// expected to be a small enough set that the bookkeeping cost on each
+/// transition is constant time and the resulting cost savings on the
+/// `O(|all canisters|)` aggregate computations in `ReplicatedState` are
+/// significant.
+///
+/// Crucially, `ColdStats` is *derived* state: it is recomputable from the
+/// `cold` map at any time and is **not** persisted in checkpoints. It is
+/// reconstructed when canisters are inserted (e.g. on checkpoint load).
+///
+/// Private to the module: external callers reach the same totals through
+/// [`CanisterStates::total_compute_allocation`],
+/// [`CanisterStates::total_canister_memory_usage`] and
+/// [`CanisterStates::callback_count`], which transparently combine the cold
+/// aggregate with an `O(|hot|)` pass over hot canisters.
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
+struct ColdStats {
+    /// Number of canisters in `cold`. Equal to `cold.len()`.
+    count: usize,
+    /// Sum of `ComputeAllocation::as_percent()` across cold canisters.
+    total_compute_allocation_percent: u64,
+    /// Sum of `memory_allocation().allocated_bytes(memory_usage())`.
+    raw_memory: NumBytes,
+    /// Sum of `memory_usage()`.
+    memory_usage: NumBytes,
+    /// Sum of `system_state.guaranteed_response_message_memory_usage()`. Always
+    /// `0` while invariants hold (cold canisters have empty queues), but
+    /// tracked for symmetry / debug-time invariant checking.
+    guaranteed_response_message_memory: NumBytes,
+    /// Sum of `wasm_custom_sections_memory_usage()`.
+    wasm_custom_sections_memory: NumBytes,
+    /// Sum of `canister_history_memory_usage()`.
+    canister_history_memory: NumBytes,
+    /// Sum of `ccm.unresponded_callback_count()` (which for cold canisters
+    /// equals the number of guaranteed-response callbacks; best-effort
+    /// callbacks force the canister into `hot`).
+    callback_count: usize,
+}
+
+impl ColdStats {
+    /// Adds the contribution of `canister` to the aggregates.
+    fn add(&mut self, canister: &CanisterState) {
+        self.count += 1;
+        self.total_compute_allocation_percent += canister.compute_allocation().as_percent();
+        let memory_usage = canister.memory_usage();
+        self.raw_memory += canister.memory_allocation().allocated_bytes(memory_usage);
+        self.memory_usage += memory_usage;
+        self.guaranteed_response_message_memory += canister
+            .system_state
+            .guaranteed_response_message_memory_usage();
+        self.wasm_custom_sections_memory += canister.wasm_custom_sections_memory_usage();
+        self.canister_history_memory += canister.canister_history_memory_usage();
+        self.callback_count += canister
+            .system_state
+            .call_context_manager()
+            .map_or(0, |ccm| ccm.unresponded_callback_count());
+    }
+
+    /// Subtracts the contribution of `canister` from the aggregates.
+    fn sub(&mut self, canister: &CanisterState) {
+        self.count -= 1;
+        self.total_compute_allocation_percent -= canister.compute_allocation().as_percent();
+        let memory_usage = canister.memory_usage();
+        self.raw_memory -= canister.memory_allocation().allocated_bytes(memory_usage);
+        self.memory_usage -= memory_usage;
+        self.guaranteed_response_message_memory -= canister
+            .system_state
+            .guaranteed_response_message_memory_usage();
+        self.wasm_custom_sections_memory -= canister.wasm_custom_sections_memory_usage();
+        self.canister_history_memory -= canister.canister_history_memory_usage();
+        self.callback_count -= canister
+            .system_state
+            .call_context_manager()
+            .map_or(0, |ccm| ccm.unresponded_callback_count());
+    }
+
+    /// Computes `ColdStats` from scratch over the provided cold canisters.
+    /// Used to (re-)derive the aggregates, e.g. after loading from checkpoint
+    /// and as a `debug_assert!` sanity check inside `debug_assert_invariants`.
+    fn recompute<'a, I>(cold: I) -> Self
+    where
+        I: IntoIterator<Item = &'a Arc<CanisterState>>,
+    {
+        let mut stats = ColdStats::default();
+        for c in cold {
+            stats.add(c.as_ref());
+        }
+        stats
+    }
+}
+
 /// Hot/cold-partitioned collection of canister states.
 ///
 /// See the module-level docs for the overall design. The two underlying
@@ -39,8 +138,8 @@ mod tests;
 /// a flat `BTreeMap<CanisterId, Arc<CanisterState>>` would.
 ///
 /// `PartialEq` and `ValidateEq` are derived: two `CanisterStates` are equal iff
-/// they have the same partition (hot vs. cold). This makes the partition
-/// observable through equality assertions in tests.
+/// they have the same partition (hot vs. cold) and the same `cold_stats`. This
+/// makes the partition observable through equality assertions in tests.
 ///
 /// # Invariants
 ///
@@ -48,13 +147,16 @@ mod tests;
 /// checked in debug builds by `debug_assert_invariants`:
 ///
 /// 1. `hot` and `cold` pools are disjoint (no canister ID in both);
-/// 2. every canister in the `cold` pool satisfies `CanisterState::is_cold()`.
+/// 2. every canister in the `cold` pool satisfies `CanisterState::is_cold()`;
+/// 3. `cold_stats` matches a fresh recomputation over the `cold` pool.
 ///
 /// Additionally, the **strict** partition invariant — that every canister in
 /// the `hot` pool does *not* satisfy `is_cold()` — holds after
-/// [`Self::try_cool_all`] and is verified by [`Self::validate_strict_split`].
-/// Between repartitioning passes the `hot` pool may contain canisters that
-/// have gone quiet but have not yet been demoted; this is by design.
+/// [`Self::try_cool_all`] /
+/// [`crate::ReplicatedState::repartition_canister_states`], and is verified
+/// during checkpoint validation by [`Self::validate_strict_split`]. Between
+/// repartitioning passes the `hot` pool may contain canisters that have gone
+/// quiet but have not yet been demoted; this is by design.
 #[derive(Clone, Debug, Default, PartialEq, ValidateEq)]
 pub struct CanisterStates {
     /// Canisters that may have round-level work or are recently active. Always
@@ -68,6 +170,9 @@ pub struct CanisterStates {
     /// need to consider them; per-round operations should skip them.
     #[validate_eq(CompareWithValidateEq)]
     cold: BTreeMap<CanisterId, Arc<CanisterState>>,
+
+    /// O(1) aggregates over `cold` canisters. See [`ColdStats`].
+    cold_stats: ColdStats,
 }
 
 impl CanisterStates {
@@ -79,14 +184,20 @@ impl CanisterStates {
     pub fn new(canisters: BTreeMap<CanisterId, Arc<CanisterState>>) -> Self {
         let mut hot = BTreeMap::new();
         let mut cold = BTreeMap::new();
+        let mut cold_stats = ColdStats::default();
         for (id, canister) in canisters {
             if canister.is_cold() {
+                cold_stats.add(canister.as_ref());
                 cold.insert(id, canister);
             } else {
                 hot.insert(id, canister);
             }
         }
-        let states = Self { hot, cold };
+        let states = Self {
+            hot,
+            cold,
+            cold_stats,
+        };
         states.debug_assert_invariants();
         states
     }
@@ -98,7 +209,8 @@ impl CanisterStates {
     }
 
     /// Returns a mutable reference to the `Arc<CanisterState>` in `hot`. If the
-    /// canister is currently in `cold`, it is first promoted (moved to `hot`).
+    /// canister is currently in `cold`, it is first promoted (moved to `hot`, with
+    /// `cold_stats` updated accordingly).
     ///
     /// This is the back door used by all mutating accessors on `ReplicatedState`.
     /// Anyone holding the returned `&mut Arc<CanisterState>` may freely mutate the
@@ -115,7 +227,8 @@ impl CanisterStates {
 
             Entry::Vacant(entry) => {
                 if let Some(canister) = self.cold.remove(id) {
-                    // Was in the `cold` pool, promote it.
+                    // Was in the `cold` pool, update the stats and promote it.
+                    self.cold_stats.sub(canister.as_ref());
                     let canister = entry.insert(canister);
                     // Unfortunately, the borrow checker won't let us do this here.
                     // self.debug_assert_invariants();
@@ -144,15 +257,16 @@ impl CanisterStates {
     }
 
     /// Inserts a canister into the appropriate pool. If a canister with this
-    /// ID was already present (in either pool), it is replaced and returned.
+    /// ID was already present (in either pool), it is replaced and returned;
+    /// `cold_stats` is adjusted accordingly.
     pub fn insert(&mut self, canister: Arc<CanisterState>) -> Option<Arc<CanisterState>> {
+        // Drop any previous entry first so `cold_stats` doesn't double-count
+        // when we transition from / to the cold pool.
         let id = canister.canister_id();
-        // Drop any previous entry first so that the partition reflects the
-        // freshly-inserted canister's `is_cold()` regardless of where the
-        // old entry lived.
         let prev = self.remove(&id);
 
         if canister.is_cold() {
+            self.cold_stats.add(canister.as_ref());
             self.cold.insert(id, canister);
         } else {
             self.hot.insert(id, canister);
@@ -162,22 +276,30 @@ impl CanisterStates {
     }
 
     /// Removes and returns the canister with the given ID from whichever pool
-    /// it is in.
+    /// it is in. Updates `cold_stats` if the canister was in `cold`.
     pub fn remove(&mut self, id: &CanisterId) -> Option<Arc<CanisterState>> {
-        let removed = self.hot.remove(id).or_else(|| self.cold.remove(id));
+        let removed = if let Some(canister) = self.hot.remove(id) {
+            Some(canister)
+        } else if let Some(canister) = self.cold.remove(id) {
+            self.cold_stats.sub(canister.as_ref());
+            Some(canister)
+        } else {
+            None
+        };
         self.debug_assert_invariants();
         removed
     }
 
     /// Re-evaluates `is_cold()` for the given canister and, if true, moves the
-    /// canister from `hot` to `cold`. No-op if the canister is not present,
-    /// already in `cold`, or not cold.
+    /// canister from `hot` to `cold`, updating `cold_stats`. No-op if the canister
+    /// is not present, already in `cold`, or not cold.
     ///
     /// Returns true iff a transition (hot → cold) actually happened.
     pub fn try_cool(&mut self, id: &CanisterId) -> bool {
         let cooled = match self.hot.entry(*id) {
             Entry::Occupied(entry) if entry.get().is_cold() => {
                 let canister = entry.remove();
+                self.cold_stats.add(canister.as_ref());
                 self.cold.insert(*id, canister);
                 true
             }
@@ -210,6 +332,7 @@ impl CanisterStates {
             .collect();
         for id in to_cool {
             let canister = self.hot.remove(&id).unwrap();
+            self.cold_stats.add(canister.as_ref());
             self.cold.insert(id, canister);
         }
         self.debug_assert_invariants();
@@ -255,15 +378,18 @@ impl CanisterStates {
     }
 
     /// Visits every canister (hot and cold) and runs `f` against it, then
-    /// re-establishes the hot/cold partition.
+    /// re-establishes strict hot/cold partitioning.
     ///
     /// This is the safe way to perform "touch every canister" loops (storage
     /// charging, checkpoint write-out, …) that may legitimately mutate cold
-    /// canisters in ways affecting [`CanisterState::is_cold`].
+    /// canisters in ways affecting [`CanisterState::is_cold`] *or* any field
+    /// aggregated in `ColdStats` (`compute_allocation`, `memory_allocation`,
+    /// canister history size, callbacks).
     ///
     /// Iterates the hot pool followed by the cold pool — i.e. canisters are
     /// **not** yielded in `CanisterId` order — but every canister is visited
-    /// exactly once. Cost is `O(|hot| + |cold|)`.
+    /// exactly once. Cost is `O(|hot| + |cold|)`, with a small constant per
+    /// cold canister for the `cold_stats` bookkeeping.
     pub fn for_each_mut<F>(&mut self, mut f: F)
     where
         F: FnMut(&CanisterId, &mut Arc<CanisterState>),
@@ -274,15 +400,22 @@ impl CanisterStates {
             f(id, canister);
         }
 
-        // Cold pool: iterate in place. The closure may flip the canister to
-        // non-cold, in which case we promote it to `hot` after the loop.
+        // Cold pool: iterate in place. Because the closure can mutate fields
+        // that affect `cold_stats` or `is_cold()`, we conservatively subtract
+        // each canister's pre-call contribution before running `f`, then
+        // either re-add (if it stays cold) or queue it for promotion to
+        // `hot` (if `f` flipped it into a non-cold state).
         let mut to_promote: Vec<CanisterId> = Vec::new();
         for (id, canister) in self.cold.iter_mut() {
+            self.cold_stats.sub(canister.as_ref());
             f(id, canister);
-            if !canister.is_cold() {
+            if canister.is_cold() {
+                self.cold_stats.add(canister.as_ref());
+            } else {
                 to_promote.push(*id);
             }
         }
+        // Promote all canisters that are now hot.
         for id in to_promote {
             let canister = self.cold.remove(&id).unwrap();
             self.hot.insert(id, canister);
@@ -310,13 +443,16 @@ impl CanisterStates {
         }
 
         // Cold pool: same in-place strategy as `for_each_mut`, but short-circuit
-        // on `Err`. We always preserve the partition for the canister we were
-        // visiting when the error occurred, then propagate the error.
+        // on `Err`. We always restore the partition / stats for the canister we
+        // were visiting when the error occurred, then propagate the error.
         let mut to_promote: Vec<CanisterId> = Vec::new();
         if result.is_ok() {
             for (id, canister) in self.cold.iter_mut() {
+                self.cold_stats.sub(canister.as_ref());
                 let res = f(id, canister);
-                if !canister.is_cold() {
+                if canister.is_cold() {
+                    self.cold_stats.add(canister.as_ref());
+                } else {
                     to_promote.push(*id);
                 }
                 if let Err(e) = res {
@@ -325,6 +461,7 @@ impl CanisterStates {
                 }
             }
         }
+        // Promote all canisters that are now hot.
         for id in to_promote {
             let canister = self.cold.remove(&id).unwrap();
             self.hot.insert(id, canister);
@@ -336,7 +473,8 @@ impl CanisterStates {
         result
     }
 
-    /// Retains only the canisters for which the predicate returns true.
+    /// Retains only the canisters for which the predicate returns true, updating
+    /// `cold_stats` to account for any cold canister that was removed.
     ///
     /// Iterates both pools.
     pub fn retain<F>(&mut self, f: F)
@@ -344,8 +482,151 @@ impl CanisterStates {
         F: Fn(&CanisterId, &Arc<CanisterState>) -> bool,
     {
         self.hot.retain(|id, c| f(id, c));
-        self.cold.retain(|id, c| f(id, c));
+        self.cold.retain(|id, c| {
+            if f(id, c) {
+                true
+            } else {
+                self.cold_stats.sub(c.as_ref());
+                false
+            }
+        });
         self.debug_assert_invariants();
+    }
+
+    /// Returns the total reserved compute allocation (as a sum of percentage
+    /// points) across every canister in either pool.
+    ///
+    /// `O(|hot canisters|)` thanks to the precomputed cold-pool aggregate.
+    pub fn total_compute_allocation(&self) -> u64 {
+        let hot: u64 = self
+            .hot
+            .values()
+            .map(|canister| canister.compute_allocation().as_percent())
+            .sum();
+        hot + self.cold_stats.total_compute_allocation_percent
+    }
+
+    /// Returns the total number of callbacks (responded and unresponded)
+    /// registered across every canister in either pool.
+    ///
+    /// `O(|hot canisters|)` thanks to the precomputed cold-pool aggregate.
+    pub fn callback_count(&self) -> usize {
+        let hot: usize = self
+            .hot
+            .values()
+            .map(|canister| {
+                canister
+                    .system_state
+                    .call_context_manager()
+                    .map_or(0, |ccm| ccm.unresponded_callback_count())
+            })
+            .sum();
+        hot + self.cold_stats.callback_count
+    }
+
+    /// Returns the total memory usage of all canisters in either pool, including
+    /// message memory.
+    ///
+    /// `O(|hot canisters|)` thanks to the precomputed cold-pool aggregate.
+    pub fn total_canister_memory_usage(&self) -> NumBytes {
+        let hot: NumBytes = self
+            .hot
+            .values()
+            .map(|canister| canister.memory_usage() + canister.message_memory_usage().total())
+            .sum();
+        // Cold canisters have empty queues by `CanisterState::is_cold`, so they
+        // contribute no message memory usage.
+        hot + self.cold_stats.memory_usage
+    }
+
+    /// Returns the total guaranteed-response message memory (including
+    /// reservations) across every canister in either pool. Does **not**
+    /// include subnet queues.
+    ///
+    /// `O(|hot canisters|)` thanks to the precomputed cold-pool aggregate.
+    pub fn guaranteed_response_message_memory_taken(&self) -> NumBytes {
+        let hot: NumBytes = self
+            .hot
+            .values()
+            .map(|canister| {
+                canister
+                    .system_state
+                    .guaranteed_response_message_memory_usage()
+            })
+            .sum();
+        hot + self.cold_stats.guaranteed_response_message_memory
+    }
+
+    /// Returns the total best-effort message memory across every canister in
+    /// either pool. Does **not** include subnet queues.
+    ///
+    /// `O(|hot canisters|)` — cold canisters by definition use no best-effort
+    /// message memory (see `CanisterState::is_cold`).
+    pub fn best_effort_message_memory_taken(&self) -> NumBytes {
+        self.hot
+            .values()
+            .map(|canister| canister.system_state.best_effort_message_memory_usage())
+            .sum()
+    }
+
+    /// Computes the per-resource [`MemoryTaken`] aggregate across every
+    /// canister in either pool.
+    ///
+    /// Does **not** include subnet queues, call `ReplicatedState::memory_taken`
+    /// for the actual subnet-wide memory usage.
+    ///
+    /// `O(|hot canisters|)` thanks to the precomputed cold-pool aggregate.
+    // The only non-test caller of this method is
+    // `ReplicatedState::memory_taken`, which is wired up in the follow-up
+    // integration PR.
+    #[allow(dead_code)]
+    pub(crate) fn memory_taken(&self) -> MemoryTaken {
+        let (
+            mut execution,
+            mut guaranteed_response_messages,
+            best_effort_messages,
+            mut wasm_custom_sections,
+            mut canister_history,
+        ) = self
+            .hot
+            .values()
+            .map(|canister| {
+                (
+                    canister.memory_allocated_bytes(),
+                    canister
+                        .system_state
+                        .guaranteed_response_message_memory_usage(),
+                    canister.system_state.best_effort_message_memory_usage(),
+                    canister.wasm_custom_sections_memory_usage(),
+                    canister.canister_history_memory_usage(),
+                )
+            })
+            .reduce(|accum, val| {
+                (
+                    accum.0 + val.0,
+                    accum.1 + val.1,
+                    accum.2 + val.2,
+                    accum.3 + val.3,
+                    accum.4 + val.4,
+                )
+            })
+            .unwrap_or_default();
+
+        let cold = &self.cold_stats;
+        execution += cold.raw_memory;
+        guaranteed_response_messages += cold.guaranteed_response_message_memory;
+        // `best_effort_messages` has no cold contribution: cold canisters
+        // have empty queues.
+        wasm_custom_sections += cold.wasm_custom_sections_memory;
+        canister_history += cold.canister_history_memory;
+
+        MemoryTaken {
+            execution,
+            guaranteed_response_messages,
+            best_effort_messages,
+            wasm_custom_sections,
+            canister_history,
+        }
     }
 
     /// Validates that the current hot/cold partition matches the canonical "strict"
@@ -372,10 +653,10 @@ impl CanisterStates {
     }
 
     /// Debug-only consistency check, called at the end of every mutating operation.
-    /// Verifies invariants (1)–(2) listed under [`CanisterStates`].
+    /// Verifies invariants (1)–(3) listed under [`CanisterStates`].
     ///
     /// Also see [`Self::validate_strict_split`] for the stricter validation applied
-    /// during checkpoint validation.
+    /// at checkpointing time.
     fn debug_assert_invariants(&self) {
         debug_assert!(
             self.hot.keys().all(|id| !self.cold.contains_key(id)),
@@ -385,10 +666,15 @@ impl CanisterStates {
             self.cold.values().all(|c| c.is_cold()),
             "cold pool contains a canister that is not cold",
         );
+        debug_assert_eq!(
+            ColdStats::recompute(self.cold.values()),
+            self.cold_stats,
+            "cold_stats is out of sync with the cold pool"
+        );
     }
 }
 
-/// Iterator returned by [`CanisterStates::all_iter`]. Merge-yields entries from
+/// Iterator returned by [`CanisterStates::iter`]. Merge-yields entries from
 /// the `hot` and `cold` pools in `CanisterId` order.
 pub struct Iter<'a> {
     hot: Peekable<std::collections::btree_map::Iter<'a, CanisterId, Arc<CanisterState>>>,
