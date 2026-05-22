@@ -56,18 +56,14 @@ mod tests;
 /// aggregate with an `O(|hot|)` pass over hot canisters.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 struct ColdStats {
-    /// Number of canisters in `cold`. Equal to `cold.len()`.
-    count: usize,
     /// Sum of `ComputeAllocation::as_percent()` across cold canisters.
     total_compute_allocation_percent: u64,
-    /// Sum of `memory_allocation().allocated_bytes(memory_usage())`.
-    raw_memory: NumBytes,
-    /// Sum of `memory_usage()`.
+    /// Sum of `memory_allocation().allocated_bytes(memory_usage())` (maximum of
+    /// memory allocation and memory usage).
+    execution_memory: NumBytes,
+    /// Sum of `memory_usage()` (actual execution memory usage, ignoring memory
+    /// allocation).
     memory_usage: NumBytes,
-    /// Sum of `system_state.guaranteed_response_message_memory_usage()`. Always
-    /// `0` while invariants hold (cold canisters have empty queues), but
-    /// tracked for symmetry / debug-time invariant checking.
-    guaranteed_response_message_memory: NumBytes,
     /// Sum of `wasm_custom_sections_memory_usage()`.
     wasm_custom_sections_memory: NumBytes,
     /// Sum of `canister_history_memory_usage()`.
@@ -81,14 +77,10 @@ struct ColdStats {
 impl ColdStats {
     /// Adds the contribution of `canister` to the aggregates.
     fn add(&mut self, canister: &CanisterState) {
-        self.count += 1;
         self.total_compute_allocation_percent += canister.compute_allocation().as_percent();
         let memory_usage = canister.memory_usage();
-        self.raw_memory += canister.memory_allocation().allocated_bytes(memory_usage);
+        self.execution_memory += canister.memory_allocation().allocated_bytes(memory_usage);
         self.memory_usage += memory_usage;
-        self.guaranteed_response_message_memory += canister
-            .system_state
-            .guaranteed_response_message_memory_usage();
         self.wasm_custom_sections_memory += canister.wasm_custom_sections_memory_usage();
         self.canister_history_memory += canister.canister_history_memory_usage();
         self.callback_count += canister
@@ -99,14 +91,10 @@ impl ColdStats {
 
     /// Subtracts the contribution of `canister` from the aggregates.
     fn sub(&mut self, canister: &CanisterState) {
-        self.count -= 1;
         self.total_compute_allocation_percent -= canister.compute_allocation().as_percent();
         let memory_usage = canister.memory_usage();
-        self.raw_memory -= canister.memory_allocation().allocated_bytes(memory_usage);
+        self.execution_memory -= canister.memory_allocation().allocated_bytes(memory_usage);
         self.memory_usage -= memory_usage;
-        self.guaranteed_response_message_memory -= canister
-            .system_state
-            .guaranteed_response_message_memory_usage();
         self.wasm_custom_sections_memory -= canister.wasm_custom_sections_memory_usage();
         self.canister_history_memory -= canister.canister_history_memory_usage();
         self.callback_count -= canister
@@ -543,18 +531,17 @@ impl CanisterStates {
     /// reservations) across every canister in either pool. Does **not**
     /// include subnet queues.
     ///
-    /// `O(|hot canisters|)` thanks to the precomputed cold-pool aggregate.
+    /// `O(|hot canisters|)`. — cold canisters by definition use no
+    /// guaranteed-response message memory (see `CanisterState::is_cold`).
     pub fn guaranteed_response_message_memory_taken(&self) -> NumBytes {
-        let hot: NumBytes = self
-            .hot
+        self.hot
             .values()
             .map(|canister| {
                 canister
                     .system_state
                     .guaranteed_response_message_memory_usage()
             })
-            .sum();
-        hot + self.cold_stats.guaranteed_response_message_memory
+            .sum()
     }
 
     /// Returns the total best-effort message memory across every canister in
@@ -583,7 +570,7 @@ impl CanisterStates {
     pub(crate) fn memory_taken(&self) -> MemoryTaken {
         let (
             mut execution,
-            mut guaranteed_response_messages,
+            guaranteed_response_messages,
             best_effort_messages,
             mut wasm_custom_sections,
             mut canister_history,
@@ -613,10 +600,9 @@ impl CanisterStates {
             .unwrap_or_default();
 
         let cold = &self.cold_stats;
-        execution += cold.raw_memory;
-        guaranteed_response_messages += cold.guaranteed_response_message_memory;
-        // `best_effort_messages` has no cold contribution: cold canisters
-        // have empty queues.
+        execution += cold.execution_memory;
+        // `guaranteed_response_messages` and `best_effort_messages` have no cold
+        // contribution: cold canisters have empty queues.
         wasm_custom_sections += cold.wasm_custom_sections_memory;
         canister_history += cold.canister_history_memory;
 

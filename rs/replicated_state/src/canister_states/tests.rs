@@ -45,6 +45,11 @@ fn push_input(canister: &mut Arc<CanisterState>) {
         .unwrap();
 }
 
+fn set_compute_allocation(canister: &mut Arc<CanisterState>, percentage: u64) {
+    Arc::make_mut(canister).system_state.compute_allocation =
+        ComputeAllocation::try_from(percentage).unwrap();
+}
+
 fn hot_canister(id: u64) -> Arc<CanisterState> {
     let mut canister = make_canister(id);
     push_input(&mut canister);
@@ -129,30 +134,33 @@ fn insert_classifies_on_the_fly() {
 #[test]
 fn insert_replaces_existing_canister_and_updates_cold_stats() {
     let mut states = CanisterStates::default();
-    let cold = cold_canister(1);
 
     // Initial insert: lands in cold.
+    let mut cold = cold_canister(1);
+    set_compute_allocation(&mut cold, 42);
     assert!(states.insert(Arc::clone(&cold)).is_none());
     assert_eq!(states.hot.len(), 0);
     assert_eq!(states.cold.len(), 1);
-    assert_eq!(states.cold_stats.count, 1);
+    assert_eq!(states.cold_stats.total_compute_allocation_percent, 42);
 
     // Replace with a hot version of the same canister: returns the cold one,
     // `cold_stats` reflects the new (empty) cold pool.
-    let hot = hot_canister(1);
+    let mut hot = hot_canister(1);
+    set_compute_allocation(&mut hot, 42);
     let prev = states.insert(Arc::clone(&hot)).expect("upsert");
     assert!(Arc::ptr_eq(&prev, &cold));
     assert_eq!(states.hot.len(), 1);
     assert_eq!(states.cold.len(), 0);
-    assert_eq!(states.cold_stats.count, 0);
+    assert_eq!(states.cold_stats.total_compute_allocation_percent, 0);
 
     // Replace again with a cold version: cold_stats picks it back up.
-    let cold_again = cold_canister(1);
+    let mut cold_again = cold_canister(1);
+    set_compute_allocation(&mut cold_again, 42);
     let prev = states.insert(Arc::clone(&cold_again)).expect("upsert");
     assert!(Arc::ptr_eq(&prev, &hot));
     assert_eq!(states.hot.len(), 0);
     assert_eq!(states.cold.len(), 1);
-    assert_eq!(states.cold_stats.count, 1);
+    assert_eq!(states.cold_stats.total_compute_allocation_percent, 42);
 }
 
 #[test]
@@ -275,8 +283,7 @@ fn for_each_mut_demotes_a_hot_canister_that_became_cold() {
     // c1: hot (has an input message). Tag it with a distinguishable compute
     // allocation so that we can verify it lands in `cold_stats` after demotion.
     let mut c1 = hot_canister(1);
-    Arc::make_mut(&mut c1).system_state.compute_allocation =
-        ComputeAllocation::try_from(42).unwrap();
+    set_compute_allocation(&mut c1, 42);
     // c2: already cold, kept untouched as a partition witness.
     let c2 = cold_canister(2);
 
@@ -322,8 +329,7 @@ fn for_each_mut_updates_cold_stats_in_place() {
     // Mutate `compute_allocation` on the cold canister without affecting
     // `is_cold()`. The in-place iteration must update `cold_stats` accordingly.
     states.for_each_mut(|_id, canister| {
-        Arc::make_mut(canister).system_state.compute_allocation =
-            ComputeAllocation::try_from(42).unwrap();
+        set_compute_allocation(canister, 42);
     });
 
     assert_eq!(states.hot.len(), 0);
@@ -443,8 +449,7 @@ fn retain_updates_cold_stats_for_removed_cold_canisters() {
     // Give every canister a distinguishable compute allocation so we can spot
     // bookkeeping errors via `total_compute_allocation()`.
     for (i, canister) in [&mut c1, &mut c2, &mut c3, &mut c4].into_iter().enumerate() {
-        Arc::make_mut(canister).system_state.compute_allocation =
-            ComputeAllocation::try_from(10 + 10 * i as u64).unwrap();
+        set_compute_allocation(canister, 10 + 10 * i as u64);
     }
     states.insert(Arc::clone(&c1));
     states.insert(Arc::clone(&c2));
