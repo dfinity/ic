@@ -5,16 +5,19 @@ use std::{
 
 use crate::invariants::common::{
     InvariantCheckError, RegistrySnapshot, get_node_record_from_snapshot,
-    get_subnet_ids_from_snapshot,
+    get_subnet_ids_from_snapshot, get_value_from_snapshot,
 };
 
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_base_types::{NodeId, PrincipalId, SubnetId, subnet_id_try_from_protobuf};
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_protobuf::registry::{
     node::v1::{NodeRecord, NodeRewardType},
     subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord, SubnetType},
 };
-use ic_registry_keys::{SUBNET_RECORD_KEY_PREFIX, make_subnet_record_key};
+use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
+use ic_registry_keys::{
+    SUBNET_RECORD_KEY_PREFIX, make_default_initial_dkg_subnet_id_key, make_subnet_record_key,
+};
 use prost::Message;
 
 /// Subnet invariants hold iff:
@@ -31,6 +34,8 @@ use prost::Message;
 ///    * Conversely, only cloud engines can have nodes with reward type 4
 ///    * SEV-enabled subnets consist of SEV-enabled nodes only (i.e. nodes with a chip ID in the node record)
 ///    * Only rented subnets can have subnet admins set to a non-empty list
+///    * The default initial DKG subnet, if set, refers to a subnet that
+///      appears in the subnet list
 pub(crate) fn check_subnet_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
@@ -172,6 +177,41 @@ pub(crate) fn check_subnet_invariants(
     //       subnet_records_map.keys()
     //    );
     //}
+
+    check_default_initial_dkg_subnet_invariant(snapshot)?;
+
+    Ok(())
+}
+
+/// Default initial DKG subnet invariant holds iff:
+///   * The `default_initial_dkg_subnet_id` record does not exist, OR
+///   * The record exists, decodes to a valid `SubnetId`, and that subnet
+///     appears in the subnet list.
+fn check_default_initial_dkg_subnet_invariant(
+    snapshot: &RegistrySnapshot,
+) -> Result<(), InvariantCheckError> {
+    let Some(subnet_id_proto) = get_value_from_snapshot::<SubnetIdProto>(
+        snapshot,
+        make_default_initial_dkg_subnet_id_key(),
+    ) else {
+        return Ok(());
+    };
+
+    let subnet_id =
+        subnet_id_try_from_protobuf(subnet_id_proto).map_err(|err| InvariantCheckError {
+            msg: format!("default_initial_dkg_subnet_id failed to decode: {err}"),
+            source: None,
+        })?;
+
+    if !get_subnet_ids_from_snapshot(snapshot).contains(&subnet_id) {
+        return Err(InvariantCheckError {
+            msg: format!(
+                "default_initial_dkg_subnet_id is set to {subnet_id}, but that subnet \
+                does not appear in the subnet list"
+            ),
+            source: None,
+        });
+    }
 
     Ok(())
 }

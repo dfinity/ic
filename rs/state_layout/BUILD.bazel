@@ -48,6 +48,7 @@ rust_test_with_binary(
     ],
     deps = [
         # Keep sorted.
+        "//rs/config",
         "//rs/interfaces",
         "//rs/test_utilities/logger",
         "//rs/test_utilities/time",
