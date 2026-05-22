@@ -164,6 +164,7 @@ def make_argparser():
     )
     parser.add_argument("--dflate", help="Path to our dflate tool", type=str, required=True)
     parser.add_argument("--diroid", help="Path to our diroid tool", type=str, required=True)
+    parser.add_argument("--zstd", help="Path to the zstd tool", type=str, required=True)
     return parser
 
 
@@ -273,7 +274,7 @@ def main():
 
     subprocess.run(
         [
-            "zstd",
+            args.zstd,
             "-q",
             "--threads=0",
             temp_tar,
