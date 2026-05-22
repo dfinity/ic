@@ -343,7 +343,11 @@ def _ext4_image_impl(ctx):
         ctx.executable._diroid.path,
         "--dflate",
         ctx.executable._dflate.path,
+        "--mkfs-ext4",
+        ctx.file._mkfs_ext4.path,
     ])
+
+    inputs.extend(ctx.files._mkfs_ext4_runfiles)
 
     if ctx.attr.file_contexts:
         args.extend(["-S", ctx.files.file_contexts[0].path])
@@ -402,6 +406,14 @@ ext4_image = _icos_build_rule(
             default = "//rs/ic_os/build_tools/dflate",
             executable = True,
             cfg = "exec",
+        ),
+        "_mkfs_ext4": attr.label(
+            default = "//toolchains/sysimage:mkfs.ext4.d/mke2fs",
+            allow_single_file = True,
+        ),
+        "_mkfs_ext4_runfiles": attr.label(
+            default = "//toolchains/sysimage:mkfs_ext4_runfiles",
+            allow_files = True,
         ),
     },
 )
