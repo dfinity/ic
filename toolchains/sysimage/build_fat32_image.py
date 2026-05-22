@@ -106,7 +106,9 @@ def main():
         help="Extra files to install; expects list of sourcefile:targetfile:mode",
     )
     parser.add_argument("--dflate", help="Path to our dflate tool", type=str)
-    parser.add_argument("--mkfs-vfat", help="Path to mkfs.vfat binary (used with -F 32 for FAT32)", type=str, required=True)
+    parser.add_argument(
+        "--mkfs-vfat", help="Path to mkfs.vfat binary (used with -F 32 for FAT32)", type=str, required=True
+    )
 
     args = parser.parse_args(sys.argv[1:])
 
