@@ -406,7 +406,6 @@ fn install_code(
         None,
         old_canister,
         time,
-        "NOT_USED".into(),
         &network_topology,
         execution_parameters,
         round_limits,
