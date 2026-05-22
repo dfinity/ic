@@ -7,7 +7,7 @@ use ic_test_utilities_types::ids::canister_test_id;
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::messages::{CallContextId, NO_DEADLINE, RequestOrResponse};
 use ic_types::methods::{Callback, WasmClosure};
-use ic_types::time::CoarseTime;
+use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{ComputeAllocation, NumBytes};
 use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
 use std::sync::Arc;
@@ -58,6 +58,27 @@ fn hot_canister(id: u64) -> Arc<CanisterState> {
 
 fn cold_canister(id: u64) -> Arc<CanisterState> {
     make_canister(id)
+}
+
+/// Builds a canister that satisfies [`CanisterState::is_cold`] but holds an
+/// input-slot reservation for an outstanding guaranteed-response request. Such
+/// canisters contribute to `cold_stats.guaranteed_response_message_memory`.
+fn cold_canister_with_guaranteed_response_reservation(id: u64) -> Arc<CanisterState> {
+    let mut canister = make_canister(id);
+    // Push an output request, then drain the output queue. The request itself
+    // leaves the queue but the reservation made in the input queue for the
+    // eventual response stays behind. This matches what `routing` does when it
+    // moves an outgoing request from a canister's output queue into a stream.
+    let request = ic_test_utilities_types::messages::RequestBuilder::default()
+        .sender(canister.canister_id())
+        .receiver(canister_test_id(999))
+        .build();
+    Arc::make_mut(&mut canister)
+        .push_output_request(Arc::new(request), UNIX_EPOCH)
+        .unwrap();
+    // Drain the output queue to leave only the reservation behind.
+    let _ = Arc::make_mut(&mut canister).output_into_iter().count();
+    canister
 }
 
 #[test]
@@ -548,6 +569,53 @@ fn memory_aggregators_combine_hot_and_cold() {
     assert_eq!(mt.best_effort_messages, expected_best_effort);
     assert_eq!(mt.wasm_custom_sections, expected_wasm_sections);
     assert_eq!(mt.canister_history, expected_history);
+}
+
+/// A cold canister holding a guaranteed-response slot reservation must still
+/// contribute its reservation memory to
+/// `guaranteed_response_message_memory_taken` and `memory_taken`. Otherwise
+/// promoting that canister to `hot` (e.g. on the next `get_mut`) would make
+/// the subnet-wide aggregate jump up out of nowhere, breaking conservation
+/// invariants in downstream code (e.g. the stream handler).
+#[test]
+fn cold_canister_with_guaranteed_response_reservation_is_aggregated() {
+    let canister = cold_canister_with_guaranteed_response_reservation(1);
+    // Sanity: the test fixture is what it claims to be.
+    assert!(canister.is_cold(), "fixture is not cold");
+    let canister_guaranteed = canister
+        .system_state
+        .guaranteed_response_message_memory_usage();
+    assert!(
+        canister_guaranteed > NumBytes::new(0),
+        "fixture has no guaranteed-response reservation",
+    );
+
+    let mut states = CanisterStates::default();
+    states.insert(Arc::clone(&canister));
+    assert_eq!(states.hot.len(), 0);
+    assert_eq!(states.cold.len(), 1);
+
+    // The canister sits in `cold` but contributes a non-zero amount to both
+    // `guaranteed_response_message_memory_taken` and `memory_taken`.
+    assert_eq!(
+        states.guaranteed_response_message_memory_taken(),
+        canister_guaranteed,
+    );
+    assert_eq!(
+        states.memory_taken().guaranteed_response_messages,
+        canister_guaranteed,
+    );
+
+    // Promoting the canister to `hot` (e.g. via `get_mut`) must not change the
+    // aggregate.
+    let _ = states.get_mut(&canister.canister_id());
+    assert_eq!(states.hot.len(), 1);
+    assert_eq!(states.cold.len(), 0);
+    assert_eq!(
+        states.guaranteed_response_message_memory_taken(),
+        canister_guaranteed,
+        "aggregate must be conserved across hot/cold promotion",
+    );
 }
 
 #[test]
