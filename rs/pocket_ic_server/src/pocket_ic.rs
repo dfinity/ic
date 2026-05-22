@@ -119,9 +119,9 @@ use ic_types::{
     CanisterId, Height, NumInstructions, PrincipalId, RegistryVersion, SnapshotId, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     canister_http::{
-        CanisterHttpReject, CanisterHttpRequest as AdapterCanisterHttpRequest,
-        CanisterHttpRequestId, CanisterHttpResponse as AdapterCanisterHttpResponse,
-        CanisterHttpResponseContent,
+        CanisterHttpPaymentReceipt, CanisterHttpReject,
+        CanisterHttpRequest as AdapterCanisterHttpRequest, CanisterHttpRequestId,
+        CanisterHttpResponse as AdapterCanisterHttpResponse, CanisterHttpResponseContent,
     },
     crypto::{BasicSig, BasicSigOf, CryptoResult, Signable, threshold_sig::IcRootOfTrust},
     malicious_flags::MaliciousFlags,
@@ -456,7 +456,7 @@ pub(crate) type CanisterHttpClient = Arc<
         Box<
             dyn NonBlockingChannel<
                     AdapterCanisterHttpRequest,
-                    Response = AdapterCanisterHttpResponse,
+                    Response = (AdapterCanisterHttpResponse, CanisterHttpPaymentReceipt),
                 > + Send,
         >,
     >,
@@ -3596,7 +3596,7 @@ impl Operation for ProcessCanisterHttpInternal {
                     Err(_) => {
                         break;
                     }
-                    Ok(response) => {
+                    Ok((response, _payment_receipt)) => {
                         canister_http.pending.remove(&response.id);
                         if let Some(context) = sm.canister_http_request_contexts().get(&response.id)
                         {
@@ -3763,7 +3763,7 @@ fn process_mock_canister_https_response(
                     socks_proxy_addrs: vec![],
                 })
                 .unwrap();
-            let response = loop {
+            let (response, _payment_receipt) = loop {
                 match client.try_receive() {
                     Err(_) => std::thread::sleep(Duration::from_millis(10)),
                     Ok(r) => {

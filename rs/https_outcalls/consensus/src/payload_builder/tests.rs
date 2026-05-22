@@ -45,10 +45,10 @@ use ic_types::{
     },
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL, CanisterHttpMethod,
-        CanisterHttpReject, CanisterHttpRequestContext, CanisterHttpResponse,
-        CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
-        CanisterHttpResponseMetadata, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
-        Replication,
+        CanisterHttpPaymentReceipt, CanisterHttpReject, CanisterHttpRequestContext,
+        CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseContent,
+        CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
+        CanisterHttpResponseWithConsensus, Replication,
     },
     consensus::get_faults_tolerated,
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed, crypto_hash},
@@ -1050,11 +1050,7 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
         let (response, metadata) = test_response_and_metadata(callback_id.get());
         let mut proof = response_and_metadata_to_proof(&response, &metadata);
         // The proof must contain exactly ONE signature, from the DELEGATED node.
-        proof
-            .proof
-            .signature
-            .signatures_map
-            .insert(delegated_node_id, BasicSigOf::new(BasicSig(vec![])));
+        add_signer_to_proof(&mut proof, delegated_node_id);
 
         let payload = CanisterHttpPayload {
             responses: vec![proof],
@@ -1105,10 +1101,8 @@ fn validate_payload_fails_for_non_replicated_response_with_wrong_signer() {
         let (response, metadata) = test_response_and_metadata(callback_id.get());
         let mut proof = response_and_metadata_to_proof(&response, &metadata);
 
-        proof.proof.signature.signatures_map.insert(
-            wrong_signer_node_id, // The illegal signature
-            BasicSigOf::new(BasicSig(vec![])),
-        );
+        // The illegal signature from a non-member node.
+        add_signer_to_proof(&mut proof, wrong_signer_node_id);
 
         let payload = CanisterHttpPayload {
             responses: vec![proof],
@@ -1251,11 +1245,7 @@ fn validate_payload_fails_when_non_replicated_proof_is_for_fully_replicated_requ
         let mut proof = response_and_metadata_to_proof(&response, &metadata);
 
         // The proof only contains one signature.
-        proof
-            .proof
-            .signature
-            .signatures_map
-            .insert(signer_node_id, BasicSigOf::new(BasicSig(vec![])));
+        add_signer_to_proof(&mut proof, signer_node_id);
 
         let payload = CanisterHttpPayload {
             responses: vec![proof],
@@ -1331,11 +1321,7 @@ fn validate_payload_fails_for_duplicate_non_replicated_response() {
         // 3. Craft a valid proof for the NonReplicated response.
         let (response, metadata) = test_response_and_metadata(duplicate_callback_id.get());
         let mut proof = response_and_metadata_to_proof(&response, &metadata);
-        proof
-            .proof
-            .signature
-            .signatures_map
-            .insert(delegated_node_id, BasicSigOf::new(BasicSig(vec![])));
+        add_signer_to_proof(&mut proof, delegated_node_id);
 
         // 4. Create a payload that includes this same proof twice.
         let payload = CanisterHttpPayload {
@@ -1399,6 +1385,7 @@ fn test_response_and_metadata_with_content(
         is_reject: response.content.is_reject(),
         registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
+        payment_receipts: BTreeMap::new(),
     };
     (response, metadata)
 }
@@ -1475,16 +1462,30 @@ pub(crate) fn metadata_to_share_with_signature(
     metadata: &CanisterHttpResponseMetadata,
     signature: Vec<u8>,
 ) -> CanisterHttpResponseShare {
+    let signer = node_test_id(from_node);
     Signed {
-        content: metadata.clone(),
+        // Per the share-shape invariant, the share carries exactly one
+        // payment receipt keyed by the signer. Tests use a default
+        // (zero-refund) receipt; that's enough to make the share/proof
+        // pipeline work end-to-end.
+        content: CanisterHttpResponseMetadata::for_signer(
+            metadata.clone(),
+            signer,
+            CanisterHttpPaymentReceipt::default(),
+        ),
         signature: BasicSignature {
             signature: BasicSigOf::new(BasicSig(signature)),
-            signer: node_test_id(from_node),
+            signer,
         },
     }
 }
 
-/// Creates a [`CanisterHttpResponseWithConsensus`] from a [`CanisterHttpResponse`] and [`CanisterHttpResponseMetadata`]
+/// Creates a [`CanisterHttpResponseWithConsensus`] from a [`CanisterHttpResponse`] and [`CanisterHttpResponseMetadata`].
+///
+/// The proof's metadata is the given metadata with `payment_receipts`
+/// stripped; tests then insert signers (and per-signer receipts) into
+/// both the signature batch and the `payment_receipts` map via
+/// [`add_signer_to_proof`].
 pub(crate) fn response_and_metadata_to_proof(
     response: &CanisterHttpResponse,
     metadata: &CanisterHttpResponseMetadata,
@@ -1492,12 +1493,27 @@ pub(crate) fn response_and_metadata_to_proof(
     CanisterHttpResponseWithConsensus {
         content: response.clone(),
         proof: Signed {
-            content: metadata.clone(),
+            content: metadata.without_receipts(),
             signature: BasicSignatureBatch {
                 signatures_map: BTreeMap::new(),
             },
         },
     }
+}
+
+/// Inserts a fake signature and a default payment receipt
+/// for `signer` into an aggregated proof.
+pub(crate) fn add_signer_to_proof(proof: &mut CanisterHttpResponseWithConsensus, signer: NodeId) {
+    proof
+        .proof
+        .signature
+        .signatures_map
+        .insert(signer, BasicSigOf::new(BasicSig(vec![])));
+    proof
+        .proof
+        .content
+        .payment_receipts
+        .insert(signer, CanisterHttpPaymentReceipt::default());
 }
 
 /// Creates a vector of [`CanisterHttpResponseShare`]s by calling [`metadata_to_share`]
@@ -2410,11 +2426,7 @@ fn flexible_response_in_regular_section_rejected() {
     setup_test_with_flexible_context(4, callback_id, committee, 2, 4, |payload_builder, _pool| {
         let (response, metadata) = test_response_and_metadata(callback_id.get());
         let mut proof = response_and_metadata_to_proof(&response, &metadata);
-        proof
-            .proof
-            .signature
-            .signatures_map
-            .insert(node_test_id(0), BasicSigOf::new(BasicSig(vec![])));
+        add_signer_to_proof(&mut proof, node_test_id(0));
 
         let payload = CanisterHttpPayload {
             responses: vec![proof],
@@ -4635,6 +4647,7 @@ fn metadata_share_with_content_size(
         is_reject: false,
         registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
+        payment_receipts: BTreeMap::new(),
     };
     metadata_to_share(signer_node, &metadata)
 }
@@ -4647,6 +4660,7 @@ fn reject_metadata_share(callback_id: u64, signer_node: u64) -> CanisterHttpResp
         is_reject: true,
         registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
+        payment_receipts: BTreeMap::new(),
     };
     metadata_to_share(signer_node, &metadata)
 }

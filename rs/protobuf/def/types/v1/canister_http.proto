@@ -2,8 +2,23 @@ syntax = "proto3";
 
 package types.v1;
 
+import "state/queues/v1/queues.proto";
 import "types/v1/errors.proto";
 import "types/v1/types.proto";
+
+// A receipt describing the per-replica cycles accounting outcome for a
+// single canister HTTP outcall.
+message CanisterHttpPaymentReceipt {
+  state.queues.v1.Cycles refund = 1;
+}
+
+// One entry of the per-signer payment receipts carried on the response
+// metadata. The signer here is the `NodeId` of the replica producing the
+// receipt.
+message CanisterHttpPaymentReceiptEntry {
+  bytes signer = 1;
+  CanisterHttpPaymentReceipt receipt = 2;
+}
 
 message HttpHeader {
   string name = 1;
@@ -23,6 +38,11 @@ message CanisterHttpResponse {
   CanisterHttpResponseContent content = 3;
 }
 
+// Canister HTTP response metadata.
+//
+// In a per-replica share, `payment_receipts` carries exactly one entry —
+// the share's signer's receipt. In an aggregated proof, it carries one
+// entry per signer in the proof's signature batch.
 message CanisterHttpResponseMetadata {
   uint64 id = 1;
   reserved 2;
@@ -31,6 +51,7 @@ message CanisterHttpResponseMetadata {
   string replica_version = 5;
   uint32 content_size = 6;
   bool is_reject = 7;
+  repeated CanisterHttpPaymentReceiptEntry payment_receipts = 8;
 }
 
 message CanisterHttpResponseContent {
@@ -64,6 +85,7 @@ message CanisterHttpResponseWithConsensus {
   repeated CanisterHttpResponseSignature signatures = 7;
   uint32 content_size = 9;
   bool is_reject = 10;
+  repeated CanisterHttpPaymentReceiptEntry payment_receipts = 11;
 }
 
 message CanisterHttpShare {

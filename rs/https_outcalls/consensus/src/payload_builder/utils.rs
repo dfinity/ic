@@ -11,9 +11,9 @@ use ic_types::{
         CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
         CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
     },
-    crypto::crypto_hash,
+    crypto::{Signed, crypto_hash},
     messages::CallbackId,
-    signature::BasicSignature,
+    signature::{BasicSignature, BasicSignatureBatch},
 };
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
@@ -71,6 +71,63 @@ pub(crate) fn check_response_consistency(
     }
 
     Ok(())
+}
+
+/// Verifies every per-signer basic signature in the aggregated proof.
+///
+/// Each signer is expected to have signed a [`CanisterHttpResponseMetadata`]
+/// where `payment_receipts` is restricted to its own entry (see
+/// [`CanisterHttpResponseMetadata::with_single_receipt`]). The proof is
+/// considered valid only if **all** of the following hold:
+///   - `payment_receipts` and the signature batch have the same number of
+///     entries.
+///   - Every signer in the batch has a corresponding entry in
+///     `payment_receipts` (this is enforced by `with_single_receipt`
+///     returning `None`). Combined with the equal-size check, this implies
+///     the two key sets are identical, so no "phantom" receipts can sneak
+///     in without an authorizing signature.
+///   - Each individual basic signature verifies against the reconstructed
+///     per-signer message.
+pub(crate) fn verify_aggregate_proof(
+    proof: &Signed<CanisterHttpResponseMetadata, BasicSignatureBatch<CanisterHttpResponseMetadata>>,
+    consensus_registry_version: RegistryVersion,
+    crypto: &dyn ConsensusCrypto,
+) -> Result<(), InvalidCanisterHttpPayloadReason> {
+    let aggregate = &proof.content;
+    let signatures = &proof.signature.signatures_map;
+    if signatures.len() != aggregate.payment_receipts.len() {
+        return Err(malformed_signature(
+            "payment_receipts map and signatures map must have the same number of entries",
+        ));
+    }
+    for (signer, sig) in signatures {
+        let content = aggregate.with_single_receipt(*signer).ok_or_else(|| {
+            malformed_signature(
+                "signature in aggregated proof has no corresponding payment receipt",
+            )
+        })?;
+        let signed_share = Signed {
+            content,
+            signature: BasicSignature {
+                signature: sig.clone(),
+                signer: *signer,
+            },
+        };
+        crypto
+            .verify(&signed_share, consensus_registry_version)
+            .map_err(|err| InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)))?;
+    }
+    Ok(())
+}
+
+fn malformed_signature(message: &str) -> InvalidCanisterHttpPayloadReason {
+    InvalidCanisterHttpPayloadReason::SignatureError(Box::new(
+        ic_types::crypto::CryptoError::MalformedSignature {
+            algorithm: ic_types::crypto::AlgorithmId::Ed25519,
+            sig_bytes: vec![],
+            internal_error: message.to_string(),
+        },
+    ))
 }
 
 /// Validates a single [`FlexibleCanisterHttpResponseWithProof`].
@@ -222,6 +279,14 @@ pub(crate) fn grouped_shares_meet_divergence_criteria(
     }
 }
 
+/// Groups shares by callback id and then by their shared metadata.
+///
+/// Shares from different replicas for the same outcall agree on every
+/// field except `payment_receipts` (which is per-replica). We use the
+/// "stripped" metadata returned by
+/// [`CanisterHttpResponseMetadata::without_receipts`] as the inner key,
+/// so each group holds all shares that voted for the same response and
+/// differ only in their per-replica receipt entry.
 pub(crate) fn group_shares_by_callback_id<
     'a,
     Shares: Iterator<Item = &'a CanisterHttpResponseShare>,
@@ -236,7 +301,7 @@ pub(crate) fn group_shares_by_callback_id<
     for share in shares {
         map.entry(share.content.id)
             .or_default()
-            .entry(share.content.clone())
+            .entry(share.content.without_receipts())
             .or_default()
             .push(share);
     }
@@ -245,9 +310,11 @@ pub(crate) fn group_shares_by_callback_id<
 
 /// Finds a fully-replicated HTTP outcall response ready for consensus.
 ///
-/// Iterates over response shares grouped by metadata, looking for one where
-/// at least `threshold` distinct replicas produced the same response hash.
-/// If found, returns the metadata, collected signatures, and response body.
+/// Iterates over response shares grouped by metadata (with `payment_receipts`
+/// stripped), looking for one where at least `threshold` distinct replicas
+/// produced the same response hash. If found, returns the aggregated
+/// metadata (the shared metadata with a per-signer `payment_receipts` map
+/// merged in), the collected signatures, and the response body.
 pub(crate) fn find_fully_replicated_response(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     threshold: usize,
@@ -264,7 +331,7 @@ pub(crate) fn find_fully_replicated_response(
                 .get_response_content_by_hash(&metadata.content_hash)
                 .map(|content| {
                     (
-                        metadata.clone(),
+                        aggregate_metadata_from_shares(metadata.clone(), shares),
                         shares.iter().map(|share| share.signature.clone()).collect(),
                         content,
                     )
@@ -278,7 +345,8 @@ pub(crate) fn find_fully_replicated_response(
 /// Finds a non-replicated HTTP outcall response from the designated node.
 ///
 /// Looks through the grouped shares for one signed by `designated_node_id`.
-/// If found, returns the metadata, the single signature, and response body.
+/// If found, returns the aggregated metadata (carrying only the designated
+/// node's payment receipt), the single signature, and the response body.
 pub(crate) fn find_non_replicated_response(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     designated_node_id: &NodeId,
@@ -297,13 +365,39 @@ pub(crate) fn find_non_replicated_response(
                     .get_response_content_by_hash(&metadata.content_hash)
                     .map(|content| {
                         (
-                            metadata.clone(),
+                            aggregate_metadata_from_shares(metadata.clone(), &[correct_share]),
                             BTreeSet::from([correct_share.signature.clone()]),
                             content,
                         )
                     })
             })
     })
+}
+
+/// Builds the aggregated metadata from a slice of contributing shares.
+///
+/// Starts from `shared` (which is expected to already have an empty
+/// `payment_receipts` — typically obtained via [`group_shares_by_callback_id`])
+/// and merges in each contributing share's per-signer receipt. In practice
+/// the upstream code only feeds at most one share per signer here.
+pub(crate) fn aggregate_metadata_from_shares(
+    shared: CanisterHttpResponseMetadata,
+    shares: &[&CanisterHttpResponseShare],
+) -> CanisterHttpResponseMetadata {
+    let payment_receipts = shares
+        .iter()
+        .flat_map(|share| {
+            share
+                .content
+                .payment_receipts
+                .iter()
+                .map(|(signer, receipt)| (*signer, receipt.clone()))
+        })
+        .collect();
+    CanisterHttpResponseMetadata {
+        payment_receipts,
+        ..shared
+    }
 }
 
 /// Estimates the byte size of a [`CanisterHttpResponseWithConsensus`] before

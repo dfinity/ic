@@ -240,6 +240,7 @@ mod tests {
         signature::BasicSignature,
         time::UNIX_EPOCH,
     };
+    use std::collections::BTreeMap;
 
     use super::*;
 
@@ -266,6 +267,7 @@ mod tests {
                 is_reject: false,
                 registry_version: RegistryVersion::from(id),
                 replica_version: ReplicaVersion::default(),
+                payment_receipts: BTreeMap::new(),
             },
             signature: BasicSignature::fake(node_test_id(id)),
         }

@@ -67,7 +67,7 @@ use rand::RngCore;
 use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     convert::{TryFrom, TryInto},
     mem::size_of,
     time::Duration,
@@ -1007,6 +1007,23 @@ impl CountBytes for CanisterHttpResponseDivergence {
     }
 }
 
+/// A per-replica receipt describing the cycles accounting outcome for a
+/// single canister HTTP outcall.
+#[derive(Clone, Default, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpPaymentReceipt {
+    /// The amount of cycles, out of the per-replica allowance, that the
+    /// replica did not use and wishes to refund to the caller.
+    pub refund: Cycles,
+}
+
+impl CountBytes for CanisterHttpPaymentReceipt {
+    fn count_bytes(&self) -> usize {
+        let Self { refund } = self;
+        size_of_val(refund)
+    }
+}
+
 /// Metadata about some [`CanisterHttpResponseContent`].
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
@@ -1017,6 +1034,9 @@ pub struct CanisterHttpResponseMetadata {
     pub is_reject: bool,
     pub registry_version: RegistryVersion,
     pub replica_version: ReplicaVersion,
+    /// Per-signer payment receipts. Holds one receipt in case of a per-replica share,
+    /// and one receipt per signer in case of an aggregated proof.
+    pub payment_receipts: BTreeMap<NodeId, CanisterHttpPaymentReceipt>,
 }
 
 impl CountBytes for CanisterHttpResponseMetadata {
@@ -1028,6 +1048,7 @@ impl CountBytes for CanisterHttpResponseMetadata {
             is_reject,
             registry_version,
             replica_version,
+            payment_receipts,
         } = self;
         size_of_val(id)
             + content_hash.get_ref().0.len()
@@ -1035,6 +1056,56 @@ impl CountBytes for CanisterHttpResponseMetadata {
             + size_of_val(is_reject)
             + size_of_val(registry_version)
             + replica_version.as_ref().len()
+            + payment_receipts
+                .iter()
+                .map(|(_, receipt)| std::mem::size_of::<NodeId>() + receipt.count_bytes())
+                .sum::<usize>()
+    }
+}
+
+impl CanisterHttpResponseMetadata {
+    /// Returns a copy of this metadata with the `payment_receipts` map
+    /// cleared. Used as a grouping key when collecting shares from multiple
+    /// replicas: shares from the same outcall agree on everything except
+    /// their `payment_receipts` map.
+    pub fn without_receipts(&self) -> Self {
+        Self {
+            payment_receipts: BTreeMap::new(),
+            ..self.clone()
+        }
+    }
+
+    /// Returns a copy of this metadata where `payment_receipts` is
+    /// restricted to `signer`'s entry, or `None` if `signer` has no entry
+    /// in `payment_receipts`.
+    ///
+    /// Validators use this to reconstruct exactly what a single replica
+    /// signed when verifying a per-signer basic signature out of an
+    /// aggregated proof. Returning `None` when no receipt is present makes
+    /// it impossible to silently accept a signature whose signer has no
+    /// corresponding receipt — see the verifier in
+    /// `payload_builder::utils::verify_aggregate_proof`.
+    pub fn with_single_receipt(&self, signer: NodeId) -> Option<Self> {
+        let receipt = self.payment_receipts.get(&signer)?.clone();
+        Some(Self {
+            payment_receipts: BTreeMap::from([(signer, receipt)]),
+            ..self.clone()
+        })
+    }
+
+    /// Builds a per-replica share metadata: takes the shared metadata
+    /// fields from `shared` and sets `payment_receipts` to a single-entry
+    /// map that binds `signer` to its own `receipt`.
+    ///
+    /// This is the one and only blessed way to construct a share's
+    /// metadata in the pool manager / tests: it makes the share-shape
+    /// invariant ("exactly one receipt, keyed by the signer") explicit at
+    /// every construction site.
+    pub fn for_signer(shared: Self, signer: NodeId, receipt: CanisterHttpPaymentReceipt) -> Self {
+        Self {
+            payment_receipts: BTreeMap::from([(signer, receipt)]),
+            ..shared.without_receipts()
+        }
     }
 }
 
@@ -1073,7 +1144,14 @@ impl PbArtifact for CanisterHttpResponseArtifact {
     type PbMessageError = ProxyDecodeError;
 }
 
-/// A signature of of [`CanisterHttpResponseMetadata`].
+/// An aggregated proof for a canister HTTP response with consensus.
+///
+/// The proof's `content` is a [`CanisterHttpResponseMetadata`] whose
+/// `payment_receipts` map contains every contributing signer's receipt.
+/// Each signature in the batch is verified against the metadata that the
+/// corresponding signer actually signed: the shared metadata combined with
+/// only that signer's entry in `payment_receipts` —
+/// see [`CanisterHttpResponseMetadata::with_single_receipt`].
 pub type CanisterHttpResponseProof =
     Signed<CanisterHttpResponseMetadata, BasicSignatureBatch<CanisterHttpResponseMetadata>>;
 

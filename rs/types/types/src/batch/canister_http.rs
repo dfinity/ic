@@ -1,9 +1,10 @@
 use crate::{
     CanisterId, CountBytes, ReplicaVersion,
     canister_http::{
-        CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponse,
-        CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
-        CanisterHttpResponseMetadata, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
+        CanisterHttpPaymentReceipt, CanisterHttpReject, CanisterHttpRequestId,
+        CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseContent,
+        CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
+        CanisterHttpResponseWithConsensus,
     },
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed},
     messages::CallbackId,
@@ -181,6 +182,49 @@ impl CanisterHttpPayload {
     }
 }
 
+impl From<CanisterHttpPaymentReceipt> for pb::CanisterHttpPaymentReceipt {
+    fn from(receipt: CanisterHttpPaymentReceipt) -> Self {
+        pb::CanisterHttpPaymentReceipt {
+            refund: Some(receipt.refund.into()),
+        }
+    }
+}
+
+impl TryFrom<pb::CanisterHttpPaymentReceipt> for CanisterHttpPaymentReceipt {
+    type Error = ProxyDecodeError;
+    fn try_from(receipt: pb::CanisterHttpPaymentReceipt) -> Result<Self, Self::Error> {
+        Ok(CanisterHttpPaymentReceipt {
+            refund: try_from_option_field(receipt.refund, "CanisterHttpPaymentReceipt::refund")?,
+        })
+    }
+}
+
+fn payment_receipts_to_pb(
+    receipts: BTreeMap<NodeId, CanisterHttpPaymentReceipt>,
+) -> Vec<pb::CanisterHttpPaymentReceiptEntry> {
+    receipts
+        .into_iter()
+        .map(|(signer, receipt)| pb::CanisterHttpPaymentReceiptEntry {
+            signer: signer.get().into_vec(),
+            receipt: Some(receipt.into()),
+        })
+        .collect()
+}
+
+fn payment_receipts_from_pb(
+    entries: Vec<pb::CanisterHttpPaymentReceiptEntry>,
+) -> Result<BTreeMap<NodeId, CanisterHttpPaymentReceipt>, ProxyDecodeError> {
+    entries
+        .into_iter()
+        .map(|entry| {
+            let signer = NodeId::from(PrincipalId::try_from(entry.signer)?);
+            let receipt =
+                try_from_option_field(entry.receipt, "CanisterHttpPaymentReceiptEntry::receipt")?;
+            Ok((signer, receipt))
+        })
+        .collect()
+}
+
 impl From<CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithConsensus {
     fn from(payload: CanisterHttpResponseWithConsensus) -> Self {
         pb::CanisterHttpResponseWithConsensus {
@@ -206,6 +250,7 @@ impl From<CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithCon
                 .collect(),
             content_size: payload.proof.content.content_size,
             is_reject: payload.proof.content.is_reject,
+            payment_receipts: payment_receipts_to_pb(payload.proof.content.payment_receipts),
         }
     }
 }
@@ -251,6 +296,7 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
                     registry_version: RegistryVersion::new(payload.registry_version),
                     replica_version: ReplicaVersion::try_from(payload.replica_version)
                         .map_err(|err| ProxyDecodeError::ReplicaVersionParseError(Box::new(err)))?,
+                    payment_receipts: payment_receipts_from_pb(payload.payment_receipts)?,
                 },
                 signature: BasicSignatureBatch {
                     signatures_map: payload
@@ -344,6 +390,7 @@ impl From<CanisterHttpResponseShare> for pb::CanisterHttpShare {
                 replica_version: share.content.replica_version.into(),
                 content_size: share.content.content_size,
                 is_reject: share.content.is_reject,
+                payment_receipts: payment_receipts_to_pb(share.content.payment_receipts),
             }),
             signature: Some(pb::CanisterHttpResponseSignature {
                 signer: share.signature.signer.get().into_vec(),
@@ -364,6 +411,7 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
         let registry_version = RegistryVersion::new(metadata.registry_version);
         let replica_version = ReplicaVersion::try_from(metadata.replica_version)
             .map_err(|err| ProxyDecodeError::ReplicaVersionParseError(Box::new(err)))?;
+        let payment_receipts = payment_receipts_from_pb(metadata.payment_receipts)?;
         let signature = share
             .signature
             .ok_or(ProxyDecodeError::MissingField("share.signature"))?;
@@ -375,6 +423,7 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
                 is_reject: metadata.is_reject,
                 registry_version,
                 replica_version,
+                payment_receipts,
             },
             signature: BasicSignature {
                 signer: NodeId::from(PrincipalId::try_from(signature.signer)?),
@@ -593,6 +642,8 @@ mod tests {
     /// works correctly, both with and without a full response.
     #[test]
     fn canister_http_response_artifact_conversion() {
+        use ic_types_cycles::Cycles;
+        let signer = NodeId::from(PrincipalId::new_node_test_id(2));
         let share = Signed {
             content: CanisterHttpResponseMetadata {
                 id: CanisterHttpRequestId::new(2),
@@ -603,9 +654,15 @@ mod tests {
                 is_reject: false,
                 registry_version: RegistryVersion::new(2),
                 replica_version: ReplicaVersion::default(),
+                payment_receipts: BTreeMap::from([(
+                    signer,
+                    CanisterHttpPaymentReceipt {
+                        refund: Cycles::from(42),
+                    },
+                )]),
             },
             signature: BasicSignature {
-                signer: NodeId::from(PrincipalId::new_node_test_id(2)),
+                signer,
                 signature: BasicSigOf::new(BasicSig(vec![4, 5, 6, 7])),
             },
         };

@@ -1074,6 +1074,7 @@ mod crypto_hash_stability {
             is_reject: false,
             registry_version: RegistryVersion::from(1),
             replica_version: ReplicaVersion::default(),
+            payment_receipts: BTreeMap::new(),
         };
         let hash = crypto_hash(&data);
         assert_eq!(
@@ -1093,6 +1094,7 @@ mod crypto_hash_stability {
             is_reject: false,
             registry_version: RegistryVersion::from(1),
             replica_version: ReplicaVersion::default(),
+            payment_receipts: BTreeMap::new(),
         };
         let data = Signed {
             content: metadata,

@@ -134,7 +134,14 @@ impl CanisterHttpPayloadBuilderImpl {
             .map(|features| features.unwrap_or_default().http_requests)
     }
 
-    /// Aggregates the signature and creates the [`CanisterHttpResponseWithConsensus`] message.
+    /// Aggregates the signature and creates the
+    /// [`CanisterHttpResponseWithConsensus`] message.
+    ///
+    /// `metadata` is the unified [`CanisterHttpResponseMetadata`] with
+    /// `payment_receipts` containing every contributing signer's receipt.
+    /// Each signature in the resulting batch is verified by reconstructing
+    /// the per-signer metadata from the aggregate — see
+    /// `verify_aggregate_proof`.
     fn aggregate(
         &self,
         registry_version: RegistryVersion,
@@ -557,13 +564,34 @@ impl CanisterHttpPayloadBuilderImpl {
                 });
             }
 
-            self.crypto
-                .verify_aggregate(&response.proof, consensus_registry_version)
-                .map_err(|err| {
-                    CanisterHttpPayloadValidationError::InvalidArtifact(
-                        InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
-                    )
-                })?;
+            // The aggregated metadata carries a per-signer map of payment
+            // receipts. Each signature in the batch is verified
+            // individually against the metadata the corresponding signer
+            // signed, i.e. the shared metadata combined with that
+            // signer's receipt.
+            utils::verify_aggregate_proof(
+                &response.proof,
+                consensus_registry_version,
+                self.crypto.as_ref(),
+            )
+            .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+
+            // Additionally enforce the per-replica refund allowance from
+            // the request context: no signer may claim a refund larger
+            // than the allowance set in `refund_status`.
+            for receipt in response.proof.content.payment_receipts.values() {
+                if receipt.refund > request_context.refund_status.per_replica_allowance {
+                    return invalid_artifact(InvalidCanisterHttpPayloadReason::SignatureError(
+                        Box::new(ic_types::crypto::CryptoError::MalformedSignature {
+                            algorithm: ic_types::crypto::AlgorithmId::Ed25519,
+                            sig_bytes: vec![],
+                            internal_error:
+                                "Refund in payment receipt is greater than per-replica allowance"
+                                    .to_string(),
+                        }),
+                    ));
+                }
+            }
         }
 
         let faults_tolerated = match self.membership.get_canister_http_committee(height) {
@@ -597,6 +625,29 @@ impl CanisterHttpPayloadBuilderImpl {
                             InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
                         )
                     })?;
+                // Enforce per-replica refund allowance for divergence
+                // shares. While a divergence proof does not deliver a
+                // refund directly, malformed receipts should still be
+                // rejected to avoid leaking budget through the divergence
+                // codepath in any future extensions.
+                if let Some(ctx) = http_contexts.get(&share.content.id) {
+                    if share
+                        .content
+                        .payment_receipts
+                        .values()
+                        .any(|r| r.refund > ctx.refund_status.per_replica_allowance)
+                    {
+                        return invalid_artifact(InvalidCanisterHttpPayloadReason::SignatureError(
+                            Box::new(ic_types::crypto::CryptoError::MalformedSignature {
+                                algorithm: ic_types::crypto::AlgorithmId::Ed25519,
+                                sig_bytes: vec![],
+                                internal_error:
+                                    "Refund in divergence share exceeds per-replica allowance"
+                                        .to_string(),
+                            }),
+                        ));
+                    }
+                }
             }
 
             let grouped_shares = group_shares_by_callback_id(response.shares.iter());
@@ -689,6 +740,26 @@ impl CanisterHttpPayloadBuilderImpl {
                             callback_id,
                         },
                     );
+                }
+
+                // Enforce the per-replica refund allowance: a flexible
+                // response carries a single share, and any receipt that
+                // share claims must be at most the per-replica allowance.
+                if response_with_proof
+                    .proof
+                    .content
+                    .payment_receipts
+                    .values()
+                    .any(|r| r.refund > context.refund_status.per_replica_allowance)
+                {
+                    return invalid_artifact(InvalidCanisterHttpPayloadReason::SignatureError(
+                        Box::new(ic_types::crypto::CryptoError::MalformedSignature {
+                            algorithm: ic_types::crypto::AlgorithmId::Ed25519,
+                            sig_bytes: vec![],
+                            internal_error:
+                                "Refund in flexible share exceeds per-replica allowance".to_string(),
+                        }),
+                    ));
                 }
             }
         }

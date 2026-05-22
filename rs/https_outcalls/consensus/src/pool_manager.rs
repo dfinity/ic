@@ -27,13 +27,17 @@ use ic_types::{
 use ic_utils::str::StrEllipsize;
 use std::{
     cell::RefCell,
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     convert::TryInto,
     sync::{Arc, Mutex},
 };
 
-pub type CanisterHttpAdapterClient =
-    Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
+pub type CanisterHttpAdapterClient = Box<
+    dyn NonBlockingChannel<
+            CanisterHttpRequest,
+            Response = (CanisterHttpResponse, CanisterHttpPaymentReceipt),
+        > + Send,
+>;
 
 /// [`CanisterHttpPoolManagerImpl`] implements the pool and state monitoring
 /// functionality that is necessary to ensure that http requests are made and
@@ -340,7 +344,7 @@ impl CanisterHttpPoolManagerImpl {
         loop {
             match self.http_adapter_shim.lock().unwrap().try_receive() {
                 Err(TryReceiveError::Empty) => break,
-                Ok(mut response) => {
+                Ok((mut response, payment_receipt)) => {
                     // Drop the response if its context is no longer present in the replicated state
                     // (e.g. the request has timed out or has already been answered by enough other nodes).
                     let Some(context) = active_contexts.get(&response.id) else {
@@ -383,6 +387,12 @@ impl CanisterHttpPoolManagerImpl {
                         content_size: response.content.count_bytes() as u32,
                         is_reject: response.content.is_reject(),
                         replica_version: ReplicaVersion::default(),
+                        // A per-replica share carries exactly one entry,
+                        // mapping the local node id to its own receipt.
+                        payment_receipts: BTreeMap::from([(
+                            self.replica_config.node_id,
+                            payment_receipt,
+                        )]),
                     };
                     let signature = if let Ok(signature) = self
                         .crypto
@@ -491,6 +501,34 @@ impl CanisterHttpPoolManagerImpl {
                 let Some(context) = active_contexts.get(&share.content.id) else {
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
                 };
+
+                // Enforce the per-replica share shape: `payment_receipts`
+                // must contain at most one entry, and if present its key
+                // must equal the share's signer. Anything else is a
+                // protocol-violating share.
+                let signer = share.signature.signer;
+                if share.content.payment_receipts.len() > 1
+                    || share.content.payment_receipts.keys().any(|s| *s != signer)
+                {
+                    return Some(CanisterHttpChangeAction::HandleInvalid(
+                        share.clone(),
+                        "Share payment_receipts must contain at most one entry keyed by the signer"
+                            .to_string(),
+                    ));
+                }
+
+                // Invalidate shares whose payment receipt claims to refund
+                // more than what a single replica is allowed to refund. An
+                // honest replica cannot legitimately refund more than its
+                // per-replica allowance.
+                if let Some(receipt) = share.content.payment_receipts.get(&signer)
+                    && receipt.refund > context.refund_status.per_replica_allowance
+                {
+                    return Some(CanisterHttpChangeAction::HandleInvalid(
+                        share.clone(),
+                        "Refund is greater than replica allowance".to_string(),
+                    ));
+                }
 
                 match &context.replication {
                     Replication::FullyReplicated => {
@@ -707,6 +745,7 @@ pub mod test {
         messages::CallbackId,
         time::UNIX_EPOCH,
     };
+    use ic_types_cycles::Cycles;
     use mockall::predicate::*;
     use mockall::*;
     use std::{collections::BTreeMap, str::FromStr};
@@ -716,10 +755,10 @@ pub mod test {
         }
 
         impl<Request> NonBlockingChannel<Request> for NonBlockingChannel<Request> {
-            type Response = CanisterHttpResponse;
+            type Response = (CanisterHttpResponse, CanisterHttpPaymentReceipt);
 
             fn send(&self, request: Request) -> Result<(), SendError<Request>>;
-            fn try_receive(&mut self) -> Result<CanisterHttpResponse, TryReceiveError>;
+            fn try_receive(&mut self) -> Result<(CanisterHttpResponse, CanisterHttpPaymentReceipt), TryReceiveError>;
         }
     }
 
@@ -817,6 +856,7 @@ pub mod test {
                         content_size: 0,
                         is_reject: false,
                         replica_version: ReplicaVersion::default(),
+                        payment_receipts: BTreeMap::new(),
                     };
 
                     let signature = crypto
@@ -914,6 +954,7 @@ pub mod test {
                     content_size: 0,
                     is_reject: false,
                     replica_version: ReplicaVersion::default(),
+                    payment_receipts: BTreeMap::new(),
                 };
 
                 let mut canister_http_pool =
@@ -1020,6 +1061,7 @@ pub mod test {
                     content_size: 0,
                     is_reject: false,
                     replica_version: ReplicaVersion::default(),
+                    payment_receipts: BTreeMap::new(),
                 };
 
                 let mut canister_http_pool =
@@ -1148,6 +1190,7 @@ pub mod test {
                     content_size: response.content.count_bytes() as u32,
                     is_reject: false,
                     replica_version: ReplicaVersion::default(),
+                    payment_receipts: BTreeMap::new(),
                 };
 
                 let signature = crypto
@@ -1345,6 +1388,7 @@ pub mod test {
                     content_size: response.content.count_bytes() as u32,
                     is_reject: false,
                     replica_version: ReplicaVersion::default(),
+                    payment_receipts: BTreeMap::new(),
                 };
                 let share = Signed {
                     content: response_metadata.clone(),
@@ -1443,6 +1487,7 @@ pub mod test {
                     content_size: response.content.count_bytes() as u32,
                     is_reject: false,
                     replica_version: ReplicaVersion::default(),
+                    payment_receipts: BTreeMap::new(),
                 };
 
                 let signature = crypto
@@ -1581,6 +1626,7 @@ pub mod test {
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
                         replica_version: ReplicaVersion::default(),
+                        payment_receipts: BTreeMap::new(),
                     };
                     let share = Signed {
                         content: response_metadata.clone(),
@@ -1647,6 +1693,7 @@ pub mod test {
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
                         replica_version: ReplicaVersion::default(),
+                        payment_receipts: BTreeMap::new(),
                     };
                     let share = Signed {
                         content: response_metadata.clone(),
@@ -1751,6 +1798,7 @@ pub mod test {
                     content_size: response.content.count_bytes() as u32,
                     is_reject: true,
                     replica_version: ReplicaVersion::default(),
+                    payment_receipts: BTreeMap::new(),
                 };
 
                 let share = Signed {
@@ -1842,7 +1890,12 @@ pub mod test {
                 shim_mock
                     .expect_try_receive()
                     .times(1)
-                    .returning(move || Ok(oversized_response.clone()))
+                    .returning(move || {
+                        Ok((
+                            oversized_response.clone(),
+                            CanisterHttpPaymentReceipt::default(),
+                        ))
+                    })
                     .in_sequence(&mut sequence);
                 shim_mock
                     .expect_try_receive()
@@ -1964,7 +2017,12 @@ pub mod test {
                 shim_mock
                     .expect_try_receive()
                     .times(1)
-                    .return_once(move || Ok(oversized_response.clone()));
+                    .return_once(move || {
+                        Ok((
+                            oversized_response.clone(),
+                            CanisterHttpPaymentReceipt::default(),
+                        ))
+                    });
                 shim_mock
                     .expect_try_receive()
                     .return_const(Err(TryReceiveError::Empty));
@@ -2083,6 +2141,7 @@ pub mod test {
                     content_size: dishonest_response.content.count_bytes() as u32,
                     is_reject: true,
                     replica_version: ReplicaVersion::default(),
+                    payment_receipts: BTreeMap::new(),
                 };
                 let share = Signed {
                     content: response_metadata.clone(),
@@ -2222,6 +2281,7 @@ pub mod test {
                     content_size: response.content.count_bytes() as u32,
                     is_reject: true,
                     replica_version: ReplicaVersion::default(),
+                    payment_receipts: BTreeMap::new(),
                 };
 
                 let share = Signed {
@@ -2300,6 +2360,7 @@ pub mod test {
                     content_size: 0,
                     is_reject: false,
                     replica_version: ReplicaVersion::default(),
+                    payment_receipts: BTreeMap::new(),
                 };
 
                 let signature = crypto
@@ -2388,7 +2449,12 @@ pub mod test {
                     shim_mock
                         .expect_try_receive()
                         .times(1)
-                        .returning(move || Ok(empty_canister_http_response(i)))
+                        .returning(move || {
+                            Ok((
+                                empty_canister_http_response(i),
+                                CanisterHttpPaymentReceipt::default(),
+                            ))
+                        })
                         .in_sequence(&mut sequence);
                 }
 
@@ -2467,7 +2533,12 @@ pub mod test {
                     shim_mock
                         .expect_try_receive()
                         .times(1)
-                        .returning(move || Ok(empty_canister_http_response(id.get())))
+                        .returning(move || {
+                            Ok((
+                                empty_canister_http_response(id.get()),
+                                CanisterHttpPaymentReceipt::default(),
+                            ))
+                        })
                         .in_sequence(&mut sequence);
                 }
                 shim_mock
@@ -2562,7 +2633,12 @@ pub mod test {
                 shim_mock
                     .expect_try_receive()
                     .times(1)
-                    .returning(move || Ok(empty_canister_http_response(callback_id.get())))
+                    .returning(move || {
+                        Ok((
+                            empty_canister_http_response(callback_id.get()),
+                            CanisterHttpPaymentReceipt::default(),
+                        ))
+                    })
                     .in_sequence(&mut sequence);
                 shim_mock
                     .expect_try_receive()
@@ -2686,6 +2762,7 @@ pub mod test {
                     content_size: 0,
                     is_reject: false,
                     replica_version: ReplicaVersion::default(),
+                    payment_receipts: BTreeMap::new(),
                 };
 
                 let signature = crypto
@@ -2850,6 +2927,7 @@ pub mod test {
                     content_size: response.content.count_bytes() as u32,
                     is_reject: false,
                     replica_version: ReplicaVersion::default(),
+                    payment_receipts: BTreeMap::new(),
                 };
                 let share = Signed {
                     content: response_metadata.clone(),
@@ -2949,6 +3027,7 @@ pub mod test {
                     content_size: response.content.count_bytes() as u32,
                     is_reject: false,
                     replica_version: ReplicaVersion::default(),
+                    payment_receipts: BTreeMap::new(),
                 };
 
                 let signature = crypto
@@ -3182,6 +3261,7 @@ pub mod test {
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
                         replica_version: ReplicaVersion::default(),
+                        payment_receipts: BTreeMap::new(),
                     };
                     let share = Signed {
                         content: response_metadata.clone(),
@@ -3246,6 +3326,7 @@ pub mod test {
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
                         replica_version: ReplicaVersion::default(),
+                        payment_receipts: BTreeMap::new(),
                     };
                     let share = Signed {
                         content: response_metadata.clone(),
@@ -3322,7 +3403,10 @@ pub mod test {
                 shim_mock
                     .expect_try_receive()
                     .times(1)
-                    .return_const(Ok(empty_response.clone()))
+                    .return_const(Ok((
+                        empty_response.clone(),
+                        CanisterHttpPaymentReceipt::default(),
+                    )))
                     .in_sequence(&mut sequence);
                 shim_mock
                     .expect_try_receive()
@@ -3364,6 +3448,128 @@ pub mod test {
                     }
                 );
             });
+        });
+    }
+
+    /// If the refund reported in the payment receipt exceeds the per-replica
+    /// allowance configured on the request context, the share is rejected
+    /// as invalid: an honest replica cannot legitimately refund more than
+    /// its allowance.
+    #[test]
+    fn test_refund_greater_than_replica_allowance_is_invalid() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 5);
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                shim_mock
+                    .expect_try_receive()
+                    .return_const(Err(TryReceiveError::Empty));
+
+                // Use a context with a small per-replica allowance.
+                let request = CanisterHttpRequestContext {
+                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
+                    url: "".to_string(),
+                    max_response_bytes: None,
+                    headers: vec![],
+                    body: None,
+                    http_method: CanisterHttpMethod::GET,
+                    transform: None,
+                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
+                    refund_status: RefundStatus {
+                        refundable_cycles: Cycles::new(1000),
+                        per_replica_allowance: Cycles::new(100),
+                        refunded_cycles: Cycles::new(0),
+                        refunding_nodes: BTreeSet::new(),
+                    },
+                };
+
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            CallbackId::from(0),
+                            request,
+                        )]))),
+                    ));
+
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                // Build a per-replica metadata whose receipt claims a
+                // refund larger than the per-replica allowance.
+                let response_metadata = CanisterHttpResponseMetadata {
+                    id: CallbackId::from(0),
+                    registry_version: RegistryVersion::from(1),
+                    content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                    content_size: 0,
+                    is_reject: false,
+                    replica_version: ReplicaVersion::default(),
+                    payment_receipts: BTreeMap::from([(
+                        replica_config.node_id,
+                        CanisterHttpPaymentReceipt {
+                            refund: Cycles::new(200),
+                        },
+                    )]),
+                };
+                let signature = crypto
+                    .sign(
+                        &response_metadata,
+                        replica_config.node_id,
+                        RegistryVersion::from(1),
+                    )
+                    .unwrap();
+                let share = Signed {
+                    content: response_metadata,
+                    signature,
+                };
+
+                canister_http_pool.insert(UnvalidatedArtifact {
+                    message: CanisterHttpResponseArtifact {
+                        share,
+                        response: None,
+                    },
+                    peer_id: replica_config.node_id,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager as Arc<_>,
+                    shim,
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                let changes = pool_manager.validate_shares(
+                    pool.get_cache().as_ref(),
+                    &canister_http_pool,
+                    Height::from(0),
+                );
+
+                assert_eq!(changes.len(), 1);
+                assert_matches!(
+                    &changes[0],
+                    CanisterHttpChangeAction::HandleInvalid(_, reason)
+                        if reason == "Refund is greater than replica allowance"
+                );
+            })
         });
     }
 }

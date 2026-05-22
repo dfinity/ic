@@ -2704,6 +2704,7 @@ impl StateMachine {
                 content_size: content.count_bytes() as u32,
                 is_reject: content.is_reject(),
                 replica_version: ReplicaVersion::default(),
+                payment_receipts: BTreeMap::new(),
             };
             let signature = CryptoReturningOk::default()
                 .sign(&response_metadata, node.node_id, registry_version)
