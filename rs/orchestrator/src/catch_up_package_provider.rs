@@ -204,8 +204,7 @@ impl CatchUpPackageProvider {
 
         if let Some(random_other_node) = nodes
             .into_iter()
-            .filter(|(node_id, _)| *node_id != self.node_id)
-            .next()
+            .find(|(node_id, _)| *node_id != self.node_id)
         {
             selected_peers.push(random_other_node);
         }
