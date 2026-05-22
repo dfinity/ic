@@ -22,26 +22,12 @@ done
 
 TMP_DIR=$(mktemp -d --tmpdir="/tmp/containers" build-image-XXXXXXXXXXXX)
 
-BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:5e275723f82c67e387ba9e3c24baa0abdcb268917f276a0561c97bef9450d0b4"
+BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:6015f66923d7afbc53558d7ccffd325d43b4e249f41a6e93eef074c9505d2233"
 
 podman --root "${TMP_DIR}/root" --runroot "${TMP_DIR}/runroot" build --iidfile "${TMP_DIR}/iidfile" - <<<"
     FROM $BASE_IMAGE
     USER root:root
-    # Pin apt to an Ubuntu archive snapshot so the bootloader build is reproducible.
-    # We rewrite the apt sources rather than using 'apt-get --snapshot' because that
-    # flag requires apt >= 3.0 (Ubuntu 25.10+), while the base image above is older.
-    # snapshot.ubuntu.com redirects HTTP -> HTTPS, but the pinned base image's CA
-    # store cannot verify its certificate chain. We therefore disable TLS peer
-    # verification: package integrity is still ensured by apt's GPG verification of
-    # the Release file against the embedded ubuntu-keyring.
-    RUN rm -f /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list \
-     && printf '%s\n' \
-            'deb https://snapshot.ubuntu.com/ubuntu/20260131T000000Z noble main universe' \
-            'deb https://snapshot.ubuntu.com/ubuntu/20260131T000000Z noble-updates main universe' \
-            'deb https://snapshot.ubuntu.com/ubuntu/20260131T000000Z noble-security main universe' \
-            > /etc/apt/sources.list \
-     && apt-get -o Acquire::Check-Valid-Until=false -o Acquire::https::Verify-Peer=false -o Acquire::https::Verify-Host=false -y update \
-     && apt-get -o Acquire::Check-Valid-Until=false -o Acquire::https::Verify-Peer=false -o Acquire::https::Verify-Host=false -y --no-install-recommends install grub-efi faketime
+    RUN apt-get -y update && apt-get -y --no-install-recommends install grub-efi faketime
     RUN mkdir -p /build/boot/grub
     RUN cp -r /usr/lib/grub/x86_64-efi /build/boot/grub
     RUN mkdir -p /build/boot/efi/EFI/Boot
