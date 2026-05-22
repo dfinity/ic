@@ -113,7 +113,7 @@ crate.spec(
 crate.spec(
     features = ["ws"],
     package = "axum",
-    version = "^0.8.4",
+    version = "^0.8.9",
 )
 crate.spec(
     features = ["typed-header"],
@@ -684,7 +684,7 @@ crate.spec(
     default_features = False,
     git = "https://github.com/dfinity/ic-gateway",
     package = "ic-gateway",
-    rev = "f33afac2aa47b8760090c93823b7fa7f5ba67dc4",
+    rev = "49424ec2dffee8d6c1e4cffc31fd9f518793c01b",
 )
 crate.spec(
     package = "ic-custom-domains-backend",
@@ -1290,6 +1290,7 @@ crate.spec(
         "json",
         "multipart",
         "rustls",
+        "socks",
         "stream",
     ],
     package = "reqwest",
