@@ -1714,6 +1714,17 @@ impl SystemState {
             .unwrap_or(false)
     }
 
+    /// Returns true iff the canister has any unexpired best-effort callback (i.e. a
+    /// callback that has not yet been returned by `time_out_callbacks()`).
+    ///
+    /// Such a callback may still need to be timed out by a future invocation of
+    /// `time_out_callbacks()`, which is why this is part of the "cold" predicate.
+    pub fn has_unexpired_callbacks(&self) -> bool {
+        self.call_context_manager()
+            .map(CallContextManager::has_unexpired_callbacks)
+            .unwrap_or(false)
+    }
+
     /// Enqueues "deadline expired" references for all expired best-effort callbacks
     /// without a response.
     ///
