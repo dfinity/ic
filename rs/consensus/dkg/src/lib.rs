@@ -724,8 +724,8 @@ mod tests {
                     crypto.clone(),
                     logger.clone(),
                     &PoolReader::new(&pool),
-                    registry,
-                    replica_config,
+                    registry.clone(),
+                    replica_config.clone(),
                 );
                 let dkg = DkgImpl::new(
                     node_test_id(1),
@@ -1122,8 +1122,8 @@ mod tests {
                         crypto.clone(),
                         logger.clone(),
                         &PoolReader::new(&consensus_pool_1),
-                        registry_1,
-                        replica_config_1,
+                        registry_1.clone(),
+                        replica_config_1.clone(),
                     );
                     let dkg_1 = DkgImpl::new(
                         node_id_1,
@@ -1141,8 +1141,8 @@ mod tests {
                         crypto.clone(),
                         logger.clone(),
                         &PoolReader::new(&consensus_pool_2),
-                        registry_2,
-                        replica_config_2,
+                        registry_2.clone(),
+                        replica_config_2.clone(),
                     );
                     let dkg_2 = DkgImpl::new(
                         node_id_2,
@@ -2167,6 +2167,8 @@ mod tests {
                     deps.crypto.clone(),
                     logger.clone(),
                     &PoolReader::new(&deps.pool),
+                    deps.registry.clone(),
+                    deps.replica_config.clone(),
                 );
                 let receiver_dkg = DkgImpl::new(
                     node_test_id(2),
