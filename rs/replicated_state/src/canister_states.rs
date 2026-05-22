@@ -67,9 +67,8 @@ struct ColdStats {
     /// Sum of `system_state.guaranteed_response_message_memory_usage()`.
     ///
     /// Cold canisters have no enqueued messages by `is_cold()`, but they can still
-    /// hold reservations for in-flight guaranteed-response requests, which
-    /// contribute to `guaranteed_response_message_memory_usage()`. We therefore
-    /// have to track this separately, instead of assuming it is zero.
+    /// hold guaranteed-response reservations, contributing to guaranteed-response
+    /// message memory usage.
     guaranteed_response_message_memory: NumBytes,
     /// Sum of `wasm_custom_sections_memory_usage()`.
     wasm_custom_sections_memory: NumBytes,
@@ -536,9 +535,7 @@ impl CanisterStates {
             .map(|canister| canister.memory_usage() + canister.message_memory_usage().total())
             .sum();
         // Cold canisters contribute their execution memory plus any
-        // guaranteed-response message memory (reservations). They never have
-        // best-effort message memory: an unexpired best-effort callback would
-        // force the canister into `hot`.
+        // guaranteed-response message memory (reservations).
         hot + self.cold_stats.memory_usage + self.cold_stats.guaranteed_response_message_memory
     }
 
@@ -546,9 +543,7 @@ impl CanisterStates {
     /// reservations) across every canister in either pool. Does **not**
     /// include subnet queues.
     ///
-    /// `O(|hot canisters|)` thanks to the precomputed cold-pool aggregate. Cold
-    /// canisters can still hold input-slot reservations for in-flight requests,
-    /// so the cold contribution is not always zero.
+    /// `O(|hot canisters|)` thanks to the precomputed cold-pool aggregate.
     pub fn guaranteed_response_message_memory_taken(&self) -> NumBytes {
         let hot: NumBytes = self
             .hot
@@ -565,10 +560,8 @@ impl CanisterStates {
     /// Returns the total best-effort message memory across every canister in
     /// either pool. Does **not** include subnet queues.
     ///
-    /// `O(|hot canisters|)`: by `CanisterState::is_cold`, a canister with an
-    /// unexpired best-effort callback or with any pending input (including an
-    /// expired best-effort callback) is forced into `hot`, so the cold pool
-    /// contributes nothing here.
+    /// `O(|hot canisters|)` — cold canisters by definition use no best-effort
+    /// message memory (see `CanisterState::is_cold`).
     pub fn best_effort_message_memory_taken(&self) -> NumBytes {
         self.hot
             .values()
@@ -622,10 +615,8 @@ impl CanisterStates {
         let cold = &self.cold_stats;
         execution += cold.execution_memory;
         guaranteed_response_messages += cold.guaranteed_response_message_memory;
-        // `best_effort_messages` has no cold contribution: an unexpired
-        // best-effort callback forces the canister into `hot`, and any expired
-        // best-effort callback shows up as a pending input, which also forces
-        // the canister into `hot`.
+        // `best_effort_messages` has no cold contribution: cold canisters have no
+        // messages in their queues.
         wasm_custom_sections += cold.wasm_custom_sections_memory;
         canister_history += cold.canister_history_memory;
 
