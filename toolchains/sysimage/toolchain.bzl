@@ -181,6 +181,8 @@ def _vfat_image_impl(ctx):
         ctx.attr.subdir,
         "--dflate",
         ctx.executable._dflate.path,
+        "--mkfs-vfat",
+        ctx.executable._mkfs_vfat.path,
     ])
 
     for input_target, install_target in ctx.attr.extra_files.items():
@@ -193,7 +195,11 @@ def _vfat_image_impl(ctx):
         arguments = args,
         inputs = inputs,
         outputs = outputs,
-        tools = [ctx.attr._tool.files_to_run, ctx.attr._dflate.files_to_run],
+        tools = [
+            ctx.attr._tool.files_to_run,
+            ctx.attr._dflate.files_to_run,
+            ctx.attr._mkfs_vfat.files_to_run,
+        ],
     )
 
     return [DefaultInfo(files = depset(outputs))]
@@ -223,6 +229,12 @@ vfat_image = _icos_build_rule(
             executable = True,
             cfg = "exec",
         ),
+        "_mkfs_vfat": attr.label(
+            default = "//toolchains/sysimage:mkfs_vfat",
+            executable = True,
+            cfg = "exec",
+            allow_single_file = True,
+        ),
     },
 )
 
@@ -247,6 +259,8 @@ def _fat32_image_impl(ctx):
         ctx.attr.subdir,
         "--dflate",
         ctx.executable._dflate.path,
+        "--mkfs-vfat",
+        ctx.executable._mkfs_vfat.path,
     ])
 
     for input_target, install_target in ctx.attr.extra_files.items():
@@ -262,7 +276,11 @@ def _fat32_image_impl(ctx):
         arguments = args,
         inputs = inputs,
         outputs = outputs,
-        tools = [ctx.attr._tool.files_to_run, ctx.attr._dflate.files_to_run],
+        tools = [
+            ctx.attr._tool.files_to_run,
+            ctx.attr._dflate.files_to_run,
+            ctx.attr._mkfs_vfat.files_to_run,
+        ],
     )
 
     return [DefaultInfo(files = depset(outputs))]
@@ -292,6 +310,12 @@ fat32_image = _icos_build_rule(
             default = "//rs/ic_os/build_tools/dflate",
             executable = True,
             cfg = "exec",
+        ),
+        "_mkfs_vfat": attr.label(
+            default = "//toolchains/sysimage:mkfs_vfat",
+            executable = True,
+            cfg = "exec",
+            allow_single_file = True,
         ),
     },
 )

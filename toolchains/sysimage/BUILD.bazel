@@ -73,6 +73,18 @@ py_binary(
     deps = [":utils"],
 )
 
+# Hermetic mkfs.vfat extracted from the apt-snapshot-pinned dosfstools .deb so
+# that the build does not depend on the host-installed binary.
+# In the dosfstools package, mkfs.vfat is a symlink to mkfs.fat; we extract the
+# real binary but name the output mkfs.vfat so argv[0] selects vfat defaults.
+genrule(
+    name = "mkfs_vfat",
+    srcs = ["@noble//dosfstools/amd64:data"],
+    outs = ["mkfs.vfat"],
+    cmd = "tar -xzOf $(location @noble//dosfstools/amd64:data) ./usr/sbin/mkfs.fat > $@ && chmod +x $@",
+    executable = True,
+)
+
 py_binary(
     name = "verity_sign",
     srcs = ["verity_sign.py"],
