@@ -130,6 +130,55 @@ filegroup(
     srcs = [":mkfs_ext4_files"],
 )
 
+# Hermetic libfaketime.so.1 extracted from the apt-snapshot-pinned libfaketime
+# .deb. We deliberately do NOT use the `faketime` wrapper binary because it
+# hard-codes /usr/$LIB/faketime/libfaketime.so.1 and so cannot be relocated.
+# Instead build_ext4_image.py LD_PRELOADs this library and sets FAKETIME
+# directly, matching what the wrapper would do.
+genrule(
+    name = "libfaketime_files",
+    srcs = ["@noble//libfaketime/amd64:data"],
+    outs = ["faketime.d/libfaketime.so.1"],
+    cmd = "tar -xzOf $(location @noble//libfaketime/amd64:data) ./usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1 > $@",
+)
+
+filegroup(
+    name = "libfaketime_runfiles",
+    srcs = [":libfaketime_files"],
+)
+
+# Hermetic fakeroot bits extracted from the apt-snapshot-pinned fakeroot and
+# libfakeroot .debs: the faked-sysv daemon and the libfakeroot-sysv.so
+# LD_PRELOAD library. We deliberately do NOT use the /usr/bin/fakeroot shell
+# wrapper because it does platform-specific library lookups against the host
+# filesystem. Instead build_ext4_image.py spawns faked-sysv itself and sets
+# FAKEROOTKEY + LD_PRELOAD directly.
+genrule(
+    name = "fakeroot_files",
+    srcs = [
+        "@noble//fakeroot/amd64:data",
+        "@noble//libfakeroot/amd64:data",
+    ],
+    outs = [
+        "fakeroot.d/faked-sysv",
+        "fakeroot.d/libfakeroot-sysv.so",
+    ],
+    cmd = """
+set -euo pipefail
+tmp=$$(mktemp -d)
+trap 'rm -rf $$tmp' EXIT
+for f in $(SRCS); do tar -xzf $$f -C $$tmp; done
+cp $$tmp/usr/bin/faked-sysv                                        $(execpath fakeroot.d/faked-sysv)
+chmod +x                                                           $(execpath fakeroot.d/faked-sysv)
+cp $$tmp/usr/lib/x86_64-linux-gnu/libfakeroot/libfakeroot-sysv.so  $(execpath fakeroot.d/libfakeroot-sysv.so)
+""",
+)
+
+filegroup(
+    name = "fakeroot_runfiles",
+    srcs = [":fakeroot_files"],
+)
+
 py_binary(
     name = "verity_sign",
     srcs = ["verity_sign.py"],
