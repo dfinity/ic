@@ -808,14 +808,30 @@ impl SchedulerImpl {
     }
 
     /// Charge canisters for their resource allocation and usage. Canisters
-    /// that did not manage to pay are uninstalled.
-    /// This function is expected to be called at the end of a round.
+    /// that cannot pay are uninstalled.
+    ///
+    /// This function is expected to be called at the end of a round and
+    /// particularly after paused executions were aborted on checkpoint rounds.
     fn charge_canisters_for_resource_allocation_and_usage(
         &self,
         state: &mut ReplicatedState,
         subnet_size: usize,
         current_round: ExecutionRound,
+        current_round_type: ExecutionRoundType,
     ) {
+        // Because it is relatively expensive to make every canister mutable just to
+        // check whether 10 seconds have passed since it was last charged, only
+        // charge canisters every 50 rounds and/or on checkpoint rounds.
+        //
+        // The latter ensures that (because we skip canisters with paused
+        // executions), every canister is charged at least once per checkpoint
+        // interval.
+        if current_round.get() % 50 != 0
+            && current_round_type != ExecutionRoundType::CheckpointRound
+        {
+            return;
+        }
+
         let cost_schedule = state.get_own_cost_schedule();
         let state_time = state.time();
         let threshold_last_allocation_charge = state_time.saturating_sub(
@@ -1464,15 +1480,17 @@ impl Scheduler for SchedulerImpl {
                 round_schedule.finish_round(&mut final_state, current_round, &self.metrics);
             }
 
+            // Abort (some) paused executions.
             self.finish_round(&mut final_state, current_round_type);
 
-            // Charge canisters after (some) paused executions were aborted.
+            // Charge canisters after paused executions were aborted.
             {
                 let _timer = self.metrics.round_finalization_charge.start_timer();
                 self.charge_canisters_for_resource_allocation_and_usage(
                     &mut final_state,
                     registry_settings.subnet_size,
                     current_round,
+                    current_round_type,
                 );
             }
 

@@ -56,8 +56,9 @@ fn only_charge_for_allocation_after_specified_duration() {
     );
 
     // Don't charge because the time since the last charge is too small.
+    // Checkpoint round, to force charging for storage.
     test.set_time(initial_time + time_between_batches);
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    test.execute_round(ExecutionRoundType::CheckpointRound);
 
     assert_eq!(
         test.canister_state(canister).system_state.balance().get(),
@@ -65,9 +66,9 @@ fn only_charge_for_allocation_after_specified_duration() {
     );
 
     // The time of the current batch is now long enough that allocation charging
-    // should be triggered.
+    // should be triggered. Checkpoint round, to force charging for storage.
     test.set_time(initial_time + 2 * time_between_batches);
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    test.execute_round(ExecutionRoundType::CheckpointRound);
     assert_eq!(
         test.canister_state(canister).system_state.balance().get(),
         initial_cycles - 10,
@@ -106,7 +107,7 @@ fn charging_for_message_memory_works() {
 
     // Send an ingress that triggers an inter-canister call. Because of the scheduler
     // configuration, we can only execute the ingress message but not the
-    // inter-canister message so this remain in the canister's input queue.
+    // inter-canister message so this remains in the canister's input queue.
     test.send_ingress(
         canister,
         ingress(1).call(other_side(canister, 1), on_response(1)),
@@ -220,7 +221,8 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
                 .duration_between_allocation_charges(),
     );
 
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Checkpoint round, to force charging for storage.
+    test.execute_round(ExecutionRoundType::CheckpointRound);
 
     for canister in test.state().canisters_iter() {
         assert!(canister.execution_state.is_none());
@@ -455,7 +457,9 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
                     .cycles_account_manager
                     .duration_between_allocation_charges(),
     );
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Checkpoint round, to force charging for storage.
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+
     assert_eq!(
         test.scheduler()
             .metrics
@@ -591,7 +595,9 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
                     .cycles_account_manager
                     .duration_between_allocation_charges(),
     );
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Checkpoint round, to force charging for storage.
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+
     assert_eq!(
         test.scheduler()
             .metrics

@@ -675,6 +675,7 @@ impl SchedulerTest {
                 self.state.as_mut().unwrap(),
                 subnet_size,
                 ExecutionRound::from(0),
+                ExecutionRoundType::CheckpointRound,
             )
     }
 

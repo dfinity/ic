@@ -304,7 +304,8 @@ fn simulate_one_gib_per_second_cost(
     env.advance_time(duration_between_allocation_charges);
 
     let balance_before = env.cycle_balance(canister_id);
-    env.tick();
+    // Checkpoint round, to force charging for storage.
+    env.checkpointed_tick();
     let balance_after = env.cycle_balance(canister_id);
 
     // Scale the cost from a defined in config value to a 1 second duration.
