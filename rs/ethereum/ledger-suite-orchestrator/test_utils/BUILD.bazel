@@ -22,7 +22,6 @@ rust_library(
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
         "//rs/ledger_suite/icrc1/ledger",
         "//rs/state_machine_tests",
-        "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
         "//rs/types/cycles",
         "//rs/types/management_canister_types",
