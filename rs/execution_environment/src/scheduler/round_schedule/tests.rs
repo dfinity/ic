@@ -298,7 +298,6 @@ impl RoundScheduleFixture {
             SystemMethod::CanisterHeartbeat,
         )]));
         self.canister_state(&canister_id).execution_state = Some(ExecutionState::new(
-            "NOT_USED".into(),
             WasmBinary::new(CanisterModule::new(vec![])),
             exports,
             Memory::new_for_testing(),
