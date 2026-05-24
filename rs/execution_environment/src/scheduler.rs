@@ -826,7 +826,7 @@ impl SchedulerImpl {
         // The latter ensures that (because we skip canisters with paused
         // executions), every canister is charged at least once per checkpoint
         // interval.
-        if current_round.get() % 50 != 0
+        if !current_round.get().is_multiple_of(50)
             && current_round_type != ExecutionRoundType::CheckpointRound
         {
             return;
