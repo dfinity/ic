@@ -1,4 +1,4 @@
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{common::LOG_PREFIX, invariants::subnet::MAX_SUBNET_ADMINS, registry::Registry};
 use candid::{CandidType, Deserialize};
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_nervous_system_time_helpers::now_system_time;
@@ -17,7 +17,6 @@ use std::collections::HashSet;
 mod rate_limits;
 use rate_limits::UpdateSubnetAdminsRateLimiter;
 
-const MAX_SUBNET_ADMINS: usize = 10;
 pub const MAX_SUSTAINED_SUBNET_ADMINS_PER_DAY: u64 = 10;
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]

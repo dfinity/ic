@@ -11,11 +11,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "@crate_index//:candid",
-        "@crate_index//:futures",
-        "@crate_index//:ic-cdk",
         "@crate_index//:ic-management-canister-types",
-        "@crate_index//:rand",
-        "@crate_index//:rand_pcg",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
     ],
