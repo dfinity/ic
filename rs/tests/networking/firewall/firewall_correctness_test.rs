@@ -80,7 +80,7 @@ const CLOUD_ENGINE_NODE_REWARD_TYPES: &[NodeRewardType] = &[
     NodeRewardType::Type4dot1,
     NodeRewardType::Type4dot2,
     NodeRewardType::Type4dot3,
-    NodeRewardType::Type4dot3,
+    NodeRewardType::Type4dot4,
     NodeRewardType::Type4dot5,
 ];
 
