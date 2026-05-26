@@ -757,10 +757,6 @@ mod tests {
             let extra_heights_clone = Arc::clone(&expected_extra_heights);
             state_manager
                 .get_mut()
-                .expect_latest_state_height()
-                .return_const(Height::from(0));
-            state_manager
-                .get_mut()
                 .expect_update_fast_forward_height()
                 .return_const(());
             state_manager
@@ -824,6 +820,83 @@ mod tests {
             // There should be no pending CUP height
             *expected_extra_heights.write().unwrap() = BTreeSet::new();
             purger.purge_replicated_state_by_finalized_certified_height(&PoolReader::new(&pool));
+        })
+    }
+
+    #[test]
+    fn test_purge_checkpoints_below_cup_height() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies {
+                mut pool,
+                state_manager,
+                replica_config,
+                registry,
+                ..
+            } = dependencies(pool_config, 10);
+
+            let purger = Purger::new(
+                replica_config,
+                state_manager.clone(),
+                Arc::new(MockMessageRouting::new()),
+                registry,
+                no_op_logger(),
+                MetricsRegistry::new(),
+            );
+
+            let expected_removed_height = Arc::new(RwLock::new(Height::from(0)));
+            let removed_height_clone = Arc::clone(&expected_removed_height);
+            state_manager
+                .get_mut()
+                .expect_remove_states_below()
+                .times(4) // This will be called exactly four times below
+                .withf(move |height| *height == *removed_height_clone.read().unwrap())
+                .return_const(());
+
+            // Initially, we expect to purge below the genesis CUP of height 0
+            *expected_removed_height.write().unwrap() = Height::from(0);
+            // Expectation called once:
+            purger.purge_checkpoints_below_cup_height(&PoolReader::new(&pool));
+
+            // Advance a bit (less than a DKG interval)
+            pool.advance_round_normal_operation_n(10);
+            // We still expect to purge below the genesis CUP of height 0
+            *expected_removed_height.write().unwrap() = Height::from(0);
+            // Expectation called twice:
+            purger.purge_checkpoints_below_cup_height(&PoolReader::new(&pool));
+
+            // After a DKG interval, we expect to purge below the next CUP height of 60.
+            // THOUGH, because the finalized tip still points to a smaller certified height (of 0
+            // here), the purger should actually not call `state_manager`.
+            pool.advance_round_normal_operation_n(60);
+            // We do not expect the expectation to be called here!
+            purger.purge_checkpoints_below_cup_height(&PoolReader::new(&pool));
+
+            let mut proposal = pool.make_next_block();
+            let block = proposal.content.as_mut();
+            block.context.certified_height = Height::from(60);
+            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+            pool.insert_validated(proposal.clone());
+            pool.notarize(&proposal);
+            pool.finalize(&proposal);
+            // Now that a finalized block points to a height higher or equal (here equal) than the
+            // CUP height, we should purge below the CUP height.
+            *expected_removed_height.write().unwrap() = Height::from(60);
+            // Expectation called three times:
+            purger.purge_checkpoints_below_cup_height(&PoolReader::new(&pool));
+
+            // Same test but with a finalized certified height HIGHER than the CUP height. We also
+            // expect to purge below the CUP height.
+            pool.insert_validated(pool.make_next_beacon());
+            let mut proposal = pool.make_next_block();
+            let block = proposal.content.as_mut();
+            block.context.certified_height = Height::from(62);
+            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+            pool.insert_validated(proposal.clone());
+            pool.notarize(&proposal);
+            pool.finalize(&proposal);
+            *expected_removed_height.write().unwrap() = Height::from(60);
+            // Expectation called four times:
+            purger.purge_checkpoints_below_cup_height(&PoolReader::new(&pool));
         })
     }
 

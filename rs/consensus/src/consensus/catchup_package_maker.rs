@@ -329,10 +329,7 @@ mod tests {
             // Skip the first DKG interval
             pool.advance_round_normal_operation_n(interval_length);
 
-            let mut proposal = pool.make_next_block();
-            let block = proposal.content.as_mut();
-            block.context.certified_height = block.height();
-            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+            let proposal = pool.make_next_block();
             pool.insert_validated(proposal.clone());
             pool.notarize(&proposal);
             pool.finalize(&proposal);
