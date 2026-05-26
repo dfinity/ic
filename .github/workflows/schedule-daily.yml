@@ -14,7 +14,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:ac24f205995a1c36921bb8606e0ee16b8b26d73be7dd0cac786c6882f3569680
+      image: ghcr.io/dfinity/ic-build@sha256:7d812574cc8f8cf2841519340de0f218d71007996fbf28dfff286f3c84977f43
       options: >-
         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 720 # 12 hours
@@ -54,9 +54,11 @@ jobs:
 
   nns-recovery-mainnet-state:
     name: Bazel Test NNS Recovery with Mainnet State
-    runs-on: *dind-large-setup
+    runs-on:
+      group: zh1
+      labels: dind-large
     container: *container-setup
-    timeout-minutes: 180
+    timeout-minutes: 120
     environment: Nightly Tests
     steps:
       - *checkout
@@ -69,25 +71,8 @@ jobs:
             bazel test \
               --config=flaky_retry \
               --config=stamped \
-              //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state \
-              --test_arg=--set-required-host-features=dc=zh1 \
+              //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state_colocate \
               --keep_going --test_timeout=7200
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-
-# the main purpose of bazel-build-all-no-cache is to detect dead URLS of external dependencies, the actual build of the ic is tested in build-ic
-# we've moved it to schedule-daily because the ubuntu servers frequently return 503 errors and we don't want this job blocking releases
-  bazel-build-all-no-cache:
-    name: Bazel Build All No Cache
-    runs-on: *dind-large-setup
-    container: *container-setup
-    timeout-minutes: 90
-    steps:
-      - *checkout
-      - uses: ./.github/actions/netrc
-      - name: Run Bazel Build All No Cache
-        uses: ./.github/actions/bazel
-        with:
-          run: bazel build --config=stamped --config=local //...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   bazel-test-bare-metal:
@@ -127,6 +112,7 @@ jobs:
           launch_bare_metal --check_hostos_metrics
 
           # Run SEV tests
+          bazel test //rs/tests/nested:guestos_upgrade_from_current_to_current_test_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
           bazel test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
           bazel test //rs/tests/nested:hostos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
           bazel test //rs/tests/nested:sev_recovery --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"

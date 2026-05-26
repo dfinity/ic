@@ -505,6 +505,12 @@ enum NnsFunction {
   // nodes become unassigned.
   // Currently limited to CloudEngine subnets.
   NNS_FUNCTION_DELETE_SUBNET = 57;
+
+  // Set or unset the default subnet to which `SetupInitialDKG` management
+  // canister calls are routed when no subnet is specified explicitly. If unset,
+  // `SetupInitialDKG` requests without an explicit subnet id are routed to the
+  // calling subnet (NNS).
+  NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET = 58;
 }
 
 // Payload of a proposal that calls a function on another NNS
@@ -1992,6 +1998,9 @@ message FulfillSubnetRentalRequest {
   ic_base_types.pb.v1.PrincipalId user = 1;
   repeated ic_base_types.pb.v1.PrincipalId node_ids = 3;
   string replica_version_id = 2;
+  // Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+  // If not set, handling defaults to the NNS subnet.
+  optional ic_base_types.pb.v1.PrincipalId initial_dkg_subnet_id = 4;
 }
 
 message BlessAlternativeGuestOsVersion {
@@ -2049,6 +2058,39 @@ message NeuronDissolveStateSnapshot {
     uint64 dissolve_delay_seconds = 1;
     uint64 when_dissolved_timestamp_seconds = 2;
   }
+}
+
+// A sampled price consisting of a timestamp and a permyriad rate.
+message SampledPrice {
+  // Timestamp in seconds since Unix epoch. Each entry represents one calendar day; there is at most
+  // one entry per day.
+  uint64 timestamp_seconds = 1;
+
+  // The ICP/XDR rate in permyriad. For example, 80000 means 1 ICP = 8 XDR.
+  uint64 xdr_permyriad_per_icp = 2;
+}
+
+// ICP price history from the Exchange Rate Canister (XRC).
+message IcpPriceHistory {
+  // Daily ICP/XDR rates (up to 365 entries), sorted by timestamp_seconds (ascending).
+  repeated SampledPrice icp_xdr_rates = 1;
+}
+
+// The maturity modulation factor is applied when disbursing (unstaked) maturity to ICP.
+//
+// When a neuron owner disburses maturity, the amount of ICP received is:
+//   maturity * (1 + current_value_permyriad / 10_000)
+//
+// This factor stabilizes ICP price: it is positive when ICP is above its long-term average
+// (encouraging selling pressure), and negative when below (discouraging selling).
+//
+// This might be unpopulated, which indicates that no value is currently available.
+message MaturityModulation {
+  // Current maturity modulation in permyriad (0.01% per unit).
+  optional int32 current_value_permyriad = 1;
+
+  // Day (days_since_epoch) when current_value_permyriad was last computed.
+  optional uint64 updated_at_days_since_epoch = 2;
 }
 
 // This represents the whole NNS governance system. It contains all
@@ -2287,16 +2329,23 @@ message Governance {
   // Map of proposal IDs to their topics for those garbage collected.
   map<uint64, Topic> topic_of_garbage_collected_proposals = 29;
 
-  // Whether the eight year gang bonus base migration has run for all neurons.
-  // This prevents the migration from running more than once.
+  // Persisted-true sentinel: the one-time eight year gang bonus base migration ran on mainnet.
+  // Retained as a rollback guard; if a previous release sees this as true, it skips the migration.
   bool eight_year_gang_bonus_migration_done = 31;
 
   // Snapshot of each neuron's dissolve state taken while clamping to the Mission 70 maximum
   // dissolve delay. Enables restoring original dissolve states if the maximum is reversed.
   map<uint64, NeuronDissolveStateSnapshot> neuron_id_to_pre_clamp_dissolve_state = 32;
 
-  // Whether the relaxed eight year gang member induction is done.
+  // Persisted-true sentinel: the relaxed eight year gang member induction ran on mainnet.
+  // Retained as a rollback guard; if a previous release sees this as true, it skips the migration.
   bool relaxed_eight_year_gang_bonus_migration_done = 33;
+
+  // ICP price history from the Exchange Rate Canister (XRC), used for maturity modulation.
+  optional IcpPriceHistory icp_price_history = 34;
+
+  // Maturity modulation state, updated daily from icp_price_history.
+  optional MaturityModulation maturity_modulation = 35;
 
   reserved 30;
   reserved "first_proposal_id_to_record_voting_history";

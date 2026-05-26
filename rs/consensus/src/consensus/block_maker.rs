@@ -4,7 +4,9 @@ use crate::consensus::{
     metrics::BlockMakerMetrics,
     status::{self, Status},
 };
-use ic_consensus_dkg::payload_builder::create_payload as create_dkg_payload;
+use ic_consensus_dkg::{
+    metrics::DkgPayloadMetrics, payload_builder::create_payload as create_dkg_payload,
+};
 use ic_consensus_idkg::{self as idkg, metrics::IDkgPayloadMetrics};
 use ic_consensus_utils::{
     find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
@@ -74,6 +76,7 @@ pub(crate) struct BlockMaker {
     idkg_pool: Arc<RwLock<dyn IDkgPool>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     metrics: BlockMakerMetrics,
+    dkg_payload_metrics: DkgPayloadMetrics,
     idkg_payload_metrics: IDkgPayloadMetrics,
     log: ReplicaLogger,
     // The minimal age of the registry version we want to use for the validation context of a new
@@ -111,6 +114,7 @@ impl BlockMaker {
             state_reader,
             log,
             metrics: BlockMakerMetrics::new(metrics_registry.clone()),
+            dkg_payload_metrics: DkgPayloadMetrics::new(metrics_registry.clone()),
             idkg_payload_metrics: IDkgPayloadMetrics::new(metrics_registry),
             stable_registry_version_age,
         }
@@ -306,8 +310,13 @@ impl BlockMaker {
             &context,
             self.log.clone(),
             max_dealings_per_block,
+            Some(&self.dkg_payload_metrics),
         )
-        .map_err(|err| warn!(self.log, "Payload construction has failed: {:?}", err))
+        .map_err(|err| {
+            warn!(self.log, "Payload construction has failed: {:?}", err);
+            self.dkg_payload_metrics
+                .payload_errors_inc("create_data_payload");
+        })
         .ok()?;
 
         let payload = Payload::new(
@@ -325,9 +334,12 @@ impl BlockMaker {
                         Some(&self.idkg_payload_metrics),
                         &self.log,
                     )
-                    .map_err(|err| warn!(self.log, "Payload construction has failed: {:?}", err))
-                    .ok()
-                    .flatten();
+                    .map_err(|err| {
+                        warn!(self.log, "Payload construction has failed: {:?}", err);
+                        self.idkg_payload_metrics
+                            .payload_errors_inc("create_summary_payload");
+                    })
+                    .ok()?;
 
                     BlockPayload::Summary(SummaryPayload {
                         dkg: summary,
@@ -373,10 +385,11 @@ impl BlockMaker {
                                 &self.log,
                             )
                             .map_err(|err| {
-                                warn!(self.log, "Payload construction has failed: {:?}", err)
+                                warn!(self.log, "Payload construction has failed: {:?}", err);
+                                self.idkg_payload_metrics
+                                    .payload_errors_inc("create_data_payload");
                             })
-                            .ok()
-                            .flatten();
+                            .ok()?;
 
                             (batch_payload, dkg, idkg_data)
                         }

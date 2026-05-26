@@ -2995,6 +2995,10 @@ pub struct FulfillSubnetRentalRequest {
     pub node_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
     #[prost(string, tag = "2")]
     pub replica_version_id: ::prost::alloc::string::String,
+    /// Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+    /// If not set, handling defaults to the NNS subnet.
+    #[prost(message, optional, tag = "4")]
+    pub initial_dkg_subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
 #[derive(
     candid::CandidType,
@@ -3136,6 +3140,68 @@ pub mod neuron_dissolve_state_snapshot {
         WhenDissolvedTimestampSeconds(u64),
     }
 }
+/// A sampled price consisting of a timestamp and a permyriad rate.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SampledPrice {
+    /// Timestamp in seconds since Unix epoch. Each entry represents one calendar day; there is at most
+    /// one entry per day.
+    #[prost(uint64, tag = "1")]
+    pub timestamp_seconds: u64,
+    /// The ICP/XDR rate in permyriad. For example, 80000 means 1 ICP = 8 XDR.
+    #[prost(uint64, tag = "2")]
+    pub xdr_permyriad_per_icp: u64,
+}
+/// ICP price history from the Exchange Rate Canister (XRC).
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct IcpPriceHistory {
+    /// Daily ICP/XDR rates (up to 365 entries), sorted by timestamp_seconds (ascending).
+    #[prost(message, repeated, tag = "1")]
+    pub icp_xdr_rates: ::prost::alloc::vec::Vec<SampledPrice>,
+}
+/// The maturity modulation factor is applied when disbursing (unstaked) maturity to ICP.
+///
+/// When a neuron owner disburses maturity, the amount of ICP received is:
+///    maturity * (1 + current_value_permyriad / 10_000)
+///
+/// This factor stabilizes ICP price: it is positive when ICP is above its long-term average
+/// (encouraging selling pressure), and negative when below (discouraging selling).
+///
+/// This might be unpopulated, which indicates that no value is currently available.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct MaturityModulation {
+    /// Current maturity modulation in permyriad (0.01% per unit).
+    #[prost(int32, optional, tag = "1")]
+    pub current_value_permyriad: ::core::option::Option<i32>,
+    /// Day (days_since_epoch) when current_value_permyriad was last computed.
+    #[prost(uint64, optional, tag = "2")]
+    pub updated_at_days_since_epoch: ::core::option::Option<u64>,
+}
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
 /// across upgrades of the NNS governance system.
@@ -3255,8 +3321,8 @@ pub struct Governance {
     /// Map of proposal IDs to their topics for those garbage collected.
     #[prost(map = "uint64, enumeration(Topic)", tag = "29")]
     pub topic_of_garbage_collected_proposals: ::std::collections::HashMap<u64, i32>,
-    /// Whether the eight year gang bonus base migration has run for all neurons.
-    /// This prevents the migration from running more than once.
+    /// Persisted-true sentinel: the one-time eight year gang bonus base migration ran on mainnet.
+    /// Retained as a rollback guard; if a previous release sees this as true, it skips the migration.
     #[prost(bool, tag = "31")]
     pub eight_year_gang_bonus_migration_done: bool,
     /// Snapshot of each neuron's dissolve state taken while clamping to the Mission 70 maximum
@@ -3264,9 +3330,16 @@ pub struct Governance {
     #[prost(map = "uint64, message", tag = "32")]
     pub neuron_id_to_pre_clamp_dissolve_state:
         ::std::collections::HashMap<u64, NeuronDissolveStateSnapshot>,
-    /// Whether the relaxed eight year gang member induction is done.
+    /// Persisted-true sentinel: the relaxed eight year gang member induction ran on mainnet.
+    /// Retained as a rollback guard; if a previous release sees this as true, it skips the migration.
     #[prost(bool, tag = "33")]
     pub relaxed_eight_year_gang_bonus_migration_done: bool,
+    /// ICP price history from the Exchange Rate Canister (XRC), used for maturity modulation.
+    #[prost(message, optional, tag = "34")]
+    pub icp_price_history: ::core::option::Option<IcpPriceHistory>,
+    /// Maturity modulation state, updated daily from icp_price_history.
+    #[prost(message, optional, tag = "35")]
+    pub maturity_modulation: ::core::option::Option<MaturityModulation>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -5208,6 +5281,11 @@ pub enum NnsFunction {
     /// nodes become unassigned.
     /// Currently limited to CloudEngine subnets.
     DeleteSubnet = 57,
+    /// Set or unset the default subnet to which `SetupInitialDKG` management
+    /// canister calls are routed when no subnet is specified explicitly. If unset,
+    /// `SetupInitialDKG` requests without an explicit subnet id are routed to the
+    /// calling subnet (NNS).
+    SetDefaultInitialDkgSubnet = 58,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -5283,6 +5361,7 @@ impl NnsFunction {
             Self::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
             Self::SplitSubnet => "NNS_FUNCTION_SPLIT_SUBNET",
             Self::DeleteSubnet => "NNS_FUNCTION_DELETE_SUBNET",
+            Self::SetDefaultInitialDkgSubnet => "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5365,6 +5444,7 @@ impl NnsFunction {
             "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
             "NNS_FUNCTION_SPLIT_SUBNET" => Some(Self::SplitSubnet),
             "NNS_FUNCTION_DELETE_SUBNET" => Some(Self::DeleteSubnet),
+            "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET" => Some(Self::SetDefaultInitialDkgSubnet),
             _ => None,
         }
     }

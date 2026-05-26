@@ -9,57 +9,38 @@ filegroup(
 )
 
 # See rs/nervous_system/feature_test.md
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/ledger_suite/common/ledger_canister_core",
-    "//rs/ledger_suite/common/ledger_core",
-    "//rs/ledger_suite/icrc1/index-ng",
-    "//rs/ledger_suite/icrc1/ledger",
-    "//rs/nervous_system/common",
-    "//rs/nervous_system/proto",
-    "//rs/nns/constants",
-    "//rs/nns/governance/api",
-    "//rs/sns/governance",
-    "//rs/sns/root",
-    "//rs/sns/swap:swap",
-    "//rs/types/base_types",
-    "@crate_index//:base64",
-    "@crate_index//:candid",
-    "@crate_index//:isocountry",
-    "@crate_index//:lazy_static",
-    "@crate_index//:maplit",
-    "@crate_index//:prost",
-    "@crate_index//:serde",
-    "@crate_index//:serde_yaml",
-]
-
-MACRO_DEPENDENCIES = []
-
-ALIASES = {}
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/nervous_system/common/test_keys",
-    "//rs/sns/init/protobuf_generator:lib",
-    "//rs/test_utilities/compare_dirs",
-    "@crate_index//:num-traits",
-    "@crate_index//:pretty_assertions",
-    "@crate_index//:tempfile",
-]
-
-MACRO_DEV_DEPENDENCIES = []
 
 rust_library(
     name = "init",
     srcs = glob([
         "src/**",
     ]),
-    aliases = ALIASES,
     crate_name = "ic_sns_init",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+        "//rs/ledger_suite/common/ledger_canister_core",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icrc1/index-ng",
+        "//rs/ledger_suite/icrc1/ledger",
+        "//rs/nervous_system/common",
+        "//rs/nervous_system/proto",
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "//rs/sns/governance",
+        "//rs/sns/root",
+        "//rs/sns/swap",
+        "//rs/types/base_types",
+        "@crate_index//:base64",
+        "@crate_index//:candid",
+        "@crate_index//:isocountry",
+        "@crate_index//:lazy_static",
+        "@crate_index//:maplit",
+        "@crate_index//:prost",
+        "@crate_index//:serde",
+        "@crate_index//:serde_yaml",
+    ],
 )
 
 rust_library(
@@ -67,12 +48,33 @@ rust_library(
     srcs = glob([
         "src/**",
     ]),
-    aliases = ALIASES,
     crate_features = ["test"],
     crate_name = "ic_sns_init",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+        "//rs/ledger_suite/common/ledger_canister_core",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icrc1/index-ng",
+        "//rs/ledger_suite/icrc1/ledger",
+        "//rs/nervous_system/common",
+        "//rs/nervous_system/proto",
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "//rs/sns/governance",
+        "//rs/sns/root",
+        "//rs/sns/swap",
+        "//rs/types/base_types",
+        "@crate_index//:base64",
+        "@crate_index//:candid",
+        "@crate_index//:isocountry",
+        "@crate_index//:lazy_static",
+        "@crate_index//:maplit",
+        "@crate_index//:prost",
+        "@crate_index//:serde",
+        "@crate_index//:serde_yaml",
+    ],
 )
 
 generated_files_check(
@@ -85,7 +87,15 @@ generated_files_check(
         "//rs/types/base_types:protos",
     ],
     manifest_dir = "rs/sns/init",
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/nervous_system/common/test_keys",
+        "//rs/sns/init/protobuf_generator:lib",
+        "//rs/test_utilities/compare_dirs",
+        "@crate_index//:num-traits",
+        "@crate_index//:pretty_assertions",
+        "@crate_index//:tempfile",
+    ],
 )
 
 # These tests will run with the testing-only CFG, i.e.:
@@ -95,8 +105,15 @@ rust_test(
     name = "init_test--test_feature",
     crate = ":init--test_feature",
     crate_features = ["test"],
-    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/nervous_system/common/test_keys",
+        "//rs/sns/init/protobuf_generator:lib",
+        "//rs/test_utilities/compare_dirs",
+        "@crate_index//:num-traits",
+        "@crate_index//:pretty_assertions",
+        "@crate_index//:tempfile",
+    ],
 )
 
 # These tests will run with the mainnet CFG, i.e.:
@@ -105,6 +122,13 @@ rust_test(
 rust_test(
     name = "init_test",
     crate = "init",
-    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/nervous_system/common/test_keys",
+        "//rs/sns/init/protobuf_generator:lib",
+        "//rs/test_utilities/compare_dirs",
+        "@crate_index//:num-traits",
+        "@crate_index//:pretty_assertions",
+        "@crate_index//:tempfile",
+    ],
 )

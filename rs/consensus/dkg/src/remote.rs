@@ -14,7 +14,7 @@ use ic_replicated_state::{
 };
 use ic_types::{
     Height, RegistryVersion, SubnetId,
-    consensus::dkg::{DkgPayloadCreationError, DkgSummary},
+    consensus::dkg::{DkgPayloadCreationError, DkgSummary, RemoteDkgAttempts},
     crypto::threshold_sig::ni_dkg::{
         NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         config::NiDkgConfig,
@@ -178,7 +178,7 @@ pub(crate) fn build_callback_id_config_map(
 ) -> Result<BTreeMap<CallbackId, ConfigResult>, DkgPayloadCreationError> {
     let mut callback_id_config_map = BTreeMap::new();
     let call_contexts = &state.metadata.subnet_call_context_manager;
-    let remote_dkg_attempts = &dkg_summary.initial_dkg_attempts;
+    let remote_dkg_attempts = &dkg_summary.remote_dkg_attempts;
 
     // Iterate over all remote DKG contexts
     for (callback_id, context) in remote_dkg_contexts(call_contexts) {
@@ -187,21 +187,20 @@ pub(crate) fn build_callback_id_config_map(
             continue;
         }
 
-        if let Some(&attempts) = remote_dkg_attempts.get(context.target_id()) {
-            if attempts == 0 {
-                // An attempt count of 0 means that the context has already been completed
-                // in the last interval. We skip the context to avoid handling it again in
-                // the current interval.
-                continue;
-            }
-            if attempts >= MAX_REMOTE_DKG_ATTEMPTS {
-                // Add timeout errors for contexts that have been attempted too many times
+        match remote_dkg_attempts.get(context.target_id()) {
+            // A `Completed` status means that the context has already been completed in the last
+            // interval. We skip the context to avoid handling it again in the current interval.
+            Some(RemoteDkgAttempts::Completed) => continue,
+            // Add timeout errors for contexts that have been attempted too many times.
+            Some(RemoteDkgAttempts::Attempt(n)) if *n >= MAX_REMOTE_DKG_ATTEMPTS => {
                 callback_id_config_map.insert(
                     callback_id,
                     Err(context.generate_timeout_errors(dkg_summary.height, dealer_subnet)),
                 );
                 continue;
             }
+            // For all other cases, we proceed to create configs.
+            Some(RemoteDkgAttempts::Attempt(_)) | None => {}
         }
 
         // Create configs for the context and insert them into the map
@@ -234,9 +233,9 @@ pub(crate) fn get_updated_remote_dkg_attempts(
     summary: &DkgSummary,
     state: &ReplicatedState,
     completed_target_ids: BTreeSet<NiDkgTargetId>,
-) -> BTreeMap<NiDkgTargetId, u32> {
+) -> BTreeMap<NiDkgTargetId, RemoteDkgAttempts> {
     let call_contexts = &state.metadata.subnet_call_context_manager;
-    let previous_remote_dkg_attempts = &summary.initial_dkg_attempts;
+    let previous_remote_dkg_attempts = &summary.remote_dkg_attempts;
     let mut remote_dkg_attempts = BTreeMap::new();
 
     // Iterate over all remote DKG contexts
@@ -244,18 +243,18 @@ pub(crate) fn get_updated_remote_dkg_attempts(
         let target_id = *context.target_id();
         let new_attempts = match previous_remote_dkg_attempts.get(&target_id) {
             // Carry forward completed contexts that still appear in the state.
-            Some(&0) => 0,
+            Some(RemoteDkgAttempts::Completed) => RemoteDkgAttempts::Completed,
             // Increment the attempt count for non-completed contexts.
-            Some(attempts) => attempts.saturating_add(1),
+            Some(RemoteDkgAttempts::Attempt(n)) => RemoteDkgAttempts::from(n.saturating_add(1)),
             // For new contexts, set the attempt count to 1.
-            None => 1,
+            None => RemoteDkgAttempts::from(1),
         };
         remote_dkg_attempts.insert(target_id, new_attempts);
     }
 
-    // Completed target IDs remain tracked with attempt counter set to 0.
+    // Completed target IDs remain tracked with attempt counter set to `Completed`.
     for target_id in completed_target_ids {
-        remote_dkg_attempts.insert(target_id, 0);
+        remote_dkg_attempts.insert(target_id, RemoteDkgAttempts::Completed);
     }
 
     remote_dkg_attempts
@@ -288,18 +287,17 @@ mod tests {
         height: Height,
         current_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
         next_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
-        initial_dkg_attempts: BTreeMap<NiDkgTargetId, u32>,
+        remote_dkg_attempts: BTreeMap<NiDkgTargetId, RemoteDkgAttempts>,
     ) -> DkgSummary {
         DkgSummary::new(
             vec![],
             current_transcripts,
             next_transcripts,
-            vec![],
             RegistryVersion::from(1),
             Height::from(10),
             Height::from(10),
             height,
-            initial_dkg_attempts,
+            remote_dkg_attempts,
         )
     }
 
@@ -426,12 +424,16 @@ mod tests {
                 && config.dkg_id().target_subnet == NiDkgTargetSubnet::Remote(target_id)
         }));
 
-        // Zero attempts => context must be skipped.
+        // Completed status => context must be skipped.
         let zero_attempts_summary = test_dkg_summary(
             Height::from(101),
             BTreeMap::new(),
             BTreeMap::new(),
-            BTreeMap::from([(target_id, 0), (target_id2, 0), (target_id3, 0)]),
+            BTreeMap::from([
+                (target_id, RemoteDkgAttempts::Completed),
+                (target_id2, RemoteDkgAttempts::Completed),
+                (target_id3, RemoteDkgAttempts::Completed),
+            ]),
         );
         let zero_attempts_map = build_callback_id_config_map(
             dealer_subnet,
@@ -450,9 +452,18 @@ mod tests {
             BTreeMap::new(),
             BTreeMap::new(),
             BTreeMap::from([
-                (target_id, MAX_REMOTE_DKG_ATTEMPTS + 1),
-                (target_id2, MAX_REMOTE_DKG_ATTEMPTS + 1),
-                (target_id3, MAX_REMOTE_DKG_ATTEMPTS + 1),
+                (
+                    target_id,
+                    RemoteDkgAttempts::from(MAX_REMOTE_DKG_ATTEMPTS + 1),
+                ),
+                (
+                    target_id2,
+                    RemoteDkgAttempts::from(MAX_REMOTE_DKG_ATTEMPTS + 1),
+                ),
+                (
+                    target_id3,
+                    RemoteDkgAttempts::from(MAX_REMOTE_DKG_ATTEMPTS + 1),
+                ),
             ]),
         );
         let max_attempts_map = build_callback_id_config_map(
@@ -640,7 +651,7 @@ mod tests {
             Height::from(103),
             BTreeMap::new(),
             BTreeMap::new(),
-            BTreeMap::from([(target_id, MAX_REMOTE_DKG_ATTEMPTS)]),
+            BTreeMap::from([(target_id, RemoteDkgAttempts::from(MAX_REMOTE_DKG_ATTEMPTS))]),
         );
         let max_attempts_map = build_callback_id_config_map(
             dealer_subnet,
@@ -716,12 +727,12 @@ mod tests {
         let zero_attempts_removed_target = NiDkgTargetId::new([7_u8; 32]);
 
         let previous_attempts = BTreeMap::from([
-            (persisted_target, 2),
-            (removed_target, 7),
-            (completed_target, 3),
-            (filtered_idkg_target, 11),
-            (zero_attempts_persisted_target, 0),
-            (zero_attempts_removed_target, 0),
+            (persisted_target, RemoteDkgAttempts::from(2)),
+            (removed_target, RemoteDkgAttempts::from(7)),
+            (completed_target, RemoteDkgAttempts::from(3)),
+            (filtered_idkg_target, RemoteDkgAttempts::from(11)),
+            (zero_attempts_persisted_target, RemoteDkgAttempts::Completed),
+            (zero_attempts_removed_target, RemoteDkgAttempts::Completed),
         ]);
         let summary = test_dkg_summary(
             Height::from(42),
@@ -806,10 +817,19 @@ mod tests {
 
         let attempts = get_updated_remote_dkg_attempts(&summary, &state, completed_target_ids);
 
-        assert_eq!(attempts.get(&persisted_target), Some(&3));
-        assert_eq!(attempts.get(&new_target), Some(&1));
-        assert_eq!(attempts.get(&completed_target), Some(&0));
-        assert_eq!(attempts.get(&zero_attempts_persisted_target), Some(&0));
+        assert_eq!(
+            attempts.get(&persisted_target),
+            Some(&RemoteDkgAttempts::from(3))
+        );
+        assert_eq!(attempts.get(&new_target), Some(&RemoteDkgAttempts::from(1)));
+        assert_eq!(
+            attempts.get(&completed_target),
+            Some(&RemoteDkgAttempts::Completed)
+        );
+        assert_eq!(
+            attempts.get(&zero_attempts_persisted_target),
+            Some(&RemoteDkgAttempts::Completed)
+        );
         assert!(!attempts.contains_key(&zero_attempts_removed_target));
         assert!(!attempts.contains_key(&removed_target));
         assert!(!attempts.contains_key(&filtered_idkg_target));

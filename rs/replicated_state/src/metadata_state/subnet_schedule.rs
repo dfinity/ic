@@ -42,6 +42,14 @@ impl CanisterPriority {
         long_execution_start_round: None,
         last_full_execution_round: ExecutionRound::new(0),
     };
+
+    /// Returns true if the canister has non-zero accumulated priority or is in a
+    /// long execution.
+    pub fn is_non_zero(&self) -> bool {
+        self.accumulated_priority.get() != 0
+            || self.executed_rounds != 0
+            || self.long_execution_start_round.is_some()
+    }
 }
 
 impl Default for CanisterPriority {
@@ -54,6 +62,9 @@ impl Default for CanisterPriority {
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetSchedule {
     priorities: BTreeMap<CanisterId, CanisterPriority>,
+
+    #[cfg(debug_assertions)]
+    pub fully_executed_canisters: std::collections::BTreeSet<CanisterId>,
 }
 
 /// Two schedules are equal if they have the same canister priorities (modulo
@@ -79,7 +90,11 @@ impl ValidateEq for SubnetSchedule {
 
 impl SubnetSchedule {
     pub fn new(priorities: BTreeMap<CanisterId, CanisterPriority>) -> Self {
-        Self { priorities }
+        Self {
+            priorities,
+            #[cfg(debug_assertions)]
+            fully_executed_canisters: std::collections::BTreeSet::new(),
+        }
     }
 
     /// Returns the priority for the given canister, or the default priority if not
@@ -112,7 +127,7 @@ impl SubnetSchedule {
     }
 
     /// Retains only the priorities for which the predicate returns `true`.
-    pub(crate) fn retain(&mut self, f: impl FnMut(&CanisterId, &mut CanisterPriority) -> bool) {
+    pub fn retain(&mut self, f: impl FnMut(&CanisterId, &mut CanisterPriority) -> bool) {
         self.priorities.retain(f);
     }
 

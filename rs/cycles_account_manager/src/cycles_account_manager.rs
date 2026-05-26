@@ -982,7 +982,6 @@ impl CyclesAccountManager {
             | CyclesUseCase::VetKd
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
-            | CyclesUseCase::NonConsumed
             | CyclesUseCase::BurnedCycles
             | CyclesUseCase::DroppedMessages => system_state.balance(),
         };
@@ -995,7 +994,6 @@ impl CyclesAccountManager {
             reveal_top_up,
         )?;
 
-        debug_assert_ne!(use_case, CyclesUseCase::NonConsumed);
         system_state.consume_cycles(cycles);
         Ok(())
     }

@@ -1,9 +1,10 @@
 use crate::{
     neuron::Neuron,
     pb::v1::{
-        Followees, Governance as GovernanceProto, MonthlyNodeProviderRewards, NetworkEconomics,
-        NeuronDissolveStateSnapshot, NeuronStakeTransfer, NodeProvider, ProposalData,
-        RestoreAgingSummary, RewardEvent, Topic, XdrConversionRate as XdrConversionRatePb,
+        Followees, Governance as GovernanceProto, IcpPriceHistory, MaturityModulation,
+        MonthlyNodeProviderRewards, NetworkEconomics, NeuronDissolveStateSnapshot,
+        NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent, Topic,
+        XdrConversionRate as XdrConversionRatePb,
         governance::{GovernanceCachedMetrics, NeuronInFlightCommand},
     },
 };
@@ -36,9 +37,17 @@ pub struct HeapGovernanceData {
     pub xdr_conversion_rate: XdrConversionRate,
     pub restore_aging_summary: Option<RestoreAgingSummary>,
     pub topic_of_garbage_collected_proposals: HashMap<u64, Topic>,
+    /// Persisted-true sentinel: the one-time eight year gang bonus base migration ran on
+    /// mainnet. Kept as a rollback guard so a previous release that sees this `true` skips
+    /// the migration (re-running it would zero out the bonus bases on dissolve-delay-clamped
+    /// neurons).
     pub eight_year_gang_bonus_migration_done: bool,
     pub neuron_id_to_pre_clamp_dissolve_state: HashMap<u64, NeuronDissolveStateSnapshot>,
+    /// Persisted-true sentinel for the relaxed eight year gang induction. See
+    /// `eight_year_gang_bonus_migration_done` for details.
     pub relaxed_eight_year_gang_bonus_migration_done: bool,
+    pub icp_price_history: Option<IcpPriceHistory>,
+    pub maturity_modulation: Option<MaturityModulation>,
 }
 
 /// Internal representation for `XdrConversionRatePb`.
@@ -211,6 +220,16 @@ pub fn initialize_governance(
         eight_year_gang_bonus_migration_done: false,
         neuron_id_to_pre_clamp_dissolve_state: HashMap::new(),
         relaxed_eight_year_gang_bonus_migration_done: false,
+        icp_price_history: None,
+        // Default to a neutral 0 permyriad so that spawning and maturity disbursement keep
+        // working immediately after init, before `update_icp_xdr_rate_related_data` accumulates
+        // enough price history to compute a real one. `updated_at_days_since_epoch` is left
+        // `None` so the task treats this as "no prior measurement" rather than "already updated
+        // today".
+        maturity_modulation: Some(MaturityModulation {
+            current_value_permyriad: Some(0),
+            updated_at_days_since_epoch: None,
+        }),
     };
 
     // Finally, return the result.
@@ -254,6 +273,8 @@ pub fn split_governance_proto(
         neuron_id_to_pre_clamp_dissolve_state,
         relaxed_eight_year_gang_bonus_migration_done,
         rng_seed,
+        icp_price_history,
+        maturity_modulation,
     } = governance_proto;
 
     let neuron_management_voting_period_seconds = neuron_management_voting_period_seconds
@@ -299,6 +320,8 @@ pub fn split_governance_proto(
             eight_year_gang_bonus_migration_done,
             neuron_id_to_pre_clamp_dissolve_state,
             relaxed_eight_year_gang_bonus_migration_done,
+            icp_price_history,
+            maturity_modulation,
         },
         rng_seed,
     )
@@ -339,6 +362,8 @@ pub fn reassemble_governance_proto(
         eight_year_gang_bonus_migration_done,
         neuron_id_to_pre_clamp_dissolve_state,
         relaxed_eight_year_gang_bonus_migration_done,
+        icp_price_history,
+        maturity_modulation,
     } = heap_governance_proto;
 
     let neuron_management_voting_period_seconds = Some(neuron_management_voting_period_seconds);
@@ -373,6 +398,8 @@ pub fn reassemble_governance_proto(
         neuron_id_to_pre_clamp_dissolve_state,
         relaxed_eight_year_gang_bonus_migration_done,
         rng_seed: rng_seed.map(|seed| seed.to_vec()),
+        icp_price_history,
+        maturity_modulation,
     }
 }
 
@@ -424,6 +451,8 @@ mod tests {
                 },
             },
             rng_seed: Some(vec![1_u8; 32]),
+            icp_price_history: None,
+            maturity_modulation: None,
         }
     }
 

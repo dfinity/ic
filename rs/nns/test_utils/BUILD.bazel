@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     # Keep sorted.
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/crypto/node_key_generation",
@@ -73,53 +73,51 @@ BASE_DEPENDENCIES = [
     "@crate_index//:tokio",
 ]
 
-# Each target declared in this file may choose either these (release-ready)
-# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
-DEPENDENCIES = BASE_DEPENDENCIES + [
-    # Keep sorted.
-    "//rs/nns/gtc",
-    "//rs/nns/handlers/root/impl:root",
-]
-
-DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    # Keep sorted.
-    "//rs/nns/gtc:gtc--test_feature",
-    "//rs/nns/handlers/root/impl:root--test_feature",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:async-trait",
-]
-
-ALIASES = {}
-
 rust_library(
     name = "test_utils",
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_name = "ic_nns_test_utils",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = BASE_DEPENDENCIES + [
+        # Keep sorted.
+        "//rs/nns/gtc",
+        "//rs/nns/handlers/root/impl:root",
+    ],
 )
 
 rust_library(
     name = "test_utils--test_feature",
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_features = ["test"],
     crate_name = "ic_nns_test_utils",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     version = "0.9.0",
-    deps = DEPENDENCIES_WITH_TEST_FEATURES,
+    deps = BASE_DEPENDENCIES + [
+        # Keep sorted.
+        "//rs/nns/gtc:gtc--test_feature",
+        "//rs/nns/handlers/root/impl:root--test_feature",
+    ],
 )
 
 rust_test(
     name = "gtc_helper_tests",
     srcs = ["src/gtc_helpers.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
+    deps = BASE_DEPENDENCIES + [
+        # Keep sorted.
+        "//rs/nns/gtc",
+        "//rs/nns/handlers/root/impl:root",
+    ],
 )

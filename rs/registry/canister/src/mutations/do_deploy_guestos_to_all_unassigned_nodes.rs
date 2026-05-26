@@ -36,11 +36,9 @@ pub struct DeployGuestosToAllUnassignedNodesPayload {
 
 #[cfg(test)]
 mod tests {
-    use ic_protobuf::registry::replica_version::v1::{
-        BlessedReplicaVersions, ReplicaVersionRecord,
-    };
-    use ic_registry_keys::{make_blessed_replica_versions_key, make_replica_version_key};
-    use ic_registry_transport::{insert, upsert};
+    use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
+    use ic_registry_keys::make_replica_version_key;
+    use ic_registry_transport::insert;
     use prost::Message;
 
     use crate::{
@@ -51,8 +49,8 @@ mod tests {
     use super::DeployGuestosToAllUnassignedNodesPayload;
 
     #[test]
-    #[should_panic(expected = "'version' is NOT blessed")]
-    fn should_panic_if_version_not_blessed() {
+    #[should_panic(expected = "'version' is NOT elected")]
+    fn should_panic_if_version_not_elected() {
         let mut registry = invariant_compliant_registry(0);
 
         // Make a proposal to upgrade all unassigned nodes to a new version
@@ -67,9 +65,7 @@ mod tests {
     fn should_succeed_if_upgrade_proposal_is_valid() {
         let mut registry = invariant_compliant_registry(0);
 
-        // Create and bless version
-        let blessed_versions = registry.get_blessed_replica_version_ids();
-
+        // Create and elect version
         registry.maybe_apply_mutation_internal(vec![
             // Mutation to insert new replica version
             insert(
@@ -81,17 +77,9 @@ mod tests {
                 }
                 .encode_to_vec(),
             ),
-            // Mutation to insert BlessedReplicaVersions
-            upsert(
-                make_blessed_replica_versions_key(), // key
-                BlessedReplicaVersions {
-                    blessed_version_ids: [blessed_versions, vec!["version".into()]].concat(),
-                }
-                .encode_to_vec(),
-            ),
         ]);
 
-        // Make a proposal to upgrade all unassigned nodes to a new blessed version
+        // Make a proposal to upgrade all unassigned nodes to a new elected version
         let payload = DeployGuestosToAllUnassignedNodesPayload {
             elected_replica_version: "version".into(),
         };
