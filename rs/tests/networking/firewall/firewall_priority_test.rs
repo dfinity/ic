@@ -320,7 +320,7 @@ async fn set_default_registry_rules(log: &Logger, nns_node: &IcNodeSnapshot) {
     execute_add_firewall_rules_proposal(
         log,
         nns_node,
-        FirewallRulesScope::Global,
+        FirewallRulesScope::ReplicaNodes,
         default_rules.clone(),
         (0..default_rules.len()).map(|u| u as i32).collect(),
         vec![],
