@@ -1,9 +1,7 @@
 use crate::canister_state::queues::{
     CanisterInput, CanisterQueuesLoopDetector, refunds::RefundPool,
 };
-use crate::canister_state::system_state::{
-    CanisterOutputQueuesIterator, CanisterStatus, push_input,
-};
+use crate::canister_state::system_state::{CanisterOutputQueuesIterator, push_input};
 use crate::metadata_state::subnet_call_context_manager::{
     PreSignatureStash, ReshareChainKeyContext, SignWithThresholdContext,
 };
@@ -27,13 +25,12 @@ use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    AccumulatedPriority, CanisterId, NumBytes, SubnetId, Time,
+    CanisterId, NumBytes, SubnetId, Time,
     batch::{ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
     messages::{
-        CallbackId, Ingress, MessageId, Refund, RequestOrResponse, Response, StopCanisterCallId,
-        SubnetMessage,
+        CallbackId, Ingress, MessageId, Refund, RequestOrResponse, Response, SubnetMessage,
     },
     time::CoarseTime,
 };
@@ -494,42 +491,6 @@ impl ReplicatedState {
         }
     }
 
-    /// Removes `StopCanisterCall`s from `SubnetCallContextManager` that have no
-    /// corresponding `StopCanisterContext` in the target canister's stop contexts.
-    /// These can arise from a bug fixed in commit 52e7b89 where a `StopCanisterCall`
-    /// was pushed but never removed when the `stop_canister` completed, e.g., when
-    /// the target canister was already stopped or the sender was not a controller.
-    pub fn remove_orphaned_stop_canister_calls(&mut self) {
-        let call_ids_with_context: BTreeSet<StopCanisterCallId> = self
-            .canister_states
-            .values()
-            .flat_map(|canister| match canister.system_state.get_status() {
-                CanisterStatus::Stopping { stop_contexts, .. } => stop_contexts.as_slice(),
-                _ => &[],
-            })
-            .filter_map(|ctx| *ctx.call_id())
-            .collect();
-
-        let orphaned: Vec<StopCanisterCallId> = self
-            .metadata
-            .subnet_call_context_manager
-            .iter_stop_canister_calls()
-            .filter_map(|(call_id, _)| {
-                if call_ids_with_context.contains(call_id) {
-                    None
-                } else {
-                    Some(*call_id)
-                }
-            })
-            .collect();
-
-        for call_id in orphaned {
-            self.metadata
-                .subnet_call_context_manager
-                .remove_stop_canister_call(call_id);
-        }
-    }
-
     /// References into _all_ fields.
     #[allow(clippy::type_complexity)]
     pub fn component_refs(
@@ -723,22 +684,6 @@ impl ReplicatedState {
             &mut self.canister_states,
             &mut self.metadata.subnet_schedule,
         )
-    }
-
-    /// Time complexity: `O(n)` in the number of active canisters.
-    pub fn canister_accumulated_priorities(&self) -> BTreeMap<CanisterId, AccumulatedPriority> {
-        self.canister_states
-            .keys()
-            .map(|canister_id| {
-                (
-                    *canister_id,
-                    self.metadata
-                        .subnet_schedule
-                        .get(canister_id)
-                        .accumulated_priority,
-                )
-            })
-            .collect()
     }
 
     /// Prunes the canister priorities of deleted canisters; and those that have
@@ -977,6 +922,16 @@ impl ReplicatedState {
             (self.subnet_queues.best_effort_message_memory_usage() as u64).into();
 
         canisters_memory_usage + subnet_memory_usage
+    }
+
+    /// Returns the total memory usage of all canisters. Execution and wasm custom section
+    /// memory are included in `memory_usage()`, message memory is added separately.
+    pub fn total_canister_memory_usage(&self) -> NumBytes {
+        let mut total_memory_usage = NumBytes::new(0);
+        for canister in self.canisters_iter() {
+            total_memory_usage += canister.memory_usage() + canister.message_memory_usage().total();
+        }
+        total_memory_usage
     }
 
     /// Returns the total memory taken by the ingress history in bytes.

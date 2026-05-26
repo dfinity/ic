@@ -5,4 +5,4 @@ cryptography==46.0.7
 idna==3.10
 pycparser==2.22
 requests==2.33.0
-urllib3==2.6.3
+urllib3==2.7.0

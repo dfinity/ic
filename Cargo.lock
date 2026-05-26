@@ -457,7 +457,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -468,7 +468,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5598,6 +5598,7 @@ dependencies = [
  "hyper-util",
  "ic-interfaces-registry",
  "ic-registry-client-helpers",
+ "ic-types",
  "rcgen 0.13.2",
  "rustls 0.23.37",
  "sev",
@@ -5641,6 +5642,8 @@ dependencies = [
  "ic-registry-client-fake",
  "ic-registry-proto-data-provider",
  "ic-test-utilities-registry",
+ "ic-types",
+ "rand 0.8.5",
  "rustls 0.23.37",
  "sev_guest",
  "sev_guest_testing",
@@ -6275,7 +6278,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.4.10",
+ "socket2 0.5.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -6370,7 +6373,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.3",
+ "socket2 0.5.10",
  "system-configuration",
  "tokio",
  "tower-layer",
@@ -6479,6 +6482,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-nns-governance-conversions",
+ "ic-nns-handler-lifeline-interface",
  "ic-nns-handler-root",
  "ic-nns-init",
  "ic-nns-test-utils",
@@ -8379,6 +8383,7 @@ dependencies = [
  "hex",
  "ic-crypto-internal-basic-sig-rsa-pkcs1",
  "ic-crypto-internal-test-vectors",
+ "ic-ed25519 0.6.0",
  "ic-secp256r1",
  "ic-types",
  "serde",
@@ -11213,7 +11218,7 @@ dependencies = [
 
 [[package]]
 name = "ic-management-canister-types"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "candid",
  "candid_parser",
@@ -11348,7 +11353,7 @@ dependencies = [
 
 [[package]]
 name = "ic-metrics-assert"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -14587,6 +14592,7 @@ dependencies = [
  "crossbeam-channel",
  "hex",
  "ic-base-types",
+ "ic-config",
  "ic-interfaces",
  "ic-logger",
  "ic-management-canister-types-private",
@@ -14626,6 +14632,7 @@ dependencies = [
  "ic-base-types",
  "ic-btc-adapter-client",
  "ic-btc-consensus",
+ "ic-certification 0.9.0",
  "ic-config",
  "ic-consensus",
  "ic-consensus-cup-utils",
@@ -15303,7 +15310,6 @@ dependencies = [
  "ic-nns-test-utils",
  "ic-protobuf",
  "ic-registry-keys",
- "ic-registry-nns-data-provider",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
@@ -15601,6 +15607,8 @@ name = "ic-utils-thread"
 version = "0.9.0"
 dependencies = [
  "crossbeam-channel",
+ "ic-metrics",
+ "prometheus",
 ]
 
 [[package]]
@@ -16044,7 +16052,6 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-protobuf",
  "ic-registry-keys",
- "ic-registry-nns-data-provider",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
@@ -20794,7 +20801,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash 2.1.1",
  "rustls 0.23.37",
- "socket2 0.6.3",
+ "socket2 0.5.10",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -20831,9 +20838,9 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.3",
+ "socket2 0.5.10",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -23191,7 +23198,7 @@ version = "1.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b"
 dependencies = [
- "errno 0.3.14",
+ "errno 0.2.8",
  "libc",
 ]
 
@@ -23554,7 +23561,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]

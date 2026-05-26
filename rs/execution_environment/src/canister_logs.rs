@@ -58,8 +58,10 @@ pub(crate) fn fetch_canister_logs_response(
     check_log_visibility_permission(&sender, canister.log_visibility(), canister.controllers())?;
     let s = &canister.system_state;
     let canister_log_records = match log_memory_store_feature {
-        FlagStatus::Disabled => filter_records(&args, s.canister_log.records()),
-        FlagStatus::Enabled => s.log_memory_store.records(args.filter),
+        FlagStatus::Enabled if s.log_memory_store.is_migrated() => {
+            s.log_memory_store.records(args.filter)
+        }
+        _ => filter_records(&args, s.canister_log.records())?,
     };
     Ok(Encode!(&FetchCanisterLogsResponse {
         canister_log_records

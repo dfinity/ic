@@ -16,7 +16,7 @@ use ic_consensus_system_test_utils::{
         update_subnet_record, wait_until_authentication_is_granted,
     },
     subnet::assert_subnet_is_healthy,
-    upgrade::{assert_assigned_replica_version, bless_replica_version},
+    upgrade::{assert_assigned_replica_version, elect_replica_version},
 };
 use ic_nervous_system_root::change_canister::AddCanisterRequest;
 use ic_recovery::{
@@ -390,8 +390,9 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     if !cfg.add_upgrade_version {
         // If ic-recovery does not add the new version to the registry, then we must elect it now.
         if cfg.use_mainnet_state {
-            block_on(ProposalWithMainnetState::bless_replica_version(
+            block_on(ProposalWithMainnetState::elect_replica_version(
                 &nns_node,
+                &env.topology_snapshot(),
                 &upgrade_version,
                 &logger,
                 upgrade_image_hash.clone(),
@@ -399,8 +400,9 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                 vec![upgrade_image_url.to_string()],
             ))
         } else {
-            block_on(bless_replica_version(
+            block_on(elect_replica_version(
                 &nns_node,
+                &env.topology_snapshot(),
                 &upgrade_version,
                 &logger,
                 upgrade_image_hash.clone(),
@@ -854,7 +856,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, 
     // Resume the recovery by re-executing the command starting from WaitForCUP. The command should
     // succeed this time.
     let session = node.block_on_ssh_session().unwrap(); // New session after reboot
-    let command = command + r#"--resume WaitForCUP \"#;
+    let command = command + r#"--resume WaitForCUP"#;
     info!(logger, "Resuming local recovery command: \n{command}");
     node.block_on_bash_script_from_session(&session, &command)
         .expect("Local recovery failed to complete");
