@@ -7,7 +7,7 @@ use ic_interfaces::consensus_pool::{
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
     Height, Time,
-    consensus::{Block, CatchUpPackage, ConsensusMessage, Finalization, HasHeight, HashedBlock},
+    consensus::{Block, CatchUpPackage, ConsensusMessage, Finalization, HasHeight},
 };
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -59,7 +59,6 @@ impl CachedData {
 struct CachedChainIterator<'a> {
     consensus_pool: &'a dyn ConsensusPool,
     finalized_chain: Arc<dyn ConsensusBlockChain>,
-    to_block: Option<HashedBlock>,
     cursor: Option<Block>,
 }
 
@@ -68,12 +67,10 @@ impl<'a> CachedChainIterator<'a> {
         consensus_pool: &'a dyn ConsensusPool,
         finalized_chain: Arc<dyn ConsensusBlockChain>,
         from_block: Block,
-        to_block: Option<HashedBlock>,
     ) -> Self {
         CachedChainIterator {
             consensus_pool,
             finalized_chain,
-            to_block,
             cursor: Some(from_block),
         }
     }
@@ -85,21 +82,6 @@ impl<'a> CachedChainIterator<'a> {
         }
         let parent_height = height.decrement();
         let parent_hash = &block.parent;
-        if let Some(to_block) = &self.to_block {
-            match parent_height.cmp(&to_block.height()) {
-                std::cmp::Ordering::Less => {
-                    return None;
-                }
-                std::cmp::Ordering::Equal => {
-                    if parent_hash == to_block.get_hash() {
-                        return Some(to_block.as_ref().clone());
-                    } else {
-                        return None;
-                    }
-                }
-                _ => (),
-            }
-        }
         // Use cached blocks if the height is finalized
         if parent_height <= self.finalized_chain.tip().height()
             && let Ok(block) = self.finalized_chain.get_block_by_height(parent_height)
@@ -183,7 +165,6 @@ impl ConsensusPoolCache for ConsensusCacheImpl {
             pool,
             self.finalized_chain(),
             block,
-            Some(self.catch_up_package().content.block),
         ))
     }
 }
@@ -335,7 +316,7 @@ pub(crate) fn update_summary_block(
             }
 
             // Otherwise, find the parent block at start_height
-            *summary_block = ChainIterator::new(consensus_pool, finalized_tip.clone(), None)
+            *summary_block = ChainIterator::new(consensus_pool, finalized_tip.clone())
                 .take_while(|block| block.height() >= start_height)
                 .find(|block| block.height() == start_height)
                 .unwrap_or_else(|| {
@@ -397,7 +378,6 @@ impl ConsensusBlockChainImpl {
             consensus_pool,
             consensus_pool.as_block_cache().finalized_chain(),
             tip,
-            None,
         )
         .take_while(|block| block.height() >= start_height)
         .map(|block| (block.height(), block));
@@ -468,7 +448,7 @@ impl ConsensusBlockChainImpl {
         if summary_height >= start_height && summary_height <= tip.height() {
             blocks.insert(summary_height, summary_block.clone());
         }
-        ChainIterator::new(consensus_pool, tip.clone(), None)
+        ChainIterator::new(consensus_pool, tip.clone())
             .take_while(|block| block.height() >= start_height)
             .for_each(|block| {
                 blocks.insert(block.height(), block);

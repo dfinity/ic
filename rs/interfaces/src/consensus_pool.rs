@@ -11,7 +11,7 @@ use ic_types::{
     artifact::ConsensusMessageId,
     consensus::{
         Block, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ContentEq,
-        EquivocationProof, Finalization, FinalizationShare, HasHeight, HashedBlock, Notarization,
+        EquivocationProof, Finalization, FinalizationShare, HasHeight, Notarization,
         NotarizationShare, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
     },
     crypto::CryptoHashOf,
@@ -388,11 +388,7 @@ pub trait ConsensusPoolCache: Send + Sync {
         pool: &'a dyn ConsensusPool,
         block: Block,
     ) -> Box<dyn Iterator<Item = Block> + 'a> {
-        Box::new(ChainIterator::new(
-            pool,
-            block,
-            Some(self.catch_up_package().content.block),
-        ))
+        Box::new(ChainIterator::new(pool, block))
     }
 }
 
@@ -427,23 +423,15 @@ pub enum ConsensusBlockChainErr {
 /// An iterator for block ancestors.
 pub struct ChainIterator<'a> {
     consensus_pool: &'a dyn ConsensusPool,
-    to_block: Option<HashedBlock>,
     cursor: Option<Block>,
 }
 
 impl<'a> ChainIterator<'a> {
-    /// Return an iterator that iterates block ancestors, going backwards
-    /// from the `from_block` to the `to_block` (both inclusive), or until a
-    /// parent is not found in the consensus pool if the `to_block` is not
-    /// specified.
-    pub fn new(
-        consensus_pool: &'a dyn ConsensusPool,
-        from_block: Block,
-        to_block: Option<HashedBlock>,
-    ) -> Self {
+    /// Return an iterator that iterates block ancestors, going backwards from the `from_block`
+    /// until a parent is not found in the consensus pool.
+    pub fn new(consensus_pool: &'a dyn ConsensusPool, from_block: Block) -> Self {
         ChainIterator {
             consensus_pool,
-            to_block,
             cursor: Some(from_block),
         }
     }
@@ -455,21 +443,6 @@ impl<'a> ChainIterator<'a> {
         }
         let parent_height = height.decrement();
         let parent_hash = &block.parent;
-        if let Some(to_block) = &self.to_block {
-            match parent_height.cmp(&to_block.height()) {
-                std::cmp::Ordering::Less => {
-                    return None;
-                }
-                std::cmp::Ordering::Equal => {
-                    if parent_hash == to_block.get_hash() {
-                        return Some(to_block.as_ref().clone());
-                    } else {
-                        return None;
-                    }
-                }
-                _ => (),
-            }
-        }
         self.consensus_pool
             .validated()
             .block_proposal()

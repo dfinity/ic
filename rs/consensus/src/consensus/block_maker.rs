@@ -654,6 +654,7 @@ mod tests {
         signature::ThresholdSignature,
         *,
     };
+    use mockall::Sequence;
     use rstest::rstest;
     use std::sync::Arc;
 
@@ -889,14 +890,26 @@ mod tests {
             pool.insert_validated(summary);
 
             // Payload builder always returns a batch payload with some canister HTTP data
+            let mut sequence = Sequence::new();
             let mut payload_builder = MockPayloadBuilder::new();
-            let expected_payload = BatchPayload {
+            let expected_payload_1 = BatchPayload {
                 canister_http: vec![1; 64],
+                ..Default::default()
+            };
+            let expected_payload_2 = BatchPayload {
+                canister_http: vec![2; 64],
                 ..Default::default()
             };
             payload_builder
                 .expect_get_payload()
-                .return_const(expected_payload.clone());
+                .times(1)
+                .return_const(expected_payload_1.clone())
+                .in_sequence(&mut sequence);
+            payload_builder
+                .expect_get_payload()
+                .times(1)
+                .return_const(expected_payload_2.clone())
+                .in_sequence(&mut sequence);
             let certified_height = Height::from(1);
             state_manager
                 .get_mut()
@@ -952,10 +965,9 @@ mod tests {
             .expect("Block creation should succeed");
             let block = proposal.content.into_inner();
             let filled_batch_payload = &block.payload.as_ref().as_data().batch;
-            assert_eq!(filled_batch_payload, &expected_payload);
+            assert_eq!(filled_batch_payload, &expected_payload_1);
 
-            // Insert the cup at height 10, the batch payload should be empty
-            // Since payloads below the CUP are not returned
+            // Even with the CUP at height 10, the batch payload should include a payload
             pool.insert_validated(cup);
             let proposal = {
                 let reader = PoolReader::new(&pool);
@@ -963,8 +975,8 @@ mod tests {
             }
             .expect("Block creation should succeed");
             let block = proposal.content.into_inner();
-            let empty_batch_payload = &block.payload.as_ref().as_data().batch;
-            assert!(empty_batch_payload.is_empty());
+            let filled_batch_payload = &block.payload.as_ref().as_data().batch;
+            assert_eq!(filled_batch_payload, &expected_payload_2);
         });
     }
 

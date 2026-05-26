@@ -2973,16 +2973,10 @@ pub mod test {
             let result = validator.check_block_validity(&PoolReader::new(&pool), &test_block);
             assert_matches!(result, Ok(()));
 
-            // Insert the cup at height 10, the payload validation should fail
-            // Since payloads below the CUP are not returned
+            // Even with the CUP at height 10, the validation should still succeed
             pool.insert_validated(cup);
             let result = validator.check_block_validity(&PoolReader::new(&pool), &test_block);
-            assert_matches!(
-                result,
-                Err(ValidationError::ValidationFailed(
-                    ValidationFailure::MissingPastPayloads,
-                ))
-            );
+            assert_matches!(result, Ok(()));
         });
     }
 
