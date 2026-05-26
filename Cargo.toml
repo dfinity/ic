@@ -628,11 +628,6 @@ chrono = { version = "0.4.42", default-features = false, features = [
 ] }
 ciborium = "0.2.1"
 clap = { version = "4.5.20", features = ["derive", "string"] }
-# cloudflare v0.12 is broken, master is partly fixed but unreleased yet.
-# see:
-# - https://github.com/cloudflare/cloudflare-rs/issues/222
-# - https://github.com/cloudflare/cloudflare-rs/issues/236
-cloudflare = { git = "https://github.com/dfinity/cloudflare-rs.git", rev = "8b011d170d9d61eaad77bb9645371f6219285104", default-features = false }
 comparable = { version = "0.5", features = ["derive"] }
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
 crossbeam-channel = "0.5.15"

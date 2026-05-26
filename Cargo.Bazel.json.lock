@@ -1,5 +1,5 @@
 {
-  "checksum": "bff2ea92df2f898abe8c03aad5a675758efa1c70fcbe642b938459d964fb688d",
+  "checksum": "84417bcfeb0ad4487d795c08819d988446801ef733d5e7e4212243ed04229e3c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -6947,7 +6947,6 @@
         ],
         "crate_features": {
           "common": [
-            "alloc",
             "default",
             "std"
           ],
@@ -14631,102 +14630,6 @@
       "license": "BSD-2-Clause",
       "license_ids": [
         "BSD-2-Clause"
-      ],
-      "license_file": null
-    },
-    "cloudflare 0.12.0": {
-      "name": "cloudflare",
-      "version": "0.12.0",
-      "package_url": null,
-      "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/cloudflare-rs.git",
-          "commitish": {
-            "Rev": "8b011d170d9d61eaad77bb9645371f6219285104"
-          },
-          "strip_prefix": "cloudflare"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "cloudflare",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "cloudflare",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "rustls-tls"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "chrono 0.4.42",
-              "target": "chrono"
-            },
-            {
-              "id": "http 0.2.12",
-              "target": "http"
-            },
-            {
-              "id": "percent-encoding 2.3.1",
-              "target": "percent_encoding"
-            },
-            {
-              "id": "reqwest 0.11.27",
-              "target": "reqwest"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.145",
-              "target": "serde_json"
-            },
-            {
-              "id": "serde_urlencoded 0.7.1",
-              "target": "serde_urlencoded"
-            },
-            {
-              "id": "serde_with 2.3.3",
-              "target": "serde_with"
-            },
-            {
-              "id": "thiserror 1.0.68",
-              "target": "thiserror"
-            },
-            {
-              "id": "url 2.5.4",
-              "target": "url"
-            },
-            {
-              "id": "uuid 1.12.1",
-              "target": "uuid"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.12.0"
-      },
-      "license": "BSD-3-Clause",
-      "license_ids": [
-        "BSD-3-Clause"
       ],
       "license_file": null
     },
@@ -22804,10 +22707,6 @@
             {
               "id": "clap 4.5.53",
               "target": "clap"
-            },
-            {
-              "id": "cloudflare 0.12.0",
-              "target": "cloudflare"
             },
             {
               "id": "colored 2.0.4",
@@ -69536,18 +69435,10 @@
           "common": [
             "__rustls",
             "__tls",
-            "async-compression",
-            "brotli",
-            "deflate",
-            "gzip",
             "hyper-rustls",
-            "json",
             "rustls",
-            "rustls-tls",
             "rustls-tls-webpki-roots",
-            "serde_json",
             "tokio-rustls",
-            "tokio-util",
             "webpki-roots"
           ],
           "selects": {}
@@ -69579,10 +69470,6 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.145",
-              "target": "serde_json"
-            },
-            {
               "id": "serde_urlencoded 0.7.1",
               "target": "serde_urlencoded"
             },
@@ -69602,10 +69489,6 @@
           "selects": {
             "aarch64-apple-darwin": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "hyper-rustls 0.24.2",
                 "target": "hyper_rustls"
               },
@@ -69620,10 +69503,6 @@
               {
                 "id": "tokio-rustls 0.24.1",
                 "target": "tokio_rustls"
-              },
-              {
-                "id": "tokio-util 0.7.17",
-                "target": "tokio_util"
               },
               {
                 "id": "webpki-roots 0.25.2",
@@ -69632,10 +69511,6 @@
             ],
             "aarch64-unknown-linux-gnu": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "hyper-rustls 0.24.2",
                 "target": "hyper_rustls"
               },
@@ -69650,10 +69525,6 @@
               {
                 "id": "tokio-rustls 0.24.1",
                 "target": "tokio_rustls"
-              },
-              {
-                "id": "tokio-util 0.7.17",
-                "target": "tokio_util"
               },
               {
                 "id": "webpki-roots 0.25.2",
@@ -69712,6 +69583,10 @@
                 "target": "js_sys"
               },
               {
+                "id": "serde_json 1.0.145",
+                "target": "serde_json"
+              },
+              {
                 "id": "wasm-bindgen 0.2.122",
                 "target": "wasm_bindgen"
               },
@@ -69738,10 +69613,6 @@
             ],
             "x86_64-apple-darwin": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "hyper-rustls 0.24.2",
                 "target": "hyper_rustls"
               },
@@ -69756,10 +69627,6 @@
               {
                 "id": "tokio-rustls 0.24.1",
                 "target": "tokio_rustls"
-              },
-              {
-                "id": "tokio-util 0.7.17",
-                "target": "tokio_util"
               },
               {
                 "id": "webpki-roots 0.25.2",
@@ -69768,10 +69635,6 @@
             ],
             "x86_64-unknown-linux-gnu": [
               {
-                "id": "async-compression 0.4.3",
-                "target": "async_compression"
-              },
-              {
                 "id": "hyper-rustls 0.24.2",
                 "target": "hyper_rustls"
               },
@@ -69786,10 +69649,6 @@
               {
                 "id": "tokio-rustls 0.24.1",
                 "target": "tokio_rustls"
-              },
-              {
-                "id": "tokio-util 0.7.17",
-                "target": "tokio_util"
               },
               {
                 "id": "webpki-roots 0.25.2",
@@ -77002,77 +76861,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "serde_with 2.3.3": {
-      "name": "serde_with",
-      "version": "2.3.3",
-      "package_url": "https://github.com/jonasbb/serde_with",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/serde_with/2.3.3/download",
-          "sha256": "07ff71d2c147a7b57362cead5e22f772cd52f6ab31cfcd9edcd7f6aeb2a0afbe"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "serde_with",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "serde_with",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "base64",
-            "default",
-            "macros",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "base64 0.13.1",
-              "target": "base64"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "serde_with_macros 2.3.3",
-              "target": "serde_with_macros"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "2.3.3"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "serde_with 3.16.0": {
       "name": "serde_with",
       "version": "3.16.0",
@@ -77196,66 +76984,6 @@
         },
         "edition": "2018",
         "version": "1.5.2"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "serde_with_macros 2.3.3": {
-      "name": "serde_with_macros",
-      "version": "2.3.3",
-      "package_url": "https://github.com/jonasbb/serde_with/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/serde_with_macros/2.3.3/download",
-          "sha256": "881b6f881b17d13214e5d494c939ebab463d01264ce1811e9d4ac3a882e7695f"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "serde_with_macros",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "serde_with_macros",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "darling 0.20.11",
-              "target": "darling"
-            },
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.42",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.110",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "2.3.3"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -104191,7 +103919,6 @@
     "ciborium 0.2.1",
     "cidr 0.2.3",
     "clap 4.5.53",
-    "cloudflare 0.12.0",
     "colored 2.0.4",
     "comparable 0.5.4",
     "console 0.11.3",

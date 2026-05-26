@@ -2465,24 +2465,6 @@ dependencies = [
 
 [[package]]
 name = "cloudflare"
-version = "0.12.0"
-source = "git+https://github.com/dfinity/cloudflare-rs.git?rev=8b011d170d9d61eaad77bb9645371f6219285104#8b011d170d9d61eaad77bb9645371f6219285104"
-dependencies = [
- "chrono 0.4.42",
- "http 0.2.12",
- "percent-encoding",
- "reqwest 0.11.27",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "serde_with 2.3.3",
- "thiserror 1.0.68",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "cloudflare"
 version = "0.14.1"
 source = "git+https://github.com/mraszyk/cloudflare-rs?rev=972f379e51ac923be9db648a75b101892a89453c#972f379e51ac923be9db648a75b101892a89453c"
 dependencies = [
@@ -3870,7 +3852,6 @@ dependencies = [
  "ciborium",
  "cidr",
  "clap 4.5.53",
- "cloudflare 0.12.0 (git+https://github.com/dfinity/cloudflare-rs.git?rev=8b011d170d9d61eaad77bb9645371f6219285104)",
  "colored 2.0.4",
  "comparable",
  "console 0.11.3",
@@ -6352,7 +6333,7 @@ dependencies = [
  "candid",
  "chacha20poly1305",
  "clap 4.5.53",
- "cloudflare 0.14.1 (git+https://github.com/mraszyk/cloudflare-rs?rev=972f379e51ac923be9db648a75b101892a89453c)",
+ "cloudflare",
  "derive-new",
  "flate2",
  "fqdn",
@@ -6433,7 +6414,7 @@ dependencies = [
  "axum 0.8.9",
  "candid",
  "clap 4.5.53",
- "cloudflare 0.14.1 (git+https://github.com/mraszyk/cloudflare-rs?rev=972f379e51ac923be9db648a75b101892a89453c)",
+ "cloudflare",
  "derive-new",
  "fqdn",
  "hickory-proto 0.26.1",
@@ -6812,7 +6793,7 @@ dependencies = [
  "bytes",
  "candid",
  "clap 4.5.53",
- "cloudflare 0.14.1 (git+https://github.com/mraszyk/cloudflare-rs?rev=972f379e51ac923be9db648a75b101892a89453c)",
+ "cloudflare",
  "ctrlc",
  "derive-new",
  "fqdn",
@@ -11766,7 +11747,6 @@ version = "0.11.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd67538700a17451e7cba03ac727fb961abb7607553461627b97de0b89cf4a62"
 dependencies = [
- "async-compression",
  "base64 0.21.6",
  "bytes",
  "encoding_rs",
@@ -11793,7 +11773,6 @@ dependencies = [
  "system-configuration 0.5.1",
  "tokio",
  "tokio-rustls 0.24.1",
- "tokio-util",
  "tower-service",
  "url",
  "wasm-bindgen",
@@ -12945,22 +12924,6 @@ dependencies = [
 
 [[package]]
 name = "serde_with"
-version = "2.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07ff71d2c147a7b57362cead5e22f772cd52f6ab31cfcd9edcd7f6aeb2a0afbe"
-dependencies = [
- "base64 0.13.1",
- "chrono 0.4.42",
- "hex",
- "indexmap 1.9.3",
- "serde",
- "serde_json",
- "serde_with_macros 2.3.3",
- "time",
-]
-
-[[package]]
-name = "serde_with"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "10574371d41b0d9b2cff89418eda27da52bcaff2cc8741db26382a77c29131f1"
@@ -12988,18 +12951,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
-]
-
-[[package]]
-name = "serde_with_macros"
-version = "2.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "881b6f881b17d13214e5d494c939ebab463d01264ce1811e9d4ac3a882e7695f"
-dependencies = [
- "darling 0.20.11",
- "proc-macro2",
- "quote",
- "syn 2.0.110",
 ]
 
 [[package]]
