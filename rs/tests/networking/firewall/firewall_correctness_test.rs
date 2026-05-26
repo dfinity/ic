@@ -73,9 +73,9 @@ static TCP_PORTS_ALL_NODES: LazyLock<Vec<u32>> = LazyLock::new(|| {
         .clone()
 });
 /// Ports closed to everyone, only a few are tested here.
-static TCP_PORTS_CLOSED: &[u32] = &[23, 24, 25];
+const TCP_PORTS_CLOSED: &[u32] = &[23, 24, 25];
 
-static CLOUD_ENGINE_NODE_REWARD_TYPES: &[NodeRewardType] = &[
+const CLOUD_ENGINE_NODE_REWARD_TYPES: &[NodeRewardType] = &[
     NodeRewardType::Type4,
     NodeRewardType::Type4dot1,
     NodeRewardType::Type4dot2,
