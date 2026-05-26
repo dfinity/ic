@@ -644,7 +644,7 @@ curve25519-dalek = { version = "4.1.3", features = [
 der = { version = "0.7", default-features = false, features = ["derive"] }
 derive-new = "0.7.0"
 devicemapper = "0.34"
-dfx-core = { git = "https://github.com/dfinity/sdk", rev = "5a791ca56eaafb360af351d8a2ea65ec1cc95009", default-features = false, features = ["reqwest-0_12"] }
+dfx-core = { version = "0.4.0" }
 ed25519-dalek = { version = "2.2.0", features = [
     "std",
     "zeroize",
@@ -678,15 +678,15 @@ hyper-rustls = { version = "0.27.5", default-features = false, features = [
     "http1",
     "http2",
     "native-tokio",
-    "ring",
+    "aws-lc-rs",
     "tls12",
 ] }
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.12", features = ["full"] }
 ic0 = "1.0.0"
-ic-agent = { git = "https://github.com/dfinity/agent-rs", rev = "e36c35eee489544fd80b2a621f38e985ea3e0c40", default-features = false, features = ["pem", "ring", "reqwest-0_12"] }
-ic-bn-lib = { version = "0.1.14", features = ["acme-alpn"] }
-ic-bn-lib-common = "0.1.4"
+ic-agent = { version = "0.47.3", features = ["pem", "ring"] }
+ic-bn-lib = { git = "https://github.com/mraszyk/ic-bn-lib", rev = "8fd381ddb526670c4a3deafb31d9868d7dc2d51a", features = ["acme-alpn"] }
+ic-bn-lib-common = { git = "https://github.com/mraszyk/ic-bn-lib", rev = "8fd381ddb526670c4a3deafb31d9868d7dc2d51a" }
 ic-btc-interface = "0.4.0"
 ic-canister-runtime = "0.2.0"
 ic-canister-sig-creation = "1.3.1"
@@ -696,15 +696,15 @@ ic-cdk-timers = "1.0.0"
 ic-certificate-verification = "3.0.3"
 ic-certification = "3"
 ic-doge-interface = "0.3.0"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "f33afac2aa47b8760090c93823b7fa7f5ba67dc4", default-features = false }
+ic-gateway = { git = "https://github.com/mraszyk/ic-gateway", rev = "e8a26d97d6880a8f7bf734caeb1ad80708f85c79", default-features = false }
 ic-http-certification = "3.0.3"
-ic-identity-hsm = { git = "https://github.com/dfinity/agent-rs", rev = "e36c35eee489544fd80b2a621f38e985ea3e0c40", features = ["reqwest-0_12"] }
+ic-identity-hsm = { version = "0.47.3" }
 ic-management-canister-types = "0.7.1"
 ic-response-verification = "3.1.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.47.3" }
-ic-utils = { git = "https://github.com/dfinity/agent-rs", rev = "e36c35eee489544fd80b2a621f38e985ea3e0c40", features = ["raw", "reqwest-0_12"] }
+ic-utils = { version = "0.47.3", features = ["raw"] }
 ic-vetkeys = "0.7.0"
 ic-xrc-types = "1.2.0"
 ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
@@ -791,10 +791,10 @@ prost-build = "0.13.3"
 protobuf = "3.7.2"
 qrcode = { version = "0.14.1", default-features = false }
 quinn = { version = "0.11.5", default-features = false, features = [
-    "ring",
+    "aws-lc-rs",
     "log",
     "runtime-tokio",
-    "rustls",
+    "rustls-aws-lc-rs",
 ] }
 quinn-udp = "0.5.5"
 quote = "1.0.37"
@@ -806,13 +806,12 @@ rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
 regex-lite = "0.1.8"
 rexpect = "0.6"
-reqwest = { version = "0.12.24", default-features = false, features = [
+reqwest = { version = "0.13", default-features = false, features = [
     "blocking",
     "http2",
     "json",
     "multipart",
-    "rustls-tls",
-    "rustls-tls-native-roots",
+    "rustls",
     "socks",
     "stream",
 ] }
@@ -823,7 +822,7 @@ rstest = "0.19.0"
 rust-ini = "0.21.1"
 rustc-demangle = { version = "0.1.16" }
 rustls = { version = "0.23.18", default-features = false, features = [
-    "ring",
+    "aws_lc_rs",
     "std",
     "brotli",
     "tls12",
@@ -877,7 +876,7 @@ time = { version = "0.3.36", features = ["formatting"] }
 tokio = { version = "1.42.0", features = ["full"] }
 tokio-metrics = "0.4.0"
 tokio-rustls = { version = "0.26.0", default-features = false, features = [
-    "ring",
+    "aws-lc-rs",
 ] }
 tokio-stream = "0.1.17"
 tokio-test = "0.4.4"
