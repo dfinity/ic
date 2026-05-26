@@ -83,6 +83,7 @@ def component_files(mode):
         Label("guestos/misc/sysctl.d/dfn-max-map-count.conf"): "/etc/sysctl.d/dfn-max-map-count.conf",
         Label("guestos/misc/sysctl.d/privileged-ports.conf"): "/etc/sysctl.d/privileged-ports.conf",
         Label("guestos/misc/sysfs.d/hugepage.conf"): "/etc/sysfs.d/hugepage.conf",
+        Label("guestos/misc/sysfs.d/read_ahead.conf"): "/etc/sysfs.d/read_ahead.conf",
         Label("guestos/misc/hsm/pcscd"): "/etc/default/pcscd",
         Label("misc/log-config/log-config-guestos.service"): "/etc/systemd/system/log-config.service",
         Label("guestos/misc/sync_fstrim.sh"): "/opt/ic/bin/sync_fstrim.sh",
