@@ -5429,7 +5429,7 @@ fn upload_chunk_increases_subnet_heap_delta() {
     );
 }
 
-// Regression test: log_memory_limit not set → would_resize not called → heap delta = 0.
+// log_memory_limit not set → would_resize not called → heap delta = 0.
 #[test]
 fn update_settings_heap_delta_log_memory_limit_none() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
@@ -5567,6 +5567,41 @@ fn update_settings_heap_delta_log_memory_limit_increased() {
         test.state().metadata.heap_delta_estimate,
         old_log_memory_usage,
     );
+}
+
+// Canister creation without log_memory_limit → first-time log store allocation
+// must not contribute to heap delta.
+#[test]
+fn create_canister_heap_delta_log_memory_limit_default() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_log_memory_store_feature_enabled()
+        .build();
+    test.create_canister(CYCLES);
+
+    assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
+}
+
+// Canister creation with explicit log_memory_limit → first-time log store
+// allocation must not contribute to heap delta.
+#[test]
+fn create_canister_heap_delta_log_memory_limit_explicit() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const MIB: u64 = 1024 * 1024;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_log_memory_store_feature_enabled()
+        .build();
+    test.create_canister_with_settings(
+        CYCLES,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(MIB)
+            .build(),
+    )
+    .unwrap();
+
+    assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
 }
 
 #[test]
