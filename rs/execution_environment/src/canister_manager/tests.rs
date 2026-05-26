@@ -406,7 +406,6 @@ fn install_code(
         None,
         old_canister,
         time,
-        "NOT_USED".into(),
         &network_topology,
         execution_parameters,
         round_limits,
@@ -3181,21 +3180,24 @@ fn creating_canisters_always_works_if_limit_is_set_to_zero() {
         .with_own_subnet_id(own_subnet)
         .with_caller(own_subnet, caller)
         .build();
-    for _ in 0..1_000 {
+    let payload = CreateCanisterArgs {
+        settings: Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(0)
+                .build(),
+        ),
+        sender_canister_version: None,
+    }
+    .encode();
+    for i in 1..=1_000 {
         test.inject_call_to_ic00(
             Method::CreateCanister,
-            CreateCanisterArgs {
-                settings: Some(
-                    CanisterSettingsArgsBuilder::new()
-                        .with_log_memory_limit(0)
-                        .build(),
-                ),
-                sender_canister_version: None,
-            }
-            .encode(),
+            payload.clone(),
             test.canister_creation_fee().real(),
         );
-        test.execute_all();
+        if i % 500 == 0 {
+            test.execute_all();
+        }
     }
     assert_eq!(test.state().num_canisters() as u64, 1_000);
 }

@@ -204,18 +204,8 @@ impl<T: Borrow<ParsedSevAttestationPackage>> AttestationPackageVerifier for T {
             return Ok(self);
         }
 
-        // TODO(NODE-1784): remove this once clients no longer send legacy custom data
-        let expected_report_data_legacy = expected_custom_data.encode_for_sev_legacy();
-        if D::needs_legacy_encoding()
-            && let Ok(expected_report_data_legacy) = expected_report_data_legacy
-            && &expected_report_data_legacy == actual_report_data
-        {
-            return Ok(self);
-        }
-
         Err(VerificationError::invalid_custom_data(format!(
             "Expected attestation report custom data: {expected_report_data:?}, \
-             legacy: {expected_report_data_legacy:?}, \
              actual: {actual_report_data:?} \
              Debug info: \
              expected: {expected_custom_data:?} \

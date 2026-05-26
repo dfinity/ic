@@ -505,6 +505,12 @@ enum NnsFunction {
   // nodes become unassigned.
   // Currently limited to CloudEngine subnets.
   NNS_FUNCTION_DELETE_SUBNET = 57;
+
+  // Set or unset the default subnet to which `SetupInitialDKG` management
+  // canister calls are routed when no subnet is specified explicitly. If unset,
+  // `SetupInitialDKG` requests without an explicit subnet id are routed to the
+  // calling subnet (NNS).
+  NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET = 58;
 }
 
 // Payload of a proposal that calls a function on another NNS
