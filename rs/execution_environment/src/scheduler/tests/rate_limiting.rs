@@ -355,7 +355,7 @@ fn no_heap_delta_rate_limiting_for_system_subnet() {
 
     // Assert that we reached the subnet heap delta capacity (140 GiB) in 70 rounds.
     assert_ge!(
-        test.scheduler().state_metrics.current_heap_delta(),
+        test.state_metrics().current_heap_delta(),
         SUBNET_HEAP_DELTA_CAPACITY
     );
 
@@ -434,7 +434,7 @@ fn canister_can_run_for_multiple_iterations() {
     assert_eq!(
         test.scheduler()
             .metrics
-            .inner_loop_consumed_non_zero_instructions_count
+            .inner_loop_processed_non_zero_inputs_count
             .get(),
         6
     );

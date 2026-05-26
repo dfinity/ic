@@ -4,6 +4,7 @@ use crate::pb::{
 };
 
 use ic_crypto_sha2::Sha256;
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_governance_api as api;
 use ic_nns_governance_conversions::{
     convert_guest_launch_measurements_from_api_to_pb,
@@ -1771,20 +1772,18 @@ impl From<api::DerivedProposalInformation> for pb::DerivedProposalInformation {
     }
 }
 
-impl From<pb::SuccessfulProposalExecutionValue> for api::SuccessfulProposalExecutionValue {
+impl From<pb::SuccessfulProposalExecutionValue> for Option<api::SuccessfulProposalExecutionValue> {
     fn from(item: pb::SuccessfulProposalExecutionValue) -> Self {
-        match item.proposal_type {
-            Some(ProposalType::CreateCanisterAndInstallCode(ok)) => {
+        let result = match item.proposal_type? {
+            ProposalType::CreateCanisterAndInstallCode(ok) => {
                 api::SuccessfulProposalExecutionValue::CreateCanisterAndInstallCode(ok.into())
             }
-            None => {
-                // This shouldn't happen, but if it does, we need a fallback.
-                // Use a CreateCanisterAndInstallCode with None canister_id.
-                api::SuccessfulProposalExecutionValue::CreateCanisterAndInstallCode(
-                    api::CreateCanisterAndInstallCodeOk { canister_id: None },
-                )
+            ProposalType::TakeCanisterSnapshot(ok) => {
+                api::SuccessfulProposalExecutionValue::TakeCanisterSnapshot(ok.into())
             }
-        }
+        };
+
+        Some(result)
     }
 }
 
@@ -1826,6 +1825,35 @@ impl From<pb::CreateCanisterAndInstallCodeOk> for pb::SuccessfulProposalExecutio
     fn from(ok: pb::CreateCanisterAndInstallCodeOk) -> Self {
         Self {
             proposal_type: Some(ProposalType::CreateCanisterAndInstallCode(ok)),
+        }
+    }
+}
+
+impl From<root::TakeCanisterSnapshotOk> for pb::TakeCanisterSnapshotOk {
+    fn from(ok: root::TakeCanisterSnapshotOk) -> Self {
+        Self { snapshot_id: ok.id }
+    }
+}
+
+impl From<root::TakeCanisterSnapshotOk> for pb::SuccessfulProposalExecutionValue {
+    fn from(ok: root::TakeCanisterSnapshotOk) -> Self {
+        Self::from(pb::TakeCanisterSnapshotOk::from(ok))
+    }
+}
+
+// Upgrade Ok to result.
+impl From<pb::TakeCanisterSnapshotOk> for pb::SuccessfulProposalExecutionValue {
+    fn from(ok: pb::TakeCanisterSnapshotOk) -> Self {
+        Self {
+            proposal_type: Some(ProposalType::TakeCanisterSnapshot(ok)),
+        }
+    }
+}
+
+impl From<pb::TakeCanisterSnapshotOk> for api::TakeCanisterSnapshotOk {
+    fn from(item: pb::TakeCanisterSnapshotOk) -> Self {
+        Self {
+            snapshot_id: item.snapshot_id,
         }
     }
 }
@@ -2763,6 +2791,7 @@ impl From<pb::FulfillSubnetRentalRequest> for api::FulfillSubnetRentalRequest {
             user: item.user,
             node_ids: Some(item.node_ids),
             replica_version_id: Some(item.replica_version_id),
+            initial_dkg_subnet_id: item.initial_dkg_subnet_id,
         }
     }
 }
@@ -2773,6 +2802,7 @@ impl From<api::FulfillSubnetRentalRequest> for pb::FulfillSubnetRentalRequest {
             user: item.user,
             node_ids: item.node_ids.unwrap_or_default(),
             replica_version_id: item.replica_version_id.unwrap_or_default(),
+            initial_dkg_subnet_id: item.initial_dkg_subnet_id,
         }
     }
 }
@@ -3852,6 +3882,9 @@ impl From<pb::NnsFunction> for api::NnsFunction {
             }
             pb::NnsFunction::SplitSubnet => api::NnsFunction::SplitSubnet,
             pb::NnsFunction::DeleteSubnet => api::NnsFunction::DeleteSubnet,
+            pb::NnsFunction::SetDefaultInitialDkgSubnet => {
+                api::NnsFunction::SetDefaultInitialDkgSubnet
+            }
         }
     }
 }
@@ -3949,6 +3982,9 @@ impl From<api::NnsFunction> for pb::NnsFunction {
             }
             api::NnsFunction::SplitSubnet => pb::NnsFunction::SplitSubnet,
             api::NnsFunction::DeleteSubnet => pb::NnsFunction::DeleteSubnet,
+            api::NnsFunction::SetDefaultInitialDkgSubnet => {
+                pb::NnsFunction::SetDefaultInitialDkgSubnet
+            }
         }
     }
 }
@@ -4044,6 +4080,17 @@ impl From<api::TakeCanisterSnapshot> for pb::TakeCanisterSnapshot {
         Self {
             canister_id: item.canister_id,
             replace_snapshot: item.replace_snapshot,
+        }
+    }
+}
+
+impl From<pb::MaturityModulation> for api::MaturityModulation {
+    fn from(item: pb::MaturityModulation) -> Self {
+        Self {
+            current_value_permyriad: item.current_value_permyriad,
+            updated_at_timestamp_seconds: item
+                .updated_at_days_since_epoch
+                .and_then(|days| days.checked_mul(ONE_DAY_SECONDS)),
         }
     }
 }

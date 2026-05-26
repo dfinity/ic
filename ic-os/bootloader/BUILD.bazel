@@ -19,7 +19,10 @@ genrule(
         "bootloader-tree.tar",
     ],
     cmd = "$(location build-bootloader-tree.sh) -o $@",
-    tags = ["manual"],
+    tags = [
+        "manual",
+        "requires-network",
+    ],
     target_compatible_with = [
         "@platforms//os:linux",
     ],

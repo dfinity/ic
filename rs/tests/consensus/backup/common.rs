@@ -27,7 +27,7 @@ use ic_backup::{
     config::{ColdStorage, Config, SubnetConfig},
 };
 use ic_base_types::SubnetId;
-use ic_consensus_system_test_utils::upgrade::bless_replica_version;
+use ic_consensus_system_test_utils::upgrade::elect_replica_version;
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     ssh_access::{
@@ -103,12 +103,13 @@ pub fn test(env: TestEnv) {
     let binary_version = get_ic_build_version();
     let target_version = get_guestos_update_img_version();
 
-    // Bless target version
+    // Elect target version
     let sha256 = get_guestos_update_img_sha256();
     let upgrade_url = get_guestos_update_img_url();
     let guest_launch_measurements = get_guestos_update_launch_measurements();
-    block_on(bless_replica_version(
+    block_on(elect_replica_version(
         &nns_node,
+        &env.topology_snapshot(),
         &target_version,
         &log,
         sha256,
@@ -278,10 +279,29 @@ pub fn test(env: TestEnv) {
     info!(log, "Started process: {}", child.id());
 
     info!(log, "Wait for archived checkpoint");
+    let checkpoint_dir = backup_dir
+        .join("data")
+        .join(subnet_id.to_string())
+        .join("ic_state/checkpoints");
+    let orig_spool_dir = backup_dir
+        .join("spool")
+        .join(subnet_id.to_string())
+        .join(initial_replica_version.to_string())
+        .join("0");
     let archive_dir = backup_dir.join("archive").join(subnet_id.to_string());
     // make sure we have some archive of the old version before upgrading to the new one
     loop {
-        if highest_dir_entry(&archive_dir, 10) > 0 {
+        let spool_height = highest_dir_entry(&orig_spool_dir, 10);
+        let checkpoint = highest_dir_entry(&checkpoint_dir, 16);
+        let archive_height = highest_dir_entry(&archive_dir, 10);
+        info!(
+            log,
+            "Waiting for archived checkpoint - Spool: {}  Checkpoint: {}  Archive: {}",
+            spool_height,
+            checkpoint,
+            archive_height,
+        );
+        if archive_height > 0 {
             info!(log, "A checkpoint has been archived");
             break;
         }
@@ -298,15 +318,6 @@ pub fn test(env: TestEnv) {
     info!(log, "Wait until the upgrade happens");
     assert_assigned_replica_version(&nns_node, &target_version, env.logger());
 
-    let checkpoint_dir = backup_dir
-        .join("data")
-        .join(subnet_id.to_string())
-        .join("ic_state/checkpoints");
-    let orig_spool_dir = backup_dir
-        .join("spool")
-        .join(subnet_id.to_string())
-        .join(initial_replica_version.to_string())
-        .join("0");
     let new_spool_dir = backup_dir
         .join("spool")
         .join(subnet_id.to_string())

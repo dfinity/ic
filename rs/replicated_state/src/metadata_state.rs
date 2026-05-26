@@ -230,6 +230,11 @@ pub struct NetworkTopology {
     /// Unfiltered topology for the certified state tree.
     /// Only set on the NNS subnet; `None` everywhere else.
     full_topology: Option<FullTopology>,
+
+    /// Subnet to which `SetupInitialDKG` management canister calls are routed
+    /// by default, i.e., when no subnet id is specified explicitly in the
+    /// request. If `None`, such requests are routed to the calling subnet.
+    pub default_initial_dkg_subnet_id: Option<SubnetId>,
 }
 
 /// Full description of the API Boundary Node, which is saved in the metadata.
@@ -258,6 +263,7 @@ impl Default for NetworkTopology {
             bitcoin_testnet_canister_id: None,
             bitcoin_mainnet_canister_id: None,
             full_topology: None,
+            default_initial_dkg_subnet_id: None,
         }
     }
 }
@@ -273,6 +279,7 @@ impl NetworkTopology {
         bitcoin_testnet_canister_id: Option<CanisterId>,
         bitcoin_mainnet_canister_id: Option<CanisterId>,
         full_topology: Option<FullTopology>,
+        default_initial_dkg_subnet_id: Option<SubnetId>,
     ) -> Self {
         Self {
             subnets,
@@ -283,6 +290,7 @@ impl NetworkTopology {
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
             full_topology,
+            default_initial_dkg_subnet_id,
         }
     }
 
@@ -396,6 +404,7 @@ pub struct SubnetMetrics {
     consumed_cycles_http_outcalls: NominalCycles,
     consumed_cycles_ecdsa_outcalls: NominalCycles,
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, NominalCycles>,
+    consumed_cycles_by_use_case_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,
     pub threshold_signature_agreements: BTreeMap<MasterPublicKeyId, u64>,
     /// The number of canisters that exist on this subnet.
     pub num_canisters: u64,
@@ -418,6 +427,10 @@ impl SubnetMetrics {
         }
         *self
             .consumed_cycles_by_use_case
+            .entry(use_case)
+            .or_insert_with(NominalCycles::zero) += cycles;
+        *self
+            .consumed_cycles_by_use_case_as_counters
             .entry(use_case)
             .or_insert_with(NominalCycles::zero) += cycles;
     }
@@ -450,6 +463,12 @@ impl SubnetMetrics {
         &self.consumed_cycles_by_use_case
     }
 
+    pub fn get_consumed_cycles_by_use_case_as_counters(
+        &self,
+    ) -> &BTreeMap<CyclesUseCase, NominalCycles> {
+        &self.consumed_cycles_by_use_case_as_counters
+    }
+
     pub fn consumed_cycles_total(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
 
@@ -465,8 +484,6 @@ impl SubnetMetrics {
                 CyclesUseCase::ECDSAOutcalls
                 | CyclesUseCase::HTTPOutcalls
                 | CyclesUseCase::DeletedCanisters => {}
-                // Non consumed cycles should not be counted towards the total consumed.
-                CyclesUseCase::NonConsumed => {}
                 // For the remaining use cases simply add the values to the total.
                 CyclesUseCase::Memory
                 | CyclesUseCase::ComputeAllocation
@@ -590,13 +607,10 @@ impl SystemMetadata {
         Ok(())
     }
 
-    /// Generates a new canister ID.
+    /// Computes a new canister ID for canister creation.
     ///
-    /// If a canister ID from a second canister allocation range is generated, the
-    /// first range is dropped. The last canister allocation range is never dropped.
-    ///
-    /// Returns `Err` iff no more canister IDs can be generated.
-    pub fn generate_new_canister_id(&mut self) -> Result<CanisterId, String> {
+    /// Returns `Err` iff no more canister IDs are available.
+    pub fn peek_new_canister_id(&self) -> Result<CanisterId, String> {
         // Start off with
         //     (canister_allocation_ranges
         //          ∩ routing_table.ranges(own_subnet_id))
@@ -626,26 +640,34 @@ impl SystemMetadata {
             )
         })?;
 
-        let res = canister_allocation_ranges.generate_canister_id(self.last_generated_canister_id);
+        canister_allocation_ranges
+            .next_canister_id(self.last_generated_canister_id)
+            .ok_or_else(|| "Canister ID allocation was consumed".into())
+    }
 
-        if let Some(res) = &res {
-            self.last_generated_canister_id = Some(*res);
+    /// Records `canister_id` as the last generated canister ID and drops any
+    /// exhausted allocation ranges. Must be called with the canister ID returned
+    /// by the immediately preceding `peek_new_canister_id` call, once canister
+    /// creation succeeded and the canister ID should be permanently consumed.
+    ///
+    /// Note. The last canister allocation range is never dropped.
+    pub fn commit_new_canister_id(&mut self, canister_id: CanisterId) {
+        debug_assert_eq!(canister_id, self.peek_new_canister_id().unwrap());
 
-            while self.canister_allocation_ranges.len() > 1
-                && !self
-                    .canister_allocation_ranges
-                    .iter()
-                    .next()
-                    .unwrap()
-                    .contains(res)
-            {
-                // Drop the first canister allocation range iff consumed and more allocation
-                // ranges are available.
-                self.canister_allocation_ranges.drop_first();
-            }
+        self.last_generated_canister_id = Some(canister_id);
+
+        while self.canister_allocation_ranges.len() > 1
+            && !self
+                .canister_allocation_ranges
+                .iter()
+                .next()
+                .unwrap()
+                .contains(&canister_id)
+        {
+            // Drop the first canister allocation range iff consumed and more allocation
+            // ranges are available.
+            self.canister_allocation_ranges.drop_first();
         }
-
-        res.ok_or_else(|| "Canister ID allocation was consumed".into())
     }
 
     /// Returns the number of canister IDs that can still be generated.
@@ -720,11 +742,6 @@ impl SystemMetadata {
 
         // Preserve ingress history.
         res.ingress_history = self.ingress_history;
-
-        // "Preserve" the subnet schedule. This is actually persisted per-canister, as
-        // part of the respective canister state, so will only actually be retained for
-        // local canisters.
-        res.subnet_schedule = self.subnet_schedule;
 
         // Ensure monotonic time for migrated canisters: apply `new_subnet_batch_time`
         // if specified and not smaller than `self.batch_time`; else, default to

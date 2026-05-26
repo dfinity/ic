@@ -134,7 +134,7 @@ pub trait NiDkgAlgorithm {
     fn create_transcript(
         &self,
         config: &NiDkgConfig,
-        verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+        verified_dealings: BTreeMap<NodeId, NiDkgDealing>,
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError>;
 
     /// Loads the transcript. This ensures that

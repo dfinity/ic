@@ -1,16 +1,13 @@
 use candid::{Decode, Encode, Principal};
 use canister_test::{Canister, Runtime, Wasm};
 use futures::future::join_all;
-use ic_agent::Agent;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::get_dependency_path_from_env;
 use ic_system_test_driver::driver::test_env_api::retry_async;
 use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasVm, IcNodeSnapshot};
 use ic_system_test_driver::util::{MetricsFetcher, UniversalCanister, block_on, runtime_from_url};
 use ic_types::PrincipalId;
-use ic_universal_canister::wasm;
 use ic_utils::interfaces::management_canister::ManagementCanister;
-use slog::Logger;
 use slog::info;
 use statesync_test::CanisterCreationStatus;
 use std::collections::BTreeMap;
@@ -303,24 +300,6 @@ async fn deploy_seed_canister(
     seed_canister_id
 }
 
-async fn deploy_busy_canister(agent: &Agent, effective_canister_id: PrincipalId, logger: &Logger) {
-    let universal_canister =
-        UniversalCanister::new_with_retries(agent, effective_canister_id, logger).await;
-    universal_canister
-        .update(
-            wasm()
-                .set_heartbeat(
-                    wasm()
-                        .instruction_counter_is_at_least(1_800_000_000)
-                        .build(),
-                )
-                .reply()
-                .build(),
-        )
-        .await
-        .expect("Failed to set up a busy canister.");
-}
-
 async fn deploy_canisters_for_long_rounds(
     logger: &slog::Logger,
     nodes: Vec<IcNodeSnapshot>,
@@ -354,7 +333,7 @@ async fn deploy_canisters_for_long_rounds(
         num_canisters_per_seed_canister * num_seed_canisters,
     );
     let mut create_many_canisters_futs = vec![];
-    for seed_canister_id in seed_canisters {
+    for seed_canister_id in seed_canisters.iter() {
         let seed_canister_id_str = seed_canister_id.to_string();
         info!(
             logger,
@@ -366,7 +345,7 @@ async fn deploy_canisters_for_long_rounds(
                 let bytes = Encode!(&num_canisters_per_seed_canister)
                     .expect("Failed to candid encode argument for a seed canister");
                 let res = agent
-                    .update(&seed_canister_id, "create_many_canisters")
+                    .update(seed_canister_id, "create_many_canisters")
                     .with_arg(bytes)
                     .call_and_wait()
                     .await;
@@ -388,7 +367,7 @@ async fn deploy_canisters_for_long_rounds(
             loop {
                 let bytes = Encode!(&()).expect("Failed to candid encode unit type");
                 let res = agent
-                    .query(&seed_canister_id, "canister_creation_status")
+                    .query(seed_canister_id, "canister_creation_status")
                     .with_arg(bytes)
                     .call()
                     .await;
@@ -409,7 +388,12 @@ async fn deploy_canisters_for_long_rounds(
                                     "Canister creation on seed canister {seed_canister_id_str:?} is in progress ({n}). Retrying canister_creation_status query ...",
                                 );
                             }
-                            CanisterCreationStatus::Done(_) => {
+                            CanisterCreationStatus::Done(canister_ids) => {
+                                info!(
+                                    logger,
+                                    "Canister creation on seed canister {seed_canister_id_str:?} is done ({} canisters created).",
+                                    canister_ids.len(),
+                                );
                                 break;
                             }
                         }
@@ -428,26 +412,41 @@ async fn deploy_canisters_for_long_rounds(
     }
     join_all(create_many_canisters_futs).await;
 
-    // We deploy 8 "busy" canisters: this way,
-    // there are 2 canisters per each of the 4 scheduler threads
-    // and thus every thread executes 2 x 1.8B = 3.6B instructions.
-    let num_busy_canisters = 8;
     info!(
         logger,
-        "Deploying {} busy canisters on a node {} ({}) ...",
-        num_busy_canisters,
-        init_node.node_id,
-        init_node.get_public_url()
+        "Calling update_many_canisters on all seed canisters ..."
     );
-    let mut create_busy_canisters_futs = vec![];
-    for _ in 0..num_busy_canisters {
-        create_busy_canisters_futs.push(deploy_busy_canister(
-            &agent,
-            init_node.effective_canister_id(),
-            logger,
-        ));
+    let mut update_many_canisters_futs = vec![];
+    for seed_canister_id in seed_canisters.iter() {
+        let seed_canister_id_str = seed_canister_id.to_string();
+        let agent = agent.clone();
+        let fut = async move {
+            loop {
+                let bytes = Encode!(&()).expect("Failed to candid encode unit type");
+                let res = agent
+                    .update(seed_canister_id, "update_many_canisters")
+                    .with_arg(bytes)
+                    .call_and_wait()
+                    .await;
+                match res {
+                    Ok(_) => break,
+                    Err(err) => {
+                        info!(
+                            logger,
+                            "Calling update_many_canisters on seed canister {seed_canister_id_str:?} failed because {err:?}. Retrying ...",
+                        );
+                    }
+                }
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+            info!(
+                logger,
+                "Successfully called update_many_canisters on seed canister {seed_canister_id_str:?}.",
+            );
+        };
+        update_many_canisters_futs.push(fut);
     }
-    join_all(create_busy_canisters_futs).await;
+    join_all(update_many_canisters_futs).await;
 }
 
 fn no_state_clone_count(node: IcNodeSnapshot, logger: &slog::Logger) -> u64 {

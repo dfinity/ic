@@ -33,7 +33,7 @@ system_test_nns(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "create_subnet_test",
     tags = [
         "long_test",

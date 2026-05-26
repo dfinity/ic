@@ -4,6 +4,7 @@ use std::time::Duration;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
+        .allocate_testnet_to_local_dc()
         .with_setup(nested::setup)
         .add_test(systest!(nested::registration))
         .with_timeout_per_test(Duration::from_secs(20 * 60))

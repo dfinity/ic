@@ -4,94 +4,135 @@ load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-dummy-getrandom-for-wasm",
-    "//packages/ic-http-types",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/tree_hash",
-    "//rs/ledger_suite/common/ledger_core",
-    "//rs/ledger_suite/icp:icp_ledger",
-    "//rs/nervous_system/common",
-    "//rs/nervous_system/governance",
-    "//rs/nervous_system/time_helpers",
-    "//rs/nns/common",
-    "//rs/nns/constants",
-    "//rs/rust_canisters/dfn_protobuf",
-    "//rs/rust_canisters/on_wire",
-    "//rs/types/base_types",
-    "//rs/types/cycles",
-    "//rs/types/types",
-    "@crate_index//:build-info",
-    "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:ic-management-canister-types",
-    "@crate_index//:ic-metrics-encoder",
-    "@crate_index//:ic-xrc-types",
-    "@crate_index//:lazy_static",
-    "@crate_index//:rand",
-    "@crate_index//:serde",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:yansi",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/nervous_system/common/build_metadata",
-    "@crate_index//:async-trait",
-]
-
-BUILD_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:build-info-build",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/types/types_test_utils",
-    "@crate_index//:candid_parser",
-    "@crate_index//:futures",
-    "@crate_index//:maplit",
-    "@crate_index//:serde_bytes",
-]
-
-ALIASES = {}
-
 cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
-    aliases = ALIASES,
     data = [],  # build script data (e.g. template files) goes here
     version = "0.9.0",
-    deps = BUILD_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:build-info-build",
+    ],
 )
 
 rust_library(
     name = "cmc",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_name = "cycles_minting_canister",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "//rs/nervous_system/common/build_metadata",
+        "@crate_index//:async-trait",
+    ],
     version = "0.9.0",
-    deps = DEPENDENCIES + [":build_script"],
+    deps = [
+        # Keep sorted.
+        ":build_script",
+        "//packages/ic-dummy-getrandom-for-wasm",
+        "//packages/ic-http-types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+        "//rs/crypto/tree_hash",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nervous_system/common",
+        "//rs/nervous_system/time_helpers",
+        "//rs/nns/common",
+        "//rs/nns/constants",
+        "//rs/rust_canisters/dfn_protobuf",
+        "//rs/rust_canisters/on_wire",
+        "//rs/types/base_types",
+        "//rs/types/cycles",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-management-canister-types",
+        "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:ic-xrc-types",
+        "@crate_index//:lazy_static",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:yansi",
+    ],
 )
 
 rust_canister(
     name = "cycles-minting-canister",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "//rs/nervous_system/common/build_metadata",
+        "@crate_index//:async-trait",
+    ],
     service_file = ":cmc.did",
-    deps = DEPENDENCIES + [
+    deps = [
+        # Keep sorted.
         ":build_script",
         ":cmc",
+        "//packages/ic-dummy-getrandom-for-wasm",
+        "//packages/ic-http-types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+        "//rs/crypto/tree_hash",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nervous_system/clients",
+        "//rs/nervous_system/common",
+        "//rs/nervous_system/governance",
+        "//rs/nervous_system/time_helpers",
+        "//rs/nns/common",
+        "//rs/nns/constants",
+        "//rs/rust_canisters/dfn_protobuf",
+        "//rs/rust_canisters/on_wire",
+        "//rs/types/base_types",
+        "//rs/types/cycles",
+        "//rs/types/types",
+        "@crate_index//:build-info",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-management-canister-types",
+        "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:ic-xrc-types",
+        "@crate_index//:lazy_static",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:yansi",
     ],
 )
 
 rust_test(
     name = "cmc_test",
     crate = ":cmc",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-dummy-getrandom-for-wasm",
+        "//packages/ic-http-types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+        "//rs/crypto/tree_hash",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nervous_system/common",
+        "//rs/nervous_system/time_helpers",
+        "//rs/nns/common",
+        "//rs/nns/constants",
+        "//rs/rust_canisters/dfn_protobuf",
+        "//rs/rust_canisters/on_wire",
+        "//rs/types/base_types",
+        "//rs/types/cycles",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-management-canister-types",
+        "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:ic-xrc-types",
+        "@crate_index//:lazy_static",
+        "@crate_index//:maplit",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:yansi",
+    ],
 )
 
 rust_test(
@@ -101,5 +142,40 @@ rust_test(
     env = {
         "CARGO_MANIFEST_DIR": "rs/nns/cmc",
     },
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-dummy-getrandom-for-wasm",
+        "//packages/ic-http-types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+        "//rs/crypto/tree_hash",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nervous_system/clients",
+        "//rs/nervous_system/common",
+        "//rs/nervous_system/governance",
+        "//rs/nervous_system/time_helpers",
+        "//rs/nns/common",
+        "//rs/nns/constants",
+        "//rs/rust_canisters/dfn_protobuf",
+        "//rs/rust_canisters/on_wire",
+        "//rs/types/base_types",
+        "//rs/types/cycles",
+        "//rs/types/types",
+        "//rs/types/types_test_utils",
+        "@crate_index//:build-info",
+        "@crate_index//:candid",
+        "@crate_index//:candid_parser",
+        "@crate_index//:futures",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-management-canister-types",
+        "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:ic-xrc-types",
+        "@crate_index//:lazy_static",
+        "@crate_index//:maplit",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:yansi",
+    ],
 )

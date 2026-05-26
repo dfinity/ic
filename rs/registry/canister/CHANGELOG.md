@@ -11,6 +11,31 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-05-08: Proposal 141739
+
+http://dashboard.internetcomputer.org/proposal/141739
+
+## Added
+* Added an optional field `initial_dkg_subnet_id` to `SplitSubnetPayload` and `FulfillSubnetRentalRequest`,
+  which allows the proposer to choose which subnet should be responsible for generating the initial key
+  material of the split or rented subnet.
+
+## Changed
+* Updated the response text of some failed registry mutations. "Blessed" -> "Elected".
+
+
+# 2026-04-25: Proposal 141566
+
+http://dashboard.internetcomputer.org/proposal/141566
+
+## Added
+
+* Added an optional field `initial_dkg_subnet_id` to `CreateSubnetPayload` and `RecoverSubnetPayload`
+  which, when present, determines the subnet to which the resulting `SetupInitialDKG` management
+  canister call should be routed.
+* Added type4.1 through type4.5 node reward types for cloud-engine sub-variants.
+
+
 # 2026-04-06: Proposal 141243
 
 http://dashboard.internetcomputer.org/proposal/141243

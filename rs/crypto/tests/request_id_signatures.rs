@@ -195,6 +195,24 @@ fn should_correctly_parse_der_encoded_openssl_ecdsa_p256_pk() {
 }
 
 #[test]
+fn should_correctly_parse_cose_encoded_der_wrapped_ed25519_pk() {
+    // Ed25519 public key (RFC 8032 TEST 1) encoded as a COSE_Key
+    // {kty=OKP, alg=EdDSA, crv=Ed25519, x=pk} and DER-wrapped with the IC's
+    // SubjectPublicKeyInfo OID 1.3.6.1.4.1.56387.1.1. The COSE parser must
+    // recognize the OKP/EdDSA/Ed25519 combination and surface it via
+    // `Ed25519PublicKeyDerWrappedCose`.
+    const ED25519_PK_COSE_DER_WRAPPED_HEX: &str = "303b300c060a2b0601040183b8430101032b00a4010103272006215820d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
+
+    let pk_cose_der = hex::decode(ED25519_PK_COSE_DER_WRAPPED_HEX).unwrap();
+    let (pk, bytes_type) = user_public_key_from_bytes(&pk_cose_der).unwrap();
+    assert_eq!(pk.algorithm_id, AlgorithmId::Ed25519);
+    assert_eq!(
+        bytes_type,
+        KeyBytesContentType::Ed25519PublicKeyDerWrappedCose
+    );
+}
+
+#[test]
 fn should_correctly_parse_cose_encoded_der_wrapped_ecdsa_p256_pk() {
     for pk_cose_der_hex in &[
         test_data::ECDSA_P256_PK_1_COSE_DER_WRAPPED_HEX,

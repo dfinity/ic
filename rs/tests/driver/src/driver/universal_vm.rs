@@ -4,7 +4,6 @@ use crate::driver::farm::ClaimResult;
 use crate::driver::farm::Farm;
 use crate::driver::farm::HostFeature;
 use crate::driver::farm::id_of_file;
-use crate::driver::ic::VmAllocationStrategy;
 use crate::driver::ic::VmResourceOverrides;
 use crate::driver::resource::AllocatedVm;
 use crate::driver::resource::{
@@ -36,7 +35,6 @@ use crate::driver::constants::SSH_USERNAME;
 pub struct UniversalVm {
     pub name: String,
     pub vm_resource_overrides: VmResourceOverrides,
-    pub vm_allocation: Option<VmAllocationStrategy>,
     pub required_host_features: Vec<HostFeature>,
     pub has_ipv4: bool,
     pub primary_image: Option<DiskImage>,
@@ -65,7 +63,6 @@ impl UniversalVm {
         UniversalVm {
             name,
             vm_resource_overrides: Default::default(),
-            vm_allocation: Default::default(),
             required_host_features: Default::default(),
             has_ipv4: false,
             primary_image: Default::default(),
@@ -75,11 +72,6 @@ impl UniversalVm {
 
     pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
         self.vm_resource_overrides = vm_resource_overrides;
-        self
-    }
-
-    pub fn with_vm_allocation(mut self, vm_allocation: VmAllocationStrategy) -> Self {
-        self.vm_allocation = Some(vm_allocation);
         self
     }
 

@@ -1082,11 +1082,6 @@ impl MemoryUsage {
 
         self.add_execution_memory(usage_growth_bytes, execution_memory_type)?;
 
-        sandbox_safe_system_state.update_status_of_low_wasm_memory_hook_condition(
-            self.wasm_memory_limit,
-            self.wasm_memory_usage,
-        );
-
         Ok(())
     }
 
@@ -1730,7 +1725,6 @@ impl SystemApiImpl {
                     requests: vec![],
                     new_global_timer: None,
                     canister_log: CanisterLog::default_delta(),
-                    on_low_wasm_memory_hook_condition_check_result: None,
                     should_bump_canister_version: false,
                 }
             }
@@ -1753,7 +1747,6 @@ impl SystemApiImpl {
                     requests: vec![],
                     new_global_timer: None,
                     canister_log: CanisterLog::default_delta(),
-                    on_low_wasm_memory_hook_condition_check_result: None,
                     should_bump_canister_version: false,
                 },
                 None => SystemStateModifications {
@@ -1767,7 +1760,6 @@ impl SystemApiImpl {
                     requests: system_state_modifications.requests,
                     new_global_timer: None,
                     canister_log: CanisterLog::default_delta(),
-                    on_low_wasm_memory_hook_condition_check_result: None,
                     should_bump_canister_version: false,
                 },
             },
@@ -1788,7 +1780,6 @@ impl SystemApiImpl {
                         requests: vec![],
                         new_global_timer: None,
                         canister_log: system_state_modifications.canister_log,
-                        on_low_wasm_memory_hook_condition_check_result: None,
                         should_bump_canister_version: false,
                     }
                 }
@@ -1805,7 +1796,6 @@ impl SystemApiImpl {
                     requests: vec![],
                     new_global_timer: None,
                     canister_log: system_state_modifications.canister_log,
-                    on_low_wasm_memory_hook_condition_check_result: None,
                     should_bump_canister_version: true,
                 },
             },
@@ -1830,7 +1820,6 @@ impl SystemApiImpl {
                         requests: vec![],
                         new_global_timer: None,
                         canister_log: system_state_modifications.canister_log,
-                        on_low_wasm_memory_hook_condition_check_result: None,
                         should_bump_canister_version: false,
                     }
                 }
@@ -1861,7 +1850,6 @@ impl SystemApiImpl {
                         requests: vec![],
                         new_global_timer: None,
                         canister_log: system_state_modifications.canister_log,
-                        on_low_wasm_memory_hook_condition_check_result: None,
                         should_bump_canister_version: false,
                     }
                 }

@@ -1,4 +1,4 @@
-use ic_types::{AccumulatedPriority, CanisterId, ExecutionRound, LongExecutionMode};
+use ic_types::{AccumulatedPriority, CanisterId, ExecutionRound};
 use ic_validate_eq::ValidateEq;
 use std::collections::BTreeMap;
 
@@ -13,16 +13,19 @@ pub struct CanisterPriority {
     /// in the vector d that corresponds to this canister.
     pub accumulated_priority: AccumulatedPriority,
 
-    /// Keeps the current priority credit of this Canister, accumulated during long
-    /// executions.
+    /// Number of rounds during which the current long execution, if any, has
+    /// executed at least one slice. (Also used transiently by `finish_round()` to
+    /// charge for full executions.)
     ///
-    /// During long executions, the Canister is temporarily credited with priority
-    /// to slightly boost the long execution priority. Only when the long execution
-    /// is done, then the `accumulated_priority` is decreased by the `priority_credit`.
-    pub priority_credit: AccumulatedPriority,
+    /// During a long execution, this is incremented for each round in which the
+    /// canister was executed. In the meantime, the canister accumulates priority
+    /// normally. It is only charged for these rounds when the long execution
+    /// completes.
+    pub executed_rounds: i64,
 
-    /// Long execution mode: Opportunistic (default) or Prioritized
-    pub long_execution_mode: LongExecutionMode,
+    /// The round when the current long execution started. `None` means the canister
+    /// is not in a long execution.
+    pub long_execution_start_round: Option<ExecutionRound>,
 
     /// The last full round that a canister got the chance to execute. This
     /// means that the canister was given the first pulse in the round or
@@ -35,10 +38,18 @@ impl CanisterPriority {
     /// subnet schedule.
     pub const DEFAULT: CanisterPriority = CanisterPriority {
         accumulated_priority: AccumulatedPriority::new(0),
-        priority_credit: AccumulatedPriority::new(0),
-        long_execution_mode: LongExecutionMode::Opportunistic,
+        executed_rounds: 0,
+        long_execution_start_round: None,
         last_full_execution_round: ExecutionRound::new(0),
     };
+
+    /// Returns true if the canister has non-zero accumulated priority or is in a
+    /// long execution.
+    pub fn is_non_zero(&self) -> bool {
+        self.accumulated_priority.get() != 0
+            || self.executed_rounds != 0
+            || self.long_execution_start_round.is_some()
+    }
 }
 
 impl Default for CanisterPriority {
@@ -51,6 +62,9 @@ impl Default for CanisterPriority {
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetSchedule {
     priorities: BTreeMap<CanisterId, CanisterPriority>,
+
+    #[cfg(debug_assertions)]
+    pub fully_executed_canisters: std::collections::BTreeSet<CanisterId>,
 }
 
 /// Two schedules are equal if they have the same canister priorities (modulo
@@ -76,7 +90,11 @@ impl ValidateEq for SubnetSchedule {
 
 impl SubnetSchedule {
     pub fn new(priorities: BTreeMap<CanisterId, CanisterPriority>) -> Self {
-        Self { priorities }
+        Self {
+            priorities,
+            #[cfg(debug_assertions)]
+            fully_executed_canisters: std::collections::BTreeSet::new(),
+        }
     }
 
     /// Returns the priority for the given canister, or the default priority if not
@@ -109,7 +127,7 @@ impl SubnetSchedule {
     }
 
     /// Retains only the priorities for which the predicate returns `true`.
-    pub(crate) fn retain(&mut self, f: impl FnMut(&CanisterId, &mut CanisterPriority) -> bool) {
+    pub fn retain(&mut self, f: impl FnMut(&CanisterId, &mut CanisterPriority) -> bool) {
         self.priorities.retain(f);
     }
 

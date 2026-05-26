@@ -53,6 +53,7 @@ use ic_registry_transport::{
     deserialize_get_value_response, serialize_get_changes_since_request,
     serialize_get_value_request,
 };
+use ic_replicated_state::metrics::ReplicatedStateInvariants;
 use ic_state_manager::StateManagerImpl;
 use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
@@ -291,15 +292,19 @@ impl Player {
         let crypto = Arc::new(crypto);
 
         let verifier = Arc::new(VerifierImpl::new(crypto.clone()));
+        let replicated_state_invariants =
+            ReplicatedStateInvariants::new(&metrics_registry, &cfg.hypervisor);
         let state_manager = Arc::new(StateManagerImpl::new(
             verifier.clone(),
             subnet_id,
             subnet_type,
-            log.clone(),
-            &metrics_registry,
             &cfg.state_manager,
             None,
             MaliciousFlags::default(),
+            tokio::sync::watch::channel(Height::from(0)).0,
+            Some(replicated_state_invariants),
+            &metrics_registry,
+            log.clone(),
         ));
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
         let execution_service = ExecutionServices::setup_execution(

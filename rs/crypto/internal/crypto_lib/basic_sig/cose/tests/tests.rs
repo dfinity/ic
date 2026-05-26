@@ -144,3 +144,84 @@ fn get_der_cose_verification_result(sig_der_hex: &str, pk_cose_hex: &str, msg_he
         false
     }
 }
+
+// Constructed COSE-encoded EdDSA / Ed25519 public key for the RFC 8032 TEST 1
+// keypair (sk = 9d61...7f60, pk = d75a...511a). The CBOR map is:
+//   { 1: 1 (kty=OKP), 3: -8 (alg=EdDSA), -1: 6 (crv=Ed25519), -2: <pk> }
+const ED25519_PK_COSE_HEX: &str =
+    "a4010103272006215820d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
+
+// The RFC 8410 SPKI DER encoding of the same Ed25519 public key.
+const ED25519_PK_RFC8410_DER_HEX: &str =
+    "302a300506032b6570032100d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
+
+// Signature, with the RFC 8032 TEST 1 secret key, over a synthetic WebAuthn
+// signed-bytes payload (authenticator_data || sha256(client_data_json)).
+const ED25519_SIG_HEX: &str = "c75d28322702e0b762a5a6e2b2ebbe35575effa6df89132826ffa9e7ff7db3ab98017f1f162acfcffaca2e10fbec029b9578088607912200627742e82bd78b0d";
+const ED25519_MSG_HEX: &str = "88e87051ccf36e3be572ef2b097e80abcb1cbc8332a6af5f9512661f3fece38e05000000005f335d5a02031b45335306e396d3ceb1a9a1802805367bc77216b80d4082ae28";
+
+#[test]
+fn should_correctly_parse_cose_encoded_ed25519_pk() {
+    let pk_cose = hex::decode(ED25519_PK_COSE_HEX).unwrap();
+    let (alg_id, pk_der) = parse_cose_public_key(&pk_cose).unwrap();
+    assert_eq!(alg_id, AlgorithmId::Ed25519);
+    assert_eq!(hex::encode(pk_der), ED25519_PK_RFC8410_DER_HEX);
+}
+
+#[test]
+fn should_correctly_verify_signature_for_ed25519_cose_pk() {
+    let pk_cose = hex::decode(ED25519_PK_COSE_HEX).unwrap();
+    let (_alg_id, pk_der) = parse_cose_public_key(&pk_cose).unwrap();
+
+    let pk = ic_ed25519::PublicKey::deserialize_rfc8410_der(&pk_der)
+        .expect("Ed25519 public key parses from RFC 8410 DER");
+
+    let sig = hex::decode(ED25519_SIG_HEX).unwrap();
+    let msg = hex::decode(ED25519_MSG_HEX).unwrap();
+    pk.verify_signature(&msg, &sig)
+        .expect("signature verifies against parsed COSE public key");
+}
+
+#[test]
+fn should_parse_nitrokey_3a_cose_encoded_ed25519_pk() {
+    // COSE key captured from a NitroKey 3A WebAuthn registration (II self-service test).
+    // Verifies that authenticators producing kty=OKP/alg=EdDSA/crv=Ed25519 are accepted.
+    let pk_cose = hex::decode(
+        "a40101032720062158205ae0e5d3bc439630f2a07660dc6d29c0129e545bc24380970722fcbf5c8f8b30",
+    )
+    .unwrap();
+    let (alg_id, _pk_der) = parse_cose_public_key(&pk_cose).unwrap();
+    assert_eq!(alg_id, AlgorithmId::Ed25519);
+}
+
+#[test]
+fn should_reject_cose_encoded_eddsa_with_unsupported_curve() {
+    // Same as a valid Ed25519 key but crv = 7 (Ed448), which is not supported.
+    let pk_cose = hex::decode(
+        "a40101032720072158205ae0e5d3bc439630f2a07660dc6d29c0129e545bc24380970722fcbf5c8f8b30",
+    )
+    .unwrap();
+    let result = parse_cose_public_key(&pk_cose);
+    assert_eq!(
+        result,
+        Err(CryptoError::AlgorithmNotSupported {
+            algorithm: AlgorithmId::Unspecified,
+            reason: "Algorithm not supported in COSE parser".to_string(),
+        })
+    );
+}
+
+#[test]
+fn should_reject_cose_encoded_ed25519_with_short_x() {
+    // x is only 16 bytes instead of the required 32.
+    // CBOR: a4 01 01 03 27 20 06 21 50 <16 bytes>
+    let pk_cose = hex::decode("a4010103272006215000112233445566778899aabbccddeeff").unwrap();
+    let result = parse_cose_public_key(&pk_cose);
+    assert!(matches!(
+        result,
+        Err(CryptoError::MalformedPublicKey {
+            algorithm: AlgorithmId::Ed25519,
+            ..
+        })
+    ));
+}

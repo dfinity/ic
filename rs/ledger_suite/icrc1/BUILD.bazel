@@ -3,61 +3,49 @@ load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/sha2",
-    "//rs/ledger_suite/common/ledger_canister_core",
-    "//rs/ledger_suite/common/ledger_core",
-    "//rs/types/base_types",
-    "@crate_index//:candid",
-    "@crate_index//:ciborium",
-    "@crate_index//:hex",
-    "@crate_index//:num-bigint",
-    "@crate_index//:num-traits",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:thiserror",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:async-trait",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/ledger_suite/common/ledger_canister_core",
-    "//rs/ledger_suite/common/ledger_core",
-    "//rs/ledger_suite/icrc1/test_utils",
-    "@crate_index//:candid",
-    "@crate_index//:ciborium",
-    "@crate_index//:leb128",
-    "@crate_index//:proptest",
-    "@crate_index//:rand",
-]
-
-MACRO_DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:proptest-derive",
-    "@crate_index//:test-strategy",
-]
-
 rust_library(
     name = "icrc1",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_icrc1",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+        "//rs/crypto/sha2",
+        "//rs/ledger_suite/common/ledger_canister_core",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:ciborium",
+        "@crate_index//:hex",
+        "@crate_index//:num-bigint",
+        "@crate_index//:num-traits",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:thiserror",
+    ],
 )
 
 rust_test(
     name = "icrc1_unit_test",
     crate = ":icrc1",
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+        "//rs/ledger_suite/common/ledger_canister_core",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icrc1/test_utils",
+        "@crate_index//:candid",
+        "@crate_index//:ciborium",
+        "@crate_index//:leb128",
+        "@crate_index//:proptest",
+        "@crate_index//:rand",
+    ],
 )
 
 rust_doc_test(
@@ -68,17 +56,30 @@ rust_doc_test(
 rust_test(
     name = "icrc1_test",
     srcs = ["tests/tests.rs"],
-    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:proptest-derive",
+        "@crate_index//:test-strategy",
+    ],
     deps = [
         # Keep sorted.
         ":icrc1",
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+        "//rs/ledger_suite/common/ledger_canister_core",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icrc1/test_utils",
         "//rs/ledger_suite/icrc1/tokens_u256",
         "//rs/ledger_suite/icrc1/tokens_u64",
         "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
         "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:ciborium",
         "@crate_index//:hex",
-    ] + DEV_DEPENDENCIES,
+        "@crate_index//:leb128",
+        "@crate_index//:proptest",
+        "@crate_index//:rand",
+    ],
 )
 
 [
@@ -158,7 +159,7 @@ rust_test(
         deps = [
             # Keep sorted.
             ":icrc1",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/icrc1/index-ng",
             "//rs/ledger_suite/icrc1/ledger",
             "//rs/ledger_suite/test_utils/in_memory_ledger:ic-ledger-suite-in-memory-ledger" + name_suffix,
@@ -217,7 +218,7 @@ rust_test(
         deps = [
             # Keep sorted.
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",

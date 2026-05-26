@@ -203,6 +203,166 @@ fn test_install_ckbtc_minter_canister() {
     install_minter(&env, ledger_id);
 }
 
+/// Smoke-tests the ICRC-21 / ICRC-10 endpoints exposed by the minter:
+///
+/// * `icrc10_supported_standards` advertises both standards with the canonical
+///   `dfinity/ICRC` URLs.
+/// * `icrc21_canister_call_consent_message` produces both a GenericDisplay
+///   markdown message and a FieldsDisplay structured message for
+///   `retrieve_btc_with_approval`, with the configured network's token symbols
+///   threaded through.
+/// * Unsupported methods return `Icrc21Error::UnsupportedCanisterCall`.
+#[test]
+fn test_icrc21_endpoints_smoke() {
+    use ic_ckbtc_minter::updates::icrc21::StandardRecord;
+    use icrc_ledger_types::icrc21::errors::Icrc21Error;
+    use icrc_ledger_types::icrc21::requests::{
+        ConsentMessageMetadata, ConsentMessageRequest, ConsentMessageSpec, DisplayMessageType,
+    };
+    use icrc_ledger_types::icrc21::responses::{ConsentInfo, ConsentMessage, Value};
+
+    let setup = CkBtcSetup::new(); // mainnet minter; "ckBTC" / "BTC" symbols.
+
+    let consent_message = |req: &ConsentMessageRequest| -> Result<ConsentInfo, Icrc21Error> {
+        Decode!(
+            &assert_reply(
+                setup
+                    .env
+                    .execute_ingress_as(
+                        setup.caller,
+                        setup.minter_id,
+                        "icrc21_canister_call_consent_message",
+                        Encode!(req).unwrap(),
+                    )
+                    .expect("icrc21_canister_call_consent_message ingress failed")
+            ),
+            Result<ConsentInfo, Icrc21Error>
+        )
+        .unwrap()
+    };
+    let make_request = |method: &str,
+                        arg: Vec<u8>,
+                        device_spec: Option<DisplayMessageType>|
+     -> ConsentMessageRequest {
+        ConsentMessageRequest {
+            method: method.to_string(),
+            arg,
+            user_preferences: ConsentMessageSpec {
+                metadata: ConsentMessageMetadata {
+                    language: "en".to_string(),
+                    utc_offset_minutes: None,
+                },
+                device_spec,
+            },
+        }
+    };
+
+    // 1. icrc10_supported_standards advertises ICRC-10 and ICRC-21.
+    let standards = Decode!(
+        &assert_reply(
+            setup
+                .env
+                .query(
+                    setup.minter_id,
+                    "icrc10_supported_standards",
+                    Encode!().unwrap()
+                )
+                .expect("icrc10_supported_standards query failed")
+        ),
+        Vec<StandardRecord>
+    )
+    .unwrap();
+    let names: Vec<_> = standards.iter().map(|s| s.name.as_str()).collect();
+    assert!(
+        names.contains(&"ICRC-10") && names.contains(&"ICRC-21"),
+        "expected ICRC-10 and ICRC-21 in supported standards, got {names:?}"
+    );
+    let icrc21 = standards
+        .iter()
+        .find(|s| s.name == "ICRC-21")
+        .expect("ICRC-21 entry missing");
+    assert_eq!(
+        icrc21.url,
+        "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-21/ICRC-21.md"
+    );
+
+    // 2a. retrieve_btc_with_approval / GenericDisplay renders the expected
+    // Markdown sections, with the configured (mainnet) token symbols. The
+    // assertion is a full-string equality so any wording change has to be
+    // updated here consciously.
+    let args = RetrieveBtcWithApprovalArgs {
+        amount: 250_000,
+        address: WITHDRAWAL_ADDRESS.to_string(),
+        from_subaccount: None,
+    };
+    let info = consent_message(&make_request(
+        "retrieve_btc_with_approval",
+        Encode!(&args).unwrap(),
+        Some(DisplayMessageType::GenericDisplay),
+    ))
+    .expect("consent message should be produced for retrieve_btc_with_approval");
+    let message = match info.consent_message {
+        ConsentMessage::GenericDisplayMessage(m) => m,
+        other => panic!("expected GenericDisplayMessage, got {other:?}"),
+    };
+    assert_eq!(
+        message,
+        format!(
+            "# Convert ckBTC to BTC\n\n\
+             Authorize the ckBTC minter to burn ckBTC from your account and \
+             send the equivalent amount in BTC (minus network and minter fees) to \
+             the Bitcoin address below.\n\n\
+             **Amount to convert:** `0.0025 ckBTC`\n\n\
+             **Bitcoin destination address:**\n`{WITHDRAWAL_ADDRESS}`"
+        )
+    );
+
+    // 2b. retrieve_btc_with_approval / FieldsDisplay renders the structured
+    // intent + (Amount, BTC address) pair.
+    let info = consent_message(&make_request(
+        "retrieve_btc_with_approval",
+        Encode!(&args).unwrap(),
+        Some(DisplayMessageType::FieldsDisplay),
+    ))
+    .expect("consent message should be produced for retrieve_btc_with_approval");
+    let fields_display = match info.consent_message {
+        ConsentMessage::FieldsDisplayMessage(f) => f,
+        other => panic!("expected FieldsDisplayMessage, got {other:?}"),
+    };
+    assert_eq!(fields_display.intent, "ckBTC to BTC");
+    assert_eq!(
+        fields_display.fields,
+        vec![
+            (
+                "Amount".to_string(),
+                Value::TokenAmount {
+                    decimals: 8,
+                    amount: 250_000,
+                    symbol: "ckBTC".to_string(),
+                }
+            ),
+            (
+                "BTC address".to_string(),
+                Value::Text {
+                    content: WITHDRAWAL_ADDRESS.to_string(),
+                }
+            ),
+        ]
+    );
+
+    // 3. Unsupported methods return UnsupportedCanisterCall. `retrieve_btc`
+    // is intentionally listed here — the minter only renders consent for
+    // the approval-based flow.
+    for method in ["retrieve_btc", "update_balance", "get_btc_address"] {
+        let err = consent_message(&make_request(method, vec![], None))
+            .expect_err("expected UnsupportedCanisterCall");
+        assert!(
+            matches!(err, Icrc21Error::UnsupportedCanisterCall(_)),
+            "method {method:?} should be rejected as unsupported, got {err:?}"
+        );
+    }
+}
+
 #[test]
 fn test_wrong_upgrade_parameter() {
     let env = new_state_machine();
@@ -723,7 +883,10 @@ impl CkBtcSetup {
                     .with_minting_account(minter_id.get().0)
                     .with_transfer_fee(TRANSFER_FEE)
                     .with_max_memo_length(CKBTC_LEDGER_MEMO_SIZE)
-                    .with_feature_flags(ic_icrc1_ledger::FeatureFlags { icrc2: true })
+                    .with_feature_flags(ic_icrc1_ledger::FeatureFlags {
+                        icrc2: true,
+                        icrc152: false
+                    })
                     .build()
             ))
             .unwrap(),

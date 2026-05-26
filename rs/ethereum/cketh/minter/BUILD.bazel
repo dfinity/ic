@@ -39,7 +39,7 @@ filegroup(
             "//packages/ic-secp256k1",
             "//packages/icrc-cbor:icrc-cbor_u256",
             "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/phantom_newtype",
             "//rs/types/management_canister_types",
             "//rs/utils/ensure",
@@ -54,7 +54,6 @@ filegroup(
             "@crate_index//:ic-canister-runtime",
             "@crate_index//:ic-cdk",
             "@crate_index//:ic-cdk-timers",
-            "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-sha3",
             "@crate_index//:ic-stable-structures",
             "@crate_index//:minicbor",
@@ -112,7 +111,6 @@ rust_test(
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/ethereum/cketh/test_utils",
         "@crate_index//:assert_matches",
-        "@crate_index//:candid_parser",
         "@crate_index//:ethers-core",
         "@crate_index//:flate2",
         "@crate_index//:ic-agent",
@@ -150,6 +148,7 @@ rust_test(
     ],
     crate_features = features,
     crate_name = "ic_cketh_minter_canister",
+    hidden_endpoints = hidden_endpoints,
     proc_macro_deps = [
         # Keep sorted.
     ],
@@ -161,7 +160,7 @@ rust_test(
         "//packages/ic-http-types",
         "//packages/ic-secp256k1",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "@crate_index//:askama",
         "@crate_index//:candid",
         "@crate_index//:futures",
@@ -175,11 +174,12 @@ rust_test(
         "@crate_index//:serde_bytes",
         "@crate_index//:time",
     ],
-) for (target_suffix, features) in [
-    ("", []),
+) for (target_suffix, features, hidden_endpoints) in [
+    ("", [], "hidden_endpoints.conf"),
     (
         "_debug",
         ["debug_checks"],
+        "hidden_endpoints_debug.conf",
     ),
 ]]
 
@@ -224,7 +224,7 @@ rust_ic_test_suite(
         # Keep sorted.
         ":minter",
         "//packages/ic-ethereum-types",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/ethereum/cketh/test_utils",
         "//rs/ethereum/ledger-suite-orchestrator/test_utils",
         "//rs/state_machine_tests",
@@ -321,7 +321,7 @@ rust_canbench(
         "//packages/ic-http-types",
         "//packages/ic-secp256k1",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "@crate_index//:askama",
         "@crate_index//:candid",
         "@crate_index//:futures",

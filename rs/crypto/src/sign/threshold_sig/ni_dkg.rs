@@ -101,7 +101,7 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng> NiDkgAlgorithm for CryptoC
     fn create_transcript(
         &self,
         config: &NiDkgConfig,
-        verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+        verified_dealings: BTreeMap<NodeId, NiDkgDealing>,
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;

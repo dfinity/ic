@@ -1,5 +1,6 @@
 // Needs to be `pub` so that the benchmarking code in `state_benches`
 // can access it.
+mod allowed_panics;
 pub mod checkpoint;
 pub mod labeled_tree_visitor;
 pub mod manifest;
@@ -19,6 +20,7 @@ use crate::{
     },
     tip::{PageMapToFlush, TipRequest, flush_tip_channel, spawn_tip_thread},
 };
+use allowed_panics::panic_with_replica_diverged_at_height;
 use crossbeam_channel::{Sender, bounded, unbounded};
 use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use ic_canonical_state_tree_hash::{
@@ -48,10 +50,10 @@ use ic_metrics::{
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::{messaging::xnet::v1, state::v1 as pb};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
-use ic_replicated_state::{
-    ReplicatedState,
-    page_map::{PersistenceError, StorageMetrics},
+use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::metrics::{ReplicatedStateInvariants, ReplicatedStateMetrics};
+use ic_replicated_state::page_map::{
+    PageAllocatorFileDescriptor, PersistenceError, StorageMetrics,
 };
 use ic_state_layout::{
     CheckpointLayout, CheckpointStatus, ReadOnly, StateLayout, error::LayoutError,
@@ -67,8 +69,11 @@ use ic_types::{
     state_sync::CURRENT_STATE_SYNC_VERSION,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
 };
-use ic_utils_thread::{JoinOnDrop, deallocator_thread::DeallocatorThread};
+use ic_utils_thread::JoinOnDrop;
+use ic_utils_thread::deallocator_thread::DeallocatorThread;
+use ic_utils_thread::worker_thread::WorkerThread;
 use ic_wasm_types::ModuleLoadingStatus;
+use parking_lot::RwLockWriteGuard;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use prost::Message;
 use std::cmp::min;
@@ -89,6 +94,7 @@ use std::{
     sync::Mutex,
 };
 use tempfile::tempfile;
+use tokio::sync::watch;
 use uuid::Uuid;
 
 /// The number of threads that state manager starts to construct checkpoints.
@@ -188,6 +194,8 @@ pub struct StateManagerMetrics {
     latest_hash_tree_max_index: IntGauge,
     fast_forward_height: IntGauge,
     no_state_clone_count: IntCounter,
+    skip_optimization_missing_cert_count: IntCounter,
+    skipped_state_observations: IntCounter,
 }
 
 #[derive(Clone)]
@@ -483,6 +491,16 @@ impl StateManagerMetrics {
             "Number of heights whose states were not cloned and not stored by this node.",
         );
 
+        let skip_optimization_missing_cert_count = metrics_registry.int_counter(
+            "state_manager_skip_optimization_missing_cert_count",
+            "How often we could have skipped state cloning but did not because no certification was available.",
+        );
+
+        let skipped_state_observations = metrics_registry.int_counter(
+            "state_manager_skipped_state_observations",
+            "Number of `ReplicatedStateMetrics::observe` invocations skipped because the background metrics thread was still busy.",
+        );
+
         Self {
             state_manager_error_count,
             checkpoint_op_duration,
@@ -510,6 +528,8 @@ impl StateManagerMetrics {
             latest_hash_tree_max_index,
             fast_forward_height,
             no_state_clone_count,
+            skip_optimization_missing_cert_count,
+            skipped_state_observations,
         }
     }
 
@@ -929,6 +949,10 @@ const EXTRA_CHECKPOINTS_TO_KEEP: usize = 0;
 pub struct StateManagerImpl {
     log: ReplicaLogger,
     metrics: StateManagerMetrics,
+    /// Runs expensive `ReplicatedStateMetrics::observe()` and
+    /// `ReplicatedStateInvariants::check()` calls in the background, so that
+    /// `commit_and_certify` does not have to do it on the critical path.
+    replicated_state_metrics_thread: ReplicatedStateMetricsThread,
     state_layout: StateLayout,
     /// The main metadata. Different threads will need to access this field.
     ///
@@ -942,7 +966,7 @@ pub struct StateManagerImpl {
     // Cached latest state height.  We cache it separately because it's
     // requested quite often and this causes high contention on the lock.
     latest_state_height: Arc<AtomicU64>,
-    latest_certified_height: AtomicU64,
+    latest_certified_height: Arc<AtomicU64>,
     fast_forward_height: AtomicU64,
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
@@ -954,6 +978,7 @@ pub struct StateManagerImpl {
     latest_height_update_time: Arc<Mutex<Instant>>,
     /// The height at which this StateManager was started. Set once during initialization and never modified.
     started_height: Height,
+    max_certified_height_tx: Arc<watch::Sender<Height>>,
 }
 
 #[cfg(debug_assertions)]
@@ -1315,11 +1340,13 @@ impl StateManagerImpl {
         verifier: Arc<dyn Verifier>,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
-        log: ReplicaLogger,
-        metrics_registry: &MetricsRegistry,
         config: &Config,
         starting_height: Option<Height>,
         malicious_flags: MaliciousFlags,
+        max_certified_height_tx: watch::Sender<Height>,
+        replicated_state_invariants: Option<ReplicatedStateInvariants>,
+        metrics_registry: &MetricsRegistry,
+        log: ReplicaLogger,
     ) -> Self {
         let metrics = StateManagerMetrics::new(metrics_registry, log.clone());
 
@@ -1327,6 +1354,16 @@ impl StateManagerImpl {
             .api_call_duration
             .with_label_values(&["new"])
             .start_timer();
+
+        let replicated_state_metrics = ReplicatedStateMetrics::new(metrics_registry);
+        let replicated_state_metrics_thread = ReplicatedStateMetricsThread {
+            metrics: Arc::new(replicated_state_metrics),
+            invariants: replicated_state_invariants.map(Arc::new),
+            worker_thread: WorkerThread::new(
+                "StateMetrics",
+                metrics.skipped_state_observations.clone(),
+            ),
+        };
 
         info!(
             log,
@@ -1509,7 +1546,7 @@ impl StateManagerImpl {
         );
 
         let latest_state_height = Arc::new(AtomicU64::new(0));
-        let latest_certified_height = AtomicU64::new(0);
+        let latest_certified_height = Arc::new(AtomicU64::new(0));
         let fast_forward_height = AtomicU64::new(0);
 
         let initial_snapshot = Snapshot {
@@ -1619,6 +1656,7 @@ impl StateManagerImpl {
         Self {
             log,
             metrics,
+            replicated_state_metrics_thread,
             state_layout,
             states,
             verifier,
@@ -1637,6 +1675,7 @@ impl StateManagerImpl {
             malicious_flags,
             latest_height_update_time,
             started_height,
+            max_certified_height_tx: Arc::new(max_certified_height_tx),
         }
     }
 
@@ -1991,6 +2030,47 @@ impl StateManagerImpl {
             })
     }
 
+    /// Helper to share `on_synced_checkpoint` code with testing code.
+    fn push_state_and_cert_metadata(
+        &self,
+        height: Height,
+        latest_state_height: &AtomicU64,
+        state: ReplicatedState,
+        states: &mut RwLockWriteGuard<'_, SharedState>,
+    ) {
+        let lazy_tree = replicated_state_as_lazy_tree(&state, height);
+        let hash_tree = hash_lazy_tree(&lazy_tree)
+            .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
+        update_hash_tree_metrics(&hash_tree, &self.metrics);
+        let height_witness = state_height_witness(&lazy_tree, &hash_tree, &self.metrics);
+        drop(lazy_tree);
+        let certification_metadata = CertificationMetadata {
+            certified_state_hash: crypto_hash_of_tree(&hash_tree),
+            height_witness,
+            hash_tree: Some((Arc::new(hash_tree), Instant::now())),
+            certification: None,
+        };
+
+        states.snapshots.push_back(Snapshot {
+            height,
+            state: Arc::new(state),
+        });
+        states
+            .snapshots
+            .make_contiguous()
+            .sort_by_key(|snapshot| snapshot.height);
+
+        self.metrics
+            .resident_state_count
+            .set(states.snapshots.len() as i64);
+
+        states
+            .certifications_metadata
+            .insert(height, certification_metadata);
+
+        update_latest_height(latest_state_height, height);
+    }
+
     fn on_synced_checkpoint(
         &self,
         state: ReplicatedState,
@@ -2017,19 +2097,6 @@ impl StateManagerImpl {
             }
         }
 
-        let lazy_tree = replicated_state_as_lazy_tree(&state, height);
-        let hash_tree = hash_lazy_tree(&lazy_tree)
-            .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
-        update_hash_tree_metrics(&hash_tree, &self.metrics);
-        let height_witness = state_height_witness(&lazy_tree, &hash_tree, &self.metrics);
-        drop(lazy_tree);
-        let certification_metadata = CertificationMetadata {
-            certified_state_hash: crypto_hash_of_tree(&hash_tree),
-            height_witness,
-            hash_tree: Some((Arc::new(hash_tree), Instant::now())),
-            certification: None,
-        };
-
         let mut states = self.states.write();
         #[cfg(debug_assertions)]
         check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
@@ -2053,22 +2120,12 @@ impl StateManagerImpl {
 
         if !is_snapshot_present {
             // Normal case: we don't have the in-memory state yet.
-            states.snapshots.push_back(Snapshot {
+            self.push_state_and_cert_metadata(
                 height,
-                state: Arc::new(state),
-            });
-            states
-                .snapshots
-                .make_contiguous()
-                .sort_by_key(|snapshot| snapshot.height);
-
-            self.metrics
-                .resident_state_count
-                .set(states.snapshots.len() as i64);
-
-            states
-                .certifications_metadata
-                .insert(height, certification_metadata);
+                &self.latest_state_height,
+                state,
+                &mut states,
+            );
         } else {
             // Rare case: we already have the in-memory state.
             info!(
@@ -2325,6 +2382,11 @@ impl StateManagerImpl {
             .set(latest_certified_height.get() as i64);
 
         let mut certifications = states.certifications.split_off(&last_height_to_keep);
+        for h in inmemory_heights_to_keep.iter() {
+            if let Some(cert) = states.certifications.remove(h) {
+                certifications.insert(*h, cert);
+            }
+        }
         std::mem::swap(&mut certifications, &mut states.certifications);
         self.deallocator_thread.send(Box::new(certifications));
 
@@ -2614,6 +2676,24 @@ impl StateManagerImpl {
             hash_tree,
         })
     }
+}
+
+fn update_latest_certified_height(
+    latest_certified_height: &AtomicU64,
+    metrics: &StateManagerMetrics,
+    max_certified_height_tx: &watch::Sender<Height>,
+    height: Height,
+) {
+    let latest_certified = update_latest_height(latest_certified_height, height);
+    metrics.latest_certified_height.set(latest_certified as i64);
+    max_certified_height_tx.send_if_modified(|h| {
+        if height > *h {
+            *h = height;
+            true
+        } else {
+            false
+        }
+    });
 }
 
 fn initial_state(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> Labeled<ReplicatedState> {
@@ -3051,11 +3131,12 @@ impl StateManager for StateManagerImpl {
                 );
             }
 
-            let latest_certified =
-                update_latest_height(&self.latest_certified_height, certification.height);
-            self.metrics
-                .latest_certified_height
-                .set(latest_certified as i64);
+            update_latest_certified_height(
+                &self.latest_certified_height,
+                &self.metrics,
+                &self.max_certified_height_tx,
+                certification_height,
+            );
 
             if let Some((_, certification_requested_at)) = metadata.hash_tree {
                 self.metrics
@@ -3306,7 +3387,7 @@ impl StateManager for StateManagerImpl {
                     .expect("Failed to send `Wait` to hash channel");
                 recv.recv().expect("Failed to wait for hash channel");
                 // After awaiting the hashing thread, snapshot and certification_metadata
-                // must have an entry at height-1, so we can unwrap.
+                // must have an entry at prev_height.
                 let states = self.states.read();
                 if let Some(cert_md) = states.certifications_metadata.get(&prev_height) {
                     cert_md.certified_state_hash.clone()
@@ -3368,18 +3449,23 @@ impl StateManager for StateManagerImpl {
                 && !height
                     .get()
                     .is_multiple_of(MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING_AND_HASHING)
-                && maybe_delivered_certification.is_some()
             {
-                #[cfg(debug_assertions)]
-                check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
+                if maybe_delivered_certification.is_some() {
+                    #[cfg(debug_assertions)]
+                    check_certifications_metadata_snapshots_and_states_metadata_are_consistent(
+                        &states,
+                    );
 
-                assert_tip_is_none(&states);
+                    assert_tip_is_none(&states);
 
-                self.metrics.no_state_clone_count.inc();
+                    self.metrics.no_state_clone_count.inc();
 
-                states.tip_height = height;
-                states.tip = Some(state);
-                return;
+                    states.tip_height = height;
+                    states.tip = Some(state);
+                    return;
+                } else {
+                    self.metrics.skip_optimization_missing_cert_count.inc();
+                }
             }
             maybe_delivered_certification
         };
@@ -3415,11 +3501,13 @@ impl StateManager for StateManagerImpl {
             state: Arc::clone(&state),
             states: Arc::clone(&self.states),
             latest_state_height: Arc::clone(&self.latest_state_height),
+            latest_certified_height: Arc::clone(&self.latest_certified_height),
             height,
             latest_height_update_time: Arc::clone(&self.latest_height_update_time),
             reference_certification: Box::new(maybe_delivered_certification),
             scope: scope.clone(),
             state_layout: Box::new(self.state_layout.clone()),
+            max_certified_height_tx: Arc::clone(&self.max_certified_height_tx),
         };
         self.hash_channel.send(hash_req).unwrap();
 
@@ -3479,6 +3567,13 @@ impl StateManager for StateManagerImpl {
                 .send(req)
                 .expect("failed to send tip request");
         }
+
+        // `ReplicatedStateMetrics::observe()` and `ReplicatedStateInvariants::check()`
+        // only update Prometheus metrics, so defer them to a background thread to keep
+        // them off the critical path.
+        let is_checkpoint_round = scope == CertificationScope::Full;
+        self.replicated_state_metrics_thread
+            .enqueue_observe_and_check(state, height, is_checkpoint_round, &self.log);
     }
 
     fn report_diverged_checkpoint(&self, height: Height) {
@@ -3525,7 +3620,7 @@ impl StateManager for StateManagerImpl {
 
         self.release_lock_and_persist_metadata(states);
 
-        fatal!(self.log, "Replica diverged at height {}", height)
+        panic_with_replica_diverged_at_height(height);
     }
 }
 
@@ -3534,6 +3629,7 @@ enum HashRequest {
         state: Arc<ReplicatedState>,
         states: Arc<parking_lot::RwLock<SharedState>>,
         latest_state_height: Arc<AtomicU64>,
+        latest_certified_height: Arc<AtomicU64>,
         height: Height,
         latest_height_update_time: Arc<Mutex<Instant>>,
         /// A certification from consensus. If `Some`, we compare it with the state hash
@@ -3544,6 +3640,7 @@ enum HashRequest {
         scope: CertificationScope,
         /// Boxed so that variants have similar size and we don't waste space when sending `HashRequest::Wait`.
         state_layout: Box<StateLayout>,
+        max_certified_height_tx: Arc<watch::Sender<Height>>,
     },
     /// Wait for the message to be executed and notify back via `sender`.
     Wait { sender: Sender<()> },
@@ -3565,11 +3662,13 @@ fn spawn_hash_thread(
                             state,
                             states,
                             latest_state_height,
+                            latest_certified_height,
                             height,
                             latest_height_update_time,
                             reference_certification,
                             scope,
                             state_layout,
+                            max_certified_height_tx,
                         } => {
                             let mut certification_metadata =
                                 StateManagerImpl::compute_certification_metadata(
@@ -3607,13 +3706,13 @@ fn spawn_hash_thread(
                                 let delivered_hash = cert.signed.content.hash.as_ref();
                                 assert_prev_hash_matches(delivered_hash, "delivered");
                                 // If we do agree, write the certification to the metadata, so that consensus does
-                                // not have to deliver it again. 
+                                // not have to deliver it again.
                                 certification_metadata.certification = *reference_certification;
                             }
 
                             // It's possible that we already computed this state before. We
                             // validate that hashes agree to spot bugs causing non-determinism as
-                            // early as possible. 
+                            // early as possible.
                             let mut states = states.write();
                             if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
                                 let prev_hash = &prev_metadata.certified_state_hash;
@@ -3635,6 +3734,8 @@ fn spawn_hash_thread(
                                     .make_contiguous()
                                     .sort_by_key(|snapshot| snapshot.height);
 
+                                let has_certification =
+                                    certification_metadata.certification.is_some();
                                 states
                                     .certifications_metadata
                                     .insert(height, certification_metadata);
@@ -3652,6 +3753,19 @@ fn spawn_hash_thread(
                                         .observe((now - *last_height_update_time).as_secs_f64());
                                     *last_height_update_time = now;
                                 }
+                                // Only update the certified height and notify the channel if the
+                                // certification is actually being stored. We must not fire the channel
+                                // when the snapshot already existed (e.g., due to state sync), because
+                                // in that case `certification_metadata` is not updated and the
+                                // certified state at this height would not be available.
+                                if has_certification {
+                                    update_latest_certified_height(
+                                        &latest_certified_height,
+                                        &metrics,
+                                        &max_certified_height_tx,
+                                        height,
+                                    );
+                                }
                             }
                         }
                         HashRequest::Wait { sender } => {
@@ -3668,7 +3782,7 @@ fn spawn_hash_thread(
 impl StateManagerImpl {
     /// After this method terminates, both `SharedState.snapshots` and `SharedState.certification_metadata`
     /// at the height from the previous `commit_and_certify` are populated. It also updates `latest_state_height`
-    /// to the maximum of the value before and the committed height.
+    /// to the maximum of the value before and the committed height. It may also update `latest_certified_state_height`.
     ///
     /// This used to happen synchronously inside `commit_and_certify`, but now happens in the hash thread
     /// at an unpredictable time.
@@ -4260,6 +4374,48 @@ impl PageAllocatorFileDescriptorImpl {
     }
 }
 
+/// A wrapper around a `ReplicatedStateMetrics`, an optional
+/// `ReplicatedStateInvariants` and a `WorkerThread` to run
+/// observations in the background.
+struct ReplicatedStateMetricsThread {
+    /// The metrics to be observed.
+    metrics: Arc<ReplicatedStateMetrics>,
+
+    /// Optional invariants to be checked.
+    ///
+    /// Always `Some` in the replica. May be `None` in tests or other binaries.
+    invariants: Option<Arc<ReplicatedStateInvariants>>,
+
+    /// Worker thread that runs the metrics observations and invariants checks.
+    worker_thread: WorkerThread,
+}
+
+impl ReplicatedStateMetricsThread {
+    /// Enqueues background metric observations and invariant checks for the given
+    /// state.
+    ///
+    /// No-op if the worker thread is backlogged with earlier enqueued tasks. Since
+    /// neither metrics nor invariant checks are critical to correct functioning of
+    /// the replica, this is preferable to blocking on the critical path.
+    fn enqueue_observe_and_check(
+        &self,
+        state: Arc<ReplicatedState>,
+        height: Height,
+        is_checkpoint_round: bool,
+        log: &ReplicaLogger,
+    ) {
+        let metrics = Arc::clone(&self.metrics);
+        let invariants = self.invariants.clone();
+        let log = log.clone();
+        self.worker_thread.enqueue(Box::new(move || {
+            metrics.observe(state.metadata.own_subnet_id, &state, height, &log);
+            if let Some(invariants) = invariants {
+                invariants.check(&state, is_checkpoint_round, height, &log);
+            }
+        }));
+    }
+}
+
 pub mod testing {
     use super::*;
 
@@ -4288,11 +4444,36 @@ pub mod testing {
             batch_summary: Option<BatchSummary>,
         );
 
+        /// Testing only: Like `commit_and_certify_at_height`, but waits for hashing thread to finish.
+        /// Note that this does not guarantee that the certification metadata is populated, if a
+        /// catch-up optimization is active.
+        fn commit_and_certify_at_height_sync(
+            &self,
+            state: ReplicatedState,
+            height: Height,
+            scope: CertificationScope,
+            batch_summary: Option<BatchSummary>,
+        );
+
+        /// Testing only: Like `commit_and_certify`, but waits for hashing thread to finish.
+        /// Note that this does not guarantee that the certification metadata is populated, if a
+        /// catch-up optimization is active.
+        fn commit_and_certify_sync(
+            &self,
+            state: ReplicatedState,
+            scope: CertificationScope,
+            batch_summary: Option<BatchSummary>,
+        );
+
         /// Testing only: Purges the `manifest` at `height` in `states.states_metadata`.
         fn purge_manifest(&mut self, height: Height) -> bool;
 
-        /// Testing only: Wait till deallocation queue is empty.
+        /// Testing only: Wait until deallocation queue is empty.
         fn flush_deallocation_channel(&self);
+
+        /// Testing only: Wait until all enqueued replicated state metrics observations
+        /// have been processed by the background metrics thread.
+        fn flush_metrics_channel(&self);
 
         /// Testing only: Returns heights in `states.snapshots`.
         fn state_snapshot_heights(&self) -> Vec<Height>;
@@ -4317,6 +4498,9 @@ pub mod testing {
 
         /// Testing only: Returns `fast_forward_height`.
         fn fast_forward_height(&self) -> u64;
+
+        /// Testing only: Push state
+        fn push_state_and_cert_metadata(&self, height: Height, state: ReplicatedState);
     }
 
     impl StateManagerTesting for StateManagerImpl {
@@ -4338,6 +4522,27 @@ pub mod testing {
             );
 
             self.commit_and_certify(state, scope, batch_summary);
+        }
+
+        fn commit_and_certify_at_height_sync(
+            &self,
+            state: ReplicatedState,
+            height: Height,
+            scope: CertificationScope,
+            batch_summary: Option<BatchSummary>,
+        ) {
+            self.commit_and_certify_at_height(state, height, scope, batch_summary);
+            self.flush_hash_channel();
+        }
+
+        fn commit_and_certify_sync(
+            &self,
+            state: ReplicatedState,
+            scope: CertificationScope,
+            batch_summary: Option<BatchSummary>,
+        ) {
+            self.commit_and_certify(state, scope, batch_summary);
+            self.flush_hash_channel();
         }
 
         fn purge_manifest(&mut self, height: Height) -> bool {
@@ -4363,6 +4568,12 @@ pub mod testing {
 
         fn flush_deallocation_channel(&self) {
             self.deallocator_thread.flush_deallocation_channel();
+        }
+
+        fn flush_metrics_channel(&self) {
+            self.replicated_state_metrics_thread
+                .worker_thread
+                .flush_channel();
         }
 
         fn state_snapshot_heights(&self) -> Vec<Height> {
@@ -4424,6 +4635,16 @@ pub mod testing {
 
         fn fast_forward_height(&self) -> u64 {
             self.fast_forward_height.load(Ordering::Relaxed)
+        }
+
+        fn push_state_and_cert_metadata(&self, height: Height, state: ReplicatedState) {
+            let mut states = self.states.write();
+            self.push_state_and_cert_metadata(
+                height,
+                &self.latest_state_height,
+                state,
+                &mut states,
+            );
         }
     }
 }
