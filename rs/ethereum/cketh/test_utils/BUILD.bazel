@@ -47,8 +47,5 @@ rust_library(
 rust_test(
     name = "lib_tests",
     crate = ":test_utils",
-    deps = [
-        # Keep sorted.
-        ":test_utils",
-    ],
+    deps = [],
 )

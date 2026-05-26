@@ -25,7 +25,7 @@ use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    AccumulatedPriority, CanisterId, NumBytes, SubnetId, Time,
+    CanisterId, NumBytes, SubnetId, Time,
     batch::{ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
@@ -684,22 +684,6 @@ impl ReplicatedState {
             &mut self.canister_states,
             &mut self.metadata.subnet_schedule,
         )
-    }
-
-    /// Time complexity: `O(n)` in the number of active canisters.
-    pub fn canister_accumulated_priorities(&self) -> BTreeMap<CanisterId, AccumulatedPriority> {
-        self.canister_states
-            .keys()
-            .map(|canister_id| {
-                (
-                    *canister_id,
-                    self.metadata
-                        .subnet_schedule
-                        .get(canister_id)
-                        .accumulated_priority,
-                )
-            })
-            .collect()
     }
 
     /// Prunes the canister priorities of deleted canisters; and those that have
