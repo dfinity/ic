@@ -107,6 +107,13 @@ genrule(
             tar -xf $$f -C squash_tmp
         done
 
+        # update-ca-certificates is not run during package extraction, so the
+        # combined bundle at /etc/ssl/certs/ca-certificates.crt is missing.
+        # Create it by concatenating all Mozilla CA certs; rustls-native-certs
+        # (via openssl-probe) looks for exactly this path on Linux.
+        mkdir -p squash_tmp/etc/ssl/certs
+        find squash_tmp/usr/share/ca-certificates -name "*.crt" -exec cat {} + >> squash_tmp/etc/ssl/certs/ca-certificates.crt
+
         tar -cf $@ -C squash_tmp .
     """,
     target_compatible_with = [

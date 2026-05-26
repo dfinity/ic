@@ -1991,7 +1991,7 @@ dependencies = [
 [[package]]
 name = "canbench"
 version = "0.6.0"
-source = "git+https://github.com/dfinity/canbench?rev=87461a507e4a3476febf8fc13954eea9f9048be5#87461a507e4a3476febf8fc13954eea9f9048be5"
+source = "git+https://github.com/dfinity/canbench?rev=089477bf0c500713855529a28e1adfdebfce074b#089477bf0c500713855529a28e1adfdebfce074b"
 dependencies = [
  "canbench-rs",
  "candid",
@@ -2016,7 +2016,7 @@ dependencies = [
 [[package]]
 name = "canbench-rs"
 version = "0.6.0"
-source = "git+https://github.com/dfinity/canbench?rev=87461a507e4a3476febf8fc13954eea9f9048be5#87461a507e4a3476febf8fc13954eea9f9048be5"
+source = "git+https://github.com/dfinity/canbench?rev=089477bf0c500713855529a28e1adfdebfce074b#089477bf0c500713855529a28e1adfdebfce074b"
 dependencies = [
  "canbench-rs-macros",
  "candid",
@@ -2027,7 +2027,7 @@ dependencies = [
 [[package]]
 name = "canbench-rs-macros"
 version = "0.6.0"
-source = "git+https://github.com/dfinity/canbench?rev=87461a507e4a3476febf8fc13954eea9f9048be5#87461a507e4a3476febf8fc13954eea9f9048be5"
+source = "git+https://github.com/dfinity/canbench?rev=089477bf0c500713855529a28e1adfdebfce074b#089477bf0c500713855529a28e1adfdebfce074b"
 dependencies = [
  "proc-macro2",
  "quote",

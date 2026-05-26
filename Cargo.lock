@@ -1997,7 +1997,7 @@ dependencies = [
 [[package]]
 name = "canbench-rs"
 version = "0.6.0"
-source = "git+https://github.com/dfinity/canbench?rev=87461a507e4a3476febf8fc13954eea9f9048be5#87461a507e4a3476febf8fc13954eea9f9048be5"
+source = "git+https://github.com/dfinity/canbench?rev=089477bf0c500713855529a28e1adfdebfce074b#089477bf0c500713855529a28e1adfdebfce074b"
 dependencies = [
  "canbench-rs-macros",
  "candid",
@@ -2008,7 +2008,7 @@ dependencies = [
 [[package]]
 name = "canbench-rs-macros"
 version = "0.6.0"
-source = "git+https://github.com/dfinity/canbench?rev=87461a507e4a3476febf8fc13954eea9f9048be5#87461a507e4a3476febf8fc13954eea9f9048be5"
+source = "git+https://github.com/dfinity/canbench?rev=089477bf0c500713855529a28e1adfdebfce074b#089477bf0c500713855529a28e1adfdebfce074b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2571,7 +2571,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -20881,7 +20881,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22505a5c94da8e3b7c2996394d1c933236c4d743e81a410bcca4e6989fc066a4"
 dependencies = [
  "bytes",
- "heck 0.5.0",
+ "heck 0.4.1",
  "itertools 0.12.1",
  "log",
  "multimap",
@@ -20901,7 +20901,7 @@ version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
- "heck 0.5.0",
+ "heck 0.4.1",
  "itertools 0.14.0",
  "log",
  "multimap",
@@ -22510,7 +22510,7 @@ dependencies = [
  "errno 0.3.14",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -23864,7 +23864,7 @@ version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1c97747dbf44bb1ca44a561ece23508e99cb592e862f22222dcf42f51d1e451"
 dependencies = [
- "heck 0.5.0",
+ "heck 0.4.1",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -24066,6 +24066,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "psm",
+ "windows-sys 0.52.0",
  "windows-sys 0.59.0",
 ]
 

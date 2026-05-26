@@ -1,5 +1,5 @@
 {
-  "checksum": "84417bcfeb0ad4487d795c08819d988446801ef733d5e7e4212243ed04229e3c",
+  "checksum": "44b35a5b8ab814e94959433f89028087172c9235910cb53204ce01fa38ca0fd6",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11732,7 +11732,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/canbench",
           "commitish": {
-            "Rev": "87461a507e4a3476febf8fc13954eea9f9048be5"
+            "Rev": "089477bf0c500713855529a28e1adfdebfce074b"
           },
           "strip_prefix": "canbench-bin"
         }
@@ -11862,7 +11862,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/canbench",
           "commitish": {
-            "Rev": "87461a507e4a3476febf8fc13954eea9f9048be5"
+            "Rev": "089477bf0c500713855529a28e1adfdebfce074b"
           },
           "strip_prefix": "canbench-rs"
         }
@@ -11929,7 +11929,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/canbench",
           "commitish": {
-            "Rev": "87461a507e4a3476febf8fc13954eea9f9048be5"
+            "Rev": "089477bf0c500713855529a28e1adfdebfce074b"
           },
           "strip_prefix": "canbench-rs-macros"
         }

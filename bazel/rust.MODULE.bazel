@@ -234,12 +234,12 @@ crate.spec(
 crate.spec(
     git = "https://github.com/dfinity/canbench",
     package = "canbench",
-    rev = "87461a507e4a3476febf8fc13954eea9f9048be5",
+    rev = "089477bf0c500713855529a28e1adfdebfce074b",
 )
 crate.spec(
     git = "https://github.com/dfinity/canbench",
     package = "canbench-rs",
-    rev = "87461a507e4a3476febf8fc13954eea9f9048be5",
+    rev = "089477bf0c500713855529a28e1adfdebfce074b",
 )
 crate.spec(
     package = "candid",
