@@ -103,11 +103,13 @@ pub fn firewall_correctness_test(env: TestEnv) {
         .flat_map(|s| s.nodes())
         .collect::<Vec<_>>();
     block_on(async {
-        // Add a dummy firewall rule to the registry to make sure that nodes do not add the default
-        // rules found in their config file, which whitelists prefixes found in the test environment
+        // Add a firewall rule to the registry to make sure that nodes do not add the default rules
+        // found in their config file, which whitelists prefixes found in the test environment
         // (which would make nodes accept connections from all other nodes, regardless of their
-        // reward types)
-        add_dummy_registry_rule(
+        // reward types).
+        // The rule allows inbound SSH such that the test driver can still connect to the nodes and
+        // perform the test.
+        add_ssh_only_registry_rule(
             &env.topology_snapshot()
                 .root_subnet()
                 .nodes()
@@ -153,13 +155,11 @@ pub fn firewall_correctness_test(env: TestEnv) {
     });
 }
 
-async fn add_dummy_registry_rule(nns_node: &IcNodeSnapshot, log: &Logger) {
+async fn add_ssh_only_registry_rule(nns_node: &IcNodeSnapshot, log: &Logger) {
     let ipv6_prefixes = get_config().firewall.unwrap().default_rules[0]
         .ipv6_prefixes
         .clone();
-    // This is actually not a dummy rule. It still allows inbound SSH such that the test driver can
-    // connect to the nodes and perform the test.
-    let dummy_rule = FirewallRule {
+    let ssh_only_rule = FirewallRule {
         ipv4_prefixes: vec![],
         ipv6_prefixes,
         ports: vec![22],
@@ -172,7 +172,7 @@ async fn add_dummy_registry_rule(nns_node: &IcNodeSnapshot, log: &Logger) {
         log,
         nns_node,
         FirewallRulesScope::Global,
-        vec![dummy_rule],
+        vec![ssh_only_rule],
         vec![0],
         vec![],
     )
