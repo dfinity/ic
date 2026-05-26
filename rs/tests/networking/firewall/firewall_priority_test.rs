@@ -240,7 +240,7 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
         FirewallRulesScope::Node(toggle_endpoint.node_id),
         vec![updated_rule.clone()],
         vec![0],
-        node_rules.clone(),
+        node_rules,
     ));
     node_rules = vec![updated_rule];
 
@@ -269,7 +269,7 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
         &log,
         &nns_node,
         FirewallRulesScope::Node(toggle_endpoint.node_id),
-        vec![updated_rule.clone()],
+        vec![updated_rule],
         vec![0],
         node_rules,
     ));
@@ -316,7 +316,7 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
 
 async fn set_default_registry_rules(log: &Logger, nns_node: &IcNodeSnapshot) {
     let firewall_config = util::get_config().firewall.unwrap();
-    let default_rules = firewall_config.default_rules.clone();
+    let default_rules = firewall_config.default_rules;
     execute_add_firewall_rules_proposal(
         log,
         nns_node,
