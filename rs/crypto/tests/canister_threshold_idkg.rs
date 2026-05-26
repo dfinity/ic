@@ -37,6 +37,7 @@ use ic_types::crypto::{AlgorithmId, CryptoError, ExtendedDerivationPath};
 use ic_types::{NodeId, Randomness};
 use maplit::hashset;
 use rand::prelude::*;
+use rand_chacha::ChaCha20Rng;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -323,7 +324,7 @@ mod create_dealing {
                 env.nodes.random_dealer(&params, rng).id(),
                 Arc::new(CryptoMetrics::none()),
                 None,
-                <rand_chacha::ChaCha20Rng as rand::SeedableRng>::from_seed(rng.r#gen()),
+                ChaCha20Rng::from_seed(rng.r#gen()),
             );
 
             (env, params, dealer)
@@ -2087,7 +2088,7 @@ mod load_transcript_with_openings {
                 node_id_not_in_receivers,
                 metrics,
                 None,
-                <rand_chacha::ChaCha20Rng as rand::SeedableRng>::from_seed(rng.r#gen()),
+                ChaCha20Rng::from_seed(rng.r#gen()),
             );
 
             env.nodes
@@ -2900,7 +2901,7 @@ mod verify_dealing_private {
                 node_id,
                 crypto_metrics,
                 time_source,
-                <rand_chacha::ChaCha20Rng as rand::SeedableRng>::from_seed(rng.r#gen()),
+                ChaCha20Rng::from_seed(rng.r#gen()),
             );
 
             Setup {

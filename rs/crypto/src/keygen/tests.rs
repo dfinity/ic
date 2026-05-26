@@ -37,6 +37,8 @@ use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
 use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::{RegistryVersion, crypto::KeyPurpose};
+use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
 use slog::Level;
 use std::sync::Arc;
 
@@ -1348,7 +1350,7 @@ mod rotate_idkg_dealing_encryption_keys {
             node_id(),
             Arc::new(CryptoMetrics::none()),
             Some(Arc::clone(&time_source) as Arc<_>),
-            <rand_chacha::ChaCha20Rng as rand::SeedableRng>::from_seed([0_u8; 32]),
+            ChaCha20Rng::from_seed([0_u8; 32]),
         );
         registry_client.reload();
 
@@ -1970,7 +1972,7 @@ impl SetupBuilder {
             node_id(),
             crypto_metrics,
             Some(Arc::clone(&time_source) as Arc<_>),
-            <rand_chacha::ChaCha20Rng as rand::SeedableRng>::from_seed([0_u8; 32]),
+            ChaCha20Rng::from_seed([0_u8; 32]),
         );
 
         Setup {
