@@ -27,7 +27,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{ReplicaLogger, error, trace, warn};
+use ic_logger::{ReplicaLogger, error, info, trace, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -348,6 +348,19 @@ impl Purger {
     /// state removal, check: [`ic_state_manager::StateManagerImpl::remove_states_below`].
     fn purge_checkpoints_below_cup_height(&self, pool: &PoolReader<'_>) {
         let cup_height = pool.get_catch_up_height();
+        let finalized_certified_height = pool.get_finalized_tip().context.certified_height;
+        if finalized_certified_height < cup_height {
+            info!(
+                every_n_seconds => 5,
+                self.log,
+                "Finalized certified height {} is still below the CUP height {}. This \
+                might be caused by a long checkpoint/manifest computation. Skipping \
+                purging checkpoints until finalized certified height catches up.",
+                finalized_certified_height,
+                cup_height
+            );
+            return;
+        }
         self.state_manager.remove_states_below(cup_height);
         trace!(
             self.log,

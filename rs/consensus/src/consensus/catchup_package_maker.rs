@@ -172,13 +172,6 @@ impl CatchUpPackageMaker {
         // Skip if random beacon does not exist for the height
         let random_beacon = pool.get_random_beacon(height)?;
 
-        // Skip if the state referenced by finalization tip has not caught up to
-        // this height. This is to increase the chance that states are available to
-        // validate payloads at the chain tip.
-        if pool.get_finalized_tip().context.certified_height < height {
-            return None;
-        }
-
         match self.state_manager.get_state_hash_at(height) {
             Err(StateHashError::Transient(StateNotCommittedYet(_))) => {
                 // TODO: Setup a delay before retry
