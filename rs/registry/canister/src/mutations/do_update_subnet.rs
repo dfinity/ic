@@ -143,27 +143,35 @@ impl Registry {
         }
     }
 
-    /// Validates that AMD Secure Encrypted Virtualization (SEV) is never disabled on a subnet.
+    /// Validates that the SEV (AMD Secure Encrypted Virtualization) feature is not changed on
+    /// an existing subnet.
     ///
-    /// Panics when attempting to turn off SEV for an SEV-enabled subnet
+    /// Panics if the proposal would change the effective `sev_enabled` value of the subnet.
+    /// No-op transitions are allowed so that non-SEV features can still be updated.
     fn validate_update_sev_feature(&self, payload: &UpdateSubnetPayload) {
         let subnet_id = payload.subnet_id;
+        let subnet_record = self.get_subnet_or_panic(subnet_id);
 
-        let Some(subnet_features) = self.get_subnet_or_panic(subnet_id).features else {
+        let Some(payload_features) = payload.features else {
             return;
         };
 
-        let Some(update_features) = payload.features else {
-            return;
-        };
+        // Note: when `payload.features` is `Some(_)`, `subnet_record.features` is wholesale
+        // replaced (see `merge_subnet_record`), so a payload with `sev_enabled: None` would
+        // implicitly disable SEV on a previously SEV-enabled subnet. Compare via the
+        // rust-level `SubnetFeatures`, which collapses `None` and `Some(false)` to `false`,
+        // to catch both explicit and implicit changes while permitting no-op updates.
+        let new_sev_enabled = SubnetFeatures::from(payload_features).sev_enabled;
+        let old_sev_enabled = subnet_record
+            .features
+            .map(|f| SubnetFeatures::from(f).sev_enabled)
+            .unwrap_or_default();
 
-        // panic if SEV is enable and the update tries to disable it
-        let attempting_to_disable =
-            subnet_features.sev_enabled == Some(true) && update_features.sev_enabled == Some(false);
-        if attempting_to_disable {
+        if new_sev_enabled != old_sev_enabled {
             panic!(
-                "{LOG_PREFIX}Proposal attempts to disable SEV for Subnet '{subnet_id}', \
-                but SEV cannot be turned off once enabled.",
+                "{LOG_PREFIX}Proposal attempts to change sev_enabled for Subnet '{subnet_id}' \
+                 from {old_sev_enabled} to {new_sev_enabled}, but sev_enabled can only be set \
+                 during subnet creation.",
             );
         }
     }
@@ -1060,11 +1068,11 @@ mod tests {
     }
 
     /// Returns an invariant-compliant Registry instance and an ID of a subnet
-    /// with an existing subnet record.
+    /// with an existing subnet record (SEV disabled).
     fn make_registry_for_update_subnet_tests() -> (Registry, SubnetId) {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_chip_id(1, 2);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1087,69 +1095,114 @@ mod tests {
         (registry, subnet_id)
     }
 
-    fn update_sev(subnet_id: SubnetId, enabled: bool) -> UpdateSubnetPayload {
+    /// Same as `make_registry_for_update_subnet_tests`, but the subnet is
+    /// created with `sev_enabled = true` on top of nodes that have a chip ID,
+    /// so that the SEV invariant is satisfied.
+    fn make_sev_enabled_registry_for_update_subnet_tests() -> (Registry, SubnetId) {
+        let mut registry = invariant_compliant_registry(0);
+
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_chip_id(1, 2);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let mut subnet_list_record = registry.get_subnet_list_record();
+
+        let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
+            .iter()
+            .next()
+            .expect("should contain at least one node ID");
+        let mut subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
+        subnet_record.features = Some(SubnetFeaturesPb {
+            canister_sandboxing: false,
+            http_requests: false,
+            sev_enabled: Some(true),
+        });
+
+        let subnet_id = subnet_test_id(1000);
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id,
+            &mut subnet_list_record,
+            subnet_record,
+            &btreemap!(*first_node_id => first_dkg_pk.clone()),
+        ));
+
+        (registry, subnet_id)
+    }
+
+    #[test]
+    #[should_panic(expected = "Proposal attempts to change sev_enabled for Subnet \
+                    'ge6io-epiam-aaaaa-aaaap-yai' from false to true, but sev_enabled can only be \
+                    set during subnet creation.")]
+    fn test_sev_enabled_cannot_be_changed_to_true() {
+        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+
         let mut payload = make_empty_update_payload(subnet_id);
         payload.features = Some(SubnetFeaturesPb {
             canister_sandboxing: false,
             http_requests: false,
-            sev_enabled: Some(enabled),
+            sev_enabled: Some(true),
         });
-        payload
+
+        registry.do_update_subnet(payload);
     }
 
     #[test]
-    fn test_can_enable_sev_if_disabled() {
-        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+    #[should_panic(expected = "Proposal attempts to change sev_enabled for Subnet \
+                    'ge6io-epiam-aaaaa-aaaap-yai' from true to false, but sev_enabled can only be \
+                    set during subnet creation.")]
+    fn test_sev_enabled_cannot_be_disabled_explicitly() {
+        let (mut registry, subnet_id) = make_sev_enabled_registry_for_update_subnet_tests();
 
-        // transition from unset -> false -> true
-        registry.do_update_subnet(update_sev(subnet_id, false));
-        registry.do_update_subnet(update_sev(subnet_id, true));
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.features = Some(SubnetFeaturesPb {
+            canister_sandboxing: false,
+            http_requests: false,
+            sev_enabled: Some(false),
+        });
+
+        registry.do_update_subnet(payload);
+    }
+
+    /// Regression test: a payload with `features = Some(_)` but
+    /// `sev_enabled = None` must not be able to silently disable SEV via the
+    /// wholesale replacement of the subnet record's `features` field.
+    #[test]
+    #[should_panic(expected = "Proposal attempts to change sev_enabled for Subnet \
+                    'ge6io-epiam-aaaaa-aaaap-yai' from true to false, but sev_enabled can only be \
+                    set during subnet creation.")]
+    fn test_sev_enabled_cannot_be_disabled_implicitly() {
+        let (mut registry, subnet_id) = make_sev_enabled_registry_for_update_subnet_tests();
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.features = Some(SubnetFeaturesPb {
+            canister_sandboxing: true,
+            http_requests: true,
+            sev_enabled: None,
+        });
+
+        registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    fn test_sev_enabled_no_op_keeps_subnet_sev_enabled() {
+        let (mut registry, subnet_id) = make_sev_enabled_registry_for_update_subnet_tests();
+
+        // Update non-SEV features while explicitly preserving sev_enabled = true.
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.features = Some(SubnetFeaturesPb {
+            canister_sandboxing: true,
+            http_requests: true,
+            sev_enabled: Some(true),
+        });
+
+        registry.do_update_subnet(payload);
 
         let subnet_features = registry
             .get_subnet_or_panic(subnet_id)
             .features
-            .expect("failed to get subnet features");
-
-        assert_eq!(
-            subnet_features.sev_enabled,
-            Some(true),
-            "Expected SEV enabled to be Some(true), but was {:?}",
-            subnet_features.sev_enabled
-        );
-    }
-
-    #[test]
-    fn test_can_enable_sev_if_unset() {
-        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
-
-        // transition from unset (implicitly) -> true
-        registry.do_update_subnet(update_sev(subnet_id, true));
-
-        let subnet_features = registry
-            .get_subnet_or_panic(subnet_id)
-            .features
-            .expect("failed to get subnet features");
-
-        assert_eq!(
-            subnet_features.sev_enabled,
-            Some(true),
-            "Expected SEV enabled to be Some(true), but was {:?}",
-            subnet_features.sev_enabled
-        );
-    }
-
-    #[test]
-    #[should_panic(
-        expected = "Proposal attempts to disable SEV for Subnet 'ge6io-epiam-aaaaa-aaaap-yai', \
-        but SEV cannot be turned off once enabled."
-    )]
-    fn test_cannot_disable_sev_if_enabled() {
-        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
-
-        // Enable SEV first as it is initially unset.
-        registry.do_update_subnet(update_sev(subnet_id, true));
-        // This should trigger the panic
-        registry.do_update_subnet(update_sev(subnet_id, false));
+            .expect("subnet should have features set");
+        assert_eq!(subnet_features.sev_enabled, Some(true));
+        assert!(subnet_features.canister_sandboxing);
+        assert!(subnet_features.http_requests);
     }
 
     #[test]
