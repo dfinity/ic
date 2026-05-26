@@ -1021,14 +1021,10 @@ pub async fn agent_with_client_identity(
 
 // Creates an identity to be used with `Agent`.
 pub fn random_ed25519_identity() -> BasicIdentity {
-    let rng = ring::rand::SystemRandom::new();
-    let key_pair = ring::signature::Ed25519KeyPair::generate_pkcs8(&rng)
-        .expect("Could not generate a key pair.");
-
-    BasicIdentity::from_key_pair(
-        ring::signature::Ed25519KeyPair::from_pkcs8(key_pair.as_ref())
-            .expect("Could not read the key pair."),
-    )
+    use rand::RngCore;
+    let mut raw_key = [0_u8; 32];
+    rand::thread_rng().fill_bytes(&mut raw_key);
+    BasicIdentity::from_raw_key(&raw_key)
 }
 
 pub fn get_nns_node(topo_snapshot: &TopologySnapshot) -> IcNodeSnapshot {
