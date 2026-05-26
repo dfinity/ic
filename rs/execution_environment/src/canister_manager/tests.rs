@@ -5427,8 +5427,9 @@ fn upload_chunk_increases_subnet_heap_delta() {
     );
 }
 
+// Regression test: log_memory_limit not set → would_resize not called → heap delta = 0.
 #[test]
-fn update_settings_log_memory_limit_increases_subnet_heap_delta() {
+fn update_settings_heap_delta_log_memory_limit_none() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
     const MIB: u64 = 1024 * 1024;
 
@@ -5443,16 +5444,113 @@ fn update_settings_log_memory_limit_increases_subnet_heap_delta() {
                 .build(),
         )
         .unwrap();
-    assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
 
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(100)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, args).unwrap();
+
+    assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
+}
+
+// log_memory_limit set to current size → would_resize = false → heap delta = 0.
+#[test]
+fn update_settings_heap_delta_log_memory_limit_unchanged() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const MIB: u64 = 1024 * 1024;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_log_memory_store_feature_enabled()
+        .build();
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(MIB)
+                .build(),
+        )
+        .unwrap();
+
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(MIB)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, args).unwrap();
+
+    assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
+}
+
+// log_memory_limit decreased → would_resize = true → heap delta = old log store size.
+#[test]
+fn update_settings_heap_delta_log_memory_limit_decreased() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const MIB: u64 = 1024 * 1024;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_log_memory_store_feature_enabled()
+        .build();
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(2 * MIB)
+                .build(),
+        )
+        .unwrap();
+    let old_log_memory_usage = test
+        .canister_state(canister_id)
+        .log_memory_store_memory_usage();
+    // header (4 KiB) + index table (4 KiB) + data region (2 MiB)
+    assert_eq!(old_log_memory_usage, NumBytes::new(2 * MIB + 8 * 1024));
+
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(MIB)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, args).unwrap();
+
+    assert_eq!(
+        test.state().metadata.heap_delta_estimate,
+        old_log_memory_usage,
+    );
+}
+
+// log_memory_limit increased → would_resize = true → heap delta = old log store size.
+#[test]
+fn update_settings_heap_delta_log_memory_limit_increased() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const MIB: u64 = 1024 * 1024;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_log_memory_store_feature_enabled()
+        .build();
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(MIB)
+                .build(),
+        )
+        .unwrap();
     let old_log_memory_usage = test
         .canister_state(canister_id)
         .log_memory_store_memory_usage();
     // header (4 KiB) + index table (4 KiB) + data region (1 MiB)
     assert_eq!(old_log_memory_usage, NumBytes::new(MIB + 8 * 1024));
 
-    // Changing the log memory limit rewrites the log store, so the heap delta
-    // should increase by the old log store memory usage.
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
         settings: CanisterSettingsArgsBuilder::new()

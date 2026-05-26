@@ -336,7 +336,9 @@ impl CanisterManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         metrics: Option<&ExecutionEnvironmentMetrics>,
-    ) -> Result<(), CanisterManagerError> {
+    ) -> Result<NumBytes, CanisterManagerError> {
+        let mut heap_delta_increase = NumBytes::from(0);
+
         // Freezing threshold: apply.
         if let Some(freezing_threshold) = settings.freezing_threshold() {
             canister.system_state.freeze_threshold = freezing_threshold;
@@ -552,6 +554,9 @@ impl CanisterManager {
                 .system_state
                 .log_memory_store
                 .would_resize(requested_limit.get() as usize);
+            if log_resize_needed {
+                heap_delta_increase = canister.log_memory_store_memory_usage();
+            }
             let log_resize_instructions = if log_resize_needed {
                 let log_bytes_used =
                     NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64);
@@ -610,7 +615,7 @@ impl CanisterManager {
             }
         }
 
-        Ok(())
+        Ok(heap_delta_increase)
     }
 
     /// Tries to apply the requested settings on the canister identified by
@@ -632,9 +637,7 @@ impl CanisterManager {
 
         validate_controller(canister, &sender)?;
 
-        let old_log_store_memory_usage = canister.log_memory_store_memory_usage();
-
-        self.validate_and_update_canister_settings(
+        let heap_delta_increase = self.validate_and_update_canister_settings(
             canister,
             round_limits,
             &settings,
@@ -695,7 +698,7 @@ impl CanisterManager {
         Ok(CanisterManagerResponse {
             canister_id: canister.canister_id(),
             reply: Some(EmptyBlob.encode()),
-            heap_delta_increase: old_log_store_memory_usage,
+            heap_delta_increase,
             unflushed_checkpoint_op: None,
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
