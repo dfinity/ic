@@ -9,6 +9,11 @@ on the process that this file is part of, see
 
 ## Added
 
+* Added a new `NnsFunction` variant `SetDefaultInitialDkgSubnet`, which
+  proposes to set or unset the default subnet to which `SetupInitialDKG`
+  management canister calls are routed when no subnet is specified explicitly
+  in the request.
+
 ## Changed
 
 ## Deprecated
