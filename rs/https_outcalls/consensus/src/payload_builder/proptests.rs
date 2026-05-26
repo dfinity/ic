@@ -17,7 +17,6 @@ use ic_types::{
     time::UNIX_EPOCH,
 };
 use proptest::{arbitrary::any, prelude::*};
-use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::ops::DerefMut;
 
@@ -59,7 +58,7 @@ fn run_proptest(
             let all_callback_ids: HashSet<_> = responses
                 .iter()
                 .map(|(r, _)| r.id)
-                .chain(shares.iter().map(|s| s.content.id))
+                .chain(shares.iter().map(|s| s.content.id()))
                 .collect();
             inject_request_contexts(
                 &mut payload_builder,
@@ -176,7 +175,6 @@ fn prop_response_with_shares(
             is_reject: response.content.is_reject(),
             registry_version: RegistryVersion::new(1),
             replica_version: ReplicaVersion::default(),
-            payment_receipts: BTreeMap::new(),
         };
         let shares = metadata_to_shares(num_shares, &metadata);
         (response, shares)
@@ -214,7 +212,6 @@ fn prop_random_metadata() -> impl Strategy<Value = CanisterHttpResponseMetadata>
             is_reject,
             registry_version: RegistryVersion::new(1),
             replica_version: ReplicaVersion::default(),
-            payment_receipts: BTreeMap::new(),
         }
     })
 }

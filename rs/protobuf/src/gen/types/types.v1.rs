@@ -559,11 +559,6 @@ pub struct CanisterHttpResponse {
     #[prost(message, optional, tag = "3")]
     pub content: ::core::option::Option<CanisterHttpResponseContent>,
 }
-/// Canister HTTP response metadata.
-///
-/// In a per-replica share, `payment_receipts` carries exactly one entry —
-/// the share's signer's receipt. In an aggregated proof, it carries one
-/// entry per signer in the proof's signature batch.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseMetadata {
     #[prost(uint64, tag = "1")]
@@ -578,8 +573,6 @@ pub struct CanisterHttpResponseMetadata {
     pub content_size: u32,
     #[prost(bool, tag = "7")]
     pub is_reject: bool,
-    #[prost(message, repeated, tag = "8")]
-    pub payment_receipts: ::prost::alloc::vec::Vec<CanisterHttpPaymentReceiptEntry>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseContent {
@@ -635,6 +628,8 @@ pub struct CanisterHttpShare {
     pub metadata: ::core::option::Option<CanisterHttpResponseMetadata>,
     #[prost(message, optional, tag = "2")]
     pub signature: ::core::option::Option<CanisterHttpResponseSignature>,
+    #[prost(message, optional, tag = "3")]
+    pub payment_receipt: ::core::option::Option<CanisterHttpPaymentReceipt>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseDivergence {

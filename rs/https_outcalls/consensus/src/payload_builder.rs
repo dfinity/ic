@@ -48,7 +48,8 @@ use ic_types::{
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
         CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
-        CanisterHttpResponseMetadata, CanisterHttpResponseWithConsensus, Replication,
+        CanisterHttpResponseReceipt, CanisterHttpResponseReceiptShare,
+        CanisterHttpResponseWithConsensus, Replication,
     },
     consensus::Committee,
     crypto::Signed,
@@ -137,16 +138,16 @@ impl CanisterHttpPayloadBuilderImpl {
     /// Aggregates the signature and creates the
     /// [`CanisterHttpResponseWithConsensus`] message.
     ///
-    /// `metadata` is the unified [`CanisterHttpResponseMetadata`] with
-    /// `payment_receipts` containing every contributing signer's receipt.
-    /// Each signature in the resulting batch is verified by reconstructing
-    /// the per-signer metadata from the aggregate — see
-    /// `verify_aggregate_proof`.
+    /// `receipt` is a [`CanisterHttpResponseReceipt`] whose
+    /// `payment_receipts` map carries every contributing signer's
+    /// receipt. Each signature in the resulting batch is verified by
+    /// reconstructing the per-signer [`CanisterHttpResponseReceiptShare`]
+    /// from the aggregate — see `verify_aggregate_proof`.
     fn aggregate(
         &self,
         registry_version: RegistryVersion,
-        metadata: CanisterHttpResponseMetadata,
-        shares: BTreeSet<BasicSignature<CanisterHttpResponseMetadata>>,
+        receipt: CanisterHttpResponseReceipt,
+        shares: BTreeSet<BasicSignature<CanisterHttpResponseReceiptShare>>,
         content: CanisterHttpResponse,
     ) -> Option<CanisterHttpResponseWithConsensus> {
         match self
@@ -163,7 +164,7 @@ impl CanisterHttpPayloadBuilderImpl {
             Ok(signature) => Some(CanisterHttpResponseWithConsensus {
                 content,
                 proof: Signed {
-                    content: metadata,
+                    content: receipt,
                     signature,
                 },
             }),
@@ -249,14 +250,14 @@ impl CanisterHttpPayloadBuilderImpl {
                     total_share_count += 1;
                 })
                 // Filter out shares with the wrong registry version
-                .filter(|&share| share.content.registry_version == consensus_registry_version)
+                .filter(|&share| share.content.registry_version() == consensus_registry_version)
                 .inspect(|_| {
                     active_shares += 1;
                 })
                 // Filter out shares for responses to requests that already have
                 // responses in the block chain up to the point we are creating a
                 // new payload.
-                .filter(|&response| !delivered_ids.contains(&response.content.id));
+                .filter(|&share| !delivered_ids.contains(&share.content.id()));
 
             // Group the shares by their metadata
             let shares_by_callback_id = group_shares_by_callback_id(share_candidates);
@@ -480,11 +481,11 @@ impl CanisterHttpPayloadBuilderImpl {
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
             // Validate response against consensus registry version
-            if response.proof.content.registry_version != consensus_registry_version {
+            if response.proof.content.registry_version() != consensus_registry_version {
                 return invalid_artifact(
                     InvalidCanisterHttpPayloadReason::RegistryVersionMismatch {
                         expected: consensus_registry_version,
-                        received: response.proof.content.registry_version,
+                        received: response.proof.content.registry_version(),
                     },
                 );
             }
@@ -627,26 +628,21 @@ impl CanisterHttpPayloadBuilderImpl {
                     })?;
                 // Enforce per-replica refund allowance for divergence
                 // shares. While a divergence proof does not deliver a
-                // refund directly, malformed receipts should still be
-                // rejected to avoid leaking budget through the divergence
-                // codepath in any future extensions.
-                if let Some(ctx) = http_contexts.get(&share.content.id) {
-                    if share
-                        .content
-                        .payment_receipts
-                        .values()
-                        .any(|r| r.refund > ctx.refund_status.per_replica_allowance)
-                    {
-                        return invalid_artifact(InvalidCanisterHttpPayloadReason::SignatureError(
-                            Box::new(ic_types::crypto::CryptoError::MalformedSignature {
-                                algorithm: ic_types::crypto::AlgorithmId::Ed25519,
-                                sig_bytes: vec![],
-                                internal_error:
-                                    "Refund in divergence share exceeds per-replica allowance"
-                                        .to_string(),
-                            }),
-                        ));
-                    }
+                // refund directly, malformed refund claims should still
+                // be rejected to avoid leaking budget through the
+                // divergence codepath in any future extensions.
+                if let Some(ctx) = http_contexts.get(&share.content.id())
+                    && share.content.refund() > ctx.refund_status.per_replica_allowance
+                {
+                    return invalid_artifact(InvalidCanisterHttpPayloadReason::SignatureError(
+                        Box::new(ic_types::crypto::CryptoError::MalformedSignature {
+                            algorithm: ic_types::crypto::AlgorithmId::Ed25519,
+                            sig_bytes: vec![],
+                            internal_error:
+                                "Refund in divergence share exceeds per-replica allowance"
+                                    .to_string(),
+                        }),
+                    ));
                 }
             }
 
@@ -742,15 +738,10 @@ impl CanisterHttpPayloadBuilderImpl {
                     );
                 }
 
-                // Enforce the per-replica refund allowance: a flexible
-                // response carries a single share, and any receipt that
-                // share claims must be at most the per-replica allowance.
-                if response_with_proof
-                    .proof
-                    .content
-                    .payment_receipts
-                    .values()
-                    .any(|r| r.refund > context.refund_status.per_replica_allowance)
+                // Enforce the per-replica refund allowance: the share's
+                // refund claim must be at most the per-replica allowance.
+                if response_with_proof.proof.content.refund()
+                    > context.refund_status.per_replica_allowance
                 {
                     return invalid_artifact(InvalidCanisterHttpPayloadReason::SignatureError(
                         Box::new(ic_types::crypto::CryptoError::MalformedSignature {
@@ -882,11 +873,11 @@ impl CanisterHttpPayloadBuilderImpl {
 
                     let mut ok_entry_sizes: Vec<usize> = all_seen_shares
                         .iter()
-                        .filter(|share| !share.content.is_reject)
+                        .filter(|share| !share.content.is_reject())
                         .map(|share| {
                             FlexibleCanisterHttpResponseWithProof::count_bytes_from_parts(
                                 &context.request.sender,
-                                share.content.content_size as usize,
+                                share.content.content_size() as usize,
                                 share,
                             )
                         })
@@ -1164,7 +1155,7 @@ fn flexible_error_into_consensus_response(
         } => {
             let num_ok = all_seen_shares
                 .iter()
-                .filter(|s| !s.content.is_reject)
+                .filter(|s| !s.content.is_reject())
                 .count() as u32;
             let num_reject = all_seen_shares.len() as u32 - num_ok;
             let num_unseen = total_requests.saturating_sub(all_seen_shares.len() as u32);
@@ -1173,7 +1164,7 @@ fn flexible_error_into_consensus_response(
             let node_details: Vec<_> = all_seen_shares
                 .iter()
                 .map(|share| {
-                    let code = if share.content.is_reject {
+                    let code = if share.content.is_reject() {
                         "reject"
                     } else {
                         "ok"
@@ -1183,7 +1174,7 @@ fn flexible_error_into_consensus_response(
                         report: HttpRequestResourceReport::default(),
                         error: Some(FlexibleHttpNodeError {
                             code: code.to_string(),
-                            message: format!("{} bytes", share.content.content_size),
+                            message: format!("{} bytes", share.content.content_size()),
                         }),
                     }
                 })
@@ -1191,8 +1182,8 @@ fn flexible_error_into_consensus_response(
 
             let mut ok_sizes: Vec<_> = all_seen_shares
                 .iter()
-                .filter(|s| !s.content.is_reject)
-                .map(|share| share.content.content_size)
+                .filter(|s| !s.content.is_reject())
+                .map(|share| share.content.content_size())
                 .collect();
             // Sort defensively, as validator doesn't enforce ordering on `all_seen_shares`
             ok_sizes.sort_unstable();
@@ -1237,7 +1228,7 @@ fn flexible_error_into_consensus_response(
 fn divergence_response_into_reject(
     response: CanisterHttpResponseDivergence,
 ) -> Option<ConsensusResponse> {
-    let Some(id) = response.shares.first().map(|share| share.content.id) else {
+    let Some(id) = response.shares.first().map(|share| share.content.id()) else {
         // NOTE: We skip delivering the divergence response, if it has no shares
         // Such a divergence response should never validate, therefore this should never happen
         // However, if it where ever to happen, we can ignore it here.
@@ -1250,7 +1241,7 @@ fn divergence_response_into_reject(
     response
         .shares
         .into_iter()
-        .map(|share| share.content.content_hash.get().0)
+        .map(|share| share.content.metadata.content_hash.get().0)
         .for_each(|hash| {
             hash_counts
                 .entry(hash)

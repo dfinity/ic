@@ -535,8 +535,7 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::canister_http::{
-        CanisterHttpPaymentReceipt, MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, RefundStatus,
-        Replication, Transform,
+        MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, RefundStatus, Replication, Transform,
     };
     use ic_types::{
         canister_http::CanisterHttpMethod, messages::CallbackId, time::UNIX_EPOCH,

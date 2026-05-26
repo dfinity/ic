@@ -47,7 +47,8 @@ use ic_types::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL, CanisterHttpMethod,
         CanisterHttpPaymentReceipt, CanisterHttpReject, CanisterHttpRequestContext,
         CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseContent,
-        CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
+        CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseReceipt,
+        CanisterHttpResponseReceiptShare, CanisterHttpResponseShare,
         CanisterHttpResponseWithConsensus, Replication,
     },
     consensus::get_faults_tolerated,
@@ -203,7 +204,10 @@ fn multiple_payload_test() {
                     responses: vec![CanisterHttpResponseWithConsensus {
                         content: past_response,
                         proof: Signed {
-                            content: past_metadata,
+                            content: CanisterHttpResponseReceipt {
+                                metadata: past_metadata,
+                                payment_receipts: BTreeMap::new(),
+                            },
                             signature: BasicSignatureBatch {
                                 signatures_map: BTreeMap::new(),
                             },
@@ -782,7 +786,10 @@ fn divergence_error_message() {
             sample.content_hash = CryptoHashOf::from(CryptoHash(new_hash.to_vec()));
 
             Signed {
-                content: sample,
+                content: CanisterHttpResponseReceiptShare {
+                    metadata: sample,
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
+                },
                 signature: BasicSignature {
                     signature: BasicSigOf::new(BasicSig(vec![])),
                     signer: node_test_id(node_id),
@@ -1385,7 +1392,6 @@ fn test_response_and_metadata_with_content(
         is_reject: response.content.is_reject(),
         registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
-        payment_receipts: BTreeMap::new(),
     };
     (response, metadata)
 }
@@ -1464,15 +1470,14 @@ pub(crate) fn metadata_to_share_with_signature(
 ) -> CanisterHttpResponseShare {
     let signer = node_test_id(from_node);
     Signed {
-        // Per the share-shape invariant, the share carries exactly one
-        // payment receipt keyed by the signer. Tests use a default
-        // (zero-refund) receipt; that's enough to make the share/proof
-        // pipeline work end-to-end.
-        content: CanisterHttpResponseMetadata::for_signer(
-            metadata.clone(),
-            signer,
-            CanisterHttpPaymentReceipt::default(),
-        ),
+        // A per-replica share wraps the shared metadata plus the
+        // replica's own payment receipt. Tests use a default (zero
+        // refund) receipt — enough to drive the share/proof pipeline
+        // end-to-end.
+        content: CanisterHttpResponseReceiptShare {
+            metadata: metadata.clone(),
+            payment_receipt: CanisterHttpPaymentReceipt::default(),
+        },
         signature: BasicSignature {
             signature: BasicSigOf::new(BasicSig(signature)),
             signer,
@@ -1482,10 +1487,9 @@ pub(crate) fn metadata_to_share_with_signature(
 
 /// Creates a [`CanisterHttpResponseWithConsensus`] from a [`CanisterHttpResponse`] and [`CanisterHttpResponseMetadata`].
 ///
-/// The proof's metadata is the given metadata with `payment_receipts`
-/// stripped; tests then insert signers (and per-signer receipts) into
-/// both the signature batch and the `payment_receipts` map via
-/// [`add_signer_to_proof`].
+/// The proof starts out with an empty `payment_receipts` map and an
+/// empty signature batch; tests insert per-signer receipt + signature
+/// pairs via [`add_signer_to_proof`].
 pub(crate) fn response_and_metadata_to_proof(
     response: &CanisterHttpResponse,
     metadata: &CanisterHttpResponseMetadata,
@@ -1493,7 +1497,10 @@ pub(crate) fn response_and_metadata_to_proof(
     CanisterHttpResponseWithConsensus {
         content: response.clone(),
         proof: Signed {
-            content: metadata.without_receipts(),
+            content: CanisterHttpResponseReceipt {
+                metadata: metadata.clone(),
+                payment_receipts: BTreeMap::new(),
+            },
             signature: BasicSignatureBatch {
                 signatures_map: BTreeMap::new(),
             },
@@ -1501,8 +1508,9 @@ pub(crate) fn response_and_metadata_to_proof(
     }
 }
 
-/// Inserts a fake signature and a default payment receipt
-/// for `signer` into an aggregated proof.
+/// Inserts a fake signature and a default payment receipt for `signer`
+/// into an aggregated proof. Tests use this to keep the proof's
+/// `payment_receipts`/`signatures` key sets in sync.
 pub(crate) fn add_signer_to_proof(proof: &mut CanisterHttpResponseWithConsensus, signer: NodeId) {
     proof
         .proof
@@ -2228,7 +2236,7 @@ fn flexible_invalid_callback_id_mismatch_in_proof() {
 
     setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
         let mut entry = flexible_response(42, 0, b"data");
-        entry.proof.content.id = mismatched_id;
+        entry.proof.content.metadata.id = mismatched_id;
 
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
@@ -2323,7 +2331,7 @@ fn flexible_invalid_content_hash_mismatch() {
         let mut entry = flexible_response(42, 0, b"data");
         let expected_calculated_hash = crypto_hash(&entry.response);
         let wrong_metadata_hash = CryptoHashOf::new(CryptoHash(vec![0xff; 32]));
-        entry.proof.content.content_hash = wrong_metadata_hash.clone();
+        entry.proof.content.metadata.content_hash = wrong_metadata_hash.clone();
 
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
@@ -2358,8 +2366,8 @@ fn flexible_invalid_content_size_mismatch() {
     setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
         let mut entry = flexible_response(42, 0, b"data");
         let expected_size = entry.response.content.count_bytes() as u32;
-        entry.proof.content.content_size = expected_size.wrapping_add(1);
-        let wrong_size = entry.proof.content.content_size;
+        entry.proof.content.metadata.content_size = expected_size.wrapping_add(1);
+        let wrong_size = entry.proof.content.content_size();
 
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
@@ -2393,7 +2401,7 @@ fn flexible_invalid_is_reject_mismatch() {
 
     setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
         let mut entry = flexible_response(42, 0, b"data");
-        entry.proof.content.is_reject = !entry.proof.content.is_reject;
+        entry.proof.content.metadata.is_reject = !entry.proof.content.is_reject();
 
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
@@ -2595,7 +2603,7 @@ fn flexible_invalid_registry_version_mismatch() {
     setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
         let wrong_registry_version = RegistryVersion::new(999);
         let mut entry = flexible_response(42, 0, b"data");
-        entry.proof.content.registry_version = wrong_registry_version;
+        entry.proof.content.metadata.registry_version = wrong_registry_version;
         let validation_context = default_validation_context();
         let expected_registry_version = validation_context.registry_version;
 
@@ -3052,7 +3060,7 @@ fn flexible_build_responses_too_large() {
             } => {
                 assert_eq!(*cb, callback_id);
                 assert_eq!(all_seen_shares.len(), 4);
-                assert!(all_seen_shares.iter().all(|s| !s.content.is_reject));
+                assert!(all_seen_shares.iter().all(|s| !s.content.is_reject()));
                 assert_eq!(*total_requests, 4);
                 assert_eq!(*min_responses, 2);
             }
@@ -3145,8 +3153,8 @@ fn flexible_build_responses_too_large_with_rejects_reducing_unseen() {
             } => {
                 assert_eq!(*cb, callback_id);
                 assert_eq!(all_seen_shares.len(), 5);
-                let ok_count = all_seen_shares.iter().filter(|s| !s.content.is_reject).count();
-                let reject_count = all_seen_shares.iter().filter(|s| s.content.is_reject).count();
+                let ok_count = all_seen_shares.iter().filter(|s| !s.content.is_reject()).count();
+                let reject_count = all_seen_shares.iter().filter(|s| s.content.is_reject()).count();
                 assert_eq!(ok_count, 3);
                 assert_eq!(reject_count, 2);
                 assert_eq!(*total_requests, 6);
@@ -3207,8 +3215,8 @@ fn flexible_build_responses_too_large_fewer_ok_than_min_responses() {
             } => {
                 assert_eq!(*cb, callback_id);
                 assert_eq!(all_seen_shares.len(), 5);
-                let ok_count = all_seen_shares.iter().filter(|s| !s.content.is_reject).count();
-                let reject_count = all_seen_shares.iter().filter(|s| s.content.is_reject).count();
+                let ok_count = all_seen_shares.iter().filter(|s| !s.content.is_reject()).count();
+                let reject_count = all_seen_shares.iter().filter(|s| s.content.is_reject()).count();
                 assert_eq!(ok_count, 3);
                 assert_eq!(reject_count, 2);
                 assert_eq!(*total_requests, 6);
@@ -3996,7 +4004,7 @@ fn flexible_error_responses_too_large_registry_version_mismatch() {
         let share_ok = metadata_share_with_content_size(callback_id.get(), 0, huge);
         // Share with wrong registry version
         let mut share_bad = metadata_share_with_content_size(callback_id.get(), 1, huge);
-        share_bad.content.registry_version = RegistryVersion::new(999);
+        share_bad.content.metadata.registry_version = RegistryVersion::new(999);
 
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
@@ -4280,7 +4288,7 @@ fn flexible_error_too_many_rejects_registry_version_mismatch() {
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
         let entry_ok = flexible_reject_response(callback_id.get(), 0);
         let mut entry_bad = flexible_reject_response(callback_id.get(), 1);
-        entry_bad.proof.content.registry_version = RegistryVersion::new(999);
+        entry_bad.proof.content.metadata.registry_version = RegistryVersion::new(999);
 
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
@@ -4315,7 +4323,8 @@ fn flexible_error_too_many_rejects_content_hash_mismatch() {
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
         let entry_ok = flexible_reject_response(callback_id.get(), 0);
         let mut entry_bad = flexible_reject_response(callback_id.get(), 1);
-        entry_bad.proof.content.content_hash = CryptoHashOf::new(CryptoHash(vec![0xFF; 32]));
+        entry_bad.proof.content.metadata.content_hash =
+            CryptoHashOf::new(CryptoHash(vec![0xFF; 32]));
 
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
@@ -4350,7 +4359,7 @@ fn flexible_error_too_many_rejects_content_size_mismatch() {
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
         let entry_ok = flexible_reject_response(callback_id.get(), 0);
         let mut entry_bad = flexible_reject_response(callback_id.get(), 1);
-        entry_bad.proof.content.content_size = 999_999;
+        entry_bad.proof.content.metadata.content_size = 999_999;
 
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
@@ -4385,7 +4394,7 @@ fn flexible_error_too_many_rejects_is_reject_mismatch() {
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
         let entry_ok = flexible_reject_response(callback_id.get(), 0);
         let mut entry_bad = flexible_reject_response(callback_id.get(), 1);
-        entry_bad.proof.content.is_reject = !entry_bad.proof.content.is_reject;
+        entry_bad.proof.content.metadata.is_reject = !entry_bad.proof.content.is_reject();
 
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
@@ -4421,7 +4430,7 @@ fn flexible_error_too_many_rejects_proof_id_mismatch() {
         let entry_ok = flexible_reject_response(callback_id.get(), 0);
         let mut entry_bad = flexible_reject_response(callback_id.get(), 1);
         // response.id stays correct, but proof.content.id is wrong
-        entry_bad.proof.content.id = CallbackId::new(999);
+        entry_bad.proof.content.metadata.id = CallbackId::new(999);
 
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
@@ -4647,7 +4656,6 @@ fn metadata_share_with_content_size(
         is_reject: false,
         registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
-        payment_receipts: BTreeMap::new(),
     };
     metadata_to_share(signer_node, &metadata)
 }
@@ -4660,7 +4668,6 @@ fn reject_metadata_share(callback_id: u64, signer_node: u64) -> CanisterHttpResp
         is_reject: true,
         registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
-        payment_receipts: BTreeMap::new(),
     };
     metadata_to_share(signer_node, &metadata)
 }

@@ -38,11 +38,6 @@ message CanisterHttpResponse {
   CanisterHttpResponseContent content = 3;
 }
 
-// Canister HTTP response metadata.
-//
-// In a per-replica share, `payment_receipts` carries exactly one entry —
-// the share's signer's receipt. In an aggregated proof, it carries one
-// entry per signer in the proof's signature batch.
 message CanisterHttpResponseMetadata {
   uint64 id = 1;
   reserved 2;
@@ -51,7 +46,6 @@ message CanisterHttpResponseMetadata {
   string replica_version = 5;
   uint32 content_size = 6;
   bool is_reject = 7;
-  repeated CanisterHttpPaymentReceiptEntry payment_receipts = 8;
 }
 
 message CanisterHttpResponseContent {
@@ -91,6 +85,7 @@ message CanisterHttpResponseWithConsensus {
 message CanisterHttpShare {
   CanisterHttpResponseMetadata metadata = 1;
   CanisterHttpResponseSignature signature = 2;
+  CanisterHttpPaymentReceipt payment_receipt = 3;
 }
 
 message CanisterHttpResponseDivergence {
