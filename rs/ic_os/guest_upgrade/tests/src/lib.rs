@@ -17,7 +17,9 @@ use ic_protobuf::registry::replica_version::v1::{
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_test_utilities_registry::{add_blessed_replica_versions, add_replica_version_record};
+use ic_test_utilities_registry::add_replica_version_record;
+use ic_types::ReplicaVersion;
+use rand::RngCore;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use sev_guest_testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
 use std::future::Future;
@@ -32,6 +34,7 @@ use vsock_lib::protocol::{Command, Payload};
 static FREE_PORT: AtomicU16 = AtomicU16::new(DEFAULT_SERVER_PORT);
 
 const REPLICA_VERSION: &str = "replica_version_1";
+const LUKS_HEADER_SIZE_BYTES: usize = 16 * 1024 * 1024;
 /// We register the following two measurements in the mock registry.
 const DEFAULT_CLIENT_MEASUREMENT: [u8; 48] = [42; 48];
 const DEFAULT_SERVER_MEASUREMENT: [u8; 48] = [52; 48];
@@ -54,11 +57,16 @@ struct TestConfig {
     server_chip_id: [u8; 64],
     /// Client chip ID
     client_chip_id: [u8; 64],
-    /// Whether to sign attestation reports
-    sign_attestation_reports: bool,
-    /// Custom data to use in attestation (None for default)
-    /// Allows testing invalid attestation data
-    custom_data_override: Option<[u8; 64]>,
+    /// Whether the server signs attestation reports.
+    server_sign_attestation_reports: bool,
+    /// Whether the client signs attestation reports.
+    client_sign_attestation_reports: bool,
+    /// Custom data to use in the server attestation (None for default).
+    /// Allows testing invalid server attestation data.
+    server_custom_data_override: Option<[u8; 64]>,
+    /// Custom data to use in the client attestation (None for default).
+    /// Allows testing invalid client attestation data.
+    client_custom_data_override: Option<[u8; 64]>,
     can_open_disk: bool,
     server_returns_luks_header: bool,
     client_recovered_luks_header: Option<Vec<u8>>,
@@ -69,8 +77,10 @@ impl Default for TestConfig {
         Self {
             client_measurement: DEFAULT_CLIENT_MEASUREMENT,
             server_measurement: DEFAULT_SERVER_MEASUREMENT,
-            sign_attestation_reports: true,
-            custom_data_override: None,
+            server_sign_attestation_reports: true,
+            client_sign_attestation_reports: true,
+            server_custom_data_override: None,
+            client_custom_data_override: None,
             client_chip_id: DEFAULT_CHIP_ID,
             server_chip_id: DEFAULT_CHIP_ID,
             can_open_disk: false,
@@ -113,8 +123,6 @@ impl DiskEncryptionKeyExchangeTestFixture {
         let _ = rustls::crypto::ring::default_provider().install_default();
 
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
-
-        add_blessed_replica_versions(&registry_data_provider, 1, &[REPLICA_VERSION]);
 
         add_replica_version_record(
             &registry_data_provider,
@@ -166,26 +174,26 @@ impl DiskEncryptionKeyExchangeTestFixture {
         let server_store = NamedTempFile::new().unwrap();
         let server_store_luks_header = NamedTempFile::new().unwrap();
         let client_store_luks_header = NamedTempFile::new().unwrap();
-        std::fs::write(server_store_luks_header.path(), b"store LUKS header bytes").unwrap();
+        std::fs::write(server_store_luks_header.path(), sample_luks_header_bytes()).unwrap();
         // Increment port for each test case so tests can run in parallel
         let server_port = FREE_PORT.fetch_add(1, Ordering::Relaxed);
 
         Self {
             server_sev_firmware: MockSevGuestFirmwareBuilder::new()
                 .with_chip_id(config.server_chip_id)
-                .with_custom_data_override(config.custom_data_override)
+                .with_custom_data_override(config.server_custom_data_override)
                 .with_signer(
                     config
-                        .sign_attestation_reports
+                        .server_sign_attestation_reports
                         .then_some(fake_attestation_report_signer.clone()),
                 )
                 .with_measurement(config.server_measurement),
             client_sev_firmware: MockSevGuestFirmwareBuilder::new()
                 .with_chip_id(config.client_chip_id)
-                .with_custom_data_override(config.custom_data_override)
+                .with_custom_data_override(config.client_custom_data_override)
                 .with_signer(
                     config
-                        .sign_attestation_reports
+                        .client_sign_attestation_reports
                         .then_some(fake_attestation_report_signer.clone()),
                 )
                 .with_measurement(config.client_measurement),
@@ -227,8 +235,9 @@ impl DiskEncryptionKeyExchangeTestFixture {
 
         let server_agent = self.create_server_agent(vsock_client);
 
+        let target_replica_version = ReplicaVersion::try_from(REPLICA_VERSION).unwrap();
         let server_future = server_agent
-            .exchange_keys()
+            .exchange_keys(&target_replica_version)
             .map_err(|e| e.into())
             .inspect_ok(|_| println!("Server finished successfully"))
             .inspect_err(|e| eprintln!("Server finished with error: {e:?}"));
@@ -338,6 +347,25 @@ impl DiskEncryptionKeyExchangeTestFixture {
             "Store LUKS header file content does not match expected content"
         );
     }
+
+    fn verify_no_artifacts_persisted(&self) {
+        assert!(
+            std::fs::read(self.previous_key.path()).unwrap().is_empty(),
+            "Previous key file should be empty"
+        );
+        assert!(
+            std::fs::read(self.client_store_luks_header.path())
+                .unwrap()
+                .is_empty(),
+            "Client Store LUKS header file should be empty"
+        );
+    }
+}
+
+fn sample_luks_header_bytes() -> Vec<u8> {
+    let mut bytes = vec![0; LUKS_HEADER_SIZE_BYTES];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    bytes
 }
 
 /// Wait for either future to finish and then wait a little more for the other future to finish (if
@@ -391,7 +419,7 @@ async fn test_exchange_keys_successfully() {
 
 #[tokio::test]
 async fn test_exchange_keys_recovers_luks_header_when_server_omits_it() {
-    let recovered_luks_header = b"recovered store LUKS header bytes".to_vec();
+    let recovered_luks_header = sample_luks_header_bytes();
     let fixture = DiskEncryptionKeyExchangeTestFixture::new(TestConfig {
         server_returns_luks_header: false,
         client_recovered_luks_header: Some(recovered_luks_header.clone()),
@@ -430,23 +458,14 @@ async fn test_server_measurement_not_in_registry() {
 
     let fixture = DiskEncryptionKeyExchangeTestFixture::new(config);
     assert_statuses_contain_errors(fixture.run_key_exchange_test().await, "InvalidMeasurement");
-
-    assert!(
-        std::fs::read(fixture.previous_key.path())
-            .unwrap()
-            .is_empty()
-    );
-    assert!(
-        std::fs::read(fixture.client_store_luks_header.path())
-            .unwrap()
-            .is_empty()
-    );
+    fixture.verify_no_artifacts_persisted();
 }
 
 #[tokio::test]
 async fn test_wrong_custom_data() {
     let config = TestConfig {
-        custom_data_override: Some(BOGUS_CUSTOM_DATA),
+        server_custom_data_override: Some(BOGUS_CUSTOM_DATA),
+        client_custom_data_override: Some(BOGUS_CUSTOM_DATA),
         ..Default::default()
     };
 
@@ -456,6 +475,21 @@ async fn test_wrong_custom_data() {
             .await,
         "InvalidCustomData",
     );
+}
+
+#[tokio::test]
+async fn test_server_wrong_custom_data() {
+    let config = TestConfig {
+        server_custom_data_override: Some(BOGUS_CUSTOM_DATA),
+        ..Default::default()
+    };
+
+    let (server_result, client_result) = DiskEncryptionKeyExchangeTestFixture::new(config)
+        .run_key_exchange_test()
+        .await;
+
+    assert_status_contains_error(&server_result, "Debug info from Upgrade VM");
+    assert_statuses_contain_errors((server_result, client_result), "InvalidCustomData");
 }
 
 #[tokio::test]
@@ -487,9 +521,10 @@ async fn test_server_timeout() {
             Ok(Payload::NoPayload)
         });
 
+    let replica_version = ReplicaVersion::try_from(REPLICA_VERSION).unwrap();
     DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default())
         .create_server_agent(vsock_client)
-        .exchange_keys()
+        .exchange_keys(&replica_version)
         .await
         .expect_err("Key exchange should fail when server times out");
 }
@@ -497,7 +532,22 @@ async fn test_server_timeout() {
 #[tokio::test]
 async fn test_attestation_reports_not_signed() {
     let config = TestConfig {
-        sign_attestation_reports: false,
+        server_sign_attestation_reports: false,
+        client_sign_attestation_reports: false,
+        ..Default::default()
+    };
+    let (server_result, client_result) = DiskEncryptionKeyExchangeTestFixture::new(config)
+        .run_key_exchange_test()
+        .await;
+
+    assert_status_contains_error(&server_result, "Debug info from Upgrade VM");
+    assert_statuses_contain_errors((server_result, client_result), "InvalidSignature");
+}
+
+#[tokio::test]
+async fn test_server_attestation_report_not_signed() {
+    let config = TestConfig {
+        server_sign_attestation_reports: false,
         ..Default::default()
     };
     let (server_result, client_result) = DiskEncryptionKeyExchangeTestFixture::new(config)
@@ -524,6 +574,21 @@ async fn test_different_chip_id() {
 }
 
 #[tokio::test]
+async fn test_server_different_chip_id() {
+    let config = TestConfig {
+        server_chip_id: DIFFERENT_CHIP_ID,
+        ..Default::default()
+    };
+
+    let (server_result, client_result) = DiskEncryptionKeyExchangeTestFixture::new(config)
+        .run_key_exchange_test()
+        .await;
+
+    assert_status_contains_error(&server_result, "Debug info from Upgrade VM");
+    assert_statuses_contain_errors((server_result, client_result), "InvalidChipId");
+}
+
+#[tokio::test]
 async fn test_can_open_disk() {
     let config = TestConfig {
         can_open_disk: true,
@@ -538,4 +603,45 @@ async fn test_can_open_disk() {
 
     server_result.expect("Key exchange should succeed");
     client_result.expect("Key exchange should succeed");
+    fixture.verify_no_artifacts_persisted();
+}
+
+#[tokio::test]
+async fn test_replica_version_not_in_registry() {
+    let fixture = DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default());
+    let result = fixture
+        .create_server_agent(MockVSockClient::default())
+        .exchange_keys(&ReplicaVersion::try_from("replica_version_missing").unwrap())
+        .await
+        .expect_err("Key exchange should fail when the target replica version is missing");
+
+    assert!(
+        result
+            .to_string()
+            .contains("Replica version record for replica_version_missing not found in registry"),
+        "{result}"
+    );
+}
+
+#[tokio::test]
+async fn test_start_upgrade_vm_command_fails() {
+    let mut vsock_client = MockVSockClient::default();
+
+    vsock_client
+        .expect_send_command()
+        .once()
+        .withf(|command| matches!(command, Command::StartUpgradeGuestVM))
+        .return_once(move |_| Err("boom".to_string()));
+
+    let replica_version = ReplicaVersion::try_from(REPLICA_VERSION).unwrap();
+    let result = DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default())
+        .create_server_agent(vsock_client)
+        .exchange_keys(&replica_version)
+        .await
+        .expect_err("Key exchange should fail when starting the Upgrade VM fails");
+
+    assert!(
+        result.to_string().contains("UpgradeVM error: boom"),
+        "{result}"
+    );
 }

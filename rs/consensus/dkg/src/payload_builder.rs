@@ -1,5 +1,5 @@
 use crate::{
-    MAX_EARLY_REMOTE_TRANSCRIPTS, MAX_REMOTE_DKGS_PER_INTERVAL,
+    MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_TRANSCRIPTS_PER_PAYLOAD,
     metrics::{DkgPayloadMetrics, DkgPayloadMetricsOptionExt},
     remote::{
         ConfigResult, build_callback_id_config_map, get_updated_remote_dkg_attempts, merge_configs,
@@ -26,7 +26,10 @@ use ic_types::{
     batch::ValidationContext,
     consensus::{
         Block,
-        dkg::{DkgDataPayload, DkgPayload, DkgPayloadCreationError, DkgSummary, Message},
+        dkg::{
+            DkgDataPayload, DkgPayload, DkgPayloadCreationError, DkgSummary, Message,
+            RemoteTranscriptResult,
+        },
         get_faults_tolerated,
     },
     crypto::threshold_sig::ni_dkg::{
@@ -85,7 +88,7 @@ pub fn create_payload(
         .map(DkgPayload::Summary)
     } else {
         // If the height is not a start height, create a payload with new dealings,
-        // and possibly early remote transcripts.
+        // and possibly remote transcripts.
         create_data_payload(
             subnet_id,
             registry_client,
@@ -150,7 +153,7 @@ fn create_data_payload(
         max_dealings_per_block,
     );
 
-    let remote_dkg_transcripts = create_early_remote_transcripts(
+    let remote_dkg_transcripts = create_remote_transcripts(
         pool_reader,
         crypto,
         parent,
@@ -162,13 +165,12 @@ fn create_data_payload(
     if !remote_dkg_transcripts.is_empty() {
         info!(
             logger,
-            "Including {} early remote DKG transcripts in data block payload at height {}",
+            "Including {} remote DKG transcripts in data block payload at height {}",
             remote_dkg_transcripts.len(),
             parent.height.increment(),
         );
     }
 
-    // Include any early remote transcripts
     Ok(DkgDataPayload::new_with_remote_dkg_transcripts(
         last_summary_block.height,
         new_validated_dealings,
@@ -176,15 +178,14 @@ fn create_data_payload(
     ))
 }
 
-#[allow(clippy::type_complexity)]
-pub(crate) fn create_early_remote_transcripts(
+pub(crate) fn create_remote_transcripts(
     pool_reader: &PoolReader<'_>,
     crypto: &dyn ConsensusCrypto,
     parent: &Block,
     callback_id_map: BTreeMap<CallbackId, ConfigResult>,
     logger: &ReplicaLogger,
     dkg_payload_metrics: Option<&DkgPayloadMetrics>,
-) -> Result<Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>, DkgPayloadCreationError> {
+) -> Result<Vec<RemoteTranscriptResult>, DkgPayloadCreationError> {
     //  Since this function is relatively expensive, we simply return if there are no outstanding DKG contexts
     if callback_id_map.is_empty() {
         return Ok(vec![]);
@@ -207,8 +208,8 @@ pub(crate) fn create_early_remote_transcripts(
                 {
                     continue;
                 }
-                // Skip requests that would exceed the maximum number of early remote transcripts.
-                if selected_transcripts.len() + errs.len() > MAX_EARLY_REMOTE_TRANSCRIPTS {
+                // Skip requests that would exceed the maximum number of remote transcripts.
+                if selected_transcripts.len() + errs.len() > MAX_REMOTE_TRANSCRIPTS_PER_PAYLOAD {
                     continue;
                 }
                 // Reject contexts for which we failed to create configs.
@@ -223,16 +224,20 @@ pub(crate) fn create_early_remote_transcripts(
                     );
                     // Including the error in the payload will cause the context to receive
                     // a reject response.
-                    selected_transcripts.push((dkg_id, callback_id, Err(err)));
+                    selected_transcripts.push(RemoteTranscriptResult::new(
+                        dkg_id,
+                        callback_id,
+                        Err(err),
+                    ));
                 }
                 continue;
             }
         };
 
-        // Ensure that creating these transcripts would not exceed the maximum number of early
+        // Ensure that creating these transcripts would not exceed the maximum number of
         // remote transcripts. We continue with the next target_id in case it requires less
         // transcripts.
-        if selected_transcripts.len() + configs.len() > MAX_EARLY_REMOTE_TRANSCRIPTS {
+        if selected_transcripts.len() + configs.len() > MAX_REMOTE_TRANSCRIPTS_PER_PAYLOAD {
             continue;
         }
 
@@ -246,7 +251,7 @@ pub(crate) fn create_early_remote_transcripts(
             continue;
         }
 
-        // For each config, try to build the necessary (dkg_id, callback_id, transcript_result) triple
+        // For each config, try to build the necessary [`RemoteTranscriptResult`].
         for config in configs.iter() {
             let dealings = all_dealings.remove(config.dkg_id()).unwrap_or_else(|| {
                 dkg_payload_metrics
@@ -262,9 +267,7 @@ pub(crate) fn create_early_remote_transcripts(
             });
             // Generate the transcript. We need to retry transient errors, as a payload containing
             // transient errors may not be verifiable by peers.
-            let transcript_result = match NiDkgAlgorithm::create_transcript(
-                crypto, config, dealings,
-            ) {
+            let result = match NiDkgAlgorithm::create_transcript(crypto, config, dealings) {
                 Ok(transcript) => Ok(transcript),
                 // Note that we handled the reproducible error case of not having enough dealings
                 // already beforehand.
@@ -273,7 +276,7 @@ pub(crate) fn create_early_remote_transcripts(
                     // Including the error in the payload will cause the context to receive
                     // a reject response.
                     let error_message = format!(
-                        "Failed to create early remote transcript for dkg id {:?} at height {}: {}",
+                        "Failed to create remote transcript for dkg id {:?} at height {}: {}",
                         config.dkg_id(),
                         parent.height.increment(),
                         err
@@ -287,7 +290,11 @@ pub(crate) fn create_early_remote_transcripts(
                     return Err(DkgPayloadCreationError::DkgCreateTranscriptError(err));
                 }
             };
-            selected_transcripts.push((config.dkg_id().clone(), callback_id, transcript_result));
+            selected_transcripts.push(RemoteTranscriptResult::new(
+                config.dkg_id().clone(),
+                callback_id,
+                result,
+            ));
         }
     }
 
@@ -672,7 +679,7 @@ pub fn get_dkg_summary_from_cup_contents(
         interval_length,
         next_interval_length,
         height,
-        BTreeMap::new(), // initial_dkg_attempts
+        BTreeMap::new(), // remote_dkg_attempts
     ))
 }
 
@@ -895,6 +902,7 @@ mod tests {
         ids::{node_test_id, subnet_test_id},
         messages::RequestBuilder,
     };
+    use ic_types::consensus::dkg::RemoteDkgAttempts;
     use ic_types::{
         RegistryVersion,
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
@@ -1144,12 +1152,12 @@ mod tests {
                         PoolReader::new(&deps.pool).get_highest_finalized_summary_block();
                     let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
                     assert_eq!(
-                        dkg_summary.initial_dkg_attempts.get(&setup_target),
-                        Some(&attempt)
+                        dkg_summary.remote_dkg_attempts.get(&setup_target),
+                        Some(&RemoteDkgAttempts::from(attempt))
                     );
                     assert_eq!(
-                        dkg_summary.initial_dkg_attempts.get(&reshare_target),
-                        Some(&attempt)
+                        dkg_summary.remote_dkg_attempts.get(&reshare_target),
+                        Some(&RemoteDkgAttempts::from(attempt))
                     );
 
                     let callback_map = build_callback_map(dkg_summary);
@@ -1185,9 +1193,11 @@ mod tests {
                     dkg_data
                         .transcripts_for_remote_subnets
                         .iter()
-                        .filter(|(dkg_id, _, result)| {
-                            dkg_id.target_subnet == NiDkgTargetSubnet::Remote(setup_target)
-                                && *result == Err(REMOTE_DKG_REPEATED_FAILURE_ERROR.to_string())
+                        .filter(|transcript| {
+                            transcript.dkg_id.target_subnet
+                                == NiDkgTargetSubnet::Remote(setup_target)
+                                && transcript.transcript_result
+                                    == Err(REMOTE_DKG_REPEATED_FAILURE_ERROR.to_string())
                         })
                         .count(),
                     2
@@ -1204,9 +1214,11 @@ mod tests {
                     dkg_data
                         .transcripts_for_remote_subnets
                         .iter()
-                        .filter(|(dkg_id, _, result)| {
-                            dkg_id.target_subnet == NiDkgTargetSubnet::Remote(reshare_target)
-                                && *result == Err(REMOTE_DKG_REPEATED_FAILURE_ERROR.to_string())
+                        .filter(|transcript| {
+                            transcript.dkg_id.target_subnet
+                                == NiDkgTargetSubnet::Remote(reshare_target)
+                                && transcript.transcript_result
+                                    == Err(REMOTE_DKG_REPEATED_FAILURE_ERROR.to_string())
                         })
                         .count(),
                     1
@@ -1226,12 +1238,12 @@ mod tests {
                     PoolReader::new(&deps.pool).get_highest_finalized_summary_block();
                 let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
                 assert_eq!(
-                    dkg_summary.initial_dkg_attempts.get(&setup_target),
-                    Some(&0)
+                    dkg_summary.remote_dkg_attempts.get(&setup_target),
+                    Some(&RemoteDkgAttempts::Completed)
                 );
                 assert_eq!(
-                    dkg_summary.initial_dkg_attempts.get(&reshare_target),
-                    Some(&0)
+                    dkg_summary.remote_dkg_attempts.get(&reshare_target),
+                    Some(&RemoteDkgAttempts::Completed)
                 );
                 let callback_map = build_callback_map(dkg_summary);
                 assert!(callback_map.is_empty(), "{callback_map:?}");
@@ -1244,13 +1256,13 @@ mod tests {
                     None,
                 );
 
-                // It should no longer appear in `initial_dkg_attempts` of the next summary.
+                // It should no longer appear in `remote_dkg_attempts` of the next summary.
                 deps.pool
                     .advance_round_normal_operation_n(dkg_interval_length + 1);
                 let summary_block =
                     PoolReader::new(&deps.pool).get_highest_finalized_summary_block();
                 let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
-                assert!(dkg_summary.initial_dkg_attempts.is_empty());
+                assert!(dkg_summary.remote_dkg_attempts.is_empty());
             });
         });
     }

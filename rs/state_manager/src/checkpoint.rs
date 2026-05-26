@@ -510,13 +510,9 @@ impl CheckpointLoader {
             )
         });
 
-        for canister_state in results.into_iter() {
-            let (canister_state, durations) = canister_state?;
-            canister_states.insert(
-                canister_state.system_state.canister_id(),
-                Arc::new(canister_state),
-            );
-
+        for result in results.into_iter() {
+            let (canister_state, durations) = result?;
+            canister_states.insert(canister_state.canister_id(), Arc::new(canister_state));
             durations.apply(&self.metrics);
         }
 
@@ -715,7 +711,6 @@ pub fn load_canister_state(
     canister_layout: &CanisterLayout<ReadOnly>,
     canister_id: &CanisterId,
     canister_snapshots: CanisterSnapshots,
-    height: Height,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     metrics: &dyn CheckpointLoadingMetrics,
 ) -> Result<(CanisterState, LoadCanisterMetrics), CheckpointError> {
@@ -765,12 +760,7 @@ pub fn load_canister_state(
             );
             durations.insert("wasm_binary", starting_time.elapsed());
 
-            let canister_root =
-                CheckpointLayout::<ReadOnly>::new_untracked("NOT_USED".into(), height)?
-                    .canister(canister_id)?
-                    .raw_path();
             Some(ExecutionState {
-                canister_root,
                 wasm_binary,
                 exports: execution_state_bits.exports,
                 wasm_memory,
@@ -866,6 +856,7 @@ pub fn load_canister_state(
         canister_state_bits.canister_log,
         canister_state_bits.next_canister_log_record_idx,
         log_memory_store_data,
+        canister_state_bits.log_memory_store_migrated,
         canister_state_bits.wasm_memory_limit,
         canister_state_bits.next_snapshot_id,
         canister_state_bits.environment_variables,
@@ -910,7 +901,6 @@ fn load_canister_state_from_checkpoint(
         &canister_layout,
         canister_id,
         canister_snapshots,
-        checkpoint_layout.height(),
         Arc::clone(&fd_factory),
         metrics,
     )

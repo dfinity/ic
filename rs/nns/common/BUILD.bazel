@@ -8,31 +8,6 @@ filegroup(
     srcs = glob(["proto/**/*.proto"]),
 )
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/nervous_system/canisters",
-    "//rs/nns/constants",
-    "//rs/protobuf",
-    "//rs/registry/keys",
-    "//rs/registry/transport",
-    "//rs/types/base_types",
-    "@crate_index//:candid",
-    "@crate_index//:comparable",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:ic-stable-structures",
-    "@crate_index//:num-traits",
-    "@crate_index//:prost",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/nns/common/protobuf_generator:lib",
-    "//rs/test_utilities/compare_dirs",
-    "@crate_index//:tempfile",
-]
-
 rust_library(
     name = "common",
     srcs = glob([
@@ -40,7 +15,23 @@ rust_library(
     ]),
     crate_name = "ic_nns_common",
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/nervous_system/canisters",
+        "//rs/nns/constants",
+        "//rs/protobuf",
+        "//rs/registry/keys",
+        "//rs/registry/transport",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:comparable",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:num-traits",
+        "@crate_index//:prost",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+    ],
 )
 
 rust_library(
@@ -51,7 +42,23 @@ rust_library(
     crate_features = ["test"],
     crate_name = "ic_nns_common",
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/nervous_system/canisters",
+        "//rs/nns/constants",
+        "//rs/protobuf",
+        "//rs/registry/keys",
+        "//rs/registry/transport",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:comparable",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:num-traits",
+        "@crate_index//:prost",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+    ],
 )
 
 generated_files_check(
@@ -62,11 +69,19 @@ generated_files_check(
         "//rs/types/base_types:protos",
     ],
     manifest_dir = "rs/nns/common",
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/nns/common/protobuf_generator:lib",
+        "//rs/test_utilities/compare_dirs",
+        "@crate_index//:tempfile",
+    ],
 )
 
 rust_test(
     name = "common_test",
     crate = ":common",
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:tempfile",
+    ],
 )

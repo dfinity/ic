@@ -78,6 +78,9 @@ use crate::{
         sum_weighted_voting_power,
     },
     storage::{VOTING_POWER_SNAPSHOTS, with_voting_history_store, with_voting_history_store_mut},
+    timer_tasks::{
+        MATURITY_MODULATION_MAX_PERMYRIAD_MISSION_70, MATURITY_MODULATION_MIN_PERMYRIAD_MISSION_70,
+    },
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -270,7 +273,9 @@ pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 /// canisters). (Such rewards come in the form of minted ICP.)
 pub const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = ONE_MONTH_SECONDS;
 
-const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
+const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> =
+    MATURITY_MODULATION_MIN_PERMYRIAD_MISSION_70 as i32
+        ..=MATURITY_MODULATION_MAX_PERMYRIAD_MISSION_70 as i32;
 
 /// Maximum allowed number of Neurons' Fund participants that may participate in an SNS swap. Given
 /// the maximum number of SNS neurons per swap participant (a.k.a. neuron basket count), this
@@ -6419,7 +6424,11 @@ impl Governance {
         }
 
         let now_seconds = self.env.now();
-        let maturity_modulation = match self.heap_data.cached_daily_maturity_modulation_basis_points
+        let maturity_modulation = match self
+            .heap_data
+            .maturity_modulation
+            .as_ref()
+            .and_then(|m| m.current_value_permyriad)
         {
             None => return,
             Some(value) => value,
@@ -6428,8 +6437,11 @@ impl Governance {
         // Sanity check that the maturity modulation returned is within bounds.
         if !VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE.contains(&maturity_modulation) {
             println!(
-                "{}Maturity modulation (in basis points) out-of-bounds. Should be in range [-500, 500], actually is: {}",
-                LOG_PREFIX, maturity_modulation
+                "{}Maturity modulation (in basis points) out-of-bounds. Should be in range [{}, {}], actually is: {}",
+                LOG_PREFIX,
+                MATURITY_MODULATION_MIN_PERMYRIAD_MISSION_70,
+                MATURITY_MODULATION_MAX_PERMYRIAD_MISSION_70,
+                maturity_modulation
             );
             return;
         }

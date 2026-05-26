@@ -68,7 +68,7 @@ use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::{
-    farm::{HostFeature, VmAllocationMode},
+    farm::HostFeature,
     ic::{
         AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
     },
@@ -490,7 +490,6 @@ fn main() -> Result<()> {
         // Since we setup VMs in sequence it takes more than the default timeout
         // of 10 minutes to setup this large testnet so let's increase the timeout:
         .with_timeout_per_test(Duration::from_secs(60 * 30))
-        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;

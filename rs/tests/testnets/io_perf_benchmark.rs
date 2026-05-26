@@ -57,7 +57,7 @@ use ic_system_test_driver::driver::ic::{
 use ic_system_test_driver::driver::ic_gateway_vm::IcGatewayVm;
 use ic_system_test_driver::driver::pot_dsl::PotSetupFn;
 use ic_system_test_driver::driver::{
-    farm::{HostFeature, VmAllocationMode},
+    farm::HostFeature,
     group::SystemTestGroup,
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
@@ -86,7 +86,6 @@ fn main() -> Result<()> {
     let config = Config::new(perf_hosts, num_hosts, hostuser);
 
     SystemTestGroup::new()
-        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(config.build())
         .with_timeout_per_test(std::time::Duration::MAX) // Switching to SSD takes long time
         .execute_from_args()?;

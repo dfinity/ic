@@ -164,6 +164,12 @@ def make_argparser():
     )
     parser.add_argument("--dflate", help="Path to our dflate tool", type=str, required=True)
     parser.add_argument("--diroid", help="Path to our diroid tool", type=str, required=True)
+    parser.add_argument(
+        "--mkfs-ext4",
+        help="Path to our hermetic mke2fs binary. Sibling files mke2fs.conf and lib/ are also used.",
+        type=str,
+        required=True,
+    )
     return parser
 
 
@@ -205,11 +211,19 @@ def main():
 
     # Now build the basic filesystem image. Wrap again in fakeroot
     # so correct permissions are read for all files etc.
+    mke2fs_dir = os.path.dirname(args.mkfs_ext4)
+    mke2fs_env = {
+        "E2FSPROGS_FAKE_TIME": "0",
+        # Point mke2fs at our bundled libraries and config so its output does
+        # not depend on the host's installed e2fsprogs version.
+        "LD_LIBRARY_PATH": os.path.join(mke2fs_dir, "lib"),
+        "MKE2FS_CONFIG": os.path.join(mke2fs_dir, "mke2fs.conf"),
+    }
     mke2fs_args = [
         "faketime",
         "-f",
         "1970-1-1 0:0:0",
-        "/usr/sbin/mkfs.ext4",
+        args.mkfs_ext4,
         "-E",
         "hash_seed=c61251eb-100b-48fe-b089-57dea7368612",
         "-U",
@@ -220,7 +234,7 @@ def main():
         image_file,
         str(image_size),
     ]
-    subprocess.run(mke2fs_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
+    subprocess.run(mke2fs_args, check=True, env=mke2fs_env)
 
     # Use our tool, diroid, to create an fs_config file to be used by e2fsdroid.
     # This file is a simple list of files with their desired uid, gid, and mode.

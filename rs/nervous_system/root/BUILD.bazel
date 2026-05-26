@@ -2,50 +2,53 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/sha2",
-    "//rs/nervous_system/clients",
-    "//rs/nervous_system/lock",
-    "//rs/nervous_system/runtime",
-    "//rs/nns/constants",
-    "//rs/rust_canisters/dfn_core",
-    "//rs/types/base_types",
-    "//rs/types/management_canister_types",
-    "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:async-trait",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:tokio",
-]
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_library(
     name = "root",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_name = "ic_nervous_system_root",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     version = "0.1.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/sha2",
+        "//rs/nervous_system/clients",
+        "//rs/nervous_system/lock",
+        "//rs/nervous_system/runtime",
+        "//rs/nns/constants",
+        "//rs/rust_canisters/dfn_core",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+    ],
 )
 
 rust_test(
     name = "root_test",
-    aliases = ALIASES,
     crate = ":root",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/sha2",
+        "//rs/nervous_system/clients",
+        "//rs/nervous_system/lock",
+        "//rs/nervous_system/runtime",
+        "//rs/nns/constants",
+        "//rs/rust_canisters/dfn_core",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:tokio",
+    ],
 )
