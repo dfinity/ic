@@ -576,10 +576,6 @@ impl CanisterStates {
     /// for the actual subnet-wide memory usage.
     ///
     /// `O(|hot canisters|)` thanks to the precomputed cold-pool aggregate.
-    // The only non-test caller of this method is
-    // `ReplicatedState::memory_taken`, which is wired up in the follow-up
-    // integration PR.
-    #[allow(dead_code)]
     pub(crate) fn memory_taken(&self) -> MemoryTaken {
         let (
             mut execution,
