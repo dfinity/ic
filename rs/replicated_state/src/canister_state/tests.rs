@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 
 use super::*;
 use crate::CallContext;
@@ -696,7 +695,6 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
     canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::new(13));
     // And an execution state with non-zero size.
     canister_state.execution_state = Some(ExecutionState::new(
-        Default::default(),
         execution_state::WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
         ExportedFunctions::new(Default::default()),
         Memory::new_for_testing(),
@@ -1049,7 +1047,6 @@ fn canister_state_canister_log_record_round_trip() {
 #[test]
 fn execution_state_test_partial_eq() {
     let state_1 = ExecutionState::new(
-        Default::default(),
         execution_state::WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
         ExportedFunctions::new(Default::default()),
         Memory::new_for_testing(),
@@ -1059,14 +1056,6 @@ fn execution_state_test_partial_eq() {
     );
 
     assert_eq!(state_1, state_1.clone());
-
-    assert_eq!(
-        ExecutionState {
-            canister_root: PathBuf::new(),
-            ..state_1.clone()
-        },
-        state_1
-    );
 
     assert_eq!(ExecutionState { ..state_1.clone() }, state_1);
 

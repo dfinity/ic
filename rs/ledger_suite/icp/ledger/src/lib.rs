@@ -423,8 +423,12 @@ impl Ledger {
                 }),
                 CTE::TxCreatedInFuture { .. } => PTE(TE::TxCreatedInFuture),
                 CTE::TxDuplicate { duplicate_of } => PTE(TE::TxDuplicate { duplicate_of }),
-                CTE::InsufficientAllowance { .. } => todo!(),
-                CTE::ExpiredApproval { .. } => todo!(),
+                CTE::InsufficientAllowance { allowance } => PaymentError::Reject(format!(
+                    "insufficient allowance, current allowance is {allowance}"
+                )),
+                CTE::ExpiredApproval { .. } => {
+                    PaymentError::Reject("the approval has expired".to_string())
+                }
                 CTE::TxThrottled => PaymentError::Reject(
                     concat!(
                         "Too many transactions in replay prevention window, ",
@@ -432,9 +436,15 @@ impl Ledger {
                     )
                     .to_string(),
                 ),
-                CTE::AllowanceChanged { .. } => todo!(),
-                CTE::SelfApproval => todo!(),
-                CTE::BadBurn { .. } => todo!(),
+                CTE::AllowanceChanged { current_allowance } => PaymentError::Reject(format!(
+                    "the allowance has changed, current allowance is {current_allowance}"
+                )),
+                CTE::SelfApproval => {
+                    PaymentError::Reject("self-approvals are not allowed".to_string())
+                }
+                CTE::BadBurn { min_burn_amount } => PaymentError::Reject(format!(
+                    "the burn amount is too small, the minimum is {min_burn_amount}"
+                )),
             }
         })
     }
