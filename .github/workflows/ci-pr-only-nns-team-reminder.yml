@@ -32,6 +32,19 @@ jobs:
           script: |
             const pullRequestNumber = context.payload.number;
 
+            // Skip reminder if only build files were changed.
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: "dfinity",
+              repo: "ic",
+              pull_number: pullRequestNumber,
+            });
+            const buildFilePattern = /^(BUILD\.bazel|BUILD|WORKSPACE|WORKSPACE\.bazel|.*\.bazel|.*\.bzl)$/;
+            const hasNonBuildFiles = files.some(f => !buildFilePattern.test(f.filename.split('/').pop()));
+            if (!hasNonBuildFiles) {
+              console.log("Skipping reminder: PR only changes build files.");
+              return;
+            }
+
             // Skip reminder if we already reminded (to avoid spam).
             const reviews = await github.rest.pulls.listReviews({
               owner: "dfinity",
