@@ -7,6 +7,7 @@ use crate::pocket_ic::{
     SetCertifiedTime,
 };
 use crate::{InstanceId, OpId, Operation};
+use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
     Router,
@@ -864,6 +865,7 @@ impl ApiState {
                     None,
                     None,
                     None,
+                    Arc::new(ArcSwapOption::new(None)),
                 )
                 .await
                 .unwrap();

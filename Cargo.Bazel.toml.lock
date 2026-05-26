@@ -1990,9 +1990,8 @@ dependencies = [
 
 [[package]]
 name = "canbench"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4ba3299ff41729601c562b5b67b1a88e6c599abab73d9bd51a72c8f9ad502eb"
+version = "0.6.0"
+source = "git+https://github.com/dfinity/canbench?rev=87461a507e4a3476febf8fc13954eea9f9048be5#87461a507e4a3476febf8fc13954eea9f9048be5"
 dependencies = [
  "canbench-rs",
  "candid",
@@ -2000,9 +1999,10 @@ dependencies = [
  "colored 3.0.0",
  "flate2",
  "hex",
+ "ic-management-canister-types 0.7.1",
  "inferno 0.11.19",
  "pocket-ic",
- "reqwest 0.12.24",
+ "reqwest 0.13.4",
  "rustc-demangle",
  "semver",
  "serde",
@@ -2015,21 +2015,19 @@ dependencies = [
 
 [[package]]
 name = "canbench-rs"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d959bc8d6e4738bcfed6682d46ef105db17e5fe81d4c30e8b49b03b9badd2c8"
+version = "0.6.0"
+source = "git+https://github.com/dfinity/canbench?rev=87461a507e4a3476febf8fc13954eea9f9048be5#87461a507e4a3476febf8fc13954eea9f9048be5"
 dependencies = [
  "canbench-rs-macros",
  "candid",
- "ic-cdk 0.19.0",
+ "ic-cdk 0.20.1",
  "serde",
 ]
 
 [[package]]
 name = "canbench-rs-macros"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3198f118892181c4f4d30cfb423511a11b9d7e8d7efb94aa58777db78da27bd8"
+version = "0.6.0"
+source = "git+https://github.com/dfinity/canbench?rev=87461a507e4a3476febf8fc13954eea9f9048be5#87461a507e4a3476febf8fc13954eea9f9048be5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2490,7 +2488,7 @@ source = "git+https://github.com/mraszyk/cloudflare-rs?rev=972f379e51ac923be9db6
 dependencies = [
  "chrono 0.4.42",
  "http 1.3.1",
- "reqwest 0.13.3",
+ "reqwest 0.13.4",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -3741,7 +3739,7 @@ dependencies = [
  "k256 0.11.6",
  "keyring",
  "lazy_static",
- "reqwest 0.13.3",
+ "reqwest 0.13.4",
  "ring 0.17.14",
  "schemars 0.8.21",
  "sec1 0.3.0",
@@ -3960,7 +3958,7 @@ dependencies = [
  "ic-stable-structures 0.6.8",
  "ic-stable-structures 0.7.0",
  "ic-test-state-machine-client",
- "ic-transport-types 0.47.3",
+ "ic-transport-types",
  "ic-utils",
  "ic-verify-bls-signature",
  "ic-vetkeys",
@@ -4065,7 +4063,7 @@ dependencies = [
  "rcgen 0.13.1",
  "regex",
  "regex-lite",
- "reqwest 0.13.3",
+ "reqwest 0.13.4",
  "rexpect",
  "rgb",
  "ring 0.17.14",
@@ -5807,12 +5805,49 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
 
 [[package]]
+name = "hickory-net"
+version = "0.26.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2295ed2f9c31e471e1428a8f88a3f0e1f4b27c15049592138d1eebe9c35b183"
+dependencies = [
+ "async-trait",
+ "aws-lc-rs",
+ "bitflags 2.10.0",
+ "bytes",
+ "cfg-if",
+ "data-encoding",
+ "futures-channel",
+ "futures-io",
+ "futures-util",
+ "h2 0.4.4",
+ "hickory-proto 0.26.1",
+ "http 1.3.1",
+ "idna 1.0.3",
+ "ipnet",
+ "jni 0.22.4",
+ "lru-cache",
+ "parking_lot 0.12.5",
+ "rand 0.10.1",
+ "rustls 0.23.27",
+ "rustls-pki-types",
+ "thiserror 2.0.18",
+ "time",
+ "tinyvec",
+ "tokio",
+ "tokio-rustls 0.26.0",
+ "tracing",
+ "url",
+ "webpki-roots 1.0.6",
+]
+
+[[package]]
 name = "hickory-proto"
 version = "0.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8a6fe56c0038198998a6f217ca4e7ef3a5e51f46163bd6dd60b5c71ca6c6502"
 dependencies = [
  "async-trait",
+ "aws-lc-rs",
  "bitflags 2.10.0",
  "bytes",
  "cfg-if",
@@ -5842,32 +5877,24 @@ dependencies = [
 
 [[package]]
 name = "hickory-proto"
-version = "0.26.0-alpha.1"
+version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a62d7684f766b0f96344be88c023f9b6650039aea09d526b4974cce302eb61b1"
+checksum = "0bab31817bfb44672a252e97fe81cd0c18d1b2cf892108922f6818820df8c643"
 dependencies = [
- "async-trait",
  "aws-lc-rs",
  "bitflags 2.10.0",
- "bytes",
- "cfg-if",
  "data-encoding",
- "enum-as-inner 0.6.0",
- "futures-channel",
- "futures-io",
- "futures-util",
  "idna 1.0.3",
  "ipnet",
+ "jni 0.22.4",
  "once_cell",
- "rand 0.9.4",
+ "prefix-trie",
+ "rand 0.10.1",
  "ring 0.17.14",
- "rustls 0.23.27",
  "rustls-pki-types",
  "thiserror 2.0.18",
  "time",
  "tinyvec",
- "tokio",
- "tokio-rustls 0.26.0",
  "tracing",
  "url",
 ]
@@ -5898,25 +5925,31 @@ dependencies = [
 
 [[package]]
 name = "hickory-resolver"
-version = "0.26.0-alpha.1"
+version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbab5e26a7f82341145ba1fbd1f1858d0490624fcc46270db2d3c4a101f763f4"
+checksum = "f0d58d28879ceecde6607729660c2667a081ccdc082e082675042793960f178c"
 dependencies = [
  "cfg-if",
  "futures-util",
- "hickory-proto 0.26.0-alpha.1",
+ "hickory-net",
+ "hickory-proto 0.26.1",
  "ipconfig",
+ "ipnet",
+ "jni 0.22.4",
  "moka",
+ "ndk-context",
  "once_cell",
  "parking_lot 0.12.5",
- "rand 0.9.4",
+ "rand 0.10.1",
  "resolv-conf",
  "rustls 0.23.27",
  "smallvec",
+ "system-configuration 0.7.0",
  "thiserror 2.0.18",
  "tokio",
  "tokio-rustls 0.26.0",
  "tracing",
+ "webpki-roots 1.0.6",
 ]
 
 [[package]]
@@ -6277,7 +6310,7 @@ dependencies = [
  "http-body-util",
  "ic-certification",
  "ic-ed25519",
- "ic-transport-types 0.47.3",
+ "ic-transport-types",
  "ic-verify-bls-signature",
  "ic_principal",
  "k256 0.13.4",
@@ -6287,8 +6320,7 @@ dependencies = [
  "pkcs8 0.10.2",
  "rand 0.10.1",
  "rangemap",
- "reqwest 0.13.3",
- "ring 0.17.14",
+ "reqwest 0.13.4",
  "sec1 0.7.3",
  "serde",
  "serde_bytes",
@@ -6306,7 +6338,7 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib"
 version = "0.0.0-git"
-source = "git+https://github.com/mraszyk/ic-bn-lib?rev=8fd381ddb526670c4a3deafb31d9868d7dc2d51a#8fd381ddb526670c4a3deafb31d9868d7dc2d51a"
+source = "git+https://github.com/mraszyk/ic-bn-lib?rev=f9ef198ffc1aabf075621b303e0c99afe5504928#f9ef198ffc1aabf075621b303e0c99afe5504928"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -6328,8 +6360,8 @@ dependencies = [
  "futures-util",
  "governor 0.10.2",
  "hex",
- "hickory-proto 0.25.2",
- "hickory-resolver 0.25.2",
+ "hickory-proto 0.26.1",
+ "hickory-resolver 0.26.1",
  "http 1.3.1",
  "http-body 1.0.1",
  "http-body-util",
@@ -6353,7 +6385,7 @@ dependencies = [
  "rand 0.8.5",
  "rcgen 0.14.5",
  "regex",
- "reqwest 0.13.3",
+ "reqwest 0.13.4",
  "rustls 0.23.27",
  "rustls-acme",
  "rustls-pemfile 2.2.0",
@@ -6394,7 +6426,7 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib-common"
 version = "0.1.8"
-source = "git+https://github.com/mraszyk/ic-bn-lib?rev=8fd381ddb526670c4a3deafb31d9868d7dc2d51a#8fd381ddb526670c4a3deafb31d9868d7dc2d51a"
+source = "git+https://github.com/mraszyk/ic-bn-lib?rev=f9ef198ffc1aabf075621b303e0c99afe5504928#f9ef198ffc1aabf075621b303e0c99afe5504928"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6404,8 +6436,8 @@ dependencies = [
  "cloudflare 0.14.1 (git+https://github.com/mraszyk/cloudflare-rs?rev=972f379e51ac923be9db648a75b101892a89453c)",
  "derive-new",
  "fqdn",
- "hickory-proto 0.25.2",
- "hickory-resolver 0.25.2",
+ "hickory-proto 0.26.1",
+ "hickory-resolver 0.26.1",
  "http 1.3.1",
  "humantime",
  "hyper 1.8.1",
@@ -6415,7 +6447,7 @@ dependencies = [
  "parse-size",
  "prometheus 0.14.0",
  "rcgen 0.14.5",
- "reqwest 0.13.3",
+ "reqwest 0.13.4",
  "rustls 0.23.27",
  "serde",
  "socket2 0.6.1",
@@ -6635,7 +6667,7 @@ dependencies = [
 [[package]]
 name = "ic-custom-domains-backend"
 version = "0.0.0-git"
-source = "git+https://github.com/mraszyk/custom-domains?rev=caf6e788af3802281c0fed27f98d47be16c9b633#caf6e788af3802281c0fed27f98d47be16c9b633"
+source = "git+https://github.com/mraszyk/custom-domains?rev=62f9e109cb598f605166e988e8c7ce55f7a40bd9#62f9e109cb598f605166e988e8c7ce55f7a40bd9"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -6666,7 +6698,7 @@ dependencies = [
 [[package]]
 name = "ic-custom-domains-base"
 version = "0.0.0-git"
-source = "git+https://github.com/mraszyk/custom-domains?rev=caf6e788af3802281c0fed27f98d47be16c9b633#caf6e788af3802281c0fed27f98d47be16c9b633"
+source = "git+https://github.com/mraszyk/custom-domains?rev=62f9e109cb598f605166e988e8c7ce55f7a40bd9#62f9e109cb598f605166e988e8c7ce55f7a40bd9"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6677,7 +6709,7 @@ dependencies = [
  "clap 4.5.53",
  "derive-new",
  "fqdn",
- "hickory-resolver 0.25.2",
+ "hickory-resolver 0.26.1",
  "humantime",
  "ic-bn-lib",
  "ic-bn-lib-common",
@@ -6697,7 +6729,7 @@ dependencies = [
 [[package]]
 name = "ic-custom-domains-canister-api"
 version = "0.0.0-git"
-source = "git+https://github.com/mraszyk/custom-domains?rev=caf6e788af3802281c0fed27f98d47be16c9b633#caf6e788af3802281c0fed27f98d47be16c9b633"
+source = "git+https://github.com/mraszyk/custom-domains?rev=62f9e109cb598f605166e988e8c7ce55f7a40bd9#62f9e109cb598f605166e988e8c7ce55f7a40bd9"
 dependencies = [
  "candid",
  "derive-new",
@@ -6709,7 +6741,7 @@ dependencies = [
 [[package]]
 name = "ic-custom-domains-canister-client"
 version = "0.0.0-git"
-source = "git+https://github.com/mraszyk/custom-domains?rev=caf6e788af3802281c0fed27f98d47be16c9b633#caf6e788af3802281c0fed27f98d47be16c9b633"
+source = "git+https://github.com/mraszyk/custom-domains?rev=62f9e109cb598f605166e988e8c7ce55f7a40bd9#62f9e109cb598f605166e988e8c7ce55f7a40bd9"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -6769,7 +6801,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.2.0"
-source = "git+https://github.com/mraszyk/ic-gateway?rev=e8a26d97d6880a8f7bf734caeb1ad80708f85c79#e8a26d97d6880a8f7bf734caeb1ad80708f85c79"
+source = "git+https://github.com/mraszyk/ic-gateway?rev=e0d7dc5c0478ad9f58da80e240a9176bce2dfacf#e0d7dc5c0478ad9f58da80e240a9176bce2dfacf"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -6796,7 +6828,7 @@ dependencies = [
  "ic-custom-domains-backend",
  "ic-custom-domains-base",
  "ic-http-gateway-protocol",
- "ic-transport-types 0.47.3",
+ "ic-transport-types",
  "isbot",
  "itertools 0.14.0",
  "lazy_static",
@@ -6805,7 +6837,7 @@ dependencies = [
  "prometheus 0.14.0",
  "rand 0.8.5",
  "regex",
- "reqwest 0.13.3",
+ "reqwest 0.13.4",
  "rustls 0.23.27",
  "serde",
  "serde_cbor",
@@ -6876,17 +6908,6 @@ dependencies = [
  "sha2 0.10.9",
  "simple_asn1",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "ic-management-canister-types"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea7e5b8a0f7c3b320d9450ac950547db4f24a31601b5d398f9680b64427455d2"
-dependencies = [
- "candid",
- "serde",
- "serde_bytes",
 ]
 
 [[package]]
@@ -6988,24 +7009,6 @@ dependencies = [
  "ciborium",
  "serde",
  "serde_bytes",
-]
-
-[[package]]
-name = "ic-transport-types"
-version = "0.40.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2e7706e55836e8104c98149ec0796d20d5213fef972ac01b544657d410f1883"
-dependencies = [
- "candid",
- "hex",
- "ic-certification",
- "leb128",
- "serde",
- "serde_bytes",
- "serde_cbor",
- "serde_repr",
- "sha2 0.10.9",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -7808,9 +7811,9 @@ dependencies = [
 
 [[package]]
 name = "js-sys"
-version = "0.3.98"
+version = "0.3.99"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67df7112613f8bfd9150013a0314e196f4800d3201ae742489d999db2f979f08"
+checksum = "142bc4740e452c1e57ade0cbc129f139c9093e354346f0872ef985f4f5cf5f11"
 dependencies = [
  "cfg-if",
  "futures-util",
@@ -8608,14 +8611,14 @@ dependencies = [
 
 [[package]]
 name = "mail-auth"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f026538d37471da028cd5c6a907777c3de2d84e2c71b2b47ae301a10977c5e6"
+checksum = "c99f0db3f1292f72149bd50fcca0354d243defda0d26532ef7281ca716c77592"
 dependencies = [
  "aws-lc-rs",
  "flate2",
  "hashify",
- "hickory-resolver 0.26.0-alpha.1",
+ "hickory-resolver 0.26.1",
  "mail-builder",
  "mail-parser",
  "quick-xml 0.39.4",
@@ -9041,6 +9044,12 @@ dependencies = [
  "quote",
  "syn 2.0.110",
 ]
+
+[[package]]
+name = "ndk-context"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27b02d87554356db9e9a873add8782d4ea6e3e58ea071a9adb9a2e8ddb884a8b"
 
 [[package]]
 name = "neli"
@@ -10365,9 +10374,8 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "10.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c9b78f339182efb981ceca2ac360aa280609f8d8c785e5a7eeda488f53497a8"
+version = "13.0.0"
+source = "git+https://github.com/dfinity/ic?rev=855c5ea6fd70582ef28bc7b1182fe42dad51a829#855c5ea6fd70582ef28bc7b1182fe42dad51a829"
 dependencies = [
  "backoff",
  "base64 0.13.1",
@@ -10375,12 +10383,12 @@ dependencies = [
  "flate2",
  "hex",
  "ic-certification",
- "ic-management-canister-types 0.3.3",
- "ic-transport-types 0.40.1",
- "reqwest 0.12.24",
+ "ic-management-canister-types 0.7.1",
+ "ic-transport-types",
+ "reqwest 0.13.4",
  "schemars 0.8.21",
+ "semver",
  "serde",
- "serde_bytes",
  "serde_cbor",
  "serde_json",
  "sha2 0.10.9",
@@ -10534,6 +10542,17 @@ checksum = "368ba315fb8c5052ab692e68a0eefec6ec57b23a36959c14496f0b0df2c0cecf"
 dependencies = [
  "predicates-core",
  "termtree",
+]
+
+[[package]]
+name = "prefix-trie"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4cf6e3177f0684016a5c209b00882e15f8bdd3f3bb48f0491df10cd102d0c6e7"
+dependencies = [
+ "either",
+ "ipnet",
+ "num-traits",
 ]
 
 [[package]]
@@ -11771,7 +11790,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "sync_wrapper 0.1.2",
- "system-configuration",
+ "system-configuration 0.5.1",
  "tokio",
  "tokio-rustls 0.24.1",
  "tokio-util",
@@ -11786,9 +11805,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.24"
+version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d0946410b9f7b082a427e4ef5c8ff541a88b357bc6c637c40db3a68ac70a36f"
+checksum = "219c5811de6525e5416c7d5d53bb656d3afdbc6c5af816e0802bcfa42dbdc1c3"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -11796,52 +11815,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "h2 0.4.4",
- "http 1.3.1",
- "http-body 1.0.1",
- "http-body-util",
- "hyper 1.8.1",
- "hyper-rustls 0.27.7",
- "hyper-util",
- "js-sys",
- "log",
- "mime_guess",
- "percent-encoding",
- "pin-project-lite",
- "quinn",
- "rustls 0.23.27",
- "rustls-native-certs 0.8.0",
- "rustls-pki-types",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "sync_wrapper 1.0.2",
- "tokio",
- "tokio-rustls 0.26.0",
- "tokio-util",
- "tower 0.5.2",
- "tower-http 0.6.11",
- "tower-service",
- "url",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "wasm-streams 0.4.0",
- "web-sys",
- "webpki-roots 1.0.6",
-]
-
-[[package]]
-name = "reqwest"
-version = "0.13.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62e0021ea2c22aed41653bc7e1419abb2c97e038ff2c33d0e1309e49a97deec0"
-dependencies = [
- "base64 0.22.1",
- "bytes",
- "futures-channel",
- "futures-core",
- "futures-util",
- "h2 0.4.4",
- "hickory-resolver 0.25.2",
+ "hickory-resolver 0.26.1",
  "http 1.3.1",
  "http-body 1.0.1",
  "http-body-util",
@@ -11870,7 +11844,7 @@ dependencies = [
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-streams 0.5.0",
+ "wasm-streams",
  "web-sys",
 ]
 
@@ -12292,7 +12266,6 @@ dependencies = [
  "brotli-decompressor 5.0.0",
  "log",
  "once_cell",
- "ring 0.17.14",
  "rustls-pki-types",
  "rustls-webpki 0.103.13",
  "subtle",
@@ -13996,7 +13969,18 @@ checksum = "ba3a3adc5c275d719af8cb4272ea1c4a6d668a777f37e115f6d11ddbc1c8e0e7"
 dependencies = [
  "bitflags 1.3.2",
  "core-foundation 0.9.4",
- "system-configuration-sys",
+ "system-configuration-sys 0.5.0",
+]
+
+[[package]]
+name = "system-configuration"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a13f3d0daba03132c0aa9767f98351b3488edc2c100cda2d2ec2b04f3d8d3c8b"
+dependencies = [
+ "bitflags 2.10.0",
+ "core-foundation 0.9.4",
+ "system-configuration-sys 0.6.0",
 ]
 
 [[package]]
@@ -14004,6 +13988,16 @@ name = "system-configuration-sys"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a75fb188eb626b924683e3b95e3a48e63551fcfb51949de2f06a9d91dbee93c9"
+dependencies = [
+ "core-foundation-sys",
+ "libc",
+]
+
+[[package]]
+name = "system-configuration-sys"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e1d1b10ced5ca923a1fcb8d03e96b8d3268065d724548c0211415ff6ac6bac4"
 dependencies = [
  "core-foundation-sys",
  "libc",
@@ -15724,9 +15718,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen"
-version = "0.2.121"
+version = "0.2.122"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49ace1d07c165b0864824eee619580c4689389afa9dc9ed3a4c75040d82e6790"
+checksum = "3ed04576f974d2b2fba0f38c51dbc5518011e38c36bf1143164be765528fd409"
 dependencies = [
  "cfg-if",
  "once_cell",
@@ -15737,9 +15731,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-futures"
-version = "0.4.71"
+version = "0.4.72"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96492d0d3ffba25305a7dc88720d250b1401d7edca02cc3bcd50633b424673b8"
+checksum = "9473dbd2991ae90b6291c3c32c30c6187ac49aa32f9905d1cce280ec1e110b0f"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
@@ -15747,9 +15741,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro"
-version = "0.2.121"
+version = "0.2.122"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e68e6f4afd367a562002c05637acb8578ff2dea1943df76afb9e83d177c8578"
+checksum = "916151b09da36bd82f6615cbf3a419e2f0ba23a03c6160e8e92eb6bd4aa1dec6"
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -15757,9 +15751,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-version = "0.2.121"
+version = "0.2.122"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d95a9ec35c64b2a7cb35d3fead40c4238d0940c86d107136999567a4703259f2"
+checksum = "299047362ccbfce148b67ab7e73349f77748e00c8296f9542adfad2ad82c5c5e"
 dependencies = [
  "bumpalo",
  "proc-macro2",
@@ -15770,9 +15764,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-shared"
-version = "0.2.121"
+version = "0.2.122"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4e0100b01e9f0d03189a92b96772a1fb998639d981193d7dbab487302513441"
+checksum = "9a929b2c61f11ba3e9bc35b50c1f25cb38e0e892c0c231ae2b8cf78d5dad4437"
 dependencies = [
  "unicode-ident",
 ]
@@ -15858,19 +15852,6 @@ dependencies = [
  "flagset",
  "wasm-encoder 0.248.0",
  "wasmparser 0.248.0",
-]
-
-[[package]]
-name = "wasm-streams"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b65dc4c90b63b118468cf747d8bf3566c1913ef60be765b5730ead9e0a3ba129"
-dependencies = [
- "futures-util",
- "js-sys",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
 ]
 
 [[package]]
@@ -16221,9 +16202,9 @@ dependencies = [
 
 [[package]]
 name = "web-sys"
-version = "0.3.98"
+version = "0.3.99"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b572dff8bcf38bad0fa19729c89bb5748b2b9b1d8be70cf90df697e3a8f32aa"
+checksum = "6d621441cfc37b84979402712047321980c178f299193a3589d05b99e8763436"
 dependencies = [
  "js-sys",
  "wasm-bindgen",

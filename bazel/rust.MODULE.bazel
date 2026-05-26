@@ -232,12 +232,14 @@ crate.spec(
     version = "^0.49",
 )
 crate.spec(
+    git = "https://github.com/dfinity/canbench",
     package = "canbench",
-    version = "^0.4.1",
+    rev = "87461a507e4a3476febf8fc13954eea9f9048be5",
 )
 crate.spec(
+    git = "https://github.com/dfinity/canbench",
     package = "canbench-rs",
-    version = "^0.4.1",
+    rev = "87461a507e4a3476febf8fc13954eea9f9048be5",
 )
 crate.spec(
     package = "candid",
@@ -669,7 +671,6 @@ crate.spec(
 crate.spec(
     features = [
         "pem",
-        "ring",
     ],
     package = "ic-agent",
     version = "^0.47.3",
@@ -680,12 +681,12 @@ crate.spec(
     ],
     git = "https://github.com/mraszyk/ic-bn-lib",
     package = "ic-bn-lib",
-    rev = "8fd381ddb526670c4a3deafb31d9868d7dc2d51a",
+    rev = "f9ef198ffc1aabf075621b303e0c99afe5504928",
 )
 crate.spec(
     git = "https://github.com/mraszyk/ic-bn-lib",
     package = "ic-bn-lib-common",
-    rev = "8fd381ddb526670c4a3deafb31d9868d7dc2d51a",
+    rev = "f9ef198ffc1aabf075621b303e0c99afe5504928",
 )
 crate.spec(
     package = "ic-btc-interface",
@@ -740,22 +741,22 @@ crate.spec(
     default_features = False,
     git = "https://github.com/mraszyk/ic-gateway",
     package = "ic-gateway",
-    rev = "e8a26d97d6880a8f7bf734caeb1ad80708f85c79",
+    rev = "e0d7dc5c0478ad9f58da80e240a9176bce2dfacf",
 )
 crate.spec(
     git = "https://github.com/mraszyk/custom-domains",
     package = "ic-custom-domains-backend",
-    rev = "caf6e788af3802281c0fed27f98d47be16c9b633",
+    rev = "62f9e109cb598f605166e988e8c7ce55f7a40bd9",
 )
 crate.spec(
     git = "https://github.com/mraszyk/custom-domains",
     package = "ic-custom-domains-base",
-    rev = "caf6e788af3802281c0fed27f98d47be16c9b633",
+    rev = "62f9e109cb598f605166e988e8c7ce55f7a40bd9",
 )
 crate.spec(
     git = "https://github.com/mraszyk/custom-domains",
     package = "ic-custom-domains-canister-client",
-    rev = "caf6e788af3802281c0fed27f98d47be16c9b633",
+    rev = "62f9e109cb598f605166e988e8c7ce55f7a40bd9",
 )
 crate.spec(
     package = "ic-http-certification",
