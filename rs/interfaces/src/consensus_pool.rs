@@ -443,17 +443,32 @@ impl<'a> ChainIterator<'a> {
         }
         let parent_height = height.decrement();
         let parent_hash = &block.parent;
-        self.consensus_pool
+        for proposal in self
+            .consensus_pool
             .validated()
             .block_proposal()
             .get_by_height(parent_height)
-            .find_map(|proposal| {
-                if proposal.content.get_hash() == parent_hash {
-                    Some(proposal.content.into_inner())
-                } else {
-                    None
-                }
-            })
+        {
+            if proposal.content.get_hash() == parent_hash {
+                return Some(proposal.content.into_inner());
+            }
+        }
+
+        // If the parent block is not found in the block proposals, it might be because we just
+        // started up and only have the initial CUP to work with.
+        if let Ok(cup) = self
+            .consensus_pool
+            .validated()
+            .catch_up_package()
+            .get_only_by_height(parent_height)
+        {
+            let (hash, block) = cup.content.block.decompose();
+            if hash == *parent_hash {
+                return Some(block);
+            }
+        }
+
+        None
     }
 }
 
