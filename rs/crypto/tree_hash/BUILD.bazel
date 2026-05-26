@@ -29,14 +29,7 @@ rust_test(
     crate = ":tree_hash",
     deps = [
         # Keep sorted.
-        "//rs/crypto/test_utils/reproducible_rng",
-        "//rs/crypto/tree_hash/test_utils",
-        "@crate_index//:assert_matches",
-        "@crate_index//:criterion",
-        "@crate_index//:maplit",
-        "@crate_index//:proptest",
         "@crate_index//:prost",
-        "@crate_index//:rand",
         "@crate_index//:serde_cbor",
     ],
 )
@@ -57,7 +50,6 @@ rust_test_suite(
         "//rs/crypto/tree_hash/test_utils",
         "//rs/protobuf",
         "@crate_index//:assert_matches",
-        "@crate_index//:criterion",
         "@crate_index//:maplit",
         "@crate_index//:proptest",
         "@crate_index//:prost",
