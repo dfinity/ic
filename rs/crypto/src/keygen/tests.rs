@@ -21,6 +21,7 @@ use ic_crypto_test_utils_keys::public_keys::{
 };
 use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
 use ic_crypto_test_utils_metrics::assertions::MetricsObservationsAssert;
+use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
 use ic_interfaces::crypto::KeyManager;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
@@ -37,8 +38,6 @@ use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
 use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::{RegistryVersion, crypto::KeyPurpose};
-use rand::SeedableRng;
-use rand_chacha::ChaCha20Rng;
 use slog::Level;
 use std::sync::Arc;
 
@@ -1277,6 +1276,7 @@ mod rotate_idkg_dealing_encryption_keys {
         use ic_protobuf::registry::subnet::v1::SubnetListRecord;
         use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 
+        let rng = reproducible_rng();
         let mut vault = MockLocalCspVault::new();
         let mut counter = 0_u8;
         vault
@@ -1350,7 +1350,7 @@ mod rotate_idkg_dealing_encryption_keys {
             node_id(),
             Arc::new(CryptoMetrics::none()),
             Some(Arc::clone(&time_source) as Arc<_>),
-            ChaCha20Rng::from_seed([0_u8; 32]),
+            rng,
         );
         registry_client.reload();
 
@@ -1376,6 +1376,7 @@ mod rotate_idkg_dealing_encryption_keys {
         use ic_protobuf::registry::subnet::v1::SubnetListRecord;
         use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 
+        let rng = reproducible_rng();
         let mut vault = MockLocalCspVault::new();
         let mut counter = 0_u8;
         vault
@@ -1449,7 +1450,7 @@ mod rotate_idkg_dealing_encryption_keys {
             MockAllCryptoServiceProvider::new(),
             vault,
             registry_client.clone(),
-            [0_u8; 32],
+            rng,
         );
 
         registry_client.reload();
@@ -1751,7 +1752,7 @@ mod rotate_idkg_dealing_encryption_keys {
 
 struct Setup {
     metrics_registry: MetricsRegistry,
-    crypto: CryptoComponentImpl<MockAllCryptoServiceProvider, rand_chacha::ChaCha20Rng>,
+    crypto: CryptoComponentImpl<MockAllCryptoServiceProvider, ReproducibleRng>,
     registry_client: Arc<dyn RegistryClient>,
     time_source: Arc<FastForwardTimeSource>,
 }
@@ -1768,6 +1769,7 @@ impl Setup {
             csp_idkg_gen_dealing_encryption_key_pair_result: None,
             logger: None,
             ecdsa_subnet_config: None,
+            rng: reproducible_rng(),
         }
     }
 }
@@ -1786,6 +1788,7 @@ struct SetupBuilder {
         Option<Result<MEGaPublicKey, CspCreateMEGaKeyError>>,
     logger: Option<ReplicaLogger>,
     ecdsa_subnet_config: Option<EcdsaSubnetConfig>,
+    rng: ReproducibleRng,
 }
 
 impl SetupBuilder {
@@ -1972,7 +1975,7 @@ impl SetupBuilder {
             node_id(),
             crypto_metrics,
             Some(Arc::clone(&time_source) as Arc<_>),
-            ChaCha20Rng::from_seed([0_u8; 32]),
+            self.rng,
         );
 
         Setup {
