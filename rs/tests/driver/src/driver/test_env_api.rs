@@ -234,8 +234,8 @@ const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
 pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehavior>>;
 
-pub(crate) const REPLICA_METRICS_PORT: u16 = 9090;
-pub(crate) const ORCHESTRATOR_METRICS_PORT: u16 = 9091;
+pub const REPLICA_METRICS_PORT: u16 = 9090;
+pub const ORCHESTRATOR_METRICS_PORT: u16 = 9091;
 
 pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
     let l = sha256.len();

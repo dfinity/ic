@@ -28,7 +28,10 @@ All connectivity assertions pass as described above.
 end::catalog[] */
 
 use anyhow::Result;
-use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_consensus_system_test_utils::{
+    node::await_subnet_firewall_registry_version_with_retries_async,
+    rw_message::install_nns_and_check_progress,
+};
 use ic_firewall_system_test_utils::execute_add_firewall_rules_proposal;
 use ic_protobuf::registry::{
     firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection},
@@ -47,7 +50,7 @@ use ic_system_test_driver::{
     util::{block_on, get_config},
 };
 use slog::Logger;
-use std::sync::LazyLock;
+use std::{sync::LazyLock, time::Duration};
 
 /// Ports opened only to whitelisted IC nodes.
 static TCP_PORTS_WHITELISTED_ONLY: LazyLock<Vec<u32>> = LazyLock::new(|| {
@@ -96,6 +99,8 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn firewall_correctness_test(env: TestEnv) {
+    let logger = env.logger();
+
     let mut join_handles = vec![];
     let all_nodes = env
         .topology_snapshot()
@@ -107,21 +112,36 @@ pub fn firewall_correctness_test(env: TestEnv) {
         // found in their config file, which whitelists prefixes found in the test environment
         // (which would make nodes accept connections from all other nodes, regardless of their
         // reward types).
-        // The rule allows inbound SSH such that the test driver can still connect to the nodes and
-        // perform the test.
-        add_ssh_only_registry_rule(
+        // The rule allows necessary ports (SSH and the metrics ports) to be open to everyone, such
+        // that the test driver can still connect to the nodes and perform the test
+        add_necessary_ports_registry_rule(
             &env.topology_snapshot()
                 .root_subnet()
                 .nodes()
                 .next()
                 .unwrap(),
-            &env.logger(),
+            &logger,
         )
         .await;
+        let new_registry_version = env
+            .topology_snapshot()
+            .block_for_newer_registry_version()
+            .await
+            .unwrap()
+            .get_registry_version();
 
         // Wait for a while to make sure that all nodes have updated their firewall rules according
         // to the new registry configuration.
-        tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+        for subnet in env.topology_snapshot().subnets() {
+            await_subnet_firewall_registry_version_with_retries_async(
+                &subnet,
+                new_registry_version,
+                &logger,
+                Duration::from_secs(60),
+                Duration::from_secs(10),
+            )
+            .await;
+        }
 
         for node_src in &all_nodes {
             for node_dst in &all_nodes {
@@ -155,14 +175,14 @@ pub fn firewall_correctness_test(env: TestEnv) {
     });
 }
 
-async fn add_ssh_only_registry_rule(nns_node: &IcNodeSnapshot, log: &Logger) {
+async fn add_necessary_ports_registry_rule(nns_node: &IcNodeSnapshot, log: &Logger) {
     let ipv6_prefixes = get_config().firewall.unwrap().default_rules[0]
         .ipv6_prefixes
         .clone();
-    let ssh_only_rule = FirewallRule {
+    let rule = FirewallRule {
         ipv4_prefixes: vec![],
         ipv6_prefixes,
-        ports: vec![22],
+        ports: vec![22, 9090, 9091],
         action: FirewallAction::Allow as i32,
         comment: "Test rule".to_string(),
         user: None,
@@ -172,7 +192,7 @@ async fn add_ssh_only_registry_rule(nns_node: &IcNodeSnapshot, log: &Logger) {
         log,
         nns_node,
         FirewallRulesScope::Global,
-        vec![ssh_only_rule],
+        vec![rule],
         vec![0],
         vec![],
     )
@@ -240,8 +260,6 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(firewall_correctness_test))
-        // The firewall rules block the test driver from fetching metrics
-        .remove_all_metrics_to_check()
         .execute_from_args()?;
     Ok(())
 }
