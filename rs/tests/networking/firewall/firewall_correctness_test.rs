@@ -4,7 +4,7 @@ Title:: Firewall Correctness
 Goal:: Verifies the whitelisted/all port split in the firewall configuration: some
        ports are reachable from all IC nodes (in `all_nodes_tcp_ports_whitelist`),
        while other ports are reachable only from whitelisted IC nodes (they are in
-       `trusted_tcp_ports_for_node_whitelist`) depending on the node's reward type.
+       `whitelisted_nodes_tcp_ports_whitelist`) depending on the node's reward type.
 
 Runbook::
 1. Set up an IC with a system subnet an application subnet, a cloud engine, and an API BN.
@@ -14,10 +14,9 @@ Runbook::
      node on the given port.
    * Assert that the connection can be established if and only if it should be allowed
      according to the firewall rules:
-     * Ports in `trusted_tcp_ports_for_node_whitelist` should only be reachable from
+     * Ports in `whitelisted_nodes_tcp_ports_whitelist` should only be reachable from
        whitelisted nodes.
-     * Ports in `untrusted_tcp_ports_for_node_whitelist` should be reachable from all IC
-       nodes.
+     * Ports in `all_nodes_tcp_ports_whitelist` should be reachable from all IC nodes.
      * Ports not in either whitelist should not be reachable from any node.
 
 Note:: UDP connectivity is not tested in this test, as it is harder to reliably test UDP
