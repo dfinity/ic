@@ -5447,6 +5447,8 @@ fn update_settings_heap_delta_log_memory_limit_none() {
         )
         .unwrap();
 
+    assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
+
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
         settings: CanisterSettingsArgsBuilder::new()
@@ -5477,6 +5479,8 @@ fn update_settings_heap_delta_log_memory_limit_unchanged() {
                 .build(),
         )
         .unwrap();
+
+    assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
 
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
@@ -5513,6 +5517,7 @@ fn update_settings_heap_delta_log_memory_limit_decreased() {
         .log_memory_store_memory_usage();
     // header (4 KiB) + index table (4 KiB) + data region (2 MiB)
     assert_eq!(old_log_memory_usage, NumBytes::new(2 * MIB + 8 * 1024));
+    assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
 
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
@@ -5552,6 +5557,7 @@ fn update_settings_heap_delta_log_memory_limit_increased() {
         .log_memory_store_memory_usage();
     // header (4 KiB) + index table (4 KiB) + data region (1 MiB)
     assert_eq!(old_log_memory_usage, NumBytes::new(MIB + 8 * 1024));
+    assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
 
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
