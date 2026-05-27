@@ -1,6 +1,6 @@
 #![deny(missing_docs)]
 use crate::consensus::{
-    ConsensusCrypto,
+    ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP, ConsensusCrypto,
     metrics::BlockMakerMetrics,
     status::{self, Status},
 };
@@ -189,6 +189,32 @@ impl BlockMaker {
     ) -> Option<BlockProposal> {
         let height = parent.height().increment();
         let certified_height = self.state_reader.latest_certified_height();
+
+        // This hard bound was introduced after the incident on subnet `3hhby` on 2026-05-22.
+        // Checkpointing was slow at an upgrade boundary, and consensus continued creating blocks
+        // until reaching `ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP`, each with a validation
+        // context's certified height equal to the upgrade height minus 1. When checkpointing
+        // finally finished, a new certified height was available, but since the block maker is
+        // always one height ahead of the notary, we had already created a block, also with a
+        // certified height equal to the upgrade height minus 1. The notary would notarize it but
+        // reach the bound again. Since the CUP maker waits for the finalized tip's validation
+        // context's certified height to reach the upgrade height, no CUP was ever created, and the
+        // subnet stalled.
+        // With this bound in place, the block maker is still always one height ahead of the notary
+        // *except* when we reach the bound. In that case, we do not propose a block, and instead
+        // wait until our own certified height has advanced. This would have prevented the stall
+        // described above.
+        if height.get().saturating_sub(certified_height.get())
+            > ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP
+        {
+            warn!(
+                self.log,
+                "Not proposing a block at height {:?} as it would trigger the hard bound between notarization height and certification height {:?}.",
+                height,
+                certified_height
+            );
+            return None;
+        }
 
         // Note that we will skip blockmaking if registry versions or replica_versions
         // are missing or temporarily not retrievable.

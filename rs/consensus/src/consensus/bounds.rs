@@ -91,11 +91,12 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
     ArtifactCounts {
         // We keep (f + 1) blocks for every height in range (h3, h4] (=d), and
         // one finalized block per height in range [h0, h3] (=l-d). The block
-        // maker component may additionally produce a single block above the
-        // notarized height.
-        block_proposals: (f + 1) * d + (l - d) + 1,
-        // The same bounds apply for block proposals and notarizations (with
-        // the exception of the +1 extra block).
+        // maker component can in principle produce an additional single block
+        // above the notarized height, though there is a hard if-check if we
+        // detect that we would cross the bound, and instead do not produce a
+        // block in that case.
+        block_proposals: (f + 1) * d + (l - d),
+        // The same bounds apply for block proposals and notarizations.
         notarizations: (f + 1) * d + (l - d),
         // There can only be one finalization at every height. In the worst
         // case, the chain tip is a finalized block, in which case our upper
