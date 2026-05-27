@@ -166,7 +166,7 @@ impl<'de> serde::Deserialize<'de> for IDkgMasterPublicKeyId {
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct IDkgPayload {
     /// Flag indicating if the deprecated signature agreements hash should be ignored.
-    pub empty_signature_agreements_flag: bool,
+    pub(crate) empty_signature_agreements_flag: bool,
 
     /// IDKG transcript Pre-Signatures that we can use to create threshold signatures.
     pub available_pre_signatures: BTreeMap<PreSigId, PreSignatureRef>,
@@ -219,7 +219,7 @@ impl IDkgPayload {
                 .map(|key_transcript| (key_transcript.key_id(), key_transcript))
                 .collect(),
             uid_generator: IDkgUIDGenerator::new(subnet_id, height),
-            empty_signature_agreements_flag: false,
+            empty_signature_agreements_flag: true,
             available_pre_signatures: BTreeMap::new(),
             pre_signatures_in_creation: BTreeMap::new(),
             idkg_transcripts: BTreeMap::new(),
@@ -416,6 +416,10 @@ impl IDkgPayload {
             .values()
             .map(|pre_sig| pre_sig.key_id().required_pre_sig_capacity())
             .sum()
+    }
+
+    pub fn set_empty_signature_agreements_flag(&mut self) {
+        self.empty_signature_agreements_flag = true;
     }
 }
 
