@@ -3,7 +3,7 @@ use crate::sign::BasicSigVerifierInternal;
 use crate::sign::ThresholdSigDataStore;
 use crate::sign::basic_sig;
 use crate::sign::lazily_calculated_public_key_from_store;
-use crate::{CryptoComponentImpl, LockableThresholdSigDataStore};
+use crate::{CryptoComponentImpl, CryptoComponentRng, LockableThresholdSigDataStore};
 use ic_crypto_internal_bls12_381_vetkd::{
     DerivationContext, EncryptedKeyCombinationError, EncryptedKeyShare,
     EncryptedKeyShareDeserializationError, G2Affine, NodeIndex, PairingInvalidPoint,
@@ -34,7 +34,7 @@ use ic_types::crypto::{BasicSig, BasicSigOf};
 use std::collections::BTreeMap;
 use std::fmt;
 
-impl<C: CryptoServiceProvider> VetKdProtocol for CryptoComponentImpl<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng> VetKdProtocol for CryptoComponentImpl<C, R> {
     #[allow(clippy::result_large_err)]
     fn create_encrypted_key_share(
         &self,

@@ -28,10 +28,7 @@ use ic_types::{
 use ic_types_cycles::CanisterCyclesCostSchedule;
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounter, IntGaugeVec};
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{path::Path, sync::Arc};
 
 use crate::canister_logs::check_log_visibility_permission;
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
@@ -148,7 +145,6 @@ impl Hypervisor {
     pub fn create_execution_state(
         &self,
         canister_module: CanisterModule,
-        canister_root: PathBuf,
         canister_id: CanisterId,
         round_limits: &mut RoundLimits,
         compilation_cost_handling: CompilationCostHandling,
@@ -173,7 +169,6 @@ impl Hypervisor {
 
         let creation_result = self.wasm_executor.create_execution_state(
             canister_module,
-            canister_root,
             canister_id,
             Arc::clone(&self.compilation_cache),
         );

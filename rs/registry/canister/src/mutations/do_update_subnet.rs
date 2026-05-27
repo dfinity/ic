@@ -1,11 +1,14 @@
 use crate::{common::LOG_PREFIX, mutations::common::has_duplicates, registry::Registry};
 use candid::{CandidType, Deserialize};
 use dfn_core::println;
-use ic_base_types::{SubnetId, subnet_id_into_protobuf};
+use ic_base_types::{PrincipalId, SubnetId, subnet_id_into_protobuf};
 use ic_management_canister_types_private::MasterPublicKeyId;
-use ic_protobuf::registry::subnet::v1::{
-    ResourceLimits as ResourceLimitsPb, SubnetFeatures as SubnetFeaturesPb,
-    SubnetRecord as SubnetRecordPb,
+use ic_protobuf::{
+    registry::subnet::v1::{
+        ResourceLimits as ResourceLimitsPb, SubnetFeatures as SubnetFeaturesPb,
+        SubnetRecord as SubnetRecordPb,
+    },
+    types::v1::PrincipalId as PrincipalIdPb,
 };
 use ic_registry_keys::{make_chain_key_enabled_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
@@ -259,6 +262,11 @@ pub struct UpdateSubnetPayload {
     pub ssh_readonly_access: Option<Vec<String>>,
     pub ssh_backup_access: Option<Vec<String>>,
 
+    /// When `Some`, replaces the subnet's admin list with the given principals
+    /// (an empty `Vec` clears the list). `None` leaves the existing list
+    /// unchanged.
+    pub subnet_admins: Option<Vec<PrincipalId>>,
+
     // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
     pub max_artifact_streams_per_peer: Option<u32>,
     pub max_chunk_wait_ms: Option<u32>,
@@ -466,6 +474,7 @@ fn merge_subnet_record(
         max_number_of_canisters,
         ssh_readonly_access,
         ssh_backup_access,
+        subnet_admins,
         // Deprecated/unused values follow
         max_artifact_streams_per_peer: _,
         max_chunk_wait_ms: _,
@@ -512,6 +521,10 @@ fn merge_subnet_record(
 
     maybe_set!(subnet_record, ssh_readonly_access);
     maybe_set!(subnet_record, ssh_backup_access);
+
+    if let Some(subnet_admins) = subnet_admins {
+        subnet_record.subnet_admins = subnet_admins.into_iter().map(PrincipalIdPb::from).collect();
+    }
 
     subnet_record
 }
@@ -560,6 +573,7 @@ mod tests {
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
+            subnet_admins: None,
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
@@ -656,6 +670,7 @@ mod tests {
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
+            subnet_admins: None,
             chain_key_config: Some(chain_key_config.clone()),
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
@@ -774,6 +789,7 @@ mod tests {
             max_number_of_canisters: Some(50),
             ssh_readonly_access: None,
             ssh_backup_access: None,
+            subnet_admins: None,
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
@@ -1565,5 +1581,128 @@ mod tests {
             max_parallel_pre_signature_transcripts_in_creation: None,
         });
         payload
+    }
+
+    /// Adds a rented (Application + Free cost schedule) subnet to the registry,
+    /// so that setting subnet admins is permitted by the registry invariant.
+    fn make_registry_with_rented_subnet() -> (Registry, SubnetId) {
+        let mut registry = invariant_compliant_registry(0);
+
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let mut subnet_list_record = registry.get_subnet_list_record();
+
+        let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
+            .iter()
+            .next()
+            .expect("should contain at least one node ID and key");
+        let mut subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
+        subnet_record.subnet_type = i32::from(SubnetType::Application);
+        subnet_record.canister_cycles_cost_schedule = i32::from(CanisterCyclesCostSchedule::Free);
+
+        let subnet_id = subnet_test_id(1000);
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id,
+            &mut subnet_list_record,
+            subnet_record,
+            &btreemap!(*first_node_id => first_dkg_pk.clone()),
+        ));
+
+        (registry, subnet_id)
+    }
+
+    #[test]
+    fn can_set_subnet_admins() {
+        let (mut registry, subnet_id) = make_registry_with_rented_subnet();
+
+        let user1 = *TEST_USER1_PRINCIPAL;
+        let user2 = *TEST_USER2_PRINCIPAL;
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(vec![user1, user2]);
+
+        registry.do_update_subnet(payload);
+
+        assert_eq!(
+            registry.get_subnet_or_panic(subnet_id).subnet_admins,
+            vec![PrincipalIdPb::from(user1), PrincipalIdPb::from(user2)],
+        );
+    }
+
+    #[test]
+    fn can_clear_subnet_admins() {
+        let (mut registry, subnet_id) = make_registry_with_rented_subnet();
+
+        let user1 = *TEST_USER1_PRINCIPAL;
+
+        // First set an admin.
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(vec![user1]);
+        registry.do_update_subnet(payload);
+        assert_eq!(
+            registry.get_subnet_or_panic(subnet_id).subnet_admins,
+            vec![PrincipalIdPb::from(user1)],
+        );
+
+        // Then clear it via Some(vec![]).
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(vec![]);
+        registry.do_update_subnet(payload);
+        assert_eq!(
+            registry.get_subnet_or_panic(subnet_id).subnet_admins,
+            Vec::<PrincipalIdPb>::new(),
+        );
+    }
+
+    #[test]
+    fn none_subnet_admins_leaves_existing_admins_unchanged() {
+        let (mut registry, subnet_id) = make_registry_with_rented_subnet();
+
+        let user1 = *TEST_USER1_PRINCIPAL;
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(vec![user1]);
+        registry.do_update_subnet(payload);
+
+        // A subsequent update with `subnet_admins: None` must not change the list.
+        let payload = make_empty_update_payload(subnet_id);
+        registry.do_update_subnet(payload);
+
+        assert_eq!(
+            registry.get_subnet_or_panic(subnet_id).subnet_admins,
+            vec![PrincipalIdPb::from(user1)],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "subnet admins, which exceeds the maximum of")]
+    fn cannot_set_more_than_max_subnet_admins() {
+        let (mut registry, subnet_id) = make_registry_with_rented_subnet();
+
+        // 11 admins exceeds MAX_SUBNET_ADMINS (10).
+        let admins = (0..11_u64)
+            .map(|i| PrincipalId::new_user_test_id(2000 + i))
+            .collect::<Vec<_>>();
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(admins);
+
+        registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "is not a rented or cloud engine subnet but has a non-empty subnet admins list"
+    )]
+    fn cannot_set_subnet_admins_on_non_rented_subnet() {
+        // Use the default test fixture which produces an Application + Normal subnet
+        // (not rented), so setting admins must violate the invariant.
+        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(vec![*TEST_USER1_PRINCIPAL]);
+
+        registry.do_update_subnet(payload);
     }
 }

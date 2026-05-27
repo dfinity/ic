@@ -105,6 +105,7 @@ def main():
         help="Extra files to install; expects list of sourcefile:targetfile:mode",
     )
     parser.add_argument("--dflate", help="Path to our dflate tool", type=str)
+    parser.add_argument("--mkfs-vfat", help="Path to mkfs.vfat binary", type=str, required=True)
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -129,7 +130,7 @@ def main():
 
     os.close(os.open(image_file, os.O_CREAT | os.O_RDWR | os.O_CLOEXEC | os.O_EXCL, 0o600))
     os.truncate(image_file, image_size)
-    subprocess.run(["/usr/sbin/mkfs.vfat", "-i", "0", image_file], check=True)
+    subprocess.run([args.mkfs_vfat, "-i", "0", image_file], check=True)
 
     if in_file:
         with tarfile.open(in_file, mode="r|*") as tf:
