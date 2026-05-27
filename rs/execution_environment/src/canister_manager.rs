@@ -315,6 +315,10 @@ impl CanisterManager {
 
     /// Validates the new canister settings and applies them to the canister.
     ///
+    /// Returns the heap delta increase due to applying the new canister settings.
+    /// The heap delta increase must be accounted for by the caller, e.g.,
+    /// by returning it as part of `CanisterManagerResponse`.
+    ///
     /// `canister: &mut CanisterState` and `round_limits: &mut RoundLimits`
     /// are updated in-place and changes must be reverted by the caller
     /// of this function in case of `Err`.
