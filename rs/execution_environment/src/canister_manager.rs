@@ -561,7 +561,7 @@ impl CanisterManager {
                 .log_memory_store
                 .would_resize(requested_limit.get() as usize);
             let log_bytes_used =
-                 NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64);
+                NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64);
             if log_resize_needed {
                 heap_delta_increase = log_bytes_used;
             }
