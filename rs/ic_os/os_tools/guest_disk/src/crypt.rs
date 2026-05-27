@@ -3,7 +3,10 @@ use anyhow::{Context, Result, anyhow, bail, ensure};
 use itertools::Either::Right;
 use libcryptsetup_rs::consts::flags::{CryptActivate, CryptPbkdf, CryptVolumeKey};
 use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat, KeyslotInfo};
-use libcryptsetup_rs::{CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle};
+use libcryptsetup_rs::{
+    CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle, CryptTokenInfo, TokenInput,
+};
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::fs::File;
 use std::os::unix::fs::PermissionsExt;
@@ -20,6 +23,49 @@ const PBKDF_TYPE: CryptKdf = CryptKdf::Pbkdf2;
 const PBKDF_ITERATIONS: u32 = 1000;
 /// Number of key slots supported by LUKS2
 const LUKS2_N_KEY_SLOTS: u32 = 32;
+/// Number of tokens supported by LUKS2
+pub const LUKS2_N_TOKENS: u32 = 32;
+const IC_KEY_TOKEN_TYPE: &str = "ic-key-metadata";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeyslotMetadata {
+    #[serde(rename = "type")]
+    token_type: String,
+    pub keyslots: Vec<String>,
+    pub sev_metadata: SevMetadata,
+    // Note: this type is serialized and stored on disk. When adding a new field, make sure to
+    // set the type to Optional or mark it with #[serde(default)].
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SevMetadata {
+    pub launch_measurement_hex: String,
+    pub tcb_version: u64,
+    // Note: this type is serialized and stored on disk. When adding a new field, make sure to
+    // set the type to Optional or mark it with #[serde(default)].
+}
+
+impl KeyslotMetadata {
+    pub fn new_sev(keyslot: u32, sev_metadata: SevMetadata) -> Self {
+        Self {
+            token_type: IC_KEY_TOKEN_TYPE.to_string(),
+            keyslots: vec![keyslot.to_string()],
+            sev_metadata,
+        }
+    }
+
+    pub fn keyslot(&self) -> Result<u32> {
+        if self.keyslots.len() != 1 {
+            bail!(
+                "Token must have exactly one keyslot, but found {:?}",
+                self.keyslots
+            );
+        }
+        self.keyslots[0]
+            .parse()
+            .context("Keyslot is not a valid number")
+    }
+}
 
 #[derive(Debug)]
 pub(crate) struct LuksParameters {
@@ -156,7 +202,7 @@ pub fn format_crypt_device(
     device_path: &Path,
     header_location: LuksHeaderLocation,
     encryption_key: &[u8],
-) -> Result<CryptDevice> {
+) -> Result<(CryptDevice, u32)> {
     if let LuksHeaderLocation::Detached(header_path) = header_location {
         File::create(header_path)
             .context("Failed to create detached LUKS header file")?
@@ -180,12 +226,12 @@ pub fn format_crypt_device(
             None,
         )
         .context("Failed to call format")?;
-    crypt_device
+    let keyslot = crypt_device
         .keyslot_handle()
         .add_by_key(None, None, encryption_key, CryptVolumeKey::empty())
         .context("Could not add key to cryptographic device")?;
 
-    Ok(crypt_device)
+    Ok((crypt_device, keyslot))
 }
 
 /// Opens a LUKS2 device at the specified path, loads its context, and prepares handle-local
@@ -461,6 +507,126 @@ pub fn destroy_key_slots_except(
             }
         }
     }
+
+    remove_unassigned_tokens(crypt_device)?;
+
+    Ok(())
+}
+
+fn remove_unassigned_tokens(crypt_device: &mut CryptDevice) -> Result<()> {
+    for token_id in ic_key_token_ids(crypt_device) {
+        if should_remove_token(crypt_device, token_id) {
+            crypt_device
+                .token_handle()
+                .json_set(TokenInput::RemoveToken(token_id))?;
+        }
+    }
+
+    Ok(())
+}
+
+fn should_remove_token(crypt_device: &mut CryptDevice, token_id: u32) -> bool {
+    let Ok(token_json) = crypt_device.token_handle().json_get(token_id as _) else {
+        debug_assert!(false, "Failed to read token {token_id} for IC key metadata");
+        warn!("Failed to read token {token_id} for IC key metadata, will remove it");
+        return true;
+    };
+
+    let Some(object) = token_json.as_object() else {
+        debug_assert!(
+            false,
+            "Token {token_id} for IC key metadata is not an object"
+        );
+        warn!("Token {token_id} for IC key metadata is not an object, will remove it");
+        return true;
+    };
+
+    let Some(keyslots) = object.get("keyslots") else {
+        debug_assert!(
+            false,
+            "Token {token_id} for IC key metadata does not contain keyslots"
+        );
+        warn!("Token {token_id} for IC key metadata does not contain keyslots, will remove it");
+        return true;
+    };
+
+    let Some(keyslots) = keyslots.as_array() else {
+        debug_assert!(
+            false,
+            "Token {token_id} for IC key metadata keyslots is not an array"
+        );
+        warn!("Token {token_id} for IC key metadata keyslots is not an array, will remove it");
+        return true;
+    };
+
+    keyslots.is_empty()
+}
+
+fn ic_key_token_ids(crypt_device: &mut CryptDevice) -> Vec<u32> {
+    (0..LUKS2_N_TOKENS)
+        .filter(|&token_id| {
+            matches!(
+                crypt_device.token_handle().status(token_id),
+                Ok(CryptTokenInfo::External(ref token_type)
+                    | CryptTokenInfo::ExternalUnknown(ref token_type))
+                    if token_type == IC_KEY_TOKEN_TYPE
+            )
+        })
+        .collect()
+}
+
+fn collect_keyslot_metadata(
+    token_metadata_results: impl IntoIterator<Item = Result<KeyslotMetadata>>,
+) -> Result<Vec<KeyslotMetadata>> {
+    let mut metadata = Vec::new();
+    let mut errors = Vec::new();
+
+    for token_metadata in token_metadata_results {
+        match token_metadata {
+            Ok(token_metadata) => metadata.push(token_metadata),
+            Err(err) => {
+                debug_assert!(false, "Failed to read key-slot metadata token: {err:#}");
+                warn!("Failed to read key-slot metadata token: {err:#}");
+                errors.push(err);
+            }
+        }
+    }
+
+    if !errors.is_empty() && metadata.is_empty() {
+        bail!("All IC key-slot metadata tokens are malformed: {errors:#?}");
+    }
+
+    Ok(metadata)
+}
+
+pub fn read_keyslot_metadata(crypt_device: &mut CryptDevice) -> Result<Vec<KeyslotMetadata>> {
+    collect_keyslot_metadata(ic_key_token_ids(crypt_device).into_iter().map(|token_id| {
+        let json = crypt_device
+            .token_handle()
+            .json_get(token_id)
+            .with_context(|| format!("Failed to read IC key metadata token {token_id}"))?;
+        let metadata = serde_json::from_value::<KeyslotMetadata>(json)
+            .with_context(|| format!("Failed to parse IC key metadata token {token_id}"))?;
+        metadata
+            .keyslot()
+            .with_context(|| format!("Invalid keyslot in IC key metadata token {token_id}"))?;
+        Ok(metadata)
+    }))
+}
+
+pub fn add_sev_metadata(
+    crypt_device: &mut CryptDevice,
+    keyslot: u32,
+    sev_metadata: SevMetadata,
+) -> Result<()> {
+    let json = serde_json::to_value(KeyslotMetadata::new_sev(keyslot, sev_metadata))
+        .context("Failed to serialize key slot metadata")?;
+
+    crypt_device
+        .token_handle()
+        .json_set(TokenInput::AddToken(&json))
+        .context("Failed to write LUKS2 token")?;
+
     Ok(())
 }
 
@@ -529,5 +695,35 @@ mod tests {
         let err = verify_luks_parameters(&luks_parameters).unwrap_err();
 
         assert!(format!("{err:#}").contains("Unexpected encryption format"));
+    }
+
+    #[test]
+    fn collect_keyslot_metadata_keeps_valid_results_when_some_reads_fail() {
+        let metadata = collect_keyslot_metadata([
+            Ok(KeyslotMetadata::new_sev(
+                7,
+                SevMetadata {
+                    launch_measurement_hex: "abcd".to_string(),
+                    tcb_version: 42,
+                },
+            )),
+            Err(anyhow!("malformed token")),
+        ])
+        .unwrap();
+
+        assert_eq!(metadata.len(), 1);
+        assert_eq!(metadata[0].keyslot().unwrap(), 7);
+        assert_eq!(metadata[0].sev_metadata.tcb_version, 42);
+    }
+
+    #[test]
+    fn collect_keyslot_metadata_errors_when_all_reads_fail() {
+        let err = collect_keyslot_metadata([
+            Err(anyhow!("malformed token 1")),
+            Err(anyhow!("malformed token 2")),
+        ])
+        .unwrap_err();
+
+        assert!(format!("{err:#}").contains("All IC key-slot metadata tokens are malformed"),);
     }
 }

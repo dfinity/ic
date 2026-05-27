@@ -1,10 +1,14 @@
 use crate::crypt::{
-    LuksHeaderLocation, activate_crypt_device, backup_luks_header_to_file, check_encryption_key,
-    destroy_key_slots_except, format_crypt_device,
+    KeyslotMetadata, LuksHeaderLocation, SevMetadata, activate_crypt_device, add_sev_metadata,
+    backup_luks_header_to_file, check_encryption_key, destroy_key_slots_except,
+    format_crypt_device,
 };
 use crate::{DiskEncryption, Partition, activate_flags};
 use anyhow::{Context, Result, bail};
+use attestation::attestation_report::AttestationReportExt;
 use config_types::GuestVMType;
+use sev::firmware::guest::AttestationReport;
+use sev::parser::ByteParser;
 use sev_guest::firmware::SevGuestFirmware;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use std::path::{Path, PathBuf};
@@ -55,6 +59,7 @@ impl SevDiskEncryption {
         device_path: &Path,
         crypt_name: &str,
         new_key: &[u8],
+        sev_metadata: &SevMetadata,
     ) -> Result<()> {
         let previous_key = std::fs::read(&self.previous_key_path).with_context(|| {
             format!(
@@ -75,10 +80,13 @@ impl SevDiskEncryption {
         .context("Failed to unlock store partition with previous key")?;
 
         info!("Adding new SEV key to store partition");
-        crypt_device
+        let new_keyslot = crypt_device
             .keyslot_handle()
             .add_by_passphrase(None, &previous_key, new_key)
             .context("Failed to add new key to store partition")?;
+
+        add_sev_metadata(&mut crypt_device, new_keyslot, sev_metadata.clone())
+            .context("Failed to write SEV key-slot metadata")?;
 
         info!("Removing old key slots from store partition");
         // Keep the key slot that was used to unlock the partition with the previous key.
@@ -107,6 +115,22 @@ impl SevDiskEncryption {
         }
 
         Ok(())
+    }
+
+    fn get_sev_metadata_for_luks(&mut self) -> Result<SevMetadata> {
+        let report_bytes = self
+            .sev_firmware
+            .get_report(None, None, None)
+            .context("Failed to get attestation report from SEV firmware")?;
+        let report = AttestationReport::from_bytes(&report_bytes)
+            .context("Failed to parse attestation report")?;
+
+        Ok(SevMetadata {
+            launch_measurement_hex: hex::encode(report.measurement),
+            tcb_version: report
+                .launch_tcb_as_u64()
+                .context("Failed to get launch TCB from attestation report")?,
+        })
     }
 }
 
@@ -144,10 +168,12 @@ impl DiskEncryption for SevDiskEncryption {
                         "Unlocking store with existing key from {}",
                         self.previous_key_path.display()
                     );
+                    let sev_metadata = self.get_sev_metadata_for_luks()?;
                     match self.setup_store_with_previous_key(
                         device_path,
                         crypt_name,
                         key.as_bytes(),
+                        &sev_metadata,
                     ) {
                         Ok(()) => return Ok(()),
                         Err(err) => {
@@ -188,12 +214,16 @@ impl DiskEncryption for SevDiskEncryption {
         )
         .context("Failed to derive SEV key for disk encryption")?;
 
+        let sev_metadata = self.get_sev_metadata_for_luks()?;
         // For now, we use attached headers and for store partition, we create a detached
         // backup. Once all GuestOS-s support detached headers, we can switch to using only detached
         // headers.
         // TODO: Remove attached header usage for store partition
-        format_crypt_device(device_path, LuksHeaderLocation::Attached, key.as_bytes())
-            .context("Failed to format partition")?;
+        let (mut crypt_device, keyslot) =
+            format_crypt_device(device_path, LuksHeaderLocation::Attached, key.as_bytes())
+                .context("Failed to format partition")?;
+        add_sev_metadata(&mut crypt_device, keyslot, sev_metadata)
+            .context("Failed to write SEV key-slot metadata")?;
 
         if partition == Partition::Store {
             self.ensure_detached_store_luks_header(device_path)?;
