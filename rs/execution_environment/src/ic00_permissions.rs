@@ -26,13 +26,20 @@ pub struct Ic00MethodPermissions {
 impl Ic00MethodPermissions {
     pub fn new(method: Ic00Method) -> Self {
         match method {
+            Ic00Method::UpdateSettings => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+                counts_toward_round_limit: true,
+                does_not_run_on_aborted_canister: false,
+                installs_code: false,
+            },
             Ic00Method::CanisterStatus
             | Ic00Method::CanisterInfo
             | Ic00Method::CanisterMetadata
             | Ic00Method::DepositCycles
             | Ic00Method::ECDSAPublicKey
             | Ic00Method::SignWithECDSA
-            | Ic00Method::UpdateSettings
             | Ic00Method::SchnorrPublicKey
             | Ic00Method::SignWithSchnorr
             | Ic00Method::VetKdPublicKey
