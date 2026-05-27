@@ -6,8 +6,8 @@ use candid::{Encode, Nat, Principal, candid_method};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{LogEntry, Sink};
 use ic_cdk::api::{
-    data_certificate, debug_print as print, instruction_counter, msg_arg_data as arg_data_raw,
-    msg_caller as caller, msg_reply as reply_raw, certified_data_set, time, trap,
+    certified_data_set, data_certificate, debug_print as print, instruction_counter,
+    msg_arg_data as arg_data_raw, msg_caller as caller, msg_reply as reply_raw, time, trap,
 };
 use ic_cdk::futures::internals::{in_executor_context, in_query_executor_context};
 use ic_cdk::{post_upgrade, pre_upgrade, query, update};
