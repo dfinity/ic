@@ -1,15 +1,22 @@
 use super::*;
 use crate::canister_state::canister_snapshots::CanisterSnapshots;
-use crate::{CanisterState, ExecutionTask, InputQueueType, SchedulerState, SystemState};
+use crate::canister_state::execution_state::{WasmBinary, WasmMetadata};
+use crate::canister_state::system_state::testing::SystemStateTesting;
+use crate::{
+    CallContextManager, CanisterState, CanisterStatus, ExecutionState, ExecutionTask,
+    ExportedFunctions, InputQueueType, Memory, SchedulerState, SystemState,
+};
 use ic_base_types::NumSeconds;
 use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::messages::{CallContextId, NO_DEADLINE, RequestOrResponse};
-use ic_types::methods::{Callback, WasmClosure};
+use ic_types::methods::{Callback, SystemMethod, WasmClosure, WasmMethod};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
-use ic_types::{ComputeAllocation, NumBytes};
+use ic_types::{CanisterTimer, ComputeAllocation, NumBytes, NumInstructions, Time};
 use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
+use ic_wasm_types::CanisterModule;
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 fn make_canister(id: u64) -> Arc<CanisterState> {
@@ -42,6 +49,16 @@ fn push_input(canister: &mut Arc<CanisterState>) {
             SubnetType::Application,
             InputQueueType::RemoteSubnet,
         )
+        .unwrap();
+}
+
+fn push_output(canister: &mut Arc<CanisterState>) {
+    let msg = RequestBuilder::default()
+        .sender(canister.canister_id())
+        .receiver(canister_test_id(999))
+        .build();
+    Arc::make_mut(canister)
+        .push_output_request(Arc::new(msg), UNIX_EPOCH)
         .unwrap();
 }
 
@@ -92,12 +109,95 @@ fn canister_with_input_is_not_cold() {
 }
 
 #[test]
+fn canister_with_output_is_not_cold() {
+    let mut canister = make_canister(1);
+    push_output(&mut canister);
+    assert!(!canister.is_cold());
+}
+
+#[test]
 fn canister_with_pending_task_is_not_cold() {
     let mut canister = make_canister(1);
     Arc::make_mut(&mut canister)
         .system_state
         .task_queue
         .enqueue(ExecutionTask::Heartbeat);
+    assert!(!canister.is_cold());
+}
+
+#[test]
+fn canister_with_heartbeat_method_is_not_cold() {
+    let mut canister = make_canister(1);
+    Arc::make_mut(&mut canister).execution_state = Some(ExecutionState::new(
+        WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
+        ExportedFunctions::new(BTreeSet::from([WasmMethod::System(
+            SystemMethod::CanisterHeartbeat,
+        )])),
+        Memory::new_for_testing(),
+        Memory::new_for_testing(),
+        vec![],
+        WasmMetadata::default(),
+    ));
+    assert!(!canister.is_cold());
+}
+
+#[test]
+fn canister_with_active_global_timer_is_not_cold() {
+    let mut canister = make_canister(1);
+    Arc::make_mut(&mut canister).system_state.global_timer =
+        CanisterTimer::Active(Time::from_nanos_since_unix_epoch(1));
+    assert!(!canister.is_cold());
+}
+
+#[test]
+fn stopping_canister_is_not_cold() {
+    let mut canister = make_canister(1);
+    Arc::make_mut(&mut canister)
+        .system_state
+        .set_status(CanisterStatus::Stopping {
+            call_context_manager: CallContextManager::default(),
+            stop_contexts: vec![],
+        });
+    assert!(!canister.is_cold());
+}
+
+#[test]
+fn canister_with_unexpired_callback_is_not_cold() {
+    let mut canister = make_canister(1);
+    Arc::make_mut(&mut canister).system_state.with_callback(
+        canister_test_id(999),
+        CoarseTime::from_secs_since_unix_epoch(1),
+    );
+    assert!(!canister.is_cold());
+}
+
+#[test]
+fn canister_with_expired_callback_is_cold() {
+    // A `NO_DEADLINE` (i.e. guaranteed-response) callback never enters the
+    // `unexpired_callbacks` set, so it does not by itself prevent the canister
+    // from being classified as cold.
+    let mut canister = make_canister(1);
+    Arc::make_mut(&mut canister)
+        .system_state
+        .with_callback(canister_test_id(999), NO_DEADLINE);
+    assert!(canister.is_cold());
+}
+
+#[test]
+fn canister_with_heap_delta_debit_is_not_cold() {
+    let mut canister = make_canister(1);
+    Arc::make_mut(&mut canister)
+        .scheduler_state
+        .heap_delta_debit = NumBytes::new(1);
+    assert!(!canister.is_cold());
+}
+
+#[test]
+fn canister_with_install_code_debit_is_not_cold() {
+    let mut canister = make_canister(1);
+    Arc::make_mut(&mut canister)
+        .scheduler_state
+        .install_code_debit = NumInstructions::new(1);
     assert!(!canister.is_cold());
 }
 
@@ -200,7 +300,21 @@ fn remove_updates_cold_stats() {
     let mut states = CanisterStates::default();
     let canister = cold_canister(1);
     states.insert(Arc::clone(&canister));
+    assert_eq!(states.hot.len(), 0);
     assert_eq!(states.cold.len(), 1);
+
+    states.remove(&canister.canister_id());
+    assert_eq!(states.hot.len(), 0);
+    assert_eq!(states.cold.len(), 0);
+}
+
+#[test]
+fn remove_takes_canister_from_hot_pool() {
+    let mut states = CanisterStates::default();
+    let canister = hot_canister(1);
+    states.insert(Arc::clone(&canister));
+    assert_eq!(states.hot.len(), 1);
+    assert_eq!(states.cold.len(), 0);
 
     states.remove(&canister.canister_id());
     assert_eq!(states.hot.len(), 0);
@@ -237,6 +351,21 @@ fn try_cool_leaves_non_cold_in_hot() {
 
     assert_eq!(states.hot.len(), 1);
     assert_eq!(states.cold.len(), 0);
+}
+
+#[test]
+fn try_cool_leaves_cold_in_cold() {
+    let mut states = CanisterStates::default();
+    let canister = cold_canister(1);
+    states.insert(canister.clone());
+
+    assert_eq!(states.hot.len(), 0);
+    assert_eq!(states.cold.len(), 1);
+
+    assert!(!states.try_cool(&canister.canister_id()));
+
+    assert_eq!(states.hot.len(), 0);
+    assert_eq!(states.cold.len(), 1);
 }
 
 #[test]

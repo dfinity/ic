@@ -28,6 +28,7 @@ use ic_base_types::NumBytes;
 use ic_types::CanisterId;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 use std::iter::Peekable;
@@ -226,17 +227,13 @@ impl CanisterStates {
             Entry::Occupied(entry) => Some(entry.into_mut()),
 
             Entry::Vacant(entry) => {
-                if let Some(canister) = self.cold.remove(id) {
-                    // Was in the `cold` pool, update the stats and promote it.
-                    self.cold_stats.sub(canister.as_ref());
-                    let canister = entry.insert(canister);
-                    // Unfortunately, the borrow checker won't let us do this here.
-                    // self.debug_assert_invariants();
-                    Some(canister)
-                } else {
-                    // Also not in the `cold` pool, so not present.
-                    None
-                }
+                let canister = self.cold.remove(id)?;
+                // Was in the `cold` pool, update the stats and promote it.
+                self.cold_stats.sub(canister.as_ref());
+                let canister = entry.insert(canister);
+                // Unfortunately, the borrow checker won't let us do this here.
+                // self.debug_assert_invariants();
+                Some(canister)
             }
         }
     }
@@ -324,17 +321,14 @@ impl CanisterStates {
     ///
     /// Complexity: `O(|hot|)`.
     pub fn try_cool_all(&mut self) {
-        let to_cool: Vec<CanisterId> = self
-            .hot
-            .iter()
-            .filter(|(_, canister)| canister.is_cold())
-            .map(|(id, _)| *id)
-            .collect();
-        for id in to_cool {
-            let canister = self.hot.remove(&id).unwrap();
-            self.cold_stats.add(canister.as_ref());
-            self.cold.insert(id, canister);
-        }
+        self.cold.extend(self.hot.extract_if(.., |_, canister| {
+            if canister.is_cold() {
+                self.cold_stats.add(canister.as_ref());
+                true
+            } else {
+                false
+            }
+        }));
         self.debug_assert_invariants();
     }
 
@@ -400,26 +394,22 @@ impl CanisterStates {
             f(id, canister);
         }
 
-        // Cold pool: iterate in place. Because the closure can mutate fields
-        // that affect `cold_stats` or `is_cold()`, we conservatively subtract
-        // each canister's pre-call contribution before running `f`, then
-        // either re-add (if it stays cold) or queue it for promotion to
-        // `hot` (if `f` flipped it into a non-cold state).
-        let mut to_promote: Vec<CanisterId> = Vec::new();
-        for (id, canister) in self.cold.iter_mut() {
+        // Cold pool: iterate in place, removing all canisters that are no longer cold
+        // after calling `f` and moving them to `hot`. Because `f` may also alter the
+        // canister's stats, conservatively subtract them from `cold_stats` then add
+        // them back iff the canister stayed cold.
+        self.hot.extend(self.cold.extract_if(.., |id, canister| {
             self.cold_stats.sub(canister.as_ref());
             f(id, canister);
             if canister.is_cold() {
+                // Restore the (potentially changed) stats and retain it in `cold`.
                 self.cold_stats.add(canister.as_ref());
+                false
             } else {
-                to_promote.push(*id);
+                // Hot canister, promote it.
+                true
             }
-        }
-        // Promote all canisters that are now hot.
-        for id in to_promote {
-            let canister = self.cold.remove(&id).unwrap();
-            self.hot.insert(id, canister);
-        }
+        }));
 
         // Demote all canisters that are now cold.
         self.try_cool_all();
@@ -432,54 +422,49 @@ impl CanisterStates {
     where
         F: FnMut(&CanisterId, &mut Arc<CanisterState>) -> Result<(), E>,
     {
-        let mut result = Ok(());
-
         // Hot pool: short-circuit on the first error.
-        for (id, canister) in self.hot.iter_mut() {
-            if let Err(e) = f(id, canister) {
-                result = Err(e);
-                break;
-            }
-        }
+        let result = RefCell::new(self.hot.iter_mut().try_for_each(|(id, c)| f(id, c)));
 
         // Cold pool: same in-place strategy as `for_each_mut`, but short-circuit
         // on `Err`. We always restore the partition / stats for the canister we
         // were visiting when the error occurred, then propagate the error.
-        let mut to_promote: Vec<CanisterId> = Vec::new();
-        if result.is_ok() {
-            for (id, canister) in self.cold.iter_mut() {
+        if !result.borrow().is_err() {
+            // Iterator that calls `f` storing its output in `result`, extracts newly hot
+            // canisters and updates `cold_stats`.
+            let to_promote = self.cold.extract_if(.., |id, canister| {
                 self.cold_stats.sub(canister.as_ref());
-                let res = f(id, canister);
+                *result.borrow_mut() = f(id, canister);
                 if canister.is_cold() {
+                    // Restore the (potentially changed) stats and retain it in `cold`.
                     self.cold_stats.add(canister.as_ref());
+                    false
                 } else {
-                    to_promote.push(*id);
+                    // Hot canister, promote it.
+                    true
                 }
-                if let Err(e) = res {
-                    result = Err(e);
+            });
+            // Consumes the iterator adding its output to `hot`. Short-circuits on `Err`.
+            for (id, canister) in to_promote {
+                self.hot.insert(id, canister);
+                if result.borrow().is_err() {
                     break;
                 }
             }
-        }
-        // Promote all canisters that are now hot.
-        for id in to_promote {
-            let canister = self.cold.remove(&id).unwrap();
-            self.hot.insert(id, canister);
         }
 
         // Demote all canisters that are now cold.
         self.try_cool_all();
         self.debug_assert_invariants();
-        result
+        result.into_inner()
     }
 
     /// Retains only the canisters for which the predicate returns true, updating
     /// `cold_stats` to account for any cold canister that was removed.
     ///
     /// Iterates both pools.
-    pub fn retain<F>(&mut self, f: F)
+    pub fn retain<F>(&mut self, mut f: F)
     where
-        F: Fn(&CanisterId, &Arc<CanisterState>) -> bool,
+        F: FnMut(&CanisterId, &Arc<CanisterState>) -> bool,
     {
         self.hot.retain(|id, c| f(id, c));
         self.cold.retain(|id, c| {
