@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use async_trait::async_trait;
 use candid::utils::{ArgumentDecoder, ArgumentEncoder};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -41,11 +40,11 @@ pub struct CdkRuntime;
 #[async_trait]
 impl Runtime for CdkRuntime {
     fn id() -> CanisterId {
-        CanisterId::unchecked_from_principal(PrincipalId::from(ic_cdk::api::id()))
+        CanisterId::unchecked_from_principal(PrincipalId::from(ic_cdk::api::canister_self()))
     }
 
     fn print(msg: impl AsRef<str>) {
-        ic_cdk::api::print(msg)
+        ic_cdk::api::debug_print(msg)
     }
 
     async fn call<In, Out>(
@@ -59,8 +58,20 @@ impl Runtime for CdkRuntime {
         Out: for<'a> ArgumentDecoder<'a>,
     {
         let principal_id = PrincipalId::from(id);
-        ic_cdk::api::call::call_with_payment(principal_id.into(), method, args, cycles)
+        let response = ic_cdk::call::Call::unbounded_wait(principal_id.into(), method)
+            .with_args(&args)
+            .with_cycles(cycles as u128)
             .await
-            .map_err(|(code, msg)| (code as i32, msg))
+            .map_err(|err| match err {
+                ic_cdk::call::CallFailed::CallRejected(rejected) => (
+                    rejected.raw_reject_code() as i32,
+                    rejected.reject_message().to_string(),
+                ),
+                ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(e) => (1, e.to_string()),
+                ic_cdk::call::CallFailed::CallPerformFailed(e) => (1, e.to_string()),
+            })?;
+        response
+            .candid_tuple::<Out>()
+            .map_err(|err| (5, err.to_string()))
     }
 }
