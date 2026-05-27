@@ -5430,10 +5430,10 @@ fn upload_chunk_increases_subnet_heap_delta() {
 }
 
 // Creates a canister with `initial_log_limit`, installs the universal canister,
-// emits a log message via debug_print, and returns the test environment together
+// emits log messages via debug_print, and returns the test environment together
 // with the canister id, the number of log bytes stored, and the heap delta
-// accumulated before the caller's update_settings call.
-fn setup_update_settings_heap_delta_test(
+// accumulated so far.
+fn setup_canister_log_heap_delta_test(
     initial_log_limit: u64,
 ) -> (ExecutionTest, CanisterId, NumBytes, NumBytes) {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
@@ -5482,7 +5482,7 @@ fn setup_update_settings_heap_delta_test(
 fn update_settings_heap_delta_log_memory_limit_none() {
     const MIB: u64 = 1024 * 1024;
     let (mut test, canister_id, _log_bytes_used, heap_delta_before) =
-        setup_update_settings_heap_delta_test(MIB);
+        setup_canister_log_heap_delta_test(MIB);
 
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
@@ -5502,7 +5502,7 @@ fn update_settings_heap_delta_log_memory_limit_none() {
 fn update_settings_heap_delta_log_memory_limit_unchanged() {
     const MIB: u64 = 1024 * 1024;
     let (mut test, canister_id, _log_bytes_used, heap_delta_before) =
-        setup_update_settings_heap_delta_test(MIB);
+        setup_canister_log_heap_delta_test(MIB);
 
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
@@ -5524,7 +5524,7 @@ fn update_settings_heap_delta_log_memory_limit_unchanged() {
 fn update_settings_heap_delta_log_memory_limit_decreased() {
     const MIB: u64 = 1024 * 1024;
     let (mut test, canister_id, log_bytes_used, heap_delta_before) =
-        setup_update_settings_heap_delta_test(2 * MIB);
+        setup_canister_log_heap_delta_test(2 * MIB);
 
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
@@ -5548,7 +5548,7 @@ fn update_settings_heap_delta_log_memory_limit_decreased() {
 fn update_settings_heap_delta_log_memory_limit_decreased_to_zero() {
     const MIB: u64 = 1024 * 1024;
     let (mut test, canister_id, _log_bytes_used, heap_delta_before) =
-        setup_update_settings_heap_delta_test(MIB);
+        setup_canister_log_heap_delta_test(MIB);
 
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
@@ -5569,12 +5569,11 @@ fn update_settings_heap_delta_log_memory_limit_decreased_to_zero() {
 #[test]
 fn update_settings_heap_delta_log_memory_limit_decreased_record_dropped() {
     // Each stored record is 2120 bytes (20-byte header + 2100-byte content).
-    // DATA_CAPACITY_MIN = one OS page = 4096 bytes: 2120 < 4096 ≤ 2 × 2120,
-    // so exactly one record fits after downsizing to one page.
+    // 2120 < 4096 ≤ 2 × 2120 so exactly one record fits after downsizing to one page.
     const RECORD_SIZE: u64 = (20 + 2100) as u64;
     // Initial limit: two pages, comfortably holding both records (4240 bytes).
     let (mut test, canister_id, log_bytes_used, heap_delta_before) =
-        setup_update_settings_heap_delta_test(2 * 4096);
+        setup_canister_log_heap_delta_test(2 * 4096);
     assert_eq!(log_bytes_used, NumBytes::new(2 * RECORD_SIZE));
 
     // Downsize to one page (4096 bytes): the oldest record is evicted so the
@@ -5608,7 +5607,7 @@ fn update_settings_heap_delta_log_memory_limit_decreased_record_dropped() {
 fn update_settings_heap_delta_log_memory_limit_increased() {
     const MIB: u64 = 1024 * 1024;
     let (mut test, canister_id, log_bytes_used, heap_delta_before) =
-        setup_update_settings_heap_delta_test(MIB);
+        setup_canister_log_heap_delta_test(MIB);
 
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
