@@ -2705,7 +2705,7 @@ fn test_log_memory_store_upgrade_downgrade() {
     // and produce log entries that land in canister_log (legacy storage).
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
-            SubnetConfig::new(subnet_type),
+            SubnetConfig::new(subnet_type, false),
             ExecutionConfig {
                 log_memory_store_feature: FlagStatus::Disabled,
                 ..Default::default()
@@ -2792,7 +2792,7 @@ fn test_log_memory_store_upgrade_downgrade() {
     // executes, migration has not run yet: is_migrated=false, is_allocated=false,
     // but fetch_canister_logs still works via the canister_log fallback.
     let env = env.restart_node_with_config(StateMachineConfig::new(
-        SubnetConfig::new(subnet_type),
+        SubnetConfig::new(subnet_type, false),
         ExecutionConfig {
             log_memory_store_feature: FlagStatus::Enabled,
             ..Default::default()
@@ -2907,7 +2907,7 @@ fn test_log_memory_store_upgrade_downgrade() {
     // Step 5: Downgrade — restart with log_memory_store feature disabled.
     // The checkpoint still has migrated=true since it was saved after step 3.
     let env = env.restart_node_with_config(StateMachineConfig::new(
-        SubnetConfig::new(subnet_type),
+        SubnetConfig::new(subnet_type, false),
         ExecutionConfig {
             log_memory_store_feature: FlagStatus::Disabled,
             ..Default::default()

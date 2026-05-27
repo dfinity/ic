@@ -70,7 +70,7 @@ fn setup_fetch_bench(
 
     let subnet_type = SubnetType::Application;
     let config = StateMachineConfig::new(
-        SubnetConfig::new(subnet_type),
+        SubnetConfig::new(subnet_type, false),
         ExecutionConfig {
             replicated_inter_canister_log_fetch: FlagStatus::Enabled,
             log_memory_store_feature: LOG_MEMORY_STORE_FEATURE,

@@ -3144,7 +3144,7 @@ fn canister_metrics_count(env: &StateMachine) -> u64 {
 
 #[test]
 fn canister_metrics_via_query_call_by_controller_succeeds() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
             subnet_config,
@@ -3171,7 +3171,7 @@ fn canister_metrics_via_query_call_by_controller_succeeds() {
 
 #[test]
 fn canister_metrics_via_query_call_by_subnet_admin_succeeds() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
     let subnet_admin = user_test_id(100);
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
@@ -3205,7 +3205,7 @@ fn canister_metrics_via_query_call_by_subnet_admin_succeeds() {
 
 #[test]
 fn canister_metrics_via_query_call_by_neither_controller_nor_subnet_admin_fails() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
     let subnet_admin = user_test_id(100);
     let test_user = user_test_id(101);
     let env = StateMachineBuilder::new()
