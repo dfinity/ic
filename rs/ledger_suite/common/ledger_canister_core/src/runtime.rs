@@ -58,20 +58,34 @@ impl Runtime for CdkRuntime {
         Out: for<'a> ArgumentDecoder<'a>,
     {
         let principal_id = PrincipalId::from(id);
+        // We use `-1` as a sentinel for failures that do not have an associated
+        // IC reject code (insufficient cycles, `ic0.call_perform` failure,
+        // candid decoding errors). The positive range matches
+        // `ic_error_types::RejectCode` so callers can reliably distinguish the
+        // two. This mirrors the convention in
+        // `rs/nervous_system/clients/src/exchange_rate_canister_client.rs`.
+        const SENTINEL_CALL_FAILURE: i32 = -1;
         let response = ic_cdk::call::Call::unbounded_wait(principal_id.into(), method)
             .with_args(&args)
             .with_cycles(cycles as u128)
             .await
             .map_err(|err| match err {
                 ic_cdk::call::CallFailed::CallRejected(rejected) => (
-                    rejected.raw_reject_code() as i32,
+                    rejected
+                        .reject_code()
+                        .map(|code| code as i32)
+                        .unwrap_or(SENTINEL_CALL_FAILURE),
                     rejected.reject_message().to_string(),
                 ),
-                ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(e) => (1, e.to_string()),
-                ic_cdk::call::CallFailed::CallPerformFailed(e) => (1, e.to_string()),
+                ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(e) => {
+                    (SENTINEL_CALL_FAILURE, e.to_string())
+                }
+                ic_cdk::call::CallFailed::CallPerformFailed(e) => {
+                    (SENTINEL_CALL_FAILURE, e.to_string())
+                }
             })?;
         response
             .candid_tuple::<Out>()
-            .map_err(|err| (5, err.to_string()))
+            .map_err(|err| (SENTINEL_CALL_FAILURE, err.to_string()))
     }
 }
