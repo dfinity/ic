@@ -539,7 +539,7 @@ async fn get_supported_standards_from_ledger() -> Vec<String> {
             // log the error but do not propagate it
             log!(
                 P0,
-                "[get_supported_standards_from_ledger]: failed to call get_supported_standards_from_ledger on ledger {}: {}",
+                "[get_supported_standards_from_ledger]: failed to call icrc1_supported_standards on ledger {}: {}",
                 ledger_id,
                 err,
             );
@@ -562,7 +562,7 @@ where
     let req = measure_span(&PROFILING_DATA, encode_span_name, || Encode!(i))
         .map_err(|err| format!("failed to candid encode the input {i:?}: {err}"))?;
     let res = Call::unbounded_wait(id, method)
-        .with_raw_args(&req)
+        .take_raw_args(req)
         .await
         .map(|response| response.into_bytes())
         .map_err(|err| format!("{err}"))?;
