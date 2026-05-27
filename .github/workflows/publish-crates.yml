@@ -14,6 +14,11 @@ on:
         required: false
         default: 'false'
         type: boolean
+      skip-tests:
+        description: "If true, skip running cargo test"
+        required: false
+        default: 'false'
+        type: boolean
 
 run-name: >-
   ${{ format('Publish Crate {0} {1}', github.event.inputs.crate-name, github.event.inputs.crate-version) }}
@@ -48,10 +53,12 @@ jobs:
       - name: Install protobuf compiler
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
-      - name: Build and Test Crate
-        run: |
-          cargo build --package ${{ github.event.inputs.crate-name }}
-          cargo test --package ${{ github.event.inputs.crate-name }}
+      - name: Build Crate
+        run: cargo build --package ${{ github.event.inputs.crate-name }}
+
+      - name: Test Crate
+        if: ${{ github.event.inputs.skip-tests == 'false' }}
+        run: cargo test --package ${{ github.event.inputs.crate-name }}
 
       - name: Publish Dry Run
         if: ${{ github.event.inputs.dry-run == 'true' }}

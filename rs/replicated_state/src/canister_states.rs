@@ -641,7 +641,7 @@ impl CanisterStates {
     /// Verifies invariants (1)–(3) listed under [`CanisterStates`].
     ///
     /// Also see [`Self::validate_strict_split`] for the stricter validation applied
-    /// at checkpointing time.
+    /// during checkpoint validation.
     fn debug_assert_invariants(&self) {
         debug_assert!(
             self.hot.keys().all(|id| !self.cold.contains_key(id)),
@@ -659,7 +659,7 @@ impl CanisterStates {
     }
 }
 
-/// Iterator returned by [`CanisterStates::iter`]. Merge-yields entries from
+/// Iterator returned by [`CanisterStates::all_iter`]. Merge-yields entries from
 /// the `hot` and `cold` pools in `CanisterId` order.
 pub struct Iter<'a> {
     hot: Peekable<std::collections::btree_map::Iter<'a, CanisterId, Arc<CanisterState>>>,

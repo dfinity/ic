@@ -284,34 +284,6 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "firewall_max_connections_test",
-    tags = [
-        "colocate",
-        "long_test",
-    ],
-    deps = COMMON_DEPS + [
-        "@crate_index//:tokio",
-        "@crate_index//:tokio-util",
-    ],
-)
-
-system_test_nns(
-    name = "firewall_priority_test",
-    tags = [
-        "long_test",
-    ],
-    deps = COMMON_DEPS + [
-        "//rs/nns/governance/api",
-        "//rs/protobuf",
-        "//rs/registry/canister",
-        "//rs/registry/keys",
-        "//rs/types/types",
-        "@crate_index//:candid",
-        "@crate_index//:url",
-    ],
-)
-
-system_test_nns(
     name = "http_endpoints_public_spec_test",
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + HTTP_ENDPOINTS_DEPS + [

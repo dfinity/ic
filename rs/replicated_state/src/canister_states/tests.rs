@@ -803,7 +803,7 @@ fn validate_strict_split_rejects_stale_hot_canister() {
     states.insert(Arc::clone(&c));
     // `get_mut` promotes c to hot without actually mutating anything, so c
     // ends up cold-by-predicate but in the `hot` pool — exactly the stale
-    // state that `try_cool_all` / `repartition` are supposed to clean up.
+    // state that `try_cool_all` is supposed to clean up.
     let _ = states.get_mut(&c.canister_id());
     assert_eq!(states.hot.len(), 1);
     assert_eq!(states.cold.len(), 0);
