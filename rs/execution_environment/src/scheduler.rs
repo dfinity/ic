@@ -1111,7 +1111,7 @@ impl Scheduler for SchedulerImpl {
         // The goal is to ensure that we can track the performance of `execute_round` and its individual components.
         let root_measurement_scope = MeasurementScope::root(&self.metrics.round);
 
-        {
+        if !state.metadata.logs_migrated {
             let _timer = self
                 .metrics
                 .round_log_memory_store_migration_duration
@@ -1140,6 +1140,7 @@ impl Scheduler for SchedulerImpl {
                     system_state.log_memory_store.clear_migrated();
                 }
             });
+            state.metadata.logs_migrated = true;
         }
 
         let round_log;
