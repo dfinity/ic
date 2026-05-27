@@ -19,7 +19,12 @@ pub fn generate_attestation_package<T: EncodeSevCustomData + Debug>(
     trusted_execution_environment_config: &TrustedExecutionEnvironmentConfig,
     custom_data: &T,
 ) -> Result<ParsedSevAttestationPackage> {
-    let custom_data_bytes = custom_data.encode_for_sev()?.to_bytes();
+    let custom_data_bytes = if T::needs_legacy_encoding() {
+        // TODO(NODE-1784): Move to new SEV encoding once clients are updated
+        custom_data.encode_for_sev_legacy()?
+    } else {
+        custom_data.encode_for_sev()?.to_bytes()
+    };
     let attestation_report = sev_firmware
         .get_report(None, Some(custom_data_bytes), None)
         .context("Failed to get attestation report from SEV firmware")?;
