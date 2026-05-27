@@ -551,22 +551,20 @@ impl CanisterManager {
                 });
             }
             // Resizing reads all stored log records from the old ring buffer and
-            // rewrites them into a new one. Heap delta increase and cost are
-            // proportional to `bytes_used()` (actual data size),
-            // not to the original/newly allocated capacity.
-            // Skip the charge when resize would be a no-op (e.g., capacity
-            // unchanged or limit set to 0 with an already empty log store).
+            // rewrites them into a new one. The instruction cost is proportional
+            // to the pre-resize `bytes_used()` (actual data read). The heap delta
+            // increase equals the post-resize `bytes_used()` (actual data written
+            // into the new store; may be less when downsizing drops records).
+            // Skip when resize would be a no-op (e.g., capacity unchanged or
+            // limit set to 0 with an already empty log store).
             let log_resize_needed = canister
                 .system_state
                 .log_memory_store
                 .would_resize(requested_limit.get() as usize);
-            let log_bytes_used =
-                NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64);
-            if log_resize_needed {
-                heap_delta_increase = log_bytes_used;
-            }
             let log_resize_instructions = if log_resize_needed {
-                NumInstructions::new(log_bytes_used.get() * LOG_RESIZE_COST_PER_BYTE)
+                let log_bytes_used_before =
+                    NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64);
+                NumInstructions::new(log_bytes_used_before.get() * LOG_RESIZE_COST_PER_BYTE)
             } else {
                 NumInstructions::new(0)
             };
@@ -596,6 +594,10 @@ impl CanisterManager {
                     .filter(|_| log_memory_store.would_resize(limit))
                     .map(|m| m.canister_log_resize_duration.start_timer());
                 log_memory_store.resize(limit, self.fd_factory.clone());
+            }
+            if log_resize_needed {
+                heap_delta_increase =
+                    NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64);
             }
         }
 

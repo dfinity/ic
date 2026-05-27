@@ -5437,6 +5437,12 @@ fn setup_update_settings_heap_delta_test(
     initial_log_limit: u64,
 ) -> (ExecutionTest, CanisterId, NumBytes, NumBytes) {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    // Message content chosen so that each stored record is 2120 bytes
+    // (20-byte LogRecord header + 2100-byte content).  Two records occupy
+    // 4240 bytes, which exceeds one OS page (4096 bytes = DATA_CAPACITY_MIN),
+    // so a buffer with only one page of data capacity can hold exactly one
+    // of the two records.
+    const MSG: &[u8] = &[b'x'; 2100];
 
     let mut test = ExecutionTestBuilder::new()
         .with_log_memory_store_feature_enabled()
@@ -5456,7 +5462,7 @@ fn setup_update_settings_heap_delta_test(
     test.ingress(
         canister_id,
         "update",
-        wasm().debug_print(b"some log message").reply().build(),
+        wasm().debug_print(MSG).debug_print(MSG).reply().build(),
     )
     .unwrap();
     let log_bytes_used = NumBytes::new(
@@ -5511,7 +5517,9 @@ fn update_settings_heap_delta_log_memory_limit_unchanged() {
     assert_eq!(test.state().metadata.heap_delta_estimate, heap_delta_before);
 }
 
-// log_memory_limit decreased → would_resize = true → heap delta increase = bytes_used.
+// log_memory_limit decreased (but large enough to retain all records) →
+// would_resize = true → post-resize bytes_used = pre-resize bytes_used
+// → heap delta increase = bytes_used.
 #[test]
 fn update_settings_heap_delta_log_memory_limit_decreased() {
     const MIB: u64 = 1024 * 1024;
@@ -5534,11 +5542,12 @@ fn update_settings_heap_delta_log_memory_limit_decreased() {
     );
 }
 
-// log_memory_limit decreased to zero → would_resize = true → heap delta increase = bytes_used.
+// log_memory_limit decreased to zero → would_resize = true → store deallocated
+// → post-resize bytes_used = 0 → heap delta increase = 0.
 #[test]
 fn update_settings_heap_delta_log_memory_limit_decreased_to_zero() {
     const MIB: u64 = 1024 * 1024;
-    let (mut test, canister_id, log_bytes_used, heap_delta_before) =
+    let (mut test, canister_id, _log_bytes_used, heap_delta_before) =
         setup_update_settings_heap_delta_test(MIB);
 
     let args = UpdateSettingsArgs {
@@ -5551,13 +5560,50 @@ fn update_settings_heap_delta_log_memory_limit_decreased_to_zero() {
     .encode();
     test.subnet_message(Method::UpdateSettings, args).unwrap();
 
+    assert_eq!(test.state().metadata.heap_delta_estimate, heap_delta_before,);
+}
+
+// log_memory_limit decreased so that only one of two records fits →
+// would_resize = true, oldest record evicted →
+// heap delta increase = post-resize bytes_used < pre-resize bytes_used.
+#[test]
+fn update_settings_heap_delta_log_memory_limit_decreased_record_dropped() {
+    // Each stored record is 2120 bytes (20-byte header + 2100-byte content).
+    // DATA_CAPACITY_MIN = one OS page = 4096 bytes: 2120 < 4096 ≤ 2 × 2120,
+    // so exactly one record fits after downsizing to one page.
+    const RECORD_SIZE: u64 = (20 + 2100) as u64;
+    // Initial limit: two pages, comfortably holding both records (4240 bytes).
+    let (mut test, canister_id, log_bytes_used, heap_delta_before) =
+        setup_update_settings_heap_delta_test(2 * 4096);
+    assert_eq!(log_bytes_used, NumBytes::new(2 * RECORD_SIZE));
+
+    // Downsize to one page (4096 bytes): the oldest record is evicted so the
+    // newer one fits, leaving exactly RECORD_SIZE bytes in the store.
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(4096)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, args).unwrap();
+
+    let post_resize_bytes_used = NumBytes::new(
+        test.canister_state(canister_id)
+            .system_state
+            .log_memory_store
+            .bytes_used() as u64,
+    );
+    assert_eq!(post_resize_bytes_used, NumBytes::new(RECORD_SIZE));
     assert_eq!(
         test.state().metadata.heap_delta_estimate - heap_delta_before,
-        log_bytes_used,
+        post_resize_bytes_used,
     );
 }
 
-// log_memory_limit increased → would_resize = true → heap delta increase = bytes_used.
+// log_memory_limit increased → would_resize = true → all records preserved
+// → post-resize bytes_used = pre-resize bytes_used → heap delta increase = bytes_used.
 #[test]
 fn update_settings_heap_delta_log_memory_limit_increased() {
     const MIB: u64 = 1024 * 1024;
