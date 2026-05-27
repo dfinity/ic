@@ -300,7 +300,7 @@ impl RoundSchedule {
                 // Retain canisters with paused executions, rate limits or something to execute.
                 canister.must_be_in_schedule() || canister.next_execution() != NextExecution::None
             });
-        } 
+        }
 
         // Collect all active canisters and their next executions.
         //
