@@ -286,33 +286,21 @@ impl RoundSchedule {
             // AP, to prevent them from jumping from the back of the schedule to the middle
             // just by being idle for a round. Similarly, idle canisters with positive AP
             // burn it down as if they had executed full rounds until they (almost) reach 0.
-            let idle_canisters_to_drop = subnet_schedule
-                .iter()
-                .filter_map(|(canister_id, canister_priority)| {
-                    if canister_priority.accumulated_priority < ZERO
-                        || canister_priority.accumulated_priority > ONE_HUNDRED_PERCENT
-                    {
-                        // Not in the 0-100 AP range: keep.
-                        return None;
-                    }
-                    let Some(canister) = canister_states.get(canister_id) else {
-                        // Canister was deleted: drop.
-                        return Some(*canister_id);
-                    };
-                    if !canister.must_be_in_schedule()
-                        && canister.next_execution() == NextExecution::None
-                    {
-                        // Canister is idle: drop.
-                        Some(*canister_id)
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>();
-            for canister_id in idle_canisters_to_drop {
-                subnet_schedule.remove(&canister_id);
-            }
-        }
+            subnet_schedule.retain(|canister_id, canister_priority| {
+                if canister_priority.accumulated_priority < ZERO
+                    || canister_priority.accumulated_priority > ONE_HUNDRED_PERCENT
+                {
+                    // Not in the 0-100 AP range: definitely keep.
+                    return true;
+                }
+                let Some(canister) = canister_states.get(canister_id) else {
+                    // Canister was deleted: definitely drop.
+                    return false;
+                };
+                // Retain canisters with paused executions, rate limits or something to execute.
+                canister.must_be_in_schedule() || canister.next_execution() != NextExecution::None
+            });
+        } 
 
         // Collect all active canisters and their next executions.
         //
