@@ -551,20 +551,21 @@ impl CanisterManager {
                 });
             }
             // Resizing reads all stored log records from the old ring buffer and
-            // rewrites them into a new one. Cost is proportional to bytes_used
-            // (actual stored data), not allocated capacity.
+            // rewrites them into a new one. Heap delta increase and cost are
+            // proportional to `bytes_used()` (actual data size),
+            // not to the original/newly allocated capacity.
             // Skip the charge when resize would be a no-op (e.g., capacity
-            // unchanged or limit set to 0 with an already-empty store).
+            // unchanged or limit set to 0 with an already empty log store).
             let log_resize_needed = canister
                 .system_state
                 .log_memory_store
                 .would_resize(requested_limit.get() as usize);
+            let log_bytes_used =
+                 NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64);
             if log_resize_needed {
-                heap_delta_increase = canister.log_memory_store_memory_usage();
+                heap_delta_increase = log_bytes_used;
             }
             let log_resize_instructions = if log_resize_needed {
-                let log_bytes_used =
-                    NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64);
                 NumInstructions::new(log_bytes_used.get() * LOG_RESIZE_COST_PER_BYTE)
             } else {
                 NumInstructions::new(0)

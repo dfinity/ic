@@ -5429,7 +5429,7 @@ fn upload_chunk_increases_subnet_heap_delta() {
     );
 }
 
-// log_memory_limit not set → would_resize not called → heap delta = 0.
+// log_memory_limit not set → would_resize not called → heap delta increase = 0.
 #[test]
 fn update_settings_heap_delta_log_memory_limit_none() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
@@ -5446,8 +5446,24 @@ fn update_settings_heap_delta_log_memory_limit_none() {
                 .build(),
         )
         .unwrap();
-
     assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
+
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(b"some log message").reply().build(),
+    )
+    .unwrap();
+    let log_bytes_used = NumBytes::new(
+        test.canister_state(canister_id)
+            .system_state
+            .log_memory_store
+            .bytes_used() as u64,
+    );
+    assert!(log_bytes_used > NumBytes::from(0));
+    let heap_delta_before = test.state().metadata.heap_delta_estimate;
 
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
@@ -5459,10 +5475,10 @@ fn update_settings_heap_delta_log_memory_limit_none() {
     .encode();
     test.subnet_message(Method::UpdateSettings, args).unwrap();
 
-    assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
+    assert_eq!(test.state().metadata.heap_delta_estimate, heap_delta_before,);
 }
 
-// log_memory_limit set to current size → would_resize = false → heap delta = 0.
+// log_memory_limit set to current size → would_resize = false → heap delta increase = 0.
 #[test]
 fn update_settings_heap_delta_log_memory_limit_unchanged() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
@@ -5479,8 +5495,24 @@ fn update_settings_heap_delta_log_memory_limit_unchanged() {
                 .build(),
         )
         .unwrap();
-
     assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
+
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(b"some log message").reply().build(),
+    )
+    .unwrap();
+    let log_bytes_used = NumBytes::new(
+        test.canister_state(canister_id)
+            .system_state
+            .log_memory_store
+            .bytes_used() as u64,
+    );
+    assert!(log_bytes_used > NumBytes::from(0));
+    let heap_delta_before = test.state().metadata.heap_delta_estimate;
 
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
@@ -5492,10 +5524,10 @@ fn update_settings_heap_delta_log_memory_limit_unchanged() {
     .encode();
     test.subnet_message(Method::UpdateSettings, args).unwrap();
 
-    assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
+    assert_eq!(test.state().metadata.heap_delta_estimate, heap_delta_before,);
 }
 
-// log_memory_limit decreased → would_resize = true → heap delta = old log store size.
+// log_memory_limit decreased → would_resize = true → heap delta increase = bytes_used.
 #[test]
 fn update_settings_heap_delta_log_memory_limit_decreased() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
@@ -5512,12 +5544,24 @@ fn update_settings_heap_delta_log_memory_limit_decreased() {
                 .build(),
         )
         .unwrap();
-    let old_log_memory_usage = test
-        .canister_state(canister_id)
-        .log_memory_store_memory_usage();
-    // header (4 KiB) + index table (4 KiB) + data region (2 MiB)
-    assert_eq!(old_log_memory_usage, NumBytes::new(2 * MIB + 8 * 1024));
     assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
+
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(b"some log message").reply().build(),
+    )
+    .unwrap();
+    let log_bytes_used = NumBytes::new(
+        test.canister_state(canister_id)
+            .system_state
+            .log_memory_store
+            .bytes_used() as u64,
+    );
+    assert!(log_bytes_used > NumBytes::from(0));
+    let heap_delta_before = test.state().metadata.heap_delta_estimate;
 
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
@@ -5530,12 +5574,12 @@ fn update_settings_heap_delta_log_memory_limit_decreased() {
     test.subnet_message(Method::UpdateSettings, args).unwrap();
 
     assert_eq!(
-        test.state().metadata.heap_delta_estimate,
-        old_log_memory_usage,
+        test.state().metadata.heap_delta_estimate - heap_delta_before,
+        log_bytes_used,
     );
 }
 
-// log_memory_limit increased → would_resize = true → heap delta = old log store size.
+// log_memory_limit increased → would_resize = true → heap delta increase = bytes_used.
 #[test]
 fn update_settings_heap_delta_log_memory_limit_increased() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
@@ -5552,12 +5596,24 @@ fn update_settings_heap_delta_log_memory_limit_increased() {
                 .build(),
         )
         .unwrap();
-    let old_log_memory_usage = test
-        .canister_state(canister_id)
-        .log_memory_store_memory_usage();
-    // header (4 KiB) + index table (4 KiB) + data region (1 MiB)
-    assert_eq!(old_log_memory_usage, NumBytes::new(MIB + 8 * 1024));
     assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
+
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(b"some log message").reply().build(),
+    )
+    .unwrap();
+    let log_bytes_used = NumBytes::new(
+        test.canister_state(canister_id)
+            .system_state
+            .log_memory_store
+            .bytes_used() as u64,
+    );
+    assert!(log_bytes_used > NumBytes::from(0));
+    let heap_delta_before = test.state().metadata.heap_delta_estimate;
 
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
@@ -5570,8 +5626,8 @@ fn update_settings_heap_delta_log_memory_limit_increased() {
     test.subnet_message(Method::UpdateSettings, args).unwrap();
 
     assert_eq!(
-        test.state().metadata.heap_delta_estimate,
-        old_log_memory_usage,
+        test.state().metadata.heap_delta_estimate - heap_delta_before,
+        log_bytes_used,
     );
 }
 
