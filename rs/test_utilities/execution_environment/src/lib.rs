@@ -1620,7 +1620,8 @@ impl ExecutionTest {
                     )
                     .nominal()
             }
-            Ok(Method::UploadChunk)
+            Ok(Method::UpdateSettings)
+            | Ok(Method::UploadChunk)
             | Ok(Method::TakeCanisterSnapshot)
             | Ok(Method::ReadCanisterSnapshotData)
             | Ok(Method::UploadCanisterSnapshotMetadata)
