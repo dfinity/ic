@@ -1,6 +1,6 @@
-#![allow(deprecated)]
+use ic_cdk::call::{Call, CallFailed};
 use ic_cdk::update;
-use ic_sender_canister_lib::{SendArg, SendResult};
+use ic_sender_canister_lib::{RejectionCode, SendArg, SendResult};
 
 #[update]
 async fn send(calls: Vec<SendArg>) -> Vec<SendResult> {
@@ -12,10 +12,28 @@ async fn send(calls: Vec<SendArg>) -> Vec<SendResult> {
         payment,
     } in calls
     {
-        futures.push(ic_cdk::api::call::call_raw128(to, &method, arg, payment));
+        futures.push(async move {
+            Call::unbounded_wait(to, &method)
+                .take_raw_args(arg)
+                .with_cycles(payment)
+                .await
+                .map(|response| response.into_bytes())
+                .map_err(map_call_error)
+        });
     }
 
     futures::future::join_all(futures).await
+}
+
+fn map_call_error(err: CallFailed) -> (RejectionCode, String) {
+    match err {
+        CallFailed::CallRejected(rejected) => (
+            RejectionCode::from_raw(rejected.raw_reject_code()),
+            rejected.reject_message().to_string(),
+        ),
+        CallFailed::InsufficientLiquidCycleBalance(e) => (RejectionCode::Unknown, e.to_string()),
+        CallFailed::CallPerformFailed(e) => (RejectionCode::Unknown, e.to_string()),
+    }
 }
 
 fn main() {}
