@@ -1812,63 +1812,44 @@ impl ExecutionEnvironment {
                         )),
                         refund: msg.take_cycles(),
                     },
-                    FlagStatus::Enabled => {
-                        let sender = *msg.sender();
-                        let payload = payload.to_vec();
-                        match &mut msg {
-                            CanisterCall::Request(request) => {
-                                let max_fetch_canister_logs_fee =
-                                    self.cycles_account_manager.max_fetch_canister_logs_fee(
-                                        registry_settings.subnet_size,
-                                        cost_schedule,
-                                    );
-
-                                // Check there are sufficient cycles to cover the worst-case execution cost.
-                                let response = if request.payment < max_fetch_canister_logs_fee {
-                                    Err(UserError::new(
-                                        ErrorCode::CanisterRejectedMessage,
-                                        format!(
-                                            "{} request sent with {} cycles, but {} cycles are required.",
-                                            Ic00Method::FetchCanisterLogs,
-                                            request.payment,
-                                            max_fetch_canister_logs_fee
-                                        ),
-                                    ))
-                                } else {
-                                    FetchCanisterLogsRequest::decode(&payload)
-                                        .and_then(|args| {
+                    FlagStatus::Enabled => match &msg {
+                        CanisterCall::Ingress(_) => {
+                            self.reject_unexpected_ingress(Ic00Method::FetchCanisterLogs)
+                        }
+                        CanisterCall::Request(_) => {
+                            let sender = *msg.sender();
+                            match FetchCanisterLogsRequest::decode(payload) {
+                                Err(err) => ExecuteSubnetMessageResult::Finished {
+                                    response: Err(err),
+                                    refund: msg.take_cycles(),
+                                },
+                                Ok(args) => {
+                                    let canister_id = args.get_canister_id();
+                                    let subnet_size = registry_settings.subnet_size;
+                                    self.execute_mgmt_operation_on_canister(
+                                        canister_id,
+                                        |canister, msg, _round_limits, _consumed_cycles| {
                                             fetch_canister_logs(
                                                 sender,
-                                                &state,
+                                                canister,
                                                 args,
                                                 self.config.log_memory_store_feature,
+                                                msg,
+                                                &self.cycles_account_manager,
+                                                subnet_size,
+                                                cost_schedule,
                                             )
-                                        })
-                                        .map(|resp| {
-                                            let response_bytes = Encode!(&resp).unwrap();
-                                            let actual_fee = self
-                                                .cycles_account_manager
-                                                .fetch_canister_logs_fee(
-                                                    NumBytes::new(response_bytes.len() as u64),
-                                                    registry_settings.subnet_size,
-                                                    cost_schedule,
-                                                );
-                                            // There are enough cycles, deduct the actual fee from paid cycles and refund the rest.
-                                            msg.deduct_cycles(actual_fee);
-                                            (response_bytes, None)
-                                        })
-                                };
-
-                                ExecuteSubnetMessageResult::Finished {
-                                    response,
-                                    refund: msg.take_cycles(),
+                                        },
+                                        &mut state,
+                                        &mut msg,
+                                        round_limits,
+                                        registry_settings,
+                                        current_round,
+                                    )
                                 }
                             }
-                            CanisterCall::Ingress(_) => {
-                                self.reject_unexpected_ingress(Ic00Method::FetchCanisterLogs)
-                            }
                         }
-                    }
+                    },
                 }
             }
 
