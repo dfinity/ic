@@ -367,7 +367,7 @@ fn create_summary_payload_helper(
     idkg_summary.uid_generator.update_height(height)?;
     update_summary_refs(height, &mut idkg_summary, block_reader)?;
 
-    idkg_summary.set_empty_signature_agreements_flag();
+    idkg_summary.empty_signature_agreements_flag = true;
 
     Ok(Some(idkg_summary))
 }
@@ -621,7 +621,7 @@ pub(crate) fn create_data_payload_helper(
         log,
     )?;
 
-    idkg_payload.set_empty_signature_agreements_flag();
+    idkg_payload.empty_signature_agreements_flag = true;
 
     Ok(Some(idkg_payload))
 }
