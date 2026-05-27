@@ -5534,6 +5534,29 @@ fn update_settings_heap_delta_log_memory_limit_decreased() {
     );
 }
 
+// log_memory_limit decreased to zero → would_resize = true → heap delta increase = bytes_used.
+#[test]
+fn update_settings_heap_delta_log_memory_limit_decreased_to_zero() {
+    const MIB: u64 = 1024 * 1024;
+    let (mut test, canister_id, log_bytes_used, heap_delta_before) =
+        setup_update_settings_heap_delta_test(MIB);
+
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(0)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, args).unwrap();
+
+    assert_eq!(
+        test.state().metadata.heap_delta_estimate - heap_delta_before,
+        log_bytes_used,
+    );
+}
+
 // log_memory_limit increased → would_resize = true → heap delta increase = bytes_used.
 #[test]
 fn update_settings_heap_delta_log_memory_limit_increased() {
