@@ -6,18 +6,23 @@ use crate::framework::{
     ConsensusRunnerConfig, StopPredicate, malicious, setup_subnet,
 };
 use framework::test_master_public_key_ids;
+use ic_consensus::consensus::ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{consensus_pool::ConsensusPool, messaging::MessageRouting};
 use ic_interfaces_registry::RegistryClient;
+use ic_interfaces_state_manager::StateReader;
+use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
-    Height, batch::BatchContent, crypto::CryptoHash, malicious_flags::MaliciousFlags,
-    replica_config::ReplicaConfig,
+    Height, RegistryVersion, batch::BatchContent, crypto::CryptoHash,
+    malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
 };
 use rand::Rng;
 use rand_chacha::{ChaChaRng, rand_core::SeedableRng};
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{cell::RefCell, cmp::Ordering, rc::Rc, sync::Arc};
 
 #[test]
 fn multiple_nodes_are_live() -> Result<(), String> {
@@ -233,6 +238,7 @@ fn stalled_clocks_with_f_malicious_would_pass() -> Result<(), String> {
 
 fn run_test(
     config: ConsensusRunnerConfig,
+    additional_registry_mutations: impl FnOnce(&ProtoRegistryDataProvider, &FakeRegistryClient),
     mut modifiers: Vec<ComponentModifier>,
     stop_predicate: StopPredicate,
     finish: bool,
@@ -254,7 +260,9 @@ fn run_test(
             .iter()
             .map(|config| config.node_id)
             .collect();
-        let (registry_client, cup, cryptos) = setup_subnet(subnet_id, &node_ids, rng);
+        let (data_provider, registry_client, cup, cryptos) =
+            setup_subnet(subnet_id, &node_ids, config.dkg_interval_length, rng);
+        additional_registry_mutations(&data_provider, &registry_client);
         let inst_deps: Vec<_> = replica_configs
             .iter()
             .zip(pool_configs.iter())
@@ -310,7 +318,13 @@ fn run_n_rounds_and_collect_hashes(
         }
         inst.deps.message_routing.expected_batch_height() >= Height::from(rounds)
     };
-    run_test(config, modifiers, Box::new(reach_n_rounds), finish);
+    run_test(
+        config,
+        |_, _| (),
+        modifiers,
+        Box::new(reach_n_rounds),
+        finish,
+    );
     hashes.as_ref().take()
 }
 
@@ -342,7 +356,7 @@ fn run_n_rounds_and_check_pubkeys(
         *pubkey_exists_clone.borrow()
             || inst.deps.message_routing.expected_batch_height() >= Height::from(rounds)
     };
-    run_test(config, modifiers, Box::new(got_pubkey), finish);
+    run_test(config, |_, _| (), modifiers, Box::new(got_pubkey), finish);
 
     *pubkey_exists.borrow()
 }
@@ -379,4 +393,164 @@ fn one_node_equivocating_passes() -> Result<(), String> {
 #[test]
 fn all_nodes_equivocating_fail() -> Result<(), String> {
     equivocating_block_maker_test(4, 4, false)
+}
+
+/// Regression test for ICSUP-XXX stalling subnet `3hhby` on 2026-05-22.
+/// Tests that if checkpointing is slow at an upgrade boundary, i.e. consensus reaches hard bound
+/// `ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP` before the upgrade height is certified, then
+/// consensus still creates a CUP.
+/// This used to not be the case because CUP shares where only created when the finalized tip's
+/// certified height reached the upgrade height, which would never happen because consensus had
+/// reached the hard bound.
+///
+/// Steps of the test:
+/// 1. Certified height is frozen at the upgrade height minus 1 (simulating a slow checkpoint).
+/// 2. Consensus advances with empty blocks until the bound
+///    `ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP` is reached, then stops creating more blocks.
+/// 3. The certified-height override is released; consensus resumes and a CUP should be created at
+///    the upgrade height, even though there exists no finalized block whose certified height
+///    reached the upgrade height.
+/// 4. Safety check: states at and below the upgrade boundary are NOT purged.
+#[test]
+fn slow_checkpointing_at_upgrade_boundary() {
+    const DKG_INTERVAL_LENGTH: u64 = 74; // On purpose larger than `ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP`
+    let upgrade_height = Height::from(DKG_INTERVAL_LENGTH + 1);
+
+    let config = ConsensusRunnerConfig {
+        num_nodes: 4,
+        dkg_interval_length: DKG_INTERVAL_LENGTH,
+        ..Default::default()
+    };
+
+    // Make the subnet upgrade at height `DKG_INTERVAL_LENGTH + 1`
+    let num_nodes = config.num_nodes;
+    let additional_registry_mutations =
+        |data_provider: &ProtoRegistryDataProvider, registry_client: &FakeRegistryClient| {
+            data_provider
+                .add(
+                    &ic_registry_keys::make_subnet_record_key(subnet_test_id(0)),
+                    RegistryVersion::from(2),
+                    Some(
+                        SubnetRecordBuilder::from(
+                            &(0..num_nodes)
+                                .map(|i| node_test_id(i as u64))
+                                .collect::<Vec<_>>(),
+                        )
+                        .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                        .with_replica_version("upgrade_version")
+                        .build(),
+                    ),
+                )
+                .unwrap();
+            registry_client.reload();
+        };
+
+    let frozen_height = Height::from(DKG_INTERVAL_LENGTH);
+    let has_released_certified_height_override = Rc::new(RefCell::new(false));
+    let has_released_clone = has_released_certified_height_override.clone();
+    let stop = move |inst: &ConsensusInstance<'_>| {
+        let pool = inst.driver.consensus_pool.read().unwrap();
+        let reader = PoolReader::new(&*pool);
+        let finalized_height = reader.get_finalized_height();
+
+        // As long as we are checkpointing, i.e. have not released the certified height override, we
+        // should not have a CUP at the upgrade height yet.
+        if !*has_released_clone.borrow() {
+            let cup_height = reader.get_catch_up_height();
+            assert_eq!(
+                cup_height.get(),
+                0,
+                "CUP height should still be 0 when we are still checkpointing, but got {}",
+                cup_height
+            );
+        }
+
+        // At any point in time, all states up to and including the upgrade height should not be
+        // purged.
+        for state_height in 0..=upgrade_height.get() {
+            assert!(
+                inst.deps
+                    .state_manager
+                    .get_state_at(Height::from(state_height))
+                    .is_ok(),
+                "state at height {} should not have been purged",
+                state_height
+            );
+        }
+        let stall_height = frozen_height.get() + ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP;
+        match Ord::cmp(&finalized_height.get(), &stall_height) {
+            Ordering::Less => {
+                // Freeze the certified height at `dkg_interval_length` (== upgrade height - 1) on
+                // all nodes to simulate a slow checkpoint at the upgrade boundary, so that
+                // consensus reaches the hard bound `ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP`
+                // before the upgrade height is certified.
+                *inst
+                    .deps
+                    .state_manager
+                    .override_max_certified_height
+                    .write()
+                    .unwrap() = Some(frozen_height);
+            }
+            Ordering::Equal => {
+                // At the stall height, every finalized block should still carry
+                // certified_height == frozen_height (the cap is still active).
+                let finalized_certified_height = reader
+                    .get_finalized_block(finalized_height)
+                    .unwrap()
+                    .context
+                    .certified_height;
+                assert_eq!(
+                    finalized_certified_height, frozen_height,
+                    "finalized block at height {} should have certified_height == {}, but got {}",
+                    finalized_height, frozen_height, finalized_certified_height
+                );
+
+                // Now, simulate that checkpointing has finished by releasing the override
+                *inst
+                    .deps
+                    .state_manager
+                    .override_max_certified_height
+                    .write()
+                    .unwrap() = None;
+                *has_released_clone.borrow_mut() = true;
+            }
+            Ordering::Greater => {
+                // This should happen only after we have released the override. In this case, we
+                // should only have created a single block past the upgrade height, and its
+                // certified height should still be equal to the frozen height.
+                assert!(
+                    *has_released_clone.borrow(),
+                    "finalized height should not have exceeded the stall point before releasing the override"
+                );
+                assert_eq!(
+                    finalized_height.get(),
+                    frozen_height.get() + ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP + 1,
+                    "finalized height should only exceed the bound by 1, but got {}",
+                    finalized_height
+                );
+                let finalized_certified_height = reader
+                    .get_finalized_block(finalized_height)
+                    .unwrap()
+                    .context
+                    .certified_height;
+                assert_eq!(
+                    finalized_certified_height, frozen_height,
+                    "finalized block at height {} should have certified_height == {}, but got {}",
+                    finalized_height, frozen_height, finalized_certified_height
+                );
+            }
+        }
+
+        let cup_height = reader.get_catch_up_height();
+        // Success condition is to have been able to create a CUP at the upgrade height.
+        cup_height == upgrade_height
+    };
+
+    run_test(
+        config,
+        additional_registry_mutations,
+        Vec::new(),
+        Box::new(stop),
+        true,
+    );
 }

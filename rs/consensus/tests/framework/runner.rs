@@ -304,6 +304,7 @@ impl Default for ConsensusRunnerConfig {
             stall_clocks: false,
             execution: GlobalMessage::new(false),
             delivery: Sequential::new(),
+            dkg_interval_length: 19,
         }
     }
 }

@@ -412,6 +412,7 @@ pub struct ConsensusRunnerConfig {
     pub stall_clocks: bool,
     pub execution: Box<dyn ExecutionStrategy>,
     pub delivery: Box<dyn DeliveryStrategy>,
+    pub dkg_interval_length: u64,
 }
 
 impl fmt::Display for ConsensusRunnerConfig {
