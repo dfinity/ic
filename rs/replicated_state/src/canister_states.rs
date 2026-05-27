@@ -339,9 +339,9 @@ impl CanisterStates {
     /// Retains only the canisters for which the predicate returns true.
     ///
     /// Iterates both pools.
-    pub fn retain<F>(&mut self, f: F)
+    pub fn retain<F>(&mut self, mut f: F)
     where
-        F: Fn(&CanisterId, &Arc<CanisterState>) -> bool,
+        F: FnMut(&CanisterId, &Arc<CanisterState>) -> bool,
     {
         self.hot.retain(|id, c| f(id, c));
         self.cold.retain(|id, c| f(id, c));
