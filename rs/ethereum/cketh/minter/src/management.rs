@@ -94,8 +94,8 @@ impl Reason {
                 }
             }
             CallFailed::InsufficientLiquidCycleBalance(_) => Self::OutOfCycles,
-            CallFailed::CallPerformFailed(_) => {
-                Self::InternalError("call_perform failed".to_string())
+            CallFailed::CallPerformFailed(e) => {
+                Self::InternalError(format!("call_perform failed: {e}"))
             }
         }
     }
