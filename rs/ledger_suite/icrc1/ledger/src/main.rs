@@ -168,7 +168,7 @@ fn post_upgrade(args: Option<LedgerArgument>) {
     post_upgrade_internal(args);
     // Set the certified data to the root hash of the ledger state, using the correct ICRC-3 labels.
     // This cannot be called in `post_upgrade_internal`, since that is benchmarked using
-    // canbench, and canbench calls functions as non-replicated queries, and `set_certified_data`
+    // canbench, and canbench calls functions as non-replicated queries, and `certified_data_set`
     // cannot be called in non-replicated queries.
     ic_cdk::api::certified_data_set(Access::with_ledger(Ledger::root_hash));
 }
