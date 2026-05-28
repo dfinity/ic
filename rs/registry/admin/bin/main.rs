@@ -4892,12 +4892,10 @@ async fn main() {
             .await;
         }
         SubCommand::GetElectedGuestosVersions => {
-            let registry_client = RegistryClientImpl::new(
-                Arc::new(NnsDataProvider::new(
-                    tokio::runtime::Handle::current(),
-                    reachable_nns_urls.clone(),
-                )),
-                None,
+            let registry_client = make_registry_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
             );
 
             // maximum number of retries, let the user ctrl+c if necessary

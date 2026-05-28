@@ -2,6 +2,7 @@ use crate::deserialize_registry_value;
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_registry_keys::{REPLICA_VERSION_KEY_PREFIX, make_replica_version_key};
+use ic_types::registry::RegistryClientError;
 pub use ic_types::replica_version::ReplicaVersion;
 pub use ic_types::{NodeId, RegistryVersion, SubnetId};
 
@@ -41,10 +42,13 @@ impl<T: RegistryClient + ?Sized> ReplicaVersionRegistry for T {
             let bytes = self.get_value(&key, version);
             let replica_version_proto =
                 deserialize_registry_value::<ReplicaVersionRecord>(bytes)?.unwrap_or_default();
-            records.push((
-                key[REPLICA_VERSION_KEY_PREFIX.len()..].to_string(),
-                replica_version_proto,
-            ))
+            let id = key
+                .strip_prefix(REPLICA_VERSION_KEY_PREFIX)
+                .ok_or_else(|| RegistryClientError::DecodeError {
+                    error: format!("Replica Version Record key {key} does not start with prefix {REPLICA_VERSION_KEY_PREFIX}"),
+                })?
+                .to_string();
+            records.push((id, replica_version_proto))
         }
 
         Ok(Some(records))
