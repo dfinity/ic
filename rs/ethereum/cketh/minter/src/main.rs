@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use crate::dashboard::DashboardPaginationParameters;
 use candid::Nat;
 use dashboard::DashboardTemplate;
@@ -60,7 +59,7 @@ pub const SEPOLIA_TEST_CHAIN_ID: u64 = 11155111;
 pub const CKETH_LEDGER_TRANSACTION_FEE: Wei = Wei::new(2_000_000_000_000_u128);
 
 fn validate_caller_not_anonymous() -> candid::Principal {
-    let principal = ic_cdk::caller();
+    let principal = ic_cdk::api::msg_caller();
     if principal == candid::Principal::anonymous() {
         panic!("anonymous principal is not allowed");
     }
@@ -564,7 +563,7 @@ fn is_address_blocked(address_string: String) -> bool {
 async fn add_ckerc20_token(erc20_token: AddCkErc20Token) {
     let orchestrator_id = read_state(|s| s.ledger_suite_orchestrator_id)
         .unwrap_or_else(|| ic_cdk::trap("ERROR: ERC-20 feature is not activated"));
-    if orchestrator_id != ic_cdk::caller() {
+    if orchestrator_id != ic_cdk::api::msg_caller() {
         ic_cdk::trap(format!(
             "ERROR: only the orchestrator {orchestrator_id} can add ERC-20 tokens"
         ));
@@ -575,15 +574,12 @@ async fn add_ckerc20_token(erc20_token: AddCkErc20Token) {
 }
 
 #[update]
-async fn get_canister_status() -> ic_cdk::api::management_canister::main::CanisterStatusResponse {
-    ic_cdk::api::management_canister::main::canister_status(
-        ic_cdk::api::management_canister::main::CanisterIdRecord {
-            canister_id: ic_cdk::id(),
-        },
-    )
+async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusResult {
+    ic_cdk::management_canister::canister_status(&ic_cdk::management_canister::CanisterStatusArgs {
+        canister_id: ic_cdk::api::canister_self(),
+    })
     .await
     .expect("failed to fetch canister status")
-    .0
 }
 
 #[query]
@@ -919,7 +915,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             read_state(|s| {
                 w.encode_gauge(
                     "stable_memory_bytes",
-                    ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
+                    ic_cdk::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
                     "Size of the stable memory allocated by this canister.",
                 )?;
 
@@ -932,7 +928,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 w.gauge_vec("cycle_balance", "Cycle balance of this canister.")?
                     .value(
                         &[("canister", "cketh-minter")],
-                        ic_cdk::api::canister_balance128() as f64,
+                        ic_cdk::api::canister_cycle_balance() as f64,
                     )?;
 
                 w.encode_gauge(
