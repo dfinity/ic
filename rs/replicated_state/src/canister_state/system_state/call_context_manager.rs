@@ -683,6 +683,12 @@ impl CallContextManager {
             .unwrap_or(false)
     }
 
+    /// Returns true iff there is at least one not yet expired best-effort callback
+    /// (regardless of deadline).
+    pub fn has_unexpired_callbacks(&self) -> bool {
+        !self.unexpired_callbacks.is_empty()
+    }
+
     /// Expires (i.e. removes from the set of unexpired callbacks, with no change to
     /// the callback itself) and returns the IDs of all not previously expired
     /// best-effort callbacks whose deadlines are `< now`.

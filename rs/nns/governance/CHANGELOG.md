@@ -11,6 +11,29 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-05-17: Proposal 141779
+
+http://dashboard.internetcomputer.org/proposal/141779
+
+## Changed
+
+* Neuron spawning and maturity disbursement finalization now read the locally
+  computed Mission 70 maturity modulation (derived from the XRC-backed price
+  history) instead of the CMC-polled `cached_daily_maturity_modulation_basis_points`.
+
+
+# 2026-05-13: Proposal 141771
+
+http://dashboard.internetcomputer.org/proposal/141771
+
+## Fixed
+
+* Tolerate XRC failures when updating maturity modulation: compute the average
+  over available days using last-observation-carried-forward, and advance past
+  days where XRC returns no rate so that a single persistent gap no longer
+  stalls maturity modulation updates.
+
+
 # 2026-05-08: Proposal 141738
 
 http://dashboard.internetcomputer.org/proposal/141738

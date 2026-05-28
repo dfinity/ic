@@ -223,9 +223,9 @@ fn validate_dealings_payload(
         crypto_validate_dealing(crypto, config, message)?;
     }
 
-    // If we have early transcripts, we compare them
+    // If we have remote transcripts, we compare them
     if !dealings.transcripts_for_remote_subnets.is_empty() {
-        let expected_transcripts = payload_builder::create_early_remote_transcripts(
+        let expected_transcripts = payload_builder::create_remote_transcripts(
             pool_reader,
             crypto,
             parent,
@@ -237,16 +237,16 @@ fn validate_dealings_payload(
         if dealings.transcripts_for_remote_subnets != expected_transcripts {
             warn!(
                 log,
-                "Failed to validate {} early remote DKG transcripts in data block payload at height {}",
+                "Failed to validate {} remote DKG transcripts in data block payload at height {}",
                 dealings.transcripts_for_remote_subnets.len(),
                 parent.height.increment(),
             );
-            return Err(InvalidDkgPayloadReason::InvalidEarlyNiDkgTranscripts.into());
+            return Err(InvalidDkgPayloadReason::InvalidRemoteNiDkgTranscripts.into());
         }
 
         info!(
             log,
-            "Validated {} early remote DKG transcripts in data block payload at height {}",
+            "Validated {} remote DKG transcripts in data block payload at height {}",
             dealings.transcripts_for_remote_subnets.len(),
             parent.height.increment(),
         );
@@ -283,7 +283,7 @@ mod tests {
         batch::BatchPayload,
         consensus::{
             DataPayload, Payload,
-            dkg::{DealingContent, Message},
+            dkg::{DealingContent, Message, RemoteTranscriptResult},
             idkg,
         },
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
@@ -506,8 +506,8 @@ mod tests {
     }
 
     #[test]
-    fn validate_dealings_payload_when_invalid_early_remote_transcripts_present_fails_test() {
-        // Data payloads with invalid early/remote transcripts are rejected.
+    fn validate_dealings_payload_when_invalid_remote_transcripts_present_fails_test() {
+        // Data payloads with invalid remote transcripts are rejected.
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let registry_version = 1;
             let committee = [NODE_1, NODE_2, NODE_3];
@@ -550,7 +550,7 @@ mod tests {
                 start_height: Height::from(0),
                 messages: vec![],
                 transcripts_for_remote_subnets: vec![
-                    (
+                    RemoteTranscriptResult::new(
                         NiDkgId {
                             start_block_height: Height::from(0),
                             dealer_subnet: SUBNET_1,
@@ -560,7 +560,7 @@ mod tests {
                         CallbackId::from(0),
                         Err("dummy".to_string()),
                     ),
-                    (
+                    RemoteTranscriptResult::new(
                         NiDkgId {
                             start_block_height: Height::from(0),
                             dealer_subnet: SUBNET_1,
@@ -594,7 +594,7 @@ mod tests {
                     &no_op_logger(),
                 ),
                 Err(DkgPayloadValidationError::InvalidArtifact(
-                    InvalidDkgPayloadReason::InvalidEarlyNiDkgTranscripts
+                    InvalidDkgPayloadReason::InvalidRemoteNiDkgTranscripts
                 ))
             );
         })

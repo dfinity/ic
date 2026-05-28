@@ -1260,7 +1260,22 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
         NumWasmPages::new(8)
     );
 
-    // The hook status is still `Ready`.
+    // The hook status was reset because it could not be executed.
+    assert_eq!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied
+    );
+
+    // We update `freezing_threshold` unfreezing canister.
+    test.update_freezing_threshold(canister_id, NumSeconds::new(100))
+        .unwrap();
+
+    // This re-evaluated the hook condition and set its status to `Ready`.
     assert_eq!(
         test.state()
             .canister_state(&canister_id)
@@ -1270,10 +1285,6 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
             .peek_hook_status(),
         OnLowWasmMemoryHookStatus::Ready
     );
-
-    // We update `freezing_threshold` unfreezing canister.
-    test.update_freezing_threshold(canister_id, NumSeconds::new(100))
-        .unwrap();
 
     // The hook is executed.
     test.execute_slice(canister_id);

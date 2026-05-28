@@ -31,6 +31,7 @@ use ic_types::{
     },
     consensus::{
         Block, BlockPayload, HasVersion,
+        dkg::RemoteTranscriptResult,
         idkg::{self},
     },
     crypto::randomness_from_crypto_hashable,
@@ -421,15 +422,23 @@ impl<'a> RemoteDkgResults<'a> {
 /// - Responses to `setup_initial_dkg` system calls
 /// - Responses to `reshare_chain_key`, if the requested key is a NiDkg key
 fn generate_responses_to_remote_dkgs(
-    transcripts_for_remote_subnets: &[(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)],
+    transcripts_for_remote_subnets: &[RemoteTranscriptResult],
     log: &ReplicaLogger,
 ) -> Vec<ConsensusResponse> {
     let mut dkg_results: BTreeMap<CallbackId, RemoteDkgResults> = BTreeMap::new();
-    for (id, callback_id, transcript) in transcripts_for_remote_subnets.iter() {
+    for transcript in transcripts_for_remote_subnets.iter() {
         dkg_results
-            .entry(*callback_id)
-            .and_modify(|transcript_result| transcript_result.add_transcript(id, transcript, log))
-            .or_insert_with(|| RemoteDkgResults::new(id, transcript));
+            .entry(transcript.callback_id)
+            .and_modify(|transcript_result| {
+                transcript_result.add_transcript(
+                    &transcript.dkg_id,
+                    &transcript.transcript_result,
+                    log,
+                )
+            })
+            .or_insert_with(|| {
+                RemoteDkgResults::new(&transcript.dkg_id, &transcript.transcript_result)
+            });
     }
 
     dkg_results
@@ -563,7 +572,10 @@ mod tests {
     use ic_types::{
         PrincipalId, RegistryVersion, SubnetId,
         batch::{BatchPayload, ValidationContext},
-        consensus::{DataPayload, Payload as ConsensusPayload, Rank, dkg::DkgDataPayload},
+        consensus::{
+            DataPayload, Payload as ConsensusPayload, Rank,
+            dkg::{DkgDataPayload, RemoteTranscriptResult},
+        },
         crypto::{
             CryptoHash, CryptoHashOf,
             threshold_sig::ni_dkg::{
@@ -593,12 +605,12 @@ mod tests {
     fn test_generate_setup_initial_dkg_response() {
         // Build some transcipts with matching ids and tags
         let transcripts_for_remote_subnets = [
-            (
+            RemoteTranscriptResult::new(
                 ni_dkg_id(NiDkgTag::LowThreshold),
                 CallbackId::from(1),
                 Ok(dummy_transcript_for_tests()),
             ),
-            (
+            RemoteTranscriptResult::new(
                 ni_dkg_id(NiDkgTag::HighThreshold),
                 CallbackId::from(1),
                 Ok(dummy_transcript_for_tests()),
@@ -628,7 +640,7 @@ mod tests {
         });
 
         // Build some transcipts with matching ids and tags
-        let transcripts_for_remote_subnets = [(
+        let transcripts_for_remote_subnets = [RemoteTranscriptResult::new(
             ni_dkg_id(NiDkgTag::HighThresholdForKey(key_id.clone())),
             CallbackId::from(2),
             Ok(dummy_transcript_for_tests()),
@@ -650,7 +662,7 @@ mod tests {
 
     #[test]
     fn test_generate_setup_initial_dkg_response_rejects_if_only_one_transcript_present() {
-        let transcripts_for_remote_subnets = [(
+        let transcripts_for_remote_subnets = [RemoteTranscriptResult::new(
             ni_dkg_id(NiDkgTag::LowThreshold),
             CallbackId::from(1),
             Ok(dummy_transcript_for_tests()),
@@ -671,7 +683,7 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_responses_for_early_remote_dkg_transcripts() {
+    fn test_generate_responses_for_remote_dkg_transcripts() {
         let key_id: NiDkgMasterPublicKeyId = NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
             curve: VetKdCurve::Bls12_381_G2,
             name: String::from("test_vetkd_key"),
@@ -683,18 +695,18 @@ mod tests {
             messages: vec![],
             transcripts_for_remote_subnets: vec![
                 // ReshareChainKey (NiDkg) → one response
-                (
+                RemoteTranscriptResult::new(
                     ni_dkg_id(NiDkgTag::HighThresholdForKey(key_id.clone())),
                     CallbackId::from(42),
                     Ok(dummy_transcript.clone()),
                 ),
                 // SetupInitialDKG: low + high threshold for same callback → one response
-                (
+                RemoteTranscriptResult::new(
                     ni_dkg_id(NiDkgTag::LowThreshold),
                     CallbackId::from(1),
                     Ok(dummy_transcript.clone()),
                 ),
-                (
+                RemoteTranscriptResult::new(
                     ni_dkg_id(NiDkgTag::HighThreshold),
                     CallbackId::from(1),
                     Ok(dummy_transcript),
@@ -741,7 +753,7 @@ mod tests {
         };
         let response = ReshareChainKeyResponse::decode(payload_data).unwrap();
         let ReshareChainKeyResponse::NiDkg(_) = response else {
-            panic!("Expected a NiDkg response for early remote DKG transcript");
+            panic!("Expected a NiDkg response for remote DKG transcript");
         };
 
         let setup_initial_response = responses

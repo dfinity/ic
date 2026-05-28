@@ -68,10 +68,8 @@ rust_test(
     ],
     deps = [
         # Keep sorted.
-        ":type",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:cached",
-        "@crate_index//:criterion",
         "@crate_index//:hex",
         "@crate_index//:ic_bls12_381",
         "@crate_index//:itertools",
@@ -97,7 +95,6 @@ rust_test_suite(
         ":type",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:cached",
-        "@crate_index//:criterion",
         "@crate_index//:hex",
         "@crate_index//:ic_bls12_381",
         "@crate_index//:itertools",

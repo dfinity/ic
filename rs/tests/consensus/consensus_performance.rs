@@ -41,7 +41,7 @@
 //
 //   $ rs/tests/run-p8s.sh --grafana-dashboards-dir ~/k8s/bases/apps/ic-dashboards performance/_tmp/*/setup/colocated_test/tests/test/universal_vms/prometheus/prometheus-data-dir.tar.zst
 //
-// Note this this script requires Nix so make sure it's installed (https://nixos.org/download/).
+// Note this script requires Nix so make sure it's installed (https://nixos.org/download/).
 // The script also requires a local clone of https://github.com/dfinity-ops/k8s containing the Grafana dashboards.
 //
 // Then, on your laptop, forward the Grafana port 3000 to your devenv:
@@ -65,7 +65,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::get_ic_build_version;
 use ic_system_test_driver::driver::{
-    farm::{HostFeature, VmAllocationMode},
+    farm::HostFeature,
     ic::{
         AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
     },
@@ -219,7 +219,6 @@ fn main() -> Result<()> {
         // Since we setup VMs in sequence it takes more than the default timeout
         // of 10 minutes to setup this large testnet so let's increase the timeout:
         .with_timeout_per_test(Duration::from_secs(60 * 30))
-        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(setup)
         .add_test(systest!(test; TestParameters { message_size: 1, rps: 1.0 }))
         .add_test(systest!(test; TestParameters { message_size: 9_500, rps: 1_000.0 }))

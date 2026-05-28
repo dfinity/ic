@@ -20,7 +20,6 @@ end::catalog[] */
 use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::farm::HostFeature;
-use ic_system_test_driver::driver::farm::VmAllocationMode;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
@@ -47,7 +46,6 @@ fn main() -> Result<()> {
     let config = Config::new(NUM_NODES, NUM_CANISTERS);
     let test = config.clone().test();
     SystemTestGroup::new()
-        .with_vm_allocation_mode(VmAllocationMode::PerformanceOptimizedAllocation)
         .with_setup(config.build())
         .add_test(systest!(test))
         .with_timeout_per_test(PER_TASK_TIMEOUT)

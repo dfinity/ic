@@ -5598,6 +5598,7 @@ dependencies = [
  "hyper-util",
  "ic-interfaces-registry",
  "ic-registry-client-helpers",
+ "ic-types",
  "rcgen 0.13.2",
  "rustls 0.23.37",
  "sev",
@@ -5641,6 +5642,8 @@ dependencies = [
  "ic-registry-client-fake",
  "ic-registry-proto-data-provider",
  "ic-test-utilities-registry",
+ "ic-types",
+ "rand 0.8.5",
  "rustls 0.23.37",
  "sev_guest",
  "sev_guest_testing",
@@ -6479,6 +6482,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-nns-governance-conversions",
+ "ic-nns-handler-lifeline-interface",
  "ic-nns-handler-root",
  "ic-nns-init",
  "ic-nns-test-utils",
@@ -9588,6 +9592,7 @@ dependencies = [
 name = "ic-ed25519"
 version = "0.6.0"
 dependencies = [
+ "criterion",
  "curve25519-dalek",
  "ed25519-dalek",
  "hex",
@@ -11214,7 +11219,7 @@ dependencies = [
 
 [[package]]
 name = "ic-management-canister-types"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "candid",
  "candid_parser",
@@ -14588,6 +14593,7 @@ dependencies = [
  "crossbeam-channel",
  "hex",
  "ic-base-types",
+ "ic-config",
  "ic-interfaces",
  "ic-logger",
  "ic-management-canister-types-private",
@@ -14627,6 +14633,7 @@ dependencies = [
  "ic-base-types",
  "ic-btc-adapter-client",
  "ic-btc-consensus",
+ "ic-certification 0.9.0",
  "ic-config",
  "ic-consensus",
  "ic-consensus-cup-utils",
@@ -14983,6 +14990,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-systest-firewall"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-nns-governance-api",
+ "ic-protobuf",
+ "ic-registry-keys",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic_consensus_system_test_utils",
+ "registry-canister",
+ "reqwest",
+ "slog",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "ic-test-artifact-pool"
 version = "0.9.0"
 dependencies = [
@@ -15304,7 +15330,6 @@ dependencies = [
  "ic-nns-test-utils",
  "ic-protobuf",
  "ic-registry-keys",
- "ic-registry-nns-data-provider",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
@@ -15602,6 +15627,8 @@ name = "ic-utils-thread"
 version = "0.9.0"
 dependencies = [
  "crossbeam-channel",
+ "ic-metrics",
+ "prometheus",
 ]
 
 [[package]]
@@ -16045,7 +16072,6 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-protobuf",
  "ic-registry-keys",
- "ic-registry-nns-data-provider",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
@@ -19931,7 +19957,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "13.0.0"
+version = "14.0.0"
 dependencies = [
  "backoff",
  "base64 0.13.1",
@@ -19992,7 +20018,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic-server"
-version = "13.0.0"
+version = "14.0.0"
 dependencies = [
  "aide",
  "askama",

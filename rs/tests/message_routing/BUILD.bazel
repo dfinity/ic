@@ -97,6 +97,7 @@ system_test_nns(
         "manual",  # TODO: replace with "system_test_large" when the test has been made to work with d28780e
     ],
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {
         "STATESYNC_TEST_CANISTER_WASM_PATH": "//rs/rust_canisters/statesync_test:statesync-test-canister",
     },

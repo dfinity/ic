@@ -76,6 +76,7 @@ system_test_nns(
     enable_metrics = True,
     tags = ["manual"],  # not meant to be run on CI
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
         "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
     },
@@ -100,6 +101,7 @@ system_test_nns(
         "manual",
     ],
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
         "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
     },
@@ -282,34 +284,6 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "firewall_max_connections_test",
-    tags = [
-        "colocate",
-        "long_test",
-    ],
-    deps = COMMON_DEPS + [
-        "@crate_index//:tokio",
-        "@crate_index//:tokio-util",
-    ],
-)
-
-system_test_nns(
-    name = "firewall_priority_test",
-    tags = [
-        "long_test",
-    ],
-    deps = COMMON_DEPS + [
-        "//rs/nns/governance/api",
-        "//rs/protobuf",
-        "//rs/registry/canister",
-        "//rs/registry/keys",
-        "//rs/types/types",
-        "@crate_index//:candid",
-        "@crate_index//:url",
-    ],
-)
-
-system_test_nns(
     name = "http_endpoints_public_spec_test",
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + HTTP_ENDPOINTS_DEPS + [
@@ -360,6 +334,7 @@ system_test_nns(
         "manual",
     ],
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
         "JAEGER_UVM_CONFIG_IMAGE_ZST": "//rs/tests:jaeger_uvm_config_image",
     },
@@ -384,6 +359,7 @@ system_test_nns(
         "colocate",
     ],
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/tests/networking/subnet_update_workload",
@@ -401,6 +377,7 @@ system_test_nns(
         "manual",
     ],
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {
         "STATESYNC_TEST_CANISTER_WASM_PATH": "//rs/rust_canisters/statesync_test:statesync-test-canister",
     },
@@ -433,6 +410,7 @@ system_test_nns(
         "colocate",
     ],
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/tests/networking/subnet_update_workload",
@@ -446,6 +424,7 @@ system_test(
         "manual",
     ],
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
         "CLONER_CANISTER_WASM_PATH": "//rs/tests/networking/canisters:cloner_canister",
     },
