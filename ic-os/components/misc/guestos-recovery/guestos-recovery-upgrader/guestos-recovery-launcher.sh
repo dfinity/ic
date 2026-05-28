@@ -46,7 +46,7 @@ for arg in "$@"; do
     esac
 done
 
-if [[ ( "$mode" == "prep" || "$mode" == "run" ) && "$has_target_boot_alternative" != true ]]; then
+if [[ ("$mode" == "prep" || "$mode" == "run") && "$has_target_boot_alternative" != true ]]; then
     echo "ERROR: target-boot-alternative=<A|B> is required for mode=${mode}" >&2
     exit 1
 fi
