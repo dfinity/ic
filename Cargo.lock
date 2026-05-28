@@ -9592,6 +9592,7 @@ dependencies = [
 name = "ic-ed25519"
 version = "0.6.0"
 dependencies = [
+ "criterion",
  "curve25519-dalek",
  "ed25519-dalek",
  "hex",
@@ -14986,6 +14987,25 @@ dependencies = [
  "walkdir",
  "wat",
  "zstd",
+]
+
+[[package]]
+name = "ic-systest-firewall"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-nns-governance-api",
+ "ic-protobuf",
+ "ic-registry-keys",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic_consensus_system_test_utils",
+ "registry-canister",
+ "reqwest",
+ "slog",
+ "tokio",
+ "url",
 ]
 
 [[package]]

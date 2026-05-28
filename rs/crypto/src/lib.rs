@@ -24,7 +24,7 @@ pub use sign::{
 use crate::sign::ThresholdSigDataStoreImpl;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::vault::vault_from_config;
-use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
+use ic_crypto_internal_csp::{CryptoServiceProvider, Csp, CspRwLock};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
 use ic_interfaces::crypto::KeyManager;
@@ -36,8 +36,14 @@ use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicK
 use ic_types::crypto::{CryptoError, CryptoResult, KeyPurpose};
 use ic_types::{NodeId, RegistryVersion};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use rand::rngs::OsRng;
+use rand::{CryptoRng, Rng};
 use std::fmt;
 use std::sync::Arc;
+
+/// A supertrait collecting traits required for an RNG used in the [`CryptoComponentImpl`].
+pub trait CryptoComponentRng: Rng + CryptoRng + 'static + Send + Sync {}
+impl<T: Rng + CryptoRng + 'static + Send + Sync> CryptoComponentRng for T {}
 
 /// Defines the maximum number of entries contained in the
 /// `ThresholdSigDataStore` per tag, where tag is of type `NiDkgTag`.
@@ -51,10 +57,11 @@ pub type CryptoComponent = CryptoComponentImpl<Csp>;
 /// Allows Internet Computer nodes to perform crypto operations such as
 /// distributed key generation, signing, signature verification, and TLS
 /// handshakes.
-pub struct CryptoComponentImpl<C: CryptoServiceProvider> {
+pub struct CryptoComponentImpl<C: CryptoServiceProvider, R: CryptoComponentRng = OsRng> {
     lockable_threshold_sig_data_store: LockableThresholdSigDataStore,
     vault: Arc<dyn CspVault>,
     csp: C,
+    csprng: CspRwLock<R>,
     registry_client: Arc<dyn RegistryClient>,
     // The node id of the node that instantiated this crypto component.
     node_id: NodeId,
@@ -93,7 +100,7 @@ impl LockableThresholdSigDataStore {
 
 /// Methods required for testing. Ideally, this block would be `#[test]` code,
 /// but this is not possible as the methods are required outside of the crate.
-impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng> CryptoComponentImpl<C, R> {
     /// Creates a crypto component using the given `csp` and fake `node_id`.
     pub fn new_for_test(
         csp: C,
@@ -103,11 +110,13 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
         node_id: NodeId,
         metrics: Arc<CryptoMetrics>,
         time_source: Option<Arc<dyn TimeSource>>,
+        rng: R,
     ) -> Self {
         CryptoComponentImpl {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
             vault,
+            csprng: CspRwLock::new_for_rng(rng, Arc::clone(&metrics)),
             registry_client,
             node_id,
             logger,
@@ -117,7 +126,7 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
     }
 }
 
-impl<C: CryptoServiceProvider> fmt::Debug for CryptoComponentImpl<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng> fmt::Debug for CryptoComponentImpl<C, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -213,6 +222,7 @@ impl CryptoComponentImpl<Csp> {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
             vault,
+            csprng: CspRwLock::new_for_rng(OsRng, Arc::clone(&metrics)),
             registry_client,
             node_id,
             time_source: Arc::new(SysTimeSource::new()),
@@ -222,7 +232,9 @@ impl CryptoComponentImpl<Csp> {
         crypto_component.collect_and_store_key_count_metrics(latest_registry_version);
         crypto_component
     }
+}
 
+impl<C: CryptoServiceProvider, R: CryptoComponentRng> CryptoComponentImpl<C, R> {
     /// Returns the `NodeId` of this crypto component.
     pub fn get_node_id(&self) -> NodeId {
         self.node_id
