@@ -1,7 +1,6 @@
 use crate::crypt::{
-    KeyslotMetadata, LuksHeaderLocation, SevMetadata, activate_crypt_device, add_sev_metadata,
-    backup_luks_header_to_file, check_encryption_key, destroy_key_slots_except,
-    format_crypt_device,
+    LuksHeaderLocation, SevMetadata, activate_crypt_device, add_sev_metadata,
+    backup_luks_header_to_file, check_encryption_key, destroy_keyslots_except, format_crypt_device,
 };
 use crate::{DiskEncryption, Partition, activate_flags};
 use anyhow::{Context, Result, bail};
@@ -67,8 +66,9 @@ impl SevDiskEncryption {
                 self.previous_key_path.display()
             )
         })?;
+
         info!("Found previous key for store partition, will use it to unlock the partition");
-        let mut crypt_device = activate_crypt_device(
+        let (mut crypt_device, previous_keyslot) = activate_crypt_device(
             device_path,
             LuksHeaderLocation::Detached(&self.store_luks_header_path),
             crypt_name,
@@ -85,21 +85,17 @@ impl SevDiskEncryption {
             .add_by_passphrase(None, &previous_key, new_key)
             .context("Failed to add new key to store partition")?;
 
-        add_sev_metadata(&mut crypt_device, new_keyslot, sev_metadata.clone())
-            .context("Failed to write SEV key-slot metadata")?;
-
         info!("Removing old key slots from store partition");
         // Keep the key slot that was used to unlock the partition with the previous key.
         // Delete all other key slots and add the new key.
         // In the end, the store partition will have two keys:
         // 1. The previous key that was used to unlock the partition before the upgrade.
         // 2. The new key that is used to unlock the partition after the upgrade.
-        if let Err(err) = destroy_key_slots_except(&mut crypt_device, &[&previous_key, new_key]) {
-            // It's not a critical error if we fail to destroy the key slots, but it's a security
-            // risk, so we should log it. We panic in debug builds.
-            debug_assert!(false, "Failed to destroy key slots: {err:?}");
-            warn!("Failed to destroy key slots: {err:?}");
-        }
+        destroy_keyslots_except(&mut crypt_device, &[previous_keyslot, new_keyslot])
+            .context("Failed to destroy keyslots")?;
+
+        add_sev_metadata(&mut crypt_device, new_keyslot, sev_metadata.clone())
+            .context("Failed to write SEV keyslot metadata")?;
 
         // Clean up the previous key on the first boot after upgrade if own key was added
         // successfully.
@@ -223,7 +219,7 @@ impl DiskEncryption for SevDiskEncryption {
             format_crypt_device(device_path, LuksHeaderLocation::Attached, key.as_bytes())
                 .context("Failed to format partition")?;
         add_sev_metadata(&mut crypt_device, keyslot, sev_metadata)
-            .context("Failed to write SEV key-slot metadata")?;
+            .context("Failed to write SEV keyslot metadata")?;
 
         if partition == Partition::Store {
             self.ensure_detached_store_luks_header(device_path)?;

@@ -2,7 +2,7 @@ use crate::{Args, Partition, crypt_name, metrics_file_path, run};
 use anyhow::{Result, anyhow};
 use config_types::{GuestOSConfig, GuestVMType, ICOSSettings};
 use guest_disk::crypt::{
-    KeyslotMetadata, LUKS2_N_TOKENS, LuksHeaderLocation, activate_crypt_device,
+    KeyslotMetadata, LUKS2_N_KEYSLOTS, LUKS2_N_TOKENS, LuksHeaderLocation, activate_crypt_device,
     backup_luks_header_to_file, check_encryption_key, deactivate_crypt_device, format_crypt_device,
     open_luks2_device, read_keyslot_metadata,
 };
@@ -219,11 +219,11 @@ impl<'a> TestFixture<'a> {
         .unwrap();
 
         let mut keyslot_handle = crypt_device.keyslot_handle();
-        (0..32)
-            .filter(|&key_slot| {
+        (0..LUKS2_N_KEYSLOTS)
+            .filter(|&keyslot| {
                 matches!(
                     keyslot_handle
-                        .status(key_slot)
+                        .status(keyslot)
                         .expect("Failed to get keyslot status"),
                     KeyslotInfo::Active | KeyslotInfo::ActiveLast
                 )
@@ -685,15 +685,15 @@ fn test_sev_unlock_store_partition_with_previous_key() {
     let mut keyslot_handle = device.keyslot_handle();
 
     // Test the all active keys have correct params.
-    for key_slot in 0..32 {
+    for keyslot in 0..LUKS2_N_KEYSLOTS {
         if matches!(
             keyslot_handle
-                .status(key_slot)
+                .status(keyslot)
                 .expect("Failed to get keyslot status"),
             KeyslotInfo::Active | KeyslotInfo::ActiveLast
         ) {
             let pbkdf = keyslot_handle
-                .get_pbkdf(key_slot)
+                .get_pbkdf(keyslot)
                 .expect("Failed to get PBKDF params for active keyslot");
             assert_eq!(pbkdf.type_, CryptKdf::Pbkdf2);
             assert_eq!(pbkdf.iterations, TEST_PBKDF_ITERATIONS);
@@ -907,7 +907,7 @@ fn test_open_store_with_same_previous_and_current_key_keeps_valid_token_metadata
         .expect("opening Store should succeed when previous and current SEV keys are equal");
 
     let metadata_after = fixture.read_keyslot_metadata(Partition::Store);
-    assert_eq!(metadata_after.len(), 1);
+    assert_eq!(metadata_after.len(), 2);
 
     let mut device = open_luks2_device(
         &fixture.device.path().unwrap(),
@@ -933,7 +933,7 @@ fn test_open_store_multiple_times_with_different_keys() {
     fixture.format(Partition::Store).unwrap();
     corrupt_attached_luks_header(&fixture.device.path().unwrap());
 
-    for i in 0..5 {
+    for i in 0..6 {
         // Simulate saving the previous key during upgrade.
         fs::write(
             &fixture.previous_key_path,
@@ -962,16 +962,18 @@ fn test_open_store_multiple_times_with_different_keys() {
 
     let metadata = fixture.read_keyslot_metadata(Partition::Store);
     assert_eq!(metadata.len(), 2);
-    assert_eq!(metadata[0].keyslot().unwrap(), 0);
+    assert_ne!(
+        metadata[0].keyslot().unwrap(),
+        metadata[1].keyslot().unwrap()
+    );
     assert_eq!(
         metadata[0].sev_metadata.launch_measurement_hex,
-        "030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303"
+        "040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404"
     );
 
-    assert_eq!(metadata[1].keyslot().unwrap(), 1);
     assert_eq!(
         metadata[1].sev_metadata.launch_measurement_hex,
-        "040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404040404"
+        "050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505050505"
     );
     assert_eq!(fixture.active_keyslot_count(Partition::Store), 2);
 }
