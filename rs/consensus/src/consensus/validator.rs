@@ -2,7 +2,7 @@
 //! artifacts.
 #![allow(clippy::result_large_err)]
 use crate::consensus::{
-    ConsensusMessageId, check_protocol_version,
+    ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP, ConsensusMessageId, check_protocol_version,
     metrics::ValidatorMetrics,
     status::{self, Status},
 };
@@ -110,6 +110,7 @@ enum InvalidArtifactReason {
     CannotVerifyBlockHeightZero,
     NonEmptyPayloadPastUpgradePoint,
     NonStrictlyIncreasingValidationContext,
+    ValidationContextCertifiedHeightTooOld,
     MismatchedBlockInCatchUpPackageShare,
     DataPayloadBlockInCatchUpPackageShare,
     MismatchedOldestRegistryVersionInCatchUpPackageShare,
@@ -1226,6 +1227,16 @@ impl Validator {
         let proposal = proposal.as_ref();
         if !proposal.context.greater(&parent.context) {
             return Err(InvalidArtifactReason::NonStrictlyIncreasingValidationContext.into());
+        }
+
+        // Honest block makers should never produce blocks with a certified height that is too old
+        if proposal
+            .height()
+            .get()
+            .saturating_sub(proposal.context.certified_height.get())
+            > ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP
+        {
+            return Err(InvalidArtifactReason::ValidationContextCertifiedHeightTooOld.into());
         }
 
         let local_context = ValidationContext {
