@@ -12,6 +12,9 @@ use serde::de::DeserializeOwned;
 use std::fmt;
 use std::fmt::Debug;
 
+#[cfg(test)]
+mod tests;
+
 // TODO: extract to common crate since copied form ckETH
 
 /// Represents an error from a management canister call, such as
@@ -218,7 +221,12 @@ impl CanisterRuntime for IcCanisterRuntime {
             controllers.len()
         );
         let payment = u128::from(cycles_for_canister_creation);
-        let balance = ic_cdk::api::canister_cycle_balance();
+        // Mirrors the ic-cdk pre-flight check inside `Call::await`, which uses
+        // `canister_liquid_cycle_balance` (i.e. excluding the freezing-threshold
+        // reserve). Using the same liquid balance here avoids issuing a Call we
+        // know will fail when the cycle balance is above `payment` but the
+        // liquid balance is not.
+        let balance = ic_cdk::api::canister_liquid_cycle_balance();
         if balance < payment {
             return Err(CallError {
                 method: "create_canister".to_string(),
