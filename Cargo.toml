@@ -494,6 +494,7 @@ members = [
     "rs/tests/networking",
     "rs/tests/networking/canister_http",
     "rs/tests/networking/canisters",
+    "rs/tests/networking/firewall",
     "rs/tests/networking/subnet_update_workload",
     "rs/tests/nns",
     "rs/tests/nns/cycles_minting",

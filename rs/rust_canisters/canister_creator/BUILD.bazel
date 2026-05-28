@@ -16,9 +16,6 @@ rust_library(
         "@crate_index//:candid",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
-        "@crate_index//:rand",
-        "@crate_index//:rand_pcg",
-        "@crate_index//:wat",
     ],
 )
 
