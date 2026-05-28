@@ -587,6 +587,41 @@ fn try_for_each_mut_short_circuits_on_cold_error_and_promotes_visited() {
 }
 
 #[test]
+fn try_for_each_mut_short_circuits_on_cold_error_for_canister_that_stays_cold() {
+    let mut states = CanisterStates::default();
+    let c1 = cold_canister(1);
+    let c2 = cold_canister(2);
+    let c3 = cold_canister(3);
+    states.insert(Arc::clone(&c1));
+    states.insert(Arc::clone(&c2));
+    states.insert(Arc::clone(&c3));
+    assert_eq!(states.hot.len(), 0);
+    assert_eq!(states.cold.len(), 3);
+
+    let mut visited = Vec::new();
+    let res: Result<(), &'static str> = states.try_for_each_mut(|id, _canister| {
+        visited.push(*id);
+        if *id == c2.canister_id() {
+            // Return `Err` without mutating: the canister stays cold.
+            // The error must still propagate and iteration must stop here.
+            Err("boom")
+        } else {
+            // No-op on c1 and c3: they stay cold.
+            Ok(())
+        }
+    });
+
+    assert_eq!(res, Err("boom"));
+    // Iteration must stop at c2; c3 must not be visited.
+    assert_eq!(visited, vec![c1.canister_id(), c2.canister_id()]);
+    // No canister was mutated, so all three remain in `cold`.
+    assert!(states.cold.contains_key(&c1.canister_id()));
+    assert!(states.cold.contains_key(&c2.canister_id()));
+    assert!(states.cold.contains_key(&c3.canister_id()));
+    assert!(states.hot.is_empty());
+}
+
+#[test]
 fn retain_updates_cold_stats_for_removed_cold_canisters() {
     let mut states = CanisterStates::default();
     let mut c1 = cold_canister(1);
