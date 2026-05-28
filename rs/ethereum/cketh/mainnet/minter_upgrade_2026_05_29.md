@@ -15,7 +15,14 @@ Previous ckETH minter proposal: https://dashboard.internetcomputer.org/proposal/
 ---
 
 ## Motivation
-TODO: THIS MUST BE FILLED OUT
+
+Update the ckETH minter canister to include the latest code changes:
+
+* Reduce the minimum ETH withdrawal amount by a factor 6. Change it from currently 0.03 ETH (`30_000_000_000_000_000` wei) to 0.005 ETH (`5_000_000_000_000_000` wei), which is approximatively $10. The reasoning is as follows:
+    * The current minimum amount dates back to 12.2023 when the ckETH minter was installed (see proposal [126171](https://dashboard.internetcomputer.org/proposal/126171)). At that time, ETH was in a similar USD price range (around $2000 like today) and transaction fees were averaging between $5-$10 per transaction ([source](https://bitinfocharts.com/comparison/ethereum-transactionfees.html#3y)).
+    * In contrast, today Ethreum mainnet transaction fees are in the order of cents and rarely above $1.
+    * As explained [here](https://github.com/dfinity/ic/blob/14382b5abb14b8e7de2bd4a3fb402ba069b82861/rs/ethereum/cketh/docs/cketh.adoc?plain=1#L208), we keep an order of magnitude as a safety margin so that the minter can always send the transaction to Ethereum if one or several resubmissions are needed if the Ethereum network is congested and fees are increasing rapidly (each resubmission requires an increase of at least 10% of the transaction fee).
+* Update the OFAC checklist.
 
 
 ## Release Notes
