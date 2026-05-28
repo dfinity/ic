@@ -132,12 +132,15 @@ fn create_parameter_lines(params: &RecoveryParams) -> Vec<Line<'_>> {
     let mut lines = vec![
         format!("Inputted parameters:"),
         format!("VERSION: {}", params.version),
-        format!(
+    ];
+
+    if params.mode.can_select_target_boot_alternative() {
+        lines.push(format!(
             "TARGET-BOOT-ALTERNATIVE: {} ({})",
             params.target_boot_alternative_selection.as_str(),
             params.get_target_boot_alternative()
-        ),
-    ];
+        ));
+    }
 
     if params.mode.requires_recovery_hash() {
         let recovery_hash_prefix = params.recovery_hash_prefix.as_deref().unwrap_or("<empty>");
@@ -326,8 +329,8 @@ fn render_input_screen(f: &mut Frame, state: &InputState, size: Rect) {
     } else {
         vec![
             Line::from("Enter the recovery version and the 6-character recovery hash prefix."),
-            Line::from("Adjust the target boot alternative if needed."),
-            Line::from("Use Left/Right on the target field; Up/Down or TAB moves focus."),
+            Line::from("The install target will use the opposite boot alternative."),
+            Line::from("Use Up/Down or TAB to move focus."),
         ]
     };
     let instructions_para = Paragraph::new(instructions)
@@ -806,15 +809,14 @@ mod tests {
             // Title and instructions
             assert!(buffer_contains(&terminal, "Manual Recovery TUI"));
             assert!(buffer_contains(&terminal, "recovery version"));
-            assert!(buffer_contains(&terminal, "Left/Right"));
+            assert!(buffer_contains(&terminal, "opposite boot alternative"));
 
             // Field labels
             assert!(buffer_contains(&terminal, "VERSION"));
             assert!(buffer_contains(&terminal, "RECOVERY-HASH-PREFIX"));
-            assert!(buffer_contains(&terminal, "TARGET-BOOT-ALTERNATIVE"));
-            assert!(buffer_contains(&terminal, "current alternative: A"));
-            assert!(buffer_contains(&terminal, "( ) current (A)"));
-            assert!(buffer_contains(&terminal, "(*) opposite (B)"));
+            assert!(!buffer_contains(&terminal, "TARGET-BOOT-ALTERNATIVE"));
+            assert!(!buffer_contains(&terminal, "current alternative: A"));
+            assert!(!buffer_contains(&terminal, "(*) opposite (B)"));
 
             // Buttons
             assert!(buffer_contains(&terminal, "<Run recovery>"));
@@ -886,10 +888,7 @@ mod tests {
             // Input parameters
             assert!(buffer_contains(&terminal, "VERSION:"));
             assert!(buffer_contains(&terminal, "abc123def456"));
-            assert!(buffer_contains(
-                &terminal,
-                "TARGET-BOOT-ALTERNATIVE: opposite (B)"
-            ));
+            assert!(!buffer_contains(&terminal, "TARGET-BOOT-ALTERNATIVE:"));
             assert!(buffer_contains(&terminal, "RECOVERY-HASH-PREFIX:"));
             assert!(buffer_contains(&terminal, "fedcba"));
 
@@ -938,10 +937,7 @@ mod tests {
             assert!(buffer_contains(&terminal, "GuestOS Recovery Upgrader"));
             assert!(buffer_contains(&terminal, "VERSION:"));
             assert!(buffer_contains(&terminal, "testversion123"));
-            assert!(buffer_contains(
-                &terminal,
-                "TARGET-BOOT-ALTERNATIVE: opposite (B)"
-            ));
+            assert!(!buffer_contains(&terminal, "TARGET-BOOT-ALTERNATIVE:"));
             assert!(buffer_contains(&terminal, "<pending>"));
             assert!(buffer_contains(&terminal, "Recovery process logs"));
         }

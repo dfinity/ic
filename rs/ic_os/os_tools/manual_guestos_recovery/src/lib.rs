@@ -78,6 +78,10 @@ impl RecoveryMode {
         matches!(self, Self::Nns)
     }
 
+    fn can_select_target_boot_alternative(self) -> bool {
+        matches!(self, Self::Tee)
+    }
+
     fn default_target_boot_alternative_selection(self) -> TargetBootAlternativeSelection {
         match self {
             Self::Nns => TargetBootAlternativeSelection::Opposite,
@@ -129,8 +133,16 @@ impl RecoveryParams {
         Ok(())
     }
 
+    fn effective_target_boot_alternative_selection(&self) -> TargetBootAlternativeSelection {
+        if self.mode.can_select_target_boot_alternative() {
+            self.target_boot_alternative_selection
+        } else {
+            self.mode.default_target_boot_alternative_selection()
+        }
+    }
+
     fn get_target_boot_alternative(&self) -> BootAlternative {
-        match self.target_boot_alternative_selection {
+        match self.effective_target_boot_alternative_selection() {
             TargetBootAlternativeSelection::Current => self.current_boot_alternative,
             TargetBootAlternativeSelection::Opposite => {
                 self.current_boot_alternative.get_opposite()
@@ -179,7 +191,6 @@ impl Field {
     const ALL_NNS: &'static [Field] = &[
         Field::Version,
         Field::RecoveryHashPrefix,
-        Field::TargetBootAlternative,
         Field::CheckArtifactsButton,
         Field::ExitButton,
     ];
@@ -191,11 +202,7 @@ impl Field {
         Field::ExitButton,
     ];
 
-    const INPUT_FIELDS_NNS: &'static [Field] = &[
-        Field::Version,
-        Field::RecoveryHashPrefix,
-        Field::TargetBootAlternative,
-    ];
+    const INPUT_FIELDS_NNS: &'static [Field] = &[Field::Version, Field::RecoveryHashPrefix];
 
     const INPUT_FIELDS_TEE: &'static [Field] = &[Field::Version, Field::TargetBootAlternative];
 
@@ -1219,10 +1226,11 @@ mod tests {
         }
 
         #[test]
-        fn resolved_target_boot_alternative_matches_selection() {
+        fn get_target_boot_alternative_honors_selection_in_tee_mode() {
             let current = RecoveryParams {
                 current_boot_alternative: BootAlternative::B,
                 target_boot_alternative_selection: TargetBootAlternativeSelection::Current,
+                mode: RecoveryMode::Tee,
                 ..default_recovery_params()
             };
             assert_eq!(current.get_target_boot_alternative(), BootAlternative::B);
@@ -1230,9 +1238,21 @@ mod tests {
             let opposite = RecoveryParams {
                 current_boot_alternative: BootAlternative::B,
                 target_boot_alternative_selection: TargetBootAlternativeSelection::Opposite,
+                mode: RecoveryMode::Tee,
                 ..default_recovery_params()
             };
             assert_eq!(opposite.get_target_boot_alternative(), BootAlternative::A);
+        }
+
+        #[test]
+        fn get_target_boot_alternative_uses_opposite_in_nns_mode() {
+            let params = RecoveryParams {
+                current_boot_alternative: BootAlternative::B,
+                target_boot_alternative_selection: TargetBootAlternativeSelection::Current,
+                mode: RecoveryMode::Nns,
+                ..default_recovery_params()
+            };
+            assert_eq!(params.get_target_boot_alternative(), BootAlternative::A);
         }
     }
 
@@ -1409,13 +1429,6 @@ mod tests {
                     .unwrap();
                 assert!(matches!(
                     app.get_state(),
-                    Some(AppState::Input(s)) if s.current_field() == Field::TargetBootAlternative
-                ));
-
-                app.handle_event(Event::Key(key_event(KeyCode::Tab)))
-                    .unwrap();
-                assert!(matches!(
-                    app.get_state(),
                     Some(AppState::Input(s)) if s.current_field() == Field::CheckArtifactsButton
                 ));
 
@@ -1456,7 +1469,7 @@ mod tests {
             #[test]
             fn left_right_toggles_buttons() {
                 let input_state = InputState {
-                    focused_index: 3, // CheckArtifactsButton
+                    focused_index: 2, // CheckArtifactsButton
                     ..create_test_input_state(RecoveryMode::Nns)
                 };
                 let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
@@ -1597,9 +1610,9 @@ mod tests {
             }
 
             #[test]
-            fn target_boot_alternative_field_switches_between_current_and_opposite() {
-                let mut input_state = create_test_input_state(RecoveryMode::Nns);
-                input_state.focused_index = 2;
+            fn tee_target_boot_alternative_field_switches_between_current_and_opposite() {
+                let mut input_state = create_test_input_state(RecoveryMode::Tee);
+                input_state.focused_index = 1;
                 let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
 
                 app.handle_event(Event::Key(key_event(KeyCode::Left)))
@@ -1667,7 +1680,7 @@ mod tests {
             #[test]
             fn exit_button_quits() {
                 let input_state = InputState {
-                    focused_index: 4, // ExitButton
+                    focused_index: 3, // ExitButton
                     ..create_test_input_state(RecoveryMode::Nns)
                 };
                 let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
@@ -1681,7 +1694,7 @@ mod tests {
             #[test]
             fn empty_inputs_shows_error() {
                 let input_state = InputState {
-                    focused_index: 3, // CheckArtifactsButton
+                    focused_index: 2, // CheckArtifactsButton
                     ..create_test_input_state(RecoveryMode::Nns)
                 };
                 let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
@@ -1702,7 +1715,7 @@ mod tests {
                 let mut input_state = create_test_input_state(RecoveryMode::Nns);
                 set_field_text(&mut input_state, Field::Version, "abc"); // Too short
                 set_field_text(&mut input_state, Field::RecoveryHashPrefix, "123456");
-                input_state.focused_index = 3; // CheckArtifactsButton
+                input_state.focused_index = 2; // CheckArtifactsButton
                 let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
 
                 app.handle_event(Event::Key(key_event(KeyCode::Enter)))
