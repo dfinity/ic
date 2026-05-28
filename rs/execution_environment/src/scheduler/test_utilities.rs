@@ -8,7 +8,7 @@ use ic_base_types::{CanisterId, NumBytes, PrincipalId, SubnetId};
 use ic_config::{
     embedders::Config as HypervisorConfig,
     flag_status::FlagStatus,
-    subnet_config::{SchedulerConfig, SubnetConfig},
+    subnet_config::{SchedulerConfig, SubnetConfig, SubnetSecurity},
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
@@ -825,7 +825,8 @@ pub(crate) struct SchedulerTestBuilder {
 impl Default for SchedulerTestBuilder {
     fn default() -> Self {
         let subnet_type = SubnetType::Application;
-        let scheduler_config = SubnetConfig::new(subnet_type, false).scheduler_config;
+        let scheduler_config =
+            SubnetConfig::new(subnet_type, SubnetSecurity::None).scheduler_config;
         let config = ic_config::execution_environment::Config::default();
         let mut hypervisor_config = config.embedders_config;
         hypervisor_config.create_execution_state_base_cost = NumInstructions::from(0);
@@ -864,7 +865,8 @@ impl SchedulerTestBuilder {
     }
 
     pub fn with_subnet_type(self, subnet_type: SubnetType) -> Self {
-        let scheduler_config = SubnetConfig::new(subnet_type, false).scheduler_config;
+        let scheduler_config =
+            SubnetConfig::new(subnet_type, SubnetSecurity::None).scheduler_config;
         Self {
             subnet_type,
             scheduler_config,
@@ -997,7 +999,7 @@ impl SchedulerTestBuilder {
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
         state.metadata.batch_time = self.batch_time;
 
-        let mut subnet_config = SubnetConfig::new(self.subnet_type, false);
+        let mut subnet_config = SubnetConfig::new(self.subnet_type, SubnetSecurity::None);
         subnet_config.scheduler_config = self.scheduler_config.clone();
 
         for key_id in &self.master_public_key_ids {

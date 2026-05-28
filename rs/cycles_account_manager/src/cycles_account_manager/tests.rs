@@ -1,12 +1,13 @@
 use super::*;
 use candid::Encode;
+use ic_config::subnet_config::SubnetSecurity;
 use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, UpdateSettingsArgs};
 use ic_test_utilities_types::ids::subnet_test_id;
 
 const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
 fn create_cycles_account_manager(reference_subnet_size: usize) -> CyclesAccountManager {
-    let mut config = CyclesAccountManagerConfig::application_subnet(false);
+    let mut config = CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None);
     config.reference_subnet_size = reference_subnet_size;
 
     CyclesAccountManager {
@@ -91,19 +92,21 @@ fn test_reference_subnet_size_is_not_zero() {
     // `reference_subnet_size` is used to scale cost according to a subnet size.
     // It should never be equal to zero.
     assert_ne!(
-        CyclesAccountManagerConfig::application_subnet(false).reference_subnet_size,
+        CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None).reference_subnet_size,
         0
     );
     assert_ne!(
-        CyclesAccountManagerConfig::application_subnet(true).reference_subnet_size,
+        CyclesAccountManagerConfig::application_subnet(SubnetSecurity::Sev).reference_subnet_size,
         0
     );
     assert_ne!(
-        CyclesAccountManagerConfig::verified_application_subnet(false).reference_subnet_size,
+        CyclesAccountManagerConfig::verified_application_subnet(SubnetSecurity::None)
+            .reference_subnet_size,
         0
     );
     assert_ne!(
-        CyclesAccountManagerConfig::verified_application_subnet(true).reference_subnet_size,
+        CyclesAccountManagerConfig::verified_application_subnet(SubnetSecurity::Sev)
+            .reference_subnet_size,
         0
     );
     assert_ne!(
@@ -119,14 +122,14 @@ fn test_reference_subnet_size_is_not_zero() {
 #[test]
 fn application_subnet_sev_disabled_uses_default_reference_subnet_size() {
     use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
-    let config = CyclesAccountManagerConfig::application_subnet(false);
+    let config = CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None);
     assert_eq!(config.reference_subnet_size, DEFAULT_REFERENCE_SUBNET_SIZE);
 }
 
 #[test]
 fn application_subnet_sev_enabled_uses_sev_reference_subnet_size() {
     use ic_config::subnet_config::SEV_REFERENCE_SUBNET_SIZE;
-    let config = CyclesAccountManagerConfig::application_subnet(true);
+    let config = CyclesAccountManagerConfig::application_subnet(SubnetSecurity::Sev);
     assert_eq!(config.reference_subnet_size, SEV_REFERENCE_SUBNET_SIZE);
 }
 

@@ -5,7 +5,7 @@ use ic_base_types::PrincipalId;
 use ic_config::{
     execution_environment::{Config as HypervisorConfig, DEFAULT_WASM_MEMORY_LIMIT},
     flag_status::FlagStatus,
-    subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
+    subnet_config::{CyclesAccountManagerConfig, SubnetConfig, SubnetSecurity},
 };
 use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_execution_environment::units::{GIB, MIB};
@@ -387,7 +387,7 @@ fn test_canister_stable_memory_upgrade_restart() {
 #[test]
 fn test_canister_out_of_cycles() {
     // Start a node with a config where all computation/storage is free.
-    let mut subnet_config = SubnetConfig::new(SubnetType::System, false);
+    let mut subnet_config = SubnetConfig::new(SubnetType::System, SubnetSecurity::None);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config.clone(),
         HypervisorConfig::default(),
@@ -430,7 +430,7 @@ fn test_canister_out_of_cycles() {
     // We don't charge for allocation periodically, we advance the state machine
     // time to trigger allocation charging.
     let now = now
-        + 2 * CyclesAccountManagerConfig::application_subnet(false)
+        + 2 * CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None)
             .duration_between_allocation_charges;
     env.set_time(now);
     env.tick();
@@ -446,7 +446,7 @@ fn test_canister_out_of_cycles() {
 
 #[test]
 fn canister_has_zero_balance_when_uninstalled_due_to_low_cycles() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     let compute_percent_allocated_per_second_fee = subnet_config
         .cycles_account_manager_config
         .compute_percent_allocated_per_second_fee;
@@ -487,7 +487,7 @@ fn canister_has_zero_balance_when_uninstalled_due_to_low_cycles() {
     // Advance the statem machine time a bit more and confirm the canister is
     // still uninstalled.
     env.advance_time(
-        2 * CyclesAccountManagerConfig::application_subnet(false)
+        2 * CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None)
             .duration_between_allocation_charges,
     );
     env.tick();
@@ -687,7 +687,7 @@ fn can_query_cycle_balance_and_top_up_canisters() {
 
 #[test]
 fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
@@ -732,7 +732,7 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
 
 #[test]
 fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
-    let mut subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let mut subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     subnet_config.scheduler_config.scheduler_cores = 2;
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
@@ -803,7 +803,7 @@ fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
 
 #[test]
 fn load_canister_snapshot_request_fails_when_subnet_capacity_reached() {
-    let mut subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let mut subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     subnet_config.scheduler_config.scheduler_cores = 2;
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
@@ -888,7 +888,7 @@ fn load_canister_snapshot_request_fails_when_subnet_capacity_reached() {
 
 #[test]
 fn canister_snapshot_metrics_are_observed() {
-    let mut subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let mut subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     subnet_config.scheduler_config.scheduler_cores = 2;
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
@@ -1040,7 +1040,7 @@ fn assert_rejected(result: Result<WasmResult, UserError>) {
 
 #[test]
 fn exceeding_memory_capacity_fails_during_message_execution() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
@@ -1092,7 +1092,7 @@ fn exceeding_memory_capacity_fails_during_message_execution() {
 
 #[test]
 fn subnet_memory_reservation_works() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     let num_cores = subnet_config.scheduler_config.scheduler_cores as u64;
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
@@ -1148,7 +1148,7 @@ fn subnet_memory_reservation_works() {
 
 #[test]
 fn subnet_memory_reservation_scales_with_number_of_cores() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     let num_cores = subnet_config.scheduler_config.scheduler_cores as u64;
     assert_lt!(1, num_cores);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
@@ -1209,7 +1209,7 @@ fn subnet_memory_reservation_scales_with_number_of_cores() {
 
 #[test]
 fn canister_with_reserved_balance_is_not_uninstalled_too_early() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig::default(),
@@ -1267,7 +1267,7 @@ fn canister_with_reserved_balance_is_not_uninstalled_too_early() {
 
 #[test]
 fn canister_with_reserved_balance_is_not_frozen_too_early() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig::default(),
@@ -1541,7 +1541,7 @@ fn test_consensus_queue_invariant_on_exceeding_heap_delta_limit() {
 
     let heap_delta_limit = 100 * MIB;
 
-    let mut subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let mut subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     subnet_config.scheduler_config.subnet_heap_delta_capacity = NumBytes::new(heap_delta_limit);
     let key_id = EcdsaKeyId::from_str("Secp256k1:valid_key").unwrap();
     let env = StateMachineBuilder::new()
@@ -1609,7 +1609,7 @@ fn test_consensus_queue_invariant_on_exceeding_heap_delta_limit() {
 #[test]
 fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
     fn setup(subnet_heap_delta_capacity: u64, heap_delta_initial_reserve: u64) -> StateMachine {
-        let mut subnet_config = SubnetConfig::new(SubnetType::Application, false);
+        let mut subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
         subnet_config.scheduler_config.subnet_heap_delta_capacity =
             subnet_heap_delta_capacity.into();
         subnet_config.scheduler_config.heap_delta_initial_reserve =
@@ -1937,7 +1937,7 @@ fn helper_best_effort_responses(
     timeout_seconds: Option<u32>,
     expected_deadline_seconds: u32,
 ) {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
 
     let env = StateMachineBuilder::new()
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
@@ -2614,7 +2614,7 @@ fn failed_stable_memory_grow_cost_and_time_multiple_canisters() {
 #[test]
 fn test_canister_liquid_cycle_balance() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::Application, false),
+        SubnetConfig::new(SubnetType::Application, SubnetSecurity::None),
         HypervisorConfig::default(),
     ));
 
@@ -2686,7 +2686,7 @@ fn test_canister_liquid_cycle_balance() {
 #[test]
 fn large_ipc_call_fails() {
     let wasm = canister_test::Project::cargo_bin_maybe_from_env("call_loop_canister", &[]);
-    let subnet_config = SubnetConfig::new(SubnetType::System, false);
+    let subnet_config = SubnetConfig::new(SubnetType::System, SubnetSecurity::None);
     let instruction_limit = subnet_config.scheduler_config.max_instructions_per_message;
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
@@ -2772,7 +2772,7 @@ fn canister_status_count(env: &StateMachine) -> u64 {
 
 #[test]
 fn canister_status_via_query_call_by_controller_succeeds() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
             subnet_config,
@@ -2799,7 +2799,7 @@ fn canister_status_via_query_call_by_controller_succeeds() {
 
 #[test]
 fn canister_status_via_query_call_by_subnet_admin_succeeds() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     let subnet_admin = user_test_id(100);
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
@@ -2833,7 +2833,7 @@ fn canister_status_via_query_call_by_subnet_admin_succeeds() {
 
 #[test]
 fn canister_status_via_query_call_by_neither_controller_nor_subnet_admin_fails() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     let subnet_admin = user_test_id(100);
     let test_user = user_test_id(101);
     let env = StateMachineBuilder::new()
@@ -2882,7 +2882,7 @@ fn maximum_state_size() {
         maximum_state_size: Some(maximum_state_size),
         maximum_state_delta: None,
     };
-    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     let hypervisor_config = HypervisorConfig {
         subnet_memory_reservation: NumBytes::new(0),
         ..Default::default()
@@ -2920,7 +2920,7 @@ fn maximum_state_delta() {
         maximum_state_size: None,
         maximum_state_delta: Some(maximum_state_delta),
     };
-    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     // We disable per-canister rate-limiting of heap delta to simplify the test.
     let hypervisor_config = HypervisorConfig {
         rate_limiting_of_heap_delta: FlagStatus::Disabled,
@@ -3144,7 +3144,7 @@ fn canister_metrics_count(env: &StateMachine) -> u64 {
 
 #[test]
 fn canister_metrics_via_query_call_by_controller_succeeds() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
             subnet_config,
@@ -3171,7 +3171,7 @@ fn canister_metrics_via_query_call_by_controller_succeeds() {
 
 #[test]
 fn canister_metrics_via_query_call_by_subnet_admin_succeeds() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     let subnet_admin = user_test_id(100);
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
@@ -3205,7 +3205,7 @@ fn canister_metrics_via_query_call_by_subnet_admin_succeeds() {
 
 #[test]
 fn canister_metrics_via_query_call_by_neither_controller_nor_subnet_admin_fails() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, false);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     let subnet_admin = user_test_id(100);
     let test_user = user_test_id(101);
     let env = StateMachineBuilder::new()

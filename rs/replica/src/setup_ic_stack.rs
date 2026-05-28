@@ -1,4 +1,4 @@
-use crate::setup::get_subnet_type;
+use crate::setup::get_subnet_type_and_security;
 use ic_artifact_pool::{
     consensus_pool::ConsensusPoolImpl, ensure_persistent_pool_replica_version_compatibility,
 };
@@ -127,13 +127,8 @@ pub fn construct_ic_stack(
         .expect("cannot read from registry")
         .expect("cannot find root subnet id");
     let registry_version = registry.get_latest_version();
-    let subnet_type = get_subnet_type(log, subnet_id, registry_version, registry.as_ref());
-    let is_sev_enabled = registry
-        .get_features(subnet_id, registry_version)
-        .ok()
-        .flatten()
-        .map(|f| f.sev_enabled)
-        .unwrap_or(false);
+    let (subnet_type, subnet_security) =
+        get_subnet_type_and_security(log, subnet_id, registry_version, registry.as_ref());
 
     // ---------- THE PERSISTED CONSENSUS ARTIFACT POOL DEPS FOLLOW ----------
     // This is the first object that is required for the creation of the IC stack. Initializing the
@@ -192,7 +187,7 @@ pub fn construct_ic_stack(
     let max_canister_http_requests_in_flight =
         config.hypervisor.max_canister_http_requests_in_flight;
 
-    let subnet_config = SubnetConfig::new(subnet_type, is_sev_enabled);
+    let subnet_config = SubnetConfig::new(subnet_type, subnet_security);
 
     let execution_services = ExecutionServices::setup_execution(
         log.clone(),

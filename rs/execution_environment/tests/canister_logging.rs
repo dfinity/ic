@@ -4,7 +4,7 @@ use ic_config::execution_environment::{
     TEST_DEFAULT_LOG_MEMORY_USAGE,
 };
 use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::SubnetConfig;
+use ic_config::subnet_config::{SubnetConfig, SubnetSecurity};
 use ic_execution_environment::units::{KIB, MIB};
 use ic_management_canister_types_private::{
     self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
@@ -93,7 +93,7 @@ fn readable_logs_without_backtraces(
 
 fn setup_env_with(replicated_inter_canister_log_fetch: FlagStatus) -> StateMachine {
     let subnet_type = SubnetType::Application;
-    let mut subnet_config = SubnetConfig::new(subnet_type, false);
+    let mut subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
     subnet_config.scheduler_config.max_instructions_per_round = MAX_INSTRUCTIONS_PER_ROUND;
     subnet_config.scheduler_config.max_instructions_per_message = MAX_INSTRUCTIONS_PER_MESSAGE;
     subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
@@ -148,7 +148,7 @@ fn setup_with_controller(controller: PrincipalId, wasm: Vec<u8>) -> (StateMachin
 
 fn restart_node(env: StateMachine) -> StateMachine {
     env.restart_node_with_config(StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::Application, false),
+        SubnetConfig::new(SubnetType::Application, SubnetSecurity::None),
         ExecutionConfig::default(),
     ))
 }
@@ -2705,7 +2705,7 @@ fn test_log_memory_store_upgrade_downgrade() {
     // and produce log entries that land in canister_log (legacy storage).
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
-            SubnetConfig::new(subnet_type, false),
+            SubnetConfig::new(subnet_type, SubnetSecurity::None),
             ExecutionConfig {
                 log_memory_store_feature: FlagStatus::Disabled,
                 ..Default::default()
@@ -2792,7 +2792,7 @@ fn test_log_memory_store_upgrade_downgrade() {
     // executes, migration has not run yet: is_migrated=false, is_allocated=false,
     // but fetch_canister_logs still works via the canister_log fallback.
     let env = env.restart_node_with_config(StateMachineConfig::new(
-        SubnetConfig::new(subnet_type, false),
+        SubnetConfig::new(subnet_type, SubnetSecurity::None),
         ExecutionConfig {
             log_memory_store_feature: FlagStatus::Enabled,
             ..Default::default()
@@ -2907,7 +2907,7 @@ fn test_log_memory_store_upgrade_downgrade() {
     // Step 5: Downgrade — restart with log_memory_store feature disabled.
     // The checkpoint still has migrated=true since it was saved after step 3.
     let env = env.restart_node_with_config(StateMachineConfig::new(
-        SubnetConfig::new(subnet_type, false),
+        SubnetConfig::new(subnet_type, SubnetSecurity::None),
         ExecutionConfig {
             log_memory_store_feature: FlagStatus::Disabled,
             ..Default::default()
