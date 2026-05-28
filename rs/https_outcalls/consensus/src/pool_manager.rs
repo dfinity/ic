@@ -39,8 +39,12 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-pub type CanisterHttpAdapterClient =
-    Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
+pub type CanisterHttpAdapterClient = Box<
+    dyn NonBlockingChannel<
+            CanisterHttpRequest,
+            Response = (CanisterHttpResponse, CanisterHttpPaymentReceipt),
+        > + Send,
+>;
 
 /// [`CanisterHttpPoolManagerImpl`] implements the pool and state monitoring
 /// functionality that is necessary to ensure that http requests are made and
@@ -347,7 +351,7 @@ impl CanisterHttpPoolManagerImpl {
         loop {
             match self.http_adapter_shim.lock().unwrap().try_receive() {
                 Err(TryReceiveError::Empty) => break,
-                Ok(mut response) => {
+                Ok((mut response, _payment_receipt)) => {
                     // Drop the response if its context is no longer present in the replicated state
                     // (e.g. the request has timed out or has already been answered by enough other nodes).
                     let Some(context) = active_contexts.get(&response.id) else {
@@ -723,10 +727,12 @@ pub mod test {
         }
 
         impl<Request> NonBlockingChannel<Request> for NonBlockingChannel<Request> {
-            type Response = CanisterHttpResponse;
+            type Response = (CanisterHttpResponse, CanisterHttpPaymentReceipt);
 
             fn send(&self, request: Request) -> Result<(), SendError<Request>>;
-            fn try_receive(&mut self) -> Result<CanisterHttpResponse, TryReceiveError>;
+            fn try_receive(
+                &mut self,
+            ) -> Result<(CanisterHttpResponse, CanisterHttpPaymentReceipt), TryReceiveError>;
         }
     }
 
@@ -1849,7 +1855,12 @@ pub mod test {
                 shim_mock
                     .expect_try_receive()
                     .times(1)
-                    .returning(move || Ok(oversized_response.clone()))
+                    .returning(move || {
+                        Ok((
+                            oversized_response.clone(),
+                            CanisterHttpPaymentReceipt::default(),
+                        ))
+                    })
                     .in_sequence(&mut sequence);
                 shim_mock
                     .expect_try_receive()
@@ -1971,7 +1982,12 @@ pub mod test {
                 shim_mock
                     .expect_try_receive()
                     .times(1)
-                    .return_once(move || Ok(oversized_response.clone()));
+                    .return_once(move || {
+                        Ok((
+                            oversized_response.clone(),
+                            CanisterHttpPaymentReceipt::default(),
+                        ))
+                    });
                 shim_mock
                     .expect_try_receive()
                     .return_const(Err(TryReceiveError::Empty));
@@ -2395,7 +2411,12 @@ pub mod test {
                     shim_mock
                         .expect_try_receive()
                         .times(1)
-                        .returning(move || Ok(empty_canister_http_response(i)))
+                        .returning(move || {
+                            Ok((
+                                empty_canister_http_response(i),
+                                CanisterHttpPaymentReceipt::default(),
+                            ))
+                        })
                         .in_sequence(&mut sequence);
                 }
 
@@ -2474,7 +2495,12 @@ pub mod test {
                     shim_mock
                         .expect_try_receive()
                         .times(1)
-                        .returning(move || Ok(empty_canister_http_response(id.get())))
+                        .returning(move || {
+                            Ok((
+                                empty_canister_http_response(id.get()),
+                                CanisterHttpPaymentReceipt::default(),
+                            ))
+                        })
                         .in_sequence(&mut sequence);
                 }
                 shim_mock
@@ -2569,7 +2595,12 @@ pub mod test {
                 shim_mock
                     .expect_try_receive()
                     .times(1)
-                    .returning(move || Ok(empty_canister_http_response(callback_id.get())))
+                    .returning(move || {
+                        Ok((
+                            empty_canister_http_response(callback_id.get()),
+                            CanisterHttpPaymentReceipt::default(),
+                        ))
+                    })
                     .in_sequence(&mut sequence);
                 shim_mock
                     .expect_try_receive()
@@ -3329,7 +3360,10 @@ pub mod test {
                 shim_mock
                     .expect_try_receive()
                     .times(1)
-                    .return_const(Ok(empty_response.clone()))
+                    .return_const(Ok((
+                        empty_response.clone(),
+                        CanisterHttpPaymentReceipt::default(),
+                    )))
                     .in_sequence(&mut sequence);
                 shim_mock
                     .expect_try_receive()
