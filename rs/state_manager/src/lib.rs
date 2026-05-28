@@ -1401,10 +1401,10 @@ impl StateManagerImpl {
         );
         let persist_metadata_guard = Arc::new(Mutex::new(()));
         let (_hash_thread_handle, hash_channel) = spawn_hash_thread(
-            metrics.clone(),
-            log.clone(),
             state_layout.clone(),
             persist_metadata_guard.clone(),
+            metrics.clone(),
+            log.clone(),
         );
 
         let starting_time = Instant::now();
@@ -3666,10 +3666,10 @@ enum HashRequest {
 }
 
 fn spawn_hash_thread(
-    metrics: StateManagerMetrics,
-    log: ReplicaLogger,
     state_layout: StateLayout,
     persist_metadata_guard: Arc<Mutex<()>>,
+    metrics: StateManagerMetrics,
+    log: ReplicaLogger,
 ) -> (JoinOnDrop<()>, Sender<HashRequest>) {
     #[allow(clippy::disallowed_methods)]
     let (hash_req_sender, receiver) = unbounded();
