@@ -3,6 +3,9 @@ use ic_cdk::management_canister::SignCallError;
 use ic_management_canister_types_private::DerivationPath;
 use std::fmt;
 
+#[cfg(test)]
+mod tests;
+
 /// Represents an error from a management canister call, such as
 /// `sign_with_ecdsa`.
 #[derive(Clone, Eq, PartialEq, Debug)]
