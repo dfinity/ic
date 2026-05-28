@@ -126,7 +126,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
         // After receiving the response from the adapter an optional transform is applied by doing an upcall to execution.
         // Once final response is available send the response over to the channel making it available to the client.
-
         self.rt_handle.spawn(async move {
             let CanisterHttpRequest {
                 id: request_id,
