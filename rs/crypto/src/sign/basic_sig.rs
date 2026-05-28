@@ -59,13 +59,41 @@ impl BasicSigVerifierInternal {
                 message: "Empty BasicSignatureBatch. At least one signature should be included in the batch.".to_string(),
             });
         };
+        let inputs: Vec<_> = signatures
+            .signatures_map
+            .iter()
+            .map(|(signer, signature)| (*signer, signature, message))
+            .collect();
+        Self::verify_basic_sigs_batch(csprng, registry, &inputs, registry_version)
+    }
 
-        let message = message.as_signed_bytes();
-        let mut msgs = Vec::with_capacity(signatures.signatures_map.len());
-        let mut sigs = Vec::with_capacity(signatures.signatures_map.len());
-        let mut keys = Vec::with_capacity(signatures.signatures_map.len());
+    /// Verifies a batch of basic signatures on potentially different messages.
+    ///
+    /// Unlike `verify_basic_sig_batch`, the entries in `inputs` may have
+    /// distinct messages, and the same `NodeId` may appear more than once.
+    pub fn verify_basic_sigs_batch<H: Signable, R: CryptoComponentRng>(
+        csprng: &CspRwLock<R>,
+        registry: &dyn RegistryClient,
+        inputs: &[(NodeId, &BasicSigOf<H>, &H)],
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<()> {
+        if inputs.is_empty() {
+            return Err(CryptoError::InvalidArgument {
+                message:
+                    "Empty signature batch. At least one signature should be included in the batch."
+                        .to_string(),
+            });
+        };
 
-        for (signer, signature) in signatures.signatures_map.iter() {
+        let messages: Vec<Vec<u8>> = inputs
+            .iter()
+            .map(|(_, _, message)| message.as_signed_bytes())
+            .collect();
+        let mut msgs = Vec::with_capacity(inputs.len());
+        let mut sigs = Vec::with_capacity(inputs.len());
+        let mut keys = Vec::with_capacity(inputs.len());
+
+        for (i, (signer, signature, _)) in inputs.iter().enumerate() {
             let pk_proto =
                 key_from_registry(registry, *signer, KeyPurpose::NodeSigning, registry_version)?;
 
@@ -85,7 +113,7 @@ impl BasicSigVerifierInternal {
                 }
             })?;
 
-            msgs.push(&message[..]);
+            msgs.push(&messages[i][..]);
             sigs.push(&signature.get_ref().0[..]);
             keys.push(pk);
         }

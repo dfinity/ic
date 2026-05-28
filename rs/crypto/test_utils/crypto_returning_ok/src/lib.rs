@@ -83,6 +83,14 @@ impl<T: Signable> BasicSigVerifier<T> for CryptoReturningOk {
     ) -> CryptoResult<()> {
         Ok(())
     }
+
+    fn verify_basic_sigs_batch(
+        &self,
+        _inputs: &[(NodeId, &BasicSigOf<T>, &T)],
+        _registry_version: RegistryVersion,
+    ) -> CryptoResult<()> {
+        Ok(())
+    }
 }
 
 impl<T: Signable> BasicSigVerifierByPublicKey<T> for CryptoReturningOk {
