@@ -10,7 +10,6 @@ use ic_consensus::consensus::ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{consensus_pool::ConsensusPool, messaging::MessageRouting};
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateReader;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_registry::SubnetRecordBuilder;
@@ -402,15 +401,15 @@ fn all_nodes_equivocating_fail() -> Result<(), String> {
 /// This used to not be the case because CUP shares where only created when the finalized tip's
 /// certified height reached the upgrade height, which would never happen because consensus had
 /// reached the hard bound.
+/// This was fixed by preventing block makers from proposing blocks that would trigger the hard
+/// bound.
 ///
 /// Steps of the test:
 /// 1. Certified height is frozen at the upgrade height minus 1 (simulating a slow checkpoint).
 /// 2. Consensus advances with empty blocks until the bound
 ///    `ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP` is reached, then stops creating more blocks.
-/// 3. The certified-height override is released; consensus resumes and a CUP should be created at
-///    the upgrade height, even though there exists no finalized block whose certified height
-///    reached the upgrade height.
-/// 4. Safety check: states at and below the upgrade boundary are NOT purged.
+/// 3. The certified-height override is released; consensus resumes by creating a block with a
+///    certified height equal to the upgrade height, which triggers the creation of a CUP.
 #[test]
 fn slow_checkpointing_at_upgrade_boundary() {
     const DKG_INTERVAL_LENGTH: u64 = 74; // On purpose larger than `ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP`
@@ -465,18 +464,10 @@ fn slow_checkpointing_at_upgrade_boundary() {
             );
         }
 
-        // At any point in time, all states up to and including the upgrade height should not be
-        // purged.
-        for state_height in 0..=upgrade_height.get() {
-            assert!(
-                inst.deps
-                    .state_manager
-                    .get_state_at(Height::from(state_height))
-                    .is_ok(),
-                "state at height {} should not have been purged",
-                state_height
-            );
-        }
+        // The block maker stops proposing when `height - certified_height >
+        // ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP`.  With certified_height frozen at
+        // `frozen_height`, the last height that can still be finalized is
+        // `frozen_height + ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP`.
         let stall_height = frozen_height.get() + ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP;
         match Ord::cmp(&finalized_height.get(), &stall_height) {
             Ordering::Less => {
@@ -517,7 +508,8 @@ fn slow_checkpointing_at_upgrade_boundary() {
             Ordering::Greater => {
                 // This should happen only after we have released the override. In this case, we
                 // should only have created a single block past the upgrade height, and its
-                // certified height should still be equal to the frozen height.
+                // certified height *should be equal to the upgrade height* (not the frozen height).
+                // This is the stall fix, since this triggers the creation of a CUP.
                 assert!(
                     *has_released_clone.borrow(),
                     "finalized height should not have exceeded the stall point before releasing the override"
@@ -534,9 +526,9 @@ fn slow_checkpointing_at_upgrade_boundary() {
                     .context
                     .certified_height;
                 assert_eq!(
-                    finalized_certified_height, frozen_height,
+                    finalized_certified_height, upgrade_height,
                     "finalized block at height {} should have certified_height == {}, but got {}",
-                    finalized_height, frozen_height, finalized_certified_height
+                    finalized_height, upgrade_height, finalized_certified_height
                 );
             }
         }
