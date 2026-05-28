@@ -27,21 +27,9 @@ BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:5e275723f82c67e387ba9e3c24baa0
 podman --root "${TMP_DIR}/root" --runroot "${TMP_DIR}/runroot" build --iidfile "${TMP_DIR}/iidfile" - <<<"
     FROM $BASE_IMAGE
     USER root:root
-    # Pin apt to an Ubuntu archive snapshot so the bootloader build is reproducible.
-    # We rewrite the apt sources rather than using 'apt-get --snapshot' because that
-    # flag requires apt >= 3.0 (Ubuntu 25.10+), while the base image above is older.
-    # snapshot.ubuntu.com redirects HTTP -> HTTPS, but the pinned base image's CA
-    # store cannot verify its certificate chain. We therefore disable TLS peer
-    # verification: package integrity is still ensured by apt's GPG verification of
-    # the Release file against the embedded ubuntu-keyring.
-    RUN rm -f /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list \
-     && printf '%s\n' \
-            'deb https://snapshot.ubuntu.com/ubuntu/20260131T000000Z noble main universe' \
-            'deb https://snapshot.ubuntu.com/ubuntu/20260131T000000Z noble-updates main universe' \
-            'deb https://snapshot.ubuntu.com/ubuntu/20260131T000000Z noble-security main universe' \
-            > /etc/apt/sources.list \
-     && apt-get -o Acquire::Check-Valid-Until=false -o Acquire::https::Verify-Peer=false -o Acquire::https::Verify-Host=false -y update \
-     && apt-get -o Acquire::Check-Valid-Until=false -o Acquire::https::Verify-Peer=false -o Acquire::https::Verify-Host=false -y --no-install-recommends install grub-efi faketime
+    # First update the required certs
+    RUN apt-get -y update && apt-get -y --no-install-recommends install ca-certificates
+    RUN apt-get -y update --snapshot 20260520T000000Z && apt-get -y --no-install-recommends install --snapshot 20260520T000000Z grub-efi faketime
     RUN mkdir -p /build/boot/grub
     RUN cp -r /usr/lib/grub/x86_64-efi /build/boot/grub
     RUN mkdir -p /build/boot/efi/EFI/Boot
@@ -51,7 +39,7 @@ podman --root "${TMP_DIR}/root" --runroot "${TMP_DIR}/runroot" build --iidfile "
         boot linux search normal configfile \
         part_gpt btrfs ext2 fat iso9660 loopback \
         test keystatus gfxmenu regexp probe \
-        efi_gop efi_uga all_video gfxterm font \
+        efi_gop all_video gfxterm font \
         echo read ls cat png jpeg halt reboot loadenv lvm
 "
 

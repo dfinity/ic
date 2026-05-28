@@ -106,9 +106,7 @@ def main():
         help="Extra files to install; expects list of sourcefile:targetfile:mode",
     )
     parser.add_argument("--dflate", help="Path to our dflate tool", type=str)
-    parser.add_argument(
-        "--mkfs-vfat", help="Path to mkfs.vfat binary (used with -F 32 for FAT32)", type=str, required=True
-    )
+    parser.add_argument("--zstd", help="Path to the zstd tool", type=str)
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -134,7 +132,7 @@ def main():
 
     os.close(os.open(image_file, os.O_CREAT | os.O_RDWR | os.O_CLOEXEC | os.O_EXCL, 0o600))
     os.truncate(image_file, image_size)
-    subprocess.run([args.mkfs_vfat, "-F", "32", "-i", "0", image_file], check=True)
+    subprocess.run(["/usr/sbin/mkfs.fat", "-F", "32", "-i", "0", image_file], check=True)
     if image_label:
         subprocess.run(["faketime", "-f", "1970-1-1 0:0:0", "/usr/sbin/fatlabel", image_file, image_label], check=True)
 
@@ -161,7 +159,7 @@ def main():
 
     subprocess.run(
         [
-            "zstd",
+            args.zstd,
             "-q",
             "--threads=0",
             temp_tar,
