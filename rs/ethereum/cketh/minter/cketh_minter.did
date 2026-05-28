@@ -732,6 +732,8 @@ service : (MinterArg) -> {
     is_address_blocked : (text) -> (bool) query;
 
     // Retrieve the status of the minter canister.
+    //
+    // This is a debug endpoint where backwards-compatibility is not guaranteed.
     get_canister_status : () -> (CanisterStatusResponse);
 
     // Retrieve events from the minter's audit log.
