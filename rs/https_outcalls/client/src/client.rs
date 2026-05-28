@@ -186,7 +186,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     request_headers,
                     request_body,
                     socks_proxy_addrs,
-                    &mut budget,
+                    &mut *budget,
                 )
                 .await?;
 
@@ -207,7 +207,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 let transformed_payload = match &request_transform {
                     Some(transform) => {
                         let (transform_result, instruction_count) = transform_adapter_response(
-                            &mut budget,
+                            &mut *budget,
                             query_handler,
                             canister_http_payload,
                             request_sender,
@@ -320,7 +320,7 @@ async fn execute_http_request(
     headers: Vec<CanisterHttpHeader>,
     body: Option<Vec<u8>>,
     socks_proxy_addrs: Vec<String>,
-    budget: &mut Box<dyn BudgetTracker>,
+    budget: &mut dyn BudgetTracker,
 ) -> Result<(HttpsOutcallResponse, NumBytes, Duration), (RejectCode, String)> {
     let AdapterLimits {
         max_response_size,
@@ -430,7 +430,7 @@ fn validate_response(
 /// Make upcall to execution to transform the response.
 /// This gives the ability to prune volatile fields before passing the response to consensus.
 async fn transform_adapter_response(
-    budget: &mut Box<dyn BudgetTracker>,
+    budget: &mut dyn BudgetTracker,
     query_handler: TransformExecutionService,
     canister_http_response: CanisterHttpResponsePayload,
     transform_canister: CanisterId,
