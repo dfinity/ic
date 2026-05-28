@@ -2,52 +2,52 @@
 
 Repository: `https://github.com/dfinity/ic.git`
 
-Git hash: `bb6e758c739768ef6713f9f3be2df47884544900`
+Git hash: `b1babb4545a977addfcb1328e05eb6c9d911da17`
 
-New compressed Wasm hash: `6256368e2a6a39a3ee5e122054c1179e262e49ed11d2fa5744132418a4225d95`
+New compressed Wasm hash: `d454c4d8a9a7a6f3aa4b11c32fd72c287cec31718d287adc676b5e88c29c5b3c`
 
-Upgrade args hash: `0fee102bd16b053022b69f2c65fd5e2f41d150ce9c214ac8731cfaf496ebda4e`
+Upgrade args hash: `5214320100ecc794582e8d3fcfcae6b42e66f0fd16bb81d21c8ef202f7215966`
 
 Target canister: `sv3dd-oaaaa-aaaar-qacoa-cai`
 
-Previous ckETH minter proposal: https://dashboard.internetcomputer.org/proposal/135547
+Previous ckETH minter proposal: https://dashboard.internetcomputer.org/proposal/139665
 
 ---
 
 ## Motivation
+TODO: THIS MUST BE FILLED OUT
 
-Update the ckETH minter canister to include the latest code changes:
-
-* Update the OFAC checklist.
-* Avoid caching metrics to have more reliable alerts
 
 ## Release Notes
 
 ```
-git log --format='%C(auto) %h %s' e96ff00c35856d11d5cce98fd2f969dd9afe797f..bb6e758c739768ef6713f9f3be2df47884544900 -- rs/ethereum/cketh/minter
-9c4e4500ea chore(ckbtc/cketh): update ckBTC/ckETH OFAC blocklists 05.2025 (#5203)
-32584f0e81 refactor(cketh): ensure the EthRpcClient always gets an evm_rpc_id (#5055)
-785eb8efe6 refactor(cketh): clean up eth_send_raw_transaction call (#5015)
-7b6552c434 refactor(cketh): clean up eth_get_block_by_number call (#4964)
-32b4df476a refactor(cketh): clean up eth_fee_history call (#5000)
-b0a3d6dc4c feat: Add "Cache-Control: no-store" to all canister /metrics endpoints (#5124)
-830f4caa90 refactor: remove direct dependency on ic-cdk-macros (#5144)
-2949c97ba3 chore: Revert ic-cdk to 0.17.2 (#5139)
-d1dc4c2dc8 chore: Update Rust to 1.86.0 (#5059)
-d6323ec599 refactor(cketh): clean up eth_get_finalized_transaction_count, eth_get_latest_transaction_count, and eth_get_logs call (#5021)
-7d987a28af refactor(cketh): remove retry counts histograms (#5035)
-3490ef2a07 chore: bump the monorepo version of ic-cdk to 0.18.0 (#5005)
-79370a23e1 refactor(cketh): remove direct https outcalls (#4926)
-c2d5684360 refactor(ic): update imports from ic_canisters_http_types to newly published ic_http_types crate (#4866)
-4d40e10c75 chore(IDX): use correct .gz name for canisters (#4300)
+git log --format='%C(auto) %h %s' d13be5a27b3331c4dc8831593eed0e3ec08b260f..b1babb4545a977addfcb1328e05eb6c9d911da17 -- rs/ethereum/cketh/minter
+13a59c1055 chore(defi): remove deprecated ic-cdk imports in ic-cketh-minter (#10290)
+63b841f4fa chore: remove unused DeFi rust dependencies (#10281)
+7fb12c2e43 ci(defi): check endpoints exported in a canister's WASM against its Candid specification (#10147)
+29103b3bdd chore: Updating the block lists for ckBTC and ckETH (#10026)
+88a0df635a chore(icrc-ledger-types): DEFI-1894: Switch icrc-ledger-types bazel variants (#9900)
+675a14c1af test(defi): move event files to CDN (#9563)
+b608c374f2 chore: 42u64 -> 42_u64 (#9523)
+a08eb494fe chore(de-fi): Add separator before type suffix in integer literals. (#9433)
+56d2c1d738 feat(cketh/ckERC20): stop scraping when minter is stopping  (#8785)
+2b1a4d1903 perf(cketh): Benchmark post_upgrade (#8916)
+c879313442 fix(cketh): use `try_send` instead of `send` for calls to the EVM RPC canister (#8821)
+ccad686b37 chore: Drop unused dependencies (#8470)
+d6f2c6fbdd feat(ckETH-minter): DEFI-2231: add decode_ledger_memo endpoint (#8133)
+ceb4b666c4 chore: Bump askama version and remove build.rs workaround (#8407)
+cc56275206 chore: rust: 1.90.0 -> 1.92.0  (#8124)
+3034c5c54b fix: revert "chore: rust 1.90.0 -> 1.91.1 (#8023)" (#8197)
+6f73a21b56 chore: rust 1.90.0 -> 1.91.1 (#8023)
+c51ed714bc test(ckETH_Minter): DEFI-2559: Add test to verify minter cannot be stopped while it is scraping blocks (#7962)
  ```
 
 ## Upgrade args
 
 ```
 git fetch
-git checkout bb6e758c739768ef6713f9f3be2df47884544900
-didc encode '()' | xxd -r -p | sha256sum
+git checkout b1babb4545a977addfcb1328e05eb6c9d911da17
+didc encode -d rs/ethereum/cketh/minter/cketh_minter.did -t '(MinterArg)' '(variant { UpgradeArg = record { minimum_withdrawal_amount = opt (5_000_000_000_000_000 : nat)} })' | xxd -r -p | sha256sum
 ```
 
 ## Wasm Verification
@@ -56,7 +56,7 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 
 ```
 git fetch
-git checkout bb6e758c739768ef6713f9f3be2df47884544900
+git checkout b1babb4545a977addfcb1328e05eb6c9d911da17
 "./ci/container/build-ic.sh" "--canisters"
 sha256sum ./artifacts/canisters/ic-cketh-minter.wasm.gz
 ```
