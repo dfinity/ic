@@ -411,6 +411,9 @@ pub struct CyclesAccountManagerConfig {
     /// Fee for storing a GiB of data per second.
     pub gib_storage_per_second_fee: Cycles,
 
+    /// Base fee charged per second for every canister, regardless of resource usage.
+    pub base_per_second_fee: Cycles,
+
     /// Fee for each percent of the reserved compute allocation. Note that
     /// reserved compute allocation is a scarce resource, and should be
     /// appropriately charged for.
@@ -480,6 +483,7 @@ impl CyclesAccountManagerConfig {
             ingress_byte_reception_fee: Cycles::new(2_000),
             // 10 SDR per GiB per year => 10e12 Cycles per year
             gib_storage_per_second_fee: Cycles::new(317_500),
+            base_per_second_fee: Cycles::new(10_000),
             duration_between_allocation_charges: Duration::from_secs(10),
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
@@ -513,6 +517,7 @@ impl CyclesAccountManagerConfig {
             ingress_message_reception_fee: Cycles::new(0),
             ingress_byte_reception_fee: Cycles::new(0),
             gib_storage_per_second_fee: Cycles::new(0),
+            base_per_second_fee: Cycles::new(0),
             duration_between_allocation_charges: Duration::from_secs(10),
             // ECDSA and Schnorr signature fees are the fees charged when creating a
             // signature on this subnet. The request likely came from a
@@ -549,6 +554,7 @@ impl CyclesAccountManagerConfig {
             ingress_message_reception_fee: Cycles::zero(),
             ingress_byte_reception_fee: Cycles::zero(),
             gib_storage_per_second_fee: Cycles::zero(),
+            base_per_second_fee: Cycles::zero(),
             compute_percent_allocated_per_second_fee: Cycles::zero(),
             duration_between_allocation_charges: Duration::from_secs(u64::MAX),
             ecdsa_signature_fee: Cycles::zero(),

@@ -364,15 +364,15 @@ pub struct MemoryTaken {
     /// specified and the actual canister memory usage (including
     /// Wasm custom sections) where no explicit memory reservation
     /// has been made.
-    execution: NumBytes,
+    pub(crate) execution: NumBytes,
     /// Memory taken by guaranteed response canister messages or reservations.
-    guaranteed_response_messages: NumBytes,
+    pub(crate) guaranteed_response_messages: NumBytes,
     /// Memory taken by best-effort canister messages.
-    best_effort_messages: NumBytes,
+    pub(crate) best_effort_messages: NumBytes,
     /// Memory taken by Wasm Custom Sections.
-    wasm_custom_sections: NumBytes,
+    pub(crate) wasm_custom_sections: NumBytes,
     /// Memory taken by canister history.
-    canister_history: NumBytes,
+    pub(crate) canister_history: NumBytes,
 }
 
 impl MemoryTaken {

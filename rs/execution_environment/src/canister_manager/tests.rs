@@ -2839,6 +2839,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     let certified_data = vec![42];
     let mut original_canister = CanisterStateBuilder::new()
         .with_canister_id(canister_id)
+        .with_cycles(Cycles::new(15_000_000_000_000))
         .with_status(CanisterStatusType::Running)
         .with_controller(controller)
         .with_certified_data(certified_data.clone())
