@@ -42,15 +42,15 @@ fn maybe_add_wipe_var_partition(args: &mut Vec<String>, wipe_var_partition: bool
 
 pub fn build_recovery_upgrader_prep_command(
     version: &str,
-    target_boot_alternative: Option<BootAlternative>,
+    target_boot_alternative: BootAlternative,
     recovery_hash_prefix: &str,
     wipe_var_partition: bool,
 ) -> RecoveryUpgraderCommand {
-    let mut args = vec![format!("version={version}")];
-    if let Some(target_boot_alternative) = target_boot_alternative {
-        args.push(format!("target-boot-alternative={target_boot_alternative}"));
-    }
-    args.push(format!("recovery-hash-prefix={recovery_hash_prefix}"));
+    let mut args = vec![
+        format!("version={version}"),
+        format!("target-boot-alternative={target_boot_alternative}"),
+        format!("recovery-hash-prefix={recovery_hash_prefix}"),
+    ];
     maybe_add_wipe_var_partition(&mut args, wipe_var_partition);
     build_recovery_upgrader_command("prep", &args)
 }
@@ -70,9 +70,11 @@ pub fn build_recovery_upgrader_run_command(
     target_boot_alternative: &str,
     wipe_var_partition: bool,
 ) -> RecoveryUpgraderCommand {
-    let mut args = vec![format!("version={version}")];
-    args.push(format!("recovery-hash-prefix={recovery_hash_prefix}"));
-    args.push(format!("target-boot-alternative={target_boot_alternative}"));
+    let mut args = vec![
+        format!("version={version}"),
+        format!("recovery-hash-prefix={recovery_hash_prefix}"),
+        format!("target-boot-alternative={target_boot_alternative}"),
+    ];
     maybe_add_wipe_var_partition(&mut args, wipe_var_partition);
     build_recovery_upgrader_command("run", &args)
 }
@@ -83,8 +85,7 @@ mod tests {
 
     #[test]
     fn prep_command_includes_target_boot_alternative_and_empty_recovery_hash_prefix() {
-        let command =
-            build_recovery_upgrader_prep_command("aabbcc", Some(BootAlternative::B), "", false);
+        let command = build_recovery_upgrader_prep_command("aabbcc", BootAlternative::B, "", false);
 
         let shell = command.to_shell_string();
         assert!(shell.contains("mode=prep"));
@@ -95,12 +96,8 @@ mod tests {
 
     #[test]
     fn prep_command_includes_recovery_hash_prefix_when_enabled() {
-        let command = build_recovery_upgrader_prep_command(
-            "aabbcc",
-            Some(BootAlternative::A),
-            "123abc",
-            true,
-        );
+        let command =
+            build_recovery_upgrader_prep_command("aabbcc", BootAlternative::A, "123abc", true);
 
         let shell = command.to_shell_string();
         assert!(shell.contains("mode=prep"));

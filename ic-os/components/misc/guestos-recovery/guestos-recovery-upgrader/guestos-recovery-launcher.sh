@@ -27,29 +27,12 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-mode=""
-has_target_boot_alternative=false
-
 for arg in "$@"; do
     if ! validate_argument "$arg"; then
         echo "Arguments must be valid recovery launcher arguments."
         exit 1
     fi
-
-    case "$arg" in
-        mode=*)
-            mode="${arg#*=}"
-            ;;
-        target-boot-alternative=*)
-            has_target_boot_alternative=true
-            ;;
-    esac
 done
-
-if [[ ("$mode" == "prep" || "$mode" == "run") && "$has_target_boot_alternative" != true ]]; then
-    echo "ERROR: target-boot-alternative=<A|B> is required for mode=${mode}" >&2
-    exit 1
-fi
 
 exec /usr/bin/systemd-run \
     --unit=guestos-recovery-upgrader \

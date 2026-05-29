@@ -23,8 +23,8 @@ show_menu() {
     echo "  ping-gateway            - Test connectivity to IPv6 gateway"
     echo "  routes                  - Show routing table"
     echo "  guestos-alternative     - Show or swap the GuestOS boot alternative (A/B)"
-    echo "  manual-recovery         - Manual node recovery (ONLY FOR EMERGENCY USE)"
-    echo "  tee-recovery            - Install alternative GuestOS in TEE mode"
+    echo "  nns-recovery            - Manual node recovery (ONLY FOR EMERGENCY USE)"
+    echo "  tee-recovery            - Install alternative GuestOS in TEE mode (ONLY FOR EMERGENCY USE)"
     echo "  rbash-console           - Drop into restricted bash console"
     echo "  clear                   - Clear the console"
     echo "  exit                    - Exit console"
@@ -47,7 +47,7 @@ run_manual_recovery() {
 
         # Fix for serial/remote consoles where window size may be missing or tiny
         if ! size=$(stty size 2>/dev/null); then
-            echo "Error: could not determine terminal size. The manual-recovery TUI requires a TTY."
+            echo "Error: could not determine terminal size. The nns-recovery TUI requires a TTY."
             echo "Please see \"Manual Recovery Fallback\" in the Manual Node Recovery Guide for further direction."
             exit 1
         fi
@@ -172,7 +172,7 @@ execute_command() {
                     ;;
             esac
             ;;
-        "manual-recovery")
+        "nns-recovery")
             run_manual_recovery nns
             ;;
         "tee-recovery")

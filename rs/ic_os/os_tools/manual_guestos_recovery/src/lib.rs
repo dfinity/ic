@@ -1,6 +1,6 @@
 //! Interactive TUI application for manual GuestOS recovery.
-//! NNS mode prompts for a recovery version, recovery hash prefix, and target boot alternative.
-//! TEE mode prompts only for a recovery version and target boot alternative.
+//! NNS mode prompts for a recovery version and recovery hash prefix.
+//! TEE mode prompts for a recovery version and target boot alternative.
 
 pub mod recovery_utils;
 mod ui;
@@ -814,7 +814,7 @@ impl GuestOSRecoveryApp {
     fn start_prep(&mut self, params: RecoveryParams, input_state: InputState) -> Result<()> {
         let command = build_recovery_upgrader_prep_command(
             &params.version,
-            Some(params.get_target_boot_alternative()),
+            params.get_target_boot_alternative(),
             params.recovery_hash_prefix.as_deref().unwrap_or(""),
             params.mode.requires_recovery_hash(),
         );
@@ -1057,14 +1057,14 @@ mod tests {
             .status()
             .expect("Failed to run 'false' command");
         FailureState {
-            params: default_recovery_params(),
+            params: default_recovery_params_for_test(),
             logs: vec!["test log".to_string()],
             exit_status: status,
             error_messages: vec!["test error".to_string()],
         }
     }
 
-    fn default_recovery_params() -> RecoveryParams {
+    fn default_recovery_params_for_test() -> RecoveryParams {
         RecoveryParams {
             version: String::new(),
             recovery_hash_prefix: None,
@@ -1129,7 +1129,7 @@ mod tests {
             let params = RecoveryParams {
                 version: "0123456789abcdef0123456789abcdef01234567".to_string(),
                 recovery_hash_prefix: Some("a1b2c3".to_string()),
-                ..default_recovery_params()
+                ..default_recovery_params_for_test()
             };
             assert!(params.validate_inputs().is_ok());
         }
@@ -1140,7 +1140,7 @@ mod tests {
                 version: "0123456789abcdef0123456789abcdef01234567".to_string(),
                 recovery_hash_prefix: None,
                 mode: RecoveryMode::Tee,
-                ..default_recovery_params()
+                ..default_recovery_params_for_test()
             };
             assert!(params.validate_inputs().is_ok());
         }
@@ -1151,7 +1151,7 @@ mod tests {
                 version: "0123456789abcdef0123456789abcdef01234567".to_string(),
                 recovery_hash_prefix: Some(String::new()),
                 mode: RecoveryMode::Tee,
-                ..default_recovery_params()
+                ..default_recovery_params_for_test()
             };
             assert!(params.validate_inputs().is_ok());
         }
@@ -1162,7 +1162,7 @@ mod tests {
                 version: "0123456789abcdef0123456789abcdef01234567".to_string(),
                 recovery_hash_prefix: Some("ABCDEF".to_string()),
                 mode: RecoveryMode::Tee,
-                ..default_recovery_params()
+                ..default_recovery_params_for_test()
             };
             assert!(params.validate_inputs().is_err());
         }
@@ -1175,7 +1175,7 @@ mod tests {
             let params = RecoveryParams {
                 version: String::new(),
                 recovery_hash_prefix: Some(valid_hash.clone()),
-                ..default_recovery_params()
+                ..default_recovery_params_for_test()
             };
             assert!(params.validate_inputs().is_err());
 
@@ -1183,7 +1183,7 @@ mod tests {
             let params = RecoveryParams {
                 version: "abc".to_string(),
                 recovery_hash_prefix: Some(valid_hash.clone()),
-                ..default_recovery_params()
+                ..default_recovery_params_for_test()
             };
             assert!(params.validate_inputs().is_err());
 
@@ -1191,7 +1191,7 @@ mod tests {
             let params = RecoveryParams {
                 version: "A".repeat(VERSION_LENGTH),
                 recovery_hash_prefix: Some(valid_hash),
-                ..default_recovery_params()
+                ..default_recovery_params_for_test()
             };
             assert!(params.validate_inputs().is_err());
         }
@@ -1204,7 +1204,7 @@ mod tests {
             let params = RecoveryParams {
                 version: valid_version.clone(),
                 recovery_hash_prefix: Some(String::new()),
-                ..default_recovery_params()
+                ..default_recovery_params_for_test()
             };
             assert!(params.validate_inputs().is_err());
 
@@ -1212,7 +1212,7 @@ mod tests {
             let params = RecoveryParams {
                 version: valid_version.clone(),
                 recovery_hash_prefix: Some("abc".to_string()),
-                ..default_recovery_params()
+                ..default_recovery_params_for_test()
             };
             assert!(params.validate_inputs().is_err());
 
@@ -1220,7 +1220,7 @@ mod tests {
             let params = RecoveryParams {
                 version: valid_version,
                 recovery_hash_prefix: Some("ABCDEF".to_string()),
-                ..default_recovery_params()
+                ..default_recovery_params_for_test()
             };
             assert!(params.validate_inputs().is_err());
         }
@@ -1231,7 +1231,7 @@ mod tests {
                 current_boot_alternative: BootAlternative::B,
                 target_boot_alternative_selection: TargetBootAlternativeSelection::Current,
                 mode: RecoveryMode::Tee,
-                ..default_recovery_params()
+                ..default_recovery_params_for_test()
             };
             assert_eq!(current.get_target_boot_alternative(), BootAlternative::B);
 
@@ -1239,7 +1239,7 @@ mod tests {
                 current_boot_alternative: BootAlternative::B,
                 target_boot_alternative_selection: TargetBootAlternativeSelection::Opposite,
                 mode: RecoveryMode::Tee,
-                ..default_recovery_params()
+                ..default_recovery_params_for_test()
             };
             assert_eq!(opposite.get_target_boot_alternative(), BootAlternative::A);
         }
@@ -1250,7 +1250,7 @@ mod tests {
                 current_boot_alternative: BootAlternative::B,
                 target_boot_alternative_selection: TargetBootAlternativeSelection::Current,
                 mode: RecoveryMode::Nns,
-                ..default_recovery_params()
+                ..default_recovery_params_for_test()
             };
             assert_eq!(params.get_target_boot_alternative(), BootAlternative::A);
         }
@@ -1325,7 +1325,7 @@ mod tests {
         fn ctrl_c_quits_from_confirmation_state() {
             let confirmation = ConfirmationState {
                 input_state: create_test_input_state(RecoveryMode::Nns),
-                params: default_recovery_params(),
+                params: default_recovery_params_for_test(),
                 selected_option: ConfirmationOption::Yes,
             };
             let mut app = GuestOSRecoveryApp::with_state(AppState::InputConfirmation(confirmation));
@@ -1492,7 +1492,10 @@ mod tests {
             #[test]
             fn tab_navigates_through_tee_mode_without_recovery_hash_field() {
                 let mut app = create_test_app(RecoveryMode::Tee);
-
+                assert!(matches!(
+                    app.get_state(),
+                    Some(AppState::Input(s)) if s.current_field() == Field::Version
+                ));
                 app.handle_event(Event::Key(key_event(KeyCode::Tab)))
                     .unwrap();
                 assert!(matches!(
@@ -1512,6 +1515,12 @@ mod tests {
                 assert!(matches!(
                     app.get_state(),
                     Some(AppState::Input(s)) if s.current_field() == Field::ExitButton
+                ));
+                app.handle_event(Event::Key(key_event(KeyCode::Tab)))
+                    .unwrap();
+                assert!(matches!(
+                    app.get_state(),
+                    Some(AppState::Input(s)) if s.current_field() == Field::Version
                 ));
             }
 
@@ -1738,7 +1747,7 @@ mod tests {
         fn escape_returns_to_input() {
             let confirmation = ConfirmationState {
                 input_state: create_test_input_state(RecoveryMode::Nns),
-                params: default_recovery_params(),
+                params: default_recovery_params_for_test(),
                 selected_option: ConfirmationOption::Yes,
             };
             let mut app = GuestOSRecoveryApp::with_state(AppState::InputConfirmation(confirmation));
@@ -1754,7 +1763,7 @@ mod tests {
         fn tab_toggles_selection() {
             let confirmation = ConfirmationState {
                 input_state: create_test_input_state(RecoveryMode::Nns),
-                params: default_recovery_params(),
+                params: default_recovery_params_for_test(),
                 selected_option: ConfirmationOption::Yes,
             };
             let mut app = GuestOSRecoveryApp::with_state(AppState::InputConfirmation(confirmation));
@@ -1780,7 +1789,7 @@ mod tests {
         fn left_right_changes_selection() {
             let confirmation = ConfirmationState {
                 input_state: create_test_input_state(RecoveryMode::Nns),
-                params: default_recovery_params(),
+                params: default_recovery_params_for_test(),
                 selected_option: ConfirmationOption::Yes,
             };
             let mut app = GuestOSRecoveryApp::with_state(AppState::InputConfirmation(confirmation));
@@ -1806,7 +1815,7 @@ mod tests {
         fn enter_no_returns_to_input() {
             let confirmation = ConfirmationState {
                 input_state: create_valid_input_state(),
-                params: default_recovery_params(),
+                params: default_recovery_params_for_test(),
                 selected_option: ConfirmationOption::No,
             };
             let mut app = GuestOSRecoveryApp::with_state(AppState::InputConfirmation(confirmation));
