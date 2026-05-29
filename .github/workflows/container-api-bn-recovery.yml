@@ -28,7 +28,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:151d1ebf531a9d83baeb566a0ac5dcc91983aee94cf01b76c2b88722dada037f
+      image: ghcr.io/dfinity/ic-build@sha256:dcb838604bc2a7643b677965d1b59e1e7b1e9830106b528219a47ac754731d6e
       options: >-
         -e NODE_NAME --privileged --cgroupns host
         --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
