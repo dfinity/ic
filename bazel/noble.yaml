@@ -32,6 +32,7 @@ packages:
   - "libcryptsetup-dev"
   - "libssl3t64"
   - "libunwind8"
+  - "libvirt0" # so colocated test binaries linking libvirt.so.0 can load (see rs/tests/driver/src/driver/local_backend.rs)
   - "mtools"
   - "openssh-client" # used to SSH into image
   - "perl"

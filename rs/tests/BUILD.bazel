@@ -25,6 +25,7 @@ PACKAGES = [
     "@noble//gzip/amd64",
     "@noble//libssl3t64/amd64",
     "@noble//libunwind8/amd64",
+    "@noble//libvirt0/amd64",
     "@noble//mtools/amd64",
     "@noble//openssh-client/amd64",
     "@noble//rsync/amd64",
