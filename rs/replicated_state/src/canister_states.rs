@@ -553,7 +553,6 @@ impl CanisterStates {
     ///
     /// `O(|hot canisters|)` — cold canisters by definition use no best-effort
     /// message memory (see `CanisterState::is_cold`).
-    #[allow(dead_code)]
     pub(crate) fn best_effort_message_memory_taken(&self) -> NumBytes {
         self.hot
             .values()

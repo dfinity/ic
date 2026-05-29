@@ -833,6 +833,12 @@ fn get_canister_status_from_another_canister_when_memory_low() {
                 .real()
                 .get())
             / one_gib
+            + test
+                .cycles_account_manager()
+                .base_per_second_fee(test.subnet_size(), CanisterCyclesCostSchedule::Normal)
+                .real()
+                .get()
+                * seconds_per_day
     );
 }
 
