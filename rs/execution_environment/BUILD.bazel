@@ -20,6 +20,7 @@ rust_library(
         "//rs/crypto/utils/canister_threshold_sig",
         "//rs/cycles_account_manager",
         "//rs/embedders",
+        "//rs/https_outcalls/pricing",
         "//rs/interfaces",
         "//rs/interfaces/state_manager",
         "//rs/limits",

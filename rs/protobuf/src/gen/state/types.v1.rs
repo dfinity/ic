@@ -375,6 +375,8 @@ pub struct IDkgPayload {
 pub struct ConsensusResponse {
     #[prost(uint64, tag = "3")]
     pub callback: u64,
+    #[prost(message, repeated, tag = "9")]
+    pub refund_shares: ::prost::alloc::vec::Vec<RefundShare>,
     #[prost(oneof = "consensus_response::Payload", tags = "5, 6")]
     pub payload: ::core::option::Option<consensus_response::Payload>,
 }
@@ -387,6 +389,13 @@ pub mod consensus_response {
         #[prost(message, tag = "6")]
         Reject(super::super::super::state::queues::v1::RejectContext),
     }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RefundShare {
+    #[prost(message, optional, tag = "1")]
+    pub node_id: ::core::option::Option<NodeId>,
+    #[prost(message, optional, tag = "2")]
+    pub amount: ::core::option::Option<super::super::state::queues::v1::Cycles>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MasterKeyTranscript {

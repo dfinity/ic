@@ -23,21 +23,17 @@ pub use self::{
     xnet::XNetPayload,
 };
 use crate::{
-    Height, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time,
-    consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
-    crypto::{
+    Cycles, Height, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time, consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature}, crypto::{
         canister_threshold_sig::{MasterPublicKey, idkg::IDkgTranscript},
         threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId},
-    },
-    messages::{CallbackId, Payload, SignedIngress},
-    xnet::CertifiedStreamSlice,
+    }, messages::{CallbackId, Payload, SignedIngress}, node_id_into_protobuf, node_id_try_from_protobuf, xnet::CertifiedStreamSlice
 };
 use ic_base_types::{NodeId, NumBytes};
 use ic_btc_replica_types::BitcoinAdapterResponse;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::MasterPublicKeyId;
-use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
+use ic_protobuf::{proxy::{ProxyDecodeError, try_from_option_field}, types::v1 as pb};
 use prost::{DecodeError, Message, bytes::BufMut};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryInto, hash::Hash};
@@ -301,11 +297,12 @@ where
 pub struct ConsensusResponse {
     pub callback: CallbackId,
     pub payload: Payload,
+    pub refund_shares: Vec<(NodeId, Cycles)>,
 }
 
 impl ConsensusResponse {
     pub fn new(callback: CallbackId, payload: Payload) -> Self {
-        Self { callback, payload }
+        Self { callback, payload, refund_shares: vec![] }
     }
 }
 
@@ -315,9 +312,19 @@ impl From<&ConsensusResponse> for pb::ConsensusResponse {
             Payload::Data(d) => pb::consensus_response::Payload::Data(d.clone()),
             Payload::Reject(r) => pb::consensus_response::Payload::Reject(r.into()),
         };
+
+        let refund_shares_proto = rep.refund_shares
+            .iter()
+            .map(|(node_id, cycles)| pb::RefundShare {
+                node_id: Some(node_id_into_protobuf(*node_id)),
+                amount: Some((*cycles).into()),
+            })
+            .collect();
+
         Self {
             callback: rep.callback.get(),
             payload: Some(p),
+            refund_shares: refund_shares_proto,
         }
     }
 }
@@ -334,9 +341,27 @@ impl TryFrom<pb::ConsensusResponse> for ConsensusResponse {
             pb::consensus_response::Payload::Reject(r) => Payload::Reject(r.try_into()?),
         };
 
+        let refund_shares = rep
+            .refund_shares
+            .into_iter()
+            .map(|share| {
+                let node_id = node_id_try_from_protobuf(
+                    share.node_id.ok_or(ProxyDecodeError::MissingField("RefundShare::node_id"))?
+                )?;
+                
+                let amount = share
+                    .amount
+                    .map(Into::into)
+                    .unwrap_or_else(Cycles::zero);
+
+                Ok((node_id, amount))
+            })
+            .collect::<Result<Vec<(NodeId, Cycles)>, ProxyDecodeError>>()?;
+
         Ok(Self {
             callback: rep.callback.into(),
             payload,
+            refund_shares,
         })
     }
 }

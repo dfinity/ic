@@ -29,6 +29,7 @@ use ic_cycles_account_manager::{
     is_delayed_ingress_induction_cost,
 };
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
+use ic_https_outcalls_pricing::PricingFactory;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
@@ -507,6 +508,71 @@ impl ExecutionEnvironment {
         let cost_schedule = state.get_own_cost_schedule();
 
         let mut msg = match msg {
+            SubnetMessage::ConsensusResponse(response) => {
+                let context = state
+                    .metadata
+                    .subnet_call_context_manager
+                    .retrieve_context(response.callback, &self.log);
+                return match context {
+                    None => (state, Some(NumInstructions::from(0))),
+                    Some(mut context) => {
+                        let time_elapsed =
+                            state.time().saturating_duration_since(context.get_time());
+                        let request = context.get_request();
+
+                        let refund = if let SubnetCallContext::CanisterHttpRequest(http_context) = &mut context {
+                            let calculator = PricingFactory::new_calculator(http_context);
+                            let consensus_cost = calculator.consensus_cost(&response.payload);
+                            let gross_refund = response.refund_shares.iter().map(|s| s.refund).sum();
+                            let net_refund = gross_refund.saturating_sub(consensus_cost);
+                            net_refund.max(0)
+                        } else {
+                            request.payment
+                        };
+
+                        self.metrics.observe_subnet_message(
+                            &request.method_name,
+                            time_elapsed.as_secs_f64(),
+                            &match &response.payload {
+                                Payload::Data(_) => Ok(()),
+                                Payload::Reject(_) => Err(ErrorCode::CanisterRejectedMessage),
+                            },
+                        );
+
+                        if let (
+                            SubnetCallContext::SignWithThreshold(threshold_context),
+                            Payload::Data(_),
+                        ) = (&context, &response.payload)
+                        {
+                            *state
+                                .metadata
+                                .subnet_metrics
+                                .threshold_signature_agreements
+                                .entry(threshold_context.key_id())
+                                .or_default() += 1;
+                        }
+
+                        let response_payload = match &response.payload {
+                            Payload::Data(d) => ic_types::messages::Payload::Data(d.clone()),
+                            Payload::Reject(r) => ic_types::messages::Payload::Reject(r.clone()),
+                        };
+
+                        state.push_subnet_output_response(
+                            Response {
+                                originator: request.sender,
+                                respondent: CanisterId::from(self.own_subnet_id),
+                                originator_reply_callback: request.sender_reply_callback,
+                                refund,
+                                response_payload,
+                                deadline: request.deadline,
+                            }
+                            .into(),
+                        );
+
+                        (state, Some(NumInstructions::from(0)))
+                    }
+                };
+            }
             SubnetMessage::Response(response) => {
                 let context = state
                     .metadata

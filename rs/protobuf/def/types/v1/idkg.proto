@@ -27,7 +27,13 @@ message ConsensusResponse {
     bytes data = 5;
     state.queues.v1.RejectContext reject = 6;
   }
+  repeated RefundShare refund_shares = 9;
 }
+
+message RefundShare {
+  types.v1.NodeId node_id = 1;
+  state.queues.v1.Cycles amount = 2;
+} 
 
 message MasterKeyTranscript {
   reserved 1;
