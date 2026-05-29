@@ -152,7 +152,7 @@ pub trait BasicSigVerifier<T: Signable> {
     /// * `CryptoError::SignatureVerification`: if at least one signature in
     ///   the batch could not be verified for its corresponding message.
     /// * `CryptoError::InvalidArgument`: if `inputs` is empty.
-    fn verify_basic_sigs_batch(
+    fn verify_basic_sig_batch_multi_msg(
         &self,
         inputs: &[(NodeId, &BasicSigOf<T>, &T)],
         registry_version: RegistryVersion,

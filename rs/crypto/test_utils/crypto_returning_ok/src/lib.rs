@@ -84,7 +84,7 @@ impl<T: Signable> BasicSigVerifier<T> for CryptoReturningOk {
         Ok(())
     }
 
-    fn verify_basic_sigs_batch(
+    fn verify_basic_sig_batch_multi_msg(
         &self,
         _inputs: &[(NodeId, &BasicSigOf<T>, &T)],
         _registry_version: RegistryVersion,

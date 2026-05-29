@@ -117,7 +117,7 @@ macro_rules! impl_basic_sig_verifier {
                 self.$verify_batch(signature_batch, message, registry_version)
             }
 
-            fn verify_basic_sigs_batch(
+            fn verify_basic_sig_batch_multi_msg(
                 &self,
                 inputs: &[(NodeId, &BasicSigOf<$t>, &$t)],
                 registry_version: RegistryVersion,
@@ -327,7 +327,7 @@ mockall::mock! {
             message: &BlockMetadata, registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
-        pub fn verify_basic_sigs_batch_block(
+        pub fn verify_basic_sig_batch_multi_msg_block(
             &self,
             inputs: Vec<(NodeId, BasicSigOf<BlockMetadata>, BlockMetadata)>,
             registry_version: RegistryVersion,
@@ -353,7 +353,7 @@ mockall::mock! {
             registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
-        pub fn verify_basic_sigs_batch_dkg_dealing_content(
+        pub fn verify_basic_sig_batch_multi_msg_dkg_dealing_content(
             &self,
             inputs: Vec<(NodeId, BasicSigOf<consensus_dkg::DealingContent>, consensus_dkg::DealingContent)>,
             registry_version: RegistryVersion,
@@ -378,7 +378,7 @@ mockall::mock! {
             message: &SignedIDkgDealing, registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
-        pub fn verify_basic_sigs_batch_signed_idkg_dealing(
+        pub fn verify_basic_sig_batch_multi_msg_signed_idkg_dealing(
             &self,
             inputs: Vec<(NodeId, BasicSigOf<SignedIDkgDealing>, SignedIDkgDealing)>,
             registry_version: RegistryVersion,
@@ -401,7 +401,7 @@ mockall::mock! {
             message: &IDkgDealing, registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
-        pub fn verify_basic_sigs_batch_idkg(
+        pub fn verify_basic_sig_batch_multi_msg_idkg(
             &self,
             inputs: Vec<(NodeId, BasicSigOf<IDkgDealing>, IDkgDealing)>,
             registry_version: RegistryVersion,
@@ -426,7 +426,7 @@ mockall::mock! {
             message: &IDkgComplaintContent, registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
-        pub fn verify_basic_sigs_batch_idkg_complaint(
+        pub fn verify_basic_sig_batch_multi_msg_idkg_complaint(
             &self,
             inputs: Vec<(NodeId, BasicSigOf<IDkgComplaintContent>, IDkgComplaintContent)>,
             registry_version: RegistryVersion,
@@ -451,7 +451,7 @@ mockall::mock! {
             message: &IDkgOpeningContent, registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
-        pub fn verify_basic_sigs_batch_idkg_opening(
+        pub fn verify_basic_sig_batch_multi_msg_idkg_opening(
             &self,
             inputs: Vec<(NodeId, BasicSigOf<IDkgOpeningContent>, IDkgOpeningContent)>,
             registry_version: RegistryVersion,
@@ -478,7 +478,7 @@ mockall::mock! {
             registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
-        pub fn verify_basic_sigs_batch_http(
+        pub fn verify_basic_sig_batch_multi_msg_http(
             &self,
             inputs: Vec<(
                 NodeId,
@@ -791,49 +791,49 @@ impl_basic_sig_verifier!(
     verify_basic_sig_block,
     combine_basic_sig_block,
     verify_basic_sig_batch_block,
-    verify_basic_sigs_batch_block
+    verify_basic_sig_batch_multi_msg_block
 );
 impl_basic_sig_verifier!(
     consensus_dkg::DealingContent,
     verify_basic_sig_dkg_dealing_content,
     combine_basic_sig_dkg_dealing_content,
     verify_basic_sig_batch_dkg_dealing_content,
-    verify_basic_sigs_batch_dkg_dealing_content
+    verify_basic_sig_batch_multi_msg_dkg_dealing_content
 );
 impl_basic_sig_verifier!(
     SignedIDkgDealing,
     verify_basic_sig_signed_idkg_dealing,
     combine_basic_sig_signed_idkg_dealing,
     verify_basic_sig_batch_signed_idkg_dealing,
-    verify_basic_sigs_batch_signed_idkg_dealing
+    verify_basic_sig_batch_multi_msg_signed_idkg_dealing
 );
 impl_basic_sig_verifier!(
     IDkgDealing,
     verify_basic_sig_idkg_dealing,
     combine_basic_sig_idkg_dealing,
     verify_basic_sig_batch_idkg,
-    verify_basic_sigs_batch_idkg
+    verify_basic_sig_batch_multi_msg_idkg
 );
 impl_basic_sig_verifier!(
     IDkgComplaintContent,
     verify_basic_sig_idkg_complaint,
     combine_basic_sig_idkg_complaint,
     verify_basic_sig_batch_idkg_complaint,
-    verify_basic_sigs_batch_idkg_complaint
+    verify_basic_sig_batch_multi_msg_idkg_complaint
 );
 impl_basic_sig_verifier!(
     IDkgOpeningContent,
     verify_basic_sig_idkg_opening,
     combine_basic_sig_idkg_opening,
     verify_basic_sig_batch_idkg_opening,
-    verify_basic_sigs_batch_idkg_opening
+    verify_basic_sig_batch_multi_msg_idkg_opening
 );
 impl_basic_sig_verifier!(
     CanisterHttpResponseMetadata,
     verify_basic_sig_http,
     combine_basic_sig_http,
     verify_basic_sig_batch_http,
-    verify_basic_sigs_batch_http
+    verify_basic_sig_batch_multi_msg_http
 );
 
 impl_threshold_signer!(CertificationContent, sign_threshold_certification);
