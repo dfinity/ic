@@ -239,12 +239,14 @@ def icos_build(
                       "$(location //toolchains/sysimage:verity_sign) " +
                       "-i $< -o $(location :" + partition_root_signed_tzst + ") " +
                       "-r $(location " + partition_root_hash + ") " +
-                      "--dflate $(location //rs/ic_os/build_tools/dflate)",
+                      "--dflate $(location //rs/ic_os/build_tools/dflate) " +
+                      "--zstd $(location @zstd//:zstd_cli)",
                 executable = False,
                 tools = [
                     "//toolchains/sysimage:proc_wrapper",
                     "//toolchains/sysimage:verity_sign",
                     "//rs/ic_os/build_tools/dflate",
+                    "@zstd//:zstd_cli",
                 ],
                 tags = ["manual", "no-cache"],
                 visibility = ["//rs/tests:__subpackages__", "//ic-os:__subpackages__"],

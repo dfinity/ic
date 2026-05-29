@@ -34,7 +34,6 @@ rust_library(
         "@crate_index//:anyhow",
         "@crate_index//:der",
         "@crate_index//:prost",
-        "@crate_index//:rustls",
         "@crate_index//:thiserror",
         "@crate_index//:tokio",
         "@crate_index//:tonic",

@@ -755,6 +755,19 @@ impl SchedulerTest {
         )
     }
 
+    pub fn canister_base_cost(
+        &self,
+        bytes: NumBytes,
+        duration: Duration,
+    ) -> CompoundCycles<ic_types_cycles::Memory> {
+        self.scheduler.cycles_account_manager.canister_base_cost(
+            bytes,
+            duration,
+            self.subnet_size(),
+            self.state.as_ref().unwrap().get_own_cost_schedule(),
+        )
+    }
+
     pub fn compute_allocation_cost(
         &self,
         compute_allocation: ComputeAllocation,

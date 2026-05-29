@@ -75,6 +75,7 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
+            subnet_admins: None,
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
@@ -205,6 +206,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             max_number_of_canisters: Some(100),
             ssh_readonly_access: None,
             ssh_backup_access: None,
+            subnet_admins: None,
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
@@ -327,6 +329,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             max_number_of_canisters: Some(42),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
+            subnet_admins: None,
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
@@ -519,6 +522,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
 
         // update payload message
         let mut payload = UpdateSubnetPayload {
+            subnet_admins: None,
             chain_key_config: Some(chain_key_config.clone()),
             chain_key_signing_enable: Some(vec![key_id.clone()]),
             ..empty_update_subnet_payload(subnet_id)
@@ -548,6 +552,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
 
         // Change one field at a time in this payload
         payload = UpdateSubnetPayload {
+            subnet_admins: None,
             chain_key_config: None,
             chain_key_signing_enable: Some(vec![key_id.clone()]),
             ..empty_update_subnet_payload(subnet_id)
@@ -587,6 +592,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
         // First call:
         {
             let payload_1 = UpdateSubnetPayload {
+                subnet_admins: None,
                 chain_key_config: Some(chain_key_config.clone()),
                 ..empty_update_subnet_payload(subnet_id)
             };
@@ -620,6 +626,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
         {
             // This update should enable signing on our subnet for the given key.
             let payload_2 = UpdateSubnetPayload {
+                subnet_admins: None,
                 chain_key_signing_enable: Some(vec![key_id.clone()]),
                 ..empty_update_subnet_payload(subnet_id)
             };
@@ -684,6 +691,7 @@ fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
         max_number_of_canisters: None,
         ssh_readonly_access: None,
         ssh_backup_access: None,
+        subnet_admins: None,
         chain_key_config: None,
         chain_key_signing_enable: None,
         chain_key_signing_disable: None,

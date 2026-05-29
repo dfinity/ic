@@ -315,6 +315,10 @@ impl CanisterManager {
 
     /// Validates the new canister settings and applies them to the canister.
     ///
+    /// Returns the heap delta increase due to applying the new canister settings.
+    /// The heap delta increase must be accounted for by the caller, e.g.,
+    /// by returning it as part of `CanisterManagerResponse`.
+    ///
     /// `canister: &mut CanisterState` and `round_limits: &mut RoundLimits`
     /// are updated in-place and changes must be reverted by the caller
     /// of this function in case of `Err`.
@@ -335,7 +339,9 @@ impl CanisterManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
         metrics: Option<&ExecutionEnvironmentMetrics>,
-    ) -> Result<(), CanisterManagerError> {
+    ) -> Result<NumBytes, CanisterManagerError> {
+        let mut heap_delta_increase = NumBytes::from(0);
+
         // Freezing threshold: apply.
         if let Some(freezing_threshold) = settings.freezing_threshold() {
             canister.system_state.freeze_threshold = freezing_threshold;
@@ -545,18 +551,20 @@ impl CanisterManager {
                 });
             }
             // Resizing reads all stored log records from the old ring buffer and
-            // rewrites them into a new one. Cost is proportional to bytes_used
-            // (actual stored data), not allocated capacity.
-            // Skip the charge when resize would be a no-op (e.g., capacity
-            // unchanged or limit set to 0 with an already-empty store).
+            // rewrites them into a new one. The instruction cost is proportional
+            // to the pre-resize `bytes_used()` (actual data read). The heap delta
+            // increase equals the post-resize `bytes_used()` (actual data written
+            // into the new store; may be less when downsizing drops records).
+            // Skip when resize would be a no-op (e.g., capacity unchanged or
+            // limit set to 0 with an already empty log store).
             let log_resize_needed = canister
                 .system_state
                 .log_memory_store
                 .would_resize(requested_limit.get() as usize);
             let log_resize_instructions = if log_resize_needed {
-                let log_bytes_used =
+                let log_bytes_used_before =
                     NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64);
-                NumInstructions::new(log_bytes_used.get() * LOG_RESIZE_COST_PER_BYTE)
+                NumInstructions::new(log_bytes_used_before.get() * LOG_RESIZE_COST_PER_BYTE)
             } else {
                 NumInstructions::new(0)
             };
@@ -587,6 +595,10 @@ impl CanisterManager {
                     .map(|m| m.canister_log_resize_duration.start_timer());
                 log_memory_store.resize(limit, self.fd_factory.clone());
             }
+            if log_resize_needed {
+                heap_delta_increase =
+                    NumBytes::new(canister.system_state.log_memory_store.bytes_used() as u64);
+            }
         }
 
         // Controllers: validate count and apply (only at the end
@@ -611,7 +623,7 @@ impl CanisterManager {
             }
         }
 
-        Ok(())
+        Ok(heap_delta_increase)
     }
 
     /// Tries to apply the requested settings on the canister identified by
@@ -633,7 +645,7 @@ impl CanisterManager {
 
         validate_controller(canister, &sender)?;
 
-        self.validate_and_update_canister_settings(
+        let heap_delta_increase = self.validate_and_update_canister_settings(
             canister,
             round_limits,
             &settings,
@@ -694,8 +706,7 @@ impl CanisterManager {
         Ok(CanisterManagerResponse {
             canister_id: canister.canister_id(),
             reply: Some(EmptyBlob.encode()),
-            // TODO(DSM-123): set `heap_delta_increase` due to canister log buffer resize
-            heap_delta_increase: NumBytes::new(0),
+            heap_delta_increase,
             unflushed_checkpoint_op: None,
             deleted_call_context_responses: vec![],
             stop_call_id_to_remove: None,
