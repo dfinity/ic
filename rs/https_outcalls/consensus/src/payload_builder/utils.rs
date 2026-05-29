@@ -188,6 +188,13 @@ pub(crate) fn validate_response_share(
 /// In contrast to verifying each share individually, this allows the
 /// underlying crypto component to use batch signature verification for
 /// signatures on potentially different messages.
+///
+/// An empty `shares` collection is rejected via the underlying
+/// `verify_basic_sig_batch_multi_msg`'s `InvalidArgument` error. Callers
+/// should make sure that upstream payload-validation rejects empty share
+/// collections (e.g. via count/threshold checks) before reaching this
+/// function; an empty batch reaching this point is treated as a malformed
+/// payload.
 pub(crate) fn verify_response_share_signatures<'a, I>(
     shares: I,
     consensus_registry_version: RegistryVersion,
@@ -206,9 +213,6 @@ where
             )
         })
         .collect();
-    if inputs.is_empty() {
-        return Ok(());
-    }
     crypto
         .verify_basic_sig_batch_multi_msg(&inputs, consensus_registry_version)
         .map_err(|err| InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)))
