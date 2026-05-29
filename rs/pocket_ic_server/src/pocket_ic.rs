@@ -2180,6 +2180,8 @@ impl PocketIcSubnets {
                 backend_canister_id: Some(IDENTITY_CANISTER_ID.get().0),
                 backend_origin: None,
                 sso_discoverable_domains: None,
+                dnssec_config: None, // DIFFERENT FROM ICP MAINNET
+                doh_config: None,    // DIFFERENT FROM ICP MAINNET
             });
             ii_subnet
                 .state_machine
