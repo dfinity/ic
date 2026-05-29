@@ -1,12 +1,15 @@
 use super::*;
 use crate::canister_state::canister_snapshots::CanisterSnapshots;
-use crate::canister_state::execution_state::{WasmBinary, WasmMetadata};
+use crate::canister_state::execution_state::{
+    CustomSection, CustomSectionType, WasmBinary, WasmMetadata,
+};
 use crate::canister_state::system_state::testing::SystemStateTesting;
 use crate::{
     CallContextManager, CanisterState, CanisterStatus, ExecutionState, ExecutionTask,
     ExportedFunctions, InputQueueType, Memory, SchedulerState, SystemState,
 };
 use ic_base_types::NumSeconds;
+use ic_management_canister_types_private::{CanisterChangeDetails, CanisterChangeOrigin};
 use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_test_utilities_types::messages::RequestBuilder;
@@ -16,7 +19,7 @@ use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{CanisterTimer, ComputeAllocation, NumBytes, NumInstructions, Time};
 use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
 use ic_wasm_types::CanisterModule;
-use std::collections::BTreeSet;
+use maplit::{btreemap, btreeset};
 use std::sync::Arc;
 
 fn make_canister(id: u64) -> Arc<CanisterState> {
@@ -36,9 +39,14 @@ fn make_canister(id: u64) -> Arc<CanisterState> {
 }
 
 fn push_input(canister: &mut Arc<CanisterState>) {
+    push_input_with_deadline(canister, NO_DEADLINE);
+}
+
+fn push_input_with_deadline(canister: &mut Arc<CanisterState>, deadline: CoarseTime) {
     let msg: RequestOrResponse = RequestBuilder::default()
         .sender(canister_test_id(999))
         .receiver(canister.canister_id())
+        .deadline(deadline)
         .build()
         .into();
     let mut available_guaranteed_response_memory = i64::MAX / 2;
@@ -130,9 +138,9 @@ fn canister_with_heartbeat_method_is_not_cold() {
     let mut canister = make_canister(1);
     Arc::make_mut(&mut canister).execution_state = Some(ExecutionState::new(
         WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
-        ExportedFunctions::new(BTreeSet::from([WasmMethod::System(
+        ExportedFunctions::new(btreeset![WasmMethod::System(
             SystemMethod::CanisterHeartbeat,
-        )])),
+        )]),
         Memory::new_for_testing(),
         Memory::new_for_testing(),
         vec![],
@@ -655,14 +663,34 @@ fn retain_updates_cold_stats_for_removed_cold_canisters() {
     assert_eq!(states.total_compute_allocation(), 40);
 }
 
-#[test]
-fn memory_aggregators_combine_hot_and_cold() {
-    let mut c1 = cold_canister(1);
-    let mut c2 = hot_canister(2);
+// Helper for the memory aggregators tests. Takes two canisters, one hot, one
+// cold; populates various parts of their states; and validates the aggregators.
+fn memory_aggregators_combine_hot_and_cold_impl(
+    mut c1: Arc<CanisterState>,
+    mut c2: Arc<CanisterState>,
+) {
     // Distinguishable memory allocation reservations so that `execution`
     // depends visibly on both canisters.
     Arc::make_mut(&mut c1).system_state.memory_allocation = NumBytes::new(10_000_000).into();
     Arc::make_mut(&mut c2).system_state.memory_allocation = NumBytes::new(20_000_000).into();
+    // Also populate custom sections.
+    Arc::make_mut(&mut c1).execution_state = Some(ExecutionState::new(
+        WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
+        ExportedFunctions::new(btreeset![]),
+        Memory::new_for_testing(),
+        Memory::new_for_testing(),
+        Vec::new(),
+        WasmMetadata::new(btreemap! {
+            "private".to_string() => CustomSection::new(CustomSectionType::Private, vec![0, 1]),
+            "public".to_string() => CustomSection::new(CustomSectionType::Public, vec![0, 2]),
+        }),
+    ));
+    // And a canister history change.
+    Arc::make_mut(&mut c2).system_state.add_canister_change(
+        Time::from_nanos_since_unix_epoch(1000),
+        CanisterChangeOrigin::from_canister(c1.canister_id().get(), Some(1)),
+        CanisterChangeDetails::CanisterCodeUninstall,
+    );
 
     let mut states = CanisterStates::default();
     states.insert(Arc::clone(&c1));
@@ -697,23 +725,34 @@ fn memory_aggregators_combine_hot_and_cold() {
         .map(|c| c.canister_history_memory_usage())
         .sum();
 
-    // Sanity: the hot canister contributes non-zero guaranteed-response message
-    // memory (from `push_input`) and both canisters contribute to `execution`
-    // (from `memory_allocation`); otherwise a broken aggregator returning 0 could
-    // trivially pass.
+    // Sanity checks: the various amounts are all non-zero; otherwise a broken
+    // aggregator returning 0 could trivially pass.
+
+    // The hot canister contributes non-zero guaranteed-response message memory
+    // (from `push_input`) andn non-zero best-effort message memory (explicit push).
     assert!(expected_guaranteed > NumBytes::new(0));
+    assert!(expected_best_effort > NumBytes::new(0));
+    // Both canisters contribute to `execution` (from `memory_allocation`).
     assert!(expected_execution == NumBytes::new(30_000_000));
-    // Also ensure that message memory usage contributes a non-zero amount to
-    // `total_canister_memory_usage`.
+    // Non-zero (actual)execution memory usage (from canister history).
+    let execution_memory: NumBytes = canisters.iter().map(|c| c.memory_usage()).sum();
+    assert!(execution_memory > NumBytes::new(0));
+    // And non-zero message memory usage.
     let total_message_memory: NumBytes = canisters
         .iter()
         .map(|c| c.message_memory_usage().total())
         .sum();
     assert!(total_message_memory > NumBytes::new(0));
-    // The actual `total_canister_memory_usage` only includes message memory
-    // (canisters have no execution state).
-    assert_eq!(expected_memory_usage, total_message_memory);
+    // Adding up to the expected memory usage.
+    assert_eq!(
+        expected_memory_usage,
+        execution_memory + total_message_memory
+    );
+    // Non-zero Wasm custom sections and canister history memory usage.
+    assert!(expected_wasm_sections > NumBytes::new(0));
+    assert!(expected_history > NumBytes::new(0));
 
+    // Test the individual getters().
     assert_eq!(states.total_canister_memory_usage(), expected_memory_usage);
     assert_eq!(
         states.guaranteed_response_message_memory_taken(),
@@ -724,6 +763,7 @@ fn memory_aggregators_combine_hot_and_cold() {
         expected_best_effort
     );
 
+    // Test the combined `memory_taken()`.
     let mt = states.memory_taken();
     assert_eq!(mt.execution, expected_execution);
     assert_eq!(mt.guaranteed_response_messages, expected_guaranteed);
@@ -732,6 +772,16 @@ fn memory_aggregators_combine_hot_and_cold() {
     assert_eq!(mt.canister_history, expected_history);
 }
 
+#[test]
+fn memory_aggregators_combine_hot_and_cold() {
+    let cold = cold_canister(1);
+    let mut hot = hot_canister(2);
+    // Also enqueue a best-effort message.
+    push_input_with_deadline(&mut hot, CoarseTime::from_secs_since_unix_epoch(1));
+
+    memory_aggregators_combine_hot_and_cold_impl(Arc::clone(&cold), Arc::clone(&hot));
+    memory_aggregators_combine_hot_and_cold_impl(Arc::clone(&hot), Arc::clone(&cold));
+}
 /// A cold canister holding a guaranteed-response slot reservation must still
 /// contribute its reservation memory to
 /// `guaranteed_response_message_memory_taken` and `memory_taken`.
