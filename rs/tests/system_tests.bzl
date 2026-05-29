@@ -244,7 +244,7 @@ def system_test(
     RUN_SCRIPT_RUNTIME_DEP_ENV_VARS = ";".join(_runtime_deps.keys())
     env["RUN_SCRIPT_RUNTIME_DEP_ENV_VARS"] = RUN_SCRIPT_RUNTIME_DEP_ENV_VARS
 
-    tags.append("system_test")
+    tags = tags + ["system_test"]
 
     if local:
         env["SYSTEM_TEST_INFRA"] = "local"
