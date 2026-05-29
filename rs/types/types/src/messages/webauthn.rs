@@ -97,7 +97,7 @@ impl TryFrom<&WebAuthnSignature> for WebAuthnEnvelope {
         };
 
         let mut signed_bytes = signature.authenticator_data.0.clone();
-        signed_bytes.append(&mut Sha256::hash(&signature.client_data_json.0.clone()[..]).to_vec());
+        signed_bytes.extend_from_slice(&Sha256::hash(&signature.client_data_json.0));
 
         Ok(WebAuthnEnvelope {
             client_data_json: signature.client_data_json.0.clone(),
