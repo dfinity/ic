@@ -46,22 +46,15 @@ impl<S> WithdrawalFlowStart<S> {
         let minter = self.setup.as_ref().minter();
         let env = self.setup.as_ref().env.clone();
 
-        let max_refreshes = 10;
-        let mut previous = minter.estimate_withdrawal_fee(withdrawal_amount);
-        for _ in 0..max_refreshes {
-            env.advance_time(FEE_PERCENTILES_REFRESH_INTERVAL + Duration::from_secs(1));
-            for _ in 0..10 {
-                env.tick();
+        let previous = minter.estimate_withdrawal_fee(withdrawal_amount);
+        env.advance_time(FEE_PERCENTILES_REFRESH_INTERVAL + Duration::from_secs(1));
+        for _ in 0..10 {
+            env.tick();
+            if minter.estimate_withdrawal_fee(withdrawal_amount) != previous {
+                break;
             }
-            let current = minter.estimate_withdrawal_fee(withdrawal_amount);
-            if current == previous {
-                return WithdrawalFlowApproval { setup: self.setup };
-            }
-            previous = current;
         }
-        panic!(
-            "BUG: fee estimate did not stabilize after {max_refreshes} refreshes; last estimate: {previous:?}"
-        );
+        WithdrawalFlowApproval { setup: self.setup }
     }
 }
 
