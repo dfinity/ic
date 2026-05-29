@@ -255,7 +255,7 @@ def system_test(
         # which makes `sudo` refuse to run. Tag the test `local` so Bazel runs it
         # unsandboxed (this also disables remote execution/caching, which the
         # local backend cannot use anyway).
-        tags = tags + ["local"]
+        tags.append("local")
     else:
         tags.append("requires-network")
 
