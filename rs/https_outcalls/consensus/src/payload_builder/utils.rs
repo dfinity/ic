@@ -80,7 +80,7 @@ pub(crate) fn check_response_consistency(
 ///
 /// **NOTE**: The signature on the share is not verified. Callers are expected
 /// to batch-verify the signatures of all shares in the surrounding group via
-/// [`BasicSigVerifier::verify_basic_sigs_batch`].
+/// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
 pub(crate) fn validate_flexible_response_with_proof(
     response_with_proof: &FlexibleCanisterHttpResponseWithProof,
     callback_id: CallbackId,
@@ -139,7 +139,7 @@ pub(crate) fn validate_flexible_response_with_proof(
 ///
 /// **NOTE**: The signature is not verified. Callers are expected to
 /// batch-verify the signatures of all shares in the surrounding group via
-/// [`BasicSigVerifier::verify_basic_sigs_batch`].
+/// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
 pub(crate) fn validate_response_share(
     share: &CanisterHttpResponseShare,
     callback_id: CallbackId,
@@ -210,7 +210,7 @@ where
         return Ok(());
     }
     crypto
-        .verify_basic_sigs_batch(&inputs, consensus_registry_version)
+        .verify_basic_sig_batch_multi_msg(&inputs, consensus_registry_version)
         .map_err(|err| InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)))
 }
 

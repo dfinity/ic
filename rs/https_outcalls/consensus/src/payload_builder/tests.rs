@@ -4711,7 +4711,7 @@ fn mock_crypto_rejecting_signatures() -> MockCrypto {
             })
         });
     mock_crypto
-        .expect_verify_basic_sigs_batch_http()
+        .expect_verify_basic_sig_batch_multi_msg_http()
         .returning(|_, _| {
             Err(ic_types::crypto::CryptoError::SignatureVerification {
                 algorithm: ic_types::crypto::AlgorithmId::Ed25519,
