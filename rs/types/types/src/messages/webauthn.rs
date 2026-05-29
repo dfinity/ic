@@ -76,8 +76,8 @@ pub struct WebAuthnEnvelope {
 }
 
 impl WebAuthnEnvelope {
-    pub fn challenge(&self) -> Vec<u8> {
-        self.challenge.clone()
+    pub fn challenge(&self) -> &[u8] {
+        &self.challenge
     }
 }
 
