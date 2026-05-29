@@ -38,14 +38,11 @@ impl<S> WithdrawalFlowStart<S> {
         Self { setup }
     }
 
-    pub fn minter_await_fee_refresh(self, withdrawal_amount: u64) -> WithdrawalFlowApproval<S>
+    pub fn minter_await_fee_refresh(self) -> WithdrawalFlowApproval<S>
     where
         S: AsRef<Setup>,
     {
-        self.setup
-            .as_ref()
-            .minter()
-            .await_fee_refresh(withdrawal_amount);
+        self.setup.as_ref().minter().await_fee_refresh();
         WithdrawalFlowApproval { setup: self.setup }
     }
 }

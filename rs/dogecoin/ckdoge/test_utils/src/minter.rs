@@ -163,16 +163,26 @@ impl MinterCanister {
         Decode!(&call_result, Result<WithdrawalFee, EstimateWithdrawalFeeError>).unwrap()
     }
 
-    pub fn await_fee_refresh(&self, withdrawal_amount: u64) {
-        let previous = self.estimate_withdrawal_fee(withdrawal_amount);
+    pub fn await_fee_refresh(&self) {
+        let refreshes_before = self.count_fee_percentile_refreshes();
         self.env
             .advance_time(FEE_PERCENTILES_REFRESH_INTERVAL + Duration::from_secs(1));
-        for _ in 0..10 {
+        let max_ticks = 10;
+        for _ in 0..max_ticks {
             self.env.tick();
-            if self.estimate_withdrawal_fee(withdrawal_amount) != previous {
-                break;
+            if self.count_fee_percentile_refreshes() > refreshes_before {
+                return;
             }
         }
+        dbg!(self.get_logs());
+        panic!("BUG: minter did not refresh fee percentiles within {max_ticks} ticks");
+    }
+
+    fn count_fee_percentile_refreshes(&self) -> usize {
+        self.get_logs()
+            .iter()
+            .filter(|entry| entry.message.contains("update median fee per vbyte"))
+            .count()
     }
 
     pub fn retrieve_doge_status(&self, ledger_burn_index: u64) -> RetrieveDogeStatus {
