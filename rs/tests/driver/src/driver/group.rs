@@ -1495,7 +1495,7 @@ impl SystemTestGroup {
                         // finalize task must terminate them or the bazel test
                         // process-wrapper hangs waiting for the orphaned root
                         // daemons to exit.
-                        backend.shutdown_daemons();
+                        backend.shutdown_daemons(&group_name);
                     }
                     Err(e) => {
                         slog::warn!(env.logger(), "LocalBackend::from_test_env failed: {e:?}");

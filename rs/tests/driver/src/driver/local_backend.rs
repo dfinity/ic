@@ -66,6 +66,11 @@ struct LocalBackendSocket {
     /// Absolute path on the host's filesystem; survives `cp -R` of the
     /// surrounding TestEnv directory because it is just a JSON string.
     socket_path: PathBuf,
+    /// Backend working directory (where VM disks and the libvirt pid/log
+    /// files live). Persisted alongside the socket because the socket no
+    /// longer lives under `working_dir` (it is placed at a short `/tmp` path,
+    /// see `spawn`), so it can no longer be derived from `socket_path`.
+    working_dir: PathBuf,
 }
 
 impl TestEnvAttribute for LocalBackendSocket {
@@ -145,6 +150,7 @@ impl LocalBackend {
             // handle to the already-running daemon.
             let backend = Arc::new(LocalBackend::connect_only(
                 existing.socket_path,
+                existing.working_dir,
                 env.logger(),
             )?);
             *reg = Some(backend.clone());
@@ -189,10 +195,54 @@ impl LocalBackend {
         // Persist the socket path so forked subprocesses can find it.
         LocalBackendSocket {
             socket_path: backend.socket_path.clone(),
+            working_dir: backend.working_dir.clone(),
         }
         .write_attribute(env);
         *reg = Some(backend.clone());
         Ok(backend)
+    }
+
+    /// Build a [`Command`] that runs `program` (with whatever args the caller
+    /// appends) as root via passwordless `sudo`, forcing the program's AppArmor
+    /// profile to `unconfined`.
+    ///
+    /// Why this is needed: Ubuntu ships enforce-mode `libvirtd`/`virtlogd`
+    /// AppArmor profiles that attach to `/usr/sbin/libvirtd` and
+    /// `/usr/sbin/virtlogd` on `exec`. Those profiles' `signal` rules deny
+    /// *receiving* signals from our container's processes (AppArmor label
+    /// `crun`), so once a daemon is confined we can no longer terminate it
+    /// during teardown: `kill`/`pkill` fail with EPERM ("Permission denied")
+    /// even as root, because AppArmor — not the credential check — blocks
+    /// delivery (`kill -0` still succeeds, but any real signal is refused). The
+    /// profiles are loaded from the host kernel, so this is invisible in the VS
+    /// Code devcontainer (where the daemons end up effectively unconfined) but
+    /// fatal under `ci/container/container-run.sh`, which runs against the
+    /// host's AppArmor policy. A leftover, unkillable libvirtd then hangs the
+    /// Bazel test wrapper (see [`shutdown_daemons`]).
+    ///
+    /// We sidestep the profile entirely by requesting an `unconfined`
+    /// transition for the next `exec` (via the kernel's
+    /// `/proc/self/attr/apparmor/exec` interface, with a fallback to the older
+    /// `/proc/self/attr/exec`) inside a tiny `sh` shim that then `exec`s the
+    /// daemon. The daemon therefore runs unconfined and stays signalable. The
+    /// write is best-effort: if AppArmor is disabled (the interface is absent or
+    /// not writable) the shim simply `exec`s the daemon unchanged.
+    fn sudo_unconfined(program: &str) -> Command {
+        let mut cmd = Command::new("sudo");
+        cmd.arg("-n")
+            .arg("/bin/sh")
+            .arg("-c")
+            .arg(concat!(
+                "for p in /proc/self/attr/apparmor/exec /proc/self/attr/exec; do ",
+                "if [ -w \"$p\" ]; then echo 'exec unconfined' > \"$p\" 2>/dev/null && break; fi; ",
+                "done; ",
+                "exec \"$@\"",
+            ))
+            // `$0` for the shim; the daemon binary and its args follow as `$1..`,
+            // which `exec "$@"` then runs.
+            .arg("sh")
+            .arg(program);
+        cmd
     }
 
     /// Ensure a `virtlogd` instance is reachable at [`VIRTLOGD_SOCK`].
@@ -242,9 +292,7 @@ impl LocalBackend {
         info!(logger, "Spawning virtlogd"; "bin" => VIRTLOGD_BIN, "socket" => VIRTLOGD_SOCK);
         // `--daemon` double-forks and writes the pid-file, so `status()` returns
         // once virtlogd has backgrounded itself.
-        let status = Command::new("sudo")
-            .arg("-n")
-            .arg(VIRTLOGD_BIN)
+        let status = Self::sudo_unconfined(VIRTLOGD_BIN)
             .arg("--daemon")
             .arg("--config")
             .arg(&conf_path)
@@ -271,6 +319,17 @@ impl LocalBackend {
         Ok(Some(pid_path))
     }
 
+    /// Short, host-global directory for this backend's libvirtd unix socket.
+    ///
+    /// See the call site in [`spawn`] for why the socket cannot live under
+    /// `working_dir`. Keyed by a hash of `working_dir` so it is stable across
+    /// re-runs of the same group yet distinct between concurrent groups.
+    fn socket_dir(working_dir: &Path) -> PathBuf {
+        use ic_crypto_sha2::Sha256;
+        let hash = Sha256::hash(working_dir.to_string_lossy().as_bytes());
+        PathBuf::from(format!("/tmp/ictest-libvirt-{}", hex::encode(&hash[0..5])))
+    }
+
     /// Spawn a fresh libvirtd subprocess in `working_dir/libvirt` and open a
     /// connection to it.
     fn spawn(working_dir: PathBuf, logger: Logger) -> Result<Self> {
@@ -279,10 +338,26 @@ impl LocalBackend {
             format!("creating libvirt working dir at {}", libvirt_dir.display())
         })?;
 
-        let socket_path = libvirt_dir.join("libvirt-sock");
         let conf_path = libvirt_dir.join("libvirtd.conf");
         let pid_path = libvirt_dir.join("libvirtd.pid");
         let log_path = libvirt_dir.join("libvirtd.log");
+
+        // The libvirtd unix socket must live at a SHORT path: the kernel caps
+        // unix socket paths (`sockaddr_un.sun_path`) at ~108 bytes, and the
+        // working dir resolves to a deep Bazel cache path
+        // (`.../execroot/_main/_tmp/<hash>/local_backend/...`) that already
+        // exceeds that limit, so a socket placed under it fails to bind with
+        // "File name too long". We therefore place the socket directory under
+        // `/tmp`, keyed by a hash of the working dir so concurrent test
+        // targets on the same host do not collide while a given group stays
+        // stable across re-runs. The pid/log/conf files stay in `libvirt_dir`.
+        let socket_dir = Self::socket_dir(&working_dir);
+        std::fs::create_dir_all(&socket_dir)
+            .with_context(|| format!("creating libvirt socket dir {}", socket_dir.display()))?;
+        let socket_path = socket_dir.join("libvirt-sock");
+        // A previous run with the same working dir leaves the socket behind at
+        // this fixed path; remove it so libvirtd can bind cleanly.
+        let _ = std::fs::remove_file(&socket_path);
 
         // The QEMU driver of a privileged libvirtd connects to virtlogd to
         // capture each domain's logs; without it, domain creation fails with
@@ -301,7 +376,7 @@ auth_unix_ro = "none"
 auth_unix_rw = "none"
 log_outputs = "1:file:{log}"
 "#,
-                dir = libvirt_dir.display(),
+                dir = socket_dir.display(),
                 log = log_path.display(),
             ),
         )?;
@@ -317,9 +392,7 @@ log_outputs = "1:file:{log}"
         // rather than at test time.
         info!(logger, "Spawning libvirtd"; "bin" => LIBVIRTD_BIN, "conf" => %conf_path.display(), "socket" => %socket_path.display());
 
-        let child = Command::new("sudo")
-            .arg("-n")
-            .arg(LIBVIRTD_BIN)
+        let child = Self::sudo_unconfined(LIBVIRTD_BIN)
             .arg("--config")
             .arg(&conf_path)
             .arg("--pid-file")
@@ -363,24 +436,16 @@ log_outputs = "1:file:{log}"
     /// Open a connection-only handle to an already-running libvirtd. Used by
     /// forked task subprocesses.
     ///
-    /// The working dir (where VM disks live) is derived from the socket path
-    /// rather than from the env, so it resolves to the SAME
-    /// `<group_dir>/local_backend` directory the spawning process used,
-    /// regardless of which env (`root_env`, `setup`, `tests/<name>`) this
-    /// handle was constructed from. This keeps VM disks out of the env tree
-    /// that gets recursively `cp -R`'d into every per-test directory.
-    fn connect_only(socket_path: PathBuf, logger: Logger) -> Result<Self> {
-        // socket_path is `<group_dir>/local_backend/libvirt/libvirt-sock`.
-        let working_dir = socket_path
-            .parent()
-            .and_then(|p| p.parent())
-            .map(PathBuf::from)
-            .with_context(|| {
-                format!(
-                    "deriving local backend working dir from socket {}",
-                    socket_path.display()
-                )
-            })?;
+    /// The working dir (where VM disks live) is passed in (persisted in the
+    /// `LocalBackendSocket` attribute by the spawning process) rather than
+    /// derived from the socket path, because the socket lives at a short
+    /// `/tmp` path (see `spawn`) and no longer sits under `working_dir`. It
+    /// resolves to the SAME `<group_dir>/local_backend` directory the spawning
+    /// process used, regardless of which env (`root_env`, `setup`,
+    /// `tests/<name>`) this handle was constructed from. This keeps VM disks
+    /// out of the env tree that gets recursively `cp -R`'d into every per-test
+    /// directory.
+    fn connect_only(socket_path: PathBuf, working_dir: PathBuf, logger: Logger) -> Result<Self> {
         let connect = open_connect(&socket_path, &logger)?;
         Ok(LocalBackend {
             socket_path,
@@ -406,6 +471,13 @@ log_outputs = "1:file:{log}"
     /// Returns the libvirt domain name for `(group_name, vm_name)`.
     fn domain_name(group_name: &str, vm_name: &str) -> String {
         sanitize_libvirt_name(&format!("ictest-{group_name}-{vm_name}"))
+    }
+
+    /// Returns the common prefix shared by every domain name in `group_name`.
+    /// Since [`sanitize_libvirt_name`] maps each character independently,
+    /// `domain_name(group, vm)` always starts with this prefix.
+    fn domain_name_prefix(group_name: &str) -> String {
+        sanitize_libvirt_name(&format!("ictest-{group_name}-"))
     }
 
     /// Returns the per-group IPv6 prefix (a deterministic /64 in the
@@ -477,7 +549,7 @@ log_outputs = "1:file:{log}"
         info!(self.logger, "Deleting libvirt group {net_name}");
 
         // Best effort: shut down all domains whose names start with the group prefix.
-        let prefix = format!("ictest-{}-", sanitize_libvirt_name(group_name));
+        let prefix = Self::domain_name_prefix(group_name);
         if let Ok(domains) = self.connect.list_all_domains(0) {
             for d in domains {
                 if let Ok(name) = d.get_name()
@@ -685,36 +757,93 @@ log_outputs = "1:file:{log}"
             .join(sanitize_libvirt_name(vm_name))
     }
 
-    /// Terminate the libvirtd (and, if we started it, virtlogd) daemon
-    /// associated with this backend.
+    /// Terminate the libvirtd/virtlogd daemons and any VM processes belonging
+    /// to `group_name`.
     ///
     /// This must be called explicitly during group teardown. The daemons are
     /// spawned by the *setup* subprocess and intentionally outlive it so that
     /// the per-test subprocesses (which connect via [`connect_only`]) can use
     /// them. No `Drop` reliably runs in the owning process, and the per-test
     /// handles are connect-only (they do not own the daemons), so the finalize
-    /// task is responsible for stopping the daemons. Otherwise the root
-    /// libvirtd/virtlogd processes are orphaned and the bazel test
-    /// process-wrapper hangs waiting for them to exit.
+    /// task is responsible for stopping everything.
     ///
-    /// Both daemons run as root (via `sudo`), so we `sudo kill` the pids they
-    /// recorded in their pid-files. Pid-files are looked up under the libvirt
-    /// working directory derived from this backend's `working_dir`, so this
-    /// works from any handle (spawning or connect-only).
-    pub fn shutdown_daemons(&self) {
+    /// Crucially this must not depend on the libvirt connection or on a clean
+    /// `delete_group`: libvirtd double-forks each QEMU process, which is then
+    /// reparented to the Bazel test `process-wrapper` and placed in its own
+    /// process group. The wrapper waits for all such reparented children to
+    /// exit, but only signals its own process group, so any QEMU (or libvirtd,
+    /// virtlogd, dnsmasq) that survives teardown hangs the test indefinitely.
+    /// We therefore force-kill, by process pattern and pid-file, every process
+    /// we may have started, regardless of whether the graceful libvirt-API
+    /// teardown in [`delete_group`] succeeded.
+    ///
+    /// All these processes run as root (via `sudo`), so we use `sudo` to signal
+    /// them.
+    pub fn shutdown_daemons(&self, group_name: &str) {
+        // 1. Force-kill any QEMU process for this group. libvirt launches each
+        //    domain as `qemu-system-* -name guest=<domain>,...`, and our
+        //    domains are named `ictest-<group>-<vm>` (see `domain_name`), so we
+        //    match the per-group `guest=` prefix. This is the critical step:
+        //    an orphaned QEMU reparented to the test wrapper hangs the test.
+        let guest_prefix = format!("guest={}", Self::domain_name_prefix(group_name));
+        let _ = Command::new("sudo")
+            .arg("-n")
+            .arg("pkill")
+            .arg("-9")
+            .arg("-f")
+            .arg(&guest_prefix)
+            .status();
+
+        // 2. Kill the network's dnsmasq (libvirt names its config after the
+        //    network, `ictest-<group>`), which libvirtd would normally reap but
+        //    may leak if it was killed first or `delete_group` did not run.
+        let net_name = Self::network_name(group_name);
+        let _ = Command::new("sudo")
+            .arg("-n")
+            .arg("pkill")
+            .arg("-9")
+            .arg("-f")
+            .arg(format!("dnsmasq.*{net_name}"))
+            .status();
+
+        // 3. Stop the libvirtd and (when we started it) virtlogd daemons.
+        //
+        //    We target them by the unique `--config` path we passed at spawn
+        //    time, NOT by a pid read from their pid-file. The pid-file can hold
+        //    a stale pid: the daemon may already have exited and its pid been
+        //    recycled to an unrelated process, and signalling that recycled pid
+        //    then fails (or, worse, signals the wrong process). Matching the
+        //    config path instead only ever selects the `sudo`/daemon processes
+        //    from THIS run (both the `sudo` wrapper and the daemon it execs
+        //    carry the path on their command line), and is a harmless no-op if
+        //    the daemon already exited.
+        //
+        //    The config files live under this backend's working dir and are
+        //    written only when we spawn the corresponding daemon — in
+        //    particular `virtlogd.conf` does not exist when we reuse a shared,
+        //    pre-existing virtlogd — so a reused virtlogd is never matched.
+        //
+        //    We can signal the daemons at all only because [`spawn`] /
+        //    [`ensure_virtlogd`] launch them via [`sudo_unconfined`]: Ubuntu's
+        //    enforce-mode `libvirtd`/`virtlogd` AppArmor profiles otherwise deny
+        //    *receiving* signals from our container processes, so `pkill` would
+        //    fail with EPERM even as root (see [`sudo_unconfined`] for the full
+        //    explanation). Launched unconfined, the daemons accept SIGTERM,
+        //    their intended graceful-shutdown signal, which makes them close
+        //    their sockets and exit promptly.
         let libvirt_dir = self.working_dir.join("libvirt");
-        // Stop libvirtd first, then virtlogd. virtlogd's pid-file only exists
-        // if we started it (we reuse a pre-existing virtlogd without taking
-        // ownership), so its absence is benign.
-        for pid_file in ["libvirtd.pid", "virtlogd.pid"] {
-            let pid_path = libvirt_dir.join(pid_file);
-            if let Ok(pid) = std::fs::read_to_string(&pid_path) {
-                let pid = pid.trim();
-                if !pid.is_empty() {
-                    info!(self.logger, "Stopping libvirt daemon"; "pid_file" => pid_file, "pid" => pid);
-                    let _ = Command::new("sudo").arg("-n").arg("kill").arg(pid).status();
-                }
+        for (daemon, conf_file) in [("libvirtd", "libvirtd.conf"), ("virtlogd", "virtlogd.conf")] {
+            let conf_path = libvirt_dir.join(conf_file);
+            if !conf_path.exists() {
+                continue;
             }
+            info!(self.logger, "Stopping libvirt daemon"; "daemon" => daemon, "config" => %conf_path.display());
+            let _ = Command::new("sudo")
+                .arg("-n")
+                .arg("pkill")
+                .arg("-f")
+                .arg(&conf_path)
+                .status();
         }
     }
 }

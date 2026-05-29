@@ -269,4 +269,10 @@ if [ -f "$HOME/.container-run.conf" ]; then
 fi
 
 set -x
-exec "${CONTAINER_CMD[@]}" run "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"
+# Align the container's `kvm` group GID with the host's /dev/kvm before running
+# the command, so the local libvirt/QEMU system-test backend works. The GID is
+# host-specific and only known at runtime, so it cannot be baked into the image
+# (see ci/container/setup-kvm-group.sh). The repo is always mounted at /ic.
+BOOTSTRAP='/ic/ci/container/setup-kvm-group.sh >/dev/null 2>&1 || true; exec "$@"'
+exec "${CONTAINER_CMD[@]}" run "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" \
+    /usr/bin/bash -c "$BOOTSTRAP" bootstrap "${cmd[@]}"
