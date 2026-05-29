@@ -1,6 +1,6 @@
 use ic_canister_client::Sender;
 use ic_canister_client_sender::SigKeys;
-use ic_consensus_system_test_utils::upgrade::get_blessed_replica_versions;
+use ic_consensus_system_test_utils::upgrade::get_elected_replica_versions;
 use ic_nervous_system_root::change_canister::AddCanisterRequest;
 use ic_nns_common::types::NeuronId;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
@@ -16,11 +16,10 @@ use ic_protobuf::registry::{
     nns::v1::NnsCanisterRecords, replica_version::v1::GuestLaunchMeasurements,
 };
 use ic_registry_keys::make_nns_canister_records_key;
-use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_system_test_driver::{
     driver::{
         test_env::{TestEnv, TestEnvAttribute},
-        test_env_api::{HasPublicApiUrl, IcNodeSnapshot},
+        test_env_api::{HasPublicApiUrl, IcNodeSnapshot, TopologySnapshot},
     },
     nns::{get_canister, get_governance_canister, submit_update_elected_replica_versions_proposal},
     util::runtime_from_url,
@@ -150,9 +149,10 @@ impl ProposalWithMainnetState {
         CanisterId::try_from(new_canister_record.id.clone().unwrap()).unwrap()
     }
 
-    /// Code duplicate of rs/tests/consensus/utils/src/upgrade.rs:bless_replica_version
-    pub async fn bless_replica_version(
+    /// Code duplicate of rs/tests/consensus/utils/src/upgrade.rs:elect_replica_version
+    pub async fn elect_replica_version(
         nns_node: &IcNodeSnapshot,
+        topology: &TopologySnapshot,
         target_version: &ReplicaVersion,
         logger: &Logger,
         sha256: String,
@@ -163,15 +163,14 @@ impl ProposalWithMainnetState {
 
         let nns = runtime_from_url(nns_node.get_public_url(), REGISTRY_CANISTER_ID.into());
         let governance_canister = get_governance_canister(&nns);
-        let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
         let neuron_id = self_.neuron_id;
         let proposal_sender = self_.proposal_sender.clone();
-        let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
-        info!(logger, "Initial: {:?}", blessed_versions);
+        let elected_versions = get_elected_replica_versions(topology).await;
+        info!(logger, "Initial: {:?}", elected_versions);
 
         info!(
             logger,
-            "Blessing replica version {:?} with sha256 {:?} using neuron {:?}",
+            "Electing replica version {:?} with sha256 {:?} using neuron {:?}",
             target_version,
             sha256,
             neuron_id
@@ -189,8 +188,8 @@ impl ProposalWithMainnetState {
         )
         .await;
         wait_for_final_state(&governance_canister, proposal_id).await;
-        let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
-        info!(logger, "Updated: {:?}", blessed_versions);
+        let elected_versions = get_elected_replica_versions(topology).await;
+        info!(logger, "Updated: {:?}", elected_versions);
     }
 
     /// Code duplicate of rs/tests/consensus/utils/src/ssh_access.rs:update_subnet_record

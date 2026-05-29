@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use bitcoin::Transaction;
 use bitcoin::consensus::deserialize;
 use candid::{Decode, Encode};
@@ -9,7 +8,7 @@ use ic_btc_interface::{
     GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse, MillisatoshiPerByte,
     Network, NetworkInRequest, OutPoint, Txid, Utxo,
 };
-use ic_cdk::api::management_canister::bitcoin::{BitcoinNetwork, SendTransactionRequest};
+use ic_cdk::bitcoin_canister::{Network as BitcoinNetwork, SendTransactionRequest};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types_cycles::Cycles;

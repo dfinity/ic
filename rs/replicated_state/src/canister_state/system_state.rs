@@ -681,6 +681,7 @@ impl SystemState {
         canister_log: CanisterLog,
         next_canister_log_record_idx: u64,
         log_memory_store_data: Option<PageMap>,
+        log_memory_store_migrated: bool,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
         environment_variables: BTreeMap<String, String>,
@@ -715,9 +716,9 @@ impl SystemState {
             snapshot_visibility,
             canister_log,
             log_memory_store: LogMemoryStore::from_checkpoint(
-                LOG_MEMORY_STORE_FEATURE,
                 log_memory_store_data,
                 next_canister_log_record_idx,
+                log_memory_store_migrated,
             ),
             wasm_memory_limit,
             next_snapshot_id,
@@ -1710,6 +1711,17 @@ impl SystemState {
     pub fn has_expired_callbacks(&self, current_time: CoarseTime) -> bool {
         self.call_context_manager()
             .map(|ccm| ccm.has_expired_callbacks(current_time))
+            .unwrap_or(false)
+    }
+
+    /// Returns true iff the canister has any unexpired best-effort callback (i.e. a
+    /// callback that has not yet been returned by `time_out_callbacks()`).
+    ///
+    /// Such a callback may still need to be timed out by a future invocation of
+    /// `time_out_callbacks()`, which is why this is part of the "cold" predicate.
+    pub fn has_unexpired_callbacks(&self) -> bool {
+        self.call_context_manager()
+            .map(CallContextManager::has_unexpired_callbacks)
             .unwrap_or(false)
     }
 

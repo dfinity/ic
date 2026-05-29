@@ -105,6 +105,7 @@ def main():
         help="Extra files to install; expects list of sourcefile:targetfile:mode",
     )
     parser.add_argument("--dflate", help="Path to our dflate tool", type=str)
+    parser.add_argument("--zstd", help="Path to the zstd tool", type=str)
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -154,7 +155,7 @@ def main():
 
     subprocess.run(
         [
-            "zstd",
+            args.zstd,
             "-q",
             "--threads=0",
             temp_tar,

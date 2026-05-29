@@ -1,7 +1,6 @@
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     convert::{TryFrom, TryInto},
-    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
@@ -756,6 +755,19 @@ impl SchedulerTest {
         )
     }
 
+    pub fn canister_base_cost(
+        &self,
+        bytes: NumBytes,
+        duration: Duration,
+    ) -> CompoundCycles<ic_types_cycles::Memory> {
+        self.scheduler.cycles_account_manager.canister_base_cost(
+            bytes,
+            duration,
+            self.subnet_size(),
+            self.state.as_ref().unwrap().get_own_cost_schedule(),
+        )
+    }
+
     pub fn compute_allocation_cost(
         &self,
         compute_allocation: ComputeAllocation,
@@ -1103,6 +1115,7 @@ impl SchedulerTestBuilder {
             self.log,
             rate_limiting_of_heap_delta,
             rate_limiting_of_instructions,
+            config.log_memory_store_feature,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
 
@@ -1288,7 +1301,6 @@ impl WasmExecutor for TestWasmExecutor {
     fn create_execution_state(
         &self,
         canister_module: CanisterModule,
-        _canister_root: PathBuf,
         canister_id: CanisterId,
         _compilation_cache: Arc<CompilationCache>,
     ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
@@ -1448,7 +1460,6 @@ impl TestWasmExecutorCore {
             exported_functions.push(WasmMethod::System(system_task));
         }
         let execution_state = ExecutionState::new(
-            Default::default(),
             execution_state::WasmBinary::new(canister_module),
             ExportedFunctions::new(exported_functions.into_iter().collect()),
             Memory::new_for_testing(),

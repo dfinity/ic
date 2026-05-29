@@ -55,6 +55,7 @@ archive_override(
 # Misc tools
 
 bazel_dep(name = "pigz", version = "2.8")  # (parallel) gzip
+bazel_dep(name = "zstd", version = "1.5.7.bcr.1")  # zstd can change format across versions
 
 # Rust
 
