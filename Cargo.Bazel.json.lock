@@ -1,5 +1,5 @@
 {
-  "checksum": "c2bc8bd118c386d71b3c3d36f50f474a2e8afbd688de9956eed32d508135c10c",
+  "checksum": "2420548cd4d219e848f232788e6bf06e5fbca3d8c3afc097c1e07f4445b3334c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5240,7 +5240,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/aws-lc-sys/0.41.0/download",
-          "sha256": "1a2f9779ce85b93ab6170dd940ad0169b5766ff848247aff13bb788b832fe3f4"
+          "sha256": "1a2f9779ce85b93ab6170dd940ad0169b5766ff848247aff13bb788b832fe3f4",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:aws-lc-sys.patch"
+          ]
         }
       },
       "targets": [
@@ -5321,12 +5327,6 @@
               "target": "fs_extra"
             }
           ],
-          "selects": {}
-        },
-        "build_script_env": {
-          "common": {
-            "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source"
-          },
           "selects": {}
         },
         "links": "aws_lc_0_41_0"
