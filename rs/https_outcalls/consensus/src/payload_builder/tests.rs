@@ -4711,4 +4711,14 @@ fn mock_crypto_rejecting_signatures() -> MockCrypto {
             })
         });
     mock_crypto
+        .expect_verify_basic_sigs_batch_http()
+        .returning(|_, _| {
+            Err(ic_types::crypto::CryptoError::SignatureVerification {
+                algorithm: ic_types::crypto::AlgorithmId::Ed25519,
+                public_key_bytes: vec![],
+                sig_bytes: vec![],
+                internal_error: "mock rejection".to_string(),
+            })
+        });
+    mock_crypto
 }

@@ -9,6 +9,7 @@ use crate::{
             find_fully_replicated_response, find_non_replicated_response,
             group_shares_by_callback_id, grouped_shares_meet_divergence_criteria,
             validate_flexible_response_with_proof, validate_response_share,
+            verify_response_share_signatures,
         },
     },
 };
@@ -589,15 +590,15 @@ impl CanisterHttpPayloadBuilderImpl {
                 });
             }
 
-            for share in response.shares.iter() {
-                self.crypto
-                    .verify(share, consensus_registry_version)
-                    .map_err(|err| {
-                        CanisterHttpPayloadValidationError::InvalidArtifact(
-                            InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
-                        )
-                    })?;
-            }
+            // The shares in a divergence response are by construction signed
+            // over (potentially) different messages, so we use the multi-message
+            // batch verifier here.
+            verify_response_share_signatures(
+                response.shares.iter(),
+                consensus_registry_version,
+                &*self.crypto,
+            )
+            .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
             let grouped_shares = group_shares_by_callback_id(response.shares.iter());
             if grouped_shares.len() != 1 {
@@ -679,7 +680,6 @@ impl CanisterHttpPayloadBuilderImpl {
                     flex_committee,
                     &mut seen_signers,
                     consensus_registry_version,
-                    &*self.crypto,
                 )
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
@@ -691,6 +691,16 @@ impl CanisterHttpPayloadBuilderImpl {
                     );
                 }
             }
+
+            // Batch-verify the signatures of all shares in this flexible
+            // response group at once. The shares are typically signed over
+            // distinct messages (different content hashes per node).
+            verify_response_share_signatures(
+                group.responses.iter().map(|r| &r.proof),
+                consensus_registry_version,
+                &*self.crypto,
+            )
+            .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
         }
 
         // Validate flexible errors
@@ -741,7 +751,6 @@ impl CanisterHttpPayloadBuilderImpl {
                             flex_committee,
                             &mut seen_signers,
                             consensus_registry_version,
-                            &*self.crypto,
                         )
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
@@ -753,6 +762,14 @@ impl CanisterHttpPayloadBuilderImpl {
                             );
                         }
                     }
+
+                    // Batch-verify the signatures of all reject shares at once.
+                    verify_response_share_signatures(
+                        reject_responses.iter().map(|r| &r.proof),
+                        consensus_registry_version,
+                        &*self.crypto,
+                    )
+                    .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
                     let max_allowed_rejects = flex_committee.len().saturating_sub(min_responses);
                     if reject_responses.len() <= max_allowed_rejects {
@@ -801,10 +818,17 @@ impl CanisterHttpPayloadBuilderImpl {
                             flex_committee,
                             &mut seen_signers,
                             consensus_registry_version,
-                            &*self.crypto,
                         )
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
                     }
+
+                    // Batch-verify the signatures of all seen shares at once.
+                    verify_response_share_signatures(
+                        all_seen_shares.iter(),
+                        consensus_registry_version,
+                        &*self.crypto,
+                    )
+                    .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
                     let num_unseen = flex_committee.len().saturating_sub(all_seen_shares.len());
                     let min_known_ok_needed = min_responses.saturating_sub(num_unseen);
