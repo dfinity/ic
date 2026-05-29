@@ -30,17 +30,13 @@ pub(crate) fn uvms_logs_stream_task(group_ctx: GroupContext) -> () {
         .enable_all()
         .build()
         .unwrap_or_else(|err| panic!("Could not create tokio runtime: {err}"));
-    let root_search_dir = {
-        let root_env = group_ctx
-            .clone()
-            .get_root_env()
-            .expect("root_env should already exist");
-        let base_path = root_env.base_path();
-        base_path
-            .parent()
-            .expect("root_env dir should have a parent dir")
-            .to_path_buf()
-    };
+    // The root env lives at `<group_dir>/root_env`, so the directory tree that
+    // `discover_uvms` walks is simply the group directory. We deliberately avoid
+    // `get_root_env()` here: it opens `root_env/test.log` with an exclusive
+    // (non-blocking) flock, which fails with EAGAIN when another long-lived
+    // process holds that lock (e.g. the root libvirtd spawned by the Local
+    // backend, which inherits the open file descriptor). We only need the path.
+    let root_search_dir = group_ctx.group_dir.clone();
     let mut streamed_uvms: HashMap<String, Ipv6Addr> = HashMap::new();
     let mut skipped_uvms: BTreeSet<String> = BTreeSet::new();
     loop {

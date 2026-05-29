@@ -186,16 +186,27 @@ pub fn get_resource_request(
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
-    let (ic_os_img_sha256, ic_os_img_url) = (get_guestos_img_sha256(), get_guestos_img_url());
-
-    let primary_image = maybe_localize(
-        DiskImage::Url {
+    // The GuestOS image URL/hash environment variables are only populated for
+    // the Farm backend. Under the Local backend they are unset (the image is
+    // provided as a local path via `ENV_DEPS__GUESTOS_DISK_IMG_PATH`), so we
+    // must not call `get_guestos_img_url`/`get_guestos_img_sha256` there.
+    let primary_image = match InfraProvider::read_attribute(test_env) {
+        InfraProvider::Farm => DiskImage::Url {
             image_type: ImageType::IcOsImage,
-            url: ic_os_img_url,
-            sha256: ic_os_img_sha256,
+            url: get_guestos_img_url(),
+            sha256: get_guestos_img_sha256(),
         },
-        test_env,
-    );
+        InfraProvider::Local => {
+            let var = local_path_env_var(&ImageType::IcOsImage);
+            DiskImage::Local {
+                image_type: ImageType::IcOsImage,
+                path: PathBuf::from(
+                    std::env::var(var)
+                        .unwrap_or_else(|_| panic!("Failed to read '{var}' for Local backend")),
+                ),
+            }
+        }
+    };
     let mut res_req = ResourceRequest::new(primary_image);
     let group_setup = GroupSetup::read_attribute(test_env);
     let group_resource_overrides = group_setup.vm_resource_overrides;

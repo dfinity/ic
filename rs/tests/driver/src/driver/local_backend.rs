@@ -40,6 +40,24 @@ use virt::connect::Connect;
 use virt::domain::Domain;
 use virt::network::Network;
 
+/// Absolute path to the `libvirtd` binary.
+///
+/// `libvirtd` is installed in `/usr/sbin`, which is absent from `PATH` inside
+/// the Bazel test sandbox, so we reference it by absolute path rather than
+/// relying on a `PATH` lookup.
+///
+/// TODO: provide libvirt via a bazel dependency and replace this with an environment variable.
+const LIBVIRTD_BIN: &str = "/usr/sbin/libvirtd";
+
+/// Path to the `virtlogd` binary. The QEMU driver of a privileged (root)
+/// libvirtd connects to virtlogd to capture each domain's stdout/stderr.
+const VIRTLOGD_BIN: &str = "/usr/sbin/virtlogd";
+
+/// Fixed unix socket a privileged (system-mode) libvirtd uses to reach
+/// virtlogd. There is no systemd socket-activation in the dev container, so we
+/// start virtlogd ourselves and it must listen here.
+const VIRTLOGD_SOCK: &str = "/run/libvirt/virtlogd-sock";
+
 /// Persistent record (in the root TestEnv) of the libvirtd unix socket so that
 /// forked task subprocesses can connect to the daemon spawned by the setup
 /// task instead of trying to spawn their own.
@@ -73,6 +91,14 @@ pub struct LocalBackend {
     /// forked tasks that merely connect to an already-running daemon. `Drop`
     /// only kills the child if we own it.
     libvirtd: Option<Child>,
+    /// Path to the libvirtd pid-file. `Some` only in the spawning process.
+    /// libvirtd runs as root (via `sudo`), so `Drop` must `sudo kill` the pid
+    /// recorded here rather than relying on killing the unprivileged `sudo`
+    /// wrapper handle.
+    pid_path: Option<PathBuf>,
+    /// Path to the virtlogd pid-file. `Some` only if this process started
+    /// virtlogd (i.e. it was not already running). `Drop` `sudo kill`s it.
+    virtlogd_pid_path: Option<PathBuf>,
     /// libvirt connection. `virt::Connect` is `Send + Sync` and all its
     /// methods take `&self` (the underlying libvirt C API is thread-safe), so
     /// no interior mutex is needed.
@@ -119,21 +145,46 @@ impl LocalBackend {
             // handle to the already-running daemon.
             let backend = Arc::new(LocalBackend::connect_only(
                 existing.socket_path,
-                env.get_path(""),
                 env.logger(),
             )?);
             *reg = Some(backend.clone());
             return Ok(backend);
         }
 
-        // First call in this group: spawn libvirtd in this env's working_dir.
+        // First call in this group: spawn libvirtd.
+        //
+        // The working dir holds the live libvirtd socket/pid/log and the
+        // (potentially multi-gibibyte) VM disk images. It must live OUTSIDE the
+        // env directory: each `TestEnv` (`root_env`, `setup`, `tests/<name>`)
+        // is recursively `cp -R`'d when the setup artifacts are forked into the
+        // per-test directories. Copying the live unix socket hangs `cp` (it
+        // blocks in `D` state), and copying the disk images would duplicate
+        // gigabytes into every test directory. We therefore place the working
+        // dir as a sibling of the env directory (i.e. directly under the group
+        // directory), which is never copied.
+        let env_path = env.get_path("");
+        let group_dir = env_path
+            .parent()
+            .with_context(|| format!("env dir {} has no parent", env_path.display()))?;
+        std::fs::create_dir_all(group_dir).with_context(|| {
+            format!(
+                "creating group dir {} for local backend",
+                group_dir.display()
+            )
+        })?;
         // Canonicalize so the socket path persisted for forked subprocesses is
         // absolute; a failure here means the directory is missing/inaccessible
         // and there is no sensible way to continue.
-        let working_dir = env.get_path("");
-        let working_dir = working_dir
+        let group_dir = group_dir
             .canonicalize()
-            .with_context(|| format!("canonicalizing working dir {}", working_dir.display()))?;
+            .with_context(|| format!("canonicalizing group dir {}", group_dir.display()))?;
+        let working_dir = group_dir.join("local_backend");
+        std::fs::create_dir_all(&working_dir).with_context(|| {
+            format!(
+                "creating local backend working dir {}",
+                working_dir.display()
+            )
+        })?;
         let backend = Arc::new(LocalBackend::spawn(working_dir.clone(), env.logger())?);
         // Persist the socket path so forked subprocesses can find it.
         LocalBackendSocket {
@@ -142,6 +193,82 @@ impl LocalBackend {
         .write_attribute(env);
         *reg = Some(backend.clone());
         Ok(backend)
+    }
+
+    /// Ensure a `virtlogd` instance is reachable at [`VIRTLOGD_SOCK`].
+    ///
+    /// Returns `Some(pid_path)` if this call started virtlogd (so `Drop` can
+    /// stop it), or `None` if a virtlogd was already running (we leave it
+    /// alone, as it may be shared with other processes).
+    fn ensure_virtlogd(libvirt_dir: &Path, logger: &Logger) -> Result<Option<PathBuf>> {
+        if Path::new(VIRTLOGD_SOCK).exists() {
+            // A socket file is present, but it may be stale: a virtlogd from a
+            // previous run that was killed (e.g. by `shutdown_daemons`) leaves
+            // its socket behind at this fixed path, and connecting to it yields
+            // "Connection refused". Probe it with a real connection; only reuse
+            // it if a daemon is actually listening, otherwise remove the stale
+            // socket and start a fresh virtlogd.
+            match std::os::unix::net::UnixStream::connect(VIRTLOGD_SOCK) {
+                Ok(_) => {
+                    // Live virtlogd (possibly shared with the host or another
+                    // backend); reuse it and do not take ownership.
+                    return Ok(None);
+                }
+                Err(e) => {
+                    warn!(
+                        logger,
+                        "Stale virtlogd socket at {VIRTLOGD_SOCK} ({e}); removing and restarting"
+                    );
+                    // The socket lives in a root-owned directory, so remove it
+                    // via sudo.
+                    let _ = Command::new("sudo")
+                        .arg("-n")
+                        .arg("rm")
+                        .arg("-f")
+                        .arg(VIRTLOGD_SOCK)
+                        .status();
+                }
+            }
+        }
+
+        let pid_path = libvirt_dir.join("virtlogd.pid");
+        let log_path = libvirt_dir.join("virtlogd.log");
+        let conf_path = libvirt_dir.join("virtlogd.conf");
+        std::fs::write(
+            &conf_path,
+            format!("log_outputs = \"1:file:{log}\"\n", log = log_path.display()),
+        )?;
+
+        info!(logger, "Spawning virtlogd"; "bin" => VIRTLOGD_BIN, "socket" => VIRTLOGD_SOCK);
+        // `--daemon` double-forks and writes the pid-file, so `status()` returns
+        // once virtlogd has backgrounded itself.
+        let status = Command::new("sudo")
+            .arg("-n")
+            .arg(VIRTLOGD_BIN)
+            .arg("--daemon")
+            .arg("--config")
+            .arg(&conf_path)
+            .arg("--pid-file")
+            .arg(&pid_path)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .context("spawning virtlogd")?;
+        if !status.success() {
+            bail!("virtlogd exited with status {status}");
+        }
+
+        // Wait for the socket to appear.
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while !Path::new(VIRTLOGD_SOCK).exists() {
+            if Instant::now() > deadline {
+                bail!("virtlogd socket {VIRTLOGD_SOCK} did not appear within 30s");
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+
+        Ok(Some(pid_path))
     }
 
     /// Spawn a fresh libvirtd subprocess in `working_dir/libvirt` and open a
@@ -157,12 +284,17 @@ impl LocalBackend {
         let pid_path = libvirt_dir.join("libvirtd.pid");
         let log_path = libvirt_dir.join("libvirtd.log");
 
+        // The QEMU driver of a privileged libvirtd connects to virtlogd to
+        // capture each domain's logs; without it, domain creation fails with
+        // "Failed to connect socket to '/run/libvirt/virtlogd-sock'". There is
+        // no systemd socket-activation in the container, so start it ourselves.
+        let virtlogd_pid_path = Self::ensure_virtlogd(&libvirt_dir, &logger)?;
+
         // Minimal libvirtd configuration: unix socket only, no auth, no TLS.
         std::fs::write(
             &conf_path,
             format!(
                 r#"unix_sock_dir = "{dir}"
-unix_sock_group = "libvirt"
 unix_sock_ro_perms = "0777"
 unix_sock_rw_perms = "0777"
 auth_unix_ro = "none"
@@ -173,9 +305,21 @@ log_outputs = "1:file:{log}"
                 log = log_path.display(),
             ),
         )?;
-        info!(logger, "Spawning libvirtd"; "conf" => %conf_path.display(), "socket" => %socket_path.display());
 
-        let child = Command::new("libvirtd")
+        // Creating libvirt networks (bridges) and running system QEMU domains
+        // requires root, which the unprivileged test process does not have.
+        // We therefore run libvirtd as root via passwordless `sudo` and connect
+        // to its world-writable unix socket. The QEMU and network drivers also
+        // expect the packaged `libvirt-qemu` / `libvirt-dnsmasq` accounts to
+        // exist (the QEMU driver refuses to initialize otherwise, and the
+        // network driver launches dnsmasq as `libvirt-dnsmasq`); those accounts
+        // are provisioned in the dev-container image (see ci/container/Dockerfile)
+        // rather than at test time.
+        info!(logger, "Spawning libvirtd"; "bin" => LIBVIRTD_BIN, "conf" => %conf_path.display(), "socket" => %socket_path.display());
+
+        let child = Command::new("sudo")
+            .arg("-n")
+            .arg(LIBVIRTD_BIN)
             .arg("--config")
             .arg(&conf_path)
             .arg("--pid-file")
@@ -203,6 +347,8 @@ log_outputs = "1:file:{log}"
         Ok(LocalBackend {
             socket_path,
             libvirtd: Some(child),
+            pid_path: Some(pid_path),
+            virtlogd_pid_path,
             connect,
             logger,
             extra_disks: Mutex::new(HashMap::new()),
@@ -216,11 +362,31 @@ log_outputs = "1:file:{log}"
 
     /// Open a connection-only handle to an already-running libvirtd. Used by
     /// forked task subprocesses.
-    fn connect_only(socket_path: PathBuf, working_dir: PathBuf, logger: Logger) -> Result<Self> {
+    ///
+    /// The working dir (where VM disks live) is derived from the socket path
+    /// rather than from the env, so it resolves to the SAME
+    /// `<group_dir>/local_backend` directory the spawning process used,
+    /// regardless of which env (`root_env`, `setup`, `tests/<name>`) this
+    /// handle was constructed from. This keeps VM disks out of the env tree
+    /// that gets recursively `cp -R`'d into every per-test directory.
+    fn connect_only(socket_path: PathBuf, logger: Logger) -> Result<Self> {
+        // socket_path is `<group_dir>/local_backend/libvirt/libvirt-sock`.
+        let working_dir = socket_path
+            .parent()
+            .and_then(|p| p.parent())
+            .map(PathBuf::from)
+            .with_context(|| {
+                format!(
+                    "deriving local backend working dir from socket {}",
+                    socket_path.display()
+                )
+            })?;
         let connect = open_connect(&socket_path, &logger)?;
         Ok(LocalBackend {
             socket_path,
             libvirtd: None,
+            pid_path: None,
+            virtlogd_pid_path: None,
             connect,
             logger,
             extra_disks: Mutex::new(HashMap::new()),
@@ -253,12 +419,25 @@ log_outputs = "1:file:{log}"
         )
     }
 
+    /// Returns the Linux bridge interface name for `group_name`.
+    ///
+    /// Bridge (interface) names are limited to `IFNAMSIZ - 1` = 15 characters
+    /// by the kernel, so we cannot embed the full (timestamped, therefore
+    /// unique) network name. Instead we hash the group name and use a short
+    /// hex digest, which keeps the name both unique per group and within the
+    /// length limit (`vbr-` + 10 hex chars = 14 chars).
+    fn bridge_name(group_name: &str) -> String {
+        use ic_crypto_sha2::Sha256;
+        let hash = Sha256::hash(group_name.as_bytes());
+        format!("vbr-{}", hex::encode(&hash[0..5]))
+    }
+
     /// Create a libvirt isolated network for `group_name`.
     pub fn create_group(&self, group_name: &str) -> Result<()> {
         let name = Self::network_name(group_name);
         info!(self.logger, "Creating libvirt network {name}");
         let prefix = Self::group_ipv6_prefix(group_name);
-        let bridge_name = format!("vbr-{:.10}", &name);
+        let bridge_name = Self::bridge_name(group_name);
         let xml = format!(
             r#"<network>
   <name>{name}</name>
@@ -274,13 +453,19 @@ log_outputs = "1:file:{log}"
         match Network::create_xml(&self.connect, &xml) {
             Ok(_) => Ok(()),
             Err(e) => {
-                // If the network already exists, ignore.
-                let msg = format!("{e}");
-                if msg.contains("already") || msg.contains("exists") {
-                    warn!(self.logger, "Network {name} already exists; reusing");
-                    Ok(())
-                } else {
-                    Err(anyhow!("create_group({group_name}): {e}"))
+                // The network may already exist from a previous, interrupted
+                // run. Only treat the error as benign if a network with this
+                // exact name actually exists AND is active; otherwise the
+                // create genuinely failed (e.g. a stale bridge collision) and
+                // we must surface it, since an absent/inactive network would
+                // make every subsequent domain creation fail with
+                // "Network not found".
+                match Network::lookup_by_name(&self.connect, &name) {
+                    Ok(net) if net.is_active().unwrap_or(false) => {
+                        warn!(self.logger, "Network {name} already exists; reusing");
+                        Ok(())
+                    }
+                    _ => Err(anyhow!("create_group({group_name}): {e}")),
                 }
             }
         }
@@ -499,12 +684,65 @@ log_outputs = "1:file:{log}"
             .join("vms")
             .join(sanitize_libvirt_name(vm_name))
     }
+
+    /// Terminate the libvirtd (and, if we started it, virtlogd) daemon
+    /// associated with this backend.
+    ///
+    /// This must be called explicitly during group teardown. The daemons are
+    /// spawned by the *setup* subprocess and intentionally outlive it so that
+    /// the per-test subprocesses (which connect via [`connect_only`]) can use
+    /// them. No `Drop` reliably runs in the owning process, and the per-test
+    /// handles are connect-only (they do not own the daemons), so the finalize
+    /// task is responsible for stopping the daemons. Otherwise the root
+    /// libvirtd/virtlogd processes are orphaned and the bazel test
+    /// process-wrapper hangs waiting for them to exit.
+    ///
+    /// Both daemons run as root (via `sudo`), so we `sudo kill` the pids they
+    /// recorded in their pid-files. Pid-files are looked up under the libvirt
+    /// working directory derived from this backend's `working_dir`, so this
+    /// works from any handle (spawning or connect-only).
+    pub fn shutdown_daemons(&self) {
+        let libvirt_dir = self.working_dir.join("libvirt");
+        // Stop libvirtd first, then virtlogd. virtlogd's pid-file only exists
+        // if we started it (we reuse a pre-existing virtlogd without taking
+        // ownership), so its absence is benign.
+        for pid_file in ["libvirtd.pid", "virtlogd.pid"] {
+            let pid_path = libvirt_dir.join(pid_file);
+            if let Ok(pid) = std::fs::read_to_string(&pid_path) {
+                let pid = pid.trim();
+                if !pid.is_empty() {
+                    info!(self.logger, "Stopping libvirt daemon"; "pid_file" => pid_file, "pid" => pid);
+                    let _ = Command::new("sudo").arg("-n").arg("kill").arg(pid).status();
+                }
+            }
+        }
+    }
 }
 
 impl Drop for LocalBackend {
     fn drop(&mut self) {
+        // libvirtd runs as root via `sudo`, so the `Child` handle refers to the
+        // unprivileged `sudo` wrapper which we cannot signal directly. Kill the
+        // daemon by the pid it recorded in its pid-file (with `sudo`), then reap
+        // the wrapper handle.
+        if let Some(pid_path) = self.pid_path.take()
+            && let Ok(pid) = std::fs::read_to_string(&pid_path)
+        {
+            let pid = pid.trim();
+            if !pid.is_empty() {
+                let _ = Command::new("sudo").arg("-n").arg("kill").arg(pid).status();
+            }
+        }
+        // Stop virtlogd if (and only if) we started it.
+        if let Some(pid_path) = self.virtlogd_pid_path.take()
+            && let Ok(pid) = std::fs::read_to_string(&pid_path)
+        {
+            let pid = pid.trim();
+            if !pid.is_empty() {
+                let _ = Command::new("sudo").arg("-n").arg("kill").arg(pid).status();
+            }
+        }
         if let Some(mut child) = self.libvirtd.take() {
-            let _ = child.kill();
             let _ = child.wait();
         }
     }
@@ -560,7 +798,7 @@ fn sanitize_libvirt_name(s: &str) -> String {
 
 /// Open a libvirt connection over a unix socket on `socket_path`.
 fn open_connect(socket_path: &Path, logger: &Logger) -> Result<Connect> {
-    let uri = format!("qemu+unix:///session?socket={}", socket_path.display());
+    let uri = format!("qemu+unix:///system?socket={}", socket_path.display());
     let connect = Connect::open(Some(&uri))
         .with_context(|| format!("opening libvirt connection to {uri}"))?;
     info!(logger, "Connected to libvirtd"; "uri" => &uri);

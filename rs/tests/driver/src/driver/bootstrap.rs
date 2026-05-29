@@ -192,11 +192,31 @@ pub fn init_ic(
     }
 
     let whitelist = ProvisionalWhitelist::All;
-    let (ic_os_update_img_sha256, ic_os_update_img_url, ic_os_launch_measurements) = (
-        get_guestos_initial_update_img_sha256(),
-        get_guestos_initial_update_img_url(),
-        get_guestos_launch_measurements(),
-    );
+    let (ic_os_update_img_sha256, ic_os_update_img_url) =
+        match InfraProvider::read_attribute(test_env) {
+            InfraProvider::Farm => (
+                get_guestos_initial_update_img_sha256(),
+                get_guestos_initial_update_img_url(),
+            ),
+            InfraProvider::Local => {
+                // In Local mode the GuestOS initial update image is provided as a local
+                // file path rather than uploaded to Farm, so its URL/hash env vars are
+                // never set. Derive a `file://` URL and the matching sha256 from the path.
+                let var = "ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_PATH";
+                let path = PathBuf::from(
+                    std::env::var(var)
+                        .unwrap_or_else(|_| panic!("Failed to read '{var}' for Local backend")),
+                );
+                let url = Url::from_file_path(&path).unwrap_or_else(|_| {
+                    panic!("Failed to build file URL from '{}'", path.display())
+                });
+                let sha256 = crate::driver::farm::id_of_file(path.clone())
+                    .unwrap_or_else(|e| panic!("Failed to hash '{}': {e}", path.display()))
+                    .to_string();
+                (sha256, url)
+            }
+        };
+    let ic_os_launch_measurements = get_guestos_launch_measurements();
     let mut ic_config = IcConfig::new(
         working_dir.path(),
         ic_topology,

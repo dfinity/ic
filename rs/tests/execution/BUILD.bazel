@@ -63,6 +63,7 @@ system_test(
     name = "general_execution_test",
     srcs = glob(["general_execution_tests/*.rs"]),
     crate_root = "general_execution_test.rs",
+    local = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/config",

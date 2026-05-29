@@ -1490,6 +1490,12 @@ impl SystemTestGroup {
                         if let Err(e) = backend.delete_group(&group_name) {
                             slog::warn!(env.logger(), "LocalBackend::delete_group failed: {e:?}");
                         }
+                        // Stop the libvirtd/virtlogd daemons started by setup;
+                        // they intentionally outlive the setup process, so the
+                        // finalize task must terminate them or the bazel test
+                        // process-wrapper hangs waiting for the orphaned root
+                        // daemons to exit.
+                        backend.shutdown_daemons();
                     }
                     Err(e) => {
                         slog::warn!(env.logger(), "LocalBackend::from_test_env failed: {e:?}");

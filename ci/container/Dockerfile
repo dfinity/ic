@@ -29,6 +29,19 @@ RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubun
     # both buildifier and ubuntu users need to be able to access root permissions
     echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
+## Local system-test backend (libvirt/QEMU; see rs/tests/driver/src/driver/local_backend.rs).
+## The root libvirtd spawned by the local backend requires the packaged system
+## accounts: the QEMU driver refuses to initialize unless the `libvirt-qemu`
+## user exists, and the network driver launches dnsmasq as `libvirt-dnsmasq`.
+## The libvirt packages do not reliably create these in the minimal image, so
+## provision them here (idempotently).
+RUN getent group libvirt >/dev/null || groupadd -r libvirt && \
+    getent passwd libvirt-qemu >/dev/null || \
+        useradd -r -g libvirt -d /var/lib/libvirt -s /usr/sbin/nologin libvirt-qemu && \
+    getent passwd libvirt-dnsmasq >/dev/null || \
+        useradd -r -g libvirt -d /var/lib/libvirt/dnsmasq -s /usr/sbin/nologin libvirt-dnsmasq && \
+    mkdir -p /var/lib/libvirt/dnsmasq
+
 # Install a version of google-android-platform-tools-installer with e2fsdroid
 RUN export DEBIAN_FRONTEND=noninteractive && \
     mkdir e2fsdroid && \
