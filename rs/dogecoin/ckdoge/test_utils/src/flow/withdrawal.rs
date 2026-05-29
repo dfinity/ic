@@ -1,5 +1,4 @@
 use crate::BLOCK_TIME;
-use crate::FEE_PERCENTILES_REFRESH_INTERVAL;
 use crate::MAX_TIME_IN_QUEUE;
 use crate::MIN_CONFIRMATIONS;
 use crate::{Setup, into_outpoint, parse_dogecoin_address};
@@ -43,17 +42,10 @@ impl<S> WithdrawalFlowStart<S> {
     where
         S: AsRef<Setup>,
     {
-        let minter = self.setup.as_ref().minter();
-        let env = self.setup.as_ref().env.clone();
-
-        let previous = minter.estimate_withdrawal_fee(withdrawal_amount);
-        env.advance_time(FEE_PERCENTILES_REFRESH_INTERVAL + Duration::from_secs(1));
-        for _ in 0..10 {
-            env.tick();
-            if minter.estimate_withdrawal_fee(withdrawal_amount) != previous {
-                break;
-            }
-        }
+        self.setup
+            .as_ref()
+            .minter()
+            .await_fee_refresh(withdrawal_amount);
         WithdrawalFlowApproval { setup: self.setup }
     }
 }

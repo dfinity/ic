@@ -639,6 +639,8 @@ fn should_estimate_withdrawal_fee() {
         .minter_update_balance()
         .expect_mint();
 
+    minter.await_fee_refresh(RETRIEVE_DOGE_MIN_AMOUNT);
+
     assert_eq!(
         estimate_withdrawal_fee_and_check(&minter, DOGE, 2),
         Err(EstimateWithdrawalFeeError::AmountTooLow {

@@ -1,5 +1,5 @@
 use crate::events::MinterEventAssert;
-use crate::{MAX_TIME_IN_QUEUE, NNS_ROOT_PRINCIPAL};
+use crate::{FEE_PERCENTILES_REFRESH_INTERVAL, MAX_TIME_IN_QUEUE, NNS_ROOT_PRINCIPAL};
 use candid::{Decode, Encode, Principal};
 use canlog::LogEntry;
 use ic_ckdoge_minter::{
@@ -161,6 +161,18 @@ impl MinterCanister {
             )
             .expect("BUG: failed to call estimate_withdrawal_fee");
         Decode!(&call_result, Result<WithdrawalFee, EstimateWithdrawalFeeError>).unwrap()
+    }
+
+    pub fn await_fee_refresh(&self, withdrawal_amount: u64) {
+        let previous = self.estimate_withdrawal_fee(withdrawal_amount);
+        self.env
+            .advance_time(FEE_PERCENTILES_REFRESH_INTERVAL + Duration::from_secs(1));
+        for _ in 0..10 {
+            self.env.tick();
+            if self.estimate_withdrawal_fee(withdrawal_amount) != previous {
+                break;
+            }
+        }
     }
 
     pub fn retrieve_doge_status(&self, ledger_burn_index: u64) -> RetrieveDogeStatus {
