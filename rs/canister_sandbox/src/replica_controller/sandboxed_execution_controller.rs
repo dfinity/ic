@@ -2068,11 +2068,7 @@ fn evict_sandbox_processes(
         Backend::Empty => false,
     });
 
-    let scheduler_priorities = state_reader
-        .get_latest_state()
-        .get_ref()
-        .canister_accumulated_priorities();
-
+    let state = state_reader.get_latest_state();
     let min_scheduler_priority = AccumulatedPriority::new(i64::MIN);
 
     let candidates: Vec<_> = backends
@@ -2082,10 +2078,12 @@ fn evict_sandbox_processes(
                 id: *id,
                 last_used: stats.last_used,
                 rss: stats.rss,
-                scheduler_priority: *scheduler_priorities
-                    .get(id)
-                    // This should happen only if the canister is deleted.
-                    .unwrap_or(&min_scheduler_priority),
+                scheduler_priority: if state.get_ref().canister_state(id).is_some() {
+                    state.get_ref().canister_priority(id).accumulated_priority
+                } else {
+                    // Canister was deleted.
+                    min_scheduler_priority
+                },
             }),
             Backend::Evicted { .. } | Backend::Empty => None,
         })

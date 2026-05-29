@@ -1,7 +1,7 @@
-use ic_system_test_driver::driver::test_env_api::{IcNodeContainer, SubnetSnapshot, secs};
 use ic_system_test_driver::{
     driver::test_env_api::{
-        HasPublicApiUrl, IcNodeSnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF, SshSession,
+        HasPublicApiUrl, IcNodeContainer, IcNodeSnapshot, ORCHESTRATOR_METRICS_PORT,
+        READY_WAIT_TIMEOUT, REPLICA_METRICS_PORT, RETRY_BACKOFF, SshSession, SubnetSnapshot, secs,
     },
     util::{MetricsFetcher, block_on},
 };
@@ -177,11 +177,18 @@ pub fn assert_node_is_unassigned_with_ssh_session(
     .expect("Failed to detect that node has deleted its state.");
 }
 
-async fn fetch_metric_from_nodes<T>(nodes: Vec<IcNodeSnapshot>, metric_name: &str) -> Result<Vec<T>>
+async fn fetch_metric_from_nodes<T>(
+    nodes: Vec<IcNodeSnapshot>,
+    (metric_name, metric_port): (&str, u16),
+) -> Result<Vec<T>>
 where
     T: Copy + Debug + std::str::FromStr,
 {
-    let metrics_fetcher = MetricsFetcher::new(nodes.iter().cloned(), vec![metric_name.to_string()]);
+    let metrics_fetcher = MetricsFetcher::new_with_port(
+        nodes.iter().cloned(),
+        vec![metric_name.to_string()],
+        metric_port,
+    );
     let metrics = metrics_fetcher
         .fetch::<T>()
         .await
@@ -199,7 +206,48 @@ where
     Ok(vals)
 }
 
-const EARLIEST_TOPOLOGY_VERSION: &str = "peer_manager_topology_earliest_registry_version";
+async fn await_metric_registry_version(
+    (metric_name, metric_port): (&str, u16),
+    log_text: &str,
+    nodes: Vec<IcNodeSnapshot>,
+    target_version: RegistryVersion,
+    logger: &Logger,
+    retry_timeout: Duration,
+    retry_backoff: Duration,
+) {
+    info!(logger, "{}", log_text);
+    ic_system_test_driver::retry_with_msg_async!(
+        log_text,
+        logger,
+        retry_timeout,
+        retry_backoff,
+        || async {
+            fetch_metric_from_nodes::<u64>(nodes.clone(), (metric_name, metric_port))
+                .await
+                .and_then(|registry_versions| {
+                    let min_registry_version = registry_versions.iter().min().unwrap();
+                    assert!(
+                        *min_registry_version <= target_version.get(),
+                        "Target version already surpassed"
+                    );
+                    ensure!(
+                        *min_registry_version == target_version.get(),
+                        "Target registry version not yet reached, current: {:?}, target: {}",
+                        registry_versions,
+                        target_version
+                    );
+                    Ok(())
+                })
+        }
+    )
+    .await
+    .expect("The nodes did not reach the specified registry version in time")
+}
+
+const EARLIEST_TOPOLOGY_VERSION: (&str, u16) = (
+    "peer_manager_topology_earliest_registry_version",
+    REPLICA_METRICS_PORT,
+);
 
 pub fn get_node_earliest_topology_version(node: &IcNodeSnapshot) -> Result<RegistryVersion> {
     block_on(fetch_metric_from_nodes::<u64>(
@@ -230,38 +278,42 @@ pub async fn await_subnet_earliest_topology_version_with_retries_async(
     retry_timeout: Duration,
     retry_backoff: Duration,
 ) {
-    info!(
-        logger,
-        "Waiting until earliest topology version {} on subnet {}", target_version, subnet.subnet_id,
-    );
-    ic_system_test_driver::retry_with_msg_async!(
-        format!(
+    await_metric_registry_version(
+        EARLIEST_TOPOLOGY_VERSION,
+        &format!(
             "Waiting until earliest topology version {} on subnet {}",
             target_version, subnet.subnet_id,
         ),
+        subnet.nodes().collect(),
+        target_version,
         logger,
         retry_timeout,
         retry_backoff,
-        || async {
-            fetch_metric_from_nodes::<u64>(subnet.nodes().collect(), EARLIEST_TOPOLOGY_VERSION)
-                .await
-                .and_then(|earliest_registry_versions| {
-                    let min_earliest_registry_version =
-                        earliest_registry_versions.iter().min().unwrap();
-                    assert!(
-                        *min_earliest_registry_version <= target_version.get(),
-                        "Target version already surpassed"
-                    );
-                    ensure!(
-                        *min_earliest_registry_version == target_version.get(),
-                        "Target registry version not yet reached, current: {:?}, target: {}",
-                        earliest_registry_versions,
-                        target_version
-                    );
-                    Ok(())
-                })
-        }
     )
     .await
-    .expect("The subnet did not reach the specified registry version in time")
+}
+
+const FIREWALL_REGISTRY_VERSION: (&str, u16) =
+    ("firewall_registry_version", ORCHESTRATOR_METRICS_PORT);
+
+pub async fn await_subnet_firewall_registry_version_with_retries_async(
+    subnet: &SubnetSnapshot,
+    target_version: RegistryVersion,
+    logger: &Logger,
+    retry_timeout: Duration,
+    retry_backoff: Duration,
+) {
+    await_metric_registry_version(
+        FIREWALL_REGISTRY_VERSION,
+        &format!(
+            "Waiting until firewall registry version {} on subnet {}",
+            target_version, subnet.subnet_id,
+        ),
+        subnet.nodes().collect(),
+        target_version,
+        logger,
+        retry_timeout,
+        retry_backoff,
+    )
+    .await
 }

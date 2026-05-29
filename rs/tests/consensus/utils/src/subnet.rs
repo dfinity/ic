@@ -119,6 +119,7 @@ pub fn enable_chain_key_signing_on_subnet(
     let enable_signing_payload = UpdateSubnetPayload {
         subnet_id,
         chain_key_signing_enable: Some(key_ids.clone()),
+        subnet_admins: None,
         ..empty_subnet_update()
     };
     block_on(execute_update_subnet_proposal(
@@ -152,6 +153,7 @@ pub fn disable_chain_key_on_subnet(
     let disable_signing_payload = UpdateSubnetPayload {
         subnet_id,
         chain_key_signing_disable: Some(key_ids.clone()),
+        subnet_admins: None,
         ..empty_subnet_update()
     };
     block_on(execute_update_subnet_proposal(

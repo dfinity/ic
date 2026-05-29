@@ -1,11 +1,10 @@
-#![allow(deprecated)]
 use candid::candid_method;
 use ic_bitcoin_canister_mock::PushUtxosToAddress;
 use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
     MillisatoshiPerByte, Network, Utxo, UtxosFilterInRequest,
 };
-use ic_cdk::api::management_canister::bitcoin::{BitcoinNetwork, SendTransactionRequest};
+use ic_cdk::bitcoin_canister::{Network as BitcoinNetwork, SendTransactionRequest};
 use ic_cdk::{init, update};
 use serde_bytes::ByteBuf;
 use std::cell::RefCell;

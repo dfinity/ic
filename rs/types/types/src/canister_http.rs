@@ -1007,6 +1007,23 @@ impl CountBytes for CanisterHttpResponseDivergence {
     }
 }
 
+/// A per-replica receipt describing the cycles accounting outcome for a
+/// single canister HTTP outcall.
+#[derive(Clone, Default, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpPaymentReceipt {
+    /// The amount of cycles, out of the per-replica allowance, that the
+    /// replica did not use and wishes to refund to the caller.
+    pub refund: Cycles,
+}
+
+impl CountBytes for CanisterHttpPaymentReceipt {
+    fn count_bytes(&self) -> usize {
+        let Self { refund } = self;
+        size_of_val(refund)
+    }
+}
+
 /// Metadata about some [`CanisterHttpResponseContent`].
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]

@@ -219,7 +219,7 @@ impl IDkgPayload {
                 .map(|key_transcript| (key_transcript.key_id(), key_transcript))
                 .collect(),
             uid_generator: IDkgUIDGenerator::new(subnet_id, height),
-            empty_signature_agreements_flag: false,
+            empty_signature_agreements_flag: true,
             available_pre_signatures: BTreeMap::new(),
             pre_signatures_in_creation: BTreeMap::new(),
             idkg_transcripts: BTreeMap::new(),
