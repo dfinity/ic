@@ -622,6 +622,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
             measurement: vec![0x42; 48],
             metadata: Some(GuestLaunchMeasurementMetadata {
                 kernel_cmdline: Some("foo=bar".to_string()),
+                vcpu_type: None,
             }),
         }],
     });

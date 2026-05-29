@@ -41,6 +41,9 @@ message GuestLaunchMeasurementMetadata {
   // and if present, can hold any value, including the empty string, up to 100
   // KiB.
   optional string kernel_cmdline = 1;
+  // Virtual CPU type used to launch the guest.
+  // Supported values can be found in ic-os/defs.bzl under `vcpu_types`.
+  optional string vcpu_type = 2;
 }
 
 // A list of blessed versions of the IC Replica
