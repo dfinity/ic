@@ -2,9 +2,9 @@
 
 Repository: `https://github.com/dfinity/ic.git`
 
-Git hash: `b1babb4545a977addfcb1328e05eb6c9d911da17`
+Git hash: `a47e5434753752c1d2972fbc4407d14f88964285`
 
-New compressed Wasm hash: `d454c4d8a9a7a6f3aa4b11c32fd72c287cec31718d287adc676b5e88c29c5b3c`
+New compressed Wasm hash: `5ca6c97d52cc3ab86f675674309255b62db91d1e2de592a44795088ba54d35c0`
 
 Upgrade args hash: `5214320100ecc794582e8d3fcfcae6b42e66f0fd16bb81d21c8ef202f7215966`
 
@@ -28,7 +28,7 @@ Update the ckETH minter canister to include the latest code changes:
 ## Release Notes
 
 ```
-git log --format='%C(auto) %h %s' d13be5a27b3331c4dc8831593eed0e3ec08b260f..b1babb4545a977addfcb1328e05eb6c9d911da17 -- rs/ethereum/cketh/minter
+git log --format='%C(auto) %h %s' d13be5a27b3331c4dc8831593eed0e3ec08b260f..a47e5434753752c1d2972fbc4407d14f88964285 -- rs/ethereum/cketh/minter
 13a59c1055 chore(defi): remove deprecated ic-cdk imports in ic-cketh-minter (#10290)
 63b841f4fa chore: remove unused DeFi rust dependencies (#10281)
 7fb12c2e43 ci(defi): check endpoints exported in a canister's WASM against its Candid specification (#10147)
@@ -53,7 +53,7 @@ c51ed714bc test(ckETH_Minter): DEFI-2559: Add test to verify minter cannot be st
 
 ```
 git fetch
-git checkout b1babb4545a977addfcb1328e05eb6c9d911da17
+git checkout a47e5434753752c1d2972fbc4407d14f88964285
 didc encode -d rs/ethereum/cketh/minter/cketh_minter.did -t '(MinterArg)' '(variant { UpgradeArg = record { minimum_withdrawal_amount = opt (5_000_000_000_000_000 : nat)} })' | xxd -r -p | sha256sum
 ```
 
@@ -63,7 +63,7 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 
 ```
 git fetch
-git checkout b1babb4545a977addfcb1328e05eb6c9d911da17
+git checkout a47e5434753752c1d2972fbc4407d14f88964285
 "./ci/container/build-ic.sh" "--canisters"
 sha256sum ./artifacts/canisters/ic-cketh-minter.wasm.gz
 ```
