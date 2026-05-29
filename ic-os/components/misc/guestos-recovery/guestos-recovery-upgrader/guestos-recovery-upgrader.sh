@@ -97,11 +97,15 @@ stop_guestos_service() {
 }
 
 start_guestos_service() {
-    log_message "Restarting guestos.service after manual upgrade installation"
-    systemctl start guestos.service
-    GUESTOS_SERVICE_STOPPED=false
-    RESTART_GUESTOS_SERVICE_ON_EXIT=false
-    log_message "GuestOS service restarted successfully"
+    local reason="$1"
+    log_message "$reason"
+    if systemctl start guestos.service; then
+        GUESTOS_SERVICE_STOPPED=false
+        RESTART_GUESTOS_SERVICE_ON_EXIT=false
+        log_message "GuestOS service restarted successfully"
+        return 0
+    fi
+    return 1
 }
 
 compute_sha256() {
@@ -427,12 +431,7 @@ guestos_upgrade_cleanup() {
     fi
 
     if [ "$RESTART_GUESTOS_SERVICE_ON_EXIT" = "true" ] && [ "$INSTALL_STARTED" != "true" ]; then
-        log_message "Restarting guestos.service during cleanup after early exit"
-        if systemctl start guestos.service; then
-            log_message "GuestOS service restarted during cleanup"
-            GUESTOS_SERVICE_STOPPED=false
-            RESTART_GUESTOS_SERVICE_ON_EXIT=false
-        else
+        if ! start_guestos_service "Restarting guestos.service during cleanup after early exit"; then
             log_message "WARNING: Failed to restart guestos.service during cleanup"
         fi
     fi
@@ -540,7 +539,7 @@ main() {
         log_message "Recovery hash written to $RECOVERY_FILE"
     fi
 
-    start_guestos_service
+    start_guestos_service "Restarting guestos.service after manual upgrade installation"
 
     # Log success banner in so that it is visible in manual recovery fallback method
     print_success_banner
