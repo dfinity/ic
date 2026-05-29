@@ -1,4 +1,5 @@
 use crate::BLOCK_TIME;
+use crate::FEE_PERCENTILES_REFRESH_INTERVAL;
 use crate::MAX_TIME_IN_QUEUE;
 use crate::MIN_CONFIRMATIONS;
 use crate::{Setup, into_outpoint, parse_dogecoin_address};
@@ -28,7 +29,7 @@ use std::time::Duration;
 
 /// Entry point in the withdrawal flow
 ///
-/// Step 1: approve the minter to burn user's funds
+/// Step 1: await a refresh of the minter's median fee percentiles
 pub struct WithdrawalFlowStart<S> {
     setup: S,
 }
@@ -38,6 +39,38 @@ impl<S> WithdrawalFlowStart<S> {
         Self { setup }
     }
 
+    pub fn minter_await_fee_refresh(self, withdrawal_amount: u64) -> WithdrawalFlowApproval<S>
+    where
+        S: AsRef<Setup>,
+    {
+        let minter = self.setup.as_ref().minter();
+        let env = self.setup.as_ref().env.clone();
+
+        let max_refreshes = 10;
+        let mut previous = minter.estimate_withdrawal_fee(withdrawal_amount);
+        for _ in 0..max_refreshes {
+            env.advance_time(FEE_PERCENTILES_REFRESH_INTERVAL + Duration::from_secs(1));
+            for _ in 0..10 {
+                env.tick();
+            }
+            let current = minter.estimate_withdrawal_fee(withdrawal_amount);
+            if current == previous {
+                return WithdrawalFlowApproval { setup: self.setup };
+            }
+            previous = current;
+        }
+        panic!(
+            "BUG: fee estimate did not stabilize after {max_refreshes} refreshes; last estimate: {previous:?}"
+        );
+    }
+}
+
+/// Step 2: approve the minter to burn user's funds
+pub struct WithdrawalFlowApproval<S> {
+    setup: S,
+}
+
+impl<S> WithdrawalFlowApproval<S> {
     pub fn ledger_approve_minter<A>(self, account: A, amount: u64) -> RetrieveDogeFlow<S>
     where
         A: Into<Account>,

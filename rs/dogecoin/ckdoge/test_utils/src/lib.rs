@@ -48,6 +48,8 @@ pub const LEDGER_TRANSFER_FEE: u64 = DOGE / 100;
 const MAX_TIME_IN_QUEUE: Duration = Duration::from_secs(10);
 pub const MIN_CONFIRMATIONS: u32 = 60;
 pub const BLOCK_TIME: Duration = Duration::from_secs(60);
+/// Must be at least the minter's `refresh_fee_percentiles_frequency`.
+pub const FEE_PERCENTILES_REFRESH_INTERVAL: Duration = Duration::from_secs(360);
 
 pub struct Setup {
     pub env: Arc<PocketIc>,

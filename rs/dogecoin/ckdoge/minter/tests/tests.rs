@@ -383,6 +383,7 @@ mod withdrawal {
 
         setup
             .withdrawal_flow()
+            .minter_await_fee_refresh(RETRIEVE_DOGE_MIN_AMOUNT)
             .ledger_approve_minter(account, RETRIEVE_DOGE_MIN_AMOUNT)
             .minter_retrieve_doge_with_approval(
                 RETRIEVE_DOGE_MIN_AMOUNT,
@@ -415,6 +416,7 @@ mod withdrawal {
 
         let withdrawal_flow = setup
             .withdrawal_flow()
+            .minter_await_fee_refresh(RETRIEVE_DOGE_MIN_AMOUNT)
             .ledger_approve_minter(account, RETRIEVE_DOGE_MIN_AMOUNT);
 
         setup.ledger().stop();
@@ -454,6 +456,7 @@ mod withdrawal {
 
             setup
                 .withdrawal_flow()
+                .minter_await_fee_refresh(RETRIEVE_DOGE_MIN_AMOUNT)
                 .ledger_approve_minter(account, RETRIEVE_DOGE_MIN_AMOUNT)
                 .minter_retrieve_doge_with_approval(
                     RETRIEVE_DOGE_MIN_AMOUNT,
@@ -542,6 +545,7 @@ mod withdrawal {
 
         setup
             .withdrawal_flow()
+            .minter_await_fee_refresh(withdrawal_amount)
             .ledger_approve_minter(account, withdrawal_amount)
             .minter_retrieve_doge_with_approval(
                 withdrawal_amount,
@@ -584,6 +588,7 @@ mod withdrawal {
 
         setup
             .withdrawal_flow()
+            .minter_await_fee_refresh(withdrawal_amount)
             .ledger_approve_minter(account, withdrawal_amount)
             .minter_retrieve_doge_with_approval(
                 withdrawal_amount,
@@ -697,6 +702,7 @@ mod post_upgrade {
 
         setup
             .withdrawal_flow()
+            .minter_await_fee_refresh(RETRIEVE_DOGE_MIN_AMOUNT)
             .ledger_approve_minter(account, RETRIEVE_DOGE_MIN_AMOUNT)
             .minter_retrieve_doge_with_approval(
                 RETRIEVE_DOGE_MIN_AMOUNT,
