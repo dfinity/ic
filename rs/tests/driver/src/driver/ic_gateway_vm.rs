@@ -285,7 +285,14 @@ sudo networkctl reconfigure enp2s0
                 ]
             }
             InfraProvider::Local => {
-                unimplemented!("local backend: ic_gateway_vm configure_dns_records")
+                // The Local backend has no playnet DNS service. Return an empty
+                // set; downstream code on the Local path is expected to skip
+                // playnet DNS configuration entirely.
+                slog::warn!(
+                    env.logger(),
+                    "LocalBackend: skipping configure_dns_records (no playnet)"
+                );
+                vec![]
             }
         };
 
@@ -431,7 +438,11 @@ docker run --name=ic-gateway -d \
                 ]
             }
             InfraProvider::Local => {
-                unimplemented!("local backend: ic_gateway_vm configure_demo_domain_dns_records")
+                slog::warn!(
+                    env.logger(),
+                    "LocalBackend: skipping configure_demo_domain_dns_records (no playnet)"
+                );
+                vec![]
             }
         };
 

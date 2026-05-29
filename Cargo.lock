@@ -14882,6 +14882,7 @@ name = "ic-system-test-driver"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "askama",
  "assert_matches",
  "async-trait",
  "bare_metal_deployment",
@@ -14982,6 +14983,7 @@ dependencies = [
  "time",
  "tokio",
  "url",
+ "virt",
  "walkdir",
  "wat",
  "zstd",

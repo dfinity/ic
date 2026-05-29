@@ -1561,7 +1561,15 @@ impl HasGroupSetup for TestEnv {
                     .unwrap();
                 }
                 InfraProvider::Local => {
-                    unimplemented!("local backend: create_group_setup")
+                    info!(
+                        log,
+                        "Creating local group {} ...", group_setup.infra_group_name,
+                    );
+                    let backend = crate::driver::local_backend::LocalBackend::from_test_env(self)
+                        .expect("LocalBackend::from_test_env failed");
+                    backend
+                        .create_group(&group_setup.infra_group_name)
+                        .expect("LocalBackend::create_group failed");
                 }
             };
             group_setup.write_attribute(self);
@@ -2320,10 +2328,17 @@ pub trait VmControl {
     fn start(&self);
 }
 
-pub struct HostedVm {
-    farm: Farm,
-    group_name: String,
-    vm_name: String,
+pub enum HostedVm {
+    Farm {
+        farm: Farm,
+        group_name: String,
+        vm_name: String,
+    },
+    Local {
+        backend: Arc<crate::driver::local_backend::LocalBackend>,
+        group_name: String,
+        vm_name: String,
+    },
 }
 
 /// VmControl enables a user to interact with VMs, i.e. change their state.
@@ -2331,21 +2346,60 @@ pub struct HostedVm {
 /// unsuccessful.
 impl VmControl for HostedVm {
     fn kill(&self) {
-        self.farm
-            .destroy_vm(&self.group_name, &self.vm_name)
-            .expect("could not kill VM");
+        match self {
+            HostedVm::Farm {
+                farm,
+                group_name,
+                vm_name,
+            } => farm
+                .destroy_vm(group_name, vm_name)
+                .expect("could not kill VM"),
+            HostedVm::Local {
+                backend,
+                group_name,
+                vm_name,
+            } => backend
+                .destroy_vm(group_name, vm_name)
+                .expect("could not kill VM"),
+        }
     }
 
     fn reboot(&self) {
-        self.farm
-            .reboot_vm(&self.group_name, &self.vm_name)
-            .expect("could not reboot VM");
+        match self {
+            HostedVm::Farm {
+                farm,
+                group_name,
+                vm_name,
+            } => farm
+                .reboot_vm(group_name, vm_name)
+                .expect("could not reboot VM"),
+            HostedVm::Local {
+                backend,
+                group_name,
+                vm_name,
+            } => backend
+                .reboot_vm(group_name, vm_name)
+                .expect("could not reboot VM"),
+        }
     }
 
     fn start(&self) {
-        self.farm
-            .start_vm(&self.group_name, &self.vm_name)
-            .expect("could not start VM");
+        match self {
+            HostedVm::Farm {
+                farm,
+                group_name,
+                vm_name,
+            } => farm
+                .start_vm(group_name, vm_name)
+                .expect("could not start VM"),
+            HostedVm::Local {
+                backend,
+                group_name,
+                vm_name,
+            } => backend
+                .start_vm(group_name, vm_name)
+                .expect("could not start VM"),
+        }
     }
 }
 
@@ -2362,15 +2416,29 @@ where
     fn vm(&self) -> Box<dyn VmControl> {
         let env = self.test_env();
         let pot_setup = GroupSetup::read_attribute(&env);
-        let farm_base_url = self.get_farm_url().unwrap();
-        let farm = Farm::new(farm_base_url, env.logger());
-
         let vm_name = self.vm_name();
-        Box::new(HostedVm {
-            farm,
-            group_name: pot_setup.infra_group_name,
-            vm_name,
-        })
+        let group_name = pot_setup.infra_group_name;
+
+        match InfraProvider::read_attribute(&env) {
+            InfraProvider::Farm => {
+                let farm_base_url = self.get_farm_url().unwrap();
+                let farm = Farm::new(farm_base_url, env.logger());
+                Box::new(HostedVm::Farm {
+                    farm,
+                    group_name,
+                    vm_name,
+                })
+            }
+            InfraProvider::Local => {
+                let backend = crate::driver::local_backend::LocalBackend::from_test_env(&env)
+                    .expect("LocalBackend::from_test_env failed");
+                Box::new(HostedVm::Local {
+                    backend,
+                    group_name,
+                    vm_name,
+                })
+            }
+        }
     }
 }
 
@@ -2789,6 +2857,14 @@ where
     fn create_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
+        if InfraProvider::read_attribute(&env) == InfraProvider::Local {
+            slog::warn!(
+                log,
+                "LocalBackend: create_dns_records is a no-op ({} records ignored)",
+                dns_records.len()
+            );
+            return "local.invalid".to_string();
+        }
         let farm_base_url = self.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
@@ -2800,6 +2876,13 @@ where
     fn create_demo_dns_records(&self, domain: &str, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
+        if InfraProvider::read_attribute(&env) == InfraProvider::Local {
+            slog::warn!(
+                log,
+                "LocalBackend: create_demo_dns_records is a no-op for domain {domain}"
+            );
+            return "local.invalid".to_string();
+        }
         let farm_base_url = self.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
@@ -2825,6 +2908,14 @@ where
     fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
+        if InfraProvider::read_attribute(&env) == InfraProvider::Local {
+            slog::warn!(
+                log,
+                "LocalBackend: create_playnet_dns_records is a no-op ({} records ignored)",
+                dns_records.len()
+            );
+            return "local.invalid".to_string();
+        }
         let farm_base_url = self.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
@@ -2847,6 +2938,11 @@ where
     fn acquire_playnet_certificate(&self) -> PlaynetCertificate {
         let env = self.test_env();
         let log = env.logger();
+        if InfraProvider::read_attribute(&env) == InfraProvider::Local {
+            panic!(
+                "LocalBackend: acquire_playnet_certificate is not supported (no TLS playnet); guard the caller with InfraProvider"
+            );
+        }
         let farm_base_url = self.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);

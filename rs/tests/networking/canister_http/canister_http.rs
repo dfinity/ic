@@ -162,7 +162,9 @@ pub fn get_universal_vm_ipv4_address(env: &TestEnv) -> Ipv4Addr {
             .block_on_ipv4()
             .expect("Universal VM IPv4 not found."),
         InfraProvider::Local => {
-            unimplemented!("local backend: get_universal_vm_ipv4_address")
+            unimplemented!(
+                "LocalBackend: get_universal_vm_ipv4_address not implemented; IPv4 wiring on Local is a future extension"
+            )
         }
     }
 }

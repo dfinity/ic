@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+askama = { workspace = true }
 bare_metal_deployment = { path = "../../ic_os/dev_test_tools/bare_metal_deployment" }
 bincode = { workspace = true }
 candid = { workspace = true }
@@ -107,6 +108,7 @@ thiserror = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
+virt = { workspace = true }
 walkdir = { workspace = true }
 wat = { workspace = true }
 zstd = { workspace = true }

@@ -103,7 +103,7 @@ pub fn get_tagged_guestos_img_sha256(tag: &str) -> String {
 
 /// Get the initial GuestOS disk image from the environment.
 pub fn get_guestos_disk_image() -> DiskImage {
-    DiskImage {
+    DiskImage::Url {
         image_type: ImageType::IcOsImage,
         url: get_guestos_img_url(),
         sha256: get_guestos_img_sha256(),
@@ -112,7 +112,7 @@ pub fn get_guestos_disk_image() -> DiskImage {
 
 /// Get a tagged GuestOS disk image from the environment.
 pub fn get_tagged_guestos_disk_image(tag: &str) -> DiskImage {
-    DiskImage {
+    DiskImage::Url {
         image_type: ImageType::IcOsImage,
         url: get_tagged_guestos_img_url(tag),
         sha256: get_tagged_guestos_img_sha256(tag),

@@ -974,8 +974,12 @@ impl SystemTestGroup {
             false,
         )) as Box<dyn Task>;
 
+        // The Local backend has no TTL; libvirt resources live for the lifetime of the
+        // libvirtd subprocess owned by the LocalBackend instance, so the keepalive task
+        // (which refreshes the Farm group TTL) is not needed there.
+        let is_local_infra = matches!(std::env::var("SYSTEM_TEST_INFRA").as_deref(), Ok("local"));
         let keepalive_task_id = TaskId::Test(String::from(KEEPALIVE_TASK_NAME));
-        let keepalive_task = if self.with_farm && !group_ctx.no_farm_keepalive {
+        let keepalive_task = if self.with_farm && !group_ctx.no_farm_keepalive && !is_local_infra {
             Box::from(subproc(
                 keepalive_task_id.clone(),
                 {
@@ -1468,13 +1472,30 @@ impl SystemTestGroup {
     }
 
     fn delete_farm_group(ctx: GroupContext) {
-        info!(ctx.log(), "Deleting farm group.");
         let env = ensure_setup_env(ctx);
         let group_setup = GroupSetup::read_attribute(&env);
-        let farm_url = env.get_farm_url().unwrap();
-        let farm = Farm::new(farm_url, env.logger());
         let group_name = group_setup.infra_group_name;
-        farm.delete_group(&group_name)
-            .expect("failed to delete the farm group");
+        match InfraProvider::read_attribute(&env) {
+            InfraProvider::Farm => {
+                info!(env.logger(), "Deleting farm group.");
+                let farm_url = env.get_farm_url().unwrap();
+                let farm = Farm::new(farm_url, env.logger());
+                farm.delete_group(&group_name)
+                    .expect("failed to delete the farm group");
+            }
+            InfraProvider::Local => {
+                info!(env.logger(), "Deleting local libvirt group.");
+                match crate::driver::local_backend::LocalBackend::from_test_env(&env) {
+                    Ok(backend) => {
+                        if let Err(e) = backend.delete_group(&group_name) {
+                            slog::warn!(env.logger(), "LocalBackend::delete_group failed: {e:?}");
+                        }
+                    }
+                    Err(e) => {
+                        slog::warn!(env.logger(), "LocalBackend::from_test_env failed: {e:?}");
+                    }
+                }
+            }
+        }
     }
 }

@@ -176,6 +176,15 @@ def system_test(
         for image_name, image_path in icos_images.items():
             _runtime_deps[image_name + "_PATH"] = image_path
 
+        # The Local backend boots Universal-VMs and the Prometheus-VM from these
+        # locally-vendored images instead of fetching them from Farm.
+        _runtime_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
+        _runtime_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
+
+        # The Local backend does not run a Vector VM.
+        if "--no-logs" not in extra_args_simple:
+            extra_args_simple.append("--no-logs")
+
     # Convert _runtime_deps into environment variables + data dependencies
     env |= {
         name: "$(rootpath {})".format(dep)

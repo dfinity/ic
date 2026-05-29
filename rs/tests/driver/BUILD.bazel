@@ -16,6 +16,7 @@ rust_library(
     compile_data = [
         ":assets/vector.toml",
         ":assets/create-universal-vm-config-image.sh",
+        ":templates/guestos_vm_template.xml",
     ],
     crate_name = "ic_system_test_driver",
     proc_macro_deps = [
@@ -88,6 +89,7 @@ rust_library(
         "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
+        "@crate_index//:askama",
         "@crate_index//:bincode",
         "@crate_index//:candid",
         "@crate_index//:chrono",
@@ -126,9 +128,11 @@ rust_library(
         "@crate_index//:time",
         "@crate_index//:tokio",
         "@crate_index//:url",
+        "@crate_index//:virt",
         "@crate_index//:walkdir",
         "@crate_index//:wat",
         "@crate_index//:zstd",
+        "@libvirt",
     ],
 )
 

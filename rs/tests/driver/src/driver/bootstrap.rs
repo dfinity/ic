@@ -1,7 +1,7 @@
 use crate::driver::ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME, Playnet};
 use crate::driver::ic_images::try_get_setupos_img_version;
 use crate::driver::nested::NestedVm;
-use crate::driver::resource::BootImage;
+use crate::driver::resource::{BootImage, DiskImage};
 use crate::driver::test_env_api::{
     SshSession, get_guestos_img_url, get_guestos_launch_measurements,
     get_hostos_initial_update_img_url,
@@ -326,7 +326,10 @@ pub fn setup_and_start_vms(
                     t_farm.start_vm(&group_name, &vm_name)?;
                 }
                 InfraProvider::Local => {
-                    unimplemented!("local backend: bootstrap attach/start vm")
+                    let backend =
+                        crate::driver::local_backend::LocalBackend::from_test_env(&t_env)?;
+                    backend.attach_disk_images(&vm_name, std::slice::from_ref(&conf_img_path))?;
+                    backend.start_vm(&group_name, &vm_name)?;
                 }
             }
             std::fs::remove_file(conf_img_path)?;
@@ -677,7 +680,12 @@ pub fn setup_baremetal_instance(
     let nested_vm_config = nested_vm.get_nested_vm_config()?;
     let guestos_image_source = match &nested_vm_config.boot_image {
         BootImage::GroupDefault => ImageSource::Url(get_guestos_img_url().as_str().parse()?),
-        BootImage::Image(disk_image) => ImageSource::Url(disk_image.url.as_str().parse()?),
+        BootImage::Image(disk_image) => match disk_image {
+            DiskImage::Url { url, .. } => ImageSource::Url(url.as_str().parse()?),
+            DiskImage::Local { .. } => {
+                bail!("DiskImage::Local is not supported for bare metal deployment")
+            }
+        },
         BootImage::File(_) => bail!("BootImage::File is not supported for bare metal deployment"),
     };
 
