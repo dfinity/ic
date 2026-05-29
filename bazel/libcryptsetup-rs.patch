@@ -30,7 +30,7 @@ diff --git a/src/settings.rs b/src/settings.rs
              max_memory_kb: v.max_memory_kb,
 
 # Fixes CryptLuks2TokenHandle::is_assigned() handling of libcryptsetup's negative errno return
-# Upsttream fix in https://github.com/stratis-storage/libcryptsetup-rs/pull/483
+# Upstream fix in https://github.com/stratis-storage/libcryptsetup-rs/pull/483
 diff --git a/src/luks2/token.rs b/src/luks2/token.rs
 --- a/src/luks2/token.rs
 +++ b/src/luks2/token.rs

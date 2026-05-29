@@ -29,6 +29,7 @@ const IC_KEY_TOKEN_TYPE: &str = "ic-key-metadata";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeyslotMetadata {
+    // token_type and keyslots are standard fields in LUKS tokens
     #[serde(rename = "type")]
     token_type: String,
     pub keyslots: Vec<String>,
