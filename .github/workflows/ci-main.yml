@@ -293,6 +293,12 @@ jobs:
 
             test_targets="$HOME/.cache/bazel-targets/test-targets"
             if [ -s "$test_targets" ]; then # bazel errors out if no test targets are listed
+              # Prepare the local libvirt/QEMU system-test backend: align the
+              # container's `kvm` group GID with the host's /dev/kvm and provision
+              # the `ic-net-admin` capability launcher. These depend on the host
+              # runtime and cannot be baked into the image, so they must run here
+              # before any system-test that uses the local backend.
+              ci/container/setup-local-backend.sh
               eval "bazel test $bazel_args --target_pattern_file=$test_targets"
             fi
 
