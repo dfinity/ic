@@ -80,6 +80,7 @@ icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
+libc = { workspace = true }
 macaddr = { workspace = true }
 nix = { workspace = true }
 num_cpus = "1.13.1"

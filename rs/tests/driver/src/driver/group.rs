@@ -1335,6 +1335,21 @@ impl SystemTestGroup {
                 _ => InfraProvider::Farm,
             };
             infra_provider.write_attribute(&root_env);
+            // Become a child-subreaper so that orphaned, double-forked daemons
+            // (e.g. libvirtd/virtlogd/QEMU started by the local backend, or any
+            // stray subprocess) are reparented to this long-lived parent process
+            // instead of escaping to the bazel test process-wrapper. This
+            // lets `kill_all_descendants` reliably reap them at teardown. The
+            // attribute is per-process and not inherited across fork, so it must
+            // be set here on the parent before any children are spawned.
+            crate::driver::process::enable_child_subreaper(group_ctx.log());
+            // Start a background thread that promptly reaps the orphaned,
+            // double-forked daemons (QEMU/dnsmasq/virtlogd) that the subreaper
+            // attribute reparents to us. Without this they linger as zombies for
+            // the whole run, and—worse—libvirt's domain teardown stalls for ~2
+            // minutes waiting for a QEMU zombie that only we can reap. See
+            // `spawn_descendant_reaper` for details.
+            crate::driver::process::spawn_descendant_reaper(group_ctx.log());
             if with_farm {
                 root_env.create_group_setup(
                     group_ctx.group_base_name.clone(),
@@ -1438,6 +1453,13 @@ impl SystemTestGroup {
                 if with_farm && !args.no_delete_farm_group {
                     Self::delete_farm_group(group_ctx.clone());
                 }
+                // Final safety net: SIGKILL and reap every descendant that
+                // outlived teardown. Because this process is a child-subreaper
+                // (see `enable_child_subreaper` above), any orphaned daemon
+                // (libvirtd/virtlogd/QEMU) has been reparented here and would
+                // otherwise hang the bazel test process-wrapper. Harmless on
+                // Farm, where well-behaved subprocesses have already exited.
+                crate::driver::process::kill_all_descendants(group_ctx.log());
                 if report.failure.is_empty() {
                     Ok(Outcome::FromParentProcess(report))
                 } else {
@@ -1490,12 +1512,6 @@ impl SystemTestGroup {
                         if let Err(e) = backend.delete_group(&group_name) {
                             slog::warn!(env.logger(), "LocalBackend::delete_group failed: {e:?}");
                         }
-                        // Stop the libvirtd/virtlogd daemons started by setup;
-                        // they intentionally outlive the setup process, so the
-                        // finalize task must terminate them or the bazel test
-                        // process-wrapper hangs waiting for the orphaned root
-                        // daemons to exit.
-                        backend.shutdown_daemons(&group_name);
                     }
                     Err(e) => {
                         slog::warn!(env.logger(), "LocalBackend::from_test_env failed: {e:?}");
