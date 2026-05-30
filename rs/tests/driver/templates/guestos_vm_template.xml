@@ -27,9 +27,9 @@
       <target dev='{{ d.target }}' bus='{{ d.bus }}'/>
     </disk>
     {% endfor %}
-    <interface type='network'>
+    <interface type='ethernet'>
       <mac address='{{ mac_address }}'/>
-      <source network='{{ network_name }}'/>
+      <target dev='{{ tap_name }}' managed='no'/>
       <model type='virtio'/>
     </interface>
     <serial type='file'>

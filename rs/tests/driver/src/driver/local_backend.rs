@@ -28,7 +28,7 @@ use askama::Template;
 use deterministic_ips::MacAddr6Ext;
 use macaddr::MacAddr6;
 use serde::{Deserialize, Serialize};
-use slog::{Logger, info, warn};
+use slog::{Logger, info};
 use std::collections::HashMap;
 use std::net::Ipv6Addr;
 use std::os::unix::fs::PermissionsExt;
@@ -38,7 +38,6 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use virt::connect::Connect;
 use virt::domain::Domain;
-use virt::network::Network;
 
 /// Absolute path to the `libvirtd` binary.
 ///
@@ -49,14 +48,28 @@ use virt::network::Network;
 /// TODO: provide libvirt via a bazel dependency and replace this with an environment variable.
 const LIBVIRTD_BIN: &str = "/usr/sbin/libvirtd";
 
-/// Path to the `virtlogd` binary. The QEMU driver of a privileged (root)
-/// libvirtd connects to virtlogd to capture each domain's stdout/stderr.
-const VIRTLOGD_BIN: &str = "/usr/sbin/virtlogd";
+/// Absolute path to the `dnsmasq` binary, used purely as an IPv6 Router
+/// Advertisement daemon so the GuestOS can derive its global SLAAC address (see
+/// [`LocalBackend::create_group`]). Like [`LIBVIRTD_BIN`], it lives in
+/// `/usr/sbin`, which is not on `PATH` in the Bazel test sandbox, so we
+/// reference it by absolute path.
+///
+/// TODO: provide dnsmasq via a bazel dependency and replace this with an environment variable.
+const DNSMASQ_BIN: &str = "/usr/sbin/dnsmasq";
 
-/// Fixed unix socket a privileged (system-mode) libvirtd uses to reach
-/// virtlogd. There is no systemd socket-activation in the dev container, so we
-/// start virtlogd ourselves and it must listen here.
-const VIRTLOGD_SOCK: &str = "/run/libvirt/virtlogd-sock";
+/// Absolute path to the capability launcher used for the few networking
+/// operations that require `CAP_NET_ADMIN` (creating the per-group bridge and
+/// attaching TAP devices). See [`LocalBackend::net_admin`] for the rationale
+/// and `ci/container/setup-local-backend.sh` for how the launcher is
+/// provisioned.
+///
+/// The backend is otherwise fully unprivileged: `libvirtd` runs as the
+/// current (non-root) user in session mode (`qemu:///session`), and QEMU opens
+/// the pre-created, user-owned TAPs directly. No `sudo` is used anywhere.
+///
+/// TODO: provide the launcher via a bazel dependency and replace this with an
+/// environment variable.
+const NET_ADMIN_LAUNCHER: &str = "/usr/local/bin/ic-net-admin";
 
 /// Persistent record (in the root TestEnv) of the libvirtd unix socket so that
 /// forked task subprocesses can connect to the daemon spawned by the setup
@@ -97,13 +110,10 @@ pub struct LocalBackend {
     /// only kills the child if we own it.
     libvirtd: Option<Child>,
     /// Path to the libvirtd pid-file. `Some` only in the spawning process.
-    /// libvirtd runs as root (via `sudo`), so `Drop` must `sudo kill` the pid
-    /// recorded here rather than relying on killing the unprivileged `sudo`
-    /// wrapper handle.
+    /// libvirtd runs as the current (unprivileged) user in session mode, so it
+    /// is a direct child we can signal; the pid-file is used as a fallback for
+    /// teardown from a connect-only handle in the finalize task.
     pid_path: Option<PathBuf>,
-    /// Path to the virtlogd pid-file. `Some` only if this process started
-    /// virtlogd (i.e. it was not already running). `Drop` `sudo kill`s it.
-    virtlogd_pid_path: Option<PathBuf>,
     /// libvirt connection. `virt::Connect` is `Send + Sync` and all its
     /// methods take `&self` (the underlying libvirt C API is thread-safe), so
     /// no interior mutex is needed.
@@ -202,121 +212,52 @@ impl LocalBackend {
         Ok(backend)
     }
 
-    /// Build a [`Command`] that runs `program` (with whatever args the caller
-    /// appends) as root via passwordless `sudo`, forcing the program's AppArmor
-    /// profile to `unconfined`.
+    /// Build a [`Command`] that runs a short shell `script` with
+    /// `CAP_NET_ADMIN` raised into the ambient set, so the program(s) it
+    /// `exec`s inherit that capability.
     ///
-    /// Why this is needed: Ubuntu ships enforce-mode `libvirtd`/`virtlogd`
-    /// AppArmor profiles that attach to `/usr/sbin/libvirtd` and
-    /// `/usr/sbin/virtlogd` on `exec`. Those profiles' `signal` rules deny
-    /// *receiving* signals from our container's processes (AppArmor label
-    /// `crun`), so once a daemon is confined we can no longer terminate it
-    /// during teardown: `kill`/`pkill` fail with EPERM ("Permission denied")
-    /// even as root, because AppArmor — not the credential check — blocks
-    /// delivery (`kill -0` still succeeds, but any real signal is refused). The
-    /// profiles are loaded from the host kernel, so this is invisible in the VS
-    /// Code devcontainer (where the daemons end up effectively unconfined) but
-    /// fatal under `ci/container/container-run.sh`, which runs against the
-    /// host's AppArmor policy. A leftover, unkillable libvirtd then hangs the
-    /// Bazel test wrapper (see [`shutdown_daemons`]).
+    /// This is the *only* privileged primitive the backend uses, and it grants
+    /// exactly one narrow capability — never root. It is needed for the few
+    /// operations the kernel gates behind `CAP_NET_ADMIN`: creating the
+    /// per-group bridge and TAP devices.
     ///
-    /// We sidestep the profile entirely by requesting an `unconfined`
-    /// transition for the next `exec` (via the kernel's
-    /// `/proc/self/attr/apparmor/exec` interface, with a fallback to the older
-    /// `/proc/self/attr/exec`) inside a tiny `sh` shim that then `exec`s the
-    /// daemon. The daemon therefore runs unconfined and stays signalable. The
-    /// write is best-effort: if AppArmor is disabled (the interface is absent or
-    /// not writable) the shim simply `exec`s the daemon unchanged.
-    fn sudo_unconfined(program: &str) -> Command {
-        let mut cmd = Command::new("sudo");
-        cmd.arg("-n")
-            .arg("/bin/sh")
+    /// The capability comes from the [`NET_ADMIN_LAUNCHER`] binary, a
+    /// file-capability-endowed `capsh` provisioned once in the container image
+    /// (`cap_net_admin,cap_net_raw+ep`; see
+    /// `ci/container/setup-local-backend.sh`). `capsh` raises the requested
+    /// caps into its inheritable+ambient sets and then `exec`s `/bin/sh -c
+    /// <script>`; ambient capabilities survive the `exec`, so the commands in
+    /// `script` (e.g. `ip link add ...`) run with the caps even though the
+    /// shell binary itself is not capability-endowed.
+    ///
+    /// `script` must only ever interpolate sanitized, shell-safe tokens
+    /// (bridge/TAP interface names and IPv6 prefixes are restricted to
+    /// `[0-9a-f:.-]`).
+    fn net_admin(script: &str) -> Command {
+        let mut cmd = Command::new(NET_ADMIN_LAUNCHER);
+        cmd.arg("--inh=cap_net_admin,cap_net_raw")
+            .arg("--addamb=cap_net_admin")
+            .arg("--addamb=cap_net_raw")
+            .arg("--")
             .arg("-c")
-            .arg(concat!(
-                "for p in /proc/self/attr/apparmor/exec /proc/self/attr/exec; do ",
-                "if [ -w \"$p\" ]; then echo 'exec unconfined' > \"$p\" 2>/dev/null && break; fi; ",
-                "done; ",
-                "exec \"$@\"",
-            ))
-            // `$0` for the shim; the daemon binary and its args follow as `$1..`,
-            // which `exec "$@"` then runs.
-            .arg("sh")
-            .arg(program);
+            .arg(script);
         cmd
     }
 
-    /// Ensure a `virtlogd` instance is reachable at [`VIRTLOGD_SOCK`].
-    ///
-    /// Returns `Some(pid_path)` if this call started virtlogd (so `Drop` can
-    /// stop it), or `None` if a virtlogd was already running (we leave it
-    /// alone, as it may be shared with other processes).
-    fn ensure_virtlogd(libvirt_dir: &Path, logger: &Logger) -> Result<Option<PathBuf>> {
-        if Path::new(VIRTLOGD_SOCK).exists() {
-            // A socket file is present, but it may be stale: a virtlogd from a
-            // previous run that was killed (e.g. by `shutdown_daemons`) leaves
-            // its socket behind at this fixed path, and connecting to it yields
-            // "Connection refused". Probe it with a real connection; only reuse
-            // it if a daemon is actually listening, otherwise remove the stale
-            // socket and start a fresh virtlogd.
-            match std::os::unix::net::UnixStream::connect(VIRTLOGD_SOCK) {
-                Ok(_) => {
-                    // Live virtlogd (possibly shared with the host or another
-                    // backend); reuse it and do not take ownership.
-                    return Ok(None);
-                }
-                Err(e) => {
-                    warn!(
-                        logger,
-                        "Stale virtlogd socket at {VIRTLOGD_SOCK} ({e}); removing and restarting"
-                    );
-                    // The socket lives in a root-owned directory, so remove it
-                    // via sudo.
-                    let _ = Command::new("sudo")
-                        .arg("-n")
-                        .arg("rm")
-                        .arg("-f")
-                        .arg(VIRTLOGD_SOCK)
-                        .status();
-                }
-            }
-        }
-
-        let pid_path = libvirt_dir.join("virtlogd.pid");
-        let log_path = libvirt_dir.join("virtlogd.log");
-        let conf_path = libvirt_dir.join("virtlogd.conf");
-        std::fs::write(
-            &conf_path,
-            format!("log_outputs = \"1:file:{log}\"\n", log = log_path.display()),
-        )?;
-
-        info!(logger, "Spawning virtlogd"; "bin" => VIRTLOGD_BIN, "socket" => VIRTLOGD_SOCK);
-        // `--daemon` double-forks and writes the pid-file, so `status()` returns
-        // once virtlogd has backgrounded itself.
-        let status = Self::sudo_unconfined(VIRTLOGD_BIN)
-            .arg("--daemon")
-            .arg("--config")
-            .arg(&conf_path)
-            .arg("--pid-file")
-            .arg(&pid_path)
+    /// Run a [`net_admin`] `script` to completion, returning an error if the
+    /// launcher is missing or the script exits non-zero. `what` describes the
+    /// operation for error context.
+    fn run_net_admin(script: &str, what: &str) -> Result<()> {
+        let status = Self::net_admin(script)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
-            .context("spawning virtlogd")?;
+            .with_context(|| format!("running net-admin launcher for {what}"))?;
         if !status.success() {
-            bail!("virtlogd exited with status {status}");
+            bail!("net-admin operation '{what}' failed with status {status}");
         }
-
-        // Wait for the socket to appear.
-        let deadline = Instant::now() + Duration::from_secs(30);
-        while !Path::new(VIRTLOGD_SOCK).exists() {
-            if Instant::now() > deadline {
-                bail!("virtlogd socket {VIRTLOGD_SOCK} did not appear within 30s");
-            }
-            std::thread::sleep(Duration::from_millis(100));
-        }
-
-        Ok(Some(pid_path))
+        Ok(())
     }
 
     /// Short, host-global directory for this backend's libvirtd unix socket.
@@ -342,61 +283,52 @@ impl LocalBackend {
         let pid_path = libvirt_dir.join("libvirtd.pid");
         let log_path = libvirt_dir.join("libvirtd.log");
 
-        // The libvirtd unix socket must live at a SHORT path: the kernel caps
-        // unix socket paths (`sockaddr_un.sun_path`) at ~108 bytes, and the
-        // working dir resolves to a deep Bazel cache path
-        // (`.../execroot/_main/_tmp/<hash>/local_backend/...`) that already
-        // exceeds that limit, so a socket placed under it fails to bind with
-        // "File name too long". We therefore place the socket directory under
-        // `/tmp`, keyed by a hash of the working dir so concurrent test
-        // targets on the same host do not collide while a given group stays
-        // stable across re-runs. The pid/log/conf files stay in `libvirt_dir`.
-        let socket_dir = Self::socket_dir(&working_dir);
-        std::fs::create_dir_all(&socket_dir)
-            .with_context(|| format!("creating libvirt socket dir {}", socket_dir.display()))?;
-        let socket_path = socket_dir.join("libvirt-sock");
+        // libvirtd runs as the current (non-root) user in *session* mode
+        // (`qemu:///session`). A session-mode daemon ignores `unix_sock_dir`
+        // and always places its socket at `$XDG_RUNTIME_DIR/libvirt/libvirt-sock`.
+        // The default `$XDG_RUNTIME_DIR` (`/run/user/<uid>`) may be absent in
+        // the container, and in any case we want a deterministic, short path
+        // (the kernel caps unix socket paths, `sockaddr_un.sun_path`, at ~108
+        // bytes, and the working dir resolves to a deep Bazel cache path that
+        // already exceeds that limit). We therefore point `$XDG_RUNTIME_DIR` at
+        // a short `/tmp` directory keyed by a hash of the working dir, so
+        // concurrent test targets on the same host do not collide while a given
+        // group stays stable across re-runs. The pid/log/conf files stay in
+        // `libvirt_dir`.
+        let xdg_runtime_dir = Self::socket_dir(&working_dir);
+        std::fs::create_dir_all(&xdg_runtime_dir).with_context(|| {
+            format!(
+                "creating libvirt XDG_RUNTIME_DIR {}",
+                xdg_runtime_dir.display()
+            )
+        })?;
+        let socket_path = xdg_runtime_dir.join("libvirt").join("libvirt-sock");
         // A previous run with the same working dir leaves the socket behind at
         // this fixed path; remove it so libvirtd can bind cleanly.
         let _ = std::fs::remove_file(&socket_path);
 
-        // The QEMU driver of a privileged libvirtd connects to virtlogd to
-        // capture each domain's logs; without it, domain creation fails with
-        // "Failed to connect socket to '/run/libvirt/virtlogd-sock'". There is
-        // no systemd socket-activation in the container, so start it ourselves.
-        let virtlogd_pid_path = Self::ensure_virtlogd(&libvirt_dir, &logger)?;
-
-        // Minimal libvirtd configuration: unix socket only, no auth, no TLS.
+        // Minimal libvirtd configuration: log to a file. Session-mode libvirtd
+        // needs no auth/TLS settings and derives its socket path from
+        // `$XDG_RUNTIME_DIR` (see above), so no `unix_sock_dir` is configured.
         std::fs::write(
             &conf_path,
-            format!(
-                r#"unix_sock_dir = "{dir}"
-unix_sock_ro_perms = "0777"
-unix_sock_rw_perms = "0777"
-auth_unix_ro = "none"
-auth_unix_rw = "none"
-log_outputs = "1:file:{log}"
-"#,
-                dir = socket_dir.display(),
-                log = log_path.display(),
-            ),
+            format!("log_outputs = \"1:file:{log}\"\n", log = log_path.display(),),
         )?;
 
-        // Creating libvirt networks (bridges) and running system QEMU domains
-        // requires root, which the unprivileged test process does not have.
-        // We therefore run libvirtd as root via passwordless `sudo` and connect
-        // to its world-writable unix socket. The QEMU and network drivers also
-        // expect the packaged `libvirt-qemu` / `libvirt-dnsmasq` accounts to
-        // exist (the QEMU driver refuses to initialize otherwise, and the
-        // network driver launches dnsmasq as `libvirt-dnsmasq`); those accounts
-        // are provisioned in the dev-container image (see ci/container/Dockerfile)
-        // rather than at test time.
-        info!(logger, "Spawning libvirtd"; "bin" => LIBVIRTD_BIN, "conf" => %conf_path.display(), "socket" => %socket_path.display());
+        // The backend is fully unprivileged: libvirtd runs as the current user
+        // in session mode and connects to a per-user QEMU driver. There is no
+        // `sudo`, no system-wide bridge, and no `virtlogd` (domain serial and
+        // console output is written directly to files). The few operations that
+        // need elevated networking capabilities (creating the bridge and TAPs)
+        // go through the narrow [`net_admin`] capability launcher instead.
+        info!(logger, "Spawning libvirtd (session mode)"; "bin" => LIBVIRTD_BIN, "conf" => %conf_path.display(), "socket" => %socket_path.display());
 
-        let child = Self::sudo_unconfined(LIBVIRTD_BIN)
+        let child = Command::new(LIBVIRTD_BIN)
             .arg("--config")
             .arg(&conf_path)
             .arg("--pid-file")
             .arg(&pid_path)
+            .env("XDG_RUNTIME_DIR", &xdg_runtime_dir)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -421,7 +353,6 @@ log_outputs = "1:file:{log}"
             socket_path,
             libvirtd: Some(child),
             pid_path: Some(pid_path),
-            virtlogd_pid_path,
             connect,
             logger,
             extra_disks: Mutex::new(HashMap::new()),
@@ -451,7 +382,6 @@ log_outputs = "1:file:{log}"
             socket_path,
             libvirtd: None,
             pid_path: None,
-            virtlogd_pid_path: None,
             connect,
             logger,
             extra_disks: Mutex::new(HashMap::new()),
@@ -461,11 +391,6 @@ log_outputs = "1:file:{log}"
             vm_min_boot_image_size_gib: Mutex::new(HashMap::new()),
             working_dir,
         })
-    }
-
-    /// Returns the libvirt network name for `group_name`.
-    fn network_name(group_name: &str) -> String {
-        sanitize_libvirt_name(&format!("ictest-{group_name}"))
     }
 
     /// Returns the libvirt domain name for `(group_name, vm_name)`.
@@ -504,51 +429,152 @@ log_outputs = "1:file:{log}"
         format!("vbr-{}", hex::encode(&hash[0..5]))
     }
 
-    /// Create a libvirt isolated network for `group_name`.
-    pub fn create_group(&self, group_name: &str) -> Result<()> {
-        let name = Self::network_name(group_name);
-        info!(self.logger, "Creating libvirt network {name}");
-        let prefix = Self::group_ipv6_prefix(group_name);
-        let bridge_name = Self::bridge_name(group_name);
-        let xml = format!(
-            r#"<network>
-  <name>{name}</name>
-  <bridge name='{bridge}' stp='off' delay='0'/>
-  <ip family='ipv6' address='{prefix}1' prefix='64'>
-  </ip>
-</network>
-"#,
-            name = name,
-            bridge = bridge_name,
-            prefix = prefix,
-        );
-        match Network::create_xml(&self.connect, &xml) {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                // The network may already exist from a previous, interrupted
-                // run. Only treat the error as benign if a network with this
-                // exact name actually exists AND is active; otherwise the
-                // create genuinely failed (e.g. a stale bridge collision) and
-                // we must surface it, since an absent/inactive network would
-                // make every subsequent domain creation fail with
-                // "Network not found".
-                match Network::lookup_by_name(&self.connect, &name) {
-                    Ok(net) if net.is_active().unwrap_or(false) => {
-                        warn!(self.logger, "Network {name} already exists; reusing");
-                        Ok(())
-                    }
-                    _ => Err(anyhow!("create_group({group_name}): {e}")),
-                }
-            }
-        }
+    /// Returns the TAP interface name for `(group_name, vm_name)`.
+    ///
+    /// Like [`bridge_name`], TAP names are bounded by `IFNAMSIZ - 1` = 15
+    /// characters, so we use a short hash digest (`tap-` + 10 hex chars = 14
+    /// chars). The digest covers both the group and VM name so TAPs are unique
+    /// per VM and stable across re-runs.
+    fn tap_name(group_name: &str, vm_name: &str) -> String {
+        use ic_crypto_sha2::Sha256;
+        let hash = Sha256::hash(format!("{group_name}/{vm_name}").as_bytes());
+        format!("tap-{}", hex::encode(&hash[0..5]))
     }
 
-    /// Tear down all domains in `group_name` and remove the network.
-    pub fn delete_group(&self, group_name: &str) -> Result<()> {
-        let net_name = Self::network_name(group_name);
-        info!(self.logger, "Deleting libvirt group {net_name}");
+    /// Create the per-group Linux bridge that hosts the group's `/64`.
+    ///
+    /// Instead of a libvirt-managed (system-mode) network — which would require
+    /// `libvirtd` to run as root — we manage the network ourselves with the
+    /// narrow [`net_admin`] capability launcher: a Linux bridge holds the
+    /// group's `/64` and per-VM TAPs are attached to it in [`start_vm`].
+    ///
+    /// The IC GuestOS does not statically configure its global IPv6 address; it
+    /// only brings up a link-local address and then derives its deterministic
+    /// global address via SLAAC from a Router Advertisement (the global address
+    /// is the group `/64` prefix plus the EUI-64 of the deterministic MAC). We
+    /// therefore run a minimal `dnsmasq` purely as an RA daemon on the bridge.
+    /// Crucially the RA is sent with a **router lifetime of 0**
+    /// (`--ra-param=<bridge>,10,0`): this advertises the on-link, autonomous
+    /// prefix so guests perform SLAAC, but does **not** install `dnsmasq` as a
+    /// default router. A default route is neither needed (the driver lives on
+    /// the same `/64`, on-link) nor wanted (this `dnsmasq` does not forward, so
+    /// a default route through it would black-hole all off-link traffic and the
+    /// replica would never become reachable).
+    pub fn create_group(&self, group_name: &str) -> Result<()> {
+        let bridge = Self::bridge_name(group_name);
+        let prefix = Self::group_ipv6_prefix(group_name);
+        // The gateway address (`<prefix>1`) lives on the bridge.
+        let gateway = format!("{prefix}1");
+        info!(
+            self.logger,
+            "Creating local bridge {bridge} for group {group_name} ({prefix}/64)"
+        );
 
-        // Best effort: shut down all domains whose names start with the group prefix.
+        // (Re)create the bridge, assign the gateway address, and bring it up.
+        // Deleting first makes this idempotent across an interrupted previous
+        // run that leaked the bridge.
+        let create_script = format!(
+            "ip link del {bridge} 2>/dev/null; \
+             ip link add name {bridge} type bridge && \
+             ip link set dev {bridge} up && \
+             ip -6 addr add {gateway}/64 dev {bridge} nodad"
+        );
+        Self::run_net_admin(&create_script, "create group bridge")?;
+
+        // Start the RA daemon so guests can SLAAC their global address.
+        self.start_ra_daemon(group_name, &bridge, &prefix)?;
+
+        Ok(())
+    }
+
+    /// Path of the pid-file for the group's `dnsmasq` RA daemon.
+    fn dnsmasq_pid_path(&self, bridge: &str) -> PathBuf {
+        self.working_dir
+            .join("dnsmasq")
+            .join(format!("{bridge}.pid"))
+    }
+
+    /// Spawn a minimal `dnsmasq` as an IPv6 Router Advertisement daemon on
+    /// `bridge`, advertising the group's `/64` for SLAAC with a router lifetime
+    /// of 0 (so it is not selected as a default router). See
+    /// [`create_group`](Self::create_group) for the rationale.
+    fn start_ra_daemon(&self, group_name: &str, bridge: &str, prefix: &str) -> Result<()> {
+        let dnsmasq_dir = self.working_dir.join("dnsmasq");
+        std::fs::create_dir_all(&dnsmasq_dir).with_context(|| {
+            format!("creating dnsmasq working dir at {}", dnsmasq_dir.display())
+        })?;
+        let pid_path = self.dnsmasq_pid_path(bridge);
+        let lease_path = dnsmasq_dir.join(format!("{bridge}.leases"));
+        let log_path = dnsmasq_dir.join(format!("{bridge}.log"));
+        // Remove a stale pid-file from a previous interrupted run.
+        let _ = std::fs::remove_file(&pid_path);
+
+        info!(
+            self.logger,
+            "Starting RA daemon (dnsmasq) for group {group_name} on bridge {bridge}"
+        );
+
+        // `dnsmasq` needs `CAP_NET_RAW`/`CAP_NET_ADMIN` to open the ICMPv6 raw
+        // socket and send Router Advertisements, so it runs through the
+        // capability launcher. `--ra-param=<bridge>,,0` sets the router lifetime
+        // to 0; `--dhcp-range=<prefix>,ra-only` advertises the on-link,
+        // autonomous prefix for SLAAC without handing out stateful leases.
+        // `--port=0` disables the DNS service entirely. `dnsmasq` daemonizes
+        // (writing its pid-file) and is later signalled via that pid-file in
+        // teardown.
+        let user = current_username();
+        let dnsmasq_script = format!(
+            "exec {DNSMASQ_BIN} \
+                 --conf-file=/dev/null \
+                 --pid-file={pid} \
+                 --dhcp-leasefile={lease} \
+                 --log-facility={log} \
+                 --user={user} \
+                 --port=0 \
+                 --bind-interfaces \
+                 --interface={bridge} \
+                 --except-interface=lo \
+                 --enable-ra \
+                 --dhcp-range={prefix},ra-only \
+                 --ra-param={bridge},10,0",
+            pid = pid_path.display(),
+            lease = lease_path.display(),
+            log = log_path.display(),
+        );
+        Self::run_net_admin(&dnsmasq_script, "start dnsmasq RA daemon")?;
+
+        Ok(())
+    }
+
+    /// Stop the group's `dnsmasq` RA daemon, if running. The daemon runs as the
+    /// current (unprivileged) user, so it can be signalled directly via the pid
+    /// recorded in its pid-file. Best-effort and idempotent.
+    fn stop_ra_daemon(&self, bridge: &str) {
+        let pid_path = self.dnsmasq_pid_path(bridge);
+        if let Ok(contents) = std::fs::read_to_string(&pid_path)
+            && let Ok(pid) = contents.trim().parse::<i32>()
+        {
+            // SIGTERM lets dnsmasq remove its pid-file on exit.
+            let _ = Command::new("kill").arg(pid.to_string()).status();
+        }
+        let _ = std::fs::remove_file(&pid_path);
+    }
+
+    /// Tear down all domains in `group_name` and remove the bridge and any
+    /// TAPs attached to it.
+    pub fn delete_group(&self, group_name: &str) -> Result<()> {
+        let bridge = Self::bridge_name(group_name);
+        info!(
+            self.logger,
+            "Deleting local group {group_name} (bridge {bridge})"
+        );
+
+        // Stop the RA daemon before removing the bridge it listens on.
+        self.stop_ra_daemon(&bridge);
+
+        // Best effort: shut down all domains whose names start with the group
+        // prefix. Destroying a domain closes its QEMU process, which releases
+        // the TAP device it had open.
         let prefix = Self::domain_name_prefix(group_name);
         if let Ok(domains) = self.connect.list_all_domains(0) {
             for d in domains {
@@ -560,9 +586,18 @@ log_outputs = "1:file:{log}"
             }
         }
 
-        if let Ok(net) = Network::lookup_by_name(&self.connect, &net_name) {
-            let _ = net.destroy();
-        }
+        // Delete every TAP enslaved to the bridge, then the bridge itself. The
+        // TAPs persist (they were created persistent in `start_vm`) until
+        // explicitly removed, so enumerate the bridge's slave interfaces via
+        // sysfs and delete each one before removing the bridge.
+        let delete_script = format!(
+            "for tap in $(ls /sys/class/net/{bridge}/brif 2>/dev/null); do \
+                 ip link del \"$tap\" 2>/dev/null; \
+             done; \
+             ip link del {bridge} 2>/dev/null; \
+             true"
+        );
+        let _ = Self::run_net_admin(&delete_script, "delete group bridge");
 
         Ok(())
     }
@@ -697,8 +732,26 @@ log_outputs = "1:file:{log}"
         let mac = vm_mac(group_name, vm_name);
         let domain_name = Self::domain_name(group_name, vm_name);
         let console_log = vm_dir.join("console.log");
-        let net_name = Self::network_name(group_name);
         let uuid = vm_uuid(group_name, vm_name);
+
+        // Create the per-VM TAP, attach it to the group bridge, and bring it
+        // up — all via the [`net_admin`] capability launcher. `user ubuntu`
+        // (the current user) tags the TAP as owned by us, which is what lets
+        // an unprivileged QEMU (driven by session-mode libvirtd) open it. The
+        // domain XML references the TAP with `managed='no'`, so libvirt uses
+        // the existing device instead of trying to create one (which would
+        // require root). Creating it fresh each time (delete first) keeps this
+        // idempotent across a re-used domain name.
+        let tap = Self::tap_name(group_name, vm_name);
+        let bridge = Self::bridge_name(group_name);
+        let user = current_username();
+        let tap_script = format!(
+            "ip link del {tap} 2>/dev/null; \
+             ip tuntap add dev {tap} mode tap user {user} && \
+             ip link set dev {tap} master {bridge} && \
+             ip link set dev {tap} up"
+        );
+        Self::run_net_admin(&tap_script, "create VM tap")?;
 
         let mut disks = Vec::new();
         disks.push(DiskEntry {
@@ -723,7 +776,7 @@ log_outputs = "1:file:{log}"
             mac_address: mac.to_string(),
             disks,
             console_log_path: console_log.display().to_string(),
-            network_name: net_name,
+            tap_name: tap,
         };
         let xml = tpl.render().context("rendering guest VM XML")?;
 
@@ -757,28 +810,30 @@ log_outputs = "1:file:{log}"
             .join(sanitize_libvirt_name(vm_name))
     }
 
-    /// Terminate the libvirtd/virtlogd daemons and any VM processes belonging
-    /// to `group_name`.
+    /// Terminate the libvirtd daemon and any VM/network processes belonging to
+    /// `group_name`.
     ///
-    /// This must be called explicitly during group teardown. The daemons are
-    /// spawned by the *setup* subprocess and intentionally outlive it so that
+    /// This must be called explicitly during group teardown. libvirtd is
+    /// spawned by the *setup* subprocess and intentionally outlives it so that
     /// the per-test subprocesses (which connect via [`connect_only`]) can use
-    /// them. No `Drop` reliably runs in the owning process, and the per-test
-    /// handles are connect-only (they do not own the daemons), so the finalize
+    /// it. No `Drop` reliably runs in the owning process, and the per-test
+    /// handles are connect-only (they do not own the daemon), so the finalize
     /// task is responsible for stopping everything.
     ///
     /// Crucially this must not depend on the libvirt connection or on a clean
     /// `delete_group`: libvirtd double-forks each QEMU process, which is then
     /// reparented to the Bazel test `process-wrapper` and placed in its own
     /// process group. The wrapper waits for all such reparented children to
-    /// exit, but only signals its own process group, so any QEMU (or libvirtd,
-    /// virtlogd, dnsmasq) that survives teardown hangs the test indefinitely.
-    /// We therefore force-kill, by process pattern and pid-file, every process
-    /// we may have started, regardless of whether the graceful libvirt-API
+    /// exit, but only signals its own process group, so any QEMU (or libvirtd)
+    /// that survives teardown hangs the test indefinitely. We
+    /// therefore force-kill, by process pattern and pid-file, every process we
+    /// may have started, regardless of whether the graceful libvirt-API
     /// teardown in [`delete_group`] succeeded.
     ///
-    /// All these processes run as root (via `sudo`), so we use `sudo` to signal
-    /// them.
+    /// Everything runs as the current (unprivileged) user — libvirtd in session
+    /// mode and QEMU as its child — so a
+    /// plain signal suffices; there is no `sudo` and no AppArmor confinement to
+    /// work around.
     pub fn shutdown_daemons(&self, group_name: &str) {
         // 1. Force-kill any QEMU process for this group. libvirt launches each
         //    domain as `qemu-system-* -name guest=<domain>,...`, and our
@@ -786,94 +841,53 @@ log_outputs = "1:file:{log}"
         //    match the per-group `guest=` prefix. This is the critical step:
         //    an orphaned QEMU reparented to the test wrapper hangs the test.
         let guest_prefix = format!("guest={}", Self::domain_name_prefix(group_name));
-        let _ = Command::new("sudo")
-            .arg("-n")
-            .arg("pkill")
+        let _ = Command::new("pkill")
             .arg("-9")
             .arg("-f")
             .arg(&guest_prefix)
             .status();
 
-        // 2. Kill the network's dnsmasq (libvirt names its config after the
-        //    network, `ictest-<group>`), which libvirtd would normally reap but
-        //    may leak if it was killed first or `delete_group` did not run.
-        let net_name = Self::network_name(group_name);
-        let _ = Command::new("sudo")
-            .arg("-n")
-            .arg("pkill")
-            .arg("-9")
-            .arg("-f")
-            .arg(format!("dnsmasq.*{net_name}"))
-            .status();
+        // 2. Delete the group bridge and any TAPs still attached to it (in case
+        //    `delete_group` did not run). Idempotent and best-effort.
+        let bridge = Self::bridge_name(group_name);
+        // Stop the RA daemon listening on the bridge before removing it.
+        self.stop_ra_daemon(&bridge);
+        let delete_script = format!(
+            "for tap in $(ls /sys/class/net/{bridge}/brif 2>/dev/null); do \
+                 ip link del \"$tap\" 2>/dev/null; \
+             done; \
+             ip link del {bridge} 2>/dev/null; \
+             true"
+        );
+        let _ = Self::run_net_admin(&delete_script, "delete group bridge");
 
-        // 3. Stop the libvirtd and (when we started it) virtlogd daemons.
+        // 3. Stop the libvirtd daemon.
         //
-        //    We target them by the unique `--config` path we passed at spawn
-        //    time, NOT by a pid read from their pid-file. The pid-file can hold
-        //    a stale pid: the daemon may already have exited and its pid been
+        //    We target it by the unique `--config` path we passed at spawn
+        //    time, NOT by a pid read from its pid-file. The pid-file can hold a
+        //    stale pid: the daemon may already have exited and its pid been
         //    recycled to an unrelated process, and signalling that recycled pid
         //    then fails (or, worse, signals the wrong process). Matching the
-        //    config path instead only ever selects the `sudo`/daemon processes
-        //    from THIS run (both the `sudo` wrapper and the daemon it execs
-        //    carry the path on their command line), and is a harmless no-op if
-        //    the daemon already exited.
-        //
-        //    The config files live under this backend's working dir and are
-        //    written only when we spawn the corresponding daemon — in
-        //    particular `virtlogd.conf` does not exist when we reuse a shared,
-        //    pre-existing virtlogd — so a reused virtlogd is never matched.
-        //
-        //    We can signal the daemons at all only because [`spawn`] /
-        //    [`ensure_virtlogd`] launch them via [`sudo_unconfined`]: Ubuntu's
-        //    enforce-mode `libvirtd`/`virtlogd` AppArmor profiles otherwise deny
-        //    *receiving* signals from our container processes, so `pkill` would
-        //    fail with EPERM even as root (see [`sudo_unconfined`] for the full
-        //    explanation). Launched unconfined, the daemons accept SIGTERM,
-        //    their intended graceful-shutdown signal, which makes them close
-        //    their sockets and exit promptly.
-        let libvirt_dir = self.working_dir.join("libvirt");
-        for (daemon, conf_file) in [("libvirtd", "libvirtd.conf"), ("virtlogd", "virtlogd.conf")] {
-            let conf_path = libvirt_dir.join(conf_file);
-            if !conf_path.exists() {
-                continue;
-            }
-            info!(self.logger, "Stopping libvirt daemon"; "daemon" => daemon, "config" => %conf_path.display());
-            let _ = Command::new("sudo")
-                .arg("-n")
-                .arg("pkill")
-                .arg("-f")
-                .arg(&conf_path)
-                .status();
+        //    config path instead only ever selects the daemon process from THIS
+        //    run, and is a harmless no-op if it already exited.
+        let conf_path = self.working_dir.join("libvirt").join("libvirtd.conf");
+        if conf_path.exists() {
+            info!(self.logger, "Stopping libvirtd"; "config" => %conf_path.display());
+            let _ = Command::new("pkill").arg("-f").arg(&conf_path).status();
         }
     }
 }
 
 impl Drop for LocalBackend {
     fn drop(&mut self) {
-        // libvirtd runs as root via `sudo`, so the `Child` handle refers to the
-        // unprivileged `sudo` wrapper which we cannot signal directly. Kill the
-        // daemon by the pid it recorded in its pid-file (with `sudo`), then reap
-        // the wrapper handle.
-        if let Some(pid_path) = self.pid_path.take()
-            && let Ok(pid) = std::fs::read_to_string(&pid_path)
-        {
-            let pid = pid.trim();
-            if !pid.is_empty() {
-                let _ = Command::new("sudo").arg("-n").arg("kill").arg(pid).status();
-            }
-        }
-        // Stop virtlogd if (and only if) we started it.
-        if let Some(pid_path) = self.virtlogd_pid_path.take()
-            && let Ok(pid) = std::fs::read_to_string(&pid_path)
-        {
-            let pid = pid.trim();
-            if !pid.is_empty() {
-                let _ = Command::new("sudo").arg("-n").arg("kill").arg(pid).status();
-            }
-        }
+        // libvirtd runs as the current user in session mode (no `sudo`
+        // wrapper), so the `Child` handle refers to the daemon itself and we
+        // can signal it directly.
         if let Some(mut child) = self.libvirtd.take() {
+            let _ = child.kill();
             let _ = child.wait();
         }
+        let _ = self.pid_path.take();
     }
 }
 
@@ -927,11 +941,20 @@ fn sanitize_libvirt_name(s: &str) -> String {
 
 /// Open a libvirt connection over a unix socket on `socket_path`.
 fn open_connect(socket_path: &Path, logger: &Logger) -> Result<Connect> {
-    let uri = format!("qemu+unix:///system?socket={}", socket_path.display());
+    // `///session`: the daemon runs as the current (non-root) user, so it
+    // exposes the per-user (session) QEMU driver rather than the system one.
+    let uri = format!("qemu+unix:///session?socket={}", socket_path.display());
     let connect = Connect::open(Some(&uri))
         .with_context(|| format!("opening libvirt connection to {uri}"))?;
     info!(logger, "Connected to libvirtd"; "uri" => &uri);
     Ok(connect)
+}
+
+/// The current user's login name, used to tag TAP device ownership so an
+/// unprivileged QEMU may open them. Falls back to the `USER` environment
+/// variable and finally to `ubuntu` (the container's default user).
+fn current_username() -> String {
+    std::env::var("USER").unwrap_or_else(|_| "ubuntu".to_string())
 }
 
 /// Extract an image:
@@ -1026,8 +1049,8 @@ struct GuestVmTemplate {
     mac_address: String,
     disks: Vec<DiskEntry>,
     console_log_path: String,
-    network_name: String,
+    tap_name: String,
 }
 
 // `vm_ipv6` is currently a write-only cache; future operations (e.g. ARP
-// pre-population, dnsmasq integration) will read it.
+// pre-population) will read it.

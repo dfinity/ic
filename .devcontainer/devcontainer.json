@@ -15,7 +15,7 @@
   "workspaceMount": "source=${localWorkspaceFolder},target=/ic,type=bind",
   "workspaceFolder": "/ic",
   "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache/cargo ~/.cache/zig-cache ~/.claude ~/.local/share/fish /tmp/ict_testnets && touch ~/.zsh_history ~/.bash_history",
-  "postStartCommand": "/ic/ci/container/setup-kvm-group.sh >/dev/null 2>&1 || true",
+  "postStartCommand": "/ic/ci/container/setup-local-backend.sh >/dev/null 2>&1 || true",
   "containerEnv": {
     "CARGO_TARGET_DIR": "/home/ubuntu/.cache/cargo",
     "USER": "${localEnv:USER}"

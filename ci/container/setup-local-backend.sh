@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Runtime setup for the local (libvirt/QEMU) system-test backend
+# (rs/tests/driver/src/driver/local_backend.rs).
+#
+# The local backend runs fully unprivileged: libvirtd runs as the current
+# (non-root) user in session mode (qemu:///session) and QEMU opens pre-created,
+# user-owned TAP devices directly. Two things must be arranged at container
+# start, because they depend on the host kernel / runtime and cannot be baked
+# into the image:
+#
+#  1. /dev/kvm access. The device is owned by root:<kvm-gid> (mode 0660) and the
+#     GID is assigned by the host kernel and passed into this privileged
+#     container, so it is unknown at image-build time. We align the in-container
+#     `kvm` group GID to the device and add the unprivileged users to it so the
+#     session-mode QEMU (which runs as that user) can open /dev/kvm.
+#
+#  2. The `ic-net-admin` capability launcher. The backend performs a handful of
+#     networking operations that the kernel gates behind CAP_NET_ADMIN /
+#     CAP_NET_RAW (creating the per-group bridge and TAPs, and running its own
+#     dnsmasq router advertiser). Rather than `sudo`, it invokes a
+#     file-capability-endowed copy of `capsh` that raises exactly those two
+#     capabilities into the ambient set and then execs the requested command.
+#     File capabilities (set via setcap, which needs CAP_SETFCAP) cannot be
+#     applied from an unprivileged test process, so we provision the launcher
+#     here.
+#
+# This script is invoked from the container startup paths
+# (ci/container/container-run.sh and .devcontainer/devcontainer.json).
+#
+# Idempotent and safe to run when /dev/kvm is absent.
+set -euo pipefail
+
+# Path to the capability launcher referenced by the local backend
+# (NET_ADMIN_LAUNCHER in local_backend.rs).
+LAUNCHER=/usr/local/bin/ic-net-admin
+
+# Managing groups and file capabilities requires root; re-exec via sudo if
+# needed.
+if [ "$(id -u)" -ne 0 ]; then
+    exec sudo -n "$0" "$@"
+fi
+
+# --- 1. /dev/kvm group alignment and membership ---------------------------
+#
+# Only relevant when KVM is available.
+if [ -e /dev/kvm ]; then
+    gid="$(stat -c %g /dev/kvm)"
+
+    if getent group kvm >/dev/null; then
+        cur="$(getent group kvm | cut -d: -f3)"
+        if [ "$cur" != "$gid" ]; then
+            # `-o` permits a non-unique GID in case the target GID is already
+            # used by another group name inside the container.
+            groupmod -o -g "$gid" kvm
+        fi
+    else
+        groupadd -o -g "$gid" kvm
+    fi
+
+    # Session-mode QEMU runs as the unprivileged container user, so that user
+    # must be a member of the `kvm` group to open /dev/kvm.
+    for user in ubuntu buildifier; do
+        if getent passwd "$user" >/dev/null && ! id -nG "$user" | tr ' ' '\n' | grep -qx kvm; then
+            usermod -aG kvm "$user"
+        fi
+    done
+fi
+
+# --- 2. Provision the ic-net-admin capability launcher --------------------
+#
+# `capsh` ships in libcap2-bin. Copy it to a stable path and grant the two
+# narrow capabilities as effective+permitted file caps so it can raise them
+# into the ambient set for the command it execs.
+if command -v capsh >/dev/null 2>&1; then
+    capsh_bin="$(command -v capsh)"
+    install -m 0755 "$capsh_bin" "$LAUNCHER"
+    setcap cap_net_admin,cap_net_raw+ep "$LAUNCHER"
+fi
