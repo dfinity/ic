@@ -256,6 +256,11 @@ jobs:
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
 
+            set -x
+            ls -la /dev/kvm
+            stat -c %g /dev/kvm
+            exit 1
+
             bazel_args='${{ steps.infer-bazel-args.outputs.bazel-args }}'
 
             build_targets="$HOME/.cache/bazel-targets/build-targets"
