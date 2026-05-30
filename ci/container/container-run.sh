@@ -290,8 +290,7 @@ set -x
 # Prepare the local libvirt/QEMU system-test backend before running the
 # command: align the container's `kvm` group GID with the host's /dev/kvm and
 # provision the `ic-net-admin` capability launcher. These depend on the host
-# runtime and cannot be baked into the image (see
-# ci/container/setup-local-backend.sh). The repo is always mounted at /ic.
-BOOTSTRAP='/ic/ci/container/setup-local-backend.sh >/dev/null 2>&1 || true; exec "$@"'
+# runtime and cannot be baked into the image.
+BOOTSTRAP='/ic/ci/container/setup-local-backend.sh && exec "$@"'
 exec "${CONTAINER_CMD[@]}" run "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" \
     /usr/bin/bash -c "$BOOTSTRAP" bootstrap "${cmd[@]}"

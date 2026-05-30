@@ -307,10 +307,6 @@ jobs:
 
             test_targets="$HOME/.cache/bazel-targets/test-targets"
             if [ -s "$test_targets" ]; then # bazel errors out if no test targets are listed
-              # The local libvirt/QEMU system-test backend is set up in the
-              # "Set up local system-test backend" step above, which must run
-              # before the bazel server is started so the server inherits the
-              # kvm group used by the QEMU test actions.
               eval "bazel test $bazel_args --target_pattern_file=$test_targets"
             fi
 
