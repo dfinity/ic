@@ -59,6 +59,17 @@ if [ -e /dev/kvm ]; then
 
     # Session-mode QEMU runs as the unprivileged container user, so that user
     # must be a member of the `kvm` group to open /dev/kvm.
+    #
+    # NOTE: supplementary group membership is fixed when a process is created,
+    # so this `usermod` only takes effect for processes started *afterwards*.
+    # In particular the bazel server (which spawns the QEMU test actions) must
+    # be started after this runs, otherwise it never picks up the `kvm` group
+    # and libvirtd ends up caching the emulator as not supporting `virt type
+    # 'kvm'`. Each CI workflow step and each devcontainer terminal is a fresh
+    # exec that recomputes supplementary groups, so running this before the
+    # first bazel invocation is sufficient there. The single-exec
+    # container-run.sh path cannot rely on that and instead adds the kvm GID as
+    # a supplementary group at container creation time (see container-run.sh).
     for user in ubuntu buildifier; do
         if getent passwd "$user" >/dev/null && ! id -nG "$user" | tr ' ' '\n' | grep -qx kvm; then
             usermod -aG kvm "$user"

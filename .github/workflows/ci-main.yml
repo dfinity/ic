@@ -246,6 +246,20 @@ jobs:
           name: bazel-targets
           path: ~/.cache/bazel-targets
 
+      - name: Set up local system-test backend
+        # Align the container's `kvm` group GID with the host's /dev/kvm and
+        # provision the `ic-net-admin` capability launcher. This must run
+        # *before* the first bazel invocation below: the bazel server is started
+        # by the build step and reused by the test step to spawn the QEMU-backed
+        # system tests, and supplementary group membership (kvm) is fixed when
+        # that server process is created. Each workflow step is a fresh exec, so
+        # running this here lets the build step's bazel server pick up the kvm
+        # group; doing it only in the test step would be too late for the
+        # already-running server (manifesting as libvirtd reporting the emulator
+        # does not support `virt type 'kvm'`).
+        shell: bash
+        run: ci/container/setup-local-backend.sh
+
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
         with:
@@ -255,11 +269,6 @@ jobs:
           run: |
             echo "Building as user: $(whoami)"
             echo "Bazel version: $(bazel version)"
-
-            set -x
-            ls -la /dev/kvm
-            stat -c %g /dev/kvm
-            exit 1
 
             bazel_args='${{ steps.infer-bazel-args.outputs.bazel-args }}'
 
@@ -298,12 +307,10 @@ jobs:
 
             test_targets="$HOME/.cache/bazel-targets/test-targets"
             if [ -s "$test_targets" ]; then # bazel errors out if no test targets are listed
-              # Prepare the local libvirt/QEMU system-test backend: align the
-              # container's `kvm` group GID with the host's /dev/kvm and provision
-              # the `ic-net-admin` capability launcher. These depend on the host
-              # runtime and cannot be baked into the image, so they must run here
-              # before any system-test that uses the local backend.
-              ci/container/setup-local-backend.sh
+              # The local libvirt/QEMU system-test backend is set up in the
+              # "Set up local system-test backend" step above, which must run
+              # before the bazel server is started so the server inherits the
+              # kvm group used by the QEMU test actions.
               eval "bazel test $bazel_args --target_pattern_file=$test_targets"
             fi
 

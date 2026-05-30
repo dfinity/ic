@@ -255,6 +255,24 @@ fi
 # additionally, we need to use hosts's cgroups and network.
 PODMAN_RUN_ARGS+=(--pids-limit=-1 --privileged --network=host --cgroupns=host)
 
+# Grant /dev/kvm access from container start.
+#
+# /dev/kvm is owned by root:<kvm-gid> (mode 0660). setup-local-backend.sh runs
+# `usermod -aG kvm` inside the container, but supplementary group membership is
+# fixed when a process is created: the container's main process and all its
+# descendants (bazel, the test driver, the on-demand libvirtd and qemu) inherit
+# the supplementary groups podman assigns at container start, *before* the setup
+# script runs, so they never pick up the kvm group. Without the kvm group they
+# cannot open /dev/kvm, and libvirtd then probes/caches QEMU as not supporting
+# `virt type 'kvm'` (the "Emulator '/usr/bin/qemu-system-x86_64' does not support
+# virt type 'kvm'" error). Adding the host's kvm GID as a supplementary group at
+# container creation time (by numeric GID, since the matching group may not exist
+# in the image yet) fixes this for the whole process tree.
+if [ -e /dev/kvm ]; then
+    KVM_GID="$(stat -c %g /dev/kvm)"
+    PODMAN_RUN_ARGS+=(--group-add "$KVM_GID")
+fi
+
 if [ -f "$HOME/.container-run.conf" ]; then
     # conf file with user's custom PODMAN_RUN_USR_ARGS
     # This file is very handy but is a source of non-hermeticity, and issues
