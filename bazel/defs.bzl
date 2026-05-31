@@ -43,11 +43,12 @@ def _zstd_compress(ctx):
     out = ctx.actions.declare_file(ctx.label.name)
 
     ctx.actions.run(
-        executable = "zstd",
+        executable = ctx.file._zstd,
         arguments = ["-q", "--threads=0", "-10", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
         inputs = ctx.files.srcs,
         outputs = [out],
         env = {"ZSTDMT_NBWORKERS_MAX": str(_COMPRESS_CONCURRENCY)},
+        tools = [ctx.file._zstd],
         resource_set = _compress_resources,
     )
     return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
@@ -56,6 +57,7 @@ zstd_compress = rule(
     implementation = _zstd_compress,
     attrs = {
         "srcs": attr.label_list(allow_files = True),
+        "_zstd": attr.label(allow_single_file = True, default = "@zstd//:zstd_cli"),
     },
 )
 

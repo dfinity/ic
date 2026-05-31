@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -40,7 +40,6 @@ rust_library(
         "@crate_index//:maplit",
         "@crate_index//:prost",
         "@crate_index//:rand",
-        "@crate_index//:reqwest",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
         "@crate_index//:slog",
@@ -256,8 +255,7 @@ rust_test(
     ],
 )
 
-# Disabled due to https://github.com/bazelbuild/rules_rust/issues/1233
-# rust_doc_test(
-#   name = "prep_doc_test",
-#   crate = ":prep",
-# )
+rust_doc_test(
+    name = "prep_doc_test",
+    crate = ":prep",
+)

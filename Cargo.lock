@@ -5533,9 +5533,11 @@ name = "guest_disk"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "attestation",
  "clap 4.6.0",
  "config_tool",
  "config_types",
+ "hex",
  "ic-sys",
  "ic_device",
  "ic_os_logging",
@@ -5546,6 +5548,8 @@ dependencies = [
  "parking_lot",
  "prometheus",
  "rand 0.8.5",
+ "serde",
+ "serde_json",
  "sev",
  "sev_guest",
  "sev_guest_testing",
@@ -9592,6 +9596,7 @@ dependencies = [
 name = "ic-ed25519"
 version = "0.6.0"
 dependencies = [
+ "criterion",
  "curve25519-dalek",
  "ed25519-dalek",
  "hex",
@@ -14989,6 +14994,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-systest-firewall"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-nns-governance-api",
+ "ic-protobuf",
+ "ic-registry-keys",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic_consensus_system_test_utils",
+ "registry-canister",
+ "reqwest",
+ "slog",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "ic-test-artifact-pool"
 version = "0.9.0"
 dependencies = [
@@ -17857,6 +17881,8 @@ name = "manual_guestos_recovery"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "clap 4.6.0",
+ "grub",
  "ratatui",
  "scopeguard",
  "shell-escape",
@@ -19937,7 +19963,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "13.0.0"
+version = "14.0.0"
 dependencies = [
  "backoff",
  "base64 0.13.1",
@@ -19998,7 +20024,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic-server"
-version = "13.0.0"
+version = "14.0.0"
 dependencies = [
  "aide",
  "askama",

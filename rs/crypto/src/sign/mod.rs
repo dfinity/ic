@@ -55,8 +55,8 @@ use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsSc
 use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use ic_types::signature::BasicSignatureBatch;
 
-impl<C: CryptoServiceProvider + Send + Sync, H: Signable> BasicSigner<H>
-    for CryptoComponentImpl<C>
+impl<C: CryptoServiceProvider + Send + Sync, R: CryptoComponentRng, H: Signable> BasicSigner<H>
+    for CryptoComponentImpl<C, R>
 {
     fn sign_basic(&self, message: &H) -> CryptoResult<BasicSigOf<H>> {
         let log_id = get_log_id(&self.logger);
@@ -90,7 +90,9 @@ impl<C: CryptoServiceProvider + Send + Sync, H: Signable> BasicSigner<H>
     }
 }
 
-impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoComponentImpl<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng, H: Signable> BasicSigVerifier<H>
+    for CryptoComponentImpl<C, R>
+{
     fn verify_basic_sig(
         &self,
         signature: &BasicSigOf<H>,
@@ -187,7 +189,7 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
         );
         let start_time = self.metrics.now();
         let result = BasicSigVerifierInternal::verify_basic_sig_batch(
-            self.vault.as_ref(),
+            &self.csprng,
             self.registry_client.as_ref(),
             signature,
             message,
@@ -209,8 +211,8 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
     }
 }
 
-impl<C: CryptoServiceProvider, S: Signable> BasicSigVerifierByPublicKey<S>
-    for CryptoComponentImpl<C>
+impl<C: CryptoServiceProvider, R: CryptoComponentRng, S: Signable> BasicSigVerifierByPublicKey<S>
+    for CryptoComponentImpl<C, R>
 {
     fn verify_basic_sig_by_public_key(
         &self,
@@ -254,7 +256,9 @@ impl<C: CryptoServiceProvider, S: Signable> BasicSigVerifierByPublicKey<S>
     }
 }
 
-impl<C: CryptoServiceProvider, H: Signable> MultiSigner<H> for CryptoComponentImpl<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng, H: Signable> MultiSigner<H>
+    for CryptoComponentImpl<C, R>
+{
     fn sign_multi(
         &self,
         message: &H,
@@ -298,7 +302,9 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigner<H> for CryptoComponentIm
     }
 }
 
-impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoComponentImpl<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng, H: Signable> MultiSigVerifier<H>
+    for CryptoComponentImpl<C, R>
+{
     fn verify_multi_sig_individual(
         &self,
         signature: &IndividualMultiSigOf<H>,
@@ -431,7 +437,9 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
     }
 }
 
-impl<C: CryptoServiceProvider, T: Signable> ThresholdSigner<T> for CryptoComponentImpl<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable> ThresholdSigner<T>
+    for CryptoComponentImpl<C, R>
+{
     fn sign_threshold(
         &self,
         message: &T,
@@ -472,7 +480,9 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigner<T> for CryptoCompone
     }
 }
 
-impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T> for CryptoComponentImpl<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable> ThresholdSigVerifier<T>
+    for CryptoComponentImpl<C, R>
+{
     fn verify_threshold_sig_share(
         &self,
         signature: &ThresholdSigShareOf<T>,
@@ -598,8 +608,8 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T> for CryptoCo
     }
 }
 
-impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifierByPublicKey<T>
-    for CryptoComponentImpl<C>
+impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable>
+    ThresholdSigVerifierByPublicKey<T> for CryptoComponentImpl<C, R>
 {
     fn verify_combined_threshold_sig_by_public_key(
         &self,
@@ -646,7 +656,9 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifierByPublicKey<T>
     }
 }
 
-impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoComponentImpl<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng, S: Signable> CanisterSigVerifier<S>
+    for CryptoComponentImpl<C, R>
+{
     fn verify_canister_sig(
         &self,
         signature: &CanisterSigOf<S>,
@@ -694,7 +706,9 @@ impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoCom
     }
 }
 
-impl<C: CryptoServiceProvider> ThresholdEcdsaSigner for CryptoComponentImpl<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng> ThresholdEcdsaSigner
+    for CryptoComponentImpl<C, R>
+{
     fn create_sig_share(
         &self,
         inputs: &ThresholdEcdsaSigInputs,
@@ -729,7 +743,9 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigner for CryptoComponentImpl<C> {
     }
 }
 
-impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentImpl<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng> ThresholdEcdsaSigVerifier
+    for CryptoComponentImpl<C, R>
+{
     fn verify_sig_share(
         &self,
         signer: NodeId,
@@ -833,7 +849,9 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentImpl
     }
 }
 
-impl<C: CryptoServiceProvider> ThresholdSchnorrSigner for CryptoComponentImpl<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng> ThresholdSchnorrSigner
+    for CryptoComponentImpl<C, R>
+{
     fn create_sig_share(
         &self,
         inputs: &ThresholdSchnorrSigInputs,
@@ -871,7 +889,9 @@ impl<C: CryptoServiceProvider> ThresholdSchnorrSigner for CryptoComponentImpl<C>
     }
 }
 
-impl<C: CryptoServiceProvider> ThresholdSchnorrSigVerifier for CryptoComponentImpl<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng> ThresholdSchnorrSigVerifier
+    for CryptoComponentImpl<C, R>
+{
     fn verify_sig_share(
         &self,
         signer: NodeId,

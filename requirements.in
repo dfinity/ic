@@ -30,7 +30,8 @@ python_gitlab
 requests>=2.33.0
 # Transitive dependency — pinned for security
 Pygments>=2.20.0
-sev-snp-measure
+# TODO: Switch to a versioned release once available.
+sev-snp-measure @ https://github.com/virtee/sev-snp-measure/archive/00a7883fa.zip
 simple-parsing
 toml>=0.10.2
 tqdm
