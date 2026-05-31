@@ -44,6 +44,11 @@ VERSION=""
 VERSION_HASH_FULL=""
 RECOVERY_HASH_PREFIX=""
 RECOVERY_HASH_FULL=""
+TARGET_BOOT_ALTERNATIVE=""
+WIPE_VAR_PARTITION=false
+GUESTOS_SERVICE_STOPPED=false
+RESTART_GUESTOS_SERVICE_ON_EXIT=false
+INSTALL_STARTED=false
 
 source /opt/ic/bin/boot-state.sh
 
@@ -60,8 +65,18 @@ parse_args() {
             recovery-hash-prefix=*)
                 RECOVERY_HASH_PREFIX="${arg#*=}"
                 ;;
+            target-boot-alternative=*)
+                TARGET_BOOT_ALTERNATIVE="${arg#*=}"
+                ;;
+            wipe-var-partition)
+                WIPE_VAR_PARTITION=true
+                ;;
         esac
     done
+}
+
+recovery_hash_enabled() {
+    [ -n "$RECOVERY_HASH_PREFIX" ]
 }
 
 # Helper function to log messages to logger and stdout
@@ -73,6 +88,26 @@ log_message() {
     echo "$message"
 }
 
+stop_guestos_service() {
+    log_message "Stopping guestos.service for upgrade"
+    systemctl stop guestos.service
+    GUESTOS_SERVICE_STOPPED=true
+    RESTART_GUESTOS_SERVICE_ON_EXIT=true
+    log_message "GuestOS service stopped"
+}
+
+start_guestos_service() {
+    local reason="$1"
+    log_message "$reason"
+    if systemctl start guestos.service; then
+        GUESTOS_SERVICE_STOPPED=false
+        RESTART_GUESTOS_SERVICE_ON_EXIT=false
+        log_message "GuestOS service restarted successfully"
+        return 0
+    fi
+    return 1
+}
+
 compute_sha256() {
     local file_path="$1"
     sha256sum "$file_path" | cut -d' ' -f1
@@ -82,6 +117,8 @@ write_prep_metadata() {
     cat >"${METADATA_FILE}" <<EOF
 VERSION=${VERSION}
 RECOVERY_HASH_PREFIX=${RECOVERY_HASH_PREFIX}
+TARGET_BOOT_ALTERNATIVE=${TARGET_BOOT_ALTERNATIVE}
+WIPE_VAR_PARTITION=${WIPE_VAR_PARTITION}
 VERSION_HASH_FULL=${VERSION_HASH_FULL}
 RECOVERY_HASH_FULL=${RECOVERY_HASH_FULL}
 EOF
@@ -98,6 +135,12 @@ load_prep_metadata() {
         case "$key" in
             VERSION) VERSION="$value" ;;
             RECOVERY_HASH_PREFIX) RECOVERY_HASH_PREFIX="$value" ;;
+            TARGET_BOOT_ALTERNATIVE) TARGET_BOOT_ALTERNATIVE="$value" ;;
+            WIPE_VAR_PARTITION)
+                if [ "$WIPE_VAR_PARTITION" != "true" ]; then
+                    WIPE_VAR_PARTITION="$value"
+                fi
+                ;;
             VERSION_HASH_FULL) VERSION_HASH_FULL="$value" ;;
             RECOVERY_HASH_FULL) RECOVERY_HASH_FULL="$value" ;;
         esac
@@ -193,13 +236,15 @@ retry_operation() {
 
 get_upgrade_target_partitions() {
     local lodev="$1"
-    local boot_alternative="$2"
+    local target_boot_alternative="$2"
 
-    # boot_alternative is the system that is *currently running*
-    if [ "$boot_alternative" = "A" ]; then
+    if [ "$target_boot_alternative" = "A" ]; then
+        echo "${lodev}p${BOOT_PARTITION_A} ${lodev}p${ROOT_PARTITION_A} ${lodev}p${VAR_PARTITION_A}"
+    elif [ "$target_boot_alternative" = "B" ]; then
         echo "${lodev}p${BOOT_PARTITION_B} ${lodev}p${ROOT_PARTITION_B} ${lodev}p${VAR_PARTITION_B}"
     else
-        echo "${lodev}p${BOOT_PARTITION_A} ${lodev}p${ROOT_PARTITION_A} ${lodev}p${VAR_PARTITION_A}"
+        log_message "ERROR: target-boot-alternative must be A or B"
+        exit 1
     fi
 }
 
@@ -219,8 +264,13 @@ prepare_guestos_upgrade() {
     boot_alternative="$(grep -oP '^boot_alternative=\K[a-zA-Z]+' "${grubdir}/grubenv")"
     log_message "Current boot alternative: $boot_alternative"
 
-    # Get upgrade partition targets
-    read -r boot_target root_target var_target < <(get_upgrade_target_partitions "$lodev" "$boot_alternative")
+    if [ -z "$TARGET_BOOT_ALTERNATIVE" ]; then
+        log_message "ERROR: target-boot-alternative must be set before preparing the upgrade target"
+        exit 1
+    fi
+
+    log_message "Target boot alternative: ${TARGET_BOOT_ALTERNATIVE}"
+    read -r boot_target root_target var_target < <(get_upgrade_target_partitions "$lodev" "$TARGET_BOOT_ALTERNATIVE")
     log_message "Target boot partition: $boot_target"
     log_message "Target root partition: $root_target"
     log_message "Target var partition: $var_target"
@@ -273,6 +323,9 @@ install_upgrade() {
 
     log_message "Current boot alternative: ${boot_alternative}"
     log_message "Current boot cycle: ${boot_cycle}"
+    log_message "Configured target boot alternative: ${TARGET_BOOT_ALTERNATIVE}"
+
+    INSTALL_STARTED=true
 
     log_message "Writing boot image to ${boot_target}..."
     dd if="$extract_dir/boot.img" of="${boot_target}" bs=1M status=progress
@@ -282,19 +335,16 @@ install_upgrade() {
     dd if="$extract_dir/root.img" of="${root_target}" bs=1M status=progress
     log_message "Root image written successfully"
 
-    log_message "Wiping var partition header on ${var_target}..."
-    dd if=/dev/zero of="${var_target}" bs=1M count=16 status=progress
-    log_message "Var partition header wiped successfully"
+    if [ "$WIPE_VAR_PARTITION" = "true" ]; then
+        log_message "Wiping var partition header on ${var_target}..."
+        dd if=/dev/zero of="${var_target}" bs=1M count=16 status=progress
+        log_message "Var partition header wiped successfully"
+    else
+        log_message "TEE mode selected; preserving var partition on ${var_target}"
+    fi
 
     log_message "Updating grubenv to prepare for next boot..."
-    if [[ "${boot_target}" == *"p7" ]]; then
-        boot_alternative="B"
-    elif [[ "${boot_target}" == *"p4" ]]; then
-        boot_alternative="A"
-    else
-        log_message "ERROR: Invalid boot device partition number"
-        exit 1
-    fi
+    boot_alternative="${TARGET_BOOT_ALTERNATIVE}"
     boot_cycle=first_boot
     log_message "Setting boot_alternative to ${boot_alternative} and boot_cycle to ${boot_cycle}"
     write_grubenv "${grubdir}/grubenv" "$boot_alternative" "$boot_cycle"
@@ -334,15 +384,24 @@ prep_phase() {
         return 1
     fi
 
-    if ! retry_operation "recovery artifact download and hashing" download_recovery_and_hash "$RECOVERY_HASH_PREFIX" "$STAGE_DIR"; then
-        return 1
+    if ! recovery_hash_enabled; then
+        log_message "TEE mode selected; skipping recovery artifact download and hashing"
+        RECOVERY_HASH_FULL=""
+    else
+        if ! retry_operation "recovery artifact download and hashing" download_recovery_and_hash "$RECOVERY_HASH_PREFIX" "$STAGE_DIR"; then
+            return 1
+        fi
     fi
 
     write_prep_metadata
 
     log_message "Prep phase complete. Calculated hashes:"
     log_message "  VERSION-HASH: ${VERSION_HASH_FULL}"
-    log_message "  RECOVERY-HASH: ${RECOVERY_HASH_FULL}"
+    if ! recovery_hash_enabled; then
+        log_message "  RECOVERY-HASH: skipped"
+    else
+        log_message "  RECOVERY-HASH: ${RECOVERY_HASH_FULL}"
+    fi
     return 0
 }
 
@@ -370,6 +429,12 @@ guestos_upgrade_cleanup() {
     elif [ -n "${STAGE_DIR}" ]; then
         log_message "Staging directory preserved at ${STAGE_DIR}"
     fi
+
+    if [ "$RESTART_GUESTOS_SERVICE_ON_EXIT" = "true" ] && [ "$INSTALL_STARTED" != "true" ]; then
+        if ! start_guestos_service "Restarting guestos.service during cleanup after early exit"; then
+            log_message "WARNING: Failed to restart guestos.service during cleanup"
+        fi
+    fi
 }
 
 main() {
@@ -377,16 +442,22 @@ main() {
 
     parse_args "$@"
 
-    log_message "Parsed MODE='$MODE' VERSION='$VERSION' RECOVERY_HASH_PREFIX='$RECOVERY_HASH_PREFIX'"
+    log_message "Parsed MODE='$MODE' VERSION='$VERSION' RECOVERY_HASH_PREFIX='$RECOVERY_HASH_PREFIX' TARGET_BOOT_ALTERNATIVE='$TARGET_BOOT_ALTERNATIVE' WIPE_VAR_PARTITION='$WIPE_VAR_PARTITION'"
 
     if [[ -z "$MODE" || ("$MODE" != "run" && "$MODE" != "prep" && "$MODE" != "install") ]]; then
         log_message "ERROR: mode must be one of run|prep|install"
         exit 1
     fi
 
-    if [ "$MODE" != "install" ] && { [ -z "$VERSION" ] || [ -z "$RECOVERY_HASH_PREFIX" ]; }; then
-        log_message "ERROR: version and recovery-hash-prefix parameters are required"
-        log_message "Usage: mode=<run|prep|install> version=<40-char-hex> recovery-hash-prefix=<6-char-hex>"
+    if [ "$MODE" != "install" ] && [ -z "$VERSION" ]; then
+        log_message "ERROR: version parameter is required"
+        log_message "Usage: mode=<prep|run> version=<40-char-hex> target-boot-alternative=<A|B> [recovery-hash-prefix=<6-char-hex>|recovery-hash-prefix=] [wipe-var-partition]"
+        exit 1
+    fi
+
+    if [ "$MODE" != "install" ] && [ -z "$TARGET_BOOT_ALTERNATIVE" ]; then
+        log_message "ERROR: target-boot-alternative parameter is required for mode=${MODE}"
+        log_message "Usage: mode=<prep|run> version=<40-char-hex> target-boot-alternative=<A|B> [recovery-hash-prefix=<6-char-hex>|recovery-hash-prefix=] [wipe-var-partition]"
         exit 1
     fi
 
@@ -414,13 +485,34 @@ main() {
         fi
         log_message "Loaded prep metadata from ${STAGE_DIR}"
         log_message "  VERSION: ${VERSION}"
+        log_message "  TARGET-BOOT-ALTERNATIVE: ${TARGET_BOOT_ALTERNATIVE}"
+        log_message "  WIPE-VAR-PARTITION: ${WIPE_VAR_PARTITION}"
         log_message "  VERSION-HASH: ${VERSION_HASH_FULL}"
-        log_message "  RECOVERY-HASH (prefix): ${RECOVERY_HASH_PREFIX}"
-        log_message "  RECOVERY-HASH (full): ${RECOVERY_HASH_FULL}"
+        if ! recovery_hash_enabled; then
+            log_message "  RECOVERY-HASH: skipped"
+        else
+            log_message "  RECOVERY-HASH (prefix): ${RECOVERY_HASH_PREFIX}"
+            log_message "  RECOVERY-HASH (full): ${RECOVERY_HASH_FULL}"
+        fi
     fi
 
-    if [ ! -f "${STAGE_DIR}/upgrade.tar.zst" ] || [ ! -f "${STAGE_DIR}/recovery.tar.zst" ]; then
-        log_message "ERROR: Staging directory is missing required artifacts (${STAGE_DIR})"
+    if [ -z "$TARGET_BOOT_ALTERNATIVE" ]; then
+        log_message "ERROR: target-boot-alternative must be provided via arguments or prep metadata"
+        exit 1
+    fi
+
+    if [ -n "$TARGET_BOOT_ALTERNATIVE" ] && [ "$TARGET_BOOT_ALTERNATIVE" != "A" ] && [ "$TARGET_BOOT_ALTERNATIVE" != "B" ]; then
+        log_message "ERROR: target-boot-alternative must be A or B"
+        exit 1
+    fi
+
+    if [ ! -f "${STAGE_DIR}/upgrade.tar.zst" ]; then
+        log_message "ERROR: Staging directory is missing the upgrade artifact (${STAGE_DIR})"
+        exit 1
+    fi
+
+    if recovery_hash_enabled && [ ! -f "${STAGE_DIR}/recovery.tar.zst" ]; then
+        log_message "ERROR: Staging directory is missing the recovery artifact (${STAGE_DIR})"
         exit 1
     fi
 
@@ -428,9 +520,7 @@ main() {
 
     extract_upgrade "$STAGE_DIR" "$extract_dir"
 
-    log_message "Stopping guestos.service for manual upgrade"
-    systemctl stop guestos.service
-    log_message "GuestOS service stopped"
+    stop_guestos_service
 
     install_upgrade "$STAGE_DIR" "$extract_dir"
 
@@ -438,15 +528,18 @@ main() {
 
     log_message "Launching GuestOS on the new version..."
 
-    log_message "Writing recovery hash to file"
     RECOVERY_FILE="/run/config/guestos_recovery_hash"
-    mkdir -p "$(dirname "$RECOVERY_FILE")"
-    echo "$RECOVERY_HASH_PREFIX" >"$RECOVERY_FILE"
-    log_message "Recovery hash written to $RECOVERY_FILE"
+    if ! recovery_hash_enabled; then
+        rm -f "$RECOVERY_FILE"
+        log_message "TEE mode selected; removed any existing recovery hash file"
+    else
+        log_message "Writing recovery hash to file"
+        mkdir -p "$(dirname "$RECOVERY_FILE")"
+        echo "$RECOVERY_HASH_PREFIX" >"$RECOVERY_FILE"
+        log_message "Recovery hash written to $RECOVERY_FILE"
+    fi
 
-    log_message "Restarting guestos.service after manual upgrade installation"
-    systemctl start guestos.service
-    log_message "GuestOS service restarted successfully"
+    start_guestos_service "Restarting guestos.service after manual upgrade installation"
 
     # Log success banner in so that it is visible in manual recovery fallback method
     print_success_banner

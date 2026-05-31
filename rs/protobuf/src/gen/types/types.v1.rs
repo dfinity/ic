@@ -517,16 +517,11 @@ pub struct ThresholdSignatureShare {
     #[prost(message, optional, tag = "2")]
     pub signer: ::core::option::Option<NodeId>,
 }
-/// A receipt describing the per-replica cycles accounting outcome for a
-/// single canister HTTP outcall.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpPaymentReceipt {
     #[prost(message, optional, tag = "1")]
     pub refund: ::core::option::Option<super::super::state::queues::v1::Cycles>,
 }
-/// One entry of the per-signer payment receipts carried on the response
-/// metadata. The signer here is the `NodeId` of the replica producing the
-/// receipt.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpPaymentReceiptEntry {
     #[prost(bytes = "vec", tag = "1")]

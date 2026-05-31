@@ -10,10 +10,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "@crate_index//:candid",
-        "@crate_index//:futures",
-        "@crate_index//:ic-cdk",
         "@crate_index//:lazy_static",
-        "@crate_index//:rand",
         "@crate_index//:serde",
     ],
 )

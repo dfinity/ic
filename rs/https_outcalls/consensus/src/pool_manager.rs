@@ -738,7 +738,9 @@ pub mod test {
             type Response = (CanisterHttpResponse, CanisterHttpPaymentReceipt);
 
             fn send(&self, request: Request) -> Result<(), SendError<Request>>;
-            fn try_receive(&mut self) -> Result<(CanisterHttpResponse, CanisterHttpPaymentReceipt), TryReceiveError>;
+            fn try_receive(
+                &mut self,
+            ) -> Result<(CanisterHttpResponse, CanisterHttpPaymentReceipt), TryReceiveError>;
         }
     }
 

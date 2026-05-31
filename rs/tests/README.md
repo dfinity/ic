@@ -137,7 +137,7 @@ follows the hierarchical structure of the tests. For example:
        ├── api_test            <<== POT name
        │   ├── setup           <<== data related to the setup of this pot
        │   │   ├── ic_prep
-       │   │   │   ├── blessed_replica_versions.pb
+       │   │   │   ├── elected_replica_versions.pb
        │   │   │   <... etc. etc. ...>
        │   │   └── test.log    <<== logs produced during the setup
        │   └── tests

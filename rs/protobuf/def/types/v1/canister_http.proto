@@ -6,15 +6,10 @@ import "state/queues/v1/queues.proto";
 import "types/v1/errors.proto";
 import "types/v1/types.proto";
 
-// A receipt describing the per-replica cycles accounting outcome for a
-// single canister HTTP outcall.
 message CanisterHttpPaymentReceipt {
   state.queues.v1.Cycles refund = 1;
 }
 
-// One entry of the per-signer payment receipts carried on the response
-// metadata. The signer here is the `NodeId` of the replica producing the
-// receipt.
 message CanisterHttpPaymentReceiptEntry {
   bytes signer = 1;
   CanisterHttpPaymentReceipt receipt = 2;

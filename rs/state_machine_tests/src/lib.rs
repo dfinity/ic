@@ -3373,7 +3373,6 @@ impl StateMachine {
             &tip_canister_layout,
             &canister_id,
             CanisterSnapshots::default(),
-            ic_types::Height::new(0),
             self.state_manager.get_fd_factory(),
             &StrictCheckpointLoadingMetrics,
         )

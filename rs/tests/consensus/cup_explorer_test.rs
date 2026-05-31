@@ -124,6 +124,7 @@ fn test(env: TestEnv) {
     let halt_at_cup_height_payload = UpdateSubnetPayload {
         subnet_id: app_subnet.subnet_id,
         halt_at_cup_height: Some(true),
+        subnet_admins: None,
         ..empty_subnet_update()
     };
     block_on(execute_update_subnet_proposal(
@@ -171,6 +172,7 @@ fn test(env: TestEnv) {
     let update_subnet_payload = UpdateSubnetPayload {
         subnet_id: app_subnet.subnet_id,
         dkg_interval_length: Some(14),
+        subnet_admins: None,
         ..empty_subnet_update()
     };
     block_on(execute_update_subnet_proposal(
