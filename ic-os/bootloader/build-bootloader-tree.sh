@@ -22,12 +22,14 @@ done
 
 TMP_DIR=$(mktemp -d --tmpdir="/tmp/containers" build-image-XXXXXXXXXXXX)
 
-BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:6015f66923d7afbc53558d7ccffd325d43b4e249f41a6e93eef074c9505d2233"
+BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:5e275723f82c67e387ba9e3c24baa0abdcb268917f276a0561c97bef9450d0b4"
 
 podman --root "${TMP_DIR}/root" --runroot "${TMP_DIR}/runroot" build --iidfile "${TMP_DIR}/iidfile" - <<<"
     FROM $BASE_IMAGE
     USER root:root
-    RUN apt-get -y update && apt-get -y --no-install-recommends install grub-efi faketime
+    # First update the required certs
+    RUN apt-get -y update && apt-get -y --no-install-recommends install ca-certificates
+    RUN apt-get -y update --snapshot 20260520T000000Z && apt-get -y --no-install-recommends install --snapshot 20260520T000000Z grub-efi faketime
     RUN mkdir -p /build/boot/grub
     RUN cp -r /usr/lib/grub/x86_64-efi /build/boot/grub
     RUN mkdir -p /build/boot/efi/EFI/Boot
@@ -37,7 +39,7 @@ podman --root "${TMP_DIR}/root" --runroot "${TMP_DIR}/runroot" build --iidfile "
         boot linux search normal configfile \
         part_gpt btrfs ext2 fat iso9660 loopback \
         test keystatus gfxmenu regexp probe \
-        efi_gop efi_uga all_video gfxterm font \
+        efi_gop all_video gfxterm font \
         echo read ls cat png jpeg halt reboot loadenv lvm
 "
 

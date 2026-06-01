@@ -447,6 +447,39 @@ fn validate_signature_webauthn() {
 }
 
 #[test]
+fn validate_signature_webauthn_ed25519() {
+    let sig_verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
+    let message_id = message_test_id(13);
+
+    // Ed25519 public key derived from the RFC 8032 TEST 1 seed
+    // (9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60),
+    // encoded as a COSE_Key map {kty=OKP, alg=EdDSA, crv=Ed25519, x=pk} and
+    // wrapped in the IC's SubjectPublicKeyInfo (OID 1.3.6.1.4.1.56387.1.1).
+    let pubkey_hex = "303b300c060a2b0601040183b8430101032b00a4010103272006215820d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
+
+    // WebAuthn signature by the corresponding secret key over the signed
+    // bytes of `message_test_id(13)` (i.e. "\x0Aic-request" || message_id).
+    let signature_hex = "d9d9f7a37261757468656e74696361746f725f646174614961726269747261727970636c69656e745f646174615f6a736f6e58887b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22436d6c6a4c584a6c6358566c6333514e414141414141414141414141414141414141414141414141414141414141414141414141414141414141222c226f726967696e223a2269632d696e67726573732d766572696669636174696f6e2d74657374227d697369676e61747572655840a0f73a56b4177b7da14c1c6be3e847394dc8511dae919e3da3ffad4307c413c350a3d028c047c2e12b822b9a1833eaf7136a38361e5ee05ece1f21c4ef2dc705";
+
+    let user_signature = UserSignature {
+        signature: hex::decode(signature_hex).unwrap(),
+        signer_pubkey: hex::decode(pubkey_hex).unwrap(),
+        sender_delegation: None,
+    };
+
+    assert_eq!(
+        validate_signature(
+            &sig_verifier,
+            &message_id,
+            &user_signature,
+            UNIX_EPOCH,
+            &MockRootOfTrustProvider::new()
+        ),
+        Ok(CanisterIdSet::all())
+    );
+}
+
+#[test]
 fn validate_signature_webauthn_with_delegations() {
     let sig_verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
     let message_id = message_test_id(13);

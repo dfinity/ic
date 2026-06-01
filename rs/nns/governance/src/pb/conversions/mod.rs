@@ -4,6 +4,7 @@ use crate::pb::{
 };
 
 use ic_crypto_sha2::Sha256;
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_governance_api as api;
 use ic_nns_governance_conversions::{
     convert_guest_launch_measurements_from_api_to_pb,
@@ -3881,6 +3882,9 @@ impl From<pb::NnsFunction> for api::NnsFunction {
             }
             pb::NnsFunction::SplitSubnet => api::NnsFunction::SplitSubnet,
             pb::NnsFunction::DeleteSubnet => api::NnsFunction::DeleteSubnet,
+            pb::NnsFunction::SetDefaultInitialDkgSubnet => {
+                api::NnsFunction::SetDefaultInitialDkgSubnet
+            }
         }
     }
 }
@@ -3978,6 +3982,9 @@ impl From<api::NnsFunction> for pb::NnsFunction {
             }
             api::NnsFunction::SplitSubnet => pb::NnsFunction::SplitSubnet,
             api::NnsFunction::DeleteSubnet => pb::NnsFunction::DeleteSubnet,
+            api::NnsFunction::SetDefaultInitialDkgSubnet => {
+                pb::NnsFunction::SetDefaultInitialDkgSubnet
+            }
         }
     }
 }
@@ -4073,6 +4080,17 @@ impl From<api::TakeCanisterSnapshot> for pb::TakeCanisterSnapshot {
         Self {
             canister_id: item.canister_id,
             replace_snapshot: item.replace_snapshot,
+        }
+    }
+}
+
+impl From<pb::MaturityModulation> for api::MaturityModulation {
+    fn from(item: pb::MaturityModulation) -> Self {
+        Self {
+            current_value_permyriad: item.current_value_permyriad,
+            updated_at_timestamp_seconds: item
+                .updated_at_days_since_epoch
+                .and_then(|days| days.checked_mul(ONE_DAY_SECONDS)),
         }
     }
 }

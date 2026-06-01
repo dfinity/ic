@@ -23,11 +23,48 @@ show_menu() {
     echo "  ping-gateway            - Test connectivity to IPv6 gateway"
     echo "  routes                  - Show routing table"
     echo "  guestos-alternative     - Show or swap the GuestOS boot alternative (A/B)"
-    echo "  manual-recovery         - Manual node recovery (ONLY FOR EMERGENCY USE)"
+    echo "  nns-recovery            - Manual node recovery (ONLY FOR EMERGENCY USE)"
+    echo "  tee-recovery            - Install alternative GuestOS in TEE mode (ONLY FOR EMERGENCY USE)"
     echo "  rbash-console           - Drop into restricted bash console"
     echo "  clear                   - Clear the console"
     echo "  exit                    - Exit console"
     echo ""
+}
+
+run_manual_recovery() {
+    local recovery_mode="${1:-nns}"
+
+    echo "=== Manual Node Recovery ==="
+    echo "This will perform a manual node recovery. Do not attempt this unless you are certain it is appropriate."
+    echo "Manual node recovery should only occur in the event of a critical IC failure."
+    echo "In such cases, the process will be coordinated by reputable IC community leaders"
+    echo "and actively discussed publicly with node providers."
+    echo ""
+    echo "Are you sure you want to proceed? (y/n)"
+    read -r confirm
+    if [ "$confirm" == "y" ]; then
+        # Launch the recovery TUI tool via hostos_tool
+
+        # Fix for serial/remote consoles where window size may be missing or tiny
+        if ! size=$(stty size 2>/dev/null); then
+            echo "Error: could not determine terminal size. The nns-recovery TUI requires a TTY."
+            echo "Please see \"Manual Recovery Fallback\" in the Manual Node Recovery Guide for further direction."
+            exit 1
+        fi
+
+        read -r rows cols <<< "$size"
+        # Treat anything smaller than the Manual Recovery TUI minimum as unusable
+        min_rows=15
+        min_cols=10
+        if [ "${rows:-0}" -lt "$min_rows" ] || [ "${cols:-0}" -lt "$min_cols" ]; then
+            echo "Terminal size (${rows}x${cols}) is too small or invalid, setting to 24x80"
+            stty rows 24 cols 80
+            sleep 5 # Give the user a chance to see the message
+        fi
+
+        cmd=(/opt/ic/bin/hostos_tool manual-recovery "$recovery_mode")
+        "${cmd[@]}"
+    fi
 }
 
 # Command dispatcher
@@ -135,37 +172,11 @@ execute_command() {
                     ;;
             esac
             ;;
-        "manual-recovery")
-            echo "=== Manual Node Recovery ==="
-            echo "This will perform a manual node recovery. Do not attempt this unless you are certain it is appropriate."
-            echo "Manual node recovery should only occur in the event of a critical IC failure."
-            echo "In such cases, the process will be coordinated by reputable IC community leaders"
-            echo "and actively discussed publicly with node providers."
-            echo ""
-            echo "Are you sure you want to proceed? (y/n)"
-            read -r confirm
-            if [ "$confirm" == "y" ]; then
-                # Launch the NNS recovery TUI tool via hostos_tool
-
-                # Fix for serial/remote consoles where window size may be missing or tiny
-                if ! size=$(stty size 2>/dev/null); then
-                    echo "Error: could not determine terminal size. The manual-recovery TUI requires a TTY."
-                    echo "Please see \"Manual Recovery Fallback\" in the Manual Node Recovery Guide for further direction."
-                    exit 1
-                fi
-
-                read -r rows cols <<< "$size"
-                # Treat anything smaller than the Manual Recovery TUI minimum as unusable
-                min_rows=15
-                min_cols=10
-                if [ "${rows:-0}" -lt "$min_rows" ] || [ "${cols:-0}" -lt "$min_cols" ]; then
-                    echo "Terminal size (${rows}x${cols}) is too small or invalid, setting to 24x80"
-                    stty rows 24 cols 80
-                    sleep 5 # Give the user a chance to see the message
-                fi
-
-                /opt/ic/bin/hostos_tool manual-recovery
-            fi
+        "nns-recovery")
+            run_manual_recovery nns
+            ;;
+        "tee-recovery")
+            run_manual_recovery tee
             ;;
         "rbash-console")
             echo "=== Dropping into Restricted Bash Console ==="

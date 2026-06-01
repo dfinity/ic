@@ -8,49 +8,38 @@ filegroup(
     srcs = glob(["proto/**/*.proto"]),
 )
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/types/base_types",
-    "@crate_index//:candid",
-    "@crate_index//:comparable",
-    "@crate_index//:prost",
-    "@crate_index//:rust_decimal",
-    "@crate_index//:serde",
-]
-
-MACRO_DEPENDENCIES = [
-]
-
-DEV_DEPENDENCIES = [
-]
-
-MACRO_DEV_DEPENDENCIES = [
-]
-
-ALIASES = {}
-
-LIB_SRCS = glob(
-    ["src/**"],
-    exclude = ["**/*tests.rs"],
-)
-
 rust_library(
     name = "proto",
-    srcs = LIB_SRCS,
-    aliases = ALIASES,
+    srcs = glob(
+        ["src/**"],
+        exclude = ["**/*tests.rs"],
+    ),
     crate_name = "ic_nervous_system_proto",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.0.1",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:comparable",
+        "@crate_index//:prost",
+        "@crate_index//:rust_decimal",
+        "@crate_index//:serde",
+    ],
 )
 
 rust_test(
     name = "proto_test",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEV_DEPENDENCIES + MACRO_DEPENDENCIES,
     version = "0.0.1",
-    deps = DEV_DEPENDENCIES + DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:comparable",
+        "@crate_index//:prost",
+        "@crate_index//:rust_decimal",
+        "@crate_index//:serde",
+    ],
 )
 
 generated_files_check(

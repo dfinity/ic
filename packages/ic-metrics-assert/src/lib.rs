@@ -16,7 +16,8 @@ use std::fmt::Debug;
 ///
 /// # Examples
 ///
-/// ```rust
+#[cfg_attr(feature = "pocket_ic", doc = "```rust")]
+#[cfg_attr(not(feature = "pocket_ic"), doc = "```ignore")]
 /// use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 /// use pocket_ic::PocketIc;
 /// use ic_management_canister_types::CanisterId;

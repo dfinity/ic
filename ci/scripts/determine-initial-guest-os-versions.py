@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, TypedDict, cast
 from urllib.request import urlopen
 
-ROLLOUT_DASHBOARD_ENDPOINT = "https://rollout-dashboard.ch1-rel1.dfinity.network/api/v1/rollouts"
+ROLLOUT_DASHBOARD_ENDPOINT = "https://rollout-dashboard.dm1-dre1.dfinity.network/api/v1/rollouts"
 PUBLIC_DASHBOARD_ENDPOINT = "https://ic-api.internetcomputer.org/api/v3/subnets?format=json"
 
 # Key definitions

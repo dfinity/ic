@@ -59,7 +59,7 @@ pub use history::MockIngressHistory;
 
 const WASM_PAGE_SIZE_BYTES: usize = 65536;
 const DEFAULT_FREEZE_THRESHOLD: NumSeconds = NumSeconds::new(1 << 30);
-const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
+const INITIAL_CYCLES: Cycles = Cycles::new(100_000_000_000_000);
 const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * 1024; // 4 KiB
 
 /// Valid, but minimal wasm code.
@@ -608,7 +608,6 @@ impl Default for ExecutionStateBuilder {
 
         ExecutionStateBuilder {
             execution_state: ExecutionState::new(
-                "NOT_USED".into(),
                 WasmBinary::new(CanisterModule::new(vec![])),
                 ExportedFunctions::new(BTreeSet::new()),
                 Memory::new_for_testing(),
@@ -1103,7 +1102,6 @@ pub(crate) fn arb_cycles_use_case() -> impl Strategy<Value = CyclesUseCase> {
         Just(CyclesUseCase::ECDSAOutcalls),
         Just(CyclesUseCase::HTTPOutcalls),
         Just(CyclesUseCase::DeletedCanisters),
-        Just(CyclesUseCase::NonConsumed),
     ]
 }
 

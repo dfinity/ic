@@ -15,11 +15,12 @@ end::catalog[] */
 use candid::Principal;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
-    can_read_msg, cert_state_makes_progress_with_retries, store_message_with_retries,
+    can_fetch_logs, can_read_msg, cert_state_makes_progress_with_retries,
+    store_message_with_retries,
 };
 use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
-    assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
+    assert_assigned_replica_version, deploy_guestos_to_all_subnet_nodes, elect_replica_version,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
     get_public_key_with_retries, run_chain_key_signature_test,
@@ -43,24 +44,25 @@ const ALLOWED_FAILURES: usize = 1;
 pub const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
 pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 
-pub fn bless_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> ReplicaVersion {
+pub fn elect_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> ReplicaVersion {
     let logger = env.logger();
 
     let target_version = get_guestos_update_img_version();
 
-    // Bless target version
+    // Elect target version
     let sha256 = get_guestos_update_img_sha256();
     let upgrade_url = get_guestos_update_img_url();
     let guest_launch_measurements = get_guestos_update_launch_measurements();
-    block_on(bless_replica_version(
+    block_on(elect_replica_version(
         nns_node,
+        &env.topology_snapshot(),
         &target_version,
         &logger,
         sha256,
         Some(guest_launch_measurements),
         vec![upgrade_url.to_string()],
     ));
-    info!(&logger, "Blessed target version");
+    info!(&logger, "Elected target version");
 
     target_version
 }
@@ -237,6 +239,11 @@ pub fn upgrade(
         msg
     ));
     info!(logger, "After upgrade could read message '{}'", msg);
+    assert!(
+        can_fetch_logs(&logger, &faulty_node.get_public_url(), can_id, msg),
+        "Canister {} logs missing after upgrade",
+        can_id
+    );
 
     let msg_2 = &format!("hello after upgrade to {upgrade_version}");
     let can_id_2 = store_message_with_retries(
@@ -252,6 +259,18 @@ pub fn upgrade(
         msg_2
     ));
     info!(logger, "Could store and read message '{}'", msg_2);
+    assert!(
+        can_fetch_logs(&logger, &faulty_node.get_public_url(), can_id_2, msg_2),
+        "Canister {} logs missing after upgrade",
+        can_id_2
+    );
+    // Storing msg_2 above guarantees a round was executed, so migration of canister_log to
+    // log_memory_store has run. Verify logs are still accessible after migration.
+    assert!(
+        can_fetch_logs(&logger, &faulty_node.get_public_url(), can_id, msg),
+        "Canister {} logs missing after upgrade (after migration)",
+        can_id
+    );
 
     if let Some((canister, public_keys)) = ecdsa_canister_key {
         for (key_id, old_public_key) in public_keys {

@@ -6,15 +6,10 @@ use ic_nns_test_utils::{
         forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
         state_machine_test_on_nns_subnet,
     },
-    registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
+    registry::{get_value, get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
-use ic_protobuf::registry::{
-    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
-    subnet::v1::SubnetRecord,
-};
-use ic_registry_keys::{
-    make_blessed_replica_versions_key, make_replica_version_key, make_subnet_record_key,
-};
+use ic_protobuf::registry::{replica_version::v1::ReplicaVersionRecord, subnet::v1::SubnetRecord};
+use ic_registry_keys::{make_replica_version_key, make_subnet_record_key};
 use ic_test_utilities_types::ids::subnet_test_id;
 
 use assert_matches::assert_matches;
@@ -39,12 +34,14 @@ fn guest_launch_measurements_for_test() -> Option<GuestLaunchMeasurements> {
                 measurement: vec![0x42; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("foo=bar".into()),
+                    vcpu_type: None,
                 }),
             },
             GuestLaunchMeasurement {
                 measurement: vec![0x42; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("hello=world".into()),
+                    vcpu_type: None,
                 }),
             },
         ],
@@ -62,14 +59,15 @@ fn test_the_anonymous_user_cannot_elect_a_version() {
         )
         .await;
 
+        let replica_version_id = "version_43";
         let payload = ReviseElectedGuestosVersionsPayload {
-            replica_version_to_elect: Some("version_43".into()),
+            replica_version_to_elect: Some(replica_version_id.into()),
             release_package_sha256_hex: None,
             release_package_urls: vec![],
             guest_launch_measurements: None,
             replica_versions_to_unelect: vec![],
         };
-        // The anonymous end-user tries to bless a version, bypassing the proposals
+        // The anonymous end-user tries to elect a version, bypassing the proposals
         // This should be rejected.
         let response: Result<(), String> = registry
             .update_(
@@ -80,16 +78,14 @@ fn test_the_anonymous_user_cannot_elect_a_version() {
             .await;
         assert_matches!(response,
                 Err(s) if s.contains("is not authorized to call this method: revise_elected_replica_versions"));
-        // .. And there should therefore be no blessed version
+        // .. And there should therefore be no elected version
         assert_eq!(
-            get_value_or_panic::<BlessedReplicaVersions>(
+            get_value::<ReplicaVersionRecord>(
                 &registry,
-                make_blessed_replica_versions_key().as_bytes()
+                make_replica_version_key(replica_version_id).as_bytes()
             )
             .await,
-            BlessedReplicaVersions {
-                blessed_version_ids: vec![ReplicaVersion::default().into()]
-            }
+            None
         );
 
         // Go through an upgrade cycle, and verify that it still works the same
@@ -104,14 +100,12 @@ fn test_the_anonymous_user_cannot_elect_a_version() {
         assert_matches!(response,
                 Err(s) if s.contains("is not authorized to call this method: revise_elected_replica_versions"));
         assert_eq!(
-            get_value_or_panic::<BlessedReplicaVersions>(
+            get_value::<ReplicaVersionRecord>(
                 &registry,
-                make_blessed_replica_versions_key().as_bytes()
+                make_replica_version_key(replica_version_id).as_bytes()
             )
             .await,
-            BlessedReplicaVersions {
-                blessed_version_ids: vec![ReplicaVersion::default().into()]
-            }
+            None
         );
 
         Ok(())
@@ -119,7 +113,7 @@ fn test_the_anonymous_user_cannot_elect_a_version() {
 }
 
 #[test]
-fn test_a_canister_other_than_the_governance_canister_cannot_bless_a_version() {
+fn test_a_canister_other_than_the_governance_canister_cannot_elect_a_version() {
     state_machine_test_on_nns_subnet(|runtime| async move {
         // An attacker got a canister that is trying to pass for the governance
         // canister...
@@ -137,14 +131,15 @@ fn test_a_canister_other_than_the_governance_canister_cannot_bless_a_version() {
                 .build(),
         )
         .await;
+        let replica_version_id = "version_43";
         let payload = ReviseElectedGuestosVersionsPayload {
-            replica_version_to_elect: Some("version_43".into()),
+            replica_version_to_elect: Some(replica_version_id.into()),
             release_package_sha256_hex: Some(MOCK_HASH.into()),
             release_package_urls: vec!["http://release_package.tar.zst".into()],
             guest_launch_measurements: None,
             replica_versions_to_unelect: vec![],
         };
-        // The attacker canister tries to bless a version, pretending to be the
+        // The attacker canister tries to elect a version, pretending to be the
         // governance canister. This should have no effect.
         assert!(
             !forward_call_via_universal_canister(
@@ -155,16 +150,14 @@ fn test_a_canister_other_than_the_governance_canister_cannot_bless_a_version() {
             )
             .await
         );
-        // But there should be no blessed version
+        // But there should be no elected version
         assert_eq!(
-            get_value_or_panic::<BlessedReplicaVersions>(
+            get_value::<ReplicaVersionRecord>(
                 &registry,
-                make_blessed_replica_versions_key().as_bytes()
+                make_replica_version_key(replica_version_id).as_bytes()
             )
             .await,
-            BlessedReplicaVersions {
-                blessed_version_ids: vec![ReplicaVersion::default().into()]
-            }
+            None
         );
         Ok(())
     });
@@ -188,11 +181,13 @@ fn test_accepted_proposal_mutates_the_registry() {
             ic_nns_constants::GOVERNANCE_CANISTER_ID
         );
 
-        // We can bless a new version, the version already in the registry is 42
+        // We can elect a new version, the version already in the registry is 42
+        let replica_version_id = "version_43";
+        let release_package_url = "http://release_package.tar.zst".to_string();
         let payload_v43 = ReviseElectedGuestosVersionsPayload {
-            replica_version_to_elect: Some("version_43".into()),
+            replica_version_to_elect: Some(replica_version_id.into()),
             release_package_sha256_hex: Some(MOCK_HASH.into()),
-            release_package_urls: vec!["http://release_package.tar.zst".into()],
+            release_package_urls: vec![release_package_url.clone()],
             guest_launch_measurements: guest_launch_measurements_for_test(),
             replica_versions_to_unelect: vec![],
         };
@@ -205,23 +200,19 @@ fn test_accepted_proposal_mutates_the_registry() {
             )
             .await
         );
-        assert_eq!(
-            get_value_or_panic::<BlessedReplicaVersions>(
+        assert!(
+            get_value::<ReplicaVersionRecord>(
                 &registry,
-                make_blessed_replica_versions_key().as_bytes()
+                make_replica_version_key(replica_version_id).as_bytes()
             )
-            .await,
-            BlessedReplicaVersions {
-                blessed_version_ids: vec![
-                    ReplicaVersion::default().into(),
-                    "version_43".to_string()
-                ]
-            }
+            .await
+            .is_some(),
         );
 
         // Trying to mutate an existing record should have no effect.
+        let replica_version_id = "version_43";
         let payload_v42_mutate = ReviseElectedGuestosVersionsPayload {
-            replica_version_to_elect: Some("version_43".into()),
+            replica_version_to_elect: Some(replica_version_id.into()),
             release_package_sha256_hex: None,
             release_package_urls: vec![],
             guest_launch_measurements: guest_launch_measurements_for_test(),
@@ -237,11 +228,10 @@ fn test_accepted_proposal_mutates_the_registry() {
             .await
         );
         // The URL in the registry should still the old one.
-        let release_package_url = "http://release_package.tar.zst".to_string();
         assert_eq!(
             get_value_or_panic::<ReplicaVersionRecord>(
                 &registry,
-                make_replica_version_key("version_43").as_bytes()
+                make_replica_version_key(replica_version_id).as_bytes()
             )
             .await,
             ReplicaVersionRecord {
@@ -254,8 +244,8 @@ fn test_accepted_proposal_mutates_the_registry() {
         // Let's now try to upgrade a subnet.
         // The subnet was added at the beginning of the test
 
-        // Set the subnet to a blessed version: it should work
-        let set_to_blessed_ = DeployGuestosToAllSubnetNodesPayload {
+        // Set the subnet to an elected version: it should work
+        let set_to_elected_ = DeployGuestosToAllSubnetNodesPayload {
             subnet_id: subnet_test_id(999).get(),
             replica_version_id: ReplicaVersion::default().into(),
         };
@@ -264,7 +254,7 @@ fn test_accepted_proposal_mutates_the_registry() {
                 &fake_governance_canister,
                 &registry,
                 "deploy_guestos_to_all_subnet_nodes",
-                Encode!(&set_to_blessed_).unwrap(),
+                Encode!(&set_to_elected_).unwrap(),
             )
             .await
         );
@@ -278,17 +268,17 @@ fn test_accepted_proposal_mutates_the_registry() {
             ReplicaVersion::default().to_string(),
         );
 
-        // Try to set the subnet to an unblessed version: it should fail
-        let try_set_to_unblessed = DeployGuestosToAllSubnetNodesPayload {
+        // Try to set the subnet to an unelected version: it should fail
+        let try_set_to_unelected = DeployGuestosToAllSubnetNodesPayload {
             subnet_id: subnet_test_id(999).get(),
-            replica_version_id: "unblessed".to_string(),
+            replica_version_id: "unelected".to_string(),
         };
         assert!(
             !forward_call_via_universal_canister(
                 &fake_governance_canister,
                 &registry,
                 "deploy_guestos_to_all_subnet_nodes",
-                Encode!(&try_set_to_unblessed).unwrap(),
+                Encode!(&try_set_to_unelected).unwrap(),
             )
             .await
         );

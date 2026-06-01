@@ -275,6 +275,51 @@ impl CanisterState {
         self.system_state.queues().has_output()
     }
 
+    /// Returns true if the canister must be present in the `SubnetSchedule`,
+    /// regardless of new inputs or accumulated priority.
+    ///
+    /// This is different from "should be scheduled in an iteration", which also
+    /// considers whether the canister has inputs / tasks or non-zero AP / priority
+    /// credit. It is strictly about ensuring that canisters are retained in the
+    /// subnet schedule for as long as they have long-running executions or heap
+    /// delta or install code debits.
+    pub fn must_be_in_schedule(&self) -> bool {
+        self.scheduler_state.heap_delta_debit.get() > 0
+            || self.scheduler_state.install_code_debit.get() > 0
+            || self.has_long_execution_or_install_code()
+    }
+
+    /// Returns true iff this canister can be safely placed in the "cold" pool of
+    /// `CanisterStates`, i.e. it has no work and nothing that requires attention.
+    ///
+    /// This is a conservative under-approximation: a `false` return does not imply
+    /// that the canister requires attention; it only means we cannot prove that it
+    /// doesn't.
+    ///
+    /// The predicate is a pure function of `CanisterState` and must remain so.
+    pub fn is_cold(&self) -> bool {
+        use self::system_state::CanisterStatus;
+        use ic_types::CanisterTimer;
+
+        let system_state = &self.system_state;
+        // No pending input or output.
+        !system_state.queues().has_input()
+            && !system_state.queues().has_output()
+            // No tasks (including paused/aborted executions, heartbeat/timer ticks and the on-low-wasm-memory hook)
+            && system_state.task_queue.is_empty()
+            // No `canister_heartbeat` or `canister_global_timer` to enqueue.
+            && !self.exports_heartbeat_method()
+            && matches!(system_state.global_timer, CanisterTimer::Inactive)
+            // `Stopping` canisters need to be processed each round (to drive the transition
+            // to `Stopped`); `Running` and `Stopped` canisters do not.
+            && !matches!(system_state.get_status(), CanisterStatus::Stopping { .. })
+            // No best-effort callback that might have to be timed out.
+            && !system_state.has_unexpired_callbacks()
+            // Not rate-limited by the scheduler.
+            && self.scheduler_state.heap_delta_debit.get() == 0
+            && self.scheduler_state.install_code_debit.get() == 0
+    }
+
     /// See `SystemState::push_output_request` for documentation.
     pub fn push_output_request(
         &mut self,

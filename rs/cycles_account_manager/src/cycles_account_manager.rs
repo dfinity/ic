@@ -156,6 +156,15 @@ impl CyclesAccountManager {
         )
     }
 
+    /// Returns the base fee per second charged to every canister that has any memory usage.
+    pub fn base_per_second_fee(
+        &self,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> CompoundCycles<Memory> {
+        self.scale_cost(self.config.base_per_second_fee, subnet_size, cost_schedule)
+    }
+
     /// Returns the fee per byte of ingress message received in [`Cycles`].
     pub fn ingress_byte_received_fee(
         &self,
@@ -227,7 +236,8 @@ impl CyclesAccountManager {
         let memory = memory_allocation.allocated_bytes(memory_usage);
 
         CyclesBurnedRate {
-            memory: self.memory_cost(memory, DAY, subnet_size, cost_schedule),
+            memory: self.memory_cost(memory, DAY, subnet_size, cost_schedule)
+                + self.canister_base_cost(memory, DAY, subnet_size, cost_schedule),
             message_memory: self.memory_cost(
                 message_memory_usage.total(),
                 DAY,
@@ -700,6 +710,21 @@ impl CyclesAccountManager {
         self.scale_cost(cycles, subnet_size, cost_schedule)
     }
 
+    pub fn canister_base_cost(
+        &self,
+        bytes: NumBytes,
+        duration: Duration,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> CompoundCycles<Memory> {
+        let cycles = if bytes > NumBytes::new(0) {
+            self.config.base_per_second_fee * duration.as_secs() as u128
+        } else {
+            Cycles::zero()
+        };
+        self.scale_cost(cycles, subnet_size, cost_schedule)
+    }
+
     /// Returns the amount of reserved cycles required for allocating the given
     /// number of bytes at the given resource saturation level.
     pub fn storage_reservation_cycles(
@@ -982,7 +1007,6 @@ impl CyclesAccountManager {
             | CyclesUseCase::VetKd
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
-            | CyclesUseCase::NonConsumed
             | CyclesUseCase::BurnedCycles
             | CyclesUseCase::DroppedMessages => system_state.balance(),
         };
@@ -995,7 +1019,6 @@ impl CyclesAccountManager {
             reveal_top_up,
         )?;
 
-        debug_assert_ne!(use_case, CyclesUseCase::NonConsumed);
         system_state.consume_cycles(cycles);
         Ok(())
     }

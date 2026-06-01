@@ -3,43 +3,28 @@ load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
-LIB_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:candid",
-    "@crate_index//:hex-literal",
-    "@crate_index//:serde",
-]
-
-DEPENDENCIES = [
-    # Keep sorted.
-    ":lib",
-    "@crate_index//:lazy_static",
-]
-
-MACRO_DEPENDENCIES = []
-
-DEV_DEPENDENCIES = []
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_library(
     name = "lib",
     srcs = glob(["src/*.rs"]),
     crate_name = "universal_canister",
     version = "0.9.0",
-    deps = LIB_DEPENDENCIES,
+    deps = [
+    ],
 )
 
 rust_canister(
     name = "universal_canister",
     srcs = glob(["src/*.rs"]),
-    aliases = ALIASES,
     crate_features = ["heartbeat"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":interface.did",
-    deps = LIB_DEPENDENCIES + DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":lib",
+        "@crate_index//:candid",
+        "@crate_index//:hex-literal",
+        "@crate_index//:lazy_static",
+        "@crate_index//:serde",
+    ],
 )
 
 genrule(
@@ -67,16 +52,26 @@ genrule(
 rust_canister(
     name = "universal_canister_no_heartbeat",
     srcs = glob(["src/*.rs"]),
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":interface.did",
-    deps = LIB_DEPENDENCIES + DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":lib",
+        "@crate_index//:candid",
+        "@crate_index//:hex-literal",
+        "@crate_index//:lazy_static",
+        "@crate_index//:serde",
+    ],
 )
 
 rust_test(
     name = "universal_canister_test",
     srcs = glob(["src/*.rs"]),
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = LIB_DEPENDENCIES + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":lib",
+        "@crate_index//:candid",
+        "@crate_index//:hex-literal",
+        "@crate_index//:lazy_static",
+        "@crate_index//:serde",
+    ],
 )

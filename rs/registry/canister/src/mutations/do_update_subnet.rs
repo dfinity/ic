@@ -1,11 +1,14 @@
 use crate::{common::LOG_PREFIX, mutations::common::has_duplicates, registry::Registry};
 use candid::{CandidType, Deserialize};
 use dfn_core::println;
-use ic_base_types::{SubnetId, subnet_id_into_protobuf};
+use ic_base_types::{PrincipalId, SubnetId, subnet_id_into_protobuf};
 use ic_management_canister_types_private::MasterPublicKeyId;
-use ic_protobuf::registry::subnet::v1::{
-    ResourceLimits as ResourceLimitsPb, SubnetFeatures as SubnetFeaturesPb,
-    SubnetRecord as SubnetRecordPb,
+use ic_protobuf::{
+    registry::subnet::v1::{
+        ResourceLimits as ResourceLimitsPb, SubnetFeatures as SubnetFeaturesPb,
+        SubnetRecord as SubnetRecordPb,
+    },
+    types::v1::PrincipalId as PrincipalIdPb,
 };
 use ic_registry_keys::{make_chain_key_enabled_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
@@ -143,27 +146,35 @@ impl Registry {
         }
     }
 
-    /// Validates that AMD Secure Encrypted Virtualization (SEV) is never disabled on a subnet.
+    /// Validates that the SEV (AMD Secure Encrypted Virtualization) feature is not changed on
+    /// an existing subnet.
     ///
-    /// Panics when attempting to turn off SEV for an SEV-enabled subnet
+    /// Panics if the proposal would change the effective `sev_enabled` value of the subnet.
+    /// No-op transitions are allowed so that non-SEV features can still be updated.
     fn validate_update_sev_feature(&self, payload: &UpdateSubnetPayload) {
         let subnet_id = payload.subnet_id;
+        let subnet_record = self.get_subnet_or_panic(subnet_id);
 
-        let Some(subnet_features) = self.get_subnet_or_panic(subnet_id).features else {
+        let Some(payload_features) = payload.features else {
             return;
         };
 
-        let Some(update_features) = payload.features else {
-            return;
-        };
+        // Note: when `payload.features` is `Some(_)`, `subnet_record.features` is wholesale
+        // replaced (see `merge_subnet_record`), so a payload with `sev_enabled: None` would
+        // implicitly disable SEV on a previously SEV-enabled subnet. Compare via the
+        // rust-level `SubnetFeatures`, which collapses `None` and `Some(false)` to `false`,
+        // to catch both explicit and implicit changes while permitting no-op updates.
+        let new_sev_enabled = SubnetFeatures::from(payload_features).sev_enabled;
+        let old_sev_enabled = subnet_record
+            .features
+            .map(|f| SubnetFeatures::from(f).sev_enabled)
+            .unwrap_or_default();
 
-        // panic if SEV is enable and the update tries to disable it
-        let attempting_to_disable =
-            subnet_features.sev_enabled == Some(true) && update_features.sev_enabled == Some(false);
-        if attempting_to_disable {
+        if new_sev_enabled != old_sev_enabled {
             panic!(
-                "{LOG_PREFIX}Proposal attempts to disable SEV for Subnet '{subnet_id}', \
-                but SEV cannot be turned off once enabled.",
+                "{LOG_PREFIX}Proposal attempts to change sev_enabled for Subnet '{subnet_id}' \
+                 from {old_sev_enabled} to {new_sev_enabled}, but sev_enabled can only be set \
+                 during subnet creation.",
             );
         }
     }
@@ -250,6 +261,11 @@ pub struct UpdateSubnetPayload {
 
     pub ssh_readonly_access: Option<Vec<String>>,
     pub ssh_backup_access: Option<Vec<String>>,
+
+    /// When `Some`, replaces the subnet's admin list with the given principals
+    /// (an empty `Vec` clears the list). `None` leaves the existing list
+    /// unchanged.
+    pub subnet_admins: Option<Vec<PrincipalId>>,
 
     // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
     pub max_artifact_streams_per_peer: Option<u32>,
@@ -458,6 +474,7 @@ fn merge_subnet_record(
         max_number_of_canisters,
         ssh_readonly_access,
         ssh_backup_access,
+        subnet_admins,
         // Deprecated/unused values follow
         max_artifact_streams_per_peer: _,
         max_chunk_wait_ms: _,
@@ -504,6 +521,10 @@ fn merge_subnet_record(
 
     maybe_set!(subnet_record, ssh_readonly_access);
     maybe_set!(subnet_record, ssh_backup_access);
+
+    if let Some(subnet_admins) = subnet_admins {
+        subnet_record.subnet_admins = subnet_admins.into_iter().map(PrincipalIdPb::from).collect();
+    }
 
     subnet_record
 }
@@ -552,6 +573,7 @@ mod tests {
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
+            subnet_admins: None,
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
@@ -648,6 +670,7 @@ mod tests {
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
+            subnet_admins: None,
             chain_key_config: Some(chain_key_config.clone()),
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
@@ -766,6 +789,7 @@ mod tests {
             max_number_of_canisters: Some(50),
             ssh_readonly_access: None,
             ssh_backup_access: None,
+            subnet_admins: None,
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
@@ -1060,11 +1084,11 @@ mod tests {
     }
 
     /// Returns an invariant-compliant Registry instance and an ID of a subnet
-    /// with an existing subnet record.
+    /// with an existing subnet record (SEV disabled).
     fn make_registry_for_update_subnet_tests() -> (Registry, SubnetId) {
         let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_chip_id(1, 2);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1087,69 +1111,114 @@ mod tests {
         (registry, subnet_id)
     }
 
-    fn update_sev(subnet_id: SubnetId, enabled: bool) -> UpdateSubnetPayload {
+    /// Same as `make_registry_for_update_subnet_tests`, but the subnet is
+    /// created with `sev_enabled = true` on top of nodes that have a chip ID,
+    /// so that the SEV invariant is satisfied.
+    fn make_sev_enabled_registry_for_update_subnet_tests() -> (Registry, SubnetId) {
+        let mut registry = invariant_compliant_registry(0);
+
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_chip_id(1, 2);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let mut subnet_list_record = registry.get_subnet_list_record();
+
+        let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
+            .iter()
+            .next()
+            .expect("should contain at least one node ID");
+        let mut subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
+        subnet_record.features = Some(SubnetFeaturesPb {
+            canister_sandboxing: false,
+            http_requests: false,
+            sev_enabled: Some(true),
+        });
+
+        let subnet_id = subnet_test_id(1000);
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id,
+            &mut subnet_list_record,
+            subnet_record,
+            &btreemap!(*first_node_id => first_dkg_pk.clone()),
+        ));
+
+        (registry, subnet_id)
+    }
+
+    #[test]
+    #[should_panic(expected = "Proposal attempts to change sev_enabled for Subnet \
+                    'ge6io-epiam-aaaaa-aaaap-yai' from false to true, but sev_enabled can only be \
+                    set during subnet creation.")]
+    fn test_sev_enabled_cannot_be_changed_to_true() {
+        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+
         let mut payload = make_empty_update_payload(subnet_id);
         payload.features = Some(SubnetFeaturesPb {
             canister_sandboxing: false,
             http_requests: false,
-            sev_enabled: Some(enabled),
+            sev_enabled: Some(true),
         });
-        payload
+
+        registry.do_update_subnet(payload);
     }
 
     #[test]
-    fn test_can_enable_sev_if_disabled() {
-        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+    #[should_panic(expected = "Proposal attempts to change sev_enabled for Subnet \
+                    'ge6io-epiam-aaaaa-aaaap-yai' from true to false, but sev_enabled can only be \
+                    set during subnet creation.")]
+    fn test_sev_enabled_cannot_be_disabled_explicitly() {
+        let (mut registry, subnet_id) = make_sev_enabled_registry_for_update_subnet_tests();
 
-        // transition from unset -> false -> true
-        registry.do_update_subnet(update_sev(subnet_id, false));
-        registry.do_update_subnet(update_sev(subnet_id, true));
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.features = Some(SubnetFeaturesPb {
+            canister_sandboxing: false,
+            http_requests: false,
+            sev_enabled: Some(false),
+        });
+
+        registry.do_update_subnet(payload);
+    }
+
+    /// Regression test: a payload with `features = Some(_)` but
+    /// `sev_enabled = None` must not be able to silently disable SEV via the
+    /// wholesale replacement of the subnet record's `features` field.
+    #[test]
+    #[should_panic(expected = "Proposal attempts to change sev_enabled for Subnet \
+                    'ge6io-epiam-aaaaa-aaaap-yai' from true to false, but sev_enabled can only be \
+                    set during subnet creation.")]
+    fn test_sev_enabled_cannot_be_disabled_implicitly() {
+        let (mut registry, subnet_id) = make_sev_enabled_registry_for_update_subnet_tests();
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.features = Some(SubnetFeaturesPb {
+            canister_sandboxing: true,
+            http_requests: true,
+            sev_enabled: None,
+        });
+
+        registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    fn test_sev_enabled_no_op_keeps_subnet_sev_enabled() {
+        let (mut registry, subnet_id) = make_sev_enabled_registry_for_update_subnet_tests();
+
+        // Update non-SEV features while explicitly preserving sev_enabled = true.
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.features = Some(SubnetFeaturesPb {
+            canister_sandboxing: true,
+            http_requests: true,
+            sev_enabled: Some(true),
+        });
+
+        registry.do_update_subnet(payload);
 
         let subnet_features = registry
             .get_subnet_or_panic(subnet_id)
             .features
-            .expect("failed to get subnet features");
-
-        assert_eq!(
-            subnet_features.sev_enabled,
-            Some(true),
-            "Expected SEV enabled to be Some(true), but was {:?}",
-            subnet_features.sev_enabled
-        );
-    }
-
-    #[test]
-    fn test_can_enable_sev_if_unset() {
-        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
-
-        // transition from unset (implicitly) -> true
-        registry.do_update_subnet(update_sev(subnet_id, true));
-
-        let subnet_features = registry
-            .get_subnet_or_panic(subnet_id)
-            .features
-            .expect("failed to get subnet features");
-
-        assert_eq!(
-            subnet_features.sev_enabled,
-            Some(true),
-            "Expected SEV enabled to be Some(true), but was {:?}",
-            subnet_features.sev_enabled
-        );
-    }
-
-    #[test]
-    #[should_panic(
-        expected = "Proposal attempts to disable SEV for Subnet 'ge6io-epiam-aaaaa-aaaap-yai', \
-        but SEV cannot be turned off once enabled."
-    )]
-    fn test_cannot_disable_sev_if_enabled() {
-        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
-
-        // Enable SEV first as it is initially unset.
-        registry.do_update_subnet(update_sev(subnet_id, true));
-        // This should trigger the panic
-        registry.do_update_subnet(update_sev(subnet_id, false));
+            .expect("subnet should have features set");
+        assert_eq!(subnet_features.sev_enabled, Some(true));
+        assert!(subnet_features.canister_sandboxing);
+        assert!(subnet_features.http_requests);
     }
 
     #[test]
@@ -1512,5 +1581,128 @@ mod tests {
             max_parallel_pre_signature_transcripts_in_creation: None,
         });
         payload
+    }
+
+    /// Adds a rented (Application + Free cost schedule) subnet to the registry,
+    /// so that setting subnet admins is permitted by the registry invariant.
+    fn make_registry_with_rented_subnet() -> (Registry, SubnetId) {
+        let mut registry = invariant_compliant_registry(0);
+
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let mut subnet_list_record = registry.get_subnet_list_record();
+
+        let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
+            .iter()
+            .next()
+            .expect("should contain at least one node ID and key");
+        let mut subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
+        subnet_record.subnet_type = i32::from(SubnetType::Application);
+        subnet_record.canister_cycles_cost_schedule = i32::from(CanisterCyclesCostSchedule::Free);
+
+        let subnet_id = subnet_test_id(1000);
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id,
+            &mut subnet_list_record,
+            subnet_record,
+            &btreemap!(*first_node_id => first_dkg_pk.clone()),
+        ));
+
+        (registry, subnet_id)
+    }
+
+    #[test]
+    fn can_set_subnet_admins() {
+        let (mut registry, subnet_id) = make_registry_with_rented_subnet();
+
+        let user1 = *TEST_USER1_PRINCIPAL;
+        let user2 = *TEST_USER2_PRINCIPAL;
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(vec![user1, user2]);
+
+        registry.do_update_subnet(payload);
+
+        assert_eq!(
+            registry.get_subnet_or_panic(subnet_id).subnet_admins,
+            vec![PrincipalIdPb::from(user1), PrincipalIdPb::from(user2)],
+        );
+    }
+
+    #[test]
+    fn can_clear_subnet_admins() {
+        let (mut registry, subnet_id) = make_registry_with_rented_subnet();
+
+        let user1 = *TEST_USER1_PRINCIPAL;
+
+        // First set an admin.
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(vec![user1]);
+        registry.do_update_subnet(payload);
+        assert_eq!(
+            registry.get_subnet_or_panic(subnet_id).subnet_admins,
+            vec![PrincipalIdPb::from(user1)],
+        );
+
+        // Then clear it via Some(vec![]).
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(vec![]);
+        registry.do_update_subnet(payload);
+        assert_eq!(
+            registry.get_subnet_or_panic(subnet_id).subnet_admins,
+            Vec::<PrincipalIdPb>::new(),
+        );
+    }
+
+    #[test]
+    fn none_subnet_admins_leaves_existing_admins_unchanged() {
+        let (mut registry, subnet_id) = make_registry_with_rented_subnet();
+
+        let user1 = *TEST_USER1_PRINCIPAL;
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(vec![user1]);
+        registry.do_update_subnet(payload);
+
+        // A subsequent update with `subnet_admins: None` must not change the list.
+        let payload = make_empty_update_payload(subnet_id);
+        registry.do_update_subnet(payload);
+
+        assert_eq!(
+            registry.get_subnet_or_panic(subnet_id).subnet_admins,
+            vec![PrincipalIdPb::from(user1)],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "subnet admins, which exceeds the maximum of")]
+    fn cannot_set_more_than_max_subnet_admins() {
+        let (mut registry, subnet_id) = make_registry_with_rented_subnet();
+
+        // 11 admins exceeds MAX_SUBNET_ADMINS (10).
+        let admins = (0..11_u64)
+            .map(|i| PrincipalId::new_user_test_id(2000 + i))
+            .collect::<Vec<_>>();
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(admins);
+
+        registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "is not a rented or cloud engine subnet but has a non-empty subnet admins list"
+    )]
+    fn cannot_set_subnet_admins_on_non_rented_subnet() {
+        // Use the default test fixture which produces an Application + Normal subnet
+        // (not rented), so setting admins must violate the invariant.
+        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(vec![*TEST_USER1_PRINCIPAL]);
+
+        registry.do_update_subnet(payload);
     }
 }

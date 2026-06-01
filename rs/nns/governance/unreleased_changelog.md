@@ -9,7 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
-* Daily timer task that fetches ICP/XDR rates from the Exchange Rate Canister, maintains a 365-day price history in Governance state, and computes Mission 70 maturity modulation locally. The computed value is not yet consumed by spawning or disbursement; that switchover will happen in a follow-up PR.
+* Added a new `NnsFunction` variant `SetDefaultInitialDkgSubnet`, which
+  proposes to set or unset the default subnet to which `SetupInitialDKG`
+  management canister calls are routed when no subnet is specified explicitly
+  in the request.
 
 ## Changed
 

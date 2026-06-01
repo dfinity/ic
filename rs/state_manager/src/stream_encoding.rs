@@ -180,7 +180,7 @@ pub fn encode_tree(t: LabeledTree<Vec<u8>>) -> Vec<u8> {
     v1::LabeledTree::proxy_encode(t)
 }
 
-/// Decodes a stream slice and the subnet it came from from a serialized
+/// Decodes a stream slice and the subnet it came from a serialized
 /// canonical tree.
 pub fn decode_stream_slice(
     tree_bytes: &[u8],

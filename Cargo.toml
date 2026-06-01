@@ -494,6 +494,7 @@ members = [
     "rs/tests/networking",
     "rs/tests/networking/canister_http",
     "rs/tests/networking/canisters",
+    "rs/tests/networking/firewall",
     "rs/tests/networking/subnet_update_workload",
     "rs/tests/nns",
     "rs/tests/nns/cycles_minting",
@@ -933,4 +934,4 @@ zstd = "0.13.2"
 [workspace.dependencies.ic-wasm]
 default-features = false
 features = ["exe"]
-version = "^0.8.1"
+version = "^0.9.11"

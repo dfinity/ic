@@ -3,11 +3,12 @@ use crate::driver::farm::FileId;
 use crate::driver::farm::ImageLocation;
 use crate::driver::farm::ImageLocation::{IcOsImageViaUrl, ImageViaUrl};
 use crate::driver::farm::VMCreateResponse;
+use crate::driver::farm::VmAllocationMode;
 use crate::driver::farm::{CreateVmRequest, HostFeature};
 use crate::driver::farm::{Farm, VmType};
 use crate::driver::ic::VmResources;
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
-use crate::driver::ic::{ImageSizeGiB, VmAllocationStrategy, VmResourceOverrides};
+use crate::driver::ic::{ImageSizeGiB, VmResourceOverrides};
 use crate::driver::nested::{NestedNode, NestedNodeSpec};
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{
@@ -115,7 +116,7 @@ pub struct VmSpec {
     boot_image: BootImage,
     boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
     has_ipv4: bool,
-    vm_allocation: Option<VmAllocationStrategy>,
+    vm_allocation_mode: Option<VmAllocationMode>,
     required_host_features: Vec<HostFeature>,
     alternate_template: Option<VmType>,
 }
@@ -274,7 +275,7 @@ pub fn get_resource_request_for_universal_vm(
         boot_image: BootImage::GroupDefault,
         boot_image_minimal_size_gibibytes: resolved_vm_resources.boot_image_minimal_size_gibibytes,
         has_ipv4: universal_vm.has_ipv4,
-        vm_allocation: universal_vm.vm_allocation.clone(),
+        vm_allocation_mode: None,
         required_host_features: universal_vm.required_host_features.clone(),
         alternate_template: None,
     });
@@ -308,7 +309,7 @@ pub fn allocate_resources(
             },
             vm_config.boot_image_minimal_size_gibibytes,
             vm_config.has_ipv4,
-            vm_config.vm_allocation.clone(),
+            None,
             vm_config.required_host_features.clone(),
         );
         let group_name = group_name.clone();
@@ -373,7 +374,7 @@ fn vm_spec_from_node(
         boot_image: n.boot_image.clone(),
         boot_image_minimal_size_gibibytes: resolved_vm_resources.boot_image_minimal_size_gibibytes,
         has_ipv4: false,
-        vm_allocation: n.vm_allocation.clone(),
+        vm_allocation_mode: None,
         required_host_features: n.required_host_features.clone(),
         alternate_template: None,
     }
@@ -408,7 +409,7 @@ fn vm_spec_from_nested_node(
         boot_image: node.boot_image.clone(),
         boot_image_minimal_size_gibibytes: resolved_vm_resources.boot_image_minimal_size_gibibytes,
         has_ipv4: false,
-        vm_allocation: None,
+        vm_allocation_mode: None,
         required_host_features,
         alternate_template: None,
     })

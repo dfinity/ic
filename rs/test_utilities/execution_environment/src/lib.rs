@@ -1620,7 +1620,8 @@ impl ExecutionTest {
                     )
                     .nominal()
             }
-            Ok(Method::UploadChunk)
+            Ok(Method::UpdateSettings)
+            | Ok(Method::UploadChunk)
             | Ok(Method::TakeCanisterSnapshot)
             | Ok(Method::ReadCanisterSnapshotData)
             | Ok(Method::UploadCanisterSnapshotMetadata)
@@ -2640,6 +2641,11 @@ impl ExecutionTestBuilder {
 
     pub fn with_canister_sandboxing_disabled(mut self) -> Self {
         self.execution_config.canister_sandboxing_flag = FlagStatus::Disabled;
+        self
+    }
+
+    pub fn with_log_memory_store_feature_disabled(mut self) -> Self {
+        self.execution_config.log_memory_store_feature = FlagStatus::Disabled;
         self
     }
 

@@ -4,50 +4,52 @@ load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:candid",
-    "@crate_index//:futures",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:lazy_static",
-    "@crate_index//:rand",
-    "@crate_index//:serde",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/rust_canisters/canister_test",
-    "//rs/state_machine_tests",
-    "//rs/test_utilities",
-    "//rs/types/management_canister_types",
-    "//rs/types/types",
-    "@crate_index//:candid_parser",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-]
-
 rust_library(
     name = "statesync_test",
     srcs = glob(["src/**/*.rs"]),
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:lazy_static",
+        "@crate_index//:serde",
+    ],
 )
 
 rust_canister(
     name = "statesync-test-canister",
     srcs = ["src/main.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":statesync_test.did",
-    deps = DEPENDENCIES + [":statesync_test"],
+    deps = [
+        # Keep sorted.
+        ":statesync_test",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:lazy_static",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+    ],
 )
 
 rust_test(
     name = "statesync_test_test",
     compile_data = [":statesync_test.did"],
     crate = ":statesync_test",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/rust_canisters/canister_test",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:candid_parser",
+        "@crate_index//:futures",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:lazy_static",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+    ],
 )
 
 rust_ic_test(
@@ -60,6 +62,20 @@ rust_ic_test(
         "CARGO_MANIFEST_DIR": "rs/rust_canisters/statesync_test",
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath :statesync-test-canister)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":statesync_test"],
+    deps = [
+        # Keep sorted.
+        ":statesync_test",
+        "//rs/rust_canisters/canister_test",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:candid_parser",
+        "@crate_index//:futures",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:lazy_static",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+    ],
 )

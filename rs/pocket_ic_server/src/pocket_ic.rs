@@ -119,9 +119,9 @@ use ic_types::{
     CanisterId, Height, NumInstructions, PrincipalId, RegistryVersion, SnapshotId, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     canister_http::{
-        CanisterHttpReject, CanisterHttpRequest as AdapterCanisterHttpRequest,
-        CanisterHttpRequestId, CanisterHttpResponse as AdapterCanisterHttpResponse,
-        CanisterHttpResponseContent,
+        CanisterHttpPaymentReceipt, CanisterHttpReject,
+        CanisterHttpRequest as AdapterCanisterHttpRequest, CanisterHttpRequestId,
+        CanisterHttpResponse as AdapterCanisterHttpResponse, CanisterHttpResponseContent,
     },
     crypto::{BasicSig, BasicSigOf, CryptoResult, Signable, threshold_sig::IcRootOfTrust},
     malicious_flags::MaliciousFlags,
@@ -456,7 +456,7 @@ pub(crate) type CanisterHttpClient = Arc<
         Box<
             dyn NonBlockingChannel<
                     AdapterCanisterHttpRequest,
-                    Response = AdapterCanisterHttpResponse,
+                    Response = (AdapterCanisterHttpResponse, CanisterHttpPaymentReceipt),
                 > + Send,
         >,
     >,
@@ -2058,6 +2058,10 @@ impl PocketIcSubnets {
             // The initial values have been adapted from the mainnet values obtained by calling
             // `dfx canister call rdmx6-jaaaa-aaaaa-aaadq-cai config --ic`:
             //     record {
+            //       doh_config = opt opt record {
+            //         max_cache_age_secs = opt (3_600 : nat64);
+            //         allowed_domains = vec { "gmail.com"; "googlemail.com"; "outlook.com"; "hotmail.com"; "msn.com"; "live.com"; "icloud.com"; "me.com"; "mac.com"; "yahoo.com"; "ymail.com"; "aol.com"; "zoho.com"; "fastmail.com"; "fastmail.fm"; "hey.com"; "yandex.com"; "yandex.ru"; "mail.ru"; "qq.com"; "163.com"; "126.com"; "naver.com"; "daum.net";};
+            //       };
             //       is_production = opt true;
             //       backend_canister_id = opt principal "rdmx6-jaaaa-aaaaa-aaadq-cai";
             //       enable_dapps_explorer = opt false;
@@ -2066,10 +2070,27 @@ impl PocketIcSubnets {
             //         7_569_744 : nat64;
             //       };
             //       new_flow_origins = opt vec { "https://id.ai" };
+            //       dnssec_config = opt opt record {
+            //         root_anchors = vec {
+            //           record {
+            //             algorithm = 8 : nat8;
+            //             key_tag = 20_326 : nat16;
+            //             digest_type = 2 : nat8;
+            //             digest = blob "\e0\6d\44\b8\0b\8f\1d\39\a9\5c\0b\0d\7c\65\d0\84\58\e8\80\40\9b\bc\68\34\57\10\42\37\c7\f8\ec\8d";
+            //           };
+            //           record {
+            //             algorithm = 8 : nat8;
+            //             key_tag = 38_696 : nat16;
+            //             digest_type = 2 : nat8;
+            //             digest = blob "\68\3d\2d\0a\cb\8c\9b\71\2a\19\48\b2\7f\74\12\19\29\8d\0a\45\0d\61\2c\48\3a\f4\44\a4\c0\fb\2b\16";
+            //           };
+            //         };
+            //       };
+            //       sso_discoverable_domains = null;
             //       archive_config = opt record {
             //         polling_interval_ns = 15_000_000_000 : nat64;
             //         entries_buffer_limit = 10_000 : nat64;
-            //         module_hash = blob "\97\44\02\c9\03\a7\ff\da\36\20\8b\cc\5e\05\9d\df\2a\b0\d0\fa\8b\ef\19\a3\1a\d8\c9\99\1f\5b\db\9a";
+            //         module_hash = blob "\00\73\a8\b8\4e\b1\57\86\da\34\9e\b3\98\0a\84\cb\c7\fb\f0\35\88\d9\d0\9c\52\37\a8\99\70\45\1d\98";
             //         entries_fetch_limit = 1_000 : nat16;
             //       };
             //       canister_creation_cycles_cost = opt (0 : nat64);
@@ -2083,10 +2104,10 @@ impl PocketIcSubnets {
             //       };
             //       related_origins = opt vec {
             //         "https://id.ai";
-            //         "https://backend.id.ai";
             //         "https://identity.ic0.app";
             //         "https://identity.internetcomputer.org";
             //         "https://identity.icp0.io";
+            //         "https://identity.icp.net";
             //       };
             //       openid_configs = opt vec {
             //         record {
@@ -2180,6 +2201,8 @@ impl PocketIcSubnets {
                 backend_canister_id: Some(IDENTITY_CANISTER_ID.get().0),
                 backend_origin: None,
                 sso_discoverable_domains: None,
+                dnssec_config: None, // DIFFERENT FROM ICP MAINNET
+                doh_config: None,    // DIFFERENT FROM ICP MAINNET
             });
             ii_subnet
                 .state_machine
@@ -3032,18 +3055,20 @@ impl PocketIc {
                         let temp_state_dir = TempDir::new().unwrap();
                         copy_dir(subnet_state_dir, temp_state_dir.path())
                             .expect("Failed to copy state directory");
+                        let metrics_registry = MetricsRegistry::new();
                         let state_manager = StateManagerImpl::new(
                             Arc::new(FakeVerifier),
                             SubnetId::new(PrincipalId::default()),
                             conv_type(subnet_kind),
-                            no_op_logger(),
-                            &MetricsRegistry::new(),
                             &ic_config::state_manager::Config::new(
                                 temp_state_dir.path().to_path_buf(),
                             ),
                             None,
                             MaliciousFlags::default(),
                             tokio::sync::watch::channel(ic_types::Height::from(0)).0,
+                            None,
+                            &metrics_registry,
+                            no_op_logger(),
                         );
                         let metadata = state_manager.get_latest_state().take().metadata.clone();
                         // Shut down the temporary state manager to avoid race conditions.
@@ -3594,7 +3619,7 @@ impl Operation for ProcessCanisterHttpInternal {
                     Err(_) => {
                         break;
                     }
-                    Ok(response) => {
+                    Ok((response, _payment_receipt)) => {
                         canister_http.pending.remove(&response.id);
                         if let Some(context) = sm.canister_http_request_contexts().get(&response.id)
                         {
@@ -3764,7 +3789,7 @@ fn process_mock_canister_https_response(
             let response = loop {
                 match client.try_receive() {
                     Err(_) => std::thread::sleep(Duration::from_millis(10)),
-                    Ok(r) => {
+                    Ok((r, _payment_receipt)) => {
                         break r;
                     }
                 }

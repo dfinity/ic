@@ -11,6 +11,49 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-05-17: Proposal 141779
+
+http://dashboard.internetcomputer.org/proposal/141779
+
+## Changed
+
+* Neuron spawning and maturity disbursement finalization now read the locally
+  computed Mission 70 maturity modulation (derived from the XRC-backed price
+  history) instead of the CMC-polled `cached_daily_maturity_modulation_basis_points`.
+
+
+# 2026-05-13: Proposal 141771
+
+http://dashboard.internetcomputer.org/proposal/141771
+
+## Fixed
+
+* Tolerate XRC failures when updating maturity modulation: compute the average
+  over available days using last-observation-carried-forward, and advance past
+  days where XRC returns no rate so that a single persistent gap no longer
+  stalls maturity modulation updates.
+
+
+# 2026-05-08: Proposal 141738
+
+http://dashboard.internetcomputer.org/proposal/141738
+
+## Added
+
+* Daily timer task that fetches ICP/XDR rates from the Exchange Rate Canister, maintains a 365-day price history in Governance state, and computes Mission 70 maturity modulation locally. The computed value is not yet consumed by spawning or disbursement; that switchover will happen in a follow-up PR.
+
+* `get_maturity_modulation` query endpoint that returns the current Mission 70 maturity modulation value, including `current_value_permyriad` and `updated_at_timestamp_seconds`.
+
+* Expose `staked_maturity_e8s_equivalent` on `NeuronInfo`, so external callers
+  can read staked maturity from `get_neuron_info` / `list_neurons` responses.
+
+## Changed
+
+* The first Mission 70 maturity modulation calculation skips the daily speed limit, so the initial
+  value reflects the target directly (subject to global bounds) instead of being clamped to a tiny
+  step away from zero.
+
+
 # 2026-04-25: Proposal 141565
 
 http://dashboard.internetcomputer.org/proposal/141565

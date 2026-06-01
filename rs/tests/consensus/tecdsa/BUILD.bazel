@@ -297,6 +297,7 @@ tecdsa_performance_test_template = system_test_nns(
         "manual",
     ],
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_features",
@@ -350,6 +351,7 @@ system_test_nns(
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = SIGNER_CANISTER_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
 )
 
@@ -384,6 +386,7 @@ system_test_nns(
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS | SIGNER_CANISTER_RUNTIME_DEPS,
 )
 
@@ -418,6 +421,7 @@ system_test_nns(
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = SIGNER_CANISTER_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
 )
 
@@ -452,5 +456,6 @@ system_test_nns(
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = SIGNER_CANISTER_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
 )

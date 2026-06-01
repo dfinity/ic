@@ -12,7 +12,7 @@ use ic_transport_types::EnvelopeContent::Call;
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
 use itertools::Itertools;
 use pocket_ic::{
-    PocketIcBuilder,
+    CreateCanisterParams, CreateCanisterPlacement, PocketIcBuilder,
     common::rest::{IcpFeatures, IcpFeaturesConfig},
     nonblocking::PocketIc,
 };
@@ -175,28 +175,31 @@ async fn setup(
         if let Some(ref allowlist) = allowlist {
             new_controllers.extend(allowlist.clone());
         }
-        let migrated_canister = pic
-            .create_canister_on_subnet(
-                Some(c1),
-                Some(CanisterSettings {
-                    controllers: Some(new_controllers),
-                    ..Default::default()
-                }),
-                migrated_canister_subnet,
-            )
-            .await;
-        if enough_cycles {
-            pic.add_cycles(migrated_canister, u128::MAX / 2).await;
+        let cycles = if enough_cycles {
+            None
         } else {
-            pic.add_cycles(
-                migrated_canister,
-                if LOG_MEMORY_STORE_FEATURE_ENABLED {
-                    11_200_000
-                } else {
-                    2_000_000
+            Some(if LOG_MEMORY_STORE_FEATURE_ENABLED {
+                40_000_000_000
+            } else {
+                30_000_000_000
+            })
+        };
+        let migrated_canister = pic
+            .create_canister_with_params(
+                Some(c1),
+                CreateCanisterParams {
+                    cycles,
+                    settings: Some(CanisterSettings {
+                        controllers: Some(new_controllers),
+                        ..Default::default()
+                    }),
+                    placement: Some(CreateCanisterPlacement::SubnetId(migrated_canister_subnet)),
                 },
             )
-            .await;
+            .await
+            .unwrap();
+        if enough_cycles {
+            pic.add_cycles(migrated_canister, u128::MAX / 2).await;
         }
         pic.stop_canister(migrated_canister, Some(c1))
             .await
@@ -212,27 +215,21 @@ async fn setup(
             new_controllers.extend(allowlist.clone());
         }
         let replaced_canister = pic
-            .create_canister_on_subnet(
+            .create_canister_with_params(
                 Some(c1),
-                Some(CanisterSettings {
-                    controllers: Some(new_controllers),
-                    ..Default::default()
-                }),
-                replaced_canister_subnet,
-            )
-            .await;
-        if enough_cycles {
-            pic.add_cycles(replaced_canister, u128::MAX / 2).await;
-        } else {
-            pic.add_cycles(
-                replaced_canister,
-                if LOG_MEMORY_STORE_FEATURE_ENABLED {
-                    11_200_000
-                } else {
-                    2_000_000
+                CreateCanisterParams {
+                    cycles,
+                    settings: Some(CanisterSettings {
+                        controllers: Some(new_controllers),
+                        ..Default::default()
+                    }),
+                    placement: Some(CreateCanisterPlacement::SubnetId(replaced_canister_subnet)),
                 },
             )
-            .await;
+            .await
+            .unwrap();
+        if enough_cycles {
+            pic.add_cycles(replaced_canister, u128::MAX / 2).await;
         }
         pic.stop_canister(replaced_canister, Some(c1))
             .await

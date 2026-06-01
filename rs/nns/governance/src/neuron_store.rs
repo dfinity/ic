@@ -68,6 +68,10 @@ pub enum NeuronStoreError {
         neuron_id: NeuronId,
     },
     NeuronIdGenerationUnavailable,
+    NeuronSubaccountGenerationUnavailable,
+    SubaccountAlreadyExists {
+        subaccount: Subaccount,
+    },
     InvalidOperation {
         reason: String,
     },
@@ -172,6 +176,16 @@ impl Display for NeuronStoreError {
                     Likely due to uninitialized RNG."
                 )
             }
+            NeuronStoreError::NeuronSubaccountGenerationUnavailable => {
+                write!(
+                    f,
+                    "Neuron subaccount generation is not available currently. \
+                    Likely due to uninitialized RNG."
+                )
+            }
+            NeuronStoreError::SubaccountAlreadyExists { subaccount } => {
+                write!(f, "There is already a neuron with subaccount {subaccount}.")
+            }
             NeuronStoreError::InvalidOperation { reason } => {
                 write!(f, "Invalid operation: {reason}")
             }
@@ -198,6 +212,8 @@ impl From<NeuronStoreError> for GovernanceError {
             NeuronStoreError::InvalidData { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::NotAuthorizedToGetFullNeuron { .. } => ErrorType::NotAuthorized,
             NeuronStoreError::NeuronIdGenerationUnavailable => ErrorType::Unavailable,
+            NeuronStoreError::NeuronSubaccountGenerationUnavailable => ErrorType::Unavailable,
+            NeuronStoreError::SubaccountAlreadyExists { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::InvalidOperation { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::TotalPotentialVotingPowerOverflow => ErrorType::PreconditionFailed,
             NeuronStoreError::TotalDecidingVotingPowerOverflow => ErrorType::PreconditionFailed,
@@ -300,6 +316,32 @@ impl NeuronStore {
                  {:?}. Trying again...",
                 LOG_PREFIX,
                 neuron_id,
+            );
+        }
+    }
+
+    /// Generates a unique random neuron subaccount, retrying on collision.
+    pub fn new_neuron_subaccount(
+        &self,
+        random: &mut dyn RandomnessGenerator,
+    ) -> Result<Subaccount, NeuronStoreError> {
+        loop {
+            let subaccount = Subaccount(
+                random
+                    .random_byte_array()
+                    .map_err(|_| NeuronStoreError::NeuronSubaccountGenerationUnavailable)?,
+            );
+
+            if !self.has_neuron_with_subaccount(subaccount) {
+                return Ok(subaccount);
+            }
+
+            ic_cdk::println!(
+                "{}WARNING: A suspiciously near-impossible event has just occurred: \
+                 we randomly picked a neuron subaccount, but it's already used: \
+                 {:?}. Trying again...",
+                LOG_PREFIX,
+                subaccount,
             );
         }
     }
@@ -440,7 +482,20 @@ impl NeuronStore {
         })
     }
 
-    pub fn has_neuron_with_subaccount(&self, subaccount: Subaccount) -> bool {
+    /// Checks that a deterministic (caller-supplied) subaccount is not already
+    /// in use. Unlike random subaccounts (which retry on collision), deterministic
+    /// subaccounts must fail immediately since retrying would produce the same result.
+    pub fn ensure_subaccount_available(
+        &self,
+        subaccount: Subaccount,
+    ) -> Result<Subaccount, NeuronStoreError> {
+        if self.has_neuron_with_subaccount(subaccount) {
+            return Err(NeuronStoreError::SubaccountAlreadyExists { subaccount });
+        }
+        Ok(subaccount)
+    }
+
+    fn has_neuron_with_subaccount(&self, subaccount: Subaccount) -> bool {
         self.get_neuron_id_for_subaccount(subaccount).is_some()
     }
 

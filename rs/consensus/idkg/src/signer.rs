@@ -612,14 +612,6 @@ impl ThresholdSigner for ThresholdSignerImpl {
             .signature_request_contexts()
             .iter()
             .flat_map(|(callback_id, context)| {
-                if let Some(id) = context.deprecated_pseudo_random_id {
-                    warn!(
-                        every_n_seconds => 15,
-                        self.log,
-                        "Deprecated pseudo random ID still in use by context {}: {:?}",
-                        callback_id, id
-                    );
-                }
                 context.height().map(|height| RequestId {
                     callback_id: *callback_id,
                     height,
@@ -738,7 +730,7 @@ mod tests {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_management_canister_types_private::{MasterPublicKeyId, SchnorrAlgorithm};
-    use ic_test_utilities_consensus::{IDkgStatsNoOp, idkg::*};
+    use ic_test_utilities_consensus::{FakeCertifiedStateSnapshot, IDkgStatsNoOp, idkg::*};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, subnet_test_id, user_test_id};
     use ic_types::{

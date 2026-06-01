@@ -1,9 +1,7 @@
 use crate::canister_state::queues::{
     CanisterInput, CanisterQueuesLoopDetector, refunds::RefundPool,
 };
-use crate::canister_state::system_state::{
-    CanisterOutputQueuesIterator, CanisterStatus, push_input,
-};
+use crate::canister_state::system_state::{CanisterOutputQueuesIterator, push_input};
 use crate::metadata_state::subnet_call_context_manager::{
     PreSignatureStash, ReshareChainKeyContext, SignWithThresholdContext,
 };
@@ -27,13 +25,12 @@ use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    AccumulatedPriority, CanisterId, NumBytes, SubnetId, Time,
+    CanisterId, NumBytes, SubnetId, Time,
     batch::{ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
     messages::{
-        CallbackId, Ingress, MessageId, Refund, RequestOrResponse, Response, StopCanisterCallId,
-        SubnetMessage,
+        CallbackId, Ingress, MessageId, Refund, RequestOrResponse, Response, SubnetMessage,
     },
     time::CoarseTime,
 };
@@ -367,15 +364,15 @@ pub struct MemoryTaken {
     /// specified and the actual canister memory usage (including
     /// Wasm custom sections) where no explicit memory reservation
     /// has been made.
-    execution: NumBytes,
+    pub(crate) execution: NumBytes,
     /// Memory taken by guaranteed response canister messages or reservations.
-    guaranteed_response_messages: NumBytes,
+    pub(crate) guaranteed_response_messages: NumBytes,
     /// Memory taken by best-effort canister messages.
-    best_effort_messages: NumBytes,
+    pub(crate) best_effort_messages: NumBytes,
     /// Memory taken by Wasm Custom Sections.
-    wasm_custom_sections: NumBytes,
+    pub(crate) wasm_custom_sections: NumBytes,
     /// Memory taken by canister history.
-    canister_history: NumBytes,
+    pub(crate) canister_history: NumBytes,
 }
 
 impl MemoryTaken {
@@ -494,42 +491,6 @@ impl ReplicatedState {
         }
     }
 
-    /// Removes `StopCanisterCall`s from `SubnetCallContextManager` that have no
-    /// corresponding `StopCanisterContext` in the target canister's stop contexts.
-    /// These can arise from a bug fixed in commit 52e7b89 where a `StopCanisterCall`
-    /// was pushed but never removed when the `stop_canister` completed, e.g., when
-    /// the target canister was already stopped or the sender was not a controller.
-    pub fn remove_orphaned_stop_canister_calls(&mut self) {
-        let call_ids_with_context: BTreeSet<StopCanisterCallId> = self
-            .canister_states
-            .values()
-            .flat_map(|canister| match canister.system_state.get_status() {
-                CanisterStatus::Stopping { stop_contexts, .. } => stop_contexts.as_slice(),
-                _ => &[],
-            })
-            .filter_map(|ctx| *ctx.call_id())
-            .collect();
-
-        let orphaned: Vec<StopCanisterCallId> = self
-            .metadata
-            .subnet_call_context_manager
-            .iter_stop_canister_calls()
-            .filter_map(|(call_id, _)| {
-                if call_ids_with_context.contains(call_id) {
-                    None
-                } else {
-                    Some(*call_id)
-                }
-            })
-            .collect();
-
-        for call_id in orphaned {
-            self.metadata
-                .subnet_call_context_manager
-                .remove_stop_canister_call(call_id);
-        }
-    }
-
     /// References into _all_ fields.
     #[allow(clippy::type_complexity)]
     pub fn component_refs(
@@ -607,11 +568,15 @@ impl ReplicatedState {
     /// cleaned up.
     pub fn put_canister_state<CS: Into<Arc<CanisterState>>>(&mut self, canister_state: CS) {
         let canister_state = canister_state.into();
-        // Also insert a scheduling priority for the canister. This is a temporary
-        // measure to ensure that every canister has an explicit priority.
-        self.metadata
-            .subnet_schedule
-            .get_mut(canister_state.canister_id());
+
+        // Add the canister to the subnet schedule if it has install code or heap delta
+        // debits or is in a long-running execution.
+        if canister_state.must_be_in_schedule() {
+            self.metadata
+                .subnet_schedule
+                .get_mut(canister_state.canister_id());
+        }
+
         self.canister_states
             .insert(canister_state.canister_id(), canister_state);
     }
@@ -721,28 +686,19 @@ impl ReplicatedState {
         )
     }
 
-    /// Time complexity: `O(n)` in the number of active canisters.
-    pub fn canister_accumulated_priorities(&self) -> BTreeMap<CanisterId, AccumulatedPriority> {
-        self.canister_states
-            .keys()
-            .map(|canister_id| {
-                (
-                    *canister_id,
-                    self.metadata
-                        .subnet_schedule
-                        .get(canister_id)
-                        .accumulated_priority,
-                )
-            })
-            .collect()
-    }
-
-    /// Prunes all canister priorities for which a corresponding canister state no
-    /// longer exists.
+    /// Prunes the canister priorities of deleted canisters; and those that have
+    /// all-zero accumulated priority, priority credit, heap delta and install code
+    /// debits, and do not have a long-running execution.
     pub fn garbage_collect_subnet_schedule(&mut self) {
         self.metadata
             .subnet_schedule
-            .retain(|canister_id, _| self.canister_states.contains_key(canister_id));
+            .retain(|canister_id, priority| {
+                self.canister_states
+                    .get(canister_id)
+                    .is_some_and(|canister| {
+                        priority.is_non_zero() || canister.must_be_in_schedule()
+                    })
+            });
     }
 
     pub fn system_metadata(&self) -> &SystemMetadata {
@@ -985,6 +941,16 @@ impl ReplicatedState {
             (self.subnet_queues.best_effort_message_memory_usage() as u64).into();
 
         canisters_memory_usage + subnet_memory_usage
+    }
+
+    /// Returns the total memory usage of all canisters. Execution and wasm custom section
+    /// memory are included in `memory_usage()`, message memory is added separately.
+    pub fn total_canister_memory_usage(&self) -> NumBytes {
+        let mut total_memory_usage = NumBytes::new(0);
+        for canister in self.canisters_iter() {
+            total_memory_usage += canister.memory_usage() + canister.message_memory_usage().total();
+        }
+        total_memory_usage
     }
 
     /// Returns the total memory taken by the ingress history in bytes.
