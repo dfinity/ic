@@ -1,9 +1,6 @@
-#![allow(deprecated)]
 use crate::{CkEthSetup, JsonRpcProvider, MAX_TICKS, assert_reply};
 use candid::{Decode, Encode};
-use ic_cdk::api::management_canister::http_request::{
-    HttpResponse as OutCallHttpResponse, TransformArgs,
-};
+use ic_cdk::management_canister::{HttpRequestResult as OutCallHttpResponse, TransformArgs};
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::CanisterHttpResponsePayload;
 use ic_state_machine_tests::{PayloadBuilder, StateMachine};

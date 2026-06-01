@@ -5593,9 +5593,11 @@ name = "guest_disk"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "attestation",
  "clap 4.6.0",
  "config_tool",
  "config_types",
+ "hex",
  "ic-sys",
  "ic_device",
  "ic_os_logging",
@@ -5606,6 +5608,8 @@ dependencies = [
  "parking_lot",
  "prometheus",
  "rand 0.8.5",
+ "serde",
+ "serde_json",
  "sev",
  "sev_guest",
  "sev_guest_testing",
@@ -18207,6 +18211,8 @@ name = "manual_guestos_recovery"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "clap 4.6.0",
+ "grub",
  "ratatui",
  "scopeguard",
  "shell-escape",

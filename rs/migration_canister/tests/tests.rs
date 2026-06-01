@@ -179,9 +179,9 @@ async fn setup(
             None
         } else {
             Some(if LOG_MEMORY_STORE_FEATURE_ENABLED {
-                11_200_000
+                40_000_000_000
             } else {
-                2_000_000
+                30_000_000_000
             })
         };
         let migrated_canister = pic

@@ -6,6 +6,7 @@ fn test_validate_guest_launch_measurement_valid() {
         measurement: vec![0_u8; 48],
         metadata: Some(GuestLaunchMeasurementMetadata {
             kernel_cmdline: Some("console=ttyS0".to_string()),
+            vcpu_type: Some("EPYC-Turin".to_string()),
         }),
     };
     let result = measurement.validate();
@@ -18,6 +19,7 @@ fn test_validate_guest_launch_measurement_wrong_size() {
         measurement: vec![0_u8; 32],
         metadata: Some(GuestLaunchMeasurementMetadata {
             kernel_cmdline: Some("console=ttyS0".to_string()),
+            vcpu_type: None,
         }),
     };
     let defects = measurement.validate().unwrap_err();
@@ -45,6 +47,7 @@ fn test_validate_guest_launch_measurement_empty_kernel_cmdline() {
         measurement: vec![0_u8; 48],
         metadata: Some(GuestLaunchMeasurementMetadata {
             kernel_cmdline: Some("".to_string()),
+            vcpu_type: None,
         }),
     };
 
@@ -88,6 +91,7 @@ fn test_validate_guest_launch_measurements_valid() {
             measurement: vec![0_u8; 48],
             metadata: Some(GuestLaunchMeasurementMetadata {
                 kernel_cmdline: Some("console=ttyS0".to_string()),
+                vcpu_type: Some("EPYC-Turin".to_string()),
             }),
         }],
     };
@@ -104,6 +108,7 @@ fn test_validate_guest_launch_measurements_multiple_defects() {
                 measurement: vec![0_u8; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("console=ttyS0".to_string()),
+                    vcpu_type: None,
                 }),
             },
             // Wrong measurement size
@@ -111,6 +116,7 @@ fn test_validate_guest_launch_measurements_multiple_defects() {
                 measurement: vec![0_u8; 32],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("console=ttyS0".to_string()),
+                    vcpu_type: None,
                 }),
             },
             // Missing metadata. This is ok.
@@ -123,6 +129,7 @@ fn test_validate_guest_launch_measurements_multiple_defects() {
                 measurement: vec![0_u8; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("".to_string()),
+                    vcpu_type: None,
                 }),
             },
             // Metadata absent. This is OK.
@@ -154,6 +161,7 @@ fn test_validate_guest_launch_measurement_metadata_kernel_cmdline_too_long() {
         measurement: vec![0_u8; 48],
         metadata: Some(GuestLaunchMeasurementMetadata {
             kernel_cmdline: Some("a".repeat(len)),
+            vcpu_type: None,
         }),
     };
     let defects = measurement.validate().unwrap_err();
@@ -172,6 +180,55 @@ fn test_validate_guest_launch_measurement_metadata_kernel_cmdline_limit() {
         measurement: vec![0_u8; 48],
         metadata: Some(GuestLaunchMeasurementMetadata {
             kernel_cmdline: Some("a".repeat(len)),
+            vcpu_type: None,
+        }),
+    };
+    assert_eq!(measurement.validate(), Ok(()));
+}
+
+#[test]
+fn test_validate_guest_launch_measurement_metadata_empty_vcpu_type() {
+    let measurement = GuestLaunchMeasurement {
+        measurement: vec![0_u8; 48],
+        metadata: Some(GuestLaunchMeasurementMetadata {
+            kernel_cmdline: Some("console=ttyS0".to_string()),
+            vcpu_type: Some("".to_string()),
+        }),
+    };
+    let defects = measurement.validate().unwrap_err();
+    assert_eq!(defects.len(), 1, "{defects:#?}");
+    assert!(
+        defects[0].contains("vcpu_type must be None or non-empty"),
+        "Expected error message to contain 'vcpu_type must be None or non-empty', got: {}",
+        defects[0]
+    );
+}
+
+#[test]
+fn test_validate_guest_launch_measurement_metadata_vcpu_type_too_long() {
+    let measurement = GuestLaunchMeasurement {
+        measurement: vec![0_u8; 48],
+        metadata: Some(GuestLaunchMeasurementMetadata {
+            kernel_cmdline: Some("console=ttyS0".to_string()),
+            vcpu_type: Some("a".repeat(101)),
+        }),
+    };
+    let defects = measurement.validate().unwrap_err();
+    assert_eq!(defects.len(), 1, "{defects:#?}");
+    assert!(
+        defects[0].contains("vcpu_type is longer than 100 bytes"),
+        "Expected error message to contain 'vcpu_type is longer than 100 bytes', got: {}",
+        defects[0]
+    );
+}
+
+#[test]
+fn test_validate_guest_launch_measurement_metadata_vcpu_type_limit() {
+    let measurement = GuestLaunchMeasurement {
+        measurement: vec![0_u8; 48],
+        metadata: Some(GuestLaunchMeasurementMetadata {
+            kernel_cmdline: Some("console=ttyS0".to_string()),
+            vcpu_type: Some("a".repeat(100)),
         }),
     };
     assert_eq!(measurement.validate(), Ok(()));

@@ -73,63 +73,6 @@ py_binary(
     deps = [":utils"],
 )
 
-# Hermetic mkfs.vfat extracted from the apt-snapshot-pinned dosfstools .deb so
-# that the build does not depend on the host-installed binary.
-# In the dosfstools package, mkfs.vfat is a symlink to mkfs.fat; we extract the
-# real binary but name the output mkfs.vfat so argv[0] selects vfat defaults.
-genrule(
-    name = "mkfs_vfat",
-    srcs = ["@noble//dosfstools/amd64:data"],
-    outs = ["mkfs.vfat"],
-    cmd = "tar -xzOf $(location @noble//dosfstools/amd64:data) ./usr/sbin/mkfs.fat > $@ && chmod +x $@",
-    executable = True,
-)
-
-# Hermetic mkfs.ext4 extracted from the apt-snapshot-pinned e2fsprogs .deb and
-# its dynamic-library dependencies (libext2fs, libcom_err, libblkid, libuuid,
-# libe2p). The on-disk binary mkfs.ext4 is itself a symlink to mke2fs; we
-# extract the real binary as `mke2fs` and name the symlink target accordingly.
-# mke2fs.conf is also included because mke2fs reads it at runtime to pick
-# default filesystem features (selected via MKE2FS_CONFIG by build_ext4_image).
-genrule(
-    name = "mkfs_ext4_files",
-    srcs = [
-        "@noble//e2fsprogs/amd64:data",
-        "@noble//libuuid1/amd64:data",
-        "@noble//libcom-err2/amd64:data",
-        "@noble//libext2fs2t64/amd64:data",
-        "@noble//libblkid1/amd64:data",
-    ],
-    outs = [
-        "mkfs.ext4.d/mke2fs",
-        "mkfs.ext4.d/mke2fs.conf",
-        "mkfs.ext4.d/lib/libuuid.so.1",
-        "mkfs.ext4.d/lib/libcom_err.so.2",
-        "mkfs.ext4.d/lib/libext2fs.so.2",
-        "mkfs.ext4.d/lib/libe2p.so.2",
-        "mkfs.ext4.d/lib/libblkid.so.1",
-    ],
-    cmd = """
-set -euo pipefail
-tmp=$$(mktemp -d)
-trap 'rm -rf $$tmp' EXIT
-for f in $(SRCS); do tar -xzf $$f -C $$tmp; done
-cp $$tmp/usr/sbin/mke2fs                              $(execpath mkfs.ext4.d/mke2fs)
-chmod +x                                              $(execpath mkfs.ext4.d/mke2fs)
-cp $$tmp/etc/mke2fs.conf                              $(execpath mkfs.ext4.d/mke2fs.conf)
-cp $$tmp/usr/lib/x86_64-linux-gnu/libuuid.so.1.3.0    $(execpath mkfs.ext4.d/lib/libuuid.so.1)
-cp $$tmp/usr/lib/x86_64-linux-gnu/libcom_err.so.2.1   $(execpath mkfs.ext4.d/lib/libcom_err.so.2)
-cp $$tmp/usr/lib/x86_64-linux-gnu/libext2fs.so.2.4    $(execpath mkfs.ext4.d/lib/libext2fs.so.2)
-cp $$tmp/usr/lib/x86_64-linux-gnu/libe2p.so.2.3       $(execpath mkfs.ext4.d/lib/libe2p.so.2)
-cp $$tmp/usr/lib/x86_64-linux-gnu/libblkid.so.1.1.0   $(execpath mkfs.ext4.d/lib/libblkid.so.1)
-""",
-)
-
-filegroup(
-    name = "mkfs_ext4_runfiles",
-    srcs = [":mkfs_ext4_files"],
-)
-
 py_binary(
     name = "verity_sign",
     srcs = ["verity_sign.py"],
