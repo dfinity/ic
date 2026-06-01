@@ -872,6 +872,15 @@ pub mod internal {
             self.crypto_component
                 .verify_basic_sig_batch(signature, message, registry_version)
         }
+
+        fn verify_basic_sig_batch_multi_msg(
+            &self,
+            inputs: &[(NodeId, &BasicSigOf<T>, &T)],
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()> {
+            self.crypto_component
+                .verify_basic_sig_batch_multi_msg(inputs, registry_version)
+        }
     }
 
     impl<C: CryptoServiceProvider, T: Signable, R: CryptoComponentRng> MultiSigVerifier<T>

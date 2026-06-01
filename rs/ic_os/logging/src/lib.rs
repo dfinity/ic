@@ -4,6 +4,8 @@ use std::fs::OpenOptions;
 use std::path::Path;
 use tracing::{Event, Level, Subscriber};
 use tracing_subscriber::{
+    Layer,
+    filter::LevelFilter,
     fmt::{
         FmtContext, format,
         format::{FormatEvent, FormatFields, Writer},
@@ -65,10 +67,20 @@ fn syslog_identifier() -> String {
 
 /// Initialize tracing, using journald if available and falling back to stderr.
 pub fn init_logging() {
+    init_logging_with_level(Level::TRACE);
+}
+
+/// Initialize tracing, using journald if available and falling back to stderr.
+pub fn init_logging_with_level(max_level: Level) {
+    let level_filter = LevelFilter::from_level(max_level);
+
     match tracing_journald::layer() {
-        Ok(layer) => tracing_subscriber::registry().with(layer).init(),
+        Ok(layer) => tracing_subscriber::registry()
+            .with(layer.with_filter(level_filter))
+            .init(),
         Err(_) => tracing_subscriber::fmt()
             .with_writer(std::io::stderr)
+            .with_max_level(max_level)
             .init(),
     }
 }

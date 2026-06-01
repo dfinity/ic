@@ -7,10 +7,13 @@ eprintln() {
     echo "$@" >&2
 }
 
-if [ -n "${IN_NIX_SHELL:-}" ]; then
-    eprintln "Please do not run $0 inside of nix-shell."
-    exit 1
-fi
+# Print a yellow, bold message
+warn() {
+    tput -T xterm setaf 3 >&2
+    tput -T xterm bold >&2
+    eprintln "$@"
+    tput -T xterm sgr0 >&2
+}
 
 if [ -e /run/.containerenv ]; then
     eprintln "Nested $0 is not supported."
@@ -33,7 +36,6 @@ usage() {
 Usage: $0 -h | --help, -c <dir> | --cache-dir <dir>
 
     -c | --cache-dir <dir>  Bind-mount custom cache dir instead of '~/.cache'
-    -r | --rebuild          Rebuild the container image
     -i | --image <image>    ic-build or ic-dev (default: ic-dev)
     -h | --help             Print help
 
@@ -46,18 +48,12 @@ To run a different shell or command, pass it as arguments, e.g.:
 EOF
 }
 
-REBUILD_IMAGE=false
 IMAGE_NAME="ic-dev"
 
 CTR=0
 while test $# -gt $CTR; do
     case "$1" in
         -h | --help) usage && exit 0 ;;
-        -f | --full) eprintln "The legacy image has been deprecated, --full is not an option anymore." && exit 0 ;;
-        -r | --rebuild)
-            REBUILD_IMAGE=true
-            shift
-            ;;
         -i | --image)
             shift
             if [ $# -eq 0 ]; then
@@ -124,9 +120,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 IMAGE_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
 IMAGE="ghcr.io/dfinity/$IMAGE_NAME:$IMAGE_TAG"
 
-if [ $REBUILD_IMAGE = true ]; then
-    "$REPO_ROOT"/ci/container/build-image.sh --image "$IMAGE_NAME"
-elif ! "${CONTAINER_CMD[@]}" image exists $IMAGE; then
+if ! "${CONTAINER_CMD[@]}" image exists $IMAGE; then
     if ! "${CONTAINER_CMD[@]}" pull $IMAGE; then
         "$REPO_ROOT"/ci/container/build-image.sh --image "$IMAGE_NAME"
     fi
@@ -140,11 +134,8 @@ if [ "$DEVENV" = true ]; then
     MAX_GB=20
     images_rawsize=$(${CONTAINER_CMD[@]} system df --format json | jq -cMr '.[]|select(.Type == "Images")|.RawSize')
     if (($images_rawsize > $MAX_GB * 10 ** 9)); then
-        tput -T xterm setaf 3
-        tput -T xterm bold
-        eprintln "Container images take up more than ${MAX_GB}GB. You can reclaim space by clearing the container image cache (will cause a rebuild):"
-        eprintln "> ${CONTAINER_CMD[@]} image prune --all --force --filter containers=false"
-        tput -T xterm sgr0
+        warn "Container images take up more than ${MAX_GB}GB. You can reclaim space by clearing the container image cache (will cause a rebuild):"
+        warn "> ${CONTAINER_CMD[@]} image prune --all --force --filter containers=false"
     fi
 fi
 
@@ -167,7 +158,6 @@ PODMAN_RUN_ARGS=(
     --add-host devenv-container:127.0.0.1
     --entrypoint=
     --init
-    --pull=missing
 )
 
 PODMAN_RUN_ARGS+=(--hostuser="$USER")
@@ -178,6 +168,7 @@ else
     CTR_HOME="/ic"
 fi
 
+# NOTE: in devenvs, ~/.cache is `/hoststorage/cache`
 CACHE_DIR="${CACHE_DIR:-${HOME}/.cache}"
 
 ZIG_CACHE="${CACHE_DIR}/zig-cache"
@@ -187,20 +178,24 @@ ICT_TESTNETS_DIR="/tmp/ict_testnets"
 mkdir -p "${ICT_TESTNETS_DIR}"
 
 # make sure we have all bind-mounts
+# ~/.aws, ~/.ssh: credentials forwarded to the container
+# ~/.cache: used as cache persisted across containers (cargo, etc)
+# ~/.claude: persisted claude settings
 mkdir -p ~/.{aws,ssh,cache,claude}
 
 PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
-    --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache"
     --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache"
     --mount type=bind,source="${ICT_TESTNETS_DIR}",target="${ICT_TESTNETS_DIR}"
-    --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
     --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
+    --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
+    --mount type=bind,source="${CACHE_DIR}",target="${CTR_HOME}/.cache"
     --mount type=bind,source="${HOME}/.claude",target="${CTR_HOME}/.claude"
     --mount type=tmpfs,target="/tmp/containers"
 )
 
-if [ "$(id -u)" = "1000" ]; then
+# In the devenv, inject some extra files into the container for convenience
+if [ "$DEVENV" = true ]; then
     if [ -e "${HOME}/.gitconfig" ]; then
         PODMAN_RUN_ARGS+=(
             --mount type=bind,source="${HOME}/.gitconfig",target="/home/ubuntu/.gitconfig"
@@ -223,18 +218,16 @@ if [ "$(id -u)" = "1000" ]; then
             --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history"
         )
     fi
-    if findmnt /hoststorage >/dev/null; then
-        # use host's storage for cargo target
-        # * shared with VSCode's devcontainer, see .devcontainer/devcontainer.json
-        # this configuration improves performance of rust-analyzer
-        if [ ! -d /hoststorage/cache/cargo ]; then
-            sudo mkdir -p /hoststorage/cache/cargo
-            sudo chown -R 1000:1000 /hoststorage/cache/cargo
-        fi
-        PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target"
-        )
-    fi
+
+    # use hoststorage for cargo target
+    # * shared with VSCode's devcontainer, see .devcontainer/devcontainer.json
+    # this configuration improves performance of rust-analyzer
+    CARGO_TARGET_DIR="$CACHE_DIR/cargo"
+    mkdir -p "$CARGO_TARGET_DIR"
+
+    PODMAN_RUN_ARGS+=(
+        --mount type=bind,source="$CARGO_TARGET_DIR",target="/ic/target"
+    )
 fi
 
 if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -e "${SSH_AUTH_SOCK:-}" ]; then
