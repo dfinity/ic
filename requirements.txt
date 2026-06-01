@@ -470,10 +470,12 @@ gitpython==3.1.50 \
     --hash=sha256:80da2d12504d52e1f998772dc5baf6e553f8d2fcfe1fcc226c9d9a2ee3372dcc \
     --hash=sha256:d352abe2908d07355014abdd21ddf798c2a961469239afec4962e9da884858f9
     # via -r requirements.in
-idna==3.10 \
-    --hash=sha256:12f65c9b470abda6dc35cf8e63cc574b1c52b11df2c86030af0ac09b01b13ea9 \
-    --hash=sha256:946d195a0d259cbba61165e88e65941f16e9b36ea6ddb97f00452bae8b1287d3
-    # via requests
+idna==3.17 \
+    --hash=sha256:466e48829084efe2548012b855df21540b96f2e20e51bd124c851536556a592c \
+    --hash=sha256:5eb0cb53bc467c12eadcf6de83163ad8527cec9416f44b9b61b19caedad2b87f
+    # via
+    #   -r requirements.in
+    #   requests
 idracredfishsupport==0.0.8 \
     --hash=sha256:964b17525f12db358fea93ce2ca491b7661fd8f7567365190da3e6729965bb19
     # via -r requirements.in
