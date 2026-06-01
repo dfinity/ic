@@ -9,10 +9,10 @@ eprintln() {
 
 # Print a yellow, bold message
 warn() {
-    tput -T xterm setaf 3
-    tput -T xterm bold
+    tput -T xterm setaf 3 >&2
+    tput -T xterm bold >&2
     eprintln "$@"
-    tput -T xterm sgr0
+    tput -T xterm sgr0 >&2
 }
 
 if [ -e /run/.containerenv ]; then
@@ -195,7 +195,7 @@ PODMAN_RUN_ARGS+=(
     --mount type=tmpfs,target="/tmp/containers"
 )
 
-# In the devenv load inject some extra files into the container for convenience
+# In the devenv, inject some extra files into the container for convenience
 if [ "$DEVENV" = true ]; then
     if [ -e "${HOME}/.gitconfig" ]; then
         PODMAN_RUN_ARGS+=(
