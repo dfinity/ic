@@ -32,7 +32,6 @@ use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::Config;
 use ic_crypto_tree_hash::{
     Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness, recompute_digest,
-    sparse_labeled_tree_from_paths,
 };
 use ic_interfaces::certification::Verifier;
 use ic_interfaces_certified_stream_store::{
