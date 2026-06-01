@@ -143,8 +143,10 @@ impl TryFrom<pb::CatchUpContent> for CatchUpContent {
 }
 
 impl SignedBytesWithoutDomainSeparator for CatchUpContent {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        pb::CatchUpContent::from(self.clone()).as_protobuf_vec()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        pb::CatchUpContent::from(self.clone())
+            .encode(bytes)
+            .expect("CatchUpContent should serialize");
     }
 }
 
@@ -211,7 +213,7 @@ impl From<CatchUpPackage> for pb::CatchUpPackage {
         Self {
             signer: Some(pb::NiDkgId::from(cup.signature.signer)),
             signature: cup.signature.signature.get().0,
-            content: pb::CatchUpContent::from(cup.content).as_protobuf_vec(),
+            content: pb::CatchUpContent::from(cup.content).encode_to_vec(),
         }
     }
 }
@@ -379,8 +381,8 @@ impl From<&pb::CatchUpPackage> for CatchUpContentProtobufBytes {
 }
 
 impl SignedBytesWithoutDomainSeparator for CatchUpContentProtobufBytes {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        self.0.clone()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(&self.0);
     }
 }
 
