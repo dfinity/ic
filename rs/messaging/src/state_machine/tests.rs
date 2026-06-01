@@ -314,7 +314,7 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         .unwrap();
 
     // Output response: local → remote (bounded-wait to avoid critical error).
-    // Best-effort responses with no route are dropped without a critical error.
+    // Bounded-wait responses with no route are dropped without a critical error.
     // First push then pop a matching input request to create the output-queue reservation.
     let mut subnet_available_memory = i64::MAX / 2;
     canister_state
