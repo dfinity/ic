@@ -268,6 +268,7 @@ def system_test(
         visibility = visibility,
     )
 
+    # create a colocated version of the test (marked as manual _unless_ the test is tagged with "colocate")
     sh_test(
         srcs = ["//rs/tests:run_systest.sh"],
         name = test_name + "_colocate",
