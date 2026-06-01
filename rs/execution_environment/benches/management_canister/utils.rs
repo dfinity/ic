@@ -1,6 +1,6 @@
 use candid::Decode;
 use ic_base_types::CanisterId;
-use ic_config::subnet_config::SubnetConfig;
+use ic_config::subnet_config::{SubnetConfig, SubnetSecurity};
 use ic_config::{execution_environment::Config as HypervisorConfig, flag_status::FlagStatus};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
@@ -29,7 +29,7 @@ pub fn env() -> StateMachine {
     };
     StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
-            SubnetConfig::new(SubnetType::Application),
+            SubnetConfig::new(SubnetType::Application, SubnetSecurity::None),
             hypervisor_config,
         )))
         .with_checkpoints_enabled(false)
