@@ -60,8 +60,8 @@
     "sha256": "8df72887ab235f4533ee613b1bc7293ec8d62c866525b1425934cf992ef894a7"
   },
   "dogecoin": {
-    "sha256": "1fe3ce73e9422a0a3e0444ea7b5a615d2b36c4b940d3cbcfe9e3d5c6cdc32494",
-    "tag": "release/2026-03-12"
+    "sha256": "1921396143c687dee142d3b8bbcc7b17f3684158a6e1d794e4491fdf7058e1ba",
+    "tag": "release/2026-05-27"
   },
   "genesis-token": {
     "rev": "36ceffe4c47f4c3a881e75951178f5413f777f6c",
