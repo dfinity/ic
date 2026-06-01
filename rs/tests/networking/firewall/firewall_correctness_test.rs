@@ -123,19 +123,13 @@ pub fn firewall_correctness_test(env: TestEnv) {
             &logger,
         )
         .await;
-        let new_registry_version = env
-            .topology_snapshot()
-            .block_for_newer_registry_version()
-            .await
-            .unwrap()
-            .get_registry_version();
 
         // Wait for a while to make sure that all nodes have updated their firewall rules according
         // to the new registry configuration.
         for subnet in env.topology_snapshot().subnets() {
             await_subnet_firewall_registry_version_with_retries_async(
                 &subnet,
-                new_registry_version,
+                RegistryVersion::from(2),
                 &logger,
                 Duration::from_secs(60),
                 Duration::from_secs(10),
