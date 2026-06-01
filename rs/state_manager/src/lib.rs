@@ -25,8 +25,8 @@ use crossbeam_channel::{Sender, bounded, unbounded};
 use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use ic_canonical_state_tree_hash::{
     hash_tree::{HashTree, HashTreeError, hash_lazy_tree},
-    lazy_tree::LazyTree,
-    lazy_tree::materialize::materialize_partial,
+    lazy_tree::{LazyTree, materialize::materialize_partial},
+    witness::compute_state_height_witness,
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::Config;
@@ -2721,13 +2721,7 @@ fn state_height_witness(
         .with_label_values(&["state_height_witness"])
         .start_timer();
 
-    let paths = vec![vec!["metadata".into(), "height".into()].into()];
-    let labeled_tree =
-        sparse_labeled_tree_from_paths(&paths).expect("Failed to compute labeled tree for height");
-    let partial_tree = materialize_partial(lazy_tree, &labeled_tree, None);
-    hash_tree
-        .witness::<Witness>(&partial_tree)
-        .expect("Failed to compute witness for state height")
+    compute_state_height_witness(lazy_tree, hash_tree)
 }
 
 fn update_latest_height(cached: &AtomicU64, h: Height) -> u64 {

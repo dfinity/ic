@@ -1,5 +1,14 @@
+use ic_canonical_state::lazy_tree_conversion::{
+    replicated_state_as_lazy_tree, state_height_as_tree,
+};
+use ic_canonical_state_tree_hash::{
+    hash_tree::hash_lazy_tree, lazy_tree::materialize::materialize,
+    witness::compute_state_height_witness,
+};
 use ic_crypto_sha2::Sha256;
-use ic_crypto_tree_hash::{Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness};
+use ic_crypto_tree_hash::{
+    Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness, recompute_digest,
+};
 use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
@@ -41,6 +50,7 @@ struct Snapshot {
     root_hash: CryptoHashOfState,
     partial_hash: CryptoHashOfPartialState,
     certification: Option<Certification>,
+    height_witness: Witness,
 }
 
 impl Snapshot {
@@ -73,16 +83,19 @@ impl Default for FakeStateManager {
 impl FakeStateManager {
     pub fn new() -> Self {
         let height = Height::new(0);
-        let fake_hash = CryptoHash(Sha256::hash(&height.get().to_le_bytes()).to_vec());
-        let partial_hash = CryptoHashOf::from(fake_hash);
-        let fake_hash = CryptoHash(Sha256::hash(&height.get().to_le_bytes()).to_vec());
+        let fake_hash = CryptoHashOf::from(CryptoHash(
+            Sha256::hash(&height.get().to_le_bytes()).to_vec(),
+        ));
         let state = initial_state().take();
+        let (height_witness, partial_hash) =
+            Self::state_height_witness_and_partial_hash(&state, height);
         let snapshot = Snapshot {
             height,
             state: state.clone(),
             partial_hash,
-            root_hash: CryptoHashOf::from(fake_hash),
+            root_hash: fake_hash,
             certification: None,
+            height_witness,
         };
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
         Self {
@@ -106,6 +119,23 @@ impl FakeStateManager {
     pub fn tip_height(&self) -> Height {
         let h = self.tip_height.read().unwrap();
         *h
+    }
+
+    fn state_height_witness_and_partial_hash(
+        state: &ReplicatedState,
+        height: Height,
+    ) -> (Witness, CryptoHashOfPartialState) {
+        let lazy_tree = replicated_state_as_lazy_tree(&state, height);
+        let hash_tree = hash_lazy_tree(&lazy_tree).unwrap();
+        let height_witness = compute_state_height_witness(&lazy_tree, &hash_tree);
+
+        let labeled_tree = materialize(&state_height_as_tree(&height), None);
+        let height_witness_digest = recompute_digest(&labeled_tree, &height_witness).unwrap();
+
+        (
+            height_witness,
+            CryptoHashOfPartialState::from(CryptoHash(height_witness_digest.to_vec())),
+        )
     }
 }
 
@@ -187,14 +217,18 @@ impl StateManager for FakeStateManager {
             .last()
             .cloned()
             .expect("fake state manager must always have at least 1 state");
+        let last_state = last_snapshot.state;
+        let (height_witness, partial_hash) =
+            Self::state_height_witness_and_partial_hash(&last_state, height);
 
         // _The_ fastest state sync on earth
         states.push(Snapshot {
-            state: last_snapshot.state,
+            state: last_state,
             height,
-            partial_hash: CryptoHashOfPartialState::from(root_hash.get_ref().clone()),
+            partial_hash,
             root_hash,
             certification: None,
+            height_witness,
         });
     }
 
@@ -207,9 +241,7 @@ impl StateManager for FakeStateManager {
             .map(|s| StateHashMetadata {
                 height: s.height,
                 hash: s.partial_hash.clone(),
-                height_witness: Witness::new_for_testing(
-                    s.partial_hash.clone().get().0.to_vec().try_into().unwrap(),
-                ),
+                height_witness: s.height_witness.clone(),
             })
             .collect()
     }
@@ -258,13 +290,18 @@ impl StateManager for FakeStateManager {
             *h = h.increment();
             *h
         };
-        let fake_hash = CryptoHash(Sha256::hash(&height.get().to_le_bytes()).to_vec());
+        let fake_hash = CryptoHashOf::from(CryptoHash(
+            Sha256::hash(&height.get().to_le_bytes()).to_vec(),
+        ));
+        let (height_witness, partial_hash) =
+            Self::state_height_witness_and_partial_hash(&state, height);
         self.states.write().unwrap().push(Snapshot {
             state: Arc::new(state.clone()),
             height,
-            root_hash: CryptoHashOf::from(fake_hash.clone()),
-            partial_hash: CryptoHashOf::from(fake_hash),
+            root_hash: fake_hash,
+            partial_hash,
             certification: None,
+            height_witness,
         });
 
         let mut tip = self.tip.write().unwrap();
