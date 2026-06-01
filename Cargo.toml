@@ -681,8 +681,8 @@ hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.12", features = ["full"] }
 ic0 = "1.0.0"
 ic-agent = { version = "0.47.3", features = ["pem"] }
-ic-bn-lib = { git = "https://github.com/mraszyk/ic-bn-lib", rev = "f9ef198ffc1aabf075621b303e0c99afe5504928", features = ["acme-alpn"] }
-ic-bn-lib-common = { git = "https://github.com/mraszyk/ic-bn-lib", rev = "f9ef198ffc1aabf075621b303e0c99afe5504928" }
+ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "43c60f0810c8c110ad69f1ea67337538a365faea", features = ["acme-alpn"] }
+ic-bn-lib-common = { git = "https://github.com/dfinity/ic-bn-lib", rev = "43c60f0810c8c110ad69f1ea67337538a365faea" }
 ic-btc-interface = "0.4.0"
 ic-canister-runtime = "0.2.0"
 ic-canister-sig-creation = "1.3.1"
@@ -692,7 +692,7 @@ ic-cdk-timers = "1.0.0"
 ic-certificate-verification = "3.0.3"
 ic-certification = "3"
 ic-doge-interface = "0.3.0"
-ic-gateway = { git = "https://github.com/mraszyk/ic-gateway", rev = "e0d7dc5c0478ad9f58da80e240a9176bce2dfacf", default-features = false }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "90e514470874885167ddc5ec91a97560cd8bc576", default-features = false }
 ic-http-certification = "3.0.3"
 ic-identity-hsm = { version = "0.47.3" }
 ic-management-canister-types = "0.7.1"

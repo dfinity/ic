@@ -1,5 +1,5 @@
 {
-  "checksum": "c2bc8bd118c386d71b3c3d36f50f474a2e8afbd688de9956eed32d508135c10c",
+  "checksum": "9019ca95d5fb5700d044fcdb0e0137298cc8a16d50ce0b4670ac01d975139cbf",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4858,7 +4858,7 @@
               "target": "log"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types"
             },
             {
@@ -6407,7 +6407,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types"
             },
             {
@@ -14639,9 +14639,9 @@
       "package_url": "https://github.com/cloudflare/cloudflare-rs",
       "repository": {
         "Git": {
-          "remote": "https://github.com/mraszyk/cloudflare-rs",
+          "remote": "https://github.com/dfinity/cloudflare-rs",
           "commitish": {
-            "Rev": "972f379e51ac923be9db648a75b101892a89453c"
+            "Rev": "7d10dca3b339e8a29cb663341dbc802fe51bf322"
           },
           "strip_prefix": "cloudflare"
         }
@@ -17463,14 +17463,14 @@
       ],
       "license_file": "LICENSES"
     },
-    "crc32fast 1.5.0": {
+    "crc32fast 1.3.2": {
       "name": "crc32fast",
-      "version": "1.5.0",
+      "version": "1.3.2",
       "package_url": "https://github.com/srijs/rust-crc32fast",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/crc32fast/1.5.0/download",
-          "sha256": "9481c1c90cbf2ac953f07c8d4a58aa3945c425b7185c9154d67a65e4230da511"
+          "url": "https://static.crates.io/crates/crc32fast/1.3.2/download",
+          "sha256": "b540bd8bc810d3885c6ea91e2018302f68baba2129ab3e88f32389ee9370880d"
         }
       },
       "targets": [
@@ -17518,14 +17518,14 @@
               "target": "cfg_if"
             },
             {
-              "id": "crc32fast 1.5.0",
+              "id": "crc32fast 1.3.2",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
-        "edition": "2021",
-        "version": "1.5.0"
+        "edition": "2015",
+        "version": "1.3.2"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -22725,7 +22725,7 @@
               "target": "convert_case"
             },
             {
-              "id": "crc32fast 1.5.0",
+              "id": "crc32fast 1.3.2",
               "target": "crc32fast"
             },
             {
@@ -22941,7 +22941,7 @@
               "target": "ic_bn_lib"
             },
             {
-              "id": "ic-bn-lib-common 0.1.8",
+              "id": "ic-bn-lib-common 0.2.1",
               "target": "ic_bn_lib_common"
             },
             {
@@ -28736,7 +28736,7 @@
         "deps": {
           "common": [
             {
-              "id": "crc32fast 1.5.0",
+              "id": "crc32fast 1.3.2",
               "target": "crc32fast"
             },
             {
@@ -30263,7 +30263,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -30659,61 +30659,6 @@
       "license": "MIT",
       "license_ids": [
         "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "gethostname 1.1.0": {
-      "name": "gethostname",
-      "version": "1.1.0",
-      "package_url": "https://codeberg.org/swsnr/gethostname.rs.git",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/gethostname/1.1.0/download",
-          "sha256": "1bd49230192a3797a9a4d6abe9b3eed6f7fa4c8a8a4947977c6f80025f92cbd8"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "gethostname",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "gethostname",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [],
-          "selects": {
-            "cfg(not(windows))": [
-              {
-                "id": "rustix 1.1.2",
-                "target": "rustix"
-              }
-            ],
-            "cfg(windows)": [
-              {
-                "id": "windows-link 0.2.1",
-                "target": "windows_link"
-              }
-            ]
-          }
-        },
-        "edition": "2021",
-        "version": "1.1.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
       ],
       "license_file": "LICENSE"
     },
@@ -32828,66 +32773,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "hashify 0.2.9": {
-      "name": "hashify",
-      "version": "0.2.9",
-      "package_url": "https://github.com/stalwartlabs/hashify",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/hashify/0.2.9/download",
-          "sha256": "dd1246c0e5493286aeb2dde35b1f4eb9c4ce00e628641210a5e553fc001a1f26"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "hashify",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "hashify",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "indexmap 2.14.0",
-              "target": "indexmap"
-            },
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.42",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.110",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2024",
-        "version": "0.2.9"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSES"
-    },
     "hashlink 0.8.3": {
       "name": "hashlink",
       "version": "0.8.3",
@@ -33896,7 +33781,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types"
             },
             {
@@ -34067,7 +33952,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types"
             },
             {
@@ -34202,7 +34087,7 @@
               "target": "rand"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types"
             },
             {
@@ -35935,7 +35820,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -36686,9 +36571,9 @@
       "package_url": "https://github.com/dfinity/ic-bn-lib",
       "repository": {
         "Git": {
-          "remote": "https://github.com/mraszyk/ic-bn-lib",
+          "remote": "https://github.com/dfinity/ic-bn-lib",
           "commitish": {
-            "Rev": "f9ef198ffc1aabf075621b303e0c99afe5504928"
+            "Rev": "43c60f0810c8c110ad69f1ea67337538a365faea"
           },
           "strip_prefix": "ic-bn-lib"
         }
@@ -36738,6 +36623,10 @@
             {
               "id": "arc-swap 1.7.1",
               "target": "arc_swap"
+            },
+            {
+              "id": "arrayvec 0.7.4",
+              "target": "arrayvec"
             },
             {
               "id": "async-channel 2.5.0",
@@ -36840,7 +36729,7 @@
               "target": "ic_agent"
             },
             {
-              "id": "ic-bn-lib-common 0.1.8",
+              "id": "ic-bn-lib-common 0.2.1",
               "target": "ic_bn_lib_common"
             },
             {
@@ -36850,14 +36739,6 @@
             {
               "id": "itertools 0.14.0",
               "target": "itertools"
-            },
-            {
-              "id": "mail-auth 0.9.0",
-              "target": "mail_auth"
-            },
-            {
-              "id": "mail-parser 0.11.3",
-              "target": "mail_parser"
             },
             {
               "id": "moka 0.12.15",
@@ -36942,10 +36823,6 @@
             {
               "id": "sha2 0.11.0",
               "target": "sha2"
-            },
-            {
-              "id": "smtp-proto 0.2.1",
-              "target": "smtp_proto"
             },
             {
               "id": "socket2 0.6.1",
@@ -37068,15 +36945,15 @@
       ],
       "license_file": null
     },
-    "ic-bn-lib-common 0.1.8": {
+    "ic-bn-lib-common 0.2.1": {
       "name": "ic-bn-lib-common",
-      "version": "0.1.8",
+      "version": "0.2.1",
       "package_url": null,
       "repository": {
         "Git": {
-          "remote": "https://github.com/mraszyk/ic-bn-lib",
+          "remote": "https://github.com/dfinity/ic-bn-lib",
           "commitish": {
-            "Rev": "f9ef198ffc1aabf075621b303e0c99afe5504928"
+            "Rev": "43c60f0810c8c110ad69f1ea67337538a365faea"
           },
           "strip_prefix": "ic-bn-lib-common"
         }
@@ -37227,7 +37104,7 @@
           ],
           "selects": {}
         },
-        "version": "0.1.8"
+        "version": "0.2.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -38319,9 +38196,9 @@
       "package_url": "https://github.com/dfinity/custom-domains",
       "repository": {
         "Git": {
-          "remote": "https://github.com/mraszyk/custom-domains",
+          "remote": "https://github.com/dfinity/custom-domains",
           "commitish": {
-            "Rev": "62f9e109cb598f605166e988e8c7ce55f7a40bd9"
+            "Rev": "152876decb8ceb308df3f488ca1e58fd0a7c8768"
           },
           "strip_prefix": "backend"
         }
@@ -38388,7 +38265,7 @@
               "target": "ic_bn_lib"
             },
             {
-              "id": "ic-bn-lib-common 0.1.8",
+              "id": "ic-bn-lib-common 0.2.1",
               "target": "ic_bn_lib_common"
             },
             {
@@ -38466,9 +38343,9 @@
       "package_url": "https://github.com/dfinity/custom-domains",
       "repository": {
         "Git": {
-          "remote": "https://github.com/mraszyk/custom-domains",
+          "remote": "https://github.com/dfinity/custom-domains",
           "commitish": {
-            "Rev": "62f9e109cb598f605166e988e8c7ce55f7a40bd9"
+            "Rev": "152876decb8ceb308df3f488ca1e58fd0a7c8768"
           },
           "strip_prefix": "base"
         }
@@ -38535,7 +38412,7 @@
               "target": "ic_bn_lib"
             },
             {
-              "id": "ic-bn-lib-common 0.1.8",
+              "id": "ic-bn-lib-common 0.2.1",
               "target": "ic_bn_lib_common"
             },
             {
@@ -38613,9 +38490,9 @@
       "package_url": "https://github.com/dfinity/custom-domains",
       "repository": {
         "Git": {
-          "remote": "https://github.com/mraszyk/custom-domains",
+          "remote": "https://github.com/dfinity/custom-domains",
           "commitish": {
-            "Rev": "62f9e109cb598f605166e988e8c7ce55f7a40bd9"
+            "Rev": "152876decb8ceb308df3f488ca1e58fd0a7c8768"
           },
           "strip_prefix": "canister/api"
         }
@@ -38684,9 +38561,9 @@
       "package_url": "https://github.com/dfinity/custom-domains",
       "repository": {
         "Git": {
-          "remote": "https://github.com/mraszyk/custom-domains",
+          "remote": "https://github.com/dfinity/custom-domains",
           "commitish": {
-            "Rev": "62f9e109cb598f605166e988e8c7ce55f7a40bd9"
+            "Rev": "152876decb8ceb308df3f488ca1e58fd0a7c8768"
           },
           "strip_prefix": "canister_client"
         }
@@ -38733,7 +38610,7 @@
               "target": "ic_bn_lib"
             },
             {
-              "id": "ic-bn-lib-common 0.1.8",
+              "id": "ic-bn-lib-common 0.2.1",
               "target": "ic_bn_lib_common"
             },
             {
@@ -38992,9 +38869,9 @@
       "package_url": null,
       "repository": {
         "Git": {
-          "remote": "https://github.com/mraszyk/ic-gateway",
+          "remote": "https://github.com/dfinity/ic-gateway",
           "commitish": {
-            "Rev": "e0d7dc5c0478ad9f58da80e240a9176bce2dfacf"
+            "Rev": "90e514470874885167ddc5ec91a97560cd8bc576"
           }
         }
       },
@@ -39096,7 +38973,7 @@
               "target": "ic_bn_lib"
             },
             {
-              "id": "ic-bn-lib-common 0.1.8",
+              "id": "ic-bn-lib-common 0.2.1",
               "target": "ic_bn_lib_common"
             },
             {
@@ -40804,7 +40681,7 @@
               "target": "arbitrary"
             },
             {
-              "id": "crc32fast 1.5.0",
+              "id": "crc32fast 1.3.2",
               "target": "crc32fast"
             },
             {
@@ -43105,7 +42982,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types"
             },
             {
@@ -46892,7 +46769,7 @@
               "target": "core2"
             },
             {
-              "id": "crc32fast 1.5.0",
+              "id": "crc32fast 1.3.2",
               "target": "crc32fast"
             },
             {
@@ -48222,7 +48099,6 @@
             "net",
             "netlink",
             "no_std",
-            "system",
             "xdp"
           ],
           "selects": {}
@@ -49869,230 +49745,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "mail-auth 0.9.0": {
-      "name": "mail-auth",
-      "version": "0.9.0",
-      "package_url": "https://github.com/stalwartlabs/mail-auth",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/mail-auth/0.9.0/download",
-          "sha256": "c99f0db3f1292f72149bd50fcca0354d243defda0d26532ef7281ca716c77592"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "mail_auth",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "mail_auth",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "aws-lc-rs",
-            "default",
-            "hashify",
-            "quick-xml",
-            "report",
-            "zip"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "aws-lc-rs 1.17.0",
-              "target": "aws_lc_rs"
-            },
-            {
-              "id": "flate2 1.1.5",
-              "target": "flate2"
-            },
-            {
-              "id": "hickory-resolver 0.26.1",
-              "target": "hickory_resolver"
-            },
-            {
-              "id": "mail-builder 0.4.4",
-              "target": "mail_builder"
-            },
-            {
-              "id": "mail-parser 0.11.3",
-              "target": "mail_parser"
-            },
-            {
-              "id": "quick-xml 0.39.4",
-              "target": "quick_xml"
-            },
-            {
-              "id": "rustls-pki-types 1.14.1",
-              "target": "rustls_pki_types"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.145",
-              "target": "serde_json"
-            },
-            {
-              "id": "zip 8.6.0",
-              "target": "zip"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2024",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "hashify 0.2.9",
-              "target": "hashify"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.9.0"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSES"
-    },
-    "mail-builder 0.4.4": {
-      "name": "mail-builder",
-      "version": "0.4.4",
-      "package_url": "https://github.com/stalwartlabs/mail-builder",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/mail-builder/0.4.4/download",
-          "sha256": "900998f307338c4013a28ab14d760b784067324b164448c6d98a89e44810473b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "mail_builder",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "mail_builder",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "gethostname"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "gethostname 1.1.0",
-              "target": "gethostname"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.4.4"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSES"
-    },
-    "mail-parser 0.11.3": {
-      "name": "mail-parser",
-      "version": "0.11.3",
-      "package_url": "https://github.com/stalwartlabs/mail-parser",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/mail-parser/0.11.3/download",
-          "sha256": "d8a2420e9ce11c2b0583ca97ddff7ab2398c8a613154e9b72e3bafdbf767f1d7"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "mail_parser",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "mail_parser",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "encoding_rs",
-            "full_encoding"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "encoding_rs 0.8.32",
-              "target": "encoding_rs"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "hashify 0.2.9",
-              "target": "hashify"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.11.3"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSES"
     },
     "maplit 1.0.2": {
       "name": "maplit",
@@ -55476,7 +55128,7 @@
         "deps": {
           "common": [
             {
-              "id": "crc32fast 1.5.0",
+              "id": "crc32fast 1.3.2",
               "target": "crc32fast"
             },
             {
@@ -65562,59 +65214,6 @@
       ],
       "license_file": "LICENSE-MIT.md"
     },
-    "quick-xml 0.39.4": {
-      "name": "quick-xml",
-      "version": "0.39.4",
-      "package_url": "https://github.com/tafia/quick-xml",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/quick-xml/0.39.4/download",
-          "sha256": "cdcc8dd4e2f670d309a5f0e83fe36dfdc05af317008fea29144da1a2ac858e5e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "quick_xml",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "quick_xml",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "memchr 2.7.4",
-              "target": "memchr"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.39.4"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE-MIT.md"
-    },
     "quickcheck 1.0.3": {
       "name": "quickcheck",
       "version": "1.0.3",
@@ -65912,7 +65511,7 @@
                 "target": "ring"
               },
               {
-                "id": "rustls-pki-types 1.14.1",
+                "id": "rustls-pki-types 1.12.0",
                 "target": "rustls_pki_types"
               },
               {
@@ -68052,7 +67651,7 @@
               "target": "ring"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -68114,9 +67713,7 @@
           "common": [
             "aws_lc_rs",
             "crypto",
-            "default",
-            "pem",
-            "ring"
+            "pem"
           ],
           "selects": {}
         },
@@ -68131,11 +67728,7 @@
               "target": "pem"
             },
             {
-              "id": "ring 0.17.14",
-              "target": "ring"
-            },
-            {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -69783,11 +69376,11 @@
                 "target": "rustls"
               },
               {
-                "id": "rustls-pki-types 1.14.1",
+                "id": "rustls-pki-types 1.12.0",
                 "target": "rustls_pki_types"
               },
               {
-                "id": "rustls-platform-verifier 0.7.0",
+                "id": "rustls-platform-verifier 0.6.2",
                 "target": "rustls_platform_verifier"
               },
               {
@@ -69825,11 +69418,11 @@
                 "target": "rustls"
               },
               {
-                "id": "rustls-pki-types 1.14.1",
+                "id": "rustls-pki-types 1.12.0",
                 "target": "rustls_pki_types"
               },
               {
-                "id": "rustls-platform-verifier 0.7.0",
+                "id": "rustls-platform-verifier 0.6.2",
                 "target": "rustls_platform_verifier"
               },
               {
@@ -69937,11 +69530,11 @@
                 "target": "rustls"
               },
               {
-                "id": "rustls-pki-types 1.14.1",
+                "id": "rustls-pki-types 1.12.0",
                 "target": "rustls_pki_types"
               },
               {
-                "id": "rustls-platform-verifier 0.7.0",
+                "id": "rustls-platform-verifier 0.6.2",
                 "target": "rustls_platform_verifier"
               },
               {
@@ -69979,11 +69572,11 @@
                 "target": "rustls"
               },
               {
-                "id": "rustls-pki-types 1.14.1",
+                "id": "rustls-pki-types 1.12.0",
                 "target": "rustls_pki_types"
               },
               {
-                "id": "rustls-platform-verifier 0.7.0",
+                "id": "rustls-platform-verifier 0.6.2",
                 "target": "rustls_platform_verifier"
               },
               {
@@ -72358,8 +71951,7 @@
             "alloc",
             "default",
             "net",
-            "std",
-            "system"
+            "std"
           ],
           "selects": {
             "aarch64-apple-darwin": [
@@ -72670,7 +72262,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -72800,7 +72392,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -73083,7 +72675,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -73208,7 +72800,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -73226,14 +72818,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rustls-pki-types 1.14.1": {
+    "rustls-pki-types 1.12.0": {
       "name": "rustls-pki-types",
-      "version": "1.14.1",
+      "version": "1.12.0",
       "package_url": "https://github.com/rustls/pki-types",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls-pki-types/1.14.1/download",
-          "sha256": "30a7197ae7eb376e574fe940d068c30fe0462554a3ddbe4eca7838e049c937a9"
+          "url": "https://static.crates.io/crates/rustls-pki-types/1.12.0/download",
+          "sha256": "229a4a4c221013e7e1f1a043678c5cc39fe5171437c88fb47151a21e6f5b5c79"
         }
       },
       "targets": [
@@ -73285,7 +72877,7 @@
           }
         },
         "edition": "2021",
-        "version": "1.14.1"
+        "version": "1.12.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -73666,7 +73258,7 @@
               "target": "ring"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -73730,7 +73322,7 @@
               "target": "aws_lc_rs"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -79936,51 +79528,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "smtp-proto 0.2.1": {
-      "name": "smtp-proto",
-      "version": "0.2.1",
-      "package_url": "https://github.com/stalwartlabs/smtp-proto",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/smtp-proto/0.2.1/download",
-          "sha256": "97c9f5dd7ec5cc6d743f33fcb96de4eb91bb1cc51c5e0ba40cb285a9012043da"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "smtp_proto",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "smtp_proto",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default"
-          ],
-          "selects": {}
-        },
-        "edition": "2024",
-        "version": "0.2.1"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSES"
     },
     "snafu 0.8.5": {
       "name": "snafu",
@@ -86426,7 +85973,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -86493,7 +86040,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -90457,52 +90004,6 @@
         "MIT"
       ],
       "license_file": "LICENSE"
-    },
-    "typed-path 0.12.3": {
-      "name": "typed-path",
-      "version": "0.12.3",
-      "package_url": "https://github.com/chipsenkbeil/typed-path",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/typed-path/0.12.3/download",
-          "sha256": "8e28f89b80c87b8fb0cf04ab448d5dd0dd0ade2f8891bae878de66a75a28600e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "typed_path",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "typed_path",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "std"
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.12.3"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
     },
     "typenum 1.17.0": {
       "name": "typenum",
@@ -96444,7 +95945,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -96530,7 +96031,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -96578,7 +96079,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -103088,76 +102589,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "zip 8.6.0": {
-      "name": "zip",
-      "version": "8.6.0",
-      "package_url": "https://github.com/zip-rs/zip2",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/zip/8.6.0/download",
-          "sha256": "2d04a6b5381502aa6087c94c669499eb1602eb9c5e8198e534de571f7154809b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "zip",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "zip",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "_deflate-any",
-            "deflate-flate2"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "crc32fast 1.5.0",
-              "target": "crc32fast"
-            },
-            {
-              "id": "flate2 1.1.5",
-              "target": "flate2"
-            },
-            {
-              "id": "indexmap 2.14.0",
-              "target": "indexmap"
-            },
-            {
-              "id": "memchr 2.7.4",
-              "target": "memchr"
-            },
-            {
-              "id": "typed-path 0.12.3",
-              "target": "typed_path"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2024",
-        "version": "8.6.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "zstd 0.12.4": {
       "name": "zstd",
       "version": "0.12.4",
@@ -103923,7 +103354,7 @@
     "comparable 0.5.4",
     "console 0.11.3",
     "convert_case 0.6.0",
-    "crc32fast 1.5.0",
+    "crc32fast 1.3.2",
     "criterion 0.5.1",
     "crossbeam 0.8.4",
     "crossbeam-channel 0.5.15",
@@ -103980,7 +103411,7 @@
     "hyper-util 0.1.12",
     "ic-agent 0.47.3",
     "ic-bn-lib 0.0.0-git",
-    "ic-bn-lib-common 0.1.8",
+    "ic-bn-lib-common 0.2.1",
     "ic-btc-interface 0.4.0",
     "ic-canister-log 0.2.0",
     "ic-canister-runtime 0.2.0",
