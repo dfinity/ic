@@ -1,14 +1,9 @@
-use ic_canonical_state::lazy_tree_conversion::{
-    replicated_state_as_lazy_tree, state_height_as_tree,
-};
+use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use ic_canonical_state_tree_hash::{
-    hash_tree::hash_lazy_tree, lazy_tree::materialize::materialize,
-    witness::compute_state_height_witness,
+    hash_tree::hash_lazy_tree, witness::compute_state_height_witness,
 };
 use ic_crypto_sha2::Sha256;
-use ic_crypto_tree_hash::{
-    Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness, recompute_digest,
-};
+use ic_crypto_tree_hash::{Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness};
 use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
@@ -128,14 +123,10 @@ impl FakeStateManager {
         let lazy_tree = replicated_state_as_lazy_tree(state, height);
         let hash_tree = hash_lazy_tree(&lazy_tree).unwrap();
         let height_witness = compute_state_height_witness(&lazy_tree, &hash_tree);
+        let partial_hash =
+            CryptoHashOfPartialState::from(CryptoHash(hash_tree.root_hash().0.to_vec()));
 
-        let labeled_tree = materialize(&state_height_as_tree(&height), None);
-        let height_witness_digest = recompute_digest(&labeled_tree, &height_witness).unwrap();
-
-        (
-            height_witness,
-            CryptoHashOfPartialState::from(CryptoHash(height_witness_digest.to_vec())),
-        )
+        (height_witness, partial_hash)
     }
 }
 
