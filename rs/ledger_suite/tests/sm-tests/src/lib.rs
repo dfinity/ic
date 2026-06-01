@@ -3,7 +3,10 @@ use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_agent::identity::{BasicIdentity, Identity};
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
-use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
+use ic_config::{
+    execution_environment::Config as HypervisorConfig,
+    subnet_config::{SubnetConfig, SubnetSecurity},
+};
 use ic_error_types::UserError;
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_block};
@@ -4391,7 +4394,7 @@ pub fn test_cycles_for_archive_creation_default_spawns_archive<T>(
     let account = Account::from(PrincipalId::new_user_test_id(1).0);
     let initial_balances = vec![(account, 100_000_000_u64)];
 
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config.clone(),
         HypervisorConfig::default(),
