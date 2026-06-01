@@ -2176,6 +2176,7 @@ crate.annotation(
     },
     crate = "ring",
 )
+# reported upstream: https://github.com/aws/aws-lc-rs/issues/1137
 crate.annotation(
     crate = "aws-lc-sys",
     patch_args = ["-p1"],
