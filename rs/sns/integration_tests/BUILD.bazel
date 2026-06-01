@@ -55,11 +55,6 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/sns/test_utils:test_utils--test_feature",
 ]
 
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:async-trait",
-]
-
 BASE_DEV_DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-http-types",
@@ -89,22 +84,17 @@ TEST_DEV_DEPENDENCIES = BASE_DEV_DEPENDENCIES + [
     "//rs/nns/test_utils:test_utils--test_feature",
 ]
 
-MACRO_DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:rust_decimal_macros",
-]
-
-ALIASES = {}
-
 rust_library(
     name = "lib",
     testonly = True,
     srcs = glob(
         ["src/**"],
     ),
-    aliases = ALIASES,
     crate_name = "ic_sns_integration_tests",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
@@ -203,7 +193,6 @@ rust_ic_test_suite_with_extra_srcs(
             "src/neuron.rs",  # there's a dedicated :neuron_test target for this test below.
         ],
     ),
-    aliases = ALIASES,
     args = [
         "--test-threads",
         "7",
@@ -212,7 +201,11 @@ rust_ic_test_suite_with_extra_srcs(
     data = DATA_DEPS,
     env = ENV,
     extra_srcs = [],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+        "@crate_index//:rust_decimal_macros",
+    ],
     tags = ["cpu:8"],
     deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES,
 )
@@ -228,7 +221,11 @@ rust_ic_test(
     crate_features = ["test"],
     data = DATA_DEPS,
     env = ENV,
-    #proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    #proc_macro_deps = [
+    #    # Keep sorted.
+    #    "@crate_index//:async-trait",
+    #    "@crate_index//:rust_decimal_macros",
+    #],
     tags = [
         "cpu:8",
         "long_test",  # The P90 duration of this test is over 6 minutes for the week starting on 2025-08-21.
@@ -247,7 +244,11 @@ rust_ic_test(
     crate_features = ["test"],
     data = DATA_DEPS,
     env = ENV,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+        "@crate_index//:rust_decimal_macros",
+    ],
     tags = [
         "cpu:8",
         "long_test",  # The P90 duration of this test is 6 minutes for the month starting on 2026-01-16.
@@ -283,7 +284,6 @@ rust_ic_test_suite_with_extra_srcs(
     srcs = [
         "src/golden_state_swap_upgrade_twice.rs",
     ],
-    aliases = ALIASES,
     args = [
         "--test-threads",
         "7",
@@ -296,7 +296,11 @@ rust_ic_test_suite_with_extra_srcs(
         ("MAINNET_SNS_SWAP_CANISTER_WASM_PATH", "$(rootpath @mainnet_canisters//:swap.wasm.gz)"),
     ]),
     extra_srcs = [],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+        "@crate_index//:rust_decimal_macros",
+    ],
     tags = [
         "cpu:8",
         "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.

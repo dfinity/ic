@@ -2755,10 +2755,10 @@ fn cycles_balance_changes_applied_correctly() {
         .with_instruction_limit(20_000_000_000)
         .build();
     let a_id = test
-        .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
+        .universal_canister_with_cycles(Cycles::new(20_000_000_000_000))
         .unwrap();
     let b_id = test
-        .universal_canister_with_cycles(Cycles::new(301_000_000_000))
+        .universal_canister_with_cycles(Cycles::new(400_000_000_000))
         .unwrap();
 
     test.ingress(
@@ -2811,7 +2811,7 @@ fn test_cycles_burn() {
     let canister_memory_usage = NumBytes::from(1_000_000);
     let canister_message_memory_usage = MessageMemoryUsage::ZERO;
 
-    let amount = 1_000_000_000;
+    let amount = 100_000_000_000;
     let mut balance = Cycles::new(amount);
     let amount_to_burn = Cycles::new(amount / 10);
 
@@ -2850,7 +2850,7 @@ fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
         Cycles::zero(),
     );
 
-    let amount = 1_000_000_000;
+    let amount = 100_000_000_000;
     let mut balance = Cycles::new(amount);
 
     let burned = test.cycles_account_manager().cycles_burn(

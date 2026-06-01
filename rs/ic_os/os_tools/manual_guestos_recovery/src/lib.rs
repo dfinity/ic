@@ -1,11 +1,13 @@
-//! Interactive TUI application for manual GuestOS recovery. Prompts the operator
-//! for a recovery version and hash prefix, downloads and verifies recovery
-//! artifacts, and installs the recovery GuestOS image.
+//! Interactive TUI application for manual GuestOS recovery.
+//! NNS mode prompts for a recovery version and recovery hash prefix.
+//! TEE mode prompts for a recovery version and target boot alternative.
 
 pub mod recovery_utils;
 mod ui;
 
 use anyhow::{Context, Result};
+use clap::ValueEnum;
+use grub::BootAlternative;
 use ratatui::crossterm::event::{
     DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
 };
@@ -42,31 +44,110 @@ const PROCESS_POLL_INTERVAL_MS: u64 = 100; // Polling interval for process monit
 // Types and Data Structures
 // ============================================================================
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct RecoveryParams {
     /// The commit ID of the recovery-GuestOS update image (40 hex characters)
     pub version: String,
-    /// The recovery hash prefix provided by the user (6 hex characters)
-    pub recovery_hash_prefix: String,
+    /// The recovery hash prefix provided by the user (6 hex characters), if provided.
+    pub recovery_hash_prefix: Option<String>,
     /// Calculated full hash of the downloaded recovery-GuestOS upgrade tarball
     pub version_hash_full: Option<String>,
-    /// Calculated full hash of the downloaded recovery artifact
+    /// Calculated full hash of the downloaded recovery artifact, if enabled.
     pub recovery_hash_full: Option<String>,
+    /// Whether recovery operates in NNS or TEE mode.
+    pub mode: RecoveryMode,
+    /// The currently configured GuestOS boot alternative when the TUI started.
+    pub current_boot_alternative: BootAlternative,
+    /// Whether the target should be the current or opposite boot alternative.
+    pub target_boot_alternative_selection: TargetBootAlternativeSelection,
 }
 
 fn is_lowercase_hex(c: char) -> bool {
     matches!(c, '0'..='9' | 'a'..='f')
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+pub enum RecoveryMode {
+    #[default]
+    Nns,
+    Tee,
+}
+
+impl RecoveryMode {
+    fn requires_recovery_hash(self) -> bool {
+        matches!(self, Self::Nns)
+    }
+
+    fn can_select_target_boot_alternative(self) -> bool {
+        matches!(self, Self::Tee)
+    }
+
+    fn default_target_boot_alternative_selection(self) -> TargetBootAlternativeSelection {
+        match self {
+            Self::Nns => TargetBootAlternativeSelection::Opposite,
+            Self::Tee => TargetBootAlternativeSelection::Current,
+        }
+    }
+}
+
+/// Where the GuestOS is written.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TargetBootAlternativeSelection {
+    /// Replace the GuestOS on the current boot alternative.
+    Current,
+    /// Write to the opposite boot alternative.
+    Opposite,
+}
+
+impl TargetBootAlternativeSelection {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Current => "current",
+            Self::Opposite => "opposite",
+        }
+    }
+}
+
+fn create_text_area_with_text(text: &str) -> TextArea<'static> {
+    let mut t = TextArea::default();
+    t.set_cursor_line_style(ratatui::style::Style::default());
+    if !text.is_empty() {
+        t.insert_str(text);
+    }
+    t
+}
+
 impl RecoveryParams {
     pub fn validate_inputs(&self) -> Result<()> {
         Self::validate_hex_field(&self.version, VERSION_LENGTH, "VERSION")?;
-        Self::validate_hex_field(
-            &self.recovery_hash_prefix,
-            PREFIX_HASH_LENGTH,
-            "RECOVERY-HASH-PREFIX",
-        )?;
+        let recovery_hash_prefix = self.recovery_hash_prefix.as_deref().unwrap_or_default();
+        if self.mode.requires_recovery_hash() {
+            Self::validate_hex_field(
+                recovery_hash_prefix,
+                PREFIX_HASH_LENGTH,
+                "RECOVERY-HASH-PREFIX",
+            )?;
+        } else if !recovery_hash_prefix.is_empty() {
+            anyhow::bail!("RECOVERY-HASH-PREFIX must be empty in TEE mode");
+        }
         Ok(())
+    }
+
+    fn effective_target_boot_alternative_selection(&self) -> TargetBootAlternativeSelection {
+        if self.mode.can_select_target_boot_alternative() {
+            self.target_boot_alternative_selection
+        } else {
+            self.mode.default_target_boot_alternative_selection()
+        }
+    }
+
+    fn get_target_boot_alternative(&self) -> BootAlternative {
+        match self.effective_target_boot_alternative_selection() {
+            TargetBootAlternativeSelection::Current => self.current_boot_alternative,
+            TargetBootAlternativeSelection::Opposite => {
+                self.current_boot_alternative.get_opposite()
+            }
+        }
     }
 
     fn validate_hex_field(value: &str, required_len: usize, name: &str) -> Result<()> {
@@ -95,6 +176,7 @@ impl RecoveryParams {
 pub(crate) enum Field {
     Version,
     RecoveryHashPrefix,
+    TargetBootAlternative,
     CheckArtifactsButton,
     ExitButton,
 }
@@ -106,14 +188,37 @@ struct FieldMetadata {
 }
 
 impl Field {
-    const ALL: &'static [Field] = &[
+    const ALL_NNS: &'static [Field] = &[
         Field::Version,
         Field::RecoveryHashPrefix,
         Field::CheckArtifactsButton,
         Field::ExitButton,
     ];
 
-    const INPUT_FIELDS: &'static [Field] = &[Field::Version, Field::RecoveryHashPrefix];
+    const ALL_TEE: &'static [Field] = &[
+        Field::Version,
+        Field::TargetBootAlternative,
+        Field::CheckArtifactsButton,
+        Field::ExitButton,
+    ];
+
+    const INPUT_FIELDS_NNS: &'static [Field] = &[Field::Version, Field::RecoveryHashPrefix];
+
+    const INPUT_FIELDS_TEE: &'static [Field] = &[Field::Version, Field::TargetBootAlternative];
+
+    fn all_fields(mode: RecoveryMode) -> &'static [Field] {
+        match mode {
+            RecoveryMode::Nns => Self::ALL_NNS,
+            RecoveryMode::Tee => Self::ALL_TEE,
+        }
+    }
+
+    fn input_fields(mode: RecoveryMode) -> &'static [Field] {
+        match mode {
+            RecoveryMode::Nns => Self::INPUT_FIELDS_NNS,
+            RecoveryMode::Tee => Self::INPUT_FIELDS_TEE,
+        }
+    }
 
     fn metadata(&self) -> FieldMetadata {
         match self {
@@ -125,6 +230,11 @@ impl Field {
             Field::RecoveryHashPrefix => FieldMetadata {
                 name: "RECOVERY-HASH-PREFIX",
                 required_len: Some(PREFIX_HASH_LENGTH),
+                is_input: true,
+            },
+            Field::TargetBootAlternative => FieldMetadata {
+                name: "TARGET-BOOT-ALTERNATIVE",
+                required_len: None,
                 is_input: true,
             },
             _ => FieldMetadata {
@@ -151,35 +261,53 @@ pub(crate) struct InputState {
     pub inputs: Vec<TextArea<'static>>,
     pub error_message: Option<String>,
     pub exit_message: Option<String>,
+    pub mode: RecoveryMode,
+    pub current_boot_alternative: BootAlternative,
+    pub target_boot_alternative_selection: TargetBootAlternativeSelection,
 }
 
-impl Default for InputState {
-    fn default() -> Self {
-        let inputs = Field::INPUT_FIELDS
-            .iter()
-            .map(|_| {
-                let mut t = TextArea::default();
-                t.set_cursor_line_style(ratatui::style::Style::default());
-                t
-            })
-            .collect::<Vec<_>>();
+impl InputState {
+    pub fn new(mode: RecoveryMode, current_boot_alternative: BootAlternative) -> Self {
+        let target_boot_alternative_selection = mode.default_target_boot_alternative_selection();
+        let inputs = vec![create_text_area_with_text(""); Field::input_fields(mode).len()];
 
         Self {
             focused_index: 0,
             inputs,
             error_message: None,
             exit_message: None,
+            mode,
+            current_boot_alternative,
+            target_boot_alternative_selection,
         }
     }
-}
 
-impl InputState {
     pub fn current_field(&self) -> Field {
-        Field::ALL[self.focused_index]
+        self.all_fields()[self.focused_index]
+    }
+
+    pub(crate) fn resolve_boot_alternative(
+        &self,
+        selection: TargetBootAlternativeSelection,
+    ) -> BootAlternative {
+        match selection {
+            TargetBootAlternativeSelection::Current => self.current_boot_alternative,
+            TargetBootAlternativeSelection::Opposite => {
+                self.current_boot_alternative.get_opposite()
+            }
+        }
+    }
+
+    fn all_fields(&self) -> &'static [Field] {
+        Field::all_fields(self.mode)
+    }
+
+    fn input_fields(&self) -> &'static [Field] {
+        Field::input_fields(self.mode)
     }
 
     pub fn get_input_index(&self, field: Field) -> Option<usize> {
-        Field::INPUT_FIELDS.iter().position(|&f| f == field)
+        self.input_fields().iter().position(|&f| f == field)
     }
 
     pub(crate) fn get_field_text(&self, field: Field) -> String {
@@ -192,6 +320,10 @@ impl InputState {
         } else {
             String::new()
         }
+    }
+
+    fn set_target_boot_alternative_selection(&mut self, selection: TargetBootAlternativeSelection) {
+        self.target_boot_alternative_selection = selection;
     }
 }
 
@@ -292,12 +424,6 @@ pub(crate) enum AppState {
     Failure(FailureState),
 }
 
-impl Default for AppState {
-    fn default() -> Self {
-        AppState::Input(InputState::default())
-    }
-}
-
 // ============================================================================
 // Terminal Management
 // ============================================================================
@@ -341,19 +467,16 @@ pub struct GuestOSRecoveryApp {
     result: Option<Result<()>>,
 }
 
-impl Default for GuestOSRecoveryApp {
-    fn default() -> Self {
+impl GuestOSRecoveryApp {
+    pub fn new(mode: RecoveryMode, current_boot_alternative: BootAlternative) -> Self {
         Self {
-            state: Some(AppState::default()),
+            state: Some(AppState::Input(InputState::new(
+                mode,
+                current_boot_alternative,
+            ))),
             should_quit: false,
             result: None,
         }
-    }
-}
-
-impl GuestOSRecoveryApp {
-    pub fn new() -> Self {
-        Self::default()
     }
 
     fn redraw(&self, terminal: &mut DefaultTerminal) -> Result<()> {
@@ -551,6 +674,11 @@ impl GuestOSRecoveryApp {
         }
 
         let current = input_state.current_field();
+        if current == Field::TargetBootAlternative {
+            self.handle_target_boot_alternative_input(input_state, key);
+            return Ok(false);
+        }
+
         if let Some(idx) = input_state.get_input_index(current) {
             self.handle_text_input(input_state, idx, key, current);
         } else {
@@ -563,7 +691,8 @@ impl GuestOSRecoveryApp {
     }
 
     fn handle_navigation(&mut self, input_state: &mut InputState, key_code: KeyCode) {
-        let count = Field::ALL.len();
+        let all_fields = input_state.all_fields();
+        let count = all_fields.len();
         match key_code {
             KeyCode::Tab | KeyCode::Down => {
                 input_state.focused_index = (input_state.focused_index + 1) % count;
@@ -576,10 +705,10 @@ impl GuestOSRecoveryApp {
                 if matches!(current, Field::CheckArtifactsButton | Field::ExitButton) {
                     // Toggle between the last two fields (buttons)
                     if current == Field::CheckArtifactsButton {
-                        if let Some(idx) = Field::ALL.iter().position(|&f| f == Field::ExitButton) {
+                        if let Some(idx) = all_fields.iter().position(|&f| f == Field::ExitButton) {
                             input_state.focused_index = idx;
                         }
-                    } else if let Some(idx) = Field::ALL
+                    } else if let Some(idx) = all_fields
                         .iter()
                         .position(|&f| f == Field::CheckArtifactsButton)
                     {
@@ -594,7 +723,8 @@ impl GuestOSRecoveryApp {
     fn handle_submission(&mut self, input_state: &mut InputState) -> Result<bool> {
         let current = input_state.current_field();
         if current.is_input_field() {
-            input_state.focused_index = (input_state.focused_index + 1) % Field::ALL.len();
+            input_state.focused_index =
+                (input_state.focused_index + 1) % input_state.all_fields().len();
             Ok(false)
         } else {
             match current {
@@ -604,11 +734,18 @@ impl GuestOSRecoveryApp {
                     Ok(false)
                 }
                 Field::CheckArtifactsButton => {
+                    let recovery_hash_prefix =
+                        Some(input_state.get_field_text(Field::RecoveryHashPrefix))
+                            .filter(|prefix| !prefix.is_empty());
                     let params = RecoveryParams {
                         version: input_state.get_field_text(Field::Version),
-                        recovery_hash_prefix: input_state.get_field_text(Field::RecoveryHashPrefix),
+                        current_boot_alternative: input_state.current_boot_alternative,
+                        target_boot_alternative_selection: input_state
+                            .target_boot_alternative_selection,
+                        recovery_hash_prefix,
                         version_hash_full: None,
                         recovery_hash_full: None,
+                        mode: input_state.mode,
                     };
 
                     // Validate and transition to running
@@ -625,6 +762,27 @@ impl GuestOSRecoveryApp {
         }
     }
 
+    fn handle_target_boot_alternative_input(&self, input_state: &mut InputState, key: KeyEvent) {
+        match key.code {
+            KeyCode::Left | KeyCode::Char('c') | KeyCode::Char('C') => input_state
+                .set_target_boot_alternative_selection(TargetBootAlternativeSelection::Current),
+            KeyCode::Right | KeyCode::Char('o') | KeyCode::Char('O') => input_state
+                .set_target_boot_alternative_selection(TargetBootAlternativeSelection::Opposite),
+            KeyCode::Char(' ') => {
+                let toggled = match input_state.target_boot_alternative_selection {
+                    TargetBootAlternativeSelection::Current => {
+                        TargetBootAlternativeSelection::Opposite
+                    }
+                    TargetBootAlternativeSelection::Opposite => {
+                        TargetBootAlternativeSelection::Current
+                    }
+                };
+                input_state.set_target_boot_alternative_selection(toggled);
+            }
+            _ => {}
+        }
+    }
+
     fn handle_text_input(
         &self,
         input_state: &mut InputState,
@@ -632,7 +790,6 @@ impl GuestOSRecoveryApp {
         key: KeyEvent,
         field: Field,
     ) {
-        // Pre-validation for character input (hex only, max length)
         if let KeyCode::Char(c) = key.code {
             if !is_lowercase_hex(c) {
                 return;
@@ -655,8 +812,12 @@ impl GuestOSRecoveryApp {
     }
 
     fn start_prep(&mut self, params: RecoveryParams, input_state: InputState) -> Result<()> {
-        let command =
-            build_recovery_upgrader_prep_command(&params.version, &params.recovery_hash_prefix);
+        let command = build_recovery_upgrader_prep_command(
+            &params.version,
+            params.get_target_boot_alternative(),
+            params.recovery_hash_prefix.as_deref().unwrap_or(""),
+            params.mode.requires_recovery_hash(),
+        );
         let task = RecoveryTask::start(command)?;
 
         self.state = Some(AppState::Running(RunningState {
@@ -669,7 +830,7 @@ impl GuestOSRecoveryApp {
     }
 
     fn start_install(&mut self, params: RecoveryParams) -> Result<()> {
-        let command = build_recovery_upgrader_install_command();
+        let command = build_recovery_upgrader_install_command(params.mode.requires_recovery_hash());
         let task = RecoveryTask::start(command)?;
 
         self.state = Some(AppState::Running(RunningState {
@@ -706,9 +867,15 @@ impl GuestOSRecoveryApp {
                     Ok(prep) => {
                         let mut params = running.params.clone();
                         params.version_hash_full = Some(prep.version_hash_full);
-                        params.recovery_hash_full = Some(prep.recovery_hash_full);
+                        params.recovery_hash_full = prep.recovery_hash_full;
 
-                        let input_state = running.previous_input_state.clone().unwrap_or_default();
+                        let input_state =
+                            running.previous_input_state.clone().unwrap_or_else(|| {
+                                InputState::new(
+                                    running.params.mode,
+                                    running.params.current_boot_alternative,
+                                )
+                            });
 
                         self.state = Some(AppState::InputConfirmation(ConfirmationState {
                             input_state,
@@ -772,7 +939,7 @@ fn extract_errors_from_logs(log_lines: &[String]) -> Vec<String> {
 #[derive(Debug)]
 struct PrepResults {
     version_hash_full: String,
-    recovery_hash_full: String,
+    recovery_hash_full: Option<String>,
 }
 
 fn read_prep_metadata() -> Result<PrepResults> {
@@ -802,9 +969,6 @@ fn parse_prep_metadata(contents: &str) -> Result<PrepResults> {
 
     let version_hash_full = version_hash_full
         .ok_or_else(|| anyhow::anyhow!("Prep metadata missing VERSION_HASH_FULL"))?;
-    let recovery_hash_full = recovery_hash_full
-        .ok_or_else(|| anyhow::anyhow!("Prep metadata missing RECOVERY_HASH_FULL"))?;
-
     Ok(PrepResults {
         version_hash_full,
         recovery_hash_full,
@@ -854,6 +1018,8 @@ mod tests {
     use super::*;
     use ratatui::crossterm::event::{KeyEventKind, KeyEventState};
 
+    const TEST_CURRENT_BOOT_ALTERNATIVE: BootAlternative = BootAlternative::A;
+
     // ========================================================================
     // Test Helpers
     // ========================================================================
@@ -891,26 +1057,41 @@ mod tests {
             .status()
             .expect("Failed to run 'false' command");
         FailureState {
-            params: RecoveryParams::default(),
+            params: default_recovery_params_for_test(),
             logs: vec!["test log".to_string()],
             exit_status: status,
             error_messages: vec!["test error".to_string()],
         }
     }
 
+    fn default_recovery_params_for_test() -> RecoveryParams {
+        RecoveryParams {
+            version: String::new(),
+            recovery_hash_prefix: None,
+            version_hash_full: None,
+            recovery_hash_full: None,
+            mode: RecoveryMode::Nns,
+            current_boot_alternative: BootAlternative::A,
+            target_boot_alternative_selection: TargetBootAlternativeSelection::Opposite,
+        }
+    }
+
+    fn create_test_input_state(mode: RecoveryMode) -> InputState {
+        InputState::new(mode, TEST_CURRENT_BOOT_ALTERNATIVE)
+    }
+
+    fn create_test_app(mode: RecoveryMode) -> GuestOSRecoveryApp {
+        GuestOSRecoveryApp::new(mode, TEST_CURRENT_BOOT_ALTERNATIVE)
+    }
+
     fn set_field_text(state: &mut InputState, field: Field, text: &str) {
         if let Some(idx) = state.get_input_index(field) {
-            state.inputs[idx] = {
-                let mut ta = TextArea::default();
-                ta.set_cursor_line_style(ratatui::style::Style::default());
-                ta.insert_str(text);
-                ta
-            };
+            state.inputs[idx] = create_text_area_with_text(text);
         }
     }
 
     fn create_valid_input_state() -> InputState {
-        let mut state = InputState::default();
+        let mut state = create_test_input_state(RecoveryMode::Nns);
         set_field_text(&mut state, Field::Version, &"a".repeat(VERSION_LENGTH));
         set_field_text(
             &mut state,
@@ -947,10 +1128,43 @@ mod tests {
         fn validate_inputs_accepts_valid_params() {
             let params = RecoveryParams {
                 version: "0123456789abcdef0123456789abcdef01234567".to_string(),
-                recovery_hash_prefix: "a1b2c3".to_string(),
-                ..Default::default()
+                recovery_hash_prefix: Some("a1b2c3".to_string()),
+                ..default_recovery_params_for_test()
             };
             assert!(params.validate_inputs().is_ok());
+        }
+
+        #[test]
+        fn validate_inputs_allows_missing_recovery_hash_in_tee_mode() {
+            let params = RecoveryParams {
+                version: "0123456789abcdef0123456789abcdef01234567".to_string(),
+                recovery_hash_prefix: None,
+                mode: RecoveryMode::Tee,
+                ..default_recovery_params_for_test()
+            };
+            assert!(params.validate_inputs().is_ok());
+        }
+
+        #[test]
+        fn validate_inputs_allows_empty_recovery_hash_in_tee_mode() {
+            let params = RecoveryParams {
+                version: "0123456789abcdef0123456789abcdef01234567".to_string(),
+                recovery_hash_prefix: Some(String::new()),
+                mode: RecoveryMode::Tee,
+                ..default_recovery_params_for_test()
+            };
+            assert!(params.validate_inputs().is_ok());
+        }
+
+        #[test]
+        fn validate_inputs_rejects_invalid_recovery_hash_in_tee_mode() {
+            let params = RecoveryParams {
+                version: "0123456789abcdef0123456789abcdef01234567".to_string(),
+                recovery_hash_prefix: Some("ABCDEF".to_string()),
+                mode: RecoveryMode::Tee,
+                ..default_recovery_params_for_test()
+            };
+            assert!(params.validate_inputs().is_err());
         }
 
         #[test]
@@ -960,24 +1174,24 @@ mod tests {
             // Empty
             let params = RecoveryParams {
                 version: String::new(),
-                recovery_hash_prefix: valid_hash.clone(),
-                ..Default::default()
+                recovery_hash_prefix: Some(valid_hash.clone()),
+                ..default_recovery_params_for_test()
             };
             assert!(params.validate_inputs().is_err());
 
             // Wrong length
             let params = RecoveryParams {
                 version: "abc".to_string(),
-                recovery_hash_prefix: valid_hash.clone(),
-                ..Default::default()
+                recovery_hash_prefix: Some(valid_hash.clone()),
+                ..default_recovery_params_for_test()
             };
             assert!(params.validate_inputs().is_err());
 
             // Invalid chars (uppercase)
             let params = RecoveryParams {
                 version: "A".repeat(VERSION_LENGTH),
-                recovery_hash_prefix: valid_hash,
-                ..Default::default()
+                recovery_hash_prefix: Some(valid_hash),
+                ..default_recovery_params_for_test()
             };
             assert!(params.validate_inputs().is_err());
         }
@@ -989,26 +1203,56 @@ mod tests {
             // Empty
             let params = RecoveryParams {
                 version: valid_version.clone(),
-                recovery_hash_prefix: String::new(),
-                ..Default::default()
+                recovery_hash_prefix: Some(String::new()),
+                ..default_recovery_params_for_test()
             };
             assert!(params.validate_inputs().is_err());
 
             // Wrong length
             let params = RecoveryParams {
                 version: valid_version.clone(),
-                recovery_hash_prefix: "abc".to_string(),
-                ..Default::default()
+                recovery_hash_prefix: Some("abc".to_string()),
+                ..default_recovery_params_for_test()
             };
             assert!(params.validate_inputs().is_err());
 
             // Invalid chars (uppercase)
             let params = RecoveryParams {
                 version: valid_version,
-                recovery_hash_prefix: "ABCDEF".to_string(),
-                ..Default::default()
+                recovery_hash_prefix: Some("ABCDEF".to_string()),
+                ..default_recovery_params_for_test()
             };
             assert!(params.validate_inputs().is_err());
+        }
+
+        #[test]
+        fn get_target_boot_alternative_honors_selection_in_tee_mode() {
+            let current = RecoveryParams {
+                current_boot_alternative: BootAlternative::B,
+                target_boot_alternative_selection: TargetBootAlternativeSelection::Current,
+                mode: RecoveryMode::Tee,
+                ..default_recovery_params_for_test()
+            };
+            assert_eq!(current.get_target_boot_alternative(), BootAlternative::B);
+
+            let opposite = RecoveryParams {
+                current_boot_alternative: BootAlternative::B,
+                target_boot_alternative_selection: TargetBootAlternativeSelection::Opposite,
+                mode: RecoveryMode::Tee,
+                ..default_recovery_params_for_test()
+            };
+            assert_eq!(opposite.get_target_boot_alternative(), BootAlternative::A);
+        }
+
+        #[test]
+        fn get_target_boot_alternative_uses_opposite_in_nns_mode() {
+            let params = RecoveryParams {
+                current_boot_alternative: BootAlternative::B,
+                target_boot_alternative_selection: TargetBootAlternativeSelection::Current,
+                mode: RecoveryMode::Nns,
+                ..default_recovery_params_for_test()
+            };
+            assert_eq!(params.get_target_boot_alternative(), BootAlternative::A);
         }
     }
 
@@ -1021,7 +1265,16 @@ mod tests {
             let result = parse_prep_metadata(contents).unwrap();
 
             assert_eq!(result.version_hash_full, "abc123def456");
-            assert_eq!(result.recovery_hash_full, "789xyz");
+            assert_eq!(result.recovery_hash_full, Some("789xyz".to_string()));
+        }
+
+        #[test]
+        fn parses_metadata_without_recovery_hash() {
+            let contents = "VERSION_HASH_FULL=abc123def456";
+            let result = parse_prep_metadata(contents).unwrap();
+
+            assert_eq!(result.version_hash_full, "abc123def456");
+            assert_eq!(result.recovery_hash_full, None);
         }
 
         #[test]
@@ -1063,7 +1316,7 @@ mod tests {
 
         #[test]
         fn ctrl_c_quits_from_input_state() {
-            let mut app = GuestOSRecoveryApp::default();
+            let mut app = create_test_app(RecoveryMode::Nns);
             app.handle_event(Event::Key(ctrl_c_event())).unwrap();
             assert!(app.is_should_quit());
         }
@@ -1071,8 +1324,8 @@ mod tests {
         #[test]
         fn ctrl_c_quits_from_confirmation_state() {
             let confirmation = ConfirmationState {
-                input_state: InputState::default(),
-                params: RecoveryParams::default(),
+                input_state: create_test_input_state(RecoveryMode::Nns),
+                params: default_recovery_params_for_test(),
                 selected_option: ConfirmationOption::Yes,
             };
             let mut app = GuestOSRecoveryApp::with_state(AppState::InputConfirmation(confirmation));
@@ -1090,7 +1343,7 @@ mod tests {
 
         #[test]
         fn non_press_events_are_ignored() {
-            let mut app = GuestOSRecoveryApp::default();
+            let mut app = create_test_app(RecoveryMode::Nns);
 
             let release_event = KeyEvent {
                 code: KeyCode::Tab,
@@ -1108,7 +1361,7 @@ mod tests {
 
         #[test]
         fn repeat_events_are_handled() {
-            let mut app = GuestOSRecoveryApp::default();
+            let mut app = create_test_app(RecoveryMode::Nns);
 
             let repeat_event = KeyEvent {
                 code: KeyCode::Tab,
@@ -1123,6 +1376,31 @@ mod tests {
                 Some(AppState::Input(s)) if s.current_field() == Field::RecoveryHashPrefix
             ));
         }
+
+        #[test]
+        fn new_in_tee_mode_hides_recovery_hash_field() {
+            let app = create_test_app(RecoveryMode::Tee);
+            assert!(matches!(
+                app.get_state(),
+                Some(AppState::Input(s)) if s.current_field() == Field::Version && s.mode == RecoveryMode::Tee
+            ));
+        }
+
+        #[test]
+        fn input_state_prefills_target_boot_alternative_from_current_boot_alternative() {
+            let state = InputState::new(RecoveryMode::Nns, BootAlternative::B);
+            assert_eq!(state.current_boot_alternative, BootAlternative::B);
+            assert_eq!(
+                state.target_boot_alternative_selection,
+                TargetBootAlternativeSelection::Opposite
+            );
+
+            let alternative_state = InputState::new(RecoveryMode::Tee, BootAlternative::B);
+            assert_eq!(
+                alternative_state.target_boot_alternative_selection,
+                TargetBootAlternativeSelection::Current
+            );
+        }
     }
 
     mod input_state {
@@ -1133,7 +1411,7 @@ mod tests {
 
             #[test]
             fn tab_navigates_forward_through_all_fields() {
-                let mut app = GuestOSRecoveryApp::default();
+                let mut app = create_test_app(RecoveryMode::Nns);
 
                 assert!(matches!(
                     app.get_state(),
@@ -1171,7 +1449,7 @@ mod tests {
 
             #[test]
             fn up_arrow_navigates_backward() {
-                let mut app = GuestOSRecoveryApp::default();
+                let mut app = create_test_app(RecoveryMode::Nns);
 
                 app.handle_event(Event::Key(key_event(KeyCode::Up)))
                     .unwrap();
@@ -1192,7 +1470,7 @@ mod tests {
             fn left_right_toggles_buttons() {
                 let input_state = InputState {
                     focused_index: 2, // CheckArtifactsButton
-                    ..Default::default()
+                    ..create_test_input_state(RecoveryMode::Nns)
                 };
                 let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
 
@@ -1212,8 +1490,43 @@ mod tests {
             }
 
             #[test]
+            fn tab_navigates_through_tee_mode_without_recovery_hash_field() {
+                let mut app = create_test_app(RecoveryMode::Tee);
+                assert!(matches!(
+                    app.get_state(),
+                    Some(AppState::Input(s)) if s.current_field() == Field::Version
+                ));
+                app.handle_event(Event::Key(key_event(KeyCode::Tab)))
+                    .unwrap();
+                assert!(matches!(
+                    app.get_state(),
+                    Some(AppState::Input(s)) if s.current_field() == Field::TargetBootAlternative
+                ));
+
+                app.handle_event(Event::Key(key_event(KeyCode::Tab)))
+                    .unwrap();
+                assert!(matches!(
+                    app.get_state(),
+                    Some(AppState::Input(s)) if s.current_field() == Field::CheckArtifactsButton
+                ));
+
+                app.handle_event(Event::Key(key_event(KeyCode::Tab)))
+                    .unwrap();
+                assert!(matches!(
+                    app.get_state(),
+                    Some(AppState::Input(s)) if s.current_field() == Field::ExitButton
+                ));
+                app.handle_event(Event::Key(key_event(KeyCode::Tab)))
+                    .unwrap();
+                assert!(matches!(
+                    app.get_state(),
+                    Some(AppState::Input(s)) if s.current_field() == Field::Version
+                ));
+            }
+
+            #[test]
             fn left_right_does_nothing_on_text_fields() {
-                let mut app = GuestOSRecoveryApp::default();
+                let mut app = create_test_app(RecoveryMode::Nns);
 
                 app.handle_event(Event::Key(key_event(KeyCode::Left)))
                     .unwrap();
@@ -1232,7 +1545,7 @@ mod tests {
 
             #[test]
             fn escape_quits_with_message() {
-                let mut app = GuestOSRecoveryApp::default();
+                let mut app = create_test_app(RecoveryMode::Nns);
                 app.handle_event(Event::Key(key_event(KeyCode::Esc)))
                     .unwrap();
 
@@ -1250,7 +1563,7 @@ mod tests {
 
             #[test]
             fn accepts_lowercase_hex() {
-                let mut app = GuestOSRecoveryApp::default();
+                let mut app = create_test_app(RecoveryMode::Nns);
 
                 for c in ['0', '1', '9', 'a', 'b', 'f'] {
                     app.handle_event(Event::Key(char_event(c))).unwrap();
@@ -1265,7 +1578,7 @@ mod tests {
 
             #[test]
             fn rejects_invalid_characters() {
-                let mut app = GuestOSRecoveryApp::default();
+                let mut app = create_test_app(RecoveryMode::Nns);
 
                 for c in ['A', 'G', 'z', ' ', '!'] {
                     app.handle_event(Event::Key(char_event(c))).unwrap();
@@ -1280,7 +1593,7 @@ mod tests {
 
             #[test]
             fn respects_max_length() {
-                let mut app = GuestOSRecoveryApp::default();
+                let mut app = create_test_app(RecoveryMode::Nns);
 
                 for _ in 0..(VERSION_LENGTH + 10) {
                     app.handle_event(Event::Key(char_event('a'))).unwrap();
@@ -1295,7 +1608,7 @@ mod tests {
 
             #[test]
             fn enter_advances_focus() {
-                let mut app = GuestOSRecoveryApp::default();
+                let mut app = create_test_app(RecoveryMode::Nns);
                 app.handle_event(Event::Key(key_event(KeyCode::Enter)))
                     .unwrap();
 
@@ -1306,10 +1619,41 @@ mod tests {
             }
 
             #[test]
+            fn tee_target_boot_alternative_field_switches_between_current_and_opposite() {
+                let mut input_state = create_test_input_state(RecoveryMode::Tee);
+                input_state.focused_index = 1;
+                let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
+
+                app.handle_event(Event::Key(key_event(KeyCode::Left)))
+                    .unwrap();
+
+                if let Some(AppState::Input(state)) = app.get_state() {
+                    assert_eq!(
+                        state.target_boot_alternative_selection,
+                        TargetBootAlternativeSelection::Current
+                    );
+                } else {
+                    panic!("Expected Input state");
+                }
+
+                app.handle_event(Event::Key(key_event(KeyCode::Right)))
+                    .unwrap();
+
+                if let Some(AppState::Input(state)) = app.get_state() {
+                    assert_eq!(
+                        state.target_boot_alternative_selection,
+                        TargetBootAlternativeSelection::Opposite
+                    );
+                } else {
+                    panic!("Expected Input state");
+                }
+            }
+
+            #[test]
             fn typing_clears_error_message() {
                 let input_state = InputState {
                     error_message: Some("Previous error".to_string()),
-                    ..Default::default()
+                    ..create_test_input_state(RecoveryMode::Nns)
                 };
                 let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
 
@@ -1324,7 +1668,7 @@ mod tests {
 
             #[test]
             fn backspace_deletes_characters() {
-                let mut input_state = InputState::default();
+                let mut input_state = create_test_input_state(RecoveryMode::Nns);
                 set_field_text(&mut input_state, Field::Version, "abc123");
                 let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
 
@@ -1346,7 +1690,7 @@ mod tests {
             fn exit_button_quits() {
                 let input_state = InputState {
                     focused_index: 3, // ExitButton
-                    ..Default::default()
+                    ..create_test_input_state(RecoveryMode::Nns)
                 };
                 let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
 
@@ -1360,7 +1704,7 @@ mod tests {
             fn empty_inputs_shows_error() {
                 let input_state = InputState {
                     focused_index: 2, // CheckArtifactsButton
-                    ..Default::default()
+                    ..create_test_input_state(RecoveryMode::Nns)
                 };
                 let mut app = GuestOSRecoveryApp::with_state(AppState::Input(input_state));
 
@@ -1377,7 +1721,7 @@ mod tests {
 
             #[test]
             fn invalid_version_length_shows_error() {
-                let mut input_state = InputState::default();
+                let mut input_state = create_test_input_state(RecoveryMode::Nns);
                 set_field_text(&mut input_state, Field::Version, "abc"); // Too short
                 set_field_text(&mut input_state, Field::RecoveryHashPrefix, "123456");
                 input_state.focused_index = 2; // CheckArtifactsButton
@@ -1402,8 +1746,8 @@ mod tests {
         #[test]
         fn escape_returns_to_input() {
             let confirmation = ConfirmationState {
-                input_state: InputState::default(),
-                params: RecoveryParams::default(),
+                input_state: create_test_input_state(RecoveryMode::Nns),
+                params: default_recovery_params_for_test(),
                 selected_option: ConfirmationOption::Yes,
             };
             let mut app = GuestOSRecoveryApp::with_state(AppState::InputConfirmation(confirmation));
@@ -1418,8 +1762,8 @@ mod tests {
         #[test]
         fn tab_toggles_selection() {
             let confirmation = ConfirmationState {
-                input_state: InputState::default(),
-                params: RecoveryParams::default(),
+                input_state: create_test_input_state(RecoveryMode::Nns),
+                params: default_recovery_params_for_test(),
                 selected_option: ConfirmationOption::Yes,
             };
             let mut app = GuestOSRecoveryApp::with_state(AppState::InputConfirmation(confirmation));
@@ -1444,8 +1788,8 @@ mod tests {
         #[test]
         fn left_right_changes_selection() {
             let confirmation = ConfirmationState {
-                input_state: InputState::default(),
-                params: RecoveryParams::default(),
+                input_state: create_test_input_state(RecoveryMode::Nns),
+                params: default_recovery_params_for_test(),
                 selected_option: ConfirmationOption::Yes,
             };
             let mut app = GuestOSRecoveryApp::with_state(AppState::InputConfirmation(confirmation));
@@ -1471,7 +1815,7 @@ mod tests {
         fn enter_no_returns_to_input() {
             let confirmation = ConfirmationState {
                 input_state: create_valid_input_state(),
-                params: RecoveryParams::default(),
+                params: default_recovery_params_for_test(),
                 selected_option: ConfirmationOption::No,
             };
             let mut app = GuestOSRecoveryApp::with_state(AppState::InputConfirmation(confirmation));

@@ -45,7 +45,7 @@ fn main() -> Result<()> {
                     dkg_interval: LARGE_DKG_INTERVAL,
                     nested_nodes_vm_resource_overrides: VmResourceOverrides {
                         // NOTE: This test is quite sensitive to loaded Farm
-                        // hosts. To limit the number of of these VMs that can
+                        // hosts. To limit the number of these VMs that can
                         // be scheduled to a given Farm host, we request 64
                         // vCPUs (resulting in approx. 4 VMs per host).
                         //

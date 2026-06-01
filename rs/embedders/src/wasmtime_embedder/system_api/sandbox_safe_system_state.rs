@@ -5,7 +5,6 @@ use super::{
     routing::ResolveDestinationError,
 };
 use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
 };
@@ -401,16 +400,10 @@ impl SystemStateModifications {
             // TODO(DSM-11): Move this into append_delta_log() once there is only one of it.
             metrics.observe_delta_log_size(self.canister_log.bytes_used());
         }
-        if LOG_MEMORY_STORE_FEATURE_ENABLED {
-            let log_memory_store = &mut system_state.log_memory_store;
-            // TODO(DSM-11): cleanup population logic after migration is done.
-            // We need to copy existing canister_log to log_memory_store in order
-            // not to loose any log records until the migration is complete.
-            let old_total = &system_state.canister_log;
-            if log_memory_store.is_empty() && !old_total.is_empty() {
-                log_memory_store.append_delta_log(&mut old_total.clone());
-            }
-            log_memory_store.append_delta_log(&mut self.canister_log.clone());
+        if system_state.log_memory_store.is_migrated() {
+            system_state
+                .log_memory_store
+                .append_delta_log(&mut self.canister_log.clone());
         }
         system_state
             .canister_log
@@ -871,7 +864,7 @@ impl SandboxSafeSystemState {
             .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
 
         let (next_canister_log_record_idx, canister_log_memory_limit) =
-            if LOG_MEMORY_STORE_FEATURE_ENABLED {
+            if system_state.log_memory_store.is_migrated() {
                 let lms = &system_state.log_memory_store;
                 (lms.next_idx(), lms.byte_capacity())
             } else {
@@ -1540,7 +1533,7 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
 
     use ic_base_types::NumSeconds;
-    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
+    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetSecurity};
     use ic_cycles_account_manager::CyclesAccountManager;
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_registry_subnet_type::SubnetType;
@@ -1669,7 +1662,7 @@ mod tests {
                 NumInstructions::from(1_000_000_000),
                 SubnetType::Application,
                 subnet_test_id(0),
-                CyclesAccountManagerConfig::application_subnet(),
+                CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None),
             ),
             Some(0),
             0,

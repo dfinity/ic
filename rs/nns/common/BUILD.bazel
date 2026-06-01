@@ -82,8 +82,6 @@ rust_test(
     crate = ":common",
     deps = [
         # Keep sorted.
-        "//rs/nns/common/protobuf_generator:lib",
-        "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",
     ],
 )

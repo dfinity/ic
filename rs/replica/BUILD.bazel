@@ -34,6 +34,7 @@ DEPENDENCIES = [
     "//rs/registry/client",
     "//rs/registry/helpers",
     "//rs/registry/local_store",
+    "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/state_manager",
@@ -59,8 +60,6 @@ DEPENDENCIES = [
     "@crate_index//:tracing-subscriber",
 ]
 
-MACRO_DEPENDENCIES = []
-
 NONMALICIOUS_DEPENDENCIES = [
     # Keep sorted.
     "//rs/consensus:consensus",
@@ -73,22 +72,6 @@ MALICIOUS_DEPENDENCIES = [
     "//rs/replica/setup_ic_network:malicious_setup_ic_network",
 ]
 
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/interfaces/registry/mocks",
-    "//rs/rust_canisters/canister_test",
-    "//rs/test_utilities",
-    "//rs/types/management_canister_types",
-    "@crate_index//:assert_cmd",
-    "@crate_index//:criterion",
-    "@crate_index//:predicates",
-    "@crate_index//:wat",
-]
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 DATA = [
     "//rs/rust_canisters/stable_structures:stable_structures_canister",
 ]
@@ -100,9 +83,7 @@ ENV = {
 rust_library(
     name = "replica_lib",
     srcs = glob(["src/**"]),
-    aliases = ALIASES,
     crate_name = "ic_replica",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES + NONMALICIOUS_DEPENDENCIES,
 )
@@ -111,9 +92,7 @@ rust_library(
     name = "malicious_replica_lib",
     testonly = True,
     srcs = glob(["src/**"]),
-    aliases = ALIASES,
     crate_name = "ic_replica",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES + MALICIOUS_DEPENDENCIES,
 )
@@ -121,8 +100,6 @@ rust_library(
 rust_binary(
     name = "replica",
     srcs = glob(["bin/replica/**"]),
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + NONMALICIOUS_DEPENDENCIES + [":replica_lib"],
 )
 
@@ -130,29 +107,43 @@ rust_binary(
     name = "malicious_replica",
     testonly = True,
     srcs = glob(["bin/replica/**"]),
-    aliases = ALIASES,
     crate_features = ["malicious_code"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + MALICIOUS_DEPENDENCIES + [":malicious_replica_lib"],
 )
 
 rust_test(
     name = "replica_test",
-    aliases = ALIASES,
     crate = ":replica",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [],
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + [
+        # Keep sorted.
+        "//rs/interfaces/registry/mocks",
+        "//rs/rust_canisters/canister_test",
+        "//rs/test_utilities",
+        "//rs/types/management_canister_types",
+        "@crate_index//:assert_cmd",
+        "@crate_index//:criterion",
+        "@crate_index//:predicates",
+        "@crate_index//:wat",
+    ],
 )
 
 rust_test_suite(
     name = "replica_integration",
     srcs = glob(["tests/**/*.rs"]),
-    aliases = ALIASES,
     data = [":replica"],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [],
-    deps = [":replica_lib"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [":replica_lib"] + DEPENDENCIES + [
+        # Keep sorted.
+        "//rs/interfaces/registry/mocks",
+        "//rs/rust_canisters/canister_test",
+        "//rs/test_utilities",
+        "//rs/types/management_canister_types",
+        "@crate_index//:assert_cmd",
+        "@crate_index//:criterion",
+        "@crate_index//:predicates",
+        "@crate_index//:wat",
+    ],
 )
 
 rust_ic_bench(

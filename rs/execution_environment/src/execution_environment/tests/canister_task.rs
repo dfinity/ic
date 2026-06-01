@@ -1,7 +1,10 @@
 use assert_matches::assert_matches;
 use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
-use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
+use ic_config::{
+    execution_environment::Config as HypervisorConfig,
+    subnet_config::{SubnetConfig, SubnetSecurity},
+};
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions,
@@ -665,7 +668,7 @@ fn global_timer_refunds_cycles_for_request_in_prep() {
     .unwrap();
 
     let canister_id = env
-        .install_canister_with_cycles(binary, vec![], None, Cycles::new(301_000_000_000))
+        .install_canister_with_cycles(binary, vec![], None, Cycles::new(400_000_000_000))
         .unwrap();
 
     let result = env.execute_ingress(canister_id, "test", vec![]).unwrap();
@@ -729,7 +732,7 @@ fn global_timer_set_returns_zero_in_canister_global_timer_method() {
     .unwrap();
 
     let canister_id = env
-        .install_canister_with_cycles(binary, vec![], None, Cycles::new(301_000_000_000))
+        .install_canister_with_cycles(binary, vec![], None, Cycles::new(400_000_000_000))
         .unwrap();
 
     let result = env
@@ -1036,7 +1039,7 @@ where
     F: FnOnce(&StateMachine, CanisterId),
     G: FnOnce(&StateMachine, CanisterId),
 {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config.clone(),
         HypervisorConfig::default(),

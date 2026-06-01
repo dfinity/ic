@@ -77,6 +77,7 @@ fn enable_signing(governance: &Canister<'_>, subnet_id: SubnetId, logger: &Logge
     let enable_signing_payload = UpdateSubnetPayload {
         subnet_id,
         chain_key_signing_enable: Some(vec![MasterPublicKeyId::Ecdsa(make_key(KEY_ID1))]),
+        subnet_admins: None,
         ..empty_subnet_update()
     };
     block_on(execute_update_subnet_proposal(
@@ -91,6 +92,7 @@ fn disable_signing(governance: &Canister<'_>, subnet_id: SubnetId, logger: &Logg
     let disable_signing_payload = UpdateSubnetPayload {
         subnet_id,
         chain_key_signing_disable: Some(vec![MasterPublicKeyId::Ecdsa(make_key(KEY_ID1))]),
+        subnet_admins: None,
         ..empty_subnet_update()
     };
     block_on(execute_update_subnet_proposal(

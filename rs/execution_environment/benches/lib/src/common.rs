@@ -7,7 +7,7 @@ use ic_config::execution_environment::{
     CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, SUBNET_CALLBACK_SOFT_LIMIT,
     SUBNET_MEMORY_RESERVATION,
 };
-use ic_config::subnet_config::SubnetConfig;
+use ic_config::subnet_config::{SubnetConfig, SubnetSecurity};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::RejectCode;
@@ -124,8 +124,6 @@ where
     let subnet_type = exec_env.own_subnet_type();
     let hypervisor = exec_env.hypervisor_for_testing();
 
-    let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-    let canister_root = tmpdir.path().to_path_buf();
     // Create Canister state
     let canister_id = canister_test_id(LOCAL_CANISTER_ID);
     let mut round_limits = RoundLimits {
@@ -138,7 +136,6 @@ where
     let execution_state = hypervisor
         .create_execution_state(
             CanisterModule::new(wat::parse_str(wat.as_ref()).unwrap()),
-            canister_root,
             canister_id,
             &mut round_limits,
             CompilationCostHandling::CountFullAmount,
@@ -282,7 +279,7 @@ where
     let log = no_op_logger();
     let own_subnet_id = subnet_test_id(1);
     let own_subnet_type = SubnetType::Application;
-    let subnet_configs = SubnetConfig::new(own_subnet_type);
+    let subnet_configs = SubnetConfig::new(own_subnet_type, SubnetSecurity::None);
 
     let embedders_config = EmbeddersConfig {
         // Set up larger heap, of 8GB for the Wasm64 feature.

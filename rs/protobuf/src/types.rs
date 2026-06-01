@@ -29,15 +29,6 @@ pub mod v1 {
         }
     }
 
-    impl CatchUpContent {
-        pub fn as_protobuf_vec(&self) -> Vec<u8> {
-            let mut buf = Vec::<u8>::new();
-            self.encode(&mut buf)
-                .expect("CatchUpContent should serialize");
-            buf
-        }
-    }
-
     impl From<RejectCodePublic> for RejectCode {
         fn from(value: RejectCodePublic) -> Self {
             match value {

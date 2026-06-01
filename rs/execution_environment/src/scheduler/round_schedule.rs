@@ -161,7 +161,9 @@ pub struct IterationSchedule {
 }
 
 impl IterationSchedule {
-    /// Partitions the executable canisters to the available cores for execution.
+    /// Splits the scheduled canisters off into per-core vectors, leaving any
+    /// non-scheduled canisters (the "inactive" set) in `canisters`. The
+    /// scheduled canisters are to be reinserted by the caller after execution.
     #[allow(clippy::type_complexity)]
     pub fn partition_canisters_to_cores(
         &self,
@@ -277,6 +279,29 @@ impl RoundSchedule {
         // Sum of all long execution canisters' compute allocations.
         let mut long_executions_compute_allocation = ZERO;
 
+        if is_first_iteration {
+            // (Only) drop from the schedule idle canisters with 0-100 AP.
+            //
+            // Idle canisters with negative AP are kept in the schedule until they reach 0
+            // AP, to prevent them from jumping from the back of the schedule to the middle
+            // just by being idle for a round. Similarly, idle canisters with positive AP
+            // burn it down as if they had executed full rounds until they (almost) reach 0.
+            subnet_schedule.retain(|canister_id, canister_priority| {
+                if canister_priority.accumulated_priority < ZERO
+                    || canister_priority.accumulated_priority > ONE_HUNDRED_PERCENT
+                {
+                    // Not in the 0-100 AP range: definitely keep.
+                    return true;
+                }
+                let Some(canister) = canister_states.get(canister_id) else {
+                    // Canister was deleted: definitely drop.
+                    return false;
+                };
+                // Retain canisters with paused executions, rate limits or something to execute.
+                canister.must_be_in_schedule() || canister.next_execution() != NextExecution::None
+            });
+        }
+
         // Collect all active canisters and their next executions.
         //
         // Unfortunately, not all active canisters are in the subnet schedule, so we
@@ -307,35 +332,22 @@ impl RoundSchedule {
                         if self.long_execution_canisters.contains(canister_id) {
                             return None;
                         }
-                        CanisterRoundState::new(canister, subnet_schedule.get_mut(*canister_id))
+                        CanisterRoundState::new(canister, subnet_schedule.get(canister_id))
                     }
 
                     NextExecution::ContinueLong => {
                         if is_first_iteration {
                             self.long_execution_canisters.insert(*canister_id);
                         }
-                        let priority = subnet_schedule.get_mut(*canister_id);
-                        let rs = CanisterRoundState::new(canister, priority);
+                        let rs =
+                            CanisterRoundState::new(canister, subnet_schedule.get(canister_id));
                         long_executions_count += 1;
                         long_executions_compute_allocation += rs.compute_allocation;
                         rs
                     }
 
                     NextExecution::None => {
-                        // (Only) drop from the schedule idle canisters with 0-100 AP.
-                        //
-                        // Idle canisters with negative AP are kept in the schedule until they reach 0
-                        // AP, to prevent them from jumping from the back of the schedule to the middle
-                        // just by being idle for a round. Similarly, idle canisters with positive AP
-                        // burn it down as if they had executed full rounds until they (almost) reach 0.
-                        if is_first_iteration && !canister.must_be_in_schedule() {
-                            let canister_priority = subnet_schedule.get(canister_id);
-                            if canister_priority.accumulated_priority >= ZERO
-                                && canister_priority.accumulated_priority <= ONE_HUNDRED_PERCENT
-                            {
-                                subnet_schedule.remove(canister_id);
-                            }
-                        }
+                        // Already dropped idle canisters with 0-100 AP above. Nothing to do here.
                         return None;
                     }
 
@@ -602,6 +614,10 @@ impl RoundSchedule {
             {
                 canister_priority.accumulated_priority -=
                     ONE_HUNDRED_PERCENT.min(canister_priority.accumulated_priority);
+                // Don't distribute any free compute to idle canisters with positive AP.
+                // And don't bother with the exponential decay either.
+                total_ap += canister_priority.accumulated_priority;
+                continue;
             }
 
             // Apply an exponential decay to AP values outside the [AP_ROUNDS_MIN,

@@ -37,7 +37,6 @@ rust_test(
         "@crate_index//:serde_json",
         "@crate_index//:sha2",
         "@crate_index//:simple_asn1",
-        "@crate_index//:wycheproof",
     ],
 )
 

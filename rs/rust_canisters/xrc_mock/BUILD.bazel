@@ -7,22 +7,10 @@ rust_library(
     name = "xrc_mock",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "xrc_mock",
-    proc_macro_deps = [
-        # Keep sorted.
-        "@crate_index//:async-trait",
-    ],
     deps = [
         # Keep sorted.
-        "//packages/ic-http-types",
         "@crate_index//:candid",
-        "@crate_index//:ciborium",
-        "@crate_index//:futures",
-        "@crate_index//:ic-cdk",
-        "@crate_index//:ic-cdk-timers",
-        "@crate_index//:ic-metrics-encoder",
-        "@crate_index//:ic-stable-structures",
         "@crate_index//:ic-xrc-types",
-        "@crate_index//:ic0",
         "@crate_index//:num-traits",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",

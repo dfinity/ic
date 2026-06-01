@@ -6,7 +6,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_config::{
     embedders::Config as EmbeddersConfig,
     execution_environment::Config as HypervisorConfig,
-    subnet_config::{SchedulerConfig, SubnetConfig},
+    subnet_config::{SchedulerConfig, SubnetConfig, SubnetSecurity},
 };
 use ic_cycles_account_manager::IngressInductionCost;
 use ic_error_types::UserError;
@@ -97,7 +97,7 @@ fn dts_subnet_config(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
 ) -> SubnetConfig {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     SubnetConfig {
         scheduler_config: SchedulerConfig {
             max_instructions_per_install_code: message_instruction_limit,
@@ -146,7 +146,8 @@ fn dts_install_code_env(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
 ) -> (StateMachine, SubnetConfig) {
-    let default_app_subnet_config = SubnetConfig::new(SubnetType::Application);
+    let default_app_subnet_config =
+        SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     let subnet_config = SubnetConfig {
         scheduler_config: SchedulerConfig {
             max_instructions_per_install_code: message_instruction_limit,
@@ -466,9 +467,15 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles_and_freezing_thr
         .compute_percent_allocated_per_second_fee
         * freezing_threshold;
 
+    // A freshly created canister has non-zero memory (canister history), so the
+    // base_per_second_fee also contributes to the freeze threshold.
+    let base_per_second_fee_cycles =
+        config.cycles_account_manager_config.base_per_second_fee * freezing_threshold;
+
     // The initial balance is sufficient to only pay the reservation for installing code
-    // and the compute allocation during the freezing threshold.
-    let initial_balance = max_install_code_cost() + compute_allocation_cycles;
+    // and the freeze threshold (compute allocation + base fee).
+    let initial_balance =
+        max_install_code_cost() + compute_allocation_cycles + base_per_second_fee_cycles;
 
     let canister_id = env.create_canister_with_cycles(
         None,
@@ -505,7 +512,7 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles_and_freezing_thr
     // i.e., consuming any cycles would make the canister frozen.
     assert_eq!(
         env.cycle_balance(canister_id),
-        compute_allocation_cycles.get()
+        (compute_allocation_cycles + base_per_second_fee_cycles).get()
     );
     let sender = PrincipalId::new_anonymous();
     let method = "update";
@@ -533,9 +540,9 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles_and_freezing_thr
     let err = env.await_ingress(install_code_ingress_id, 100).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterInstructionLimitExceeded);
 
-    // The cycles to cover the compute allocation during the freezing threshold are only needed to keep the canister unfrozen
+    // The cycles to cover the freeze threshold are only needed to keep the canister unfrozen
     // and are not actually used.
-    let unused_cycles = compute_allocation_cycles;
+    let unused_cycles = compute_allocation_cycles + base_per_second_fee_cycles;
     assert_eq!(env.cycle_balance(canister_id), unused_cycles.get());
 }
 
@@ -1889,7 +1896,7 @@ fn impl_dts_canister_with_update_is_uninstalled_due_to_resource_charges(
     // Enable normal message execution.
     env.set_checkpoints_enabled(false);
 
-    env.await_ingress(update.clone(), 100)
+    env.await_ingress(update, 100)
 }
 
 #[test]
@@ -1908,7 +1915,7 @@ fn dts_canister_with_paused_update_is_not_uninstalled_due_to_resource_charges() 
     let result = impl_dts_canister_with_update_is_uninstalled_due_to_resource_charges(false);
 
     // Canister is only uninstalled after paused update completes successfully.
-    assert_matches!(result, Ok(_));
+    assert_matches!(result, Ok(WasmResult::Reply(_)));
 }
 
 #[test]

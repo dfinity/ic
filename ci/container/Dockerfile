@@ -18,7 +18,13 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
 
-## Because the container is used for both CI and development, we need to have a user that matches the UID of the runner (1001) and a user that matches the UID of ubuntu (1000)
+## The image carries two users so the runtime UID can match the host's:
+## - ubuntu (1000): DFINITY devenv
+## - buildifier (1001): CI runners and namespace.so devboxes
+## User convention below:
+## - Build tools (needed regardless of runtime user): installed as root.
+## - Dev tools (convenience only): installed as ubuntu under ~ubuntu.
+##   buildifier has read access via its `ubuntu` supplementary group.
 RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
     # both buildifier and ubuntu users need to be able to access root permissions
     echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
@@ -77,25 +83,18 @@ RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
     mv afl-fuzz afl-showmap  /afl && \
     cd .. && rm -rf AFLplusplus
 
-# install cargo with the ubuntu user
-USER ubuntu
-ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
-COPY rust-toolchain.toml /tmp/rust-toolchain.toml
-RUN RUST_VERSION=$(sed -n 's/^channel = "\(.*\)"$/\1/p' /tmp/rust-toolchain.toml) && \
-    echo "Rust version: $RUST_VERSION" && \
-    curl --fail https://sh.rustup.rs -sSf \
-    | sh -s -- -y --default-toolchain "${RUST_VERSION}-x86_64-unknown-linux-gnu" --no-modify-path && \
-    rustup default "${RUST_VERSION}-x86_64-unknown-linux-gnu" && \
-    rustup target add wasm32-unknown-unknown && \
-    rustup component add clippy && \
-    sudo rm /tmp/rust-toolchain.toml
+# Install rustup proxies system-wide as root:
+# - Binaries land in /opt/cargo/bin/ owned by root, world-readable.
+# - The toolchain (incl. targets/components) lives in /ic/rust-toolchain.toml
+#   and gets fetched on the first `cargo` invocation.
+# - CARGO_HOME/RUSTUP_HOME are only set for the install step; runtime users
+#   fall back to their default $HOME/.{cargo,rustup} for per-user state.
+ENV PATH=/ic/bin:/opt/cargo/bin:$PATH
+RUN curl --fail https://sh.rustup.rs -sSf \
+    | env CARGO_HOME=/opt/cargo RUSTUP_HOME=/opt/rustup \
+      sh -s -- -y --default-toolchain none --no-modify-path \
+    && rm -rf /opt/rustup
 
-# Add cargo-audit and remove build files (we don't need them in the build images)
-ARG CARGO_AUDIT_VERSION=0.22.0
-RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION} && \
-    find /home/ubuntu/.cargo -not -name bin -maxdepth 1 -mindepth 1 -exec rm -r {} +
-
-# switch back to root user after cargo install so that we have permissions to install additional packages
 USER root
 WORKDIR /
 CMD ["/bin/bash"]
