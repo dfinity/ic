@@ -1878,7 +1878,7 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^44.0.1",
+    version = "^45.0.0",
 )
 crate.spec(
     package = "wast",
