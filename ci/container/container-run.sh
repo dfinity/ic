@@ -158,7 +158,6 @@ PODMAN_RUN_ARGS=(
     --add-host devenv-container:127.0.0.1
     --entrypoint=
     --init
-    --pull=missing
 )
 
 PODMAN_RUN_ARGS+=(--hostuser="$USER")
