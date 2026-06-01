@@ -44,7 +44,7 @@
 use crate::{
     CanisterId, CountBytes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
-    crypto::{CryptoHashOf, Signed},
+    crypto::{BasicSigOf, CryptoHashOf},
     messages::{CallbackId, RejectContext, Request},
     node_id_into_protobuf, node_id_try_from_protobuf,
     signature::*,
@@ -1115,38 +1115,58 @@ impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseRe
     }
 }
 
-/// The aggregated cycles-accounting outcome of an HTTPS outcall: the
-/// shared [`CanisterHttpResponseMetadata`] together with each signer's
-/// [`CanisterHttpPaymentReceipt`].
-///
-/// This is the content of an aggregated proof
-/// ([`CanisterHttpResponseProof`]). A validator can reconstruct, for each
-/// signer in the accompanying [`BasicSignatureBatch`], the exact
-/// [`CanisterHttpResponseReceiptShare`] that the signer signed and verify
-/// the individual basic signature — see
-/// [`CanisterHttpResponseReceipt::receipt_share_of`].
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+/// A single signer's contribution to an aggregated proof: the
+/// [`CanisterHttpPaymentReceipt`] that signer signed over, together with
+/// their basic signature on the corresponding
+/// [`CanisterHttpResponseReceiptShare`].
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct CanisterHttpResponseReceipt {
-    pub metadata: CanisterHttpResponseMetadata,
-    pub payment_receipts: BTreeMap<NodeId, CanisterHttpPaymentReceipt>,
+pub struct CanisterHttpResponseSignature {
+    pub payment_receipt: CanisterHttpPaymentReceipt,
+    pub signature: BasicSigOf<CanisterHttpResponseReceiptShare>,
 }
 
-impl CountBytes for CanisterHttpResponseReceipt {
+impl CountBytes for CanisterHttpResponseSignature {
+    fn count_bytes(&self) -> usize {
+        let Self {
+            payment_receipt,
+            signature,
+        } = self;
+        payment_receipt.count_bytes() + signature.get_ref().count_bytes()
+    }
+}
+
+/// An aggregated proof for a canister HTTP response with consensus.
+///
+/// Holds the shared [`CanisterHttpResponseMetadata`] together with, for
+/// each contributing signer, the [`CanisterHttpPaymentReceipt`] they
+/// signed over and their basic signature (see
+/// [`CanisterHttpResponseSignature`]). A validator reconstructs, for each
+/// signer, the exact [`CanisterHttpResponseReceiptShare`] that signer
+/// signed — the shared metadata plus that signer's receipt — and verifies
+/// the individual basic signature.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpResponseProof {
+    pub metadata: CanisterHttpResponseMetadata,
+    pub signatures: BTreeMap<NodeId, CanisterHttpResponseSignature>,
+}
+
+impl CountBytes for CanisterHttpResponseProof {
     fn count_bytes(&self) -> usize {
         let Self {
             metadata,
-            payment_receipts,
+            signatures,
         } = self;
         metadata.count_bytes()
-            + payment_receipts
+            + signatures
                 .iter()
-                .map(|(_, r)| std::mem::size_of::<NodeId>() + r.count_bytes())
+                .map(|(_, s)| std::mem::size_of::<NodeId>() + s.count_bytes())
                 .sum::<usize>()
     }
 }
 
-impl CanisterHttpResponseReceipt {
+impl CanisterHttpResponseProof {
     pub fn id(&self) -> CallbackId {
         self.metadata.id
     }
@@ -1170,27 +1190,10 @@ impl CanisterHttpResponseReceipt {
     pub fn replica_version(&self) -> &ReplicaVersion {
         &self.metadata.replica_version
     }
-
-    /// Reconstructs the [`CanisterHttpResponseReceiptShare`] that `signer`
-    /// signed, or `None` if `signer` has no entry in `payment_receipts`.
-    ///
-    /// Validators use this to rebuild the exact bytes a single replica
-    /// signed when verifying a per-signer basic signature out of an
-    /// aggregated proof. Returning `None` when no receipt is present
-    /// makes it impossible to silently accept a signature whose signer
-    /// has no corresponding receipt entry.
-    pub fn receipt_share_of(&self, signer: NodeId) -> Option<CanisterHttpResponseReceiptShare> {
-        let payment_receipt = self.payment_receipts.get(&signer)?.clone();
-        Some(CanisterHttpResponseReceiptShare {
-            metadata: self.metadata.clone(),
-            payment_receipt,
-        })
-    }
 }
 
 /// A signature share of [`CanisterHttpResponseReceiptShare`].
-pub type CanisterHttpResponseShare =
-    Signed<CanisterHttpResponseReceiptShare, BasicSignature<CanisterHttpResponseReceiptShare>>;
+pub type CanisterHttpResponseShare = BasicSigned<CanisterHttpResponseReceiptShare>;
 
 /// Contains a share and optionally the full response.
 ///
@@ -1216,16 +1219,6 @@ impl PbArtifact for CanisterHttpResponseArtifact {
     type PbMessage = ic_protobuf::types::v1::CanisterHttpArtifact;
     type PbMessageError = ProxyDecodeError;
 }
-
-/// An aggregated proof for a canister HTTP response with consensus.
-///
-/// The proof's `content` is a [`CanisterHttpResponseReceipt`] whose
-/// `refunds` map contains every contributing signer's refund claim. Each
-/// signature in the batch is verified against the
-/// [`CanisterHttpResponseReceiptShare`] the corresponding signer actually
-/// signed — see [`CanisterHttpResponseReceipt::receipt_share_of`].
-pub type CanisterHttpResponseProof =
-    Signed<CanisterHttpResponseReceipt, BasicSignatureBatch<CanisterHttpResponseReceiptShare>>;
 
 #[cfg(test)]
 mod tests {

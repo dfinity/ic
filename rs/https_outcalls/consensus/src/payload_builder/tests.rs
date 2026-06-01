@@ -47,15 +47,15 @@ use ic_types::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL, CanisterHttpMethod,
         CanisterHttpPaymentReceipt, CanisterHttpReject, CanisterHttpRequestContext,
         CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseContent,
-        CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseReceipt,
-        CanisterHttpResponseReceiptShare, CanisterHttpResponseShare,
+        CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
+        CanisterHttpResponseReceiptShare, CanisterHttpResponseShare, CanisterHttpResponseSignature,
         CanisterHttpResponseWithConsensus, Replication,
     },
     consensus::get_faults_tolerated,
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed, crypto_hash},
     messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
-    signature::{BasicSignature, BasicSignatureBatch},
+    signature::BasicSignature,
     time::UNIX_EPOCH,
 };
 use rand::Rng;
@@ -203,14 +203,9 @@ fn multiple_payload_test() {
                 let past_payload = CanisterHttpPayload {
                     responses: vec![CanisterHttpResponseWithConsensus {
                         content: past_response,
-                        proof: Signed {
-                            content: CanisterHttpResponseReceipt {
-                                metadata: past_metadata,
-                                payment_receipts: BTreeMap::new(),
-                            },
-                            signature: BasicSignatureBatch {
-                                signatures_map: BTreeMap::new(),
-                            },
+                        proof: CanisterHttpResponseProof {
+                            metadata: past_metadata,
+                            signatures: BTreeMap::new(),
                         },
                     }],
                     timeouts: vec![],
@@ -884,15 +879,12 @@ fn non_replicated_request_response_coming_in_gossip_payload_created() {
         // The response must contain one signature.
         let proof = &parsed_payload.responses[0].proof;
         assert_eq!(
-            proof.signature.signatures_map.len(),
+            proof.signatures.len(),
             1,
             "Proof should contain exactly one signature"
         );
         assert!(
-            proof
-                .signature
-                .signatures_map
-                .contains_key(&delegated_node_id),
+            proof.signatures.contains_key(&delegated_node_id),
             "The single signature must be from the delegated node"
         );
     });
@@ -957,15 +949,12 @@ fn non_replicated_request_with_extra_share_includes_only_delegated_share() {
         // The response must contain EXACTLY ONE signature, proving the "extra" share was ignored.
         let proof = &parsed_payload.responses[0].proof;
         assert_eq!(
-            proof.signature.signatures_map.len(),
+            proof.signatures.len(),
             1,
             "Proof should contain exactly one signature"
         );
         assert!(
-            proof
-                .signature
-                .signatures_map
-                .contains_key(&delegated_node_id),
+            proof.signatures.contains_key(&delegated_node_id),
             "The single signature must be from the delegated node"
         );
     });
@@ -1176,7 +1165,7 @@ fn validate_payload_fails_for_response_with_no_signatures() {
         let mut proof = response_and_metadata_to_proof(&response, &metadata);
 
         // Ensure the signature map is empty.
-        proof.proof.signature.signatures_map = BTreeMap::new();
+        proof.proof.signatures = BTreeMap::new();
 
         let payload = CanisterHttpPayload {
             responses: vec![proof],
@@ -1487,41 +1476,31 @@ pub(crate) fn metadata_to_share_with_signature(
 
 /// Creates a [`CanisterHttpResponseWithConsensus`] from a [`CanisterHttpResponse`] and [`CanisterHttpResponseMetadata`].
 ///
-/// The proof starts out with an empty `payment_receipts` map and an
-/// empty signature batch; tests insert per-signer receipt + signature
-/// pairs via [`add_signer_to_proof`].
+/// The proof starts out with an empty signatures map; tests insert
+/// per-signer receipt + signature pairs via [`add_signer_to_proof`].
 pub(crate) fn response_and_metadata_to_proof(
     response: &CanisterHttpResponse,
     metadata: &CanisterHttpResponseMetadata,
 ) -> CanisterHttpResponseWithConsensus {
     CanisterHttpResponseWithConsensus {
         content: response.clone(),
-        proof: Signed {
-            content: CanisterHttpResponseReceipt {
-                metadata: metadata.clone(),
-                payment_receipts: BTreeMap::new(),
-            },
-            signature: BasicSignatureBatch {
-                signatures_map: BTreeMap::new(),
-            },
+        proof: CanisterHttpResponseProof {
+            metadata: metadata.clone(),
+            signatures: BTreeMap::new(),
         },
     }
 }
 
-/// Inserts a fake signature and a default payment receipt for `signer`
-/// into an aggregated proof. Tests use this to keep the proof's
-/// `payment_receipts`/`signatures` key sets in sync.
+/// Inserts a fake signature together with a default payment receipt for
+/// `signer` into an aggregated proof.
 pub(crate) fn add_signer_to_proof(proof: &mut CanisterHttpResponseWithConsensus, signer: NodeId) {
-    proof
-        .proof
-        .signature
-        .signatures_map
-        .insert(signer, BasicSigOf::new(BasicSig(vec![])));
-    proof
-        .proof
-        .content
-        .payment_receipts
-        .insert(signer, CanisterHttpPaymentReceipt::default());
+    proof.proof.signatures.insert(
+        signer,
+        CanisterHttpResponseSignature {
+            payment_receipt: CanisterHttpPaymentReceipt::default(),
+            signature: BasicSigOf::new(BasicSig(vec![])),
+        },
+    );
 }
 
 /// Creates a vector of [`CanisterHttpResponseShare`]s by calling [`metadata_to_share`]

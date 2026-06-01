@@ -5,10 +5,10 @@ use crate::{
     payload_builder::{
         parse::bytes_to_payload,
         utils::{
-            FlexibleFindResult, estimate_response_with_consensus_size, find_flexible_result,
-            find_fully_replicated_response, find_non_replicated_response,
-            group_shares_by_callback_id, grouped_shares_meet_divergence_criteria,
-            validate_flexible_response_with_proof, validate_response_share,
+            FlexibleFindResult, find_flexible_result, find_fully_replicated_response,
+            find_non_replicated_response, group_shares_by_callback_id,
+            grouped_shares_meet_divergence_criteria, validate_flexible_response_with_proof,
+            validate_response_share,
         },
     },
 };
@@ -39,7 +39,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
+    CountBytes, Height, NodeId, NumBytes, SubnetId,
     batch::{
         CanisterHttpPayload, ConsensusResponse, FlexibleCanisterHttpError,
         FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
@@ -47,18 +47,14 @@ use ic_types::{
     },
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
-        CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
-        CanisterHttpResponseReceipt, CanisterHttpResponseReceiptShare,
-        CanisterHttpResponseWithConsensus, Replication,
+        CanisterHttpResponseContent, CanisterHttpResponseDivergence, Replication,
     },
     consensus::Committee,
-    crypto::Signed,
     messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
-    signature::BasicSignature,
 };
 use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeMap, HashSet},
     sync::{Arc, RwLock},
 };
 
@@ -135,42 +131,6 @@ impl CanisterHttpPayloadBuilderImpl {
             .map(|features| features.unwrap_or_default().http_requests)
     }
 
-    /// Aggregates the signature and creates the
-    /// [`CanisterHttpResponseWithConsensus`] message.
-    ///
-    /// `receipt` is a [`CanisterHttpResponseReceipt`] whose
-    /// `payment_receipts` map carries every contributing signer's
-    /// receipt. Each signature in the resulting batch is verified by
-    /// reconstructing the per-signer [`CanisterHttpResponseReceiptShare`]
-    /// from the aggregate — see `verify_aggregate_proof`.
-    fn aggregate(
-        &self,
-        registry_version: RegistryVersion,
-        receipt: CanisterHttpResponseReceipt,
-        shares: BTreeSet<BasicSignature<CanisterHttpResponseReceiptShare>>,
-        content: CanisterHttpResponse,
-    ) -> Option<CanisterHttpResponseWithConsensus> {
-        match self
-            .crypto
-            .aggregate(shares.iter().collect(), registry_version)
-        {
-            Err(err) => {
-                warn!(
-                    self.log,
-                    "Failed to aggregate signature for CanisterHttpResponse: {:?}", err
-                );
-                None
-            }
-            Ok(signature) => Some(CanisterHttpResponseWithConsensus {
-                content,
-                proof: Signed {
-                    content: receipt,
-                    signature,
-                },
-            }),
-        }
-    }
-
     fn get_canister_http_payload_impl(
         &self,
         height: Height,
@@ -227,7 +187,7 @@ impl CanisterHttpPayloadBuilderImpl {
         let mut accumulated_size = 0;
         let mut responses_included = 0;
 
-        let mut candidates = vec![];
+        let mut responses = vec![];
         let mut timeouts = vec![];
         let mut divergence_responses = vec![];
         let mut flexible_responses = vec![];
@@ -237,9 +197,7 @@ impl CanisterHttpPayloadBuilderImpl {
         let mut total_share_count = 0;
         let mut active_shares = 0;
 
-        // Since aggregating signatures is potentially expensive (currently for
-        // BasicSignatures it is not expensive), we pick the candidates first
-        // (under the pool lock), then aggregate in a separate step.
+        // Pick the candidates under the pool lock.
         {
             let pool_access = self.pool.read().unwrap();
 
@@ -305,14 +263,13 @@ impl CanisterHttpPayloadBuilderImpl {
                 };
                 match &request.replication {
                     Replication::FullyReplicated => {
-                        if let Some((metadata, shares, content)) =
+                        if let Some(response) =
                             find_fully_replicated_response(grouped_shares, threshold, &*pool_access)
                         {
-                            let candidate_size =
-                                estimate_response_with_consensus_size(&metadata, &shares, &content);
+                            let candidate_size = response.count_bytes();
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
                             if size < max_payload_size {
-                                candidates.push((metadata, shares, content));
+                                responses.push(response);
                                 responses_included += 1;
                                 accumulated_size += candidate_size;
                             }
@@ -337,16 +294,16 @@ impl CanisterHttpPayloadBuilderImpl {
                         }
                     }
                     Replication::NonReplicated(designated_node_id) => {
-                        if let Some((metadata, shares, content)) = find_non_replicated_response(
+                        if let Some(response) = find_non_replicated_response(
                             grouped_shares,
                             designated_node_id,
                             &*pool_access,
                         ) {
-                            let candidate_size =
-                                estimate_response_with_consensus_size(&metadata, &shares, &content);
-                            let size = NumBytes::new((accumulated_size + candidate_size) as u64);
+                            let candidate_size = response.count_bytes();
+                            let size =
+                                NumBytes::new((accumulated_size + response.count_bytes()) as u64);
                             if size < max_payload_size {
-                                candidates.push((metadata, shares, content));
+                                responses.push(response);
                                 responses_included += 1;
                                 accumulated_size += candidate_size;
                             }
@@ -388,12 +345,7 @@ impl CanisterHttpPayloadBuilderImpl {
         }
 
         CanisterHttpPayload {
-            responses: candidates
-                .into_iter()
-                .filter_map(|(metadata, shares, content)| {
-                    self.aggregate(consensus_registry_version, metadata, shares, content)
-                })
-                .collect(),
+            responses,
             timeouts,
             divergence_responses,
             flexible_responses,
@@ -481,11 +433,11 @@ impl CanisterHttpPayloadBuilderImpl {
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
             // Validate response against consensus registry version
-            if response.proof.content.registry_version() != consensus_registry_version {
+            if response.proof.registry_version() != consensus_registry_version {
                 return invalid_artifact(
                     InvalidCanisterHttpPayloadReason::RegistryVersionMismatch {
                         expected: consensus_registry_version,
-                        received: response.proof.content.registry_version(),
+                        received: response.proof.registry_version(),
                     },
                 );
             }
@@ -544,8 +496,7 @@ impl CanisterHttpPayloadBuilderImpl {
 
             let (valid_signers, invalid_signers): (Vec<NodeId>, Vec<NodeId>) = response
                 .proof
-                .signature
-                .signatures_map
+                .signatures
                 .keys()
                 .cloned()
                 .partition(|signer| effective_committee.iter().any(|id| id == signer));
@@ -565,11 +516,10 @@ impl CanisterHttpPayloadBuilderImpl {
                 });
             }
 
-            // The aggregated metadata carries a per-signer map of payment
-            // receipts. Each signature in the batch is verified
-            // individually against the metadata the corresponding signer
-            // signed, i.e. the shared metadata combined with that
-            // signer's receipt.
+            // Each per-signer entry of the proof carries that signer's
+            // payment receipt alongside their signature. Each signature is
+            // verified individually against the shared metadata combined
+            // with that signer's receipt.
             utils::verify_aggregate_proof(
                 &response.proof,
                 consensus_registry_version,
@@ -580,8 +530,9 @@ impl CanisterHttpPayloadBuilderImpl {
             // Additionally enforce the per-replica refund allowance from
             // the request context: no signer may claim a refund larger
             // than the allowance set in `refund_status`.
-            for receipt in response.proof.content.payment_receipts.values() {
-                if receipt.refund > request_context.refund_status.per_replica_allowance {
+            for sig in response.proof.signatures.values() {
+                if sig.payment_receipt.refund > request_context.refund_status.per_replica_allowance
+                {
                     return invalid_artifact(InvalidCanisterHttpPayloadReason::SignatureError(
                         Box::new(ic_types::crypto::CryptoError::MalformedSignature {
                             algorithm: ic_types::crypto::AlgorithmId::Ed25519,
@@ -999,7 +950,7 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
             .expect("Failed to parse a payload that was already validated");
 
         let responses = messages.responses.into_iter().map(|response| {
-            if response.proof.signature.signatures_map.len() == 1 {
+            if response.proof.signatures.len() == 1 {
                 stats.single_signature_responses += 1;
             }
             stats.responses += 1;

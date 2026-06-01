@@ -10,11 +10,6 @@ message CanisterHttpPaymentReceipt {
   state.queues.v1.Cycles refund = 1;
 }
 
-message CanisterHttpPaymentReceiptEntry {
-  bytes signer = 1;
-  CanisterHttpPaymentReceipt receipt = 2;
-}
-
 message HttpHeader {
   string name = 1;
   bytes value = 2;
@@ -61,6 +56,7 @@ message CanisterHttpReject {
 message CanisterHttpResponseSignature {
   bytes signer = 1;
   bytes signature = 2;
+  CanisterHttpPaymentReceipt payment_receipt = 3;
 }
 
 message CanisterHttpResponseWithConsensus {
@@ -74,13 +70,11 @@ message CanisterHttpResponseWithConsensus {
   repeated CanisterHttpResponseSignature signatures = 7;
   uint32 content_size = 9;
   bool is_reject = 10;
-  repeated CanisterHttpPaymentReceiptEntry payment_receipts = 11;
 }
 
 message CanisterHttpShare {
   CanisterHttpResponseMetadata metadata = 1;
   CanisterHttpResponseSignature signature = 2;
-  CanisterHttpPaymentReceipt payment_receipt = 3;
 }
 
 message CanisterHttpResponseDivergence {
