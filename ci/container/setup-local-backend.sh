@@ -24,6 +24,18 @@
 #     applied from an unprivileged test process, so we provision the launcher
 #     here.
 #
+#  3. Allow Bazel's linux-sandbox to run. The backend's test actions must run
+#     under `linux-sandbox` so they match CI (under the weaker
+#     `processwrapper-sandbox` fallback `$HOME` stays writable, which masks
+#     real, CI-only failures). Bazel runs as the unprivileged container user
+#     with no effective capabilities, so linux-sandbox creates an
+#     *unprivileged* user namespace to obtain the CAP_SYS_ADMIN it needs to set
+#     up its mounts. Ubuntu 24.04 ships
+#     `kernel.apparmor_restrict_unprivileged_userns=1`, which blocks that and
+#     makes Bazel silently fall back to `processwrapper-sandbox`. We relax it
+#     here. NOTE: this is a host kernel sysctl; because the container is
+#     privileged and shares the host kernel, setting it takes effect host-wide.
+#
 # This script is invoked from the container startup paths
 # (ci/container/container-run.sh and .devcontainer/devcontainer.json).
 #
@@ -86,4 +98,15 @@ if command -v capsh >/dev/null 2>&1; then
     capsh_bin="$(command -v capsh)"
     install -m 0755 "$capsh_bin" "$LAUNCHER"
     setcap cap_net_admin,cap_net_raw+ep "$LAUNCHER"
+fi
+
+# --- 3. Allow Bazel's linux-sandbox (unprivileged user namespaces) ---------
+#
+# Best-effort: the sysctl only exists on AppArmor-enabled kernels (Ubuntu
+# 24.04+) and may be read-only in some environments, so never fail setup over
+# it. Bazel probes linux-sandbox support once at server startup, so the bazel
+# server must be (re)started after this runs to pick up the change.
+sysctl_key=kernel.apparmor_restrict_unprivileged_userns
+if [ -w "/proc/sys/${sysctl_key//.//}" ]; then
+    sysctl -w "${sysctl_key}=0" >/dev/null 2>&1 || true
 fi
