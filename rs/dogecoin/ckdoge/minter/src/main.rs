@@ -2,7 +2,7 @@ use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
 use ic_ckbtc_minter::state::eventlog::EventLogger;
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
-use ic_ckbtc_minter::{BuildTxError, CanisterRuntime, fees::FeeEstimator};
+use ic_ckbtc_minter::{BuildTxError, CanisterRuntime};
 use ic_ckdoge_minter::candid_api::{EstimateWithdrawalFeeError, MinterInfo};
 use ic_ckdoge_minter::event::CkDogeEventLogger;
 use ic_ckdoge_minter::{
@@ -105,16 +105,11 @@ fn estimate_withdrawal_fee(
         let fee_estimator = DOGECOIN_CANISTER_RUNTIME.fee_estimator(s);
         let withdrawal_amount = arg.amount.unwrap_or(s.fee_based_retrieve_btc_min_amount);
 
-        let fee_rate = fee_estimator
-            .estimate_median_fee(&s.last_fee_per_vbyte)
-            .unwrap_or_else(|| {
-                s.last_median_fee_per_vbyte
-                    .expect("Bitcoin current fee percentiles not retrieved yet.")
-            });
         ic_ckdoge_minter::fees::estimate_retrieve_doge_fee(
             &mut s.available_utxos,
             withdrawal_amount,
-            fee_rate,
+            s.last_median_fee_per_vbyte
+                .expect("Bitcoin current fee percentiles not retrieved yet."),
             s.max_num_inputs_in_transaction,
             &fee_estimator,
         )
