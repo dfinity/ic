@@ -1889,7 +1889,7 @@ fn impl_dts_canister_with_update_is_uninstalled_due_to_resource_charges(
     // Enable normal message execution.
     env.set_checkpoints_enabled(false);
 
-    env.await_ingress(update.clone(), 100)
+    env.await_ingress(update, 100)
 }
 
 #[test]
@@ -1908,7 +1908,7 @@ fn dts_canister_with_paused_update_is_not_uninstalled_due_to_resource_charges() 
     let result = impl_dts_canister_with_update_is_uninstalled_due_to_resource_charges(false);
 
     // Canister is only uninstalled after paused update completes successfully.
-    assert_matches!(result, Ok(_));
+    assert_matches!(result, Ok(WasmResult::Reply(_)));
 }
 
 #[test]
