@@ -280,7 +280,7 @@ fn state_machine_handles_messages_to_deleted_subnet() {
     });
     assert!(initial_state.get_stream(&SUBNET_2).is_some());
 
-    // Add a canister with a bounded-wait output request, a best-effort output response, and a
+    // Add a canister with a bounded-wait output request, a bounded-wait output response, and a
     // bounded-wait subnet message (callee = the deleted subnet's ID), all destined for the
     // deleted subnet. Also add a bounded-wait subnet output response (local subnet →
     // remote canister) to the subnet queues.
@@ -313,7 +313,7 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         )
         .unwrap();
 
-    // Output response: local → remote (best-effort to avoid critical error).
+    // Output response: local → remote (bounded-wait to avoid critical error).
     // Best-effort responses with no route are dropped without a critical error.
     // First push then pop a matching input request to create the output-queue reservation.
     let mut subnet_available_memory = i64::MAX / 2;
@@ -448,8 +448,8 @@ fn state_machine_handles_messages_to_deleted_subnet() {
 
         // Stream to the deleted subnet is gone.
         assert!(state.get_stream(&SUBNET_2).is_none());
-        // Output queues are empty: requests were consumed (reject responses generated),
-        // best-effort and bounded-wait responses were dropped.
+        // Output queues are empty: requests were consumed,
+        // bounded-wait responses were dropped.
         assert!(
             !state
                 .canister_state(&local_canister_id)
