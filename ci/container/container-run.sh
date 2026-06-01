@@ -223,9 +223,8 @@ if [ "$DEVENV" = true ]; then
     # * shared with VSCode's devcontainer, see .devcontainer/devcontainer.json
     # this configuration improves performance of rust-analyzer
     CARGO_TARGET_DIR="$CACHE_DIR/cargo"
-    if [ ! -d "$CARGO_TARGET_DIR" ]; then
-        mkdir -p "$CARGO_TARGET_DIR"
-    fi
+    mkdir -p "$CARGO_TARGET_DIR"
+
     PODMAN_RUN_ARGS+=(
         --mount type=bind,source="$CARGO_TARGET_DIR",target="/ic/target"
     )
