@@ -35,7 +35,7 @@ jobs:
     container: &container-setup
       image: ghcr.io/dfinity/ic-build@sha256:497ce2a5ac6f2c9143aa1d2fcb027f5896c854f1978ff58079d49eb6d75c0661
       options: >-
-         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
+         --user "ubuntu:ubuntu" -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 90
     steps:
       - &checkout

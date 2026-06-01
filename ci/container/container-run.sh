@@ -147,7 +147,7 @@ PODMAN_RUN_ARGS=(
     --rm              # remove container after it ran
     --log-driver=none # by default podman logs all of stdout to the journal which is resource-consuming and wasteful
 
-    -u "ubuntu:ubuntu"
+    --user "ubuntu:ubuntu" # run as the ubuntu user defined in the container image
     -e HOSTUSER="$USER"
     -e HOSTHOSTNAME="$HOSTNAME"
     -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
