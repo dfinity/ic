@@ -37,6 +37,7 @@ ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-local-store = { path = "../registry/local_store" }
+ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replica-setup-ic-network = { path = "./setup_ic_network" }
 ic-replicated-state = { path = "../replicated_state" }
