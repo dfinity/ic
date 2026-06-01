@@ -849,6 +849,14 @@ http_archive(
 )
 
 http_file(
+    name = "canbench_bin",
+    downloaded_file_path = "canbench",
+    executable = True,
+    sha256 = "9d55976505e0e77a47be2f3240813090f84242f3912bb587fda8b97b9304bdd4",
+    url = "https://github.com/dfinity/canbench/releases/download/v0.6.0/canbench",
+)
+
+http_file(
     name = "didc-x86_64-linux",
     downloaded_file_path = "didc",
     executable = True,

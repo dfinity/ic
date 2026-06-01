@@ -1989,34 +1989,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "canbench"
-version = "0.6.0"
-source = "git+https://github.com/dfinity/canbench?rev=089477bf0c500713855529a28e1adfdebfce074b#089477bf0c500713855529a28e1adfdebfce074b"
-dependencies = [
- "canbench-rs",
- "candid",
- "clap 4.5.53",
- "colored 3.0.0",
- "flate2",
- "hex",
- "ic-management-canister-types 0.7.1",
- "inferno 0.11.19",
- "pocket-ic",
- "reqwest 0.13.4",
- "rustc-demangle",
- "semver",
- "serde",
- "serde_yaml 0.9.34+deprecated",
- "sha256",
- "tempfile",
- "walrus 0.23.3",
- "wasmparser 0.235.0",
-]
-
-[[package]]
 name = "canbench-rs"
 version = "0.6.0"
-source = "git+https://github.com/dfinity/canbench?rev=089477bf0c500713855529a28e1adfdebfce074b#089477bf0c500713855529a28e1adfdebfce074b"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11eef0544778ff515f65fbe5427807009a9cf44eb898404380f6f13c9af20025"
 dependencies = [
  "canbench-rs-macros",
  "candid",
@@ -2027,7 +2003,8 @@ dependencies = [
 [[package]]
 name = "canbench-rs-macros"
 version = "0.6.0"
-source = "git+https://github.com/dfinity/canbench?rev=089477bf0c500713855529a28e1adfdebfce074b#089477bf0c500713855529a28e1adfdebfce074b"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94a1c524c43e000e22c24816ead2fcf79d57aca4bae6747835dc088d57682f11"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3838,7 +3815,6 @@ dependencies = [
  "byteorder",
  "bytes",
  "cached 0.49.2",
- "canbench",
  "canbench-rs",
  "candid",
  "candid_parser 0.1.4",
@@ -7446,9 +7422,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "321f0f839cd44a4686e9504b0a62b4d69a50b62072144c71c68f5873c167b8d9"
 dependencies = [
  "ahash 0.8.11",
- "crossbeam-channel",
- "crossbeam-utils",
- "dashmap 5.5.0",
  "indexmap 2.14.0",
  "is-terminal",
  "itoa",
@@ -10354,38 +10327,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pocket-ic"
-version = "13.0.0"
-source = "git+https://github.com/dfinity/ic?rev=855c5ea6fd70582ef28bc7b1182fe42dad51a829#855c5ea6fd70582ef28bc7b1182fe42dad51a829"
-dependencies = [
- "backoff",
- "base64 0.13.1",
- "candid",
- "flate2",
- "hex",
- "ic-certification",
- "ic-management-canister-types 0.7.1",
- "ic-transport-types",
- "reqwest 0.13.4",
- "schemars 0.8.21",
- "semver",
- "serde",
- "serde_cbor",
- "serde_json",
- "sha2 0.10.9",
- "slog",
- "strum 0.26.3",
- "strum_macros 0.26.4",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "wslpath",
-]
-
-[[package]]
 name = "polling"
 version = "3.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13090,19 +13031,6 @@ dependencies = [
  "cfg-if",
  "cpufeatures 0.3.0",
  "digest 0.11.3",
-]
-
-[[package]]
-name = "sha256"
-version = "1.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f880fc8562bdeb709793f00eb42a2ad0e672c4f883bbe59122b926eca935c8f6"
-dependencies = [
- "async-trait",
- "bytes",
- "hex",
- "sha2 0.10.9",
- "tokio",
 ]
 
 [[package]]
@@ -15861,19 +15789,6 @@ dependencies = [
 
 [[package]]
 name = "wasmparser"
-version = "0.235.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "161296c618fa2d63f6ed5fffd1112937e803cb9ec71b32b01a76321555660917"
-dependencies = [
- "bitflags 2.10.0",
- "hashbrown 0.15.2",
- "indexmap 2.14.0",
- "semver",
- "serde",
-]
-
-[[package]]
-name = "wasmparser"
 version = "0.244.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47b807c72e1bac69382b3a6fb3dbe8ea4c0ed87ff5629b8685ae6b9a611028fe"
@@ -16875,12 +16790,6 @@ name = "wsl"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dab7ac864710bdea6594becbea5b5050333cf34fefb0dc319567eb347950d4"
-
-[[package]]
-name = "wslpath"
-version = "0.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04a2ecdf2cc4d33a6a93d71bcfbc00bb1f635cdb8029a2cc0709204a045ec7a3"
 
 [[package]]
 name = "wycheproof"

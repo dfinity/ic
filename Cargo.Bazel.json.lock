@@ -1,5 +1,5 @@
 {
-  "checksum": "2420548cd4d219e848f232788e6bf06e5fbca3d8c3afc097c1e07f4445b3334c",
+  "checksum": "de98f94c0bda3cb52e5a69c8286321201e93e6f923059be1d3d78bf88a189587",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11724,147 +11724,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "canbench 0.6.0": {
-      "name": "canbench",
-      "version": "0.6.0",
-      "package_url": "https://github.com/dfinity/canbench",
-      "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/canbench",
-          "commitish": {
-            "Rev": "089477bf0c500713855529a28e1adfdebfce074b"
-          },
-          "strip_prefix": "canbench-bin"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "canbench",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "canbench",
-            "crate_root": "src/main.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "canbench",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "canbench-rs 0.6.0",
-              "target": "canbench_rs"
-            },
-            {
-              "id": "candid 0.10.29",
-              "target": "candid"
-            },
-            {
-              "id": "clap 4.5.53",
-              "target": "clap"
-            },
-            {
-              "id": "colored 3.0.0",
-              "target": "colored"
-            },
-            {
-              "id": "flate2 1.1.5",
-              "target": "flate2"
-            },
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
-            },
-            {
-              "id": "ic-management-canister-types 0.7.1",
-              "target": "ic_management_canister_types"
-            },
-            {
-              "id": "inferno 0.11.19",
-              "target": "inferno"
-            },
-            {
-              "id": "pocket-ic 13.0.0",
-              "target": "pocket_ic"
-            },
-            {
-              "id": "reqwest 0.13.4",
-              "target": "reqwest"
-            },
-            {
-              "id": "rustc-demangle 0.1.26",
-              "target": "rustc_demangle"
-            },
-            {
-              "id": "semver 1.0.27",
-              "target": "semver"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            },
-            {
-              "id": "serde_yaml 0.9.34+deprecated",
-              "target": "serde_yaml"
-            },
-            {
-              "id": "sha256 1.6.0",
-              "target": "sha256"
-            },
-            {
-              "id": "tempfile 3.23.0",
-              "target": "tempfile"
-            },
-            {
-              "id": "walrus 0.23.3",
-              "target": "walrus"
-            },
-            {
-              "id": "wasmparser 0.235.0",
-              "target": "wasmparser"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.6.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
     "canbench-rs 0.6.0": {
       "name": "canbench-rs",
       "version": "0.6.0",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/canbench",
-          "commitish": {
-            "Rev": "089477bf0c500713855529a28e1adfdebfce074b"
-          },
-          "strip_prefix": "canbench-rs"
+        "Http": {
+          "url": "https://static.crates.io/crates/canbench-rs/0.6.0/download",
+          "sha256": "11eef0544778ff515f65fbe5427807009a9cf44eb898404380f6f13c9af20025"
         }
       },
       "targets": [
@@ -11926,12 +11793,9 @@
       "version": "0.6.0",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/canbench",
-          "commitish": {
-            "Rev": "089477bf0c500713855529a28e1adfdebfce074b"
-          },
-          "strip_prefix": "canbench-rs-macros"
+        "Http": {
+          "url": "https://static.crates.io/crates/canbench-rs-macros/0.6.0/download",
+          "sha256": "94a1c524c43e000e22c24816ead2fcf79d57aca4bae6747835dc088d57682f11"
         }
       },
       "targets": [
@@ -22650,10 +22514,6 @@
             {
               "id": "cached 0.49.2",
               "target": "cached"
-            },
-            {
-              "id": "canbench 0.6.0",
-              "target": "canbench"
             },
             {
               "id": "canbench-rs 0.6.0",
@@ -42567,11 +42427,7 @@
         ],
         "crate_features": {
           "common": [
-            "crossbeam-channel",
-            "crossbeam-utils",
-            "dashmap",
             "indexmap",
-            "multithreaded",
             "nameattr"
           ],
           "selects": {}
@@ -42581,18 +42437,6 @@
             {
               "id": "ahash 0.8.11",
               "target": "ahash"
-            },
-            {
-              "id": "crossbeam-channel 0.5.15",
-              "target": "crossbeam_channel"
-            },
-            {
-              "id": "crossbeam-utils 0.8.21",
-              "target": "crossbeam_utils"
-            },
-            {
-              "id": "dashmap 5.5.0",
-              "target": "dashmap"
             },
             {
               "id": "indexmap 2.14.0",
@@ -60836,160 +60680,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "pocket-ic 13.0.0": {
-      "name": "pocket-ic",
-      "version": "13.0.0",
-      "package_url": "https://github.com/dfinity/ic",
-      "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/ic",
-          "commitish": {
-            "Rev": "855c5ea6fd70582ef28bc7b1182fe42dad51a829"
-          },
-          "strip_prefix": "packages/pocket-ic"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "pocket_ic",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "pocket_ic",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "backoff 0.4.0",
-              "target": "backoff"
-            },
-            {
-              "id": "base64 0.13.1",
-              "target": "base64"
-            },
-            {
-              "id": "candid 0.10.29",
-              "target": "candid"
-            },
-            {
-              "id": "flate2 1.1.5",
-              "target": "flate2"
-            },
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
-            },
-            {
-              "id": "ic-certification 3.1.0",
-              "target": "ic_certification"
-            },
-            {
-              "id": "ic-management-canister-types 0.7.1",
-              "target": "ic_management_canister_types"
-            },
-            {
-              "id": "ic-transport-types 0.47.3",
-              "target": "ic_transport_types"
-            },
-            {
-              "id": "reqwest 0.13.4",
-              "target": "reqwest"
-            },
-            {
-              "id": "schemars 0.8.21",
-              "target": "schemars"
-            },
-            {
-              "id": "semver 1.0.27",
-              "target": "semver"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            },
-            {
-              "id": "serde_cbor 0.11.2",
-              "target": "serde_cbor"
-            },
-            {
-              "id": "serde_json 1.0.145",
-              "target": "serde_json"
-            },
-            {
-              "id": "sha2 0.10.9",
-              "target": "sha2"
-            },
-            {
-              "id": "slog 2.7.0",
-              "target": "slog"
-            },
-            {
-              "id": "strum 0.26.3",
-              "target": "strum"
-            },
-            {
-              "id": "tempfile 3.23.0",
-              "target": "tempfile"
-            },
-            {
-              "id": "thiserror 2.0.18",
-              "target": "thiserror"
-            },
-            {
-              "id": "tokio 1.50.0",
-              "target": "tokio"
-            },
-            {
-              "id": "tracing 0.1.41",
-              "target": "tracing"
-            },
-            {
-              "id": "tracing-appender 0.2.3",
-              "target": "tracing_appender"
-            },
-            {
-              "id": "tracing-subscriber 0.3.20",
-              "target": "tracing_subscriber"
-            }
-          ],
-          "selects": {
-            "cfg(windows)": [
-              {
-                "id": "wslpath 0.0.2",
-                "target": "wslpath"
-              }
-            ]
-          }
-        },
-        "edition": "2024",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "strum_macros 0.26.4",
-              "target": "strum_macros"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "13.0.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "polling 3.7.4": {
       "name": "polling",
       "version": "3.7.4",
@@ -69708,7 +69398,6 @@
             "json",
             "multipart",
             "rustls",
-            "socks",
             "stream"
           ],
           "selects": {}
@@ -77781,83 +77470,6 @@
           "selects": {}
         },
         "version": "0.11.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "sha256 1.6.0": {
-      "name": "sha256",
-      "version": "1.6.0",
-      "package_url": "https://github.com/baoyachi/sha256-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/sha256/1.6.0/download",
-          "sha256": "f880fc8562bdeb709793f00eb42a2ad0e672c4f883bbe59122b926eca935c8f6"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "sha256",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "sha256",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "async",
-            "default",
-            "tokio"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bytes 1.11.1",
-              "target": "bytes"
-            },
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
-            },
-            {
-              "id": "sha2 0.10.9",
-              "target": "sha2"
-            },
-            {
-              "id": "tokio 1.50.0",
-              "target": "tokio"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "async-trait 0.1.89",
-              "target": "async_trait"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "1.6.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -94456,110 +94068,6 @@
       ],
       "license_file": null
     },
-    "wasmparser 0.235.0": {
-      "name": "wasmparser",
-      "version": "0.235.0",
-      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmparser/0.235.0/download",
-          "sha256": "161296c618fa2d63f6ed5fffd1112937e803cb9ec71b32b01a76321555660917"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasmparser",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasmparser",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "component-model",
-            "default",
-            "features",
-            "hash-collections",
-            "serde",
-            "simd",
-            "std",
-            "validate"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitflags 2.10.0",
-              "target": "bitflags"
-            },
-            {
-              "id": "hashbrown 0.15.2",
-              "target": "hashbrown"
-            },
-            {
-              "id": "indexmap 2.14.0",
-              "target": "indexmap"
-            },
-            {
-              "id": "semver 1.0.27",
-              "target": "semver"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            },
-            {
-              "id": "wasmparser 0.235.0",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.235.0"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
-    },
     "wasmparser 0.244.0": {
       "name": "wasmparser",
       "version": "0.244.0",
@@ -101707,44 +101215,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "wslpath 0.0.2": {
-      "name": "wslpath",
-      "version": "0.0.2",
-      "package_url": "https://github.com/pratikpc/wsl-path-rust",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wslpath/0.0.2/download",
-          "sha256": "04a2ecdf2cc4d33a6a93d71bcfbc00bb1f635cdb8029a2cc0709204a045ec7a3"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wslpath",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wslpath",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "version": "0.0.2"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "wycheproof 0.6.0": {
       "name": "wycheproof",
       "version": "0.6.0",
@@ -103543,7 +103013,6 @@
     }
   },
   "binary_crates": [
-    "canbench 0.6.0",
     "ic-wasm 0.9.11",
     "metrics-proxy 0.1.0"
   ],
@@ -103905,7 +103374,6 @@
     "byteorder 1.5.0",
     "bytes 1.11.1",
     "cached 0.49.2",
-    "canbench 0.6.0",
     "canbench-rs 0.6.0",
     "candid 0.10.29",
     "candid_parser 0.1.4",
