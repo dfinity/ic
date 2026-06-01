@@ -315,6 +315,40 @@ impl LocalBackend {
             format!("log_outputs = \"1:file:{log}\"\n", log = log_path.display(),),
         )?;
 
+        // Session-mode libvirtd initializes per-user *state drivers* on
+        // startup, which create config/cache/data directories derived from
+        // `$HOME` (`~/.config/libvirt`, `~/.cache/libvirt`,
+        // `~/.local/share/libvirt`). If those directories cannot be created the
+        // daemon aborts in `daemonRunStateInit` *before* binding its socket,
+        // and the caller below times out waiting for the socket.
+        //
+        // Under the Bazel `linux-sandbox` the real `$HOME` is bind-mounted
+        // read-only (only the exec root, `$TEST_TMPDIR`, the hermetic `/tmp`
+        // and any `--sandbox_writable_path`s are writable), so libvirtd's
+        // attempt to create `~/.config/libvirt/...` fails with `Permission
+        // denied` and no socket ever appears. (Run unsandboxed the same code
+        // works because `$HOME` is then writable.) To make the backend
+        // sandbox-friendly we point `$HOME` and the XDG base-directory vars at
+        // a writable directory we control.
+        //
+        // The state dir lives under `xdg_runtime_dir` (the short `/tmp` path
+        // above), NOT under `libvirt_dir`: libvirtd's QEMU driver opens a QMP
+        // monitor unix socket at
+        // `$XDG_CONFIG_HOME/libvirt/qemu/lib/qmp-XXXXXX/qmp.monitor`, and
+        // rooting `$HOME` at the deep Bazel working dir pushes that path past
+        // the ~108-byte `sun_path` limit (`QEMU ... UNIX socket path ... is too
+        // long`). The short `/tmp` base keeps every derived socket path within
+        // the limit, for the same reason `$XDG_RUNTIME_DIR` is placed there.
+        let state_home = xdg_runtime_dir.join("home");
+        for sub in [".config", ".cache", ".local/share"] {
+            std::fs::create_dir_all(state_home.join(sub)).with_context(|| {
+                format!(
+                    "creating libvirt state dir {}",
+                    state_home.join(sub).display()
+                )
+            })?;
+        }
+
         // The backend is fully unprivileged: libvirtd runs as the current user
         // in session mode and connects to a per-user QEMU driver. There is no
         // `sudo`, no system-wide bridge, and no `virtlogd` (domain serial and
@@ -329,6 +363,10 @@ impl LocalBackend {
             .arg("--pid-file")
             .arg(&pid_path)
             .env("XDG_RUNTIME_DIR", &xdg_runtime_dir)
+            .env("HOME", &state_home)
+            .env("XDG_CONFIG_HOME", state_home.join(".config"))
+            .env("XDG_CACHE_HOME", state_home.join(".cache"))
+            .env("XDG_DATA_HOME", state_home.join(".local/share"))
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
