@@ -172,7 +172,11 @@ def system_test(
     extra_args_simple.extend(["--group-base-name", test_name])
     extra_args_colocated.extend(["--group-base-name", test_name + "_colocate"])
 
+    tags = tags + ["system_test"]
+
     if local:
+        env["SYSTEM_TEST_INFRA"] = "local"
+
         for image_name, image_path in icos_images.items():
             _runtime_deps[image_name + "_PATH"] = image_path
 
@@ -184,6 +188,8 @@ def system_test(
         # The Local backend does not run a Vector VM.
         if "--no-logs" not in extra_args_simple:
             extra_args_simple.append("--no-logs")
+    else:
+        tags.append("requires-network")
 
     # Convert _runtime_deps into environment variables + data dependencies
     env |= {
@@ -244,13 +250,6 @@ def system_test(
     RUN_SCRIPT_RUNTIME_DEP_ENV_VARS = ";".join(_runtime_deps.keys())
     env["RUN_SCRIPT_RUNTIME_DEP_ENV_VARS"] = RUN_SCRIPT_RUNTIME_DEP_ENV_VARS
 
-    tags = tags + ["system_test"]
-
-    if local:
-        env["SYSTEM_TEST_INFRA"] = "local"
-    else:
-        tags.append("requires-network")
-
     env["RUN_SCRIPT_VOLATILE_STATUS_PATH"] = "$(rootpath //bazel:volatile-status.txt)"
     data.append("//bazel:volatile-status.txt")
 
@@ -268,11 +267,6 @@ def system_test(
         timeout = test_timeout,
         visibility = visibility,
     )
-
-    # create a colocated version of the test (marked as manual _unless_ the test is tagged with "colocate")
-    # The colocated flow depends on Farm; skip it for local-backend tests.
-    if local:
-        return struct(test_driver_target = test_driver_target)
 
     sh_test(
         srcs = ["//rs/tests:run_systest.sh"],
