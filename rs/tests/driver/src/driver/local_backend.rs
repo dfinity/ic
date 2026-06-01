@@ -279,6 +279,35 @@ impl LocalBackend {
             format!("creating libvirt working dir at {}", libvirt_dir.display())
         })?;
 
+        // Run libvirtd from a private copy rather than directly from
+        // `LIBVIRTD_BIN`.
+        //
+        // The host's `libvirtd` AppArmor profile attaches *by executable path*
+        // (it is defined for `/usr/sbin/libvirtd`) and, in enforce mode, only
+        // permits peers in the same profile to signal the daemon. Our teardown
+        // (`kill_all_descendants`) runs unconfined, so signalling the confined
+        // daemon is denied by the kernel and surfaces as `EACCES`; the daemon
+        // then survives teardown until its PID namespace is torn down, stalling
+        // the reaper and spamming the log.
+        //
+        // AppArmor matches the profile against the exec'd path, so a copy at any
+        // other path does not match and runs *unconfined* — exactly like the
+        // QEMU and dnsmasq processes we already spawn (in session mode libvirt's
+        // AppArmor security driver does not confine QEMU, so dropping the
+        // daemon's own confinement changes nothing for the guests). The copy is
+        // therefore signalable and reaped normally at teardown.
+        //
+        // TODO: this is no longer necessary when we provide libvirtd as a bazel dependency.
+        let libvirtd_bin = libvirt_dir.join("libvirtd");
+        std::fs::copy(LIBVIRTD_BIN, &libvirtd_bin).with_context(|| {
+            format!(
+                "copying {LIBVIRTD_BIN} to {} to escape its path-attached AppArmor profile",
+                libvirtd_bin.display()
+            )
+        })?;
+        std::fs::set_permissions(&libvirtd_bin, std::fs::Permissions::from_mode(0o755))
+            .with_context(|| format!("making {} executable", libvirtd_bin.display()))?;
+
         let conf_path = libvirt_dir.join("libvirtd.conf");
         let pid_path = libvirt_dir.join("libvirtd.pid");
         let log_path = libvirt_dir.join("libvirtd.log");
@@ -355,9 +384,9 @@ impl LocalBackend {
         // console output is written directly to files). The few operations that
         // need elevated networking capabilities (creating the bridge and TAPs)
         // go through the narrow [`net_admin`] capability launcher instead.
-        info!(logger, "Spawning libvirtd (session mode)"; "bin" => LIBVIRTD_BIN, "conf" => %conf_path.display(), "socket" => %socket_path.display());
+        info!(logger, "Spawning libvirtd (session mode)"; "bin" => %libvirtd_bin.display(), "conf" => %conf_path.display(), "socket" => %socket_path.display());
 
-        let child = Command::new(LIBVIRTD_BIN)
+        let child = Command::new(&libvirtd_bin)
             .arg("--config")
             .arg(&conf_path)
             .arg("--pid-file")
