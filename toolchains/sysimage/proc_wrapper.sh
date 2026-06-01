@@ -20,7 +20,7 @@ tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
 # fallback in case `podman unshare` is unavailable for any reason.
 _cleanup() {
     if ! podman --root "$podman_storage_dir/root" --runroot "$podman_storage_dir/runroot" \
-        unshare rm -rf "$tmpdir" "$podman_storage_dir" 2>/dev/null ; then
+        unshare rm -rf "$tmpdir" "$podman_storage_dir" 2>/dev/null; then
 
         echo >&2 "WARNING: could not unshare podman runroot, forcing"
         sudo rm -rf "$tmpdir" "$podman_storage_dir"
