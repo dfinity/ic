@@ -125,7 +125,7 @@ impl FakeStateManager {
         state: &ReplicatedState,
         height: Height,
     ) -> (Witness, CryptoHashOfPartialState) {
-        let lazy_tree = replicated_state_as_lazy_tree(&state, height);
+        let lazy_tree = replicated_state_as_lazy_tree(state, height);
         let hash_tree = hash_lazy_tree(&lazy_tree).unwrap();
         let height_witness = compute_state_height_witness(&lazy_tree, &hash_tree);
 
