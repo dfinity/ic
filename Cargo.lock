@@ -1996,19 +1996,21 @@ dependencies = [
 
 [[package]]
 name = "canbench-rs"
-version = "0.6.0"
-source = "git+https://github.com/dfinity/canbench?rev=089477bf0c500713855529a28e1adfdebfce074b#089477bf0c500713855529a28e1adfdebfce074b"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d959bc8d6e4738bcfed6682d46ef105db17e5fe81d4c30e8b49b03b9badd2c8"
 dependencies = [
  "canbench-rs-macros",
  "candid",
- "ic-cdk 0.20.1",
+ "ic-cdk 0.19.0",
  "serde",
 ]
 
 [[package]]
 name = "canbench-rs-macros"
-version = "0.6.0"
-source = "git+https://github.com/dfinity/canbench?rev=089477bf0c500713855529a28e1adfdebfce074b#089477bf0c500713855529a28e1adfdebfce074b"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3198f118892181c4f4d30cfb423511a11b9d7e8d7efb94aa58777db78da27bd8"
 dependencies = [
  "proc-macro2",
  "quote",
