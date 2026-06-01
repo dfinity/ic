@@ -1459,10 +1459,6 @@ pub(crate) fn metadata_to_share_with_signature(
 ) -> CanisterHttpResponseShare {
     let signer = node_test_id(from_node);
     Signed {
-        // A per-replica share wraps the shared metadata plus the
-        // replica's own payment receipt. Tests use a default (zero
-        // refund) receipt — enough to drive the share/proof pipeline
-        // end-to-end.
         content: CanisterHttpResponseReceiptShare {
             metadata: metadata.clone(),
             payment_receipt: CanisterHttpPaymentReceipt::default(),
