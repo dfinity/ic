@@ -248,14 +248,6 @@ def system_test(
 
     if local:
         env["SYSTEM_TEST_INFRA"] = "local"
-
-        # The local backend runs libvirtd as root via `sudo`. The Bazel sandbox
-        # executes the test in a user namespace that remaps file ownership (e.g.
-        # `/etc/sudo.conf` and the setuid `sudo` binary appear owned by `nobody`),
-        # which makes `sudo` refuse to run. Tag the test `local` so Bazel runs it
-        # unsandboxed (this also disables remote execution/caching, which the
-        # local backend cannot use anyway).
-        tags.append("local")
     else:
         tags.append("requires-network")
 
