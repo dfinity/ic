@@ -595,6 +595,7 @@ impl CanisterHttpRequestContext {
         args: FlexibleCanisterHttpRequestArgs,
         node_ids: &BTreeSet<NodeId>,
         rng: &mut dyn RngCore,
+        pricing_version: PricingVersion,
     ) -> Result<Self, CanisterHttpRequestContextError> {
         validate_transform_principal(&args.transform, request.sender.get())?;
         validate_url_length(&args.url)?;
@@ -683,7 +684,7 @@ impl CanisterHttpRequestContext {
                 min_responses,
                 max_responses,
             },
-            pricing_version: PricingVersion::PayAsYouGo,
+            pricing_version,
             refund_status: RefundStatus {
                 //TODO(IC-1937): subtract the base fee from the refundable amount.
                 refundable_cycles: request.payment,
@@ -1397,7 +1398,12 @@ mod tests {
         });
 
         let result = CanisterHttpRequestContext::generate_from_flexible_args(
-            UNIX_EPOCH, &request, args, &node_ids, rng,
+            UNIX_EPOCH,
+            &request,
+            args,
+            &node_ids,
+            rng,
+            PricingVersion::PayAsYouGo,
         );
 
         assert_matches!(
@@ -1415,7 +1421,12 @@ mod tests {
         args.url = "a".repeat(MAX_CANISTER_HTTP_URL_SIZE + 1);
 
         let result = CanisterHttpRequestContext::generate_from_flexible_args(
-            UNIX_EPOCH, &request, args, &node_ids, rng,
+            UNIX_EPOCH,
+            &request,
+            args,
+            &node_ids,
+            rng,
+            PricingVersion::PayAsYouGo,
         );
 
         assert_matches!(result, Err(CanisterHttpRequestContextError::UrlTooLong(_)));
@@ -1441,7 +1452,12 @@ mod tests {
         };
 
         let result = CanisterHttpRequestContext::generate_from_flexible_args(
-            UNIX_EPOCH, &request, args, &node_ids, rng,
+            UNIX_EPOCH,
+            &request,
+            args,
+            &node_ids,
+            rng,
+            PricingVersion::PayAsYouGo,
         );
 
         assert_matches!(
@@ -1462,7 +1478,12 @@ mod tests {
         }));
 
         let result = CanisterHttpRequestContext::generate_from_flexible_args(
-            UNIX_EPOCH, &request, args, &node_ids, rng,
+            UNIX_EPOCH,
+            &request,
+            args,
+            &node_ids,
+            rng,
+            PricingVersion::PayAsYouGo,
         );
 
         assert_matches!(
@@ -1484,7 +1505,12 @@ mod tests {
         }));
 
         let result = CanisterHttpRequestContext::generate_from_flexible_args(
-            UNIX_EPOCH, &request, args, &node_ids, rng,
+            UNIX_EPOCH,
+            &request,
+            args,
+            &node_ids,
+            rng,
+            PricingVersion::PayAsYouGo,
         );
 
         assert_matches!(
@@ -1506,7 +1532,12 @@ mod tests {
         }));
 
         let result = CanisterHttpRequestContext::generate_from_flexible_args(
-            UNIX_EPOCH, &request, args, &node_ids, rng,
+            UNIX_EPOCH,
+            &request,
+            args,
+            &node_ids,
+            rng,
+            PricingVersion::PayAsYouGo,
         );
 
         assert_matches!(
@@ -1528,7 +1559,12 @@ mod tests {
         }));
 
         let result = CanisterHttpRequestContext::generate_from_flexible_args(
-            UNIX_EPOCH, &request, args, &node_ids, rng,
+            UNIX_EPOCH,
+            &request,
+            args,
+            &node_ids,
+            rng,
+            PricingVersion::PayAsYouGo,
         );
 
         assert_matches!(
@@ -1547,7 +1583,12 @@ mod tests {
         let args = dummy_flexible_args(None);
 
         let result = CanisterHttpRequestContext::generate_from_flexible_args(
-            UNIX_EPOCH, &request, args, &node_ids, rng,
+            UNIX_EPOCH,
+            &request,
+            args,
+            &node_ids,
+            rng,
+            PricingVersion::PayAsYouGo,
         );
 
         assert_matches!(
@@ -1574,7 +1615,12 @@ mod tests {
         let args = dummy_flexible_args(None);
 
         let result = CanisterHttpRequestContext::generate_from_flexible_args(
-            UNIX_EPOCH, &request, args, &node_ids, rng,
+            UNIX_EPOCH,
+            &request,
+            args,
+            &node_ids,
+            rng,
+            PricingVersion::PayAsYouGo,
         );
 
         assert_matches!(
@@ -1595,7 +1641,12 @@ mod tests {
         }));
 
         let ctx = CanisterHttpRequestContext::generate_from_flexible_args(
-            UNIX_EPOCH, &request, args, &node_ids, rng,
+            UNIX_EPOCH,
+            &request,
+            args,
+            &node_ids,
+            rng,
+            PricingVersion::PayAsYouGo,
         );
 
         assert_matches!(
@@ -1626,7 +1677,12 @@ mod tests {
         }));
 
         let ctx = CanisterHttpRequestContext::generate_from_flexible_args(
-            UNIX_EPOCH, &request, args, &node_ids, rng,
+            UNIX_EPOCH,
+            &request,
+            args,
+            &node_ids,
+            rng,
+            PricingVersion::PayAsYouGo,
         );
 
         assert_matches!(
@@ -1650,7 +1706,12 @@ mod tests {
             max_responses: 3,
         }));
         let ctx = CanisterHttpRequestContext::generate_from_flexible_args(
-            UNIX_EPOCH, &request, args, &node_ids, rng,
+            UNIX_EPOCH,
+            &request,
+            args,
+            &node_ids,
+            rng,
+            PricingVersion::PayAsYouGo,
         );
 
         assert_matches!(
@@ -1682,7 +1743,12 @@ mod tests {
                 max_responses: 0,
             }));
             let ctx = CanisterHttpRequestContext::generate_from_flexible_args(
-                UNIX_EPOCH, &request, args, &node_ids, rng,
+                UNIX_EPOCH,
+                &request,
+                args,
+                &node_ids,
+                rng,
+                PricingVersion::PayAsYouGo,
             );
             assert_matches!(
                 ctx,
@@ -1712,7 +1778,12 @@ mod tests {
         }));
 
         let ctx = CanisterHttpRequestContext::generate_from_flexible_args(
-            UNIX_EPOCH, &request, args, &node_ids, rng,
+            UNIX_EPOCH,
+            &request,
+            args,
+            &node_ids,
+            rng,
+            PricingVersion::PayAsYouGo,
         );
 
         assert_matches!(
@@ -1756,7 +1827,12 @@ mod tests {
         args.method = method;
 
         let result = CanisterHttpRequestContext::generate_from_flexible_args(
-            UNIX_EPOCH, &request, args, &node_ids, rng,
+            UNIX_EPOCH,
+            &request,
+            args,
+            &node_ids,
+            rng,
+            PricingVersion::PayAsYouGo,
         );
 
         if should_succeed {
