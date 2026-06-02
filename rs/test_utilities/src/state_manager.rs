@@ -1,7 +1,7 @@
-use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
-use ic_canonical_state_tree_hash::{
-    hash_tree::hash_lazy_tree, witness::compute_state_height_witness,
+use ic_canonical_state::lazy_tree_conversion::{
+    compute_state_height_witness, replicated_state_as_lazy_tree,
 };
+use ic_canonical_state_tree_hash::hash_tree::hash_lazy_tree;
 use ic_crypto_sha2::Sha256;
 use ic_crypto_tree_hash::{Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness};
 use ic_interfaces_certified_stream_store::{

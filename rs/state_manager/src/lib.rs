@@ -22,11 +22,12 @@ use crate::{
 };
 use allowed_panics::panic_with_replica_diverged_at_height;
 use crossbeam_channel::{Sender, bounded, unbounded};
-use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
+use ic_canonical_state::lazy_tree_conversion::{
+    compute_state_height_witness, replicated_state_as_lazy_tree,
+};
 use ic_canonical_state_tree_hash::{
     hash_tree::{HashTree, HashTreeError, hash_lazy_tree},
     lazy_tree::{LazyTree, materialize::materialize_partial},
-    witness::compute_state_height_witness,
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::Config;
