@@ -324,6 +324,17 @@ def _ext4_image_impl(ctx):
         args.extend(["-i", src_file.path])
     inputs.extend(ctx.files.src)
 
+    # Locate the mke2fs binary among the //:mkfs.ext4 outputs (configure_make
+    # also exposes an include/ dir, so filter by name).
+    mke2fs = None
+    for f in ctx.files._mkfs_ext4:
+        if f.basename == "mke2fs":
+            mke2fs = f
+            break
+    if not mke2fs:
+        fail("could not locate mke2fs binary among //:mkfs.ext4 outputs")
+    inputs.extend(ctx.files._mkfs_ext4)
+
     args.extend([
         "-s",
         ctx.attr.partition_size,
@@ -335,6 +346,8 @@ def _ext4_image_impl(ctx):
         ctx.executable._dflate.path,
         "--zstd",
         ctx.executable._zstd.path,
+        "--mkfs-ext4",
+        mke2fs.path,
     ])
 
     if ctx.attr.file_contexts:
@@ -384,6 +397,11 @@ ext4_image = _icos_build_rule(
             default = "//toolchains/sysimage:build_ext4_image",
             executable = True,
             cfg = "exec",
+        ),
+        "_mkfs_ext4": attr.label(
+            default = "//:mkfs.ext4",
+            cfg = "exec",
+            allow_files = True,
         ),
         "_diroid": attr.label(
             default = "//rs/ic_os/build_tools/diroid",
