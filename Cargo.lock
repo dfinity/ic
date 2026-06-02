@@ -15060,6 +15060,8 @@ dependencies = [
  "hex-literal 0.4.1",
  "ic-artifact-pool",
  "ic-btc-replica-types",
+ "ic-canonical-state",
+ "ic-canonical-state-tree-hash",
  "ic-config",
  "ic-consensus-features",
  "ic-crypto-sha2",
