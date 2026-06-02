@@ -1,10 +1,6 @@
 """
 e2fsprogs, built from source. The bundled libuuid/libblkid are enabled so we
-don't link against system copies. The resulting mke2fs binary is currently
-dynamically linked against libc/libpthread because the hermetic glibc toolchain
-doesn't ship static libc archives -- `-static` is passed but silently ignored
-by the linker. Fully-static linkage via the musl variant of the toolchain is a
-follow-up.
+don't link against system copies. 
 """
 
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
