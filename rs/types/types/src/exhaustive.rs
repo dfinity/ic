@@ -2,10 +2,7 @@
 
 use crate::artifact::IngressMessageId;
 use crate::batch::ChainKeyAgreement;
-use crate::canister_http::{
-    CanisterHttpPaymentReceipt, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
-    CanisterHttpResponseSignature,
-};
+use crate::canister_http::CanisterHttpResponseSignature;
 use crate::consensus::dkg::RemoteDkgAttempts;
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::IDkgMasterPublicKeyId;
