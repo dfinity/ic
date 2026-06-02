@@ -38,10 +38,10 @@ pub enum RegistryCupCreationError {
     IDkgSummaryCreationError(String),
     #[error("No current threshold transcript with tag {0:?} in registry CUP contents")]
     ThresholdTranscriptMissing(NiDkgTag),
+    #[error("Failed to retrieve CUP contents from the registry at version {0}: {1:?}")]
+    FailedToGetCupContents(RegistryVersion, RegistryClientError),
     #[error("Missing registry CUP contents at version {0}")]
     CupContentsMissing(RegistryVersion),
-    #[error("Failed to retrieve versioned record from the registry at version {0}: {1:?}")]
-    FailedToGetCupContents(RegistryVersion, RegistryClientError),
 }
 
 /// Constructs a genesis/recovery CUP from the CUP contents associated with the
@@ -298,12 +298,10 @@ mod tests {
                 None
             }
         });
-        let result =
+        let RegistryCUP { cup, cup_type } =
             make_registry_cup(&registry_client, subnet_test_id(0), &no_op_logger()).unwrap();
 
-        assert_eq!(result.cup_type, RegistryCupType::Recovery);
-        let cup = result.cup;
-
+        assert_eq!(cup_type, RegistryCupType::Recovery);
         assert_eq!(
             cup.content.state_hash.get_ref(),
             &CryptoHash(vec![1, 2, 3, 4, 5])
