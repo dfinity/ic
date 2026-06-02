@@ -323,11 +323,22 @@ pub fn get_resource_request_for_universal_vm(
     group_name: &str,
     env: &TestEnv,
 ) -> anyhow::Result<ResourceRequest> {
-    let primary_image = universal_vm
-        .primary_image
-        .clone()
-        .unwrap_or_else(default_universal_vm_disk_image);
-    let primary_image = maybe_localize(primary_image, env);
+    let primary_image = match universal_vm.primary_image.clone() {
+        Some(image) => maybe_localize(image, env),
+        None => match InfraProvider::read_attribute(env) {
+            InfraProvider::Farm => default_universal_vm_disk_image(),
+            InfraProvider::Local => {
+                let var = local_path_env_var(&ImageType::UniversalImage);
+                DiskImage::Local {
+                    image_type: ImageType::UniversalImage,
+                    path: PathBuf::from(
+                        std::env::var(var)
+                            .unwrap_or_else(|_| panic!("Failed to read '{var}' for Local backend")),
+                    ),
+                }
+            }
+        },
+    };
     let mut res_req = ResourceRequest::new(primary_image);
     res_req.group_name = group_name.to_string();
 

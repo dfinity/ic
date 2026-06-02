@@ -1016,6 +1016,10 @@ fn extract_image(src: &Path, dst: &Path, logger: &Logger) -> Result<()> {
             dst.display()
         );
         let status = Command::new("unzstd")
+            // `-f` forces decompression of symbolic links (runtime deps are
+            // symlinks into the bazel cache, which unzstd otherwise ignores)
+            // and overwrites any existing output file.
+            .arg("-f")
             .arg("-o")
             .arg(dst)
             .arg(src)
