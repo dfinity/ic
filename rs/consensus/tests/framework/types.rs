@@ -274,7 +274,7 @@ impl fmt::Display for ConsensusInstance<'_> {
 /// This is the type of predicates used by the ConsensusRunner to determine
 /// whether or not it should terminate. It is evaluated for all consensus
 /// instances at every time step.
-pub type StopPredicate = Box<dyn Fn(&ConsensusInstance<'_>) -> bool>;
+pub type StopPredicate = Box<dyn FnMut(&ConsensusInstance<'_>) -> bool>;
 
 pub(crate) struct BouncerState<Artifact: IdentifiableArtifact> {
     bouncer: Bouncer<Artifact::Id>,
@@ -412,6 +412,7 @@ pub struct ConsensusRunnerConfig {
     pub stall_clocks: bool,
     pub execution: Box<dyn ExecutionStrategy>,
     pub delivery: Box<dyn DeliveryStrategy>,
+    pub dkg_interval_length: u64,
 }
 
 impl fmt::Display for ConsensusRunnerConfig {
@@ -419,7 +420,8 @@ impl fmt::Display for ConsensusRunnerConfig {
         write!(
             f,
             "ConsensusRunnerConfig {{ max_delta: {}, random_seed: {}, \
-             num_nodes: {}, num_rounds: {}, degree: {}, use_priority_fn: {}, execution: {}, delivery: {} }}",
+             num_nodes: {}, num_rounds: {}, degree: {}, use_priority_fn: {}, \
+             execution: {}, delivery: {}, dkg_interval_length: {} }}",
             self.max_delta,
             self.random_seed,
             self.num_nodes,
@@ -427,7 +429,8 @@ impl fmt::Display for ConsensusRunnerConfig {
             self.degree,
             self.use_priority_fn,
             get_name(&self.execution),
-            get_name(&self.delivery)
+            get_name(&self.delivery),
+            self.dkg_interval_length,
         )
     }
 }

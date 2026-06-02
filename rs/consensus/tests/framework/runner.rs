@@ -251,7 +251,7 @@ impl<'a> ConsensusRunner<'a> {
 
     /// Run a single step of all instances to finish processing their messages.
     /// Return the updated NetworkStatus.
-    fn process(&self) -> NetworkStatus {
+    fn process(&mut self) -> NetworkStatus {
         let delivered = self.config.delivery.deliver_next(self);
         let mut idle_since = self.idle_since.borrow_mut();
 
@@ -274,7 +274,6 @@ impl<'a> ConsensusRunner<'a> {
             // only stop when all instances satisfy StopPredicate
             if !(self.stop_predicate)(instance) {
                 stopped = false;
-                break;
             }
         }
         if stopped {
@@ -304,6 +303,7 @@ impl Default for ConsensusRunnerConfig {
             stall_clocks: false,
             execution: GlobalMessage::new(false),
             delivery: Sequential::new(),
+            dkg_interval_length: 19,
         }
     }
 }
