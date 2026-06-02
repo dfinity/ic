@@ -317,6 +317,10 @@ fn balance_key(account: Account) -> (AccountDataType, (Blob<29>, [u8; 32])) {
 
 #[init]
 fn init(index_arg: Option<IndexArg>) {
+    // `InitArg::retrieve_blocks_from_ledger_interval_seconds` is itself
+    // `#[deprecated]` (see `lib.rs`); we still observe it here so
+    // `parse_timer_configuration_options` can enforce the backwards-compat
+    // rule that it cannot be set alongside the new `min_`/`max_` fields.
     #[allow(deprecated)]
     let InitArg {
         ledger_id,
@@ -389,6 +393,11 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
         Some(IndexArg::Upgrade(upgrade)) => {
             log!(P1, "Possible upgrade configuration changes: {:#?}", upgrade,);
 
+            // `UpgradeArg::retrieve_blocks_from_ledger_interval_seconds` is
+            // itself `#[deprecated]` (see `lib.rs`); we still observe it here
+            // so `parse_timer_configuration_options` can enforce the
+            // backwards-compat rule that it cannot be set alongside the new
+            // `min_`/`max_` fields.
             #[allow(deprecated)]
             let UpgradeArg {
                 ledger_id,
