@@ -1160,8 +1160,8 @@ impl CountBytes for CanisterHttpResponseProof {
         } = self;
         metadata.count_bytes()
             + signatures
-                .iter()
-                .map(|(_, s)| std::mem::size_of::<NodeId>() + s.count_bytes())
+                .values()
+                .map(|s| std::mem::size_of::<NodeId>() + s.count_bytes())
                 .sum::<usize>()
     }
 }
