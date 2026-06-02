@@ -3010,3 +3010,29 @@ fn test_log_memory_store_upgrade_downgrade() {
     check_lms(&env, canister_few, false, false, true, 0);
     check_records(&env, canister_few, 3, 2, &log_2);
 }
+
+#[test]
+fn produce_log_with_zero_log_memory_limit() {
+    let subnet_type = SubnetType::Application;
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(subnet_type, SubnetSecurity::None),
+            ExecutionConfig {
+                log_memory_store_feature: FlagStatus::Enabled,
+                ..Default::default()
+            },
+        )))
+        .with_subnet_type(subnet_type)
+        .with_checkpoints_enabled(true)
+        .build();
+
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
+        .build();
+    let canister_id = create_and_install_canister(&env, settings, UNIVERSAL_CANISTER_WASM.to_vec());
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(b"log").reply().build(),
+    );
+}
