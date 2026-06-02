@@ -41,7 +41,7 @@ To run a different shell or command, pass it as arguments, e.g.:
 EOF
 }
 
-if [ -e /run/.containerenv ] || [ -e /.dockerenv ]; then
+if [ -e /run/.containerenv ]; then
     eprintln "Nested $0 is not supported."
     exit 1
 fi
