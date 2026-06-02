@@ -1,11 +1,12 @@
 use anyhow::{Context, Result, anyhow, bail};
 use http::{Method, StatusCode};
+use rcgen::{CertifiedKey, generate_simple_self_signed};
 use reqwest::{Client, Request};
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
 use std::{
     fs,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     path::Path,
     time::Duration,
 };
@@ -163,30 +164,47 @@ sudo networkctl reconfigure enp2s0
             None
         };
 
+        let infra_provider = InfraProvider::read_attribute(env);
         let demo_domain_env = std::env::var("DEMO_DOMAIN").ok().filter(|s| !s.is_empty());
 
-        let (ic_gateway_fqdn, cert, aaaa_records, a_records) =
-            if let Some(demo_domain) = demo_domain_env {
-                let demo = self.load_or_create_demo_domain(env, &demo_domain, vm_ipv6, vm_ipv4)?;
-                let fqdn = demo.demo_cert.domain.clone();
-                self.configure_demo_domain_dns_records(env, &demo, &fqdn)?;
+        let (ic_gateway_fqdn, cert, aaaa_records, a_records) = match infra_provider {
+            InfraProvider::Local => {
+                // The Local backend has no playnet TLS service, so generate a
+                // self-signed certificate for a local domain and skip DNS
+                // configuration entirely.
+                let playnet = self.load_or_create_local_self_signed(env, vm_ipv6, vm_ipv4)?;
                 (
-                    fqdn,
-                    demo.demo_cert.cert.clone(),
-                    demo.aaaa_records.clone(),
-                    demo.a_records.clone(),
-                )
-            } else {
-                let playnet = self.load_or_create_playnet(env, vm_ipv6, vm_ipv4)?;
-                let fqdn = playnet.playnet_cert.playnet.clone();
-                self.configure_dns_records(env, &playnet, &fqdn)?;
-                (
-                    fqdn,
+                    playnet.playnet_cert.playnet.clone(),
                     playnet.playnet_cert.cert.clone(),
                     playnet.aaaa_records.clone(),
                     playnet.a_records.clone(),
                 )
-            };
+            }
+            InfraProvider::Farm => {
+                if let Some(demo_domain) = demo_domain_env {
+                    let demo =
+                        self.load_or_create_demo_domain(env, &demo_domain, vm_ipv6, vm_ipv4)?;
+                    let fqdn = demo.demo_cert.domain.clone();
+                    self.configure_demo_domain_dns_records(env, &demo, &fqdn)?;
+                    (
+                        fqdn,
+                        demo.demo_cert.cert.clone(),
+                        demo.aaaa_records.clone(),
+                        demo.a_records.clone(),
+                    )
+                } else {
+                    let playnet = self.load_or_create_playnet(env, vm_ipv6, vm_ipv4)?;
+                    let fqdn = playnet.playnet_cert.playnet.clone();
+                    self.configure_dns_records(env, &playnet, &fqdn)?;
+                    (
+                        fqdn,
+                        playnet.playnet_cert.cert.clone(),
+                        playnet.aaaa_records.clone(),
+                        playnet.a_records.clone(),
+                    )
+                }
+            }
+        };
 
         // Emit log events for A and AAAA records
         emit_ic_gateway_records_event(&logger, &ic_gateway_fqdn, &aaaa_records, &a_records);
@@ -218,7 +236,21 @@ sudo networkctl reconfigure enp2s0
             self.universal_vm.name,
             health_url.as_str()
         );
-        block_on(await_status_is_healthy(&env.logger(), health_url, msg))
+        // The Local backend has no DNS for the self-signed domain, so resolve it
+        // directly to the VM's IPv6 address and accept the self-signed cert.
+        let resolve = match infra_provider {
+            InfraProvider::Local => Some((
+                ic_gateway_fqdn.clone(),
+                SocketAddr::new(IpAddr::V6(vm_ipv6), 443),
+            )),
+            InfraProvider::Farm => None,
+        };
+        block_on(await_status_is_healthy(
+            &env.logger(),
+            health_url,
+            msg,
+            resolve,
+        ))
     }
 
     /// Loads existing playnet configuration or creates a new one.
@@ -241,6 +273,60 @@ sudo networkctl reconfigure enp2s0
             info!(logger, "Acquired new playnet: {}", playnet_cert.playnet);
             Playnet {
                 playnet_cert,
+                aaaa_records: vec![],
+                a_records: vec![],
+            }
+        };
+
+        playnet.aaaa_records.push(uvm_ipv6);
+        if let Some(ipv4) = uvm_ipv4 {
+            playnet.a_records.push(ipv4);
+        }
+
+        // Write/overwrite file
+        playnet.write_attribute(env);
+
+        Ok(playnet)
+    }
+
+    /// Loads existing configuration or, on the Local backend, generates a
+    /// self-signed certificate for a deterministic local domain. The Local
+    /// backend has no playnet TLS service, so the gateway serves HTTPS with this
+    /// self-signed certificate. The certificate covers both the apex domain and
+    /// its wildcard so the gateway can also serve canister subdomains.
+    fn load_or_create_local_self_signed(
+        &self,
+        env: &TestEnv,
+        uvm_ipv6: Ipv6Addr,
+        uvm_ipv4: Option<Ipv4Addr>,
+    ) -> Result<Playnet> {
+        let logger = env.logger();
+        let mut playnet = if Playnet::attribute_exists(env) {
+            let playnet: Playnet = Playnet::read_attribute(env);
+            info!(
+                logger,
+                "Using existing local domain: {}", playnet.playnet_cert.playnet
+            );
+            playnet
+        } else {
+            let domain = format!("{}.local", self.universal_vm.name);
+            let CertifiedKey { cert, key_pair } =
+                generate_simple_self_signed(vec![domain.clone(), format!("*.{domain}")])
+                    .context("failed to generate self-signed certificate")?;
+            let certificate = Certificate {
+                priv_key_pem: key_pair.serialize_pem(),
+                cert_pem: cert.pem(),
+                chain_pem: String::new(),
+            };
+            info!(
+                logger,
+                "Generated self-signed certificate for local domain: {domain}"
+            );
+            Playnet {
+                playnet_cert: PlaynetCertificate {
+                    playnet: domain,
+                    cert: certificate,
+                },
                 aaaa_records: vec![],
                 a_records: vec![],
             }
@@ -656,12 +742,26 @@ async fn await_dns_propagation(logger: &Logger, base_domain: &str) -> Result<()>
     .await
 }
 
-async fn await_status_is_healthy(logger: &Logger, url: Url, msg: String) -> Result<()> {
+async fn await_status_is_healthy(
+    logger: &Logger,
+    url: Url,
+    msg: String,
+    resolve: Option<(String, SocketAddr)>,
+) -> Result<()> {
     info!(logger, "Waiting for IcGatewayVm to become healthy ...");
 
     let request = Request::new(Method::GET, url);
     retry_with_msg_async!(&msg, logger, READY_TIMEOUT, RETRY_INTERVAL, || async {
-        let client = Client::builder().build()?;
+        let mut builder = Client::builder();
+        // On the Local backend the gateway domain has no DNS entry and is served
+        // with a self-signed certificate, so resolve it directly to the VM and
+        // skip certificate verification.
+        if let Some((domain, addr)) = resolve.as_ref() {
+            builder = builder
+                .danger_accept_invalid_certs(true)
+                .resolve(domain, *addr);
+        }
+        let client = builder.build()?;
         let response = client
             .execute(request.try_clone().unwrap())
             .await

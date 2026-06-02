@@ -129,6 +129,11 @@ pub struct LocalBackend {
     vm_specs: Mutex<HashMap<String, VmSpec>>,
     /// Per-VM minimum boot-image size in gibibytes, keyed by `vm_name`.
     vm_min_boot_image_size_gib: Mutex<HashMap<String, u64>>,
+    /// Per-VM flag recording whether the VM requested a second (IPv4) NIC,
+    /// keyed by `vm_name`. When set, [`start_vm`](Self::start_vm) attaches an
+    /// additional TAP/interface (the guest's `enp2s0`) that obtains an IPv4
+    /// address via DHCP from the group bridge's `dnsmasq`.
+    vm_has_ipv4: Mutex<HashMap<String, bool>>,
     /// Working directory under which to materialize VM disks. Only meaningful
     /// in the setup process; forked tasks never call `create_vm` /
     /// `attach_disk_images` / `start_vm`.
@@ -223,21 +228,26 @@ impl LocalBackend {
     ///
     /// The capability comes from the [`NET_ADMIN_LAUNCHER`] binary, a
     /// file-capability-endowed `capsh` provisioned once in the container image
-    /// (`cap_net_admin,cap_net_raw+ep`; see
+    /// (`cap_net_admin,cap_net_raw,cap_net_bind_service+ep`; see
     /// `ci/container/setup-local-backend.sh`). `capsh` raises the requested
     /// caps into its inheritable+ambient sets and then `exec`s `/bin/sh -c
     /// <script>`; ambient capabilities survive the `exec`, so the commands in
     /// `script` (e.g. `ip link add ...`) run with the caps even though the
     /// shell binary itself is not capability-endowed.
     ///
+    /// `CAP_NET_BIND_SERVICE` is additionally needed by the group's `dnsmasq`
+    /// to bind the privileged UDP port 67 of its DHCPv4 server (see
+    /// [`start_ra_daemon`](Self::start_ra_daemon)).
+    ///
     /// `script` must only ever interpolate sanitized, shell-safe tokens
     /// (bridge/TAP interface names and IPv6 prefixes are restricted to
     /// `[0-9a-f:.-]`).
     fn net_admin(script: &str) -> Command {
         let mut cmd = Command::new(NET_ADMIN_LAUNCHER);
-        cmd.arg("--inh=cap_net_admin,cap_net_raw")
+        cmd.arg("--inh=cap_net_admin,cap_net_raw,cap_net_bind_service")
             .arg("--addamb=cap_net_admin")
             .arg("--addamb=cap_net_raw")
+            .arg("--addamb=cap_net_bind_service")
             .arg("--")
             .arg("-c")
             .arg(script);
@@ -427,6 +437,7 @@ impl LocalBackend {
             vm_ipv6: Mutex::new(HashMap::new()),
             vm_specs: Mutex::new(HashMap::new()),
             vm_min_boot_image_size_gib: Mutex::new(HashMap::new()),
+            vm_has_ipv4: Mutex::new(HashMap::new()),
             working_dir,
         })
     }
@@ -456,6 +467,7 @@ impl LocalBackend {
             vm_ipv6: Mutex::new(HashMap::new()),
             vm_specs: Mutex::new(HashMap::new()),
             vm_min_boot_image_size_gib: Mutex::new(HashMap::new()),
+            vm_has_ipv4: Mutex::new(HashMap::new()),
             working_dir,
         })
     }
@@ -483,6 +495,21 @@ impl LocalBackend {
         )
     }
 
+    /// Returns the per-group private IPv4 `/24` (a deterministic subnet in the
+    /// RFC 1918 `10.0.0.0/8` range). Derived from a hash of the group name —
+    /// like [`group_ipv6_prefix`](Self::group_ipv6_prefix) — so concurrently
+    /// running groups get distinct subnets (and therefore distinct host
+    /// connected routes), with the `.0` network and `.1` gateway reserved.
+    ///
+    /// This network is only used to hand the guest an IPv4 address on its
+    /// second NIC (the guest's `enp2s0`) via DHCP; the driver reaches VMs over
+    /// IPv6, so the IPv4 subnet needs no routing or NAT.
+    fn group_ipv4_prefix(group_name: &str) -> String {
+        use ic_crypto_sha2::Sha256;
+        let hash = Sha256::hash(format!("ipv4/{group_name}").as_bytes());
+        format!("10.{}.{}", hash[0], hash[1])
+    }
+
     /// Returns the Linux bridge interface name for `group_name`.
     ///
     /// Bridge (interface) names are limited to `IFNAMSIZ - 1` = 15 characters
@@ -506,6 +533,18 @@ impl LocalBackend {
         use ic_crypto_sha2::Sha256;
         let hash = Sha256::hash(format!("{group_name}/{vm_name}").as_bytes());
         format!("tap-{}", hex::encode(&hash[0..5]))
+    }
+
+    /// Returns the TAP interface name for the VM's *second* (IPv4) NIC.
+    ///
+    /// Same length constraints as [`tap_name`](Self::tap_name); a distinct
+    /// digest seed (`ipv4/...`) keeps it from colliding with the primary TAP
+    /// while remaining unique per VM and stable across re-runs (`ta4-` + 10 hex
+    /// chars = 14 chars).
+    fn tap_name_ipv4(group_name: &str, vm_name: &str) -> String {
+        use ic_crypto_sha2::Sha256;
+        let hash = Sha256::hash(format!("ipv4/{group_name}/{vm_name}").as_bytes());
+        format!("ta4-{}", hex::encode(&hash[0..5]))
     }
 
     /// Create the per-group Linux bridge that hosts the group's `/64`.
@@ -532,24 +571,35 @@ impl LocalBackend {
         let prefix = Self::group_ipv6_prefix(group_name);
         // The gateway address (`<prefix>1`) lives on the bridge.
         let gateway = format!("{prefix}1");
+        // The IPv4 gateway (`<ipv4_prefix>.1`) also lives on the bridge so
+        // `dnsmasq` can serve DHCPv4 to VMs that requested a second NIC.
+        let ipv4_prefix = Self::group_ipv4_prefix(group_name);
+        let ipv4_gateway = format!("{ipv4_prefix}.1");
         info!(
             self.logger,
-            "Creating local bridge {bridge} for group {group_name} ({prefix}/64)"
+            "Creating local bridge {bridge} for group {group_name} ({prefix}/64, {ipv4_prefix}.0/24)"
         );
 
         // (Re)create the bridge, assign the gateway address, and bring it up.
         // Deleting first makes this idempotent across an interrupted previous
         // run that leaked the bridge.
+        //
+        // The IPv4 `/24` gateway is always assigned (harmless when no VM in the
+        // group requests IPv4); it is what lets `dnsmasq` answer DHCPv4
+        // requests from the guests' second NIC.
         let create_script = format!(
             "ip link del {bridge} 2>/dev/null; \
              ip link add name {bridge} type bridge && \
              ip link set dev {bridge} up && \
-             ip -6 addr add {gateway}/64 dev {bridge} nodad"
+             ip -6 addr add {gateway}/64 dev {bridge} nodad && \
+             ip addr add {ipv4_gateway}/24 dev {bridge}"
         );
         Self::run_net_admin(&create_script, "create group bridge")?;
 
-        // Start the RA daemon so guests can SLAAC their global address.
-        self.start_ra_daemon(group_name, &bridge, &prefix)?;
+        // Start the RA daemon so guests can SLAAC their global address. The
+        // same `dnsmasq` also serves DHCPv4 on the group's IPv4 `/24` for VMs
+        // that requested a second NIC.
+        self.start_ra_daemon(group_name, &bridge, &prefix, &ipv4_prefix)?;
 
         Ok(())
     }
@@ -563,9 +613,17 @@ impl LocalBackend {
 
     /// Spawn a minimal `dnsmasq` as an IPv6 Router Advertisement daemon on
     /// `bridge`, advertising the group's `/64` for SLAAC with a router lifetime
-    /// of 0 (so it is not selected as a default router). See
+    /// of 0 (so it is not selected as a default router). The same daemon also
+    /// serves DHCPv4 on the group's IPv4 `/24` (`ipv4_prefix`) so VMs that
+    /// requested a second NIC obtain an IPv4 address. See
     /// [`create_group`](Self::create_group) for the rationale.
-    fn start_ra_daemon(&self, group_name: &str, bridge: &str, prefix: &str) -> Result<()> {
+    fn start_ra_daemon(
+        &self,
+        group_name: &str,
+        bridge: &str,
+        prefix: &str,
+        ipv4_prefix: &str,
+    ) -> Result<()> {
         let dnsmasq_dir = self.working_dir.join("dnsmasq");
         std::fs::create_dir_all(&dnsmasq_dir).with_context(|| {
             format!("creating dnsmasq working dir at {}", dnsmasq_dir.display())
@@ -586,9 +644,12 @@ impl LocalBackend {
         // capability launcher. `--ra-param=<bridge>,,0` sets the router lifetime
         // to 0; `--dhcp-range=<prefix>,ra-only` advertises the on-link,
         // autonomous prefix for SLAAC without handing out stateful leases.
-        // `--port=0` disables the DNS service entirely. `dnsmasq` daemonizes
-        // (writing its pid-file) and is later signalled via that pid-file in
-        // teardown.
+        // A second `--dhcp-range=<ipv4_prefix>.2,<ipv4_prefix>.254,...` enables
+        // stateful DHCPv4 on the group's IPv4 `/24` (the `.1` gateway lives on
+        // the bridge), which is what gives a VM's second NIC (the guest's
+        // `enp2s0`) an IPv4 address. `--port=0` disables the DNS service
+        // entirely. `dnsmasq` daemonizes (writing its pid-file) and is later
+        // signalled via that pid-file in teardown.
         let user = current_username();
         let dnsmasq_script = format!(
             "exec {DNSMASQ_BIN} \
@@ -603,6 +664,7 @@ impl LocalBackend {
                  --except-interface=lo \
                  --enable-ra \
                  --dhcp-range={prefix},ra-only \
+                 --dhcp-range={ipv4_prefix}.2,{ipv4_prefix}.254,255.255.255.0,1h \
                  --ra-param={bridge},10,0",
             pid = pid_path.display(),
             lease = lease_path.display(),
@@ -679,6 +741,7 @@ impl LocalBackend {
         memory_kib: u64,
         primary_image: DiskImage,
         boot_image_minimal_size_gibibytes: Option<u64>,
+        has_ipv4: bool,
     ) -> Result<VMCreateResponse> {
         let mac = vm_mac(group_name, vm_name);
         let prefix = Self::group_ipv6_prefix(group_name);
@@ -701,6 +764,10 @@ impl LocalBackend {
             .lock()
             .unwrap()
             .insert(key.clone(), spec.clone());
+        self.vm_has_ipv4
+            .lock()
+            .unwrap()
+            .insert(key.clone(), has_ipv4);
         if let Some(min_gib) = boot_image_minimal_size_gibibytes {
             self.vm_min_boot_image_size_gib
                 .lock()
@@ -820,6 +887,28 @@ impl LocalBackend {
         );
         Self::run_net_admin(&tap_script, "create VM tap")?;
 
+        // If the VM requested IPv4, create a second TAP on the same bridge for
+        // the guest's `enp2s0`, which obtains an address via DHCPv4 from the
+        // group's `dnsmasq`.
+        let has_ipv4 = self
+            .vm_has_ipv4
+            .lock()
+            .unwrap()
+            .get(&key)
+            .copied()
+            .unwrap_or(false);
+        let mac_ipv4 = vm_mac_ipv4(group_name, vm_name);
+        let tap_ipv4 = Self::tap_name_ipv4(group_name, vm_name);
+        if has_ipv4 {
+            let tap_ipv4_script = format!(
+                "ip link del {tap_ipv4} 2>/dev/null; \
+                 ip tuntap add dev {tap_ipv4} mode tap user {user} && \
+                 ip link set dev {tap_ipv4} master {bridge} && \
+                 ip link set dev {tap_ipv4} up"
+            );
+            Self::run_net_admin(&tap_ipv4_script, "create VM ipv4 tap")?;
+        }
+
         let mut disks = Vec::new();
         disks.push(DiskEntry {
             file: primary_disk.display().to_string(),
@@ -844,6 +933,9 @@ impl LocalBackend {
             disks,
             console_log_path: console_log.display().to_string(),
             tap_name: tap,
+            has_ipv4,
+            mac_address_ipv4: mac_ipv4.to_string(),
+            tap_name_ipv4: tap_ipv4,
         };
         let xml = tpl.render().context("rendering guest VM XML")?;
 
@@ -897,6 +989,17 @@ fn vm_mac(group_name: &str, vm_name: &str) -> MacAddr6 {
     let hash = Sha256::hash(format!("{group_name}/{vm_name}").as_bytes());
     // 0x6a: locally-administered, unicast prefix consistent with
     // `calculate_deterministic_mac`.
+    [0x6a, 0x01, hash[0], hash[1], hash[2], hash[3]].into()
+}
+
+/// Deterministic MAC address for a `(group, vm)` pair's *second* (IPv4) NIC.
+///
+/// A distinct digest seed (`ipv4/...`) guarantees it differs from the primary
+/// NIC's [`vm_mac`] so the two interfaces never share a MAC on the bridge.
+fn vm_mac_ipv4(group_name: &str, vm_name: &str) -> MacAddr6 {
+    use ic_crypto_sha2::Sha256;
+    let hash = Sha256::hash(format!("ipv4/{group_name}/{vm_name}").as_bytes());
+    // 0x6a: locally-administered, unicast prefix consistent with `vm_mac`.
     [0x6a, 0x01, hash[0], hash[1], hash[2], hash[3]].into()
 }
 
@@ -1015,7 +1118,7 @@ fn extract_image(src: &Path, dst: &Path, logger: &Logger) -> Result<()> {
             src.display(),
             dst.display()
         );
-        let status = Command::new("unzstd")
+        let output = Command::new("unzstd")
             // `-f` forces decompression of symbolic links (runtime deps are
             // symlinks into the bazel cache, which unzstd otherwise ignores)
             // and overwrites any existing output file.
@@ -1023,10 +1126,14 @@ fn extract_image(src: &Path, dst: &Path, logger: &Logger) -> Result<()> {
             .arg("-o")
             .arg(dst)
             .arg(src)
-            .status()
+            .output()
             .context("running unzstd")?;
-        if !status.success() {
-            bail!("unzstd decompression of {} failed", src.display());
+        if !output.status.success() {
+            bail!(
+                "unzstd decompression of {} failed: {}",
+                src.display(),
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
         }
     } else {
         info!(logger, "Copying {} -> {}", src.display(), dst.display());
@@ -1054,6 +1161,12 @@ struct GuestVmTemplate {
     disks: Vec<DiskEntry>,
     console_log_path: String,
     tap_name: String,
+    /// When `true`, the domain gets a second virtio NIC (the guest's `enp2s0`)
+    /// attached to `tap_name_ipv4` with `mac_address_ipv4`, used to obtain an
+    /// IPv4 address via DHCP. When `false`, the other two fields are unused.
+    has_ipv4: bool,
+    mac_address_ipv4: String,
+    tap_name_ipv4: String,
 }
 
 // `vm_ipv6` is currently a write-only cache; future operations (e.g. ARP

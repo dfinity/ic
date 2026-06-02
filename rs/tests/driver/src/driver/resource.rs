@@ -441,6 +441,7 @@ pub fn allocate_resources(req: &ResourceRequest, env: &TestEnv) -> FarmResult<Re
                         vm_config.memory_kibibytes.get(),
                         primary_image,
                         vm_config.boot_image_minimal_size_gibibytes.map(|s| s.get()),
+                        vm_config.has_ipv4,
                     )
                     .expect("LocalBackend::create_vm failed");
                 let VMCreateResponse {

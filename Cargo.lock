@@ -14971,6 +14971,7 @@ dependencies = [
  "phantom_newtype",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "rcgen 0.13.2",
  "regex",
  "registry-canister",
  "reqwest",

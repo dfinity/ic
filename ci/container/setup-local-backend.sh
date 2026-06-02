@@ -16,13 +16,14 @@
 #
 #  2. The `ic-net-admin` capability launcher. The backend performs a handful of
 #     networking operations that the kernel gates behind CAP_NET_ADMIN /
-#     CAP_NET_RAW (creating the per-group bridge and TAPs, and running its own
-#     dnsmasq router advertiser). Rather than `sudo`, it invokes a
-#     file-capability-endowed copy of `capsh` that raises exactly those two
-#     capabilities into the ambient set and then execs the requested command.
-#     File capabilities (set via setcap, which needs CAP_SETFCAP) cannot be
-#     applied from an unprivileged test process, so we provision the launcher
-#     here.
+#     CAP_NET_RAW / CAP_NET_BIND_SERVICE (creating the per-group bridge and
+#     TAPs, and running its own dnsmasq router advertiser and DHCPv4 server,
+#     which binds the privileged UDP bootps port 67). Rather than `sudo`, it
+#     invokes a file-capability-endowed copy of `capsh` that raises exactly
+#     those capabilities into the ambient set and then execs the requested
+#     command. File capabilities (set via setcap, which needs CAP_SETFCAP)
+#     cannot be applied from an unprivileged test process, so we provision the
+#     launcher here.
 #
 #  3. Allow Bazel's linux-sandbox to run. The backend's test actions must run
 #     under `linux-sandbox` so they match CI (under the weaker
@@ -91,13 +92,14 @@ fi
 
 # --- 2. Provision the ic-net-admin capability launcher --------------------
 #
-# `capsh` ships in libcap2-bin. Copy it to a stable path and grant the two
-# narrow capabilities as effective+permitted file caps so it can raise them
-# into the ambient set for the command it execs.
+# `capsh` ships in libcap2-bin. Copy it to a stable path and grant the narrow
+# capabilities as effective+permitted file caps so it can raise them into the
+# ambient set for the command it execs. CAP_NET_BIND_SERVICE is needed by the
+# backend's dnsmasq DHCPv4 server to bind the privileged UDP port 67.
 if command -v capsh >/dev/null 2>&1; then
     capsh_bin="$(command -v capsh)"
     install -m 0755 "$capsh_bin" "$LAUNCHER"
-    setcap cap_net_admin,cap_net_raw+ep "$LAUNCHER"
+    setcap cap_net_admin,cap_net_raw,cap_net_bind_service+ep "$LAUNCHER"
 fi
 
 # --- 3. Allow Bazel's linux-sandbox (unprivileged user namespaces) ---------

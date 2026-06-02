@@ -27,11 +27,28 @@
       <target dev='{{ d.target }}' bus='{{ d.bus }}'/>
     </disk>
     {% endfor %}
+    <!--
+      Pin the NIC(s) to dedicated PCIe root ports with explicit bus numbers so
+      the guest's predictable interface names are deterministic regardless of
+      how many disks are attached: bus 1 -> enp1s0 (primary), bus 2 -> enp2s0
+      (IPv4). Disks auto-assign to other root ports.
+    -->
+    <controller type='pci' index='1' model='pcie-root-port'/>
     <interface type='ethernet'>
       <mac address='{{ mac_address }}'/>
       <target dev='{{ tap_name }}' managed='no'/>
       <model type='virtio'/>
+      <address type='pci' domain='0x0000' bus='0x01' slot='0x00' function='0x0'/>
     </interface>
+    {% if has_ipv4 %}
+    <controller type='pci' index='2' model='pcie-root-port'/>
+    <interface type='ethernet'>
+      <mac address='{{ mac_address_ipv4 }}'/>
+      <target dev='{{ tap_name_ipv4 }}' managed='no'/>
+      <model type='virtio'/>
+      <address type='pci' domain='0x0000' bus='0x02' slot='0x00' function='0x0'/>
+    </interface>
+    {% endif %}
     <serial type='file'>
       <source path='{{ console_log_path }}' append='off'/>
       <target type='isa-serial' port='0'>
