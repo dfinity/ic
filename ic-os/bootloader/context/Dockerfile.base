@@ -2,8 +2,5 @@ FROM ubuntu:26.04
 
 USER root:root
 
-# First update the required certs
-RUN apt-get -y update && apt-get -y --no-install-recommends install ca-certificates
-
-# Then pull required packages
-RUN apt-get -y update --snapshot 20260520T000000Z && apt-get -y --no-install-recommends install --snapshot 20260520T000000Z grub-efi faketime
+# Pull required packages
+RUN apt-get -y update && apt-get -y --no-install-recommends install grub-efi faketime
