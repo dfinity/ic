@@ -3801,7 +3801,7 @@ fn process_mock_canister_https_response(
                     socks_proxy_addrs: vec![],
                 })
                 .unwrap();
-            let (response, _payment_receipt) = loop {
+            let response = loop {
                 match client.try_receive() {
                     Err(_) => std::thread::sleep(Duration::from_millis(10)),
                     Ok((r, _payment_receipt)) => {
