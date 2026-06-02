@@ -28,11 +28,7 @@ fn only_charge_for_allocation_after_specified_duration() {
     let initial_time = Time::from_nanos_since_unix_epoch(1_000_000_000_000);
     test.set_time(initial_time);
 
-    let time_between_batches = test
-        .scheduler()
-        .cycles_account_manager
-        .duration_between_allocation_charges()
-        / 2;
+    let time_between_batches = test.duration_between_allocation_charges() / 2;
 
     // Just enough memory to cost us one cycle per second.
     let bytes_per_cycle = (1_u128 << 30)
@@ -83,6 +79,48 @@ fn only_charge_for_allocation_after_specified_duration() {
 }
 
 #[test]
+fn charging_happens_on_average_once_every_charge_interval_rounds() {
+    let mut test = SchedulerTestBuilder::new().build();
+
+    // Charging handles time=0 as a special case, so it should be set to some
+    // non-zero time.
+    let initial_time = Time::from_nanos_since_unix_epoch(1_000_000_000_000);
+    test.set_time(initial_time);
+
+    // A canister with a memory allocation and plenty of cycles, so that every
+    // charge reduces the balance but the canister is never uninstalled.
+    let canister = test.create_canister_with(
+        Cycles::new(1_000_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::from(NumBytes::from(1 << 30)),
+        None,
+        Some(initial_time),
+        None,
+    );
+
+    // Advance time by a full charge duration every round, so that a charge is
+    // always due whenever charging is attempted (every `CHARGE_INTERVAL_ROUNDS`
+    // rounds).
+    let charge_duration = test.duration_between_allocation_charges();
+
+    const NUM_ROUNDS: u64 = 1_000;
+    let mut num_charges = 0;
+    for _ in 0..NUM_ROUNDS {
+        test.advance_time(charge_duration);
+        let balance_before = test.canister_state(canister).system_state.balance();
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+        if test.canister_state(canister).system_state.balance() < balance_before {
+            num_charges += 1;
+        }
+    }
+
+    // Even though enough time has passed to charge in every round, the canister
+    // was only charged once every `CHARGE_INTERVAL_ROUNDS` rounds, i.e. on
+    // average once every 50 rounds.
+    assert_eq!(num_charges, NUM_ROUNDS / CHARGE_INTERVAL_ROUNDS);
+}
+
+#[test]
 fn charging_for_message_memory_works() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
@@ -124,10 +162,7 @@ fn charging_for_message_memory_works() {
 
     // Set time to at least one interval between charges to trigger a charge
     // because of message memory consumption.
-    let charge_duration = test
-        .scheduler()
-        .cycles_account_manager
-        .duration_between_allocation_charges();
+    let charge_duration = test.duration_between_allocation_charges();
     test.set_time(initial_time + charge_duration);
     test.charge_for_resource_allocations();
 
@@ -184,10 +219,7 @@ fn charging_for_logging_memory_works() {
 
     // Set time to at least one interval between charges to trigger a charge
     // because of log memory consumption.
-    let charge_duration = test
-        .scheduler()
-        .cycles_account_manager
-        .duration_between_allocation_charges();
+    let charge_duration = test.duration_between_allocation_charges();
     test.set_time(initial_time + charge_duration);
     test.charge_for_resource_allocations();
 
@@ -226,13 +258,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
             None,
         );
     }
-    test.set_time(
-        initial_time
-            + test
-                .scheduler()
-                .cycles_account_manager
-                .duration_between_allocation_charges(),
-    );
+    test.set_time(initial_time + test.duration_between_allocation_charges());
 
     // Checkpoint round, to force charging for storage.
     test.execute_round(ExecutionRoundType::CheckpointRound);
@@ -285,10 +311,7 @@ fn open_call_contexts_produce_reject_responses_when_out_of_cycles() {
         .system_state
         .set_balance(Cycles::zero());
 
-    let duration_between_allocation_charges = test
-        .scheduler()
-        .cycles_account_manager
-        .duration_between_allocation_charges();
+    let duration_between_allocation_charges = test.duration_between_allocation_charges();
     test.set_time(initial_time + duration_between_allocation_charges);
 
     test.charge_for_resource_allocations();
@@ -343,10 +366,7 @@ fn dont_charge_allocations_for_paused_canisters() {
         .task_queue
         .enqueue(ExecutionTask::PausedInstallCode(PausedExecutionId(0)));
 
-    let duration_between_allocation_charges = test
-        .scheduler()
-        .cycles_account_manager
-        .duration_between_allocation_charges();
+    let duration_between_allocation_charges = test.duration_between_allocation_charges();
     test.set_time(T0 + duration_between_allocation_charges);
 
     test.charge_for_resource_allocations();
@@ -464,14 +484,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     );
 
     // Uninstall canister due to `out_of_cycles`.
-    test.set_time(
-        initial_time
-            + 1000
-                * test
-                    .scheduler()
-                    .cycles_account_manager
-                    .duration_between_allocation_charges(),
-    );
+    test.set_time(initial_time + 1000 * test.duration_between_allocation_charges());
     // Checkpoint round, to force charging for storage.
     test.execute_round(ExecutionRoundType::CheckpointRound);
 
@@ -602,14 +615,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     );
 
     // Trigger canister `out_of_cycles`.
-    test.set_time(
-        initial_time
-            + 1000
-                * test
-                    .scheduler()
-                    .cycles_account_manager
-                    .duration_between_allocation_charges(),
-    );
+    test.set_time(initial_time + 1000 * test.duration_between_allocation_charges());
     // Checkpoint round, to force charging for storage.
     test.execute_round(ExecutionRoundType::CheckpointRound);
 

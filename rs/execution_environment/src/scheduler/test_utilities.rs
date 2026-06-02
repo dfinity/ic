@@ -784,6 +784,12 @@ impl SchedulerTest {
             )
     }
 
+    pub fn duration_between_allocation_charges(&self) -> Duration {
+        self.scheduler
+            .cycles_account_manager
+            .duration_between_allocation_charges()
+    }
+
     pub(crate) fn deliver_pre_signatures(
         &mut self,
         idkg_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,

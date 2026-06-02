@@ -72,6 +72,11 @@ pub(crate) mod tests;
 /// work here.
 const SUBNET_MESSAGES_LIMIT_FRACTION: u64 = 16;
 
+/// Because it is relatively expensive to make every canister mutable just to
+/// check whether 10 seconds have passed since it was last charged, only try to
+/// charge canisters every 50 rounds (and/or on checkpoint rounds).
+const CHARGE_INTERVAL_ROUNDS: u64 = 50;
+
 /// Contains limits (or budget) for various resources that affect duration of
 /// an execution round.
 #[derive(Clone, Debug, Default)]
@@ -827,13 +832,13 @@ impl SchedulerImpl {
         current_round_type: ExecutionRoundType,
     ) {
         // Because it is relatively expensive to make every canister mutable just to
-        // check whether 10 seconds have passed since it was last charged, only
+        // check whether 10 seconds have passed since it was last charged, only try to
         // charge canisters every 50 rounds and/or on checkpoint rounds.
         //
         // The latter ensures that (because we skip canisters with paused
         // executions), every canister is charged at least once per checkpoint
         // interval.
-        if !current_round.get().is_multiple_of(50)
+        if !current_round.get().is_multiple_of(CHARGE_INTERVAL_ROUNDS)
             && current_round_type != ExecutionRoundType::CheckpointRound
         {
             return;
