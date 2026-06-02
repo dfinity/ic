@@ -136,7 +136,7 @@ pub const VETKD_FEE: Cycles = Cycles::new(10 * B as u128);
 pub const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
 
 /// Costs for each newly created dirty page in stable memory.
-const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(1_000);
+const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(5_000);
 
 /// Accumulated priority reset interval, rounds.
 ///

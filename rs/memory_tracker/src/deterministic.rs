@@ -83,6 +83,8 @@ use crate::checksum;
 #[cfg(feature = "sigsegv_handler_checksum")]
 use std::ops::BitXor;
 
+const INSTRUCTION_OVERHEAD_PER_OS_PAGE: u64 = 5_000;
+
 /// Metrics may vary due to non-deterministic signal delivery.
 #[derive(Default)]
 struct NonDeterministicMetrics {
@@ -353,7 +355,7 @@ impl DeterministicMemoryTracker {
         }
 
         // Charge 1 instruction per OS page accessed.
-        (self.subtract_instruction_counter.lock())(num_os_pages);
+        (self.subtract_instruction_counter.lock())(num_os_pages * INSTRUCTION_OVERHEAD_PER_OS_PAGE);
     }
 
     /// Marks a Wasm page as dirty.
@@ -364,7 +366,7 @@ impl DeterministicMemoryTracker {
         // Charge 1 instruction per OS page dirtied.
         let os_page_range = Range::from_wasm_page_idx(wasm_page_idx);
         let num_os_pages = os_page_range.end.get() - os_page_range.start.get();
-        (self.subtract_instruction_counter.lock())(num_os_pages);
+        (self.subtract_instruction_counter.lock())(num_os_pages * INSTRUCTION_OVERHEAD_PER_OS_PAGE);
     }
 
     /// A missing OS page handler that provides deterministic prefetching behavior
