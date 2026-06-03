@@ -49,7 +49,8 @@ use ic_types::{
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
         CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
-        CanisterHttpResponseMetadata, CanisterHttpResponseWithConsensus, Replication,
+        CanisterHttpResponseMetadata, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
+        Replication,
     },
     consensus::Committee,
     crypto::Signed,
@@ -575,6 +576,15 @@ impl CanisterHttpPayloadBuilderImpl {
             }
         };
 
+        // Accumulates every flexible / divergence response share in the payload
+        // so that all of their signatures can be checked in a single batched
+        // multi-message verification call at the very end. These shares are
+        // signed over (potentially) distinct messages against the same
+        // consensus registry version, so collecting them into one batch lets
+        // the crypto component amortize verification across the whole payload
+        // rather than paying the per-group batching overhead repeatedly.
+        let mut shares_to_verify: Vec<&CanisterHttpResponseShare> = Vec::new();
+
         for response in &payload.divergence_responses {
             let (valid_signers, invalid_signers): (Vec<NodeId>, Vec<NodeId>) = response
                 .shares
@@ -591,14 +601,10 @@ impl CanisterHttpPayloadBuilderImpl {
             }
 
             // The shares in a divergence response are by construction signed
-            // over (potentially) different messages, so we use the multi-message
-            // batch verifier here.
-            verify_response_share_signatures(
-                response.shares.iter(),
-                consensus_registry_version,
-                &*self.crypto,
-            )
-            .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+            // over (potentially) different messages. We defer the (expensive)
+            // signature verification and instead collect the shares to be
+            // batch-verified together with the rest of the payload.
+            shares_to_verify.extend(response.shares.iter());
 
             let grouped_shares = group_shares_by_callback_id(response.shares.iter());
             if grouped_shares.len() != 1 {
@@ -692,15 +698,9 @@ impl CanisterHttpPayloadBuilderImpl {
                 }
             }
 
-            // Batch-verify the signatures of all shares in this flexible
-            // response group at once. The shares are typically signed over
-            // distinct messages (different content hashes per node).
-            verify_response_share_signatures(
-                group.responses.iter().map(|r| &r.proof),
-                consensus_registry_version,
-                &*self.crypto,
-            )
-            .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+            // Defer signature verification: collect this group's shares to be
+            // batch-verified together with the rest of the payload.
+            shares_to_verify.extend(group.responses.iter().map(|r| &r.proof));
         }
 
         // Validate flexible errors
@@ -763,13 +763,9 @@ impl CanisterHttpPayloadBuilderImpl {
                         }
                     }
 
-                    // Batch-verify the signatures of all reject shares at once.
-                    verify_response_share_signatures(
-                        reject_responses.iter().map(|r| &r.proof),
-                        consensus_registry_version,
-                        &*self.crypto,
-                    )
-                    .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+                    // Defer signature verification: collect the reject shares to
+                    // be batch-verified together with the rest of the payload.
+                    shares_to_verify.extend(reject_responses.iter().map(|r| &r.proof));
 
                     let max_allowed_rejects = flex_committee.len().saturating_sub(min_responses);
                     if reject_responses.len() <= max_allowed_rejects {
@@ -822,13 +818,9 @@ impl CanisterHttpPayloadBuilderImpl {
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
                     }
 
-                    // Batch-verify the signatures of all seen shares at once.
-                    verify_response_share_signatures(
-                        all_seen_shares.iter(),
-                        consensus_registry_version,
-                        &*self.crypto,
-                    )
-                    .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+                    // Defer signature verification: collect the seen shares to be
+                    // batch-verified together with the rest of the payload.
+                    shares_to_verify.extend(all_seen_shares.iter());
 
                     let num_unseen = flex_committee.len().saturating_sub(all_seen_shares.len());
                     let min_known_ok_needed = min_responses.saturating_sub(num_unseen);
@@ -865,6 +857,25 @@ impl CanisterHttpPayloadBuilderImpl {
                     }
                 }
             }
+        }
+
+        // All cheap, structural checks have passed. Verify the signatures of
+        // every flexible / divergence response share collected above in a
+        // single batched multi-message verification call. Batching the whole
+        // payload at once (rather than once per group) maximizes the crypto
+        // component's ability to amortize verification cost.
+        //
+        // The batch verifier rejects an empty input, so we skip the call when
+        // there are no flexible / divergence shares to verify (e.g. a payload
+        // that only contains fully-replicated responses, whose aggregate
+        // signatures are verified separately above).
+        if !shares_to_verify.is_empty() {
+            verify_response_share_signatures(
+                shares_to_verify,
+                consensus_registry_version,
+                &*self.crypto,
+            )
+            .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
         }
 
         Ok(())
