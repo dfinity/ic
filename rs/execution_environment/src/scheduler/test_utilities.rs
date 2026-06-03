@@ -674,6 +674,7 @@ impl SchedulerTest {
                 self.state.as_mut().unwrap(),
                 subnet_size,
                 ExecutionRound::from(0),
+                ExecutionRoundType::CheckpointRound,
             )
     }
 
@@ -781,6 +782,12 @@ impl SchedulerTest {
                 self.subnet_size(),
                 self.state.as_ref().unwrap().get_own_cost_schedule(),
             )
+    }
+
+    pub fn duration_between_allocation_charges(&self) -> Duration {
+        self.scheduler
+            .cycles_account_manager
+            .duration_between_allocation_charges()
     }
 
     pub(crate) fn deliver_pre_signatures(
