@@ -3010,3 +3010,64 @@ fn test_log_memory_store_upgrade_downgrade() {
     check_lms(&env, canister_few, false, false, true, 0);
     check_records(&env, canister_few, 3, 2, &log_2);
 }
+
+#[test]
+fn test_canister_log_with_zero_log_memory_limit() {
+    let subnet_type = SubnetType::Application;
+    let config = StateMachineConfig::new(
+        SubnetConfig::new(subnet_type, SubnetSecurity::None),
+        ExecutionConfig {
+            log_memory_store_feature: FlagStatus::Enabled,
+            ..Default::default()
+        },
+    );
+    let env = StateMachineBuilder::new()
+        .with_config(Some(config.clone()))
+        .with_subnet_type(subnet_type)
+        .with_checkpoints_enabled(true)
+        .build();
+
+    // Create canister with a non-zero log_memory_limit so that a ring buffer
+    // exists and the first log record advances persistent_next_idx to 1.
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT as u64)
+        .build();
+    let canister_id = create_and_install_canister(&env, settings, UNIVERSAL_CANISTER_WASM.to_vec());
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(b"log").reply().build(),
+    );
+
+    // Set log_memory_limit to 0: the ring buffer is deallocated but
+    // persistent_next_idx is preserved at 1.
+    let _ = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(0)
+            .build(),
+    );
+
+    // Produce a second log with no ring buffer. canister_log advances to
+    // next_idx == 2, but persistent_next_idx stays at 1.
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(b"log").reply().build(),
+    );
+
+    // canister_log.next_idx() == 2 and lms.next_idx() == 1 must hold before
+    // and after a checkpoint/reload cycle. Before the CanisterStateBits fix,
+    // the reload would wrongly restore lms.persistent_next_idx from
+    // next_canister_log_record_idx (== 2) instead of the (by now) stored 1.
+    let check_next_idx = |env: &StateMachine| {
+        let state = env.get_latest_state();
+        let ss = &state.canister_state(&canister_id).unwrap().system_state;
+        assert_eq!(ss.canister_log.next_idx(), 2);
+        assert_eq!(ss.log_memory_store.next_idx(), 1);
+    };
+    check_next_idx(&env);
+
+    let env = env.restart_node_with_config(config);
+    check_next_idx(&env);
+}
