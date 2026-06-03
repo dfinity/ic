@@ -63,8 +63,7 @@ pub fn get_status(
         return Ok(Status::NotScheduled);
     }
 
-    let subnet_splitting_args: SubnetSplittingArgs = subnet_splitting_args_proto
-        .try_into()
+    let subnet_splitting_args = SubnetSplittingArgs::try_from(subnet_splitting_args_proto)
         .map_err(StatusError::CatchUpContentsDeserializationError)?;
 
     Ok(Status::Scheduled {
