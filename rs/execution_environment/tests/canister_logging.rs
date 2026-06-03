@@ -3012,7 +3012,7 @@ fn test_log_memory_store_upgrade_downgrade() {
 }
 
 #[test]
-fn produce_log_with_zero_log_memory_limit() {
+fn test_canister_log_with_zero_log_memory_limit() {
     let subnet_type = SubnetType::Application;
     let config = StateMachineConfig::new(
         SubnetConfig::new(subnet_type, SubnetSecurity::None),
