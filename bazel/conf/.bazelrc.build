@@ -56,6 +56,11 @@ test:precommit --build_tests_only --test_tag_filters="smoke"
 build:testnet --build_tag_filters=
 test:testnet --test_output=streamed --test_tag_filters=
 
+# Run system-tests on the local (libvirt-based) backend instead of Farm.
+# Usage: `bazel test //rs/tests/... --config=systest_local`
+build:systest_local --//bazel:system_test_infra=local
+test:systest_local --//bazel:system_test_infra=local
+
 # Set all tests (including those marked as flaky) to fail explicitly on the
 # first try (can be overriden). This is useful when developing locally to
 # spot flakiness.
