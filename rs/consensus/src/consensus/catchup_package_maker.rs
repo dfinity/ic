@@ -480,7 +480,7 @@ pub(crate) fn create_post_split_summary_block(
         get_post_split_dkg_summary(subnet_id, registry, splitting_summary_block)
             .map_err(|err| format!("Failed to get post-split DKG summary: {err}"))?;
 
-    let height = post_split_dkg_summary.height;
+    let post_split_height = post_split_dkg_summary.height;
     Ok(Block {
         version: splitting_summary_block.version.clone(),
         // Fake parent
@@ -498,11 +498,11 @@ pub(crate) fn create_post_split_summary_block(
                     .clone(),
             }),
         ),
-        height,
+        height: post_split_height,
         rank: Rank(0),
         context: ValidationContext {
             registry_version: splitting_summary_block.context.registry_version,
-            certified_height: height,
+            certified_height: post_split_height,
             // time needs to be strictly increasing
             time: splitting_summary_block.context.time + std::time::Duration::from_millis(1),
         },
