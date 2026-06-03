@@ -5218,10 +5218,10 @@ impl StateMachine {
             .collect();
         let (_height, mut replicated_state) = self.state_manager.take_tip();
         let mut synthetic_responses = vec![];
-        for canister_state in replicated_state.hot_canisters_iter_mut() {
+        replicated_state.canisters_for_each_mut(|_, canister_state| {
             let Some(call_context_manager) = canister_state.system_state.call_context_manager()
             else {
-                continue;
+                return;
             };
             for (callback_id, callback) in call_context_manager.callbacks().iter() {
                 let is_remote = if callback.respondent.get() == self.get_subnet_id().get() {
@@ -5255,7 +5255,7 @@ impl StateMachine {
                     synthetic_responses.push(response);
                 }
             }
-        }
+        });
         let mut available_guaranteed_response_memory = self
             .hypervisor_config
             .guaranteed_response_message_memory_capacity

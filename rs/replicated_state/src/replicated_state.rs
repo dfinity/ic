@@ -1168,13 +1168,13 @@ impl ReplicatedState {
 
     /// Garbage collects empty canister and subnet queues.
     pub fn garbage_collect_canister_queues(&mut self) {
-        for canister in self.canister_states.hot_values_mut() {
+        self.canister_states.for_each_mut(|_, canister| {
             if canister.system_state.can_garbage_collect_canister_queues() {
                 Arc::make_mut(canister)
                     .system_state
                     .garbage_collect_canister_queues();
             }
-        }
+        });
         self.subnet_queues.garbage_collect();
     }
 
