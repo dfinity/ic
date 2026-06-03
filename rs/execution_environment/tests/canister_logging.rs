@@ -2179,7 +2179,7 @@ fn test_canister_uninstall_code_clears_logs() {
 }
 
 #[test]
-fn test_canister_uninstall_and_install_clears_log_memory() {
+fn test_canister_uninstall_and_install_clears_log() {
     if !LOG_MEMORY_STORE_FEATURE_ENABLED {
         return;
     }
