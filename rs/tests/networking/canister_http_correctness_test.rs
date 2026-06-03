@@ -128,6 +128,8 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_put_without_non_replicated_rejected))
                 .add_test(systest!(test_delete_call))
                 .add_test(systest!(test_delete_without_non_replicated_rejected))
+                .add_test(systest!(test_patch_call))
+                .add_test(systest!(test_patch_without_non_replicated_rejected))
                 .add_test(systest!(test_max_possible_request_size))
                 .add_test(systest!(test_max_possible_request_size_exceeded))
                 // This section tests the request headers limits scenarios
@@ -1921,6 +1923,72 @@ fn test_delete_without_non_replicated_rejected(env: TestEnv) {
         headers: vec![],
         method: HttpMethod::DELETE,
         body: None,
+        transform: None,
+        max_response_bytes: Some(1024),
+        is_replicated: None,
+        pricing_version: None,
+    };
+
+    let (response, _) = block_on(submit_outcall(
+        &handlers,
+        RemoteHttpRequest {
+            request,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
+        },
+    ));
+
+    assert_matches!(response, Err(RejectResponse { reject_message, .. }) => {
+        assert!(reject_message.contains("only allowed for non-replicated requests"));
+    });
+}
+
+fn test_patch_call(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let url = format!("https://[{webserver_ipv6}]/anything");
+    let body = Some("patch_request_body".as_bytes().to_vec());
+    let headers = vec![HttpHeader {
+        name: "name1".to_string(),
+        value: "value1".to_string(),
+    }];
+
+    let request = UnvalidatedCanisterHttpRequestArgs {
+        url,
+        headers,
+        method: HttpMethod::PATCH,
+        body,
+        transform: None,
+        max_response_bytes: None,
+        is_replicated: Some(false),
+        pricing_version: None,
+    };
+
+    let (response, _) = block_on(submit_outcall(
+        &handlers,
+        RemoteHttpRequest {
+            request: request.clone(),
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
+        },
+    ));
+
+    assert_matches!(response, Ok(response) => {
+        assert_matches!(response, RemoteHttpResponse { status: 200, .. });
+        assert_distinct_headers(&response);
+        assert_http_json_response(&request, &response);
+    });
+}
+
+fn test_patch_without_non_replicated_rejected(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let url = format!("https://[{}]/{}", webserver_ipv6, "anything");
+    let request = UnvalidatedCanisterHttpRequestArgs {
+        url,
+        headers: vec![],
+        method: HttpMethod::PATCH,
+        body: Some(vec![]),
         transform: None,
         max_response_bytes: Some(1024),
         is_replicated: None,

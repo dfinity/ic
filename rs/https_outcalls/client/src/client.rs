@@ -334,6 +334,7 @@ async fn execute_http_request(
             CanisterHttpMethod::HEAD => HttpMethod::Head.into(),
             CanisterHttpMethod::PUT => HttpMethod::Put.into(),
             CanisterHttpMethod::DELETE => HttpMethod::Delete.into(),
+            CanisterHttpMethod::PATCH => HttpMethod::Patch.into(),
         },
         max_response_size_bytes: max_response_size.get(),
         headers: headers

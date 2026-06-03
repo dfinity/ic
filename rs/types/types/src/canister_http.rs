@@ -534,17 +534,19 @@ impl CanisterHttpRequestContext {
             None => Ok(None),
         }?;
 
-        // Allow PUT and DELETE only in non-replicated mode to avoid confusing
-        // race conditions that may occur.
+        // Allow PUT, DELETE, and PATCH only in non-replicated mode to avoid
+        // confusing race conditions that may occur.
         // For example, if first a DELETE outcall for resource R is made,
-        // directly followed by a PUT or POST outcall for R, in replicated
-        // mode it may happen that R is actually deleted after the PUT/POST
-        // outcall has finished, because the IC does not necessarily wait for
-        // all outcalls to complete before a result is delivered back to the
-        // canister: The IC only waits for sufficient calls to complete to
-        // reach consensus on the result.
-        if matches!(args.method, HttpMethod::PUT | HttpMethod::DELETE)
-            && args.is_replicated != Some(false)
+        // directly followed by a PUT, PATCH, or POST outcall for R, in
+        // replicated mode it may happen that R is actually deleted after the
+        // PUT/PATCH/POST outcall has finished, because the IC does not
+        // necessarily wait for all outcalls to complete before a result is
+        // delivered back to the canister: The IC only waits for sufficient
+        // calls to complete to reach consensus on the result.
+        if matches!(
+            args.method,
+            HttpMethod::PUT | HttpMethod::DELETE | HttpMethod::PATCH
+        ) && args.is_replicated != Some(false)
         {
             return Err(CanisterHttpRequestContextError::DeterministicResponseCountRequired);
         }
@@ -645,19 +647,21 @@ impl CanisterHttpRequestContext {
         debug_assert!(min_responses <= max_responses && max_responses <= total_requests);
         debug_assert!(1 <= total_requests && total_requests <= n);
 
-        // Allow PUT and DELETE only if the response behavior is deterministic,
-        // to avoid confusing race conditions that may occur.
+        // Allow PUT, DELETE, and PATCH only if the response behavior is
+        // deterministic, to avoid confusing race conditions that may occur.
         // For flexible outcalls this means all delegated requests must complete,
         // i.e. min_responses == max_responses == total_requests.
         // Otherwise, if first a DELETE outcall for resource R is made,
-        // directly followed by a PUT or POST outcall for R, in a mode where
-        // min_responses < total_requests, it may happen that R is actually
-        // deleted after the PUT/POST outcall has finished, because the IC does
-        // not necessarily wait for all outcalls to complete before a result is
-        // delivered back to the canister: The IC only waits for sufficient calls
-        // to complete to reach consensus on the result.
-        if matches!(args.method, HttpMethod::PUT | HttpMethod::DELETE)
-            && !(min_responses == max_responses && max_responses == total_requests)
+        // directly followed by a PUT, PATCH, or POST outcall for R, in a mode
+        // where min_responses < total_requests, it may happen that R is actually
+        // deleted after the PUT/PATCH/POST outcall has finished, because the IC
+        // does not necessarily wait for all outcalls to complete before a result
+        // is delivered back to the canister: The IC only waits for sufficient
+        // calls to complete to reach consensus on the result.
+        if matches!(
+            args.method,
+            HttpMethod::PUT | HttpMethod::DELETE | HttpMethod::PATCH
+        ) && !(min_responses == max_responses && max_responses == total_requests)
         {
             return Err(CanisterHttpRequestContextError::DeterministicResponseCountRequired);
         }
@@ -919,6 +923,7 @@ pub enum CanisterHttpMethod {
     HEAD = 3,
     PUT = 4,
     DELETE = 5,
+    PATCH = 6,
 }
 
 impl CanisterHttpMethod {
@@ -929,6 +934,7 @@ impl CanisterHttpMethod {
             CanisterHttpMethod::HEAD => "HEAD",
             CanisterHttpMethod::PUT => "PUT",
             CanisterHttpMethod::DELETE => "DELETE",
+            CanisterHttpMethod::PATCH => "PATCH",
         }
     }
 }
@@ -941,6 +947,7 @@ impl From<&CanisterHttpMethod> for pb_metadata::HttpMethod {
             CanisterHttpMethod::HEAD => pb_metadata::HttpMethod::Head,
             CanisterHttpMethod::PUT => pb_metadata::HttpMethod::Put,
             CanisterHttpMethod::DELETE => pb_metadata::HttpMethod::Delete,
+            CanisterHttpMethod::PATCH => pb_metadata::HttpMethod::Patch,
         }
     }
 }
@@ -955,6 +962,7 @@ impl TryFrom<pb_metadata::HttpMethod> for CanisterHttpMethod {
             pb_metadata::HttpMethod::Head => Ok(CanisterHttpMethod::HEAD),
             pb_metadata::HttpMethod::Put => Ok(CanisterHttpMethod::PUT),
             pb_metadata::HttpMethod::Delete => Ok(CanisterHttpMethod::DELETE),
+            pb_metadata::HttpMethod::Patch => Ok(CanisterHttpMethod::PATCH),
             pb_metadata::HttpMethod::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "ic_protobuf::state::system_metadata::v1::HttpMethod",
                 err: "Unspecified HttpMethod".to_string(),
@@ -971,6 +979,7 @@ impl From<HttpMethod> for CanisterHttpMethod {
             HttpMethod::HEAD => CanisterHttpMethod::HEAD,
             HttpMethod::PUT => CanisterHttpMethod::PUT,
             HttpMethod::DELETE => CanisterHttpMethod::DELETE,
+            HttpMethod::PATCH => CanisterHttpMethod::PATCH,
         }
     }
 }
@@ -1215,7 +1224,7 @@ mod tests {
             CanisterHttpMethod::iter()
                 .map(|x| x as i32)
                 .collect::<Vec<i32>>(),
-            [1, 2, 3, 4, 5]
+            [1, 2, 3, 4, 5, 6]
         );
     }
 
@@ -1297,6 +1306,7 @@ mod tests {
     #[rstest]
     #[case(HttpMethod::PUT)]
     #[case(HttpMethod::DELETE)]
+    #[case(HttpMethod::PATCH)]
     fn put_delete_requires_non_replicated(#[case] method: HttpMethod) {
         let rng = &mut ReproducibleRng::new();
         let node_ids = BTreeSet::from([node_test_id(1)]);
@@ -1734,10 +1744,13 @@ mod tests {
     #[rstest]
     #[case(HttpMethod::PUT, 3, 2, 3, false)]
     #[case(HttpMethod::DELETE, 3, 2, 3, false)]
+    #[case(HttpMethod::PATCH, 3, 2, 3, false)]
     #[case(HttpMethod::PUT, 3, 3, 3, true)]
     #[case(HttpMethod::DELETE, 3, 3, 3, true)]
+    #[case(HttpMethod::PATCH, 3, 3, 3, true)]
     #[case(HttpMethod::PUT, 3, 2, 2, false)]
     #[case(HttpMethod::DELETE, 3, 2, 2, false)]
+    #[case(HttpMethod::PATCH, 3, 2, 2, false)]
     fn flexible_methods_require_deterministic_response_counts(
         #[case] method: HttpMethod,
         #[case] total_requests: u32,

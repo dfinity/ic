@@ -180,11 +180,17 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             .and(warp::path("delete"))
             .map(|| Response::builder().body("deleted"));
 
+        let basic_patch = warp::patch()
+            .and(warp::path("patch"))
+            .and(warp::body::bytes())
+            .map(|body: Bytes| Response::builder().body(body));
+
         basic_post
             .or(basic_get)
             .or(basic_head)
             .or(basic_put)
             .or(basic_delete)
+            .or(basic_patch)
             .or(get_response_size)
             .or(get_delay)
             .or(invalid_header)
@@ -593,6 +599,33 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let (http_response, _) = unwrap_response(response);
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
         assert_eq!(String::from_utf8_lossy(&http_response.content), "deleted");
+    }
+
+    #[tokio::test]
+    async fn test_canister_http_server_patch() {
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
+        let server_config = Config {
+            incoming_source: IncomingSource::Path(path.into()),
+            ..Default::default()
+        };
+
+        let url = start_server(CERT_INIT.get_or_init(generate_certs));
+        let mut client = spawn_grpc_server(server_config);
+
+        let body = b"patch-body";
+        let request = tonic::Request::new(HttpsOutcallRequest {
+            url: format!("https://{url}/patch"),
+            headers: Vec::new(),
+            method: HttpMethod::Patch as i32,
+            body: body.to_vec(),
+            max_response_size_bytes: 512,
+            ..Default::default()
+        });
+
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, _) = unwrap_response(response);
+        assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
+        assert_eq!(http_response.content, body);
     }
 
     #[tokio::test]
