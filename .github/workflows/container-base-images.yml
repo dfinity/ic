@@ -10,6 +10,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/container-base-images.yml'
+      - 'toolchains/sysimage/build_container_base_image.py'
       - '**/Dockerfile.base'
       - '**/packages.common'
       - '**/packages.dev'

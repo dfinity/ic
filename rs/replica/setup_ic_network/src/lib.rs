@@ -49,7 +49,10 @@ use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{
     NodeId, SubnetId,
     artifact::UnvalidatedArtifactMutation,
-    canister_http::{CanisterHttpRequest, CanisterHttpResponse, CanisterHttpResponseArtifact},
+    canister_http::{
+        CanisterHttpPaymentReceipt, CanisterHttpRequest, CanisterHttpResponse,
+        CanisterHttpResponseArtifact,
+    },
     consensus::{
         CatchUpPackage, ConsensusMessage, HasHeight, certification::CertificationMessage, dkg,
         idkg::IDkgMessage,
@@ -314,8 +317,12 @@ impl AbortableBroadcastChannels {
     }
 }
 
-pub type CanisterHttpAdapterClient =
-    Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
+pub type CanisterHttpAdapterClient = Box<
+    dyn NonBlockingChannel<
+            CanisterHttpRequest,
+            Response = (CanisterHttpResponse, CanisterHttpPaymentReceipt),
+        > + Send,
+>;
 
 /// The function constructs a P2P instance. Currently, it constructs all the
 /// artifact pools and the Consensus/P2P time source. Artifact

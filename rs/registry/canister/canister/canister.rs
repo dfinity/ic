@@ -56,6 +56,7 @@ use registry_canister::{
         do_remove_node_operators::RemoveNodeOperatorsPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
         do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
+        do_set_default_initial_dkg_subnet::SetDefaultInitialDkgSubnetPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
         do_set_subnet_operational_level::SetSubnetOperationalLevelPayload,
         do_split_subnet::SplitSubnetPayload,
@@ -1374,6 +1375,18 @@ fn set_subnet_operational_level() {
 #[candid_method(update, rename = "set_subnet_operational_level")]
 fn set_subnet_operational_level_(payload: SetSubnetOperationalLevelPayload) {
     registry_mut().do_set_subnet_operational_level(payload);
+    recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update set_default_initial_dkg_subnet")]
+fn set_default_initial_dkg_subnet() {
+    check_caller_is_governance_and_log("set_default_initial_dkg_subnet");
+    over(candid_one, set_default_initial_dkg_subnet_);
+}
+
+#[candid_method(update, rename = "set_default_initial_dkg_subnet")]
+fn set_default_initial_dkg_subnet_(payload: SetDefaultInitialDkgSubnetPayload) {
+    registry_mut().do_set_default_initial_dkg_subnet(payload);
     recertify_registry();
 }
 

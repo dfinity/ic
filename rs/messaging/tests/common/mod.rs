@@ -1,7 +1,9 @@
 use canister_test::Project;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_config::execution_environment::Config as HypervisorConfig;
-use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
+use ic_config::subnet_config::{
+    CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig, SubnetSecurity,
+};
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_state_machine_tests::{StateMachine, StateMachineConfig, SubmitIngressError, UserError};
@@ -239,7 +241,9 @@ impl TestSubnetConfig {
                     max_instructions_per_install_code_slice: self.max_instructions_per_round.into(),
                     ..SchedulerConfig::application_subnet()
                 },
-                cycles_account_manager_config: CyclesAccountManagerConfig::application_subnet(),
+                cycles_account_manager_config: CyclesAccountManagerConfig::application_subnet(
+                    SubnetSecurity::None,
+                ),
             },
             HypervisorConfig {
                 guaranteed_response_message_memory_capacity: self

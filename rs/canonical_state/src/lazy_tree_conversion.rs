@@ -8,8 +8,13 @@ use crate::{
     },
 };
 use LazyTree::Blob;
-use ic_canonical_state_tree_hash::lazy_tree::{Lazy, LazyFork, LazyTree, blob, fork, num, string};
-use ic_crypto_tree_hash::Label;
+use ic_canonical_state_tree_hash::{
+    hash_tree::HashTree,
+    lazy_tree::{
+        Lazy, LazyFork, LazyTree, blob, fork, materialize::materialize_partial, num, string,
+    },
+};
+use ic_crypto_tree_hash::{Label, Witness, sparse_labeled_tree_from_paths};
 use ic_error_types::ErrorCode;
 use ic_error_types::RejectCode;
 use ic_registry_routing_table::RoutingTable;
@@ -990,4 +995,14 @@ pub fn subnet_type_as_string(subnet_type: SubnetType) -> &'static str {
 pub fn state_height_as_tree(height: &Height) -> LazyTree<'_> {
     let metadata_lazy_tree = fork(FiniteMap::default().with_tree(HEIGHT_LABEL, num(height.get())));
     fork(FiniteMap::default().with_tree(METADATA_LABEL, metadata_lazy_tree))
+}
+
+pub fn compute_state_height_witness(lazy_tree: &LazyTree, hash_tree: &HashTree) -> Witness {
+    let paths = vec![vec![METADATA_LABEL.into(), HEIGHT_LABEL.into()].into()];
+    let labeled_tree =
+        sparse_labeled_tree_from_paths(&paths).expect("Failed to compute labeled tree for height");
+    let partial_tree = materialize_partial(lazy_tree, &labeled_tree, None);
+    hash_tree
+        .witness::<Witness>(&partial_tree)
+        .expect("Failed to compute witness for state height")
 }

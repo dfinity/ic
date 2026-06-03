@@ -991,6 +991,95 @@ mod zeroize_old_secret_key_store {
         assert_eq!(current_sks_bytes, initial_sks_bytes);
     }
 
+    // Regression test for CRP-2979: on filesystems where `rename(2)` reuses the destination
+    // inode (e.g. virtiofs bind mounts via Docker Desktop on macOS), the post-rename state
+    // has `proto_file` and `old_proto_file_to_zeroize` pointing to the same inode. Zeroing
+    // that inode would clobber the keystore we just wrote. `zeroize_or_unlink_old_file` must
+    // detect the shared inode and unlink the extra link instead of zeroing.
+    #[test]
+    fn zeroize_or_unlink_old_file_unlinks_without_zeroing_when_inodes_are_shared() {
+        let setup = Setup::new();
+        ic_sys::fs::create_hard_link_to_existing_file(
+            &setup.secret_key_store.proto_file,
+            &setup.secret_key_store.old_proto_file_to_zeroize,
+        )
+        .expect("error creating hard link from current secret key store file to backup file");
+        let initial_sks_bytes = fs::read(&setup.secret_key_store.proto_file)
+            .expect("error reading initial secret key store");
+        assert!(!initial_sks_bytes.is_empty());
+
+        setup
+            .secret_key_store
+            .zeroize_or_unlink_old_file()
+            .expect("zeroize_or_unlink_old_file should succeed when inodes are shared");
+
+        assert_matches!(
+            Path::try_exists(&setup.secret_key_store.old_proto_file_to_zeroize),
+            Ok(false)
+        );
+        let current_sks_bytes = fs::read(&setup.secret_key_store.proto_file)
+            .expect("error reading current secret key store");
+        assert_eq!(current_sks_bytes, initial_sks_bytes);
+    }
+
+    #[test]
+    fn zeroize_or_unlink_old_file_is_noop_when_old_file_does_not_exist() {
+        // First write to a fresh keystore: `try_create_hard_link_to_existing_file` was a
+        // no-op (no existing `proto_file` at the time), so `.old` does not exist when
+        // `zeroize_or_unlink_old_file` is reached after the write completes. The helper
+        // must short-circuit without erroring (calling `are_hard_links_to_the_same_inode`
+        // on a non-existent path would return `NotFound`).
+        let setup = Setup::new();
+        let _ = fs::remove_file(&setup.secret_key_store.old_proto_file_to_zeroize);
+        assert_matches!(
+            Path::try_exists(&setup.secret_key_store.old_proto_file_to_zeroize),
+            Ok(false)
+        );
+        let initial_sks_bytes = fs::read(&setup.secret_key_store.proto_file)
+            .expect("error reading initial secret key store");
+
+        setup
+            .secret_key_store
+            .zeroize_or_unlink_old_file()
+            .expect("zeroize_or_unlink_old_file should succeed when .old does not exist");
+
+        assert_matches!(
+            Path::try_exists(&setup.secret_key_store.old_proto_file_to_zeroize),
+            Ok(false)
+        );
+        let current_sks_bytes = fs::read(&setup.secret_key_store.proto_file)
+            .expect("error reading current secret key store");
+        assert_eq!(current_sks_bytes, initial_sks_bytes);
+    }
+
+    #[test]
+    fn zeroize_or_unlink_old_file_zeroes_and_deletes_when_inodes_differ() {
+        let setup = Setup::new();
+        // Simulate the normal-filesystem post-rename state: `.old` is a distinct file
+        // (different inode) holding stale content that must be zeroed before deletion.
+        fs::copy(
+            &setup.secret_key_store.proto_file,
+            &setup.secret_key_store.old_proto_file_to_zeroize,
+        )
+        .expect("error copying current sks to old sks");
+        ic_sys::fs::create_hard_link_to_existing_file(
+            &setup.secret_key_store.old_proto_file_to_zeroize,
+            &setup.hard_link_to_test_zeroization,
+        )
+        .expect("error creating hard link to old secret key store file");
+
+        setup
+            .secret_key_store
+            .zeroize_or_unlink_old_file()
+            .expect("zeroize_or_unlink_old_file should succeed when inodes differ");
+
+        assert_matches!(
+            Path::try_exists(&setup.secret_key_store.old_proto_file_to_zeroize),
+            Ok(false)
+        );
+        assert_contains_only_zeroes(&setup.hard_link_to_test_zeroization);
+    }
+
     #[test]
     fn should_clean_up_leftover_old_file_when_dropping_secret_key_store() {
         let setup = Setup::new();
@@ -1090,19 +1179,20 @@ mod zeroize_old_secret_key_store {
         }
 
         #[test]
-        fn should_observe_cleanup_error_metrics_on_write_if_inode_of_current_and_old_sks_are_the_same()
-         {
+        fn should_observe_cleanup_error_metric_on_write_when_stale_old_sks_file_exists() {
             let mut setup = Setup::new();
-            // Make the current and old SKS files point to the same inode. This is a reasonable
-            // situation if e.g., the vault process crashed during
-            // `[ProtoSecretKeyStore::write_secret_keys_to_disk]`, `[ProtoSecretKeyStore::drop]` was
-            // not executed, and the old SKS file was not cleaned up. However, on the next startup
-            // of the vault process, this situation should be cleaned up.
-            // This situation is NOT expected to occur once the vault process is running. In
-            // particular, it is not expected to be the current state when
-            // `[ProtoSecretKeyStore::write_secret_keys_to_disk]` is called. It is therefore treated
-            // internally as an error, and the cleanup error metric counter is expected to be
-            // incremented.
+            // Simulate a stale `.old` left behind by a prior process that crashed between
+            // creating the hard link and finishing the write. The current vault process is
+            // expected to clean this up at startup; encountering it mid-write means the
+            // hard-link-creation step of the write path fails (the link target already
+            // exists) and that failure is reported as a cleanup error metric.
+            //
+            // Note: post-rename inode sharing between `proto_file` and `.old` (which can
+            // arise on filesystems where `rename(2)` reuses the destination inode) is
+            // handled separately by `zeroize_or_unlink_old_file` so the just-written
+            // keystore is preserved. That property is covered by dedicated unit tests on
+            // the helper; here we assert the metric is incremented and the on-disk
+            // keystore still contains the inserted key.
             ic_sys::fs::create_hard_link_to_existing_file(
                 &setup.secret_key_store.proto_file,
                 &setup.secret_key_store.old_proto_file_to_zeroize,
@@ -1118,6 +1208,14 @@ mod zeroize_old_secret_key_store {
 
             MetricsObservationsAssert::assert_that(setup.metrics)
                 .contains_crypto_secret_key_store_cleanup_error(1);
+
+            let reopened_sks = ProtoSecretKeyStore::open(
+                setup.temp_dir.as_ref(),
+                &existing_secret_key_store_file_name(&SecretKeyStoreVersion::V3),
+                None,
+                Arc::new(CryptoMetrics::none()),
+            );
+            assert!(reopened_sks.contains(&key_id));
         }
     }
 
@@ -1127,17 +1225,17 @@ mod zeroize_old_secret_key_store {
         use slog::Level;
 
         #[test]
-        fn should_log_warning_on_write_if_inode_of_current_and_old_sks_are_the_same() {
+        fn should_log_warning_on_write_when_stale_old_sks_file_exists() {
             let mut setup = Setup::new();
-            // Make the current and old SKS files point to the same inode. This is a reasonable
-            // situation if e.g., the vault process crashed during
-            // `[ProtoSecretKeyStore::write_secret_keys_to_disk]`, `[ProtoSecretKeyStore::drop]` was
-            // not executed, and the old SKS file was not cleaned up. However, on the next startup
-            // of the vault process, this situation should be cleaned up.
-            // This situation is NOT expected to occur once the vault process is running. In
-            // particular, it is not expected to be the current state when
-            // `[ProtoSecretKeyStore::write_secret_keys_to_disk]` is called. It is therefore treated
-            // internally as an error, and a cleanup error log warning is expected to be written.
+            // Simulate a stale `.old` left behind by a prior process that crashed between
+            // creating the hard link and finishing the write. The hard-link-creation step
+            // of the write path then fails (the link target already exists) and that
+            // failure surfaces as a warning log line.
+            //
+            // The post-rename inode-sharing case (where, on filesystems like virtiofs that
+            // reuse inodes on `rename(2)`, `.old` and `proto_file` end up sharing an
+            // inode) is handled by `zeroize_or_unlink_old_file` and covered by separate
+            // unit tests on the helper.
             ic_sys::fs::create_hard_link_to_existing_file(
                 &setup.secret_key_store.proto_file,
                 &setup.secret_key_store.old_proto_file_to_zeroize,

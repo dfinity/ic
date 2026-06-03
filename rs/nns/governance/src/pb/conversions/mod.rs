@@ -3882,6 +3882,9 @@ impl From<pb::NnsFunction> for api::NnsFunction {
             }
             pb::NnsFunction::SplitSubnet => api::NnsFunction::SplitSubnet,
             pb::NnsFunction::DeleteSubnet => api::NnsFunction::DeleteSubnet,
+            pb::NnsFunction::SetDefaultInitialDkgSubnet => {
+                api::NnsFunction::SetDefaultInitialDkgSubnet
+            }
         }
     }
 }
@@ -3979,6 +3982,9 @@ impl From<api::NnsFunction> for pb::NnsFunction {
             }
             api::NnsFunction::SplitSubnet => pb::NnsFunction::SplitSubnet,
             api::NnsFunction::DeleteSubnet => pb::NnsFunction::DeleteSubnet,
+            api::NnsFunction::SetDefaultInitialDkgSubnet => {
+                pb::NnsFunction::SetDefaultInitialDkgSubnet
+            }
         }
     }
 }

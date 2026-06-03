@@ -108,6 +108,7 @@ pub struct OpenIdConfig {
     pub auth_scope: Vec<String>,
     pub fedcm_uri: Option<String>,
     pub email_verification: Option<OpenIdEmailVerification>,
+    pub seed_jwks: Option<Vec<Vec<(String, String)>>>,
 }
 
 #[allow(dead_code)]
@@ -124,6 +125,25 @@ pub enum AnalyticsConfig {
 #[derive(CandidType)]
 pub struct DummyAuthConfig {
     pub prompt_for_index: bool,
+}
+
+#[derive(CandidType)]
+pub struct DnssecRootAnchor {
+    pub key_tag: u16,
+    pub algorithm: u8,
+    pub digest_type: u8,
+    pub digest: Vec<u8>,
+}
+
+#[derive(CandidType)]
+pub struct DnssecConfig {
+    pub root_anchors: Vec<DnssecRootAnchor>,
+}
+
+#[derive(CandidType)]
+pub struct DohConfig {
+    pub allowed_domains: Vec<String>,
+    pub max_cache_age_secs: Option<u64>,
 }
 
 #[derive(CandidType)]
@@ -154,4 +174,6 @@ pub struct InternetIdentityInit {
     pub backend_canister_id: Option<Principal>,
     pub backend_origin: Option<String>,
     pub sso_discoverable_domains: Option<Vec<String>>,
+    pub dnssec_config: Option<Option<DnssecConfig>>,
+    pub doh_config: Option<Option<DohConfig>>,
 }

@@ -1,9 +1,9 @@
 use super::*;
+use crate::CryptoComponentRng;
+use ic_crypto_internal_csp::CspRwLock;
 use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::types::SigConverter;
-use ic_crypto_internal_csp::vault::api::{
-    BasicSignatureCspVault, CspBasicSignatureError, PublicRandomSeedGeneratorError,
-};
+use ic_crypto_internal_csp::vault::api::{BasicSignatureCspVault, CspBasicSignatureError};
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult};
 
 #[cfg(test)]
@@ -47,8 +47,8 @@ impl BasicSigVerifierInternal {
         Ok(BasicSignatureBatch { signatures_map })
     }
 
-    pub fn verify_basic_sig_batch<H: Signable>(
-        vault: &dyn CspVault,
+    pub fn verify_basic_sig_batch<H: Signable, R: CryptoComponentRng>(
+        csprng: &CspRwLock<R>,
         registry: &dyn RegistryClient,
         signatures: &BasicSignatureBatch<H>,
         message: &H,
@@ -59,15 +59,67 @@ impl BasicSigVerifierInternal {
                 message: "Empty BasicSignatureBatch. At least one signature should be included in the batch.".to_string(),
             });
         };
+        // Compute the signed bytes once, since all signatures share the same
+        // message.
+        let message_bytes = message.as_signed_bytes();
+        Self::verify_basic_sig_batch_internal(
+            csprng,
+            registry,
+            signatures
+                .signatures_map
+                .iter()
+                .map(|(signer, signature)| (*signer, signature, message_bytes.as_slice())),
+            registry_version,
+        )
+    }
 
-        let message = message.as_signed_bytes();
-        let mut msgs = Vec::with_capacity(signatures.signatures_map.len());
-        let mut sigs = Vec::with_capacity(signatures.signatures_map.len());
-        let mut keys = Vec::with_capacity(signatures.signatures_map.len());
+    /// Verifies a batch of basic signatures on potentially different messages.
+    ///
+    /// Unlike `verify_basic_sig_batch`, the entries in `inputs` may have
+    /// distinct messages, and the same `NodeId` may appear more than once.
+    pub fn verify_basic_sig_batch_multi_msg<H: Signable, R: CryptoComponentRng>(
+        csprng: &CspRwLock<R>,
+        registry: &dyn RegistryClient,
+        inputs: &[(NodeId, &BasicSigOf<H>, &H)],
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<()> {
+        if inputs.is_empty() {
+            return Err(CryptoError::InvalidArgument {
+                message:
+                    "Empty signature batch. At least one signature should be included in the batch."
+                        .to_string(),
+            });
+        };
+        // Serialize each message once and keep the owned buffers alive so we
+        // can borrow them into the helper's input iterator.
+        let entries: Vec<(NodeId, &BasicSigOf<H>, Vec<u8>)> = inputs
+            .iter()
+            .map(|(signer, signature, message)| (*signer, *signature, message.as_signed_bytes()))
+            .collect();
+        Self::verify_basic_sig_batch_internal(
+            csprng,
+            registry,
+            entries
+                .iter()
+                .map(|(signer, signature, msg_bytes)| (*signer, *signature, msg_bytes.as_slice())),
+            registry_version,
+        )
+    }
 
-        for (signer, signature) in signatures.signatures_map.iter() {
+    /// Shared implementation of batched Ed25519 basic-sig verification.
+    fn verify_basic_sig_batch_internal<'a, H: 'a, R: CryptoComponentRng>(
+        csprng: &CspRwLock<R>,
+        registry: &dyn RegistryClient,
+        inputs: impl ExactSizeIterator<Item = (NodeId, &'a BasicSigOf<H>, &'a [u8])>,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<()> {
+        let mut msgs = Vec::with_capacity(inputs.len());
+        let mut sigs = Vec::with_capacity(inputs.len());
+        let mut keys = Vec::with_capacity(inputs.len());
+
+        for (signer, signature, msg_bytes) in inputs {
             let pk_proto =
-                key_from_registry(registry, *signer, KeyPurpose::NodeSigning, registry_version)?;
+                key_from_registry(registry, signer, KeyPurpose::NodeSigning, registry_version)?;
 
             let pubkey_alg = AlgorithmId::from(pk_proto.algorithm);
             if pubkey_alg != AlgorithmId::Ed25519 {
@@ -85,19 +137,14 @@ impl BasicSigVerifierInternal {
                 }
             })?;
 
-            msgs.push(&message[..]);
-            sigs.push(&signature.get_ref().0[..]);
+            msgs.push(msg_bytes);
+            sigs.push(signature.get_ref().0.as_slice());
             keys.push(pk);
         }
 
-        let seed = vault.new_public_seed().map_err(|e| match e {
-            PublicRandomSeedGeneratorError::TransientInternalError { internal_error } => {
-                CryptoError::TransientInternalError { internal_error }
-            }
-        })?;
-        let rng = &mut seed.into_rng();
+        let seed: [u8; 32] = csprng.write().r#gen();
 
-        ic_ed25519::PublicKey::batch_verify(&msgs, &sigs, &keys, rng).map_err(|e| {
+        ic_ed25519::PublicKey::batch_verify_with_seed(&msgs, &sigs, &keys, &seed).map_err(|e| {
             CryptoError::SignatureVerification {
                 algorithm: AlgorithmId::Ed25519,
                 public_key_bytes: vec![],

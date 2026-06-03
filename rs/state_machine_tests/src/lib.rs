@@ -9,7 +9,7 @@ use ic_config::{
     execution_environment::Config as HypervisorConfig,
     message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES},
     state_manager::LsmtConfig,
-    subnet_config::SubnetConfig,
+    subnet_config::{SubnetConfig, SubnetSecurity},
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus_cup_utils::make_registry_cup_from_cup_contents;
@@ -1994,7 +1994,10 @@ impl StateMachine {
 
         let (mut subnet_config, hypervisor_config) = match config {
             Some(config) => (config.subnet_config, config.hypervisor_config),
-            None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
+            None => (
+                SubnetConfig::new(subnet_type, SubnetSecurity::None),
+                HypervisorConfig::default(),
+            ),
         };
         if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
             subnet_config
@@ -2369,20 +2372,21 @@ impl StateMachine {
         }
     }
 
-    fn into_components_inner(self) -> (u64, Time, u64) {
+    fn into_components_inner(self) -> (u64, Time, u64, SubnetType) {
         (
             self.nonce.into_inner(),
             Time::from_nanos_since_unix_epoch(self.time.into_inner()),
             self.checkpoint_interval_length.load(Ordering::Relaxed),
+            self.subnet_type,
         )
     }
 
-    fn into_components(self) -> (Box<dyn StateMachineStateDir>, u64, Time, u64) {
+    fn into_components(self) -> (Box<dyn StateMachineStateDir>, u64, Time, u64, SubnetType) {
         // Finish any asynchronous state manager operations first.
         self.state_manager.flush_all();
 
         let mut state_manager = self.state_manager.clone();
-        let (nonce, time, checkpoint_interval_length) = self.into_components_inner();
+        let (nonce, time, checkpoint_interval_length, subnet_type) = self.into_components_inner();
         // StateManager is owned by an Arc, that is cloned into multiple components and different
         // threads. If we return before all the asynchronous components release the Arc, we may
         // end up with to StateManagers writing to the same directory, resulting in a crash.
@@ -2400,7 +2404,13 @@ impl StateMachine {
                 panic!("Timed out while dropping StateMachine.");
             }
         };
-        (state_dir, nonce, time, checkpoint_interval_length)
+        (
+            state_dir,
+            nonce,
+            time,
+            checkpoint_interval_length,
+            subnet_type,
+        )
     }
 
     /// Safely drops this `StateMachine`. We cannot achieve this functionality by implementing `Drop`
@@ -2414,13 +2424,15 @@ impl StateMachine {
     pub fn restart_node(self) -> Self {
         // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
         // to the same root.
-        let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
+        let (state_dir, nonce, time, checkpoint_interval_length, subnet_type) =
+            self.into_components();
 
         StateMachineBuilder::new()
             .with_state_machine_state_dir(state_dir)
             .with_nonce(nonce)
             .with_time(time)
             .with_checkpoint_interval_length(checkpoint_interval_length)
+            .with_subnet_type(subnet_type)
             .build()
     }
 
@@ -2428,13 +2440,15 @@ impl StateMachine {
     pub fn restart_node_with_lsmt_override(self, lsmt_override: Option<LsmtConfig>) -> Self {
         // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
         // to the same root.
-        let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
+        let (state_dir, nonce, time, checkpoint_interval_length, subnet_type) =
+            self.into_components();
 
         StateMachineBuilder::new()
             .with_state_machine_state_dir(state_dir)
             .with_nonce(nonce)
             .with_time(time)
             .with_checkpoint_interval_length(checkpoint_interval_length)
+            .with_subnet_type(subnet_type)
             .with_lsmt_override(lsmt_override)
             .build()
     }
@@ -2443,13 +2457,15 @@ impl StateMachine {
     pub fn restart_node_with_snapshot_download_enabled(self) -> Self {
         // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
         // to the same root.
-        let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
+        let (state_dir, nonce, time, checkpoint_interval_length, subnet_type) =
+            self.into_components();
 
         StateMachineBuilder::new()
             .with_state_machine_state_dir(state_dir)
             .with_nonce(nonce)
             .with_time(time)
             .with_checkpoint_interval_length(checkpoint_interval_length)
+            .with_subnet_type(subnet_type)
             .build()
     }
 
@@ -2458,7 +2474,8 @@ impl StateMachine {
     pub fn restart_node_with_config(self, config: StateMachineConfig) -> Self {
         // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
         // to the same root.
-        let (state_dir, nonce, time, checkpoint_interval_length) = self.into_components();
+        let (state_dir, nonce, time, checkpoint_interval_length, subnet_type) =
+            self.into_components();
 
         StateMachineBuilder::new()
             .with_state_machine_state_dir(state_dir)
@@ -2466,6 +2483,7 @@ impl StateMachine {
             .with_time(time)
             .with_config(Some(config))
             .with_checkpoint_interval_length(checkpoint_interval_length)
+            .with_subnet_type(subnet_type)
             .build()
     }
 
@@ -3354,7 +3372,6 @@ impl StateMachine {
             &tip_canister_layout,
             &canister_id,
             CanisterSnapshots::default(),
-            ic_types::Height::new(0),
             self.state_manager.get_fd_factory(),
             &StrictCheckpointLoadingMetrics,
         )
@@ -5582,7 +5599,7 @@ pub fn two_subnets_with_config(
 /// Sets up two `StateMachine` that can communicate with each other.
 pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
     let config = StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::Application),
+        SubnetConfig::new(SubnetType::Application, SubnetSecurity::None),
         HypervisorConfig::default(),
     );
     two_subnets_with_config(config.clone(), config)

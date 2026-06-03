@@ -41,8 +41,9 @@ use ic_types::batch::ChainKeyData;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{Ingress, MessageId, NO_DEADLINE, Response, SubnetMessage};
 use ic_types::{
-    CanisterId, ComputeAllocation, ExecutionRound, MemoryAllocation, NumBytes, NumInstructions,
-    NumMessages, NumSlices, Randomness, ReplicaVersion, Time,
+    CanisterId, ComputeAllocation, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, ExecutionRound,
+    MemoryAllocation, NumBytes, NumInstructions, NumMessages, NumSlices, Randomness,
+    ReplicaVersion, Time,
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
@@ -70,6 +71,11 @@ pub(crate) mod tests;
 /// as 1/16 of the fixed limit. Any other value in the same ballpark would
 /// work here.
 const SUBNET_MESSAGES_LIMIT_FRACTION: u64 = 16;
+
+/// Because it is relatively expensive to make every canister mutable just to
+/// check whether 10 seconds have passed since it was last charged, only try to
+/// charge canisters every 50 rounds (and/or on checkpoint rounds).
+const CHARGE_INTERVAL_ROUNDS: u64 = 50;
 
 /// Contains limits (or budget) for various resources that affect duration of
 /// an execution round.
@@ -148,6 +154,7 @@ pub(crate) struct SchedulerImpl {
     thread_pool: RefCell<scoped_threadpool::Pool>,
     rate_limiting_of_heap_delta: FlagStatus,
     rate_limiting_of_instructions: FlagStatus,
+    log_memory_store_feature: FlagStatus,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 }
 
@@ -163,6 +170,7 @@ impl SchedulerImpl {
         log: ReplicaLogger,
         rate_limiting_of_heap_delta: FlagStatus,
         rate_limiting_of_instructions: FlagStatus,
+        log_memory_store_feature: FlagStatus,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
         let scheduler_cores = config.scheduler_cores as u32;
@@ -177,6 +185,7 @@ impl SchedulerImpl {
             log,
             rate_limiting_of_heap_delta,
             rate_limiting_of_instructions,
+            log_memory_store_feature,
             fd_factory,
         }
     }
@@ -811,14 +820,30 @@ impl SchedulerImpl {
     }
 
     /// Charge canisters for their resource allocation and usage. Canisters
-    /// that did not manage to pay are uninstalled.
-    /// This function is expected to be called at the end of a round.
+    /// that cannot pay are uninstalled.
+    ///
+    /// This function is expected to be called at the end of a round and
+    /// particularly after paused executions were aborted on checkpoint rounds.
     fn charge_canisters_for_resource_allocation_and_usage(
         &self,
         state: &mut ReplicatedState,
         subnet_size: usize,
         current_round: ExecutionRound,
+        current_round_type: ExecutionRoundType,
     ) {
+        // Because it is relatively expensive to make every canister mutable just to
+        // check whether 10 seconds have passed since it was last charged, only try to
+        // charge canisters every 50 rounds and/or on checkpoint rounds.
+        //
+        // The latter ensures that (because we skip canisters with paused
+        // executions), every canister is charged at least once per checkpoint
+        // interval.
+        if !current_round.get().is_multiple_of(CHARGE_INTERVAL_ROUNDS)
+            && current_round_type != ExecutionRoundType::CheckpointRound
+        {
+            return;
+        }
+
         let cost_schedule = state.get_own_cost_schedule();
         let state_time = state.time();
         let threshold_last_allocation_charge = state_time.saturating_sub(
@@ -1107,6 +1132,38 @@ impl Scheduler for SchedulerImpl {
         // When making changes to this method, please make sure each piece of code is covered by duration metrics.
         // The goal is to ensure that we can track the performance of `execute_round` and its individual components.
         let root_measurement_scope = MeasurementScope::root(&self.metrics.round);
+
+        if !state.metadata.logs_migrated {
+            let _timer = self
+                .metrics
+                .round_log_memory_store_migration_duration
+                .start_timer();
+            let log_memory_store_feature = self.log_memory_store_feature;
+            for canister in state.canisters_iter_mut() {
+                if log_memory_store_feature == FlagStatus::Enabled
+                    && !canister.system_state.log_memory_store.is_migrated()
+                {
+                    let system_state = &mut Arc::make_mut(canister).system_state;
+                    system_state.log_memory_store.resize(
+                        DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
+                        Arc::clone(&self.fd_factory),
+                    );
+                    system_state
+                        .log_memory_store
+                        .append_delta_log(&mut system_state.canister_log.clone());
+                    system_state.log_memory_store.set_migrated();
+                } else if log_memory_store_feature == FlagStatus::Disabled
+                    && canister.system_state.log_memory_store.is_migrated()
+                {
+                    let system_state = &mut Arc::make_mut(canister).system_state;
+                    system_state
+                        .log_memory_store
+                        .resize(0, Arc::clone(&self.fd_factory));
+                    system_state.log_memory_store.clear_migrated();
+                }
+            }
+            state.metadata.logs_migrated = true;
+        }
 
         let round_log;
         let mut csprng;
@@ -1460,14 +1517,6 @@ impl Scheduler for SchedulerImpl {
                 let _timer = self.metrics.round_finalization_ingress.start_timer();
                 final_state.prune_ingress_history();
             }
-            {
-                let _timer = self.metrics.round_finalization_charge.start_timer();
-                self.charge_canisters_for_resource_allocation_and_usage(
-                    &mut final_state,
-                    registry_settings.subnet_size,
-                    current_round,
-                );
-            }
 
             // Update canister priorities.
             {
@@ -1475,7 +1524,19 @@ impl Scheduler for SchedulerImpl {
                 round_schedule.finish_round(&mut final_state, current_round, &self.metrics);
             }
 
+            // Abort (some) paused executions.
             self.finish_round(&mut final_state, current_round_type);
+
+            // Charge canisters after (some) paused executions were aborted.
+            {
+                let _timer = self.metrics.round_finalization_charge.start_timer();
+                self.charge_canisters_for_resource_allocation_and_usage(
+                    &mut final_state,
+                    registry_settings.subnet_size,
+                    current_round,
+                    current_round_type,
+                );
+            }
 
             final_state
                 .metadata

@@ -68,7 +68,6 @@ rust_library(
         "@crate_index//:tempfile",
         "@crate_index//:wasm-encoder",
         "@crate_index//:wasmparser",
-        "@crate_index//:wasmprinter",
         "@crate_index//:wasmtime",
         "@crate_index//:wirm",
     ],

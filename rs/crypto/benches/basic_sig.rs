@@ -11,13 +11,16 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::{
-    AlgorithmId, BasicSig, BasicSigOf, DOMAIN_IC_REQUEST, KeyPurpose, SignableMock, UserPublicKey,
+    AlgorithmId, BasicSig, BasicSigOf, DOMAIN_IC_REQUEST, KeyPurpose, Signable, SignableMock,
+    UserPublicKey,
 };
 use ic_types::{NodeId, RegistryVersion};
 use ic_types_test_utils::ids::{NODE_1, NODE_2};
 
+use ic_base_types::PrincipalId;
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use strum::IntoEnumIterator;
 
@@ -169,10 +172,78 @@ fn crypto_basicsig_verifybypubkey<M: Measurement, R: Rng + CryptoRng>(
     });
 }
 
+fn crypto_basicsig_ed25519_batch_verify(criterion: &mut Criterion) {
+    let rng = &mut reproducible_rng();
+    let batch_sizes = [13, 34, 40];
+
+    for batch_size in batch_sizes {
+        let group = &mut criterion.benchmark_group(format!(
+            "crypto_basicsig_batch_verify/batch_size_{batch_size}"
+        ));
+        group.warm_up_time(WARMUP_TIME);
+
+        crypto_ed25519_basicsig_batch_verify(group, batch_size, rng);
+    }
+}
+
+fn crypto_ed25519_basicsig_batch_verify<M: Measurement, R: Rng + CryptoRng>(
+    group: &mut BenchmarkGroup<'_, M>,
+    batch_size: usize,
+    rng: &mut R,
+) {
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+
+    let crypto = TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&registry) as Arc<_>)
+        .with_node_id(NODE_1)
+        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
+        .build();
+
+    let msg = random_signable_message_of_size(32, rng);
+
+    // Generate batch_size distinct signers, each with their own key and signature.
+    let mut node_ids = Vec::with_capacity(batch_size);
+    let mut signatures = Vec::with_capacity(batch_size);
+    let bytes_to_sign = msg.as_signed_bytes();
+    for i in 0..batch_size {
+        let node_id = NodeId::from(PrincipalId::new_node_test_id(1000 + i as u64));
+        let private_key = ic_ed25519::PrivateKey::generate_using_rng(rng);
+        let sig_bytes = private_key.sign_message(&bytes_to_sign);
+        let pub_key_bytes = private_key.public_key().serialize_raw().to_vec();
+
+        add_node_signing_pubkey_to_registry(node_id, &pub_key_bytes, &registry, &registry_data);
+
+        let signature: BasicSigOf<SignableMock> = BasicSigOf::new(BasicSig(sig_bytes.to_vec()));
+        node_ids.push(node_id);
+        signatures.push(signature);
+    }
+
+    let sig_refs: BTreeMap<NodeId, &BasicSigOf<SignableMock>> = node_ids
+        .iter()
+        .zip(signatures.iter())
+        .map(|(id, sig)| (*id, sig))
+        .collect();
+
+    let batch = crypto
+        .combine_basic_sig(sig_refs, REGISTRY_VERSION)
+        .unwrap();
+
+    group.bench_function("verify_batch", |bench| {
+        bench.iter(|| {
+            assert!(
+                crypto
+                    .verify_basic_sig_batch(&batch, &msg, REGISTRY_VERSION)
+                    .is_ok()
+            );
+        })
+    });
+}
+
 criterion_group! {
     name = benches;
     config = Criterion::default().sample_size(20).warm_up_time(WARMUP_TIME);
-    targets = crypto_basicsig_ed25519, crypto_basicsig_p256, crypto_basicsig_secp256k1, crypto_basicsig_rsasha256
+    targets = crypto_basicsig_ed25519, crypto_basicsig_p256, crypto_basicsig_secp256k1, crypto_basicsig_rsasha256, crypto_basicsig_ed25519_batch_verify
 }
 
 criterion_main!(benches);
@@ -240,12 +311,7 @@ fn signature_from_random_keypair<R: Rng + CryptoRng>(
     algorithm_id: AlgorithmId,
     rng: &mut R,
 ) -> (BasicSigOf<SignableMock>, UserPublicKey) {
-    let bytes_to_sign = {
-        let mut buf = vec![];
-        buf.extend_from_slice(&msg.domain);
-        buf.extend_from_slice(&msg.signed_bytes_without_domain);
-        buf
-    };
+    let bytes_to_sign = msg.as_signed_bytes();
 
     let (signature_bytes, public_key_bytes) = match algorithm_id {
         AlgorithmId::Ed25519 => {

@@ -1,7 +1,10 @@
-#![allow(deprecated)]
-use ic_cdk::api::call::RejectionCode;
+use ic_cdk::call::{CallFailed, RejectCode};
+use ic_cdk::management_canister::SignCallError;
 use ic_management_canister_types_private::DerivationPath;
 use std::fmt;
+
+#[cfg(test)]
+mod tests;
 
 /// Represents an error from a management canister call, such as
 /// `sign_with_ecdsa`.
@@ -64,17 +67,39 @@ impl fmt::Display for Reason {
 }
 
 impl Reason {
-    fn from_reject(reject_code: RejectionCode, reject_message: String) -> Self {
-        match reject_code {
-            RejectionCode::SysTransient => Self::TransientInternalError(reject_message),
-            RejectionCode::CanisterError => Self::CanisterError(reject_message),
-            RejectionCode::CanisterReject => Self::Rejected(reject_message),
-            RejectionCode::NoError
-            | RejectionCode::SysFatal
-            | RejectionCode::DestinationInvalid
-            | RejectionCode::Unknown => Self::InternalError(format!(
-                "rejection code: {reject_code:?}, rejection message: {reject_message}"
-            )),
+    fn from_sign_call_error(error: SignCallError) -> Self {
+        match error {
+            SignCallError::CallFailed(failed) => Self::from_call_failed(failed),
+            SignCallError::SignCostError(e) => {
+                Self::InternalError(format!("signature cost calculation failed: {e}"))
+            }
+            SignCallError::CandidDecodeFailed(e) => {
+                Self::InternalError(format!("candid decode failed: {e}"))
+            }
+        }
+    }
+
+    fn from_call_failed(failed: CallFailed) -> Self {
+        match failed {
+            CallFailed::CallRejected(rejected) => {
+                let message = rejected.reject_message().to_string();
+                match rejected.reject_code() {
+                    Ok(RejectCode::SysTransient) => Self::TransientInternalError(message),
+                    Ok(RejectCode::CanisterError) => Self::CanisterError(message),
+                    Ok(RejectCode::CanisterReject) => Self::Rejected(message),
+                    Ok(code) => Self::InternalError(format!(
+                        "rejection code: {code:?}, rejection message: {message}"
+                    )),
+                    Err(_) => Self::InternalError(format!(
+                        "unrecognized rejection code: {}, rejection message: {message}",
+                        rejected.raw_reject_code()
+                    )),
+                }
+            }
+            CallFailed::InsufficientLiquidCycleBalance(_) => Self::OutOfCycles,
+            CallFailed::CallPerformFailed(e) => {
+                Self::InternalError(format!("call_perform failed: {e}"))
+            }
         }
     }
 }
@@ -85,11 +110,9 @@ pub async fn sign_with_ecdsa(
     derivation_path: DerivationPath,
     message_hash: [u8; 32],
 ) -> Result<[u8; 64], CallError> {
-    use ic_cdk::api::management_canister::ecdsa::{
-        EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument, sign_with_ecdsa,
-    };
+    use ic_cdk::management_canister::{EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgs, sign_with_ecdsa};
 
-    let result = sign_with_ecdsa(SignWithEcdsaArgument {
+    let result = sign_with_ecdsa(&SignWithEcdsaArgs {
         message_hash: message_hash.to_vec(),
         derivation_path: derivation_path.into_inner(),
         key_id: EcdsaKeyId {
@@ -100,7 +123,7 @@ pub async fn sign_with_ecdsa(
     .await;
 
     match result {
-        Ok((reply,)) => {
+        Ok(reply) => {
             let signature_length = reply.signature.len();
             Ok(<[u8; 64]>::try_from(reply.signature).unwrap_or_else(|_| {
                 panic!(
@@ -108,9 +131,9 @@ pub async fn sign_with_ecdsa(
                 )
             }))
         }
-        Err((code, msg)) => Err(CallError {
+        Err(error) => Err(CallError {
             method: "sign_with_ecdsa".to_string(),
-            reason: Reason::from_reject(code, msg),
+            reason: Reason::from_sign_call_error(error),
         }),
     }
 }
