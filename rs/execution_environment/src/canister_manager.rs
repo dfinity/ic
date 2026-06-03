@@ -562,9 +562,9 @@ impl CanisterManager {
                 .log_memory_store
                 .would_resize(requested_limit.get() as usize);
             if log_resize_needed
+                && requested_limit.get() != 0
                 && self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
                 && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
-            {
                 return Err(CanisterManagerError::CanisterHeapDeltaRateLimited {
                     canister_id: canister.canister_id(),
                     value: canister.scheduler_state.heap_delta_debit,
