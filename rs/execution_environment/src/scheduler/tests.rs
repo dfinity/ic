@@ -21,6 +21,7 @@ use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use ic00::{CanisterHttpRequestArgs, HttpMethod};
 use proptest::prelude::*;
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 mod charging;

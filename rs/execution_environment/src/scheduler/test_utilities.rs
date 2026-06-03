@@ -145,7 +145,7 @@ impl std::fmt::Debug for SchedulerTest {
                 &self
                     .state()
                     .canister_states()
-                    .values()
+                    .all_values()
                     .map(|state| state.compute_allocation().as_percent())
                     .collect::<Vec<_>>(),
             )
