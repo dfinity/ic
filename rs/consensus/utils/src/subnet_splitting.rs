@@ -382,7 +382,7 @@ mod tests {
     fn should_fail_with_not_splitting_when_subnet_splitting_not_scheduled_test(
         #[values(
             SubnetSplittingStatus::NotScheduled,
-            SubnetSplittingStatus::Done { new_subnet_id: SOURCE_SUBNET_ID },
+            SubnetSplittingStatus::PostSplit { new_subnet_id: SOURCE_SUBNET_ID },
         )]
         status: SubnetSplittingStatus,
     ) {

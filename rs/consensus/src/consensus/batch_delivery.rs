@@ -257,14 +257,13 @@ pub(crate) fn deliver_batches_with_result_processor(
                             other_subnet_id,
                         }
                     }
-                    SubnetSplittingStatus::Done { .. } | SubnetSplittingStatus::NotScheduled => {
-                        BatchContent::Data {
-                            batch_messages: BatchMessages::default(),
-                            chain_key_data,
-                            consensus_responses,
-                            requires_full_state_hash,
-                        }
-                    }
+                    SubnetSplittingStatus::PostSplit { .. }
+                    | SubnetSplittingStatus::NotScheduled => BatchContent::Data {
+                        batch_messages: BatchMessages::default(),
+                        chain_key_data,
+                        consensus_responses,
+                        requires_full_state_hash,
+                    },
                 }
             }
             BlockPayload::Data(data_payload) => {

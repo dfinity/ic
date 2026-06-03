@@ -230,7 +230,7 @@ pub enum SubnetSplittingStatus {
         source_subnet_id: SubnetId,
     },
     /// The subnet was split at the previous summary block.
-    Done { new_subnet_id: SubnetId },
+    PostSplit { new_subnet_id: SubnetId },
 }
 
 /// The DKG summary will be present as the DKG payload at every block,
@@ -559,8 +559,10 @@ impl From<&SubnetSplittingStatus> for pb::summary::SubnetSplittingStatus {
                 destination_subnet_id: Some(subnet_id_into_protobuf(*destination_subnet_id)),
                 source_subnet_id: Some(subnet_id_into_protobuf(*source_subnet_id)),
             }),
-            SubnetSplittingStatus::Done { new_subnet_id } => {
-                pb::summary::SubnetSplittingStatus::Done(subnet_id_into_protobuf(*new_subnet_id))
+            SubnetSplittingStatus::PostSplit { new_subnet_id } => {
+                pb::summary::SubnetSplittingStatus::PostSplit(subnet_id_into_protobuf(
+                    *new_subnet_id,
+                ))
             }
         }
     }
@@ -587,8 +589,8 @@ impl TryFrom<pb::summary::SubnetSplittingStatus> for SubnetSplittingStatus {
                     "SubnetSplittingStatus::source_subnet_id",
                 )?,
             }),
-            pb::summary::SubnetSplittingStatus::Done(subnet_id) => {
-                Ok(SubnetSplittingStatus::Done {
+            pb::summary::SubnetSplittingStatus::PostSplit(subnet_id) => {
+                Ok(SubnetSplittingStatus::PostSplit {
                     new_subnet_id: subnet_id_try_from_protobuf(subnet_id)?,
                 })
             }

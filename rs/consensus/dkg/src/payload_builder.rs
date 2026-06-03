@@ -935,7 +935,7 @@ pub fn get_post_split_dkg_summary(
         new_subnet_id,
         registry,
         registry_version,
-        Some(SubnetSplittingStatus::Done { new_subnet_id }),
+        Some(SubnetSplittingStatus::PostSplit { new_subnet_id }),
     )
     .map_err(|err| format!("Failed to create post-split dkg summary from contents: {err}"))
 }

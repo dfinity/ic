@@ -770,7 +770,9 @@ fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<
 
     // If this is the first CUP created right after the subnet was split, infer the subnet id from
     // the subnet splitting status in the dkg summary.
-    if let SubnetSplittingStatus::Done { new_subnet_id } = dkg_summary.subnet_splitting_status() {
+    if let SubnetSplittingStatus::PostSplit { new_subnet_id } =
+        dkg_summary.subnet_splitting_status()
+    {
         return Ok(new_subnet_id);
     }
 

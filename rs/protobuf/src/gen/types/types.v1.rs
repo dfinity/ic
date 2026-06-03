@@ -409,7 +409,7 @@ pub mod summary {
         #[prost(message, tag = "14")]
         Scheduled(super::SplittingArgs),
         #[prost(message, tag = "15")]
-        Done(super::SubnetId),
+        PostSplit(super::SubnetId),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]

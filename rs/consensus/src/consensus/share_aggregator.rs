@@ -273,7 +273,7 @@ impl ShareAggregator {
                 signature,
             })?;
 
-        if let SubnetSplittingStatus::Done { new_subnet_id } = subnet_splitting_status {
+        if let SubnetSplittingStatus::PostSplit { new_subnet_id } = subnet_splitting_status {
             info!(
                 self.log,
                 "Aggregated a Post-Split CUP for subnet {new_subnet_id} at height {}",

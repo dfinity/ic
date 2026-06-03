@@ -98,7 +98,7 @@ pub(crate) fn should_halt(
         {
             SubnetSplittingStatus::NotScheduled => false,
             // After the split, don't produce any blocks until we are on the right subnet.
-            SubnetSplittingStatus::Done { new_subnet_id } => subnet_id != new_subnet_id,
+            SubnetSplittingStatus::PostSplit { new_subnet_id } => subnet_id != new_subnet_id,
             SubnetSplittingStatus::Scheduled { .. } => height >= summary_block.height,
         }
     });
@@ -271,7 +271,7 @@ mod tests {
         current_height: CUP_HEIGHT,
         replica_version: ReplicaVersion::default(),
         halt_at_cup_height: false,
-        subnet_splitting_status: Some(SubnetSplittingStatus::Done { new_subnet_id: SUBNET_0 }),
+        subnet_splitting_status: Some(SubnetSplittingStatus::PostSplit { new_subnet_id: SUBNET_0 }),
         subnet_id: SUBNET_1,
         expected_status: Some(Status::Halted),
     })]
@@ -280,7 +280,7 @@ mod tests {
         current_height: CUP_HEIGHT,
         replica_version: ReplicaVersion::default(),
         halt_at_cup_height: false,
-        subnet_splitting_status: Some(SubnetSplittingStatus::Done { new_subnet_id: SUBNET_0 }),
+        subnet_splitting_status: Some(SubnetSplittingStatus::PostSplit { new_subnet_id: SUBNET_0 }),
         subnet_id: SUBNET_0,
         expected_status: Some(Status::Running),
     })]
