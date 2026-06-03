@@ -452,7 +452,9 @@ pub(crate) fn get_catch_up_package_type(
 
             Ok(CatchUpPackageType::PostSplit { new_subnet_id })
         }
-        _ => Ok(CatchUpPackageType::Normal),
+        SubnetSplittingStatus::NotScheduled | SubnetSplittingStatus::PostSplit { .. } => {
+            Ok(CatchUpPackageType::Normal)
+        }
     }
 }
 
