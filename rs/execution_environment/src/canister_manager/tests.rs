@@ -5647,6 +5647,15 @@ fn update_settings_fails_when_heap_delta_rate_limited() {
     test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
+    // Ensure the log store is non-empty so resize would rewrite log data.
+    const MSG: &[u8] = &[b'x'; 2100];
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(MSG).reply().build(),
+    )
+    .unwrap();
+
     test.canister_state_mut(canister_id)
         .scheduler_state
         .heap_delta_debit = LIMIT;
