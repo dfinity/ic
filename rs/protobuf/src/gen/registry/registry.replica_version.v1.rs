@@ -64,6 +64,10 @@ pub struct GuestLaunchMeasurementMetadata {
     /// KiB.
     #[prost(string, optional, tag = "1")]
     pub kernel_cmdline: ::core::option::Option<::prost::alloc::string::String>,
+    /// Virtual CPU type used to launch the guest.
+    /// Supported values can be found in ic-os/defs.bzl under `vcpu_types`.
+    #[prost(string, optional, tag = "2")]
+    pub vcpu_type: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// A list of blessed versions of the IC Replica
 ///

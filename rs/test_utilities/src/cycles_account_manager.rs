@@ -1,4 +1,4 @@
-use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetConfig};
+use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetConfig, SubnetSecurity};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities_types::ids::subnet_test_id;
@@ -20,13 +20,14 @@ impl CyclesAccountManagerBuilder {
             subnet_id: subnet_test_id(0),
             subnet_type: SubnetType::Application,
             cycles_limit_per_canister: Some(Cycles::new(100_000_000_000_000)),
-            config: CyclesAccountManagerConfig::application_subnet(),
+            config: CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None),
         }
     }
 
     pub fn with_subnet_type(mut self, subnet_type: SubnetType) -> Self {
         self.subnet_type = subnet_type;
-        self.config = SubnetConfig::new(subnet_type).cycles_account_manager_config;
+        self.config =
+            SubnetConfig::new(subnet_type, SubnetSecurity::None).cycles_account_manager_config;
         self
     }
 

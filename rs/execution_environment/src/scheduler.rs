@@ -1496,14 +1496,6 @@ impl Scheduler for SchedulerImpl {
                 let _timer = self.metrics.round_finalization_ingress.start_timer();
                 final_state.prune_ingress_history();
             }
-            {
-                let _timer = self.metrics.round_finalization_charge.start_timer();
-                self.charge_canisters_for_resource_allocation_and_usage(
-                    &mut final_state,
-                    registry_settings.subnet_size,
-                    current_round,
-                );
-            }
 
             // Update canister priorities.
             {
@@ -1512,6 +1504,16 @@ impl Scheduler for SchedulerImpl {
             }
 
             self.finish_round(&mut final_state, current_round_type);
+
+            // Charge canisters after (some) paused executions were aborted.
+            {
+                let _timer = self.metrics.round_finalization_charge.start_timer();
+                self.charge_canisters_for_resource_allocation_and_usage(
+                    &mut final_state,
+                    registry_settings.subnet_size,
+                    current_round,
+                );
+            }
 
             final_state
                 .metadata

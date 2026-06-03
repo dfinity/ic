@@ -1,5 +1,8 @@
 use ic_base_types::PrincipalId;
-use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
+use ic_config::{
+    execution_environment::Config as HypervisorConfig,
+    subnet_config::{SubnetConfig, SubnetSecurity},
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
 use ic_types_cycles::Cycles;
@@ -63,7 +66,7 @@ fn very_slow_wasm(n: u64) -> Vec<u8> {
 #[test]
 fn test_dts() {
     let config = StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::Application),
+        SubnetConfig::new(SubnetType::Application, SubnetSecurity::None),
         HypervisorConfig::default(),
     );
     let sm = StateMachineBuilder::new()

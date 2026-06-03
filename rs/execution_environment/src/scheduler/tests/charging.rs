@@ -5,7 +5,9 @@ use super::super::test_utilities::{
 };
 use super::super::*;
 use super::zero_instruction_overhead_config;
-use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
+use ic_config::subnet_config::{
+    CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig, SubnetSecurity,
+};
 use ic_management_canister_types_private::{
     Method, Payload as _, TakeCanisterSnapshotArgs, UninstallCodeArgs,
 };
@@ -35,7 +37,7 @@ fn only_charge_for_allocation_after_specified_duration() {
     // Just enough memory to cost us one cycle per second.
     let bytes_per_cycle = (1_u128 << 30)
         .checked_div(
-            CyclesAccountManagerConfig::application_subnet()
+            CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None)
                 .gib_storage_per_second_fee
                 .get(),
         )
@@ -70,7 +72,12 @@ fn only_charge_for_allocation_after_specified_duration() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(
         test.canister_state(canister).system_state.balance().get(),
-        initial_cycles - 10,
+        initial_cycles
+            - 10
+            - test
+                .canister_base_cost(NumBytes::from(bytes_per_cycle), time_between_batches * 2,)
+                .real()
+                .get(),
     );
 }
 
@@ -130,6 +137,9 @@ fn charging_for_message_memory_works() {
         canister_state.system_state.balance(),
         balance_before
             - test
+                .canister_base_cost(canister_state.memory_usage(), charge_duration)
+                .real()
+            - test
                 .memory_cost(
                     canister_state.message_memory_usage().total(),
                     charge_duration,
@@ -186,6 +196,9 @@ fn charging_for_logging_memory_works() {
     assert_eq!(
         canister_state.system_state.balance(),
         balance_before
+            - test
+                .canister_base_cost(canister_state.memory_usage(), charge_duration)
+                .real()
             - test
                 .memory_cost(
                     canister_state.log_memory_store_memory_usage(),
@@ -339,7 +352,9 @@ fn dont_charge_allocations_for_paused_canisters() {
     fn assert_balance_change(test: &SchedulerTest, canister: CanisterId, duration: Duration) {
         assert_eq!(
             test.canister_state(canister).system_state.balance(),
-            INITIAL_CYCLES - test.memory_cost(MEMORY_ALLOCATION, duration).real()
+            INITIAL_CYCLES
+                - test.memory_cost(MEMORY_ALLOCATION, duration).real()
+                - test.canister_base_cost(MEMORY_ALLOCATION, duration).real()
         );
     }
     // Balance has changed for the canister with no paused execution.
@@ -397,7 +412,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     // Taking a snapshot of the canister will decrease the balance.
     // Increase the canister balance to be able to take a new snapshot.
     let subnet_type = SubnetType::Application;
-    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
+    let scheduler_config = SubnetConfig::new(subnet_type, SubnetSecurity::None).scheduler_config;
     let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
         + NumInstructions::new(canister_snapshot_size.get());
@@ -515,7 +530,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     // Taking a snapshot of the canister will decrease the balance.
     // Increase the canister balance to be able to take a new snapshot.
     let subnet_type = SubnetType::Application;
-    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
+    let scheduler_config = SubnetConfig::new(subnet_type, SubnetSecurity::None).scheduler_config;
     let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
         + NumInstructions::new(canister_snapshot_size.get());

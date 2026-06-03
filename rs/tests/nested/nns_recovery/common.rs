@@ -766,8 +766,25 @@ async fn simulate_node_provider_action(
         recovery_hash_prefix,
     );
 
-    let recovery_upgrader_cmd =
-        build_recovery_upgrader_run_command(img_version, recovery_hash_prefix).to_shell_string();
+    let current_boot_alternative = host
+        .block_on_bash_script_async(
+            "sudo /opt/ic/bin/hostos_tool guestos-alternative show | awk '/GuestOS Boot alternative:/ {print $4}'",
+        )
+        .await
+        .expect("Failed to read current GuestOS boot alternative");
+    let target_boot_alternative = match current_boot_alternative.trim() {
+        "A" => "B",
+        "B" => "A",
+        other => panic!("Unexpected GuestOS boot alternative: {other}"),
+    };
+
+    let recovery_upgrader_cmd = build_recovery_upgrader_run_command(
+        img_version,
+        recovery_hash_prefix,
+        target_boot_alternative,
+        true,
+    )
+    .to_shell_string();
 
     // Note: keep in sync with the limited-console invocation in cpp/infogetty-cpp/infogetty.cc.
     // We need TWO "exit" commands: one to exit rbash, and one to exit limited-console's main loop.
