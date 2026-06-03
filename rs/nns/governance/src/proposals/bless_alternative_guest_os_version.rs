@@ -179,10 +179,14 @@ impl From<GuestLaunchMeasurement> for SelfDescribingValue {
 
 impl From<GuestLaunchMeasurementMetadata> for SelfDescribingValue {
     fn from(value: GuestLaunchMeasurementMetadata) -> Self {
-        let GuestLaunchMeasurementMetadata { kernel_cmdline } = value;
+        let GuestLaunchMeasurementMetadata {
+            kernel_cmdline,
+            vcpu_type,
+        } = value;
 
         ValueBuilder::new()
             .add_field("kernel_cmdline", kernel_cmdline)
+            .add_field("vcpu_type", vcpu_type)
             .build()
     }
 }

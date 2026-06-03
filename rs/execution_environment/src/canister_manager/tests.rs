@@ -26,7 +26,7 @@ use ic_config::{
         SUBNET_CALLBACK_SOFT_LIMIT, SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
     },
     flag_status::FlagStatus,
-    subnet_config::{CANISTER_CREATION_FEE, SchedulerConfig},
+    subnet_config::{CANISTER_CREATION_FEE, SchedulerConfig, SubnetSecurity},
 };
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::{
@@ -2839,6 +2839,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     let certified_data = vec![42];
     let mut original_canister = CanisterStateBuilder::new()
         .with_canister_id(canister_id)
+        .with_cycles(Cycles::new(15_000_000_000_000))
         .with_status(CanisterStatusType::Running)
         .with_controller(controller)
         .with_certified_data(certified_data.clone())
@@ -5834,7 +5835,8 @@ fn empty_canister_memory_usage() {
 /// This test checks that the wasm chunk store is accounted for then.
 #[test]
 fn chunk_store_counts_against_subnet_memory_in_initial_round_computation() {
-    let subnet_config = ic_config::subnet_config::SubnetConfig::new(SubnetType::Application);
+    let subnet_config =
+        ic_config::subnet_config::SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     // Initialize subnet with enough memory for one chunk but not two.
     assert_lt!(EMPTY_CANISTER_MEMORY_USAGE, wasm_chunk_store::chunk_size());
     let hypervisor_config = Config {
