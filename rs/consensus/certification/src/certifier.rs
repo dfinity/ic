@@ -1647,6 +1647,23 @@ mod tests {
     // DKG interval length used for subnet-splitting tests.
     const TEST_DKG_INTERVAL: u64 = 9;
 
+    fn dependencies_for_splitting_tests(
+        pool_config: ArtifactPoolConfig,
+        nodes: u64,
+    ) -> Dependencies {
+        let committee = (0..nodes).map(node_test_id).collect::<Vec<_>>();
+        dependencies_with_subnet_params(
+            pool_config,
+            subnet_test_id(0),
+            vec![(
+                1,
+                SubnetRecordBuilder::from(&committee)
+                    .with_dkg_interval_length(TEST_DKG_INTERVAL)
+                    .build(),
+            )],
+        )
+    }
+
     // Advances `pool` by TEST_DKG_INTERVAL rounds so the next block is a DKG
     // summary block, then inserts and finalizes that summary block after setting
     // its subnet-splitting status to `status`.
@@ -1677,6 +1694,10 @@ mod tests {
         proposal.height()
     }
 
+    fn not_scheduled_splitting() -> SubnetSplittingStatus {
+        SubnetSplittingStatus::NotScheduled
+    }
+
     fn scheduled_splitting() -> SubnetSplittingStatus {
         SubnetSplittingStatus::Scheduled {
             source_subnet_id: subnet_test_id(0),
@@ -1696,21 +1717,23 @@ mod tests {
         }
     }
 
-    fn dependencies_for_splitting_tests(
-        pool_config: ArtifactPoolConfig,
-        nodes: u64,
-    ) -> Dependencies {
-        let committee = (0..nodes).map(node_test_id).collect::<Vec<_>>();
-        dependencies_with_subnet_params(
-            pool_config,
-            subnet_test_id(0),
-            vec![(
-                1,
-                SubnetRecordBuilder::from(&committee)
-                    .with_dkg_interval_length(TEST_DKG_INTERVAL)
-                    .build(),
-            )],
-        )
+    fn assert_for_all_subnet_splitting_statuses(
+        pool: &mut TestConsensusPool,
+        mut test: impl FnMut(SubnetSplittingStatus, Height),
+    ) {
+        for status in [
+            not_scheduled_splitting(),
+            scheduled_splitting(),
+            done_splitting_different_subnet(),
+            done_splitting_same_subnet(),
+        ] {
+            let splitting_height = advance_to_splitting_interval(pool, status);
+            for test_height in splitting_height.get()..=splitting_height.get() + TEST_DKG_INTERVAL {
+                let test_height = Height::from(test_height);
+
+                test(status, test_height);
+            }
+        }
     }
 
     /// Signing should be skipped for heights covered by a `Scheduled` or `Done` with different
@@ -1746,11 +1769,7 @@ mod tests {
                     log,
                 );
 
-                let scheduled_split =
-                    advance_to_splitting_interval(&mut pool, scheduled_splitting());
-                for test_height in scheduled_split.get()..=scheduled_split.get() + TEST_DKG_INTERVAL
-                {
-                    let test_height = Height::from(test_height);
+                assert_for_all_subnet_splitting_statuses(&mut pool, |status, test_height| {
                     let shares = certifier.sign(
                         &cert_pool,
                         &[StateHashMetadata {
@@ -1760,59 +1779,37 @@ mod tests {
                         }],
                     );
 
-                    assert!(
-                        shares.is_empty(),
-                        "Expected no shares during subnet splitting, got: {shares:?}"
-                    );
-                }
-
-                let done_diff_subnet =
-                    advance_to_splitting_interval(&mut pool, done_splitting_different_subnet());
-                for test_height in
-                    done_diff_subnet.get()..=done_diff_subnet.get() + TEST_DKG_INTERVAL
-                {
-                    let test_height = Height::from(test_height);
-                    let shares = certifier.sign(
-                        &cert_pool,
-                        &[StateHashMetadata {
-                            height: test_height,
-                            hash: CryptoHashOfPartialState::from(CryptoHash(vec![1, 2, 3])),
-                            height_witness: Witness::new_for_testing_with_height(),
-                        }],
-                    );
-
-                    assert!(
-                        shares.is_empty(),
-                        "Expected no shares after Done splitting with different subnet ID, got: {shares:?}"
-                    );
-                }
-
-                let done_same_subnet =
-                    advance_to_splitting_interval(&mut pool, done_splitting_same_subnet());
-                for test_height in
-                    done_same_subnet.get()..=done_same_subnet.get() + TEST_DKG_INTERVAL
-                {
-                    let test_height = Height::from(test_height);
-                    let shares = certifier.sign(
-                        &cert_pool,
-                        &[StateHashMetadata {
-                            height: test_height,
-                            hash: CryptoHashOfPartialState::from(CryptoHash(vec![1, 2, 3])),
-                            height_witness: Witness::new_for_testing_with_height(),
-                        }],
-                    );
-
-                    assert!(
-                        !shares.is_empty(),
-                        "Expected shares after Done splitting with same subnet ID"
-                    );
-                }
+                    match status {
+                        SubnetSplittingStatus::Scheduled { .. } => {
+                            assert!(
+                                shares.is_empty(),
+                                "Expected no shares during subnet splitting, got: {shares:?}"
+                            );
+                        }
+                        SubnetSplittingStatus::Done { new_subnet_id }
+                            if new_subnet_id != subnet_test_id(0) =>
+                        {
+                            assert!(
+                                shares.is_empty(),
+                                "Expected no shares after Done splitting with different subnet ID, got: {shares:?}"
+                            );
+                        }
+                        SubnetSplittingStatus::NotScheduled
+                        | SubnetSplittingStatus::Done { .. } => {
+                            assert!(
+                                !shares.is_empty(),
+                                "Expected shares when not splitting or splitting with same subnet ID"
+                            );
+                        }
+                    }
+                });
             })
         })
     }
 
     /// An incoming share at a height inside a `Scheduled` or `Done` with different subnet ID
     /// splitting interval should be immediately invalidated rather than forwarded.
+    /// In a `Done` interval with same subnet ID, shares should be validated as normal.
     #[test]
     fn test_validate_share_handles_invalid_during_scheduled_subnet_splitting() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -1843,60 +1840,53 @@ mod tests {
                     log,
                 );
 
-                let scheduled_split =
-                    advance_to_splitting_interval(&mut pool, scheduled_splitting());
-                for test_height in scheduled_split.get()..=scheduled_split.get() + TEST_DKG_INTERVAL
-                {
-                    let test_height = Height::from(test_height);
+                assert_for_all_subnet_splitting_statuses(&mut pool, |status, test_height| {
                     let content = gen_content(test_height);
                     let share = CertificationShare {
                         height: test_height,
                         height_witness: Witness::new_for_testing_with_height(),
                         signed: Signed {
-                            content: content.clone(),
+                            content,
                             signature: ThresholdSignatureShare::fake(node_test_id(1)),
                         },
                     };
 
                     let result = certifier.validate_share(&cert_pool, &share);
-
-                    assert_eq!(
-                        result,
-                        Some(ChangeAction::HandleInvalid(
-                            CertificationMessage::CertificationShare(share),
-                            "Subnet splitting in progress".to_string(),
-                        )),
-                        "Expected HandleInvalid during subnet splitting"
-                    );
-                }
-
-                let done_diff_subnet =
-                    advance_to_splitting_interval(&mut pool, done_splitting_different_subnet());
-                for test_height in
-                    done_diff_subnet.get()..=done_diff_subnet.get() + TEST_DKG_INTERVAL
-                {
-                    let test_height = Height::from(test_height);
-                    let content = gen_content(test_height);
-                    let share = CertificationShare {
-                        height: test_height,
-                        height_witness: Witness::new_for_testing_with_height(),
-                        signed: Signed {
-                            content: content.clone(),
-                            signature: ThresholdSignatureShare::fake(node_test_id(1)),
-                        },
-                    };
-
-                    let result = certifier.validate_share(&cert_pool, &share);
-
-                    assert_eq!(
-                        result,
-                        Some(ChangeAction::HandleInvalid(
-                            CertificationMessage::CertificationShare(share),
-                            "Subnet splitting in progress".to_string(),
-                        )),
-                        "Expected HandleInvalid during subnet splitting"
-                    );
-                }
+                    match status {
+                        SubnetSplittingStatus::Scheduled { .. } => {
+                            assert_eq!(
+                                result,
+                                Some(ChangeAction::HandleInvalid(
+                                    CertificationMessage::CertificationShare(share),
+                                    "Subnet splitting in progress".to_string(),
+                                )),
+                                "Expected HandleInvalid during subnet splitting"
+                            );
+                        }
+                        SubnetSplittingStatus::Done { new_subnet_id }
+                            if new_subnet_id != subnet_test_id(0) =>
+                        {
+                            assert_eq!(
+                                result,
+                                Some(ChangeAction::HandleInvalid(
+                                    CertificationMessage::CertificationShare(share),
+                                    "Subnet splitting in progress".to_string(),
+                                )),
+                                "Expected HandleInvalid after Done splitting with different subnet ID"
+                            );
+                        }
+                        SubnetSplittingStatus::NotScheduled
+                        | SubnetSplittingStatus::Done { .. } => {
+                            assert_eq!(
+                                result,
+                                Some(ChangeAction::MoveToValidated(
+                                    CertificationMessage::CertificationShare(share)
+                                )),
+                                "Expected MoveToValidated when not splitting or splitting with same subnet ID"
+                            );
+                        }
+                    }
+                });
             })
         })
     }
@@ -1927,58 +1917,26 @@ mod tests {
                     log,
                 );
 
-                let scheduled_split =
-                    advance_to_splitting_interval(&mut pool, scheduled_splitting());
-                for test_height in scheduled_split.get()..=scheduled_split.get() + TEST_DKG_INTERVAL
-                {
-                    let test_height = Height::from(test_height);
+                assert_for_all_subnet_splitting_statuses(&mut pool, |_status, test_height| {
                     let content = gen_content(test_height);
                     let cert = Certification {
                         height: test_height,
                         height_witness: Some(Witness::new_for_testing_with_height()),
                         signed: Signed {
-                            content: content.clone(),
+                            content,
                             signature: ThresholdSignature::fake(),
                         },
                     };
 
                     let result = certifier.validate_certification(&cert);
-
                     assert_eq!(
                         result,
                         Some(ChangeAction::MoveToValidated(
                             CertificationMessage::Certification(cert)
                         )),
-                        "Expected MoveToValidated even during subnet splitting"
+                        "Expected MoveToValidated whether or not subnet splitting is in progress"
                     );
-                }
-
-                let done_diff_subnet =
-                    advance_to_splitting_interval(&mut pool, done_splitting_different_subnet());
-                for test_height in
-                    done_diff_subnet.get()..=done_diff_subnet.get() + TEST_DKG_INTERVAL
-                {
-                    let test_height = Height::from(test_height);
-                    let content = gen_content(test_height);
-                    let cert = Certification {
-                        height: test_height,
-                        height_witness: Some(Witness::new_for_testing_with_height()),
-                        signed: Signed {
-                            content: content.clone(),
-                            signature: ThresholdSignature::fake(),
-                        },
-                    };
-
-                    let result = certifier.validate_certification(&cert);
-
-                    assert_eq!(
-                        result,
-                        Some(ChangeAction::MoveToValidated(
-                            CertificationMessage::Certification(cert)
-                        )),
-                        "Expected MoveToValidated even during subnet splitting"
-                    );
-                }
+                });
             })
         })
     }
