@@ -12,9 +12,8 @@ use ic_types::{
         CanisterHttpResponseProof, CanisterHttpResponseReceiptShare, CanisterHttpResponseShare,
         CanisterHttpResponseSignature, CanisterHttpResponseWithConsensus,
     },
-    crypto::{Signed, crypto_hash},
+    crypto::crypto_hash,
     messages::CallbackId,
-    signature::BasicSignature,
 };
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
@@ -76,33 +75,38 @@ pub(crate) fn check_response_consistency(
 
 /// Verifies every per-signer basic signature in the aggregated proof.
 ///
-/// Each signer is expected to have signed a
-/// [`CanisterHttpResponseReceiptShare`] consisting of the shared
-/// [`CanisterHttpResponseMetadata`] and that signer's own
-/// [`CanisterHttpPaymentReceipt`]. The proof is considered
-/// valid only if each individual basic signature verifies against the
-/// reconstructed per-signer message.
+/// Each signer signs its own [`CanisterHttpResponseReceiptShare`]: the
+/// shared [`CanisterHttpResponseMetadata`] combined with that signer's own
+/// [`CanisterHttpPaymentReceipt`]. Since the signed messages differ per
+/// signer, the whole batch is verified in one call with the multi-message
+/// batch verification, which is cheaper than verifying each signature
+/// individually.
 pub(crate) fn verify_aggregate_proof(
     proof: &CanisterHttpResponseProof,
     consensus_registry_version: RegistryVersion,
     crypto: &dyn ConsensusCrypto,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    for (signer, sig) in &proof.signatures {
-        let signed_share = Signed {
-            content: CanisterHttpResponseReceiptShare {
-                metadata: proof.metadata.clone(),
-                payment_receipt: sig.payment_receipt.clone(),
-            },
-            signature: BasicSignature {
-                signature: sig.signature.clone(),
-                signer: *signer,
-            },
-        };
-        crypto
-            .verify(&signed_share, consensus_registry_version)
-            .map_err(|err| InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)))?;
-    }
-    Ok(())
+    // The reconstructed per-signer messages must outlive `inputs`, which
+    // only borrows them.
+    let messages: Vec<CanisterHttpResponseReceiptShare> = proof
+        .signatures
+        .values()
+        .map(|sig| CanisterHttpResponseReceiptShare {
+            metadata: proof.metadata.clone(),
+            payment_receipt: sig.payment_receipt.clone(),
+        })
+        .collect();
+
+    let inputs: Vec<_> = proof
+        .signatures
+        .iter()
+        .zip(messages.iter())
+        .map(|((signer, sig), message)| (*signer, &sig.signature, message))
+        .collect();
+
+    crypto
+        .verify_basic_sig_batch_multi_msg(&inputs, consensus_registry_version)
+        .map_err(|err| InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)))
 }
 
 /// Validates a single [`FlexibleCanisterHttpResponseWithProof`].
