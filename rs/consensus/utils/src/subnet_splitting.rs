@@ -34,15 +34,15 @@ pub fn get_status(
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
     last_summary_block_registry_version: RegistryVersion,
-    current_registry_version: RegistryVersion,
+    looked_up_registry_version: RegistryVersion,
 ) -> Result<Status, StatusError> {
     let versioned_record = registry_client
-        .get_cup_contents(subnet_id, current_registry_version)
-        .map_err(|err| StatusError::FailedToGetCatchUpContents(current_registry_version, err))?;
+        .get_cup_contents(subnet_id, looked_up_registry_version)
+        .map_err(|err| StatusError::FailedToGetCatchUpContents(looked_up_registry_version, err))?;
 
     let Some(contents) = versioned_record.value else {
         return Err(StatusError::CatchUpContentsMissingInRegistry(
-            current_registry_version,
+            looked_up_registry_version,
         ));
     };
 
