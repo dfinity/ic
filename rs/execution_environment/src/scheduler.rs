@@ -891,6 +891,7 @@ impl SchedulerImpl {
                 canister.system_state.compute_allocation = ComputeAllocation::zero();
                 canister.system_state.memory_allocation = MemoryAllocation::default();
                 canister.system_state.clear_canister_history();
+                canister.remove_log();
                 // Burn the remaining balance of the canister.
                 canister
                     .system_state

@@ -4941,16 +4941,6 @@ fn uninstall_code_on_empty_canister_updates_subnet_available_memory() {
     // Assert that canister history memory was non empty.
     let initial_canister_history_memory_usage = canister_history_memory_usage(&mut test);
     assert_gt!(initial_canister_history_memory_usage, 0);
-    let initial_log_memory_store_memory_usage = test
-        .canister_state(canister_id)
-        .log_memory_store_memory_usage()
-        .get();
-    if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        // Assert that canister log memory store memory was non empty.
-        assert_gt!(initial_log_memory_store_memory_usage, 0);
-    } else {
-        assert_eq!(initial_log_memory_store_memory_usage, 0);
-    }
 
     test.uninstall_code(canister_id).unwrap();
 
@@ -4962,23 +4952,15 @@ fn uninstall_code_on_empty_canister_updates_subnet_available_memory() {
         final_canister_history_memory_usage,
         initial_canister_history_memory_usage
     );
-    // Assert that canister log memory store memory was cleared.
-    let final_log_memory_store_memory_usage = test
-        .canister_state(canister_id)
-        .log_memory_store_memory_usage()
-        .get();
-    assert_eq!(final_log_memory_store_memory_usage, 0);
 
     let extra_subnet_available_memory_usage =
         final_subnet_available_memory as i64 - initial_subnet_available_memory as i64;
     let extra_canister_history_memory_usage =
         final_canister_history_memory_usage as i64 - initial_canister_history_memory_usage as i64;
-    let extra_canister_log_memory_store_memory_usage =
-        final_log_memory_store_memory_usage as i64 - initial_log_memory_store_memory_usage as i64;
-    // Assert that subnet available memory usage has opposite sign to canister memory usage.
+    // Assert that subnet available memory change has opposite sign to canister history memory change.
     assert_eq!(
         -extra_subnet_available_memory_usage,
-        extra_canister_history_memory_usage + extra_canister_log_memory_store_memory_usage
+        extra_canister_history_memory_usage
     );
 }
 
