@@ -1732,7 +1732,7 @@ impl StateManagerImpl {
     fn observe_num_loaded_wasm_files(&self, state: &ReplicatedState) {
         let num_loaded_canister_wasm = state
             .canister_states()
-            .iter()
+            .all_iter()
             .filter_map(|(_, canister)| canister.execution_state.as_ref())
             .filter(|execution_state| {
                 execution_state.wasm_binary.binary.module_loading_status()
@@ -1742,7 +1742,7 @@ impl StateManagerImpl {
 
         let num_loaded_snapshot_wasm: usize = state
             .canister_states()
-            .values()
+            .all_values()
             .map(|canister| {
                 canister
                     .canister_snapshots
@@ -3415,6 +3415,12 @@ impl StateManager for StateManagerImpl {
                 flush_checkpoint_ops_and_page_maps(&mut state, height, &self.tip_channel);
             }
         }
+
+        // Re-establish strict hot/cold partitioning of canister states. Mutations
+        // during the round may have left canisters that are now cold in `hot`. The
+        // partition must be canonical at checkpoint time so that a replica continuing
+        // through a checkpoint and one (re)starting from it agree on the partition.
+        state.repartition_canister_states();
 
         let assert_tip_is_none = |states: &SharedState| {
             // The following assert validates that we don't have two clients
