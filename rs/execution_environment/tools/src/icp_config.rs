@@ -2,7 +2,7 @@ use clap::{Arg, ArgMatches};
 use eyre::Result;
 use ic_config::{
     embedders, execution_environment,
-    subnet_config::{CyclesAccountManagerConfig, SchedulerConfig},
+    subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetSecurity},
 };
 use serde_json::json;
 
@@ -50,14 +50,14 @@ fn icp_config_as_json(version: &str) -> serde_json::Value {
     let execution = execution_environment::Config::default();
 
     let application = json_config(
-        &CyclesAccountManagerConfig::application_subnet(),
+        &CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None),
         &SchedulerConfig::application_subnet(),
         &embedder,
         &execution,
     );
 
     let verified_application = json_config(
-        &CyclesAccountManagerConfig::verified_application_subnet(),
+        &CyclesAccountManagerConfig::verified_application_subnet(SubnetSecurity::None),
         &SchedulerConfig::verified_application_subnet(),
         &embedder,
         &execution,
