@@ -59,7 +59,7 @@ pub struct NNSRecoveryFailoverNodesArgs {
     #[clap(long, value_parser=crate::util::subnet_id_from_str)]
     pub subnet_id: SubnetId,
 
-    /// Replica version to start the new NNS with (has to be blessed by parent NNS)
+    /// Replica version to start the new NNS with (has to be elected by parent NNS)
     #[clap(long)]
     pub replica_version: Option<ReplicaVersion>,
 
@@ -212,7 +212,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 if self.params.replica_version.is_none() {
                     self.params.replica_version = read_optional(
                         &self.logger,
-                        "New NNS version (current unassigned version or other version blessed by parent NNS): ",
+                        "New NNS version (current unassigned version or other version elected by parent NNS): ",
                     );
                 }
                 if self.params.replacement_nodes.is_none() {

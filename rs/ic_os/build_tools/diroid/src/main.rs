@@ -4,7 +4,7 @@ use std::io::{self, BufRead, Write};
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
 use walkdir::{DirEntryExt, WalkDir};
 
@@ -33,14 +33,13 @@ fn main() -> Result<()> {
 
         let metadata = entry.metadata()?;
 
-        // fakeroot does not track /, so special case this ownership
-        let (uid, gid) = if entry.path() == args.input_dir {
-            &(0, 0)
-        } else {
-            fakeroot_map.get(&entry.ino()).context(format!(
-                "fakeroot map does not contain inode: '{}'",
-                entry.ino()
-            ))?
+        let (uid, gid) = match fakeroot_map.get(&entry.ino()) {
+            Some(v) => v,
+            // fakeroot does not track /, so special case this ownership
+            None if entry.path() == args.input_dir => &(0, 0),
+            None => {
+                bail!("fakeroot map does not contain inode: '{}'", entry.ino());
+            }
         };
 
         writeln!(

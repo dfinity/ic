@@ -8,7 +8,7 @@ genrule(
     outs = ["OVMF_SEV.fd"],
     cmd = """
         REPOSITORY=https://github.com/tianocore/edk2.git
-        COMMIT=6951dfe7d59d144a3a980bd7eda699db2d8554ac # edk2-stable202505
+        COMMIT=b7a715f7c03c45c6b4575bf88596bfd79658b8ce # edk2-stable202602
 
         out="$$(realpath $@)"
         workdir="$$(mktemp -d)"
