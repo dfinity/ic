@@ -72,6 +72,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         http_outcalls_executed: 0,
         heartbeats_and_global_timers_executed: 0,
         log_memory_store_migrated: LOG_MEMORY_STORE_FEATURE_ENABLED,
+        log_memory_store_persistent_next_idx: 0,
     }
 }
 
