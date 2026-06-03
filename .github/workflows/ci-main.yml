@@ -267,7 +267,7 @@ jobs:
             test_targets="$HOME/.cache/bazel-targets/test-targets"
 
             # Only run system-tests:
-            grep "$test_targets" '//rs/tests/' > ./test_targets
+            grep '//rs/tests/' "$test_targets" > ./test_targets
 
             # Run the non-colocated versions of system-tests as the colocated versions don't make sense with the `local` backend:
             sed -i 's/_colocate$//' ./test_targets
