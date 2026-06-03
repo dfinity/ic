@@ -244,7 +244,7 @@ impl ShareAggregator {
             }
         };
 
-        let mut shares = pool
+        let shares = pool
             .get_catch_up_package_shares(block.height())
             .collect::<Vec<_>>();
 
@@ -253,7 +253,7 @@ impl ShareAggregator {
         if shares.len() < threshold {
             return Ok(None);
         }
-        let share_content = shares.pop().unwrap().content;
+        let share_content = shares.first().unwrap().content.clone();
 
         let subnet_splitting_status = block
             .payload
