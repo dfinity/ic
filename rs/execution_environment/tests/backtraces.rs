@@ -1,5 +1,8 @@
 use candid::Encode;
-use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
+use ic_config::{
+    execution_environment::Config as HypervisorConfig,
+    subnet_config::{SubnetConfig, SubnetSecurity},
+};
 use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, LogVisibilityV2};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig};
@@ -40,7 +43,7 @@ fn env_with_backtrace_canister_and_visibility(
 
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
-            SubnetConfig::new(subnet_type),
+            SubnetConfig::new(subnet_type, SubnetSecurity::None),
             hypervisor_config,
         )))
         .with_subnet_type(subnet_type)

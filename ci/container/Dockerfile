@@ -24,10 +24,8 @@ RUN rm -f /etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf
 ## The image carries two users so the runtime UID can match the host's:
 ## - ubuntu (1000): DFINITY devenv
 ## - buildifier (1001): CI runners and namespace.so devboxes
-## User convention below:
-## - Build tools (needed regardless of runtime user): installed as root.
-## - Dev tools (convenience only): installed as ubuntu under ~ubuntu.
-##   buildifier has read access via its `ubuntu` supplementary group.
+## All tools are installed as root and usable by all. The extra users are only
+## there for convenience to avoid running the image as root.
 RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
     # both buildifier and ubuntu users need to be able to access root permissions
     echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
@@ -68,19 +66,14 @@ RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}
 ARG motoko_version=0.16.3
 RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
-# Install AFLplusplus for fuzzing
-# LLVM is only a build time dependency now since we link the fuzzer lib from the hermetic toolchain directly
+# Install AFLplusplus (`make install` puts the executables in /usr/local/bin/)
 ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c
 ARG LLVM_VERSION=21
-RUN mkdir -p /afl && \
-    chown -R ubuntu:ubuntu /afl && \
+RUN git clone --depth=1 --branch=${AFLPLUSPLUS_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git /afl && \
     cd /afl && \
-    git clone --depth=1 --branch=${AFLPLUSPLUS_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git && \
-    cd AFLplusplus && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-${LLVM_VERSION} CC=/usr/bin/clang-${LLVM_VERSION} CXX=/usr/bin/clang++-${LLVM_VERSION} make all && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-${LLVM_VERSION} CC=/usr/bin/clang-${LLVM_VERSION} CXX=/usr/bin/clang++-${LLVM_VERSION} make install && \
-    mv afl-fuzz afl-showmap  /afl && \
-    cd .. && rm -rf AFLplusplus
+    rm -rf /afl
 
 # Install rustup proxies system-wide as root:
 # - Binaries land in /opt/cargo/bin/ owned by root, world-readable.
@@ -94,7 +87,6 @@ RUN curl --fail https://sh.rustup.rs -sSf \
       sh -s -- -y --default-toolchain none --no-modify-path \
     && rm -rf /opt/rustup
 
-USER root
 WORKDIR /
 CMD ["/bin/bash"]
 
@@ -103,9 +95,6 @@ FROM base as build
 USER buildifier
 
 FROM base as dev
-
-# Add zshrc generated from zsh-newuser-install (option 2)
-COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
 
 # Add GitHub CLI repository to get the latest version
 RUN mkdir -p -m 755 /etc/apt/keyrings \
@@ -121,5 +110,8 @@ COPY ${PACKAGE_DEV_FILE} /tmp/
 RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_DEV_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_DEV_FILE)"
+
+# Add zshrc generated from zsh-newuser-install (option 2)
+COPY ./ci/container/files/zshrc /etc/zsh/zshrc
 
 USER ubuntu

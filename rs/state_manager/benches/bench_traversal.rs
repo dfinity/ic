@@ -238,7 +238,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
         let mut state = get_initial_state(/*num_canisters=*/ 100_u64, 0);
         state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
         assert_eq!(state.canister_states().len(), 100);
-        for canister in state.canisters_iter_mut() {
+        state.canisters_for_each_mut(|_id, canister| {
             Arc::make_mut(canister)
                 .execution_state
                 .as_mut()
@@ -246,7 +246,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
                 .metadata = WasmMetadata::new(btreemap! {
                 "large_section".to_string() => CustomSection::new(CustomSectionType::Public, vec![1_u8; 1 << 20]),
             });
-        }
+        });
         state
     };
 

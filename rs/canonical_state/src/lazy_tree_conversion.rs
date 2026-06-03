@@ -8,14 +8,19 @@ use crate::{
     },
 };
 use LazyTree::Blob;
-use ic_canonical_state_tree_hash::lazy_tree::{Lazy, LazyFork, LazyTree, blob, fork, num, string};
-use ic_crypto_tree_hash::Label;
+use ic_canonical_state_tree_hash::{
+    hash_tree::HashTree,
+    lazy_tree::{
+        Lazy, LazyFork, LazyTree, blob, fork, materialize::materialize_partial, num, string,
+    },
+};
+use ic_crypto_tree_hash::{Label, Witness, sparse_labeled_tree_from_paths};
 use ic_error_types::ErrorCode;
 use ic_error_types::RejectCode;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    ExecutionState, ReplicatedState, Stream,
+    CanisterStates, ExecutionState, ReplicatedState, Stream,
     canister_state::CanisterState,
     metadata_state::{
         ApiBoundaryNodeEntry, IngressHistoryState, StreamMap, SubnetMetrics, SubnetTopology,
@@ -868,20 +873,52 @@ fn api_boundary_nodes_as_tree(
 }
 
 fn canisters_as_tree(
-    canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
+    canisters: &CanisterStates,
     certification_version: CertificationVersion,
 ) -> LazyTree<'_> {
-    fork(MapTransformFork {
-        map: canisters,
-        map_filter: NoFilter,
+    fork(CanisterStatesFork {
+        canisters,
         certification_version,
-        mk_tree: |_canister_id, canister, certification_version| {
+    })
+}
+
+/// A `LazyFork` view of a [`CanisterStates`].
+///
+/// Iterates over the merged hot+cold pools in `CanisterId` order, producing the
+/// same `LazyTree` shape that a plain `BTreeMap` + `MapTransformFork` would.
+#[derive(Clone)]
+struct CanisterStatesFork<'a> {
+    canisters: &'a CanisterStates,
+    certification_version: CertificationVersion,
+}
+
+impl<'a> LazyFork<'a> for CanisterStatesFork<'a> {
+    fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
+        let k = CanisterId::from_label(label.as_bytes())?;
+        self.canisters.get(&k).map(|canister| {
             fork(CanisterFork {
                 canister,
-                version: certification_version,
+                version: self.certification_version,
             })
-        },
-    })
+        })
+    }
+
+    fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
+        Box::new(self.canisters.all_keys().map(|k| k.to_label()))
+    }
+
+    fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + '_> {
+        let version = self.certification_version;
+        Box::new(
+            self.canisters
+                .all_iter()
+                .map(move |(k, canister)| (k.to_label(), fork(CanisterFork { canister, version }))),
+        )
+    }
+
+    fn len(&self) -> usize {
+        self.canisters.len()
+    }
 }
 
 fn subnets_as_tree<'a>(
@@ -990,4 +1027,14 @@ pub fn subnet_type_as_string(subnet_type: SubnetType) -> &'static str {
 pub fn state_height_as_tree(height: &Height) -> LazyTree<'_> {
     let metadata_lazy_tree = fork(FiniteMap::default().with_tree(HEIGHT_LABEL, num(height.get())));
     fork(FiniteMap::default().with_tree(METADATA_LABEL, metadata_lazy_tree))
+}
+
+pub fn compute_state_height_witness(lazy_tree: &LazyTree, hash_tree: &HashTree) -> Witness {
+    let paths = vec![vec![METADATA_LABEL.into(), HEIGHT_LABEL.into()].into()];
+    let labeled_tree =
+        sparse_labeled_tree_from_paths(&paths).expect("Failed to compute labeled tree for height");
+    let partial_tree = materialize_partial(lazy_tree, &labeled_tree, None);
+    hash_tree
+        .witness::<Witness>(&partial_tree)
+        .expect("Failed to compute witness for state height")
 }

@@ -4,7 +4,7 @@ use criterion::{BatchSize, BenchmarkGroup, Criterion, criterion_group, criterion
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_config::execution_environment::{Config as ExecutionConfig, LOG_MEMORY_STORE_FEATURE};
 use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::SubnetConfig;
+use ic_config::subnet_config::{SubnetConfig, SubnetSecurity};
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder, FetchCanisterLogsRequest,
     LogVisibilityV2, Payload,
@@ -70,7 +70,7 @@ fn setup_fetch_bench(
 
     let subnet_type = SubnetType::Application;
     let config = StateMachineConfig::new(
-        SubnetConfig::new(subnet_type),
+        SubnetConfig::new(subnet_type, SubnetSecurity::None),
         ExecutionConfig {
             replicated_inter_canister_log_fetch: FlagStatus::Enabled,
             log_memory_store_feature: LOG_MEMORY_STORE_FEATURE,

@@ -26,7 +26,7 @@ use ic_config::{
         SUBNET_CALLBACK_SOFT_LIMIT, SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
     },
     flag_status::FlagStatus,
-    subnet_config::{CANISTER_CREATION_FEE, SchedulerConfig},
+    subnet_config::{CANISTER_CREATION_FEE, SchedulerConfig, SubnetSecurity},
 };
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::{
@@ -5626,6 +5626,56 @@ fn update_settings_heap_delta_log_memory_limit_increased() {
     );
 }
 
+#[test]
+fn update_settings_fails_when_heap_delta_rate_limited() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const MIB: u64 = 1024 * 1024;
+    const LIMIT: NumBytes = NumBytes::new(10 * MIB);
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_heap_delta_rate_limit(LIMIT)
+        .with_log_memory_store_feature_enabled()
+        .build();
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(2 * MIB)
+                .build(),
+        )
+        .unwrap();
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    // Ensure the log store is non-empty so resize would rewrite log data.
+    const MSG: &[u8] = &[b'x'; 2100];
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(MSG).reply().build(),
+    )
+    .unwrap();
+
+    test.canister_state_mut(canister_id)
+        .scheduler_state
+        .heap_delta_debit = LIMIT;
+
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(MIB)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, args)
+        .unwrap_err()
+        .assert_contains(
+            ErrorCode::CanisterHeapDeltaRateLimited,
+            &format!("Canister {canister_id} is heap delta rate limited: current delta debit is 10485760, but limit is 10485760"),
+        );
+}
+
 // Canister creation without log_memory_limit → first-time log store allocation
 // must not contribute to heap delta.
 #[test]
@@ -5835,7 +5885,8 @@ fn empty_canister_memory_usage() {
 /// This test checks that the wasm chunk store is accounted for then.
 #[test]
 fn chunk_store_counts_against_subnet_memory_in_initial_round_computation() {
-    let subnet_config = ic_config::subnet_config::SubnetConfig::new(SubnetType::Application);
+    let subnet_config =
+        ic_config::subnet_config::SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     // Initialize subnet with enough memory for one chunk but not two.
     assert_lt!(EMPTY_CANISTER_MEMORY_USAGE, wasm_chunk_store::chunk_size());
     let hypervisor_config = Config {
