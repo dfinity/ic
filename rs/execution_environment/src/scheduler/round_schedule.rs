@@ -7,11 +7,11 @@ use ic_base_types::{CanisterId, NumBytes};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::{ReplicaLogger, error};
 use ic_replicated_state::canister_state::NextExecution;
-use ic_replicated_state::{CanisterPriority, CanisterState, ReplicatedState};
+use ic_replicated_state::{CanisterPriority, CanisterState, CanisterStates, ReplicatedState};
 use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, NumInstructions};
 use num_traits::SaturatingSub;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -167,11 +167,8 @@ impl IterationSchedule {
     #[allow(clippy::type_complexity)]
     pub fn partition_canisters_to_cores(
         &self,
-        mut canisters: BTreeMap<CanisterId, Arc<CanisterState>>,
-    ) -> (
-        Vec<Vec<Arc<CanisterState>>>,
-        BTreeMap<CanisterId, Arc<CanisterState>>,
-    ) {
+        mut canisters: CanisterStates,
+    ) -> (Vec<Vec<Arc<CanisterState>>>, CanisterStates) {
         let mut canisters_partitioned_by_cores = vec![vec![]; self.scheduler_cores];
 
         // Completely segregate long and new executions across cores. Opportunistically
@@ -304,10 +301,10 @@ impl RoundSchedule {
 
         // Collect all active canisters and their next executions.
         //
-        // Unfortunately, not all active canisters are in the subnet schedule, so we
-        // must iterate over all canister states to find them.
+        // Not all active canisters will be in the subnet schedule, iterate over hot
+        // canister states to find them.
         let mut schedule: Vec<CanisterRoundState> = canister_states
-            .iter()
+            .hot_iter()
             .filter_map(|(canister_id, canister)| {
                 // Record and filter out rate limited canisters.
                 if canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
@@ -601,7 +598,7 @@ impl RoundSchedule {
         let mut total_ca = ZERO;
         let mut compute_allocations = Vec::with_capacity(subnet_schedule.len());
         for (canister_id, canister_priority) in subnet_schedule.iter_mut() {
-            let canister = canister_states.get_mut(canister_id).unwrap();
+            let canister = canister_states.get(canister_id).unwrap();
             let compute_allocation = from_ca(canister.compute_allocation());
             canister_priority.accumulated_priority += compute_allocation;
 
@@ -705,7 +702,9 @@ impl RoundSchedule {
     ) {
         let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
         for (canister_id, _) in subnet_schedule.iter() {
-            let Some(canister) = canister_states.get_mut(canister_id) else {
+            // `get` is significantly cheaper than `get_mut`. And few canisters will have
+            // heap delta or install code debits.
+            let Some(canister) = canister_states.get(canister_id) else {
                 continue;
             };
 
@@ -713,20 +712,20 @@ impl RoundSchedule {
             metrics
                 .canister_heap_delta_debits
                 .observe(heap_delta_debit as f64);
+            let install_code_debit = canister.scheduler_state.install_code_debit.get();
+            metrics
+                .canister_install_code_debits
+                .observe(install_code_debit as f64);
+
             if heap_delta_debit > 0 {
-                let canister = Arc::make_mut(canister);
+                let canister = Arc::make_mut(canister_states.get_mut(canister_id).unwrap());
                 canister.scheduler_state.heap_delta_debit = canister
                     .scheduler_state
                     .heap_delta_debit
                     .saturating_sub(&self.config.heap_delta_rate_limit);
             }
-
-            let install_code_debit = canister.scheduler_state.install_code_debit.get();
-            metrics
-                .canister_install_code_debits
-                .observe(install_code_debit as f64);
             if install_code_debit > 0 {
-                let canister = Arc::make_mut(canister);
+                let canister = Arc::make_mut(canister_states.get_mut(canister_id).unwrap());
                 canister.scheduler_state.install_code_debit = canister
                     .scheduler_state
                     .install_code_debit

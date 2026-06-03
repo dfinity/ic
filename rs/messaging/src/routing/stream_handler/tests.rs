@@ -1936,7 +1936,13 @@ fn check_stream_handler_generated_reject_signal_queue_full() {
 fn check_stream_handler_generated_reject_signal_out_of_memory() {
     check_stream_handler_generated_reject_signal_impl(
         0, // `available_guaranteed_response_memory`
-        &|_| {},
+        // Touch the canister (no mutation) so it ends up in the `hot` pool.
+        // `induct_stream_slices` will do the same when it looks up the canister to try
+        // to deliver the message; without this, the expected and inducted states would
+        // differ in their hot/cold partition.
+        &|state| {
+            state.canister_state_make_mut(&LOCAL_CANISTER).unwrap();
+        },
         RejectReason::OutOfMemory,
     );
 }

@@ -715,8 +715,9 @@ impl ReplicatedStateInvariants {
 
     /// Checks DTS invariants at the end of a round.
     fn check_dts(&self, state: &ReplicatedState, is_checkpoint_round: bool) {
+        // Only hot canisters may have non-empty task queues.
         let canisters_with_tasks = state
-            .canisters_iter()
+            .hot_canisters_iter()
             .filter(|canister| !canister.system_state.task_queue.is_empty());
 
         for canister in canisters_with_tasks {
@@ -734,14 +735,11 @@ impl ReplicatedStateInvariants {
         height: Height,
         logger: &ReplicaLogger,
     ) {
-        let mut total_canister_history_memory_usage = NumBytes::new(0);
-        let mut total_canister_memory_allocated_bytes = NumBytes::new(0);
-        for canister in state.canisters_iter() {
-            total_canister_history_memory_usage += canister.canister_history_memory_usage();
-            total_canister_memory_allocated_bytes += canister
-                .memory_allocation()
-                .allocated_bytes(canister.memory_usage());
-        }
+        // `O(|hot canisters|)` thanks to `CanisterStates` maintaining precomputed stats
+        // for all cold canisters.
+        let canisters_memory = state.canister_states().memory_taken();
+        let total_canister_history_memory_usage = canisters_memory.canister_history();
+        let total_canister_memory_allocated_bytes = canisters_memory.execution();
         let subnet_memory_capacity = state
             .resource_limits()
             .maximum_state_size_or(self.default_subnet_memory_capacity);

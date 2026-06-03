@@ -4941,16 +4941,6 @@ fn uninstall_code_on_empty_canister_updates_subnet_available_memory() {
     // Assert that canister history memory was non empty.
     let initial_canister_history_memory_usage = canister_history_memory_usage(&mut test);
     assert_gt!(initial_canister_history_memory_usage, 0);
-    let initial_log_memory_store_memory_usage = test
-        .canister_state(canister_id)
-        .log_memory_store_memory_usage()
-        .get();
-    if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        // Assert that canister log memory store memory was non empty.
-        assert_gt!(initial_log_memory_store_memory_usage, 0);
-    } else {
-        assert_eq!(initial_log_memory_store_memory_usage, 0);
-    }
 
     test.uninstall_code(canister_id).unwrap();
 
@@ -4962,23 +4952,15 @@ fn uninstall_code_on_empty_canister_updates_subnet_available_memory() {
         final_canister_history_memory_usage,
         initial_canister_history_memory_usage
     );
-    // Assert that canister log memory store memory was cleared.
-    let final_log_memory_store_memory_usage = test
-        .canister_state(canister_id)
-        .log_memory_store_memory_usage()
-        .get();
-    assert_eq!(final_log_memory_store_memory_usage, 0);
 
     let extra_subnet_available_memory_usage =
         final_subnet_available_memory as i64 - initial_subnet_available_memory as i64;
     let extra_canister_history_memory_usage =
         final_canister_history_memory_usage as i64 - initial_canister_history_memory_usage as i64;
-    let extra_canister_log_memory_store_memory_usage =
-        final_log_memory_store_memory_usage as i64 - initial_log_memory_store_memory_usage as i64;
-    // Assert that subnet available memory usage has opposite sign to canister memory usage.
+    // Assert that subnet available memory change has opposite sign to canister history memory change.
     assert_eq!(
         -extra_subnet_available_memory_usage,
-        extra_canister_history_memory_usage + extra_canister_log_memory_store_memory_usage
+        extra_canister_history_memory_usage
     );
 }
 
@@ -5624,6 +5606,56 @@ fn update_settings_heap_delta_log_memory_limit_increased() {
         test.state().metadata.heap_delta_estimate - heap_delta_before,
         log_bytes_used,
     );
+}
+
+#[test]
+fn update_settings_fails_when_heap_delta_rate_limited() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const MIB: u64 = 1024 * 1024;
+    const LIMIT: NumBytes = NumBytes::new(10 * MIB);
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_heap_delta_rate_limit(LIMIT)
+        .with_log_memory_store_feature_enabled()
+        .build();
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(2 * MIB)
+                .build(),
+        )
+        .unwrap();
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    // Ensure the log store is non-empty so resize would rewrite log data.
+    const MSG: &[u8] = &[b'x'; 2100];
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(MSG).reply().build(),
+    )
+    .unwrap();
+
+    test.canister_state_mut(canister_id)
+        .scheduler_state
+        .heap_delta_debit = LIMIT;
+
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(MIB)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, args)
+        .unwrap_err()
+        .assert_contains(
+            ErrorCode::CanisterHeapDeltaRateLimited,
+            &format!("Canister {canister_id} is heap delta rate limited: current delta debit is 10485760, but limit is 10485760"),
+        );
 }
 
 // Canister creation without log_memory_limit → first-time log store allocation

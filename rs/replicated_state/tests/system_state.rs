@@ -5,7 +5,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::DEFAULT_QUEUE_CAPACITY;
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
-use ic_replicated_state::{ExecutionTask, InputQueueType, StateError, SystemState};
+use ic_replicated_state::{CanisterStates, ExecutionTask, InputQueueType, StateError, SystemState};
 use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::CanisterId;
@@ -16,7 +16,7 @@ use ic_types::messages::{
 use ic_types::methods::Callback;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types_cycles::Cycles;
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
 /// Figure out how many cycles a canister should have so that it can support the
 /// given amount of storage for the given amount of time, given the storage fee.
@@ -173,9 +173,11 @@ impl SystemStateFixture {
     /// number of expired callbacks.
     fn time_out_callbacks(&mut self, current_time: CoarseTime) -> (usize, Vec<StateError>) {
         let input_responses_before = self.system_state.queues().input_queues_response_count();
-        let (expired, errors) =
-            self.system_state
-                .time_out_callbacks(current_time, &CANISTER_ID, &BTreeMap::new());
+        let (expired, errors) = self.system_state.time_out_callbacks(
+            current_time,
+            &CANISTER_ID,
+            &CanisterStates::default(),
+        );
         let input_responses_after = self.system_state.queues().input_queues_response_count();
 
         assert_eq!(
