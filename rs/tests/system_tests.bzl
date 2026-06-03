@@ -42,7 +42,6 @@ def system_test(
         additional_colocate_tags = [],
         logs = True,
         vm_allocation_mode = None,
-        backend = None,
         **kwargs):
     """Declares a system-test.
 
@@ -93,15 +92,6 @@ def system_test(
         `"performanceOptimizedAllocation"`,
         `"minIntraDistanceLoadBalanceAllocation"` or `"distributeAcrossDcs"`.
         When None it defaults to `"minIntraDistanceLoadBalanceAllocation"`.
-      backend: optionally force a specific system-test backend. Must be one of:
-        * None (the default): respect the `//bazel:system_test_backend` flag,
-          which defaults to Farm but can be switched to the local
-          (libvirt-based) backend at build time without editing the
-          BUILD.bazel file (e.g. `bazel test ... --//bazel:system_test_backend=local`
-          or `--config=local_systest`).
-        * "local": force the local (libvirt-based) backend. Sets
-          `SYSTEM_TEST_BACKEND=local` in the test env.
-        * "farm": force the Farm backend regardless of the flag.
       **kwargs: additional arguments to pass to the rust_binary rule.
 
     Returns:
@@ -177,28 +167,6 @@ def system_test(
     extra_args_simple.extend(["--group-base-name", test_name])
     extra_args_colocated.extend(["--group-base-name", test_name + "_colocate"])
 
-    if backend != None and backend not in ["local", "farm"]:
-        fail("Invalid backend {}: must be None or one of {}".format(repr(backend), ["local", "farm"]))
-
-    # Runtime deps that are only needed when running on the local (libvirt-based)
-    # backend. The Local backend boots Universal-VMs and the Prometheus-VM from
-    # these locally-vendored images instead of fetching them from Farm.
-    _local_only_deps = {
-        image_name + "_PATH": image_path
-        for image_name, image_path in icos_images.items()
-    }
-    _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
-    _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
-
-    if backend == "local":
-        # Force the local backend regardless of the //bazel:system_test_backend flag.
-        env["SYSTEM_TEST_BACKEND"] = "local"
-        _runtime_deps |= _local_only_deps
-
-        # The Local backend does not run a Vector VM.
-        if "--no-logs" not in extra_args_simple:
-            extra_args_simple.append("--no-logs")
-
     # Convert _runtime_deps into environment variables + data dependencies
     env |= {
         name: "$(rootpath {})".format(dep)
@@ -258,43 +226,7 @@ def system_test(
     RUN_SCRIPT_RUNTIME_DEP_ENV_VARS = ";".join(_runtime_deps.keys())
     env["RUN_SCRIPT_RUNTIME_DEP_ENV_VARS"] = RUN_SCRIPT_RUNTIME_DEP_ENV_VARS
 
-    env["RUN_SCRIPT_VOLATILE_STATUS_PATH"] = "$(rootpath //bazel:volatile-status.txt)"
-    data.append("//bazel:volatile-status.txt")
-
-    simple_env = env | {
-        "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_simple),
-        "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath {})".format(test_driver_target),
-    }
-    simple_data = data
-
-    # When the test isn't forced onto a specific backend (backend = None), the
-    # backend is chosen at build time via the //bazel:system_test_backend flag.
-    # Running with `--//bazel:system_test_backend=local` (or `--config=local_systest`)
-    # switches the test onto the local (libvirt-based) backend without having to
-    # set `backend = "local"` in the BUILD.bazel file.
-    if backend == None:
-        local_dep_env = {
-            name: "$(rootpath {})".format(dep)
-            for name, dep in _local_only_deps.items()
-        }
-        local_args = extra_args_simple + ([] if "--no-logs" in extra_args_simple else ["--no-logs"])
-        local_env = simple_env | local_dep_env | {
-            "SYSTEM_TEST_BACKEND": "local",
-            "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(local_args),
-            "RUN_SCRIPT_RUNTIME_DEP_ENV_VARS": ";".join(_runtime_deps.keys() + _local_only_deps.keys()),
-        }
-        local_data_override = [dep for dep in _local_only_deps.values() if dep not in data]
-
-        # env is a dict attribute which does not support `+ select(...)`, so the
-        # whole dict is selected; data is a list attribute which does.
-        simple_env = select({
-            "//bazel:local_system_test_backend": local_env,
-            "//conditions:default": simple_env,
-        })
-        simple_data = data + select({
-            "//bazel:local_system_test_backend": local_data_override,
-            "//conditions:default": [],
-        })
+    tags = tags + ["system_test"]
 
     # The Farm backend needs sandbox network access, so it gets `requires-network`.
     # The local backend is the opposite: it creates its bridge/TAPs and boots VMs
@@ -304,23 +236,55 @@ def system_test(
     # `requires-network` is *absent*. With the tag present the test runs in the host
     # network namespace, where the user-namespaced sandbox process lacks effective
     # CAP_NET_ADMIN and bridge creation fails with
-    # `RTNETLINK answers: Operation not permitted`.
-    #
-    # `tags` is non-configurable and cannot depend on the selected backend, so:
-    #   * for `backend == "local"` (forced) we simply omit the tag here, and
-    #   * for the flag-selected path (`--config=local_systest`) the tag is stripped
-    #     via `--modify_execution_info` in `bazel/conf/.bazelrc.build`.
-    tags = tags + ["system_test"]
-    if backend != "local":
-        tags = tags + ["requires-network"]
+    #`RTNETLINK answers: Operation not permitted`.
+    farm_tags = tags + ["requires-network"]
+
+    env["RUN_SCRIPT_VOLATILE_STATUS_PATH"] = "$(rootpath //bazel:volatile-status.txt)"
+    data.append("//bazel:volatile-status.txt")
+
+    # Runtime deps that are only needed when running on the local (libvirt-based)
+    # backend. The Local backend boots Universal-VMs and the Prometheus-VM from
+    # these locally-vendored images instead of fetching them from Farm.
+    _local_only_deps = {
+        image_name + "_PATH": image_path
+        for image_name, image_path in icos_images.items()
+    }
+    _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
+    _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
+
+    local_dep_env = {
+        name: "$(rootpath {})".format(dep)
+        for name, dep in _local_only_deps.items()
+    }
+    local_args = [] if "--no-logs" in extra_args_simple else ["--no-logs"]
+
+    sh_test(
+        name = test_name + "_local",
+        srcs = ["//rs/tests:run_systest.sh"],
+        data = data + [dep for dep in _local_only_deps.values() if dep not in data],
+        env = env | local_dep_env | {
+            "SYSTEM_TEST_BACKEND": "local",
+            "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_simple + local_args),
+            "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath {})".format(test_driver_target),
+            "RUN_SCRIPT_RUNTIME_DEP_ENV_VARS": ";".join(_runtime_deps.keys() + _local_only_deps.keys()),
+        },
+        env_inherit = env_inherit,
+        tags = tags + ["manual", "local_system_test"],
+        target_compatible_with = ["@platforms//os:linux"],
+        timeout = test_timeout,
+        visibility = visibility,
+    )
 
     sh_test(
         name = test_name,
         srcs = ["//rs/tests:run_systest.sh"],
-        data = simple_data,
-        env = simple_env,
+        data = data,
+        env = env | {
+            "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_simple),
+            "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath {})".format(test_driver_target),
+        },
         env_inherit = env_inherit,
-        tags = tags + (["manual"] if "colocate" in tags else []),
+        tags = farm_tags + (["manual"] if "colocate" in tags else []),
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,
@@ -344,7 +308,7 @@ def system_test(
                   "COLOCATED_TEST_DRIVER_VM_RESOURCES": json.encode(colocated_test_driver_vm_resources),
               } | ({"COLOCATED_TEST_DRIVER_VM_ENABLE_IPV4": "1"} if colocated_test_driver_vm_enable_ipv4 else {}) |
               ({"COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT": "1"} if colocated_test_driver_vm_forward_ssh_agent else {}),
-        tags = tags + (["manual"] if not "colocate" in tags else []) + additional_colocate_tags,
+        tags = farm_tags + (["manual"] if not "colocate" in tags else []) + additional_colocate_tags,
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,
