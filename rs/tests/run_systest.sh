@@ -16,7 +16,7 @@ export -n \
 # RUN_SCRIPT_ICOS_IMAGES:
 # For every ic-os image specified, first ensure it's in remote
 # storage, then export its download URL and HASH as environment variables.
-if [ "${SYSTEM_TEST_INFRA:-}" != "local" ] && [ -n "${RUN_SCRIPT_ICOS_IMAGES:-}" ]; then
+if [ "${SYSTEM_TEST_BACKEND:-}" != "local" ] && [ -n "${RUN_SCRIPT_ICOS_IMAGES:-}" ]; then
     # split the ";"-delimited list of "env_prefix:filepath;env_prefix2:filepath2;..."
     # into an array
     IFS=';' read -ra icos_images <<<"$RUN_SCRIPT_ICOS_IMAGES"

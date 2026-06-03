@@ -41,11 +41,11 @@ config_setting(
 )
 
 # Flag to select the system-test backend (Farm vs local/libvirt) from the CLI.
-# Run e.g. `bazel test //rs/tests/... --//bazel:system_test_infra=local` (or use
-# `--config=systest_local`) to run a system-test on the local backend without
+# Run e.g. `bazel test //rs/tests/... --//bazel:system_test_backend=local` (or use
+# `--config=local_systest`) to run a system-test on the local backend without
 # having to set `local = True` in any BUILD.bazel file.
 string_flag(
-    name = "system_test_infra",
+    name = "system_test_backend",
     build_setting_default = "farm",
     values = [
         "farm",
@@ -55,9 +55,9 @@ string_flag(
 )
 
 config_setting(
-    name = "local_system_test_infra",
+    name = "local_system_test_backend",
     flag_values = {
-        ":system_test_infra": "local",
+        ":system_test_backend": "local",
     },
     visibility = ["//visibility:public"],
 )

@@ -37,13 +37,13 @@ impl TestEnvAttribute for GroupSetup {
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-pub enum InfraProvider {
+pub enum SystemTestBackend {
     Farm,
     Local,
 }
 
-impl TestEnvAttribute for InfraProvider {
+impl TestEnvAttribute for SystemTestBackend {
     fn attribute_name() -> String {
-        "infra_provider".to_string()
+        "system_test_backend".to_string()
     }
 }

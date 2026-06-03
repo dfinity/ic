@@ -42,7 +42,7 @@ def system_test(
         additional_colocate_tags = [],
         logs = True,
         vm_allocation_mode = None,
-        infra = None,
+        backend = None,
         **kwargs):
     """Declares a system-test.
 
@@ -93,14 +93,14 @@ def system_test(
         `"performanceOptimizedAllocation"`,
         `"minIntraDistanceLoadBalanceAllocation"` or `"distributeAcrossDcs"`.
         When None it defaults to `"minIntraDistanceLoadBalanceAllocation"`.
-      infra: optionally force a specific system-test backend. Must be one of:
-        * None (the default): respect the `//bazel:system_test_infra` flag,
+      backend: optionally force a specific system-test backend. Must be one of:
+        * None (the default): respect the `//bazel:system_test_backend` flag,
           which defaults to Farm but can be switched to the local
           (libvirt-based) backend at build time without editing the
-          BUILD.bazel file (e.g. `bazel test ... --//bazel:system_test_infra=local`
-          or `--config=systest_local`).
+          BUILD.bazel file (e.g. `bazel test ... --//bazel:system_test_backend=local`
+          or `--config=local_systest`).
         * "local": force the local (libvirt-based) backend. Sets
-          `SYSTEM_TEST_INFRA=local` in the test env.
+          `SYSTEM_TEST_BACKEND=local` in the test env.
         * "farm": force the Farm backend regardless of the flag.
       **kwargs: additional arguments to pass to the rust_binary rule.
 
@@ -177,8 +177,8 @@ def system_test(
     extra_args_simple.extend(["--group-base-name", test_name])
     extra_args_colocated.extend(["--group-base-name", test_name + "_colocate"])
 
-    if infra != None and infra not in ["local", "farm"]:
-        fail("Invalid infra {}: must be None or one of {}".format(repr(infra), ["local", "farm"]))
+    if backend != None and backend not in ["local", "farm"]:
+        fail("Invalid backend {}: must be None or one of {}".format(repr(backend), ["local", "farm"]))
 
     # Runtime deps that are only needed when running on the local (libvirt-based)
     # backend. The Local backend boots Universal-VMs and the Prometheus-VM from
@@ -190,9 +190,9 @@ def system_test(
     _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
     _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
 
-    if infra == "local":
-        # Force the local backend regardless of the //bazel:system_test_infra flag.
-        env["SYSTEM_TEST_INFRA"] = "local"
+    if backend == "local":
+        # Force the local backend regardless of the //bazel:system_test_backend flag.
+        env["SYSTEM_TEST_BACKEND"] = "local"
         _runtime_deps |= _local_only_deps
 
         # The Local backend does not run a Vector VM.
@@ -267,19 +267,19 @@ def system_test(
     }
     simple_data = data
 
-    # When the test isn't forced onto a specific backend (infra = None), the
-    # backend is chosen at build time via the //bazel:system_test_infra flag.
-    # Running with `--//bazel:system_test_infra=local` (or `--config=systest_local`)
+    # When the test isn't forced onto a specific backend (backend = None), the
+    # backend is chosen at build time via the //bazel:system_test_backend flag.
+    # Running with `--//bazel:system_test_backend=local` (or `--config=local_systest`)
     # switches the test onto the local (libvirt-based) backend without having to
-    # set `infra = "local"` in the BUILD.bazel file.
-    if infra == None:
+    # set `backend = "local"` in the BUILD.bazel file.
+    if backend == None:
         local_dep_env = {
             name: "$(rootpath {})".format(dep)
             for name, dep in _local_only_deps.items()
         }
         local_args = extra_args_simple + ([] if "--no-logs" in extra_args_simple else ["--no-logs"])
         local_env = simple_env | local_dep_env | {
-            "SYSTEM_TEST_INFRA": "local",
+            "SYSTEM_TEST_BACKEND": "local",
             "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(local_args),
             "RUN_SCRIPT_RUNTIME_DEP_ENV_VARS": ";".join(_runtime_deps.keys() + _local_only_deps.keys()),
         }
@@ -288,11 +288,11 @@ def system_test(
         # env is a dict attribute which does not support `+ select(...)`, so the
         # whole dict is selected; data is a list attribute which does.
         simple_env = select({
-            "//bazel:local_system_test_infra": local_env,
+            "//bazel:local_system_test_backend": local_env,
             "//conditions:default": simple_env,
         })
         simple_data = data + select({
-            "//bazel:local_system_test_infra": local_data_override,
+            "//bazel:local_system_test_backend": local_data_override,
             "//conditions:default": [],
         })
 
@@ -307,11 +307,11 @@ def system_test(
     # `RTNETLINK answers: Operation not permitted`.
     #
     # `tags` is non-configurable and cannot depend on the selected backend, so:
-    #   * for `infra == "local"` (forced) we simply omit the tag here, and
-    #   * for the flag-selected path (`--config=systest_local`) the tag is stripped
+    #   * for `backend == "local"` (forced) we simply omit the tag here, and
+    #   * for the flag-selected path (`--config=local_systest`) the tag is stripped
     #     via `--modify_execution_info` in `bazel/conf/.bazelrc.build`.
     tags = tags + ["system_test"]
-    if infra != "local":
+    if backend != "local":
         tags = tags + ["requires-network"]
 
     sh_test(

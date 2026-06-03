@@ -11,7 +11,7 @@ use crate::driver::{
         AcquirePlaynetCertificate, CreatePlaynetDnsRecords, HasRegistryLocalStore,
         HasTopologySnapshot,
     },
-    test_setup::{GroupSetup, InfraProvider},
+    test_setup::{GroupSetup, SystemTestBackend},
 };
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
@@ -307,9 +307,9 @@ impl InternetComputer {
         self.propagate_ip_addrs(&res_group);
 
         if self.api_bn_use_playnet {
-            match InfraProvider::read_attribute(env) {
-                InfraProvider::Farm => self.setup_api_bn_playnet(env),
-                InfraProvider::Local => {
+            match SystemTestBackend::read_attribute(env) {
+                SystemTestBackend::Farm => self.setup_api_bn_playnet(env),
+                SystemTestBackend::Local => {
                     slog::warn!(
                         env.logger(),
                         "LocalBackend: skipping API BN playnet setup (no playnet DNS/TLS)"

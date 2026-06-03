@@ -29,7 +29,7 @@ use crate::driver::{
         CreateDnsRecords, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, RetrieveIpv4Addr,
         SshSession, TopologySnapshot, scp_recv_from, try_scp_send_to,
     },
-    test_setup::{GroupSetup, InfraProvider},
+    test_setup::{GroupSetup, SystemTestBackend},
     universal_vm::{UniversalVm, UniversalVms},
 };
 use crate::util::block_on;
@@ -311,8 +311,8 @@ chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
             .with_config_dir(config_dir)
             .start(env)?;
 
-        let p8s_urls = match InfraProvider::read_attribute(env) {
-            InfraProvider::Farm => {
+        let p8s_urls = match SystemTestBackend::read_attribute(env) {
+            SystemTestBackend::Farm => {
                 // Log the Prometheus URL so users can browse to it while the test is running.
                 let deployed_prometheus_vm = env.get_deployed_universal_vm(vm_name).unwrap();
                 let prometheus_vm = deployed_prometheus_vm.get_vm().unwrap();
@@ -353,7 +353,7 @@ chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
                 p8s_urls.write_attribute(env);
                 p8s_urls
             }
-            InfraProvider::Local => {
+            SystemTestBackend::Local => {
                 // No playnet DNS on Local; expose Prometheus/Grafana via raw
                 // IPv6 inside the libvirt network.
                 // TODO: this won't actually work since the nginx on the PrometheusVm is configured using virtualHosts.

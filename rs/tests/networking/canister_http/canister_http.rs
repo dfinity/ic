@@ -9,7 +9,7 @@ use ic_system_test_driver::driver::simulate_network::SimulateNetwork;
 use ic_system_test_driver::driver::test_env_api::{
     HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr,
 };
-use ic_system_test_driver::driver::test_setup::InfraProvider;
+use ic_system_test_driver::driver::test_setup::SystemTestBackend;
 use ic_system_test_driver::driver::universal_vm::*;
 use ic_system_test_driver::driver::{
     test_env::{TestEnv, TestEnvAttribute},
@@ -157,11 +157,11 @@ pub fn get_universal_vm_address(env: &TestEnv) -> Ipv6Addr {
 
 pub fn get_universal_vm_ipv4_address(env: &TestEnv) -> Ipv4Addr {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-    match InfraProvider::read_attribute(env) {
-        InfraProvider::Farm => deployed_universal_vm
+    match SystemTestBackend::read_attribute(env) {
+        SystemTestBackend::Farm => deployed_universal_vm
             .block_on_ipv4()
             .expect("Universal VM IPv4 not found."),
-        InfraProvider::Local => {
+        SystemTestBackend::Local => {
             unimplemented!(
                 "LocalBackend: get_universal_vm_ipv4_address not implemented; IPv4 wiring on Local is a future extension"
             )

@@ -12,7 +12,7 @@ use crate::driver::resource::{
 use crate::driver::test_env::SshKeyGen;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession};
-use crate::driver::test_setup::{GroupSetup, InfraProvider};
+use crate::driver::test_setup::{GroupSetup, SystemTestBackend};
 use anyhow::{Result, bail};
 use chrono::Duration;
 use chrono::Utc;
@@ -122,7 +122,7 @@ impl UniversalVm {
 
         let mut image_specs = vec![];
         let mut local_image_paths: Vec<PathBuf> = vec![];
-        let infra = InfraProvider::read_attribute(env);
+        let backend = SystemTestBackend::read_attribute(env);
 
         // Always build the SSH config image; Farm uploads it, Local attaches
         // it directly from disk.
@@ -131,8 +131,8 @@ impl UniversalVm {
         let config_ssh_img = universal_vm_dir.join(CONF_SSH_IMG_FNAME);
         std::fs::create_dir_all(&universal_vm_dir)?;
         create_universal_vm_config_image(&config_ssh_dir, &config_ssh_img, "SSH")?;
-        match infra {
-            InfraProvider::Farm => {
+        match backend {
+            SystemTestBackend::Farm => {
                 let farm: Farm = Farm::from_test_env(env, "universal VM");
                 let ssh_config_img_file_spec = AttachImageSpec::new(farm.upload_file(
                     &pot_setup.infra_group_name,
@@ -141,7 +141,7 @@ impl UniversalVm {
                 )?);
                 image_specs.push(ssh_config_img_file_spec);
             }
-            InfraProvider::Local => {
+            SystemTestBackend::Local => {
                 local_image_paths.push(config_ssh_img);
             }
         }
@@ -158,8 +158,8 @@ impl UniversalVm {
                 UniversalVmConfig::Img(config_img) => config_img.to_path_buf(),
             };
 
-            match infra {
-                InfraProvider::Farm => {
+            match backend {
+                SystemTestBackend::Farm => {
                     let file_id = id_of_file(config_img.clone())?;
                     let mut file_spec = AttachImageSpec::new(file_id.clone());
 
@@ -196,14 +196,14 @@ impl UniversalVm {
                     }
                     image_specs.push(file_spec);
                 }
-                InfraProvider::Local => {
+                SystemTestBackend::Local => {
                     local_image_paths.push(config_img);
                 }
             }
         }
 
-        match infra {
-            InfraProvider::Farm => {
+        match backend {
+            SystemTestBackend::Farm => {
                 let farm: Farm = Farm::from_test_env(env, "universal VM");
                 farm.attach_disk_images(
                     &pot_setup.infra_group_name,
@@ -213,7 +213,7 @@ impl UniversalVm {
                 )?;
                 farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
             }
-            InfraProvider::Local => {
+            SystemTestBackend::Local => {
                 let backend = crate::driver::local_backend::LocalBackend::from_test_env(env)?;
                 backend.attach_disk_images(&self.name, &local_image_paths)?;
                 backend.start_vm(&pot_setup.infra_group_name, &self.name)?;

@@ -14,7 +14,7 @@ use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{
     get_empty_disk_img_sha256, get_empty_disk_img_url, get_guestos_img_sha256, get_guestos_img_url,
 };
-use crate::driver::test_setup::{GroupSetup, InfraProvider};
+use crate::driver::test_setup::{GroupSetup, SystemTestBackend};
 use crate::driver::universal_vm::UniversalVm;
 use anyhow;
 use anyhow::bail;
@@ -190,13 +190,13 @@ pub fn get_resource_request(
     // the Farm backend. Under the Local backend they are unset (the image is
     // provided as a local path via `ENV_DEPS__GUESTOS_DISK_IMG_PATH`), so we
     // must not call `get_guestos_img_url`/`get_guestos_img_sha256` there.
-    let primary_image = match InfraProvider::read_attribute(test_env) {
-        InfraProvider::Farm => DiskImage::Url {
+    let primary_image = match SystemTestBackend::read_attribute(test_env) {
+        SystemTestBackend::Farm => DiskImage::Url {
             image_type: ImageType::IcOsImage,
             url: get_guestos_img_url(),
             sha256: get_guestos_img_sha256(),
         },
-        InfraProvider::Local => {
+        SystemTestBackend::Local => {
             let var = local_path_env_var(&ImageType::IcOsImage);
             DiskImage::Local {
                 image_type: ImageType::IcOsImage,
@@ -301,9 +301,9 @@ fn local_path_env_var(image_type: &ImageType) -> &'static str {
 /// the appropriate `ENV_DEPS__*_DISK_IMG_PATH` environment variable provided by
 /// the bazel `system_test(local = True, ...)` macro.
 pub fn maybe_localize(primary_image: DiskImage, env: &TestEnv) -> DiskImage {
-    match InfraProvider::read_attribute(env) {
-        InfraProvider::Farm => primary_image,
-        InfraProvider::Local => match primary_image {
+    match SystemTestBackend::read_attribute(env) {
+        SystemTestBackend::Farm => primary_image,
+        SystemTestBackend::Local => match primary_image {
             DiskImage::Local { .. } => primary_image,
             DiskImage::Url { image_type, .. } => {
                 let var = local_path_env_var(&image_type);
@@ -325,9 +325,9 @@ pub fn get_resource_request_for_universal_vm(
 ) -> anyhow::Result<ResourceRequest> {
     let primary_image = match universal_vm.primary_image.clone() {
         Some(image) => maybe_localize(image, env),
-        None => match InfraProvider::read_attribute(env) {
-            InfraProvider::Farm => default_universal_vm_disk_image(),
-            InfraProvider::Local => {
+        None => match SystemTestBackend::read_attribute(env) {
+            SystemTestBackend::Farm => default_universal_vm_disk_image(),
+            SystemTestBackend::Local => {
                 let var = local_path_env_var(&ImageType::UniversalImage);
                 DiskImage::Local {
                     image_type: ImageType::UniversalImage,
@@ -363,12 +363,12 @@ pub fn get_resource_request_for_universal_vm(
 
 pub fn allocate_resources(req: &ResourceRequest, env: &TestEnv) -> FarmResult<ResourceGroup> {
     let group_name = req.group_name.clone();
-    let infra = InfraProvider::read_attribute(env);
+    let backend = SystemTestBackend::read_attribute(env);
 
     let mut res_group = ResourceGroup::new(group_name.clone());
 
-    match infra {
-        InfraProvider::Farm => {
+    match backend {
+        SystemTestBackend::Farm => {
             let farm = Farm::from_test_env(env, "allocate_resources");
             let mut threads = vec![];
             for vm_config in req.vm_configs.iter() {
@@ -421,7 +421,7 @@ pub fn allocate_resources(req: &ResourceRequest, env: &TestEnv) -> FarmResult<Re
                 });
             }
         }
-        InfraProvider::Local => {
+        SystemTestBackend::Local => {
             let backend = crate::driver::local_backend::LocalBackend::from_test_env(env)
                 .expect("LocalBackend::from_test_env failed");
             for vm_config in req.vm_configs.iter() {

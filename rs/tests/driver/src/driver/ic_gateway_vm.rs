@@ -26,7 +26,7 @@ use crate::{
             CreatePlaynetDnsRecords, HasPublicApiUrl, HasTestEnv, HasTopologySnapshot,
             IcNodeSnapshot, RetrieveIpv4Addr, SshSession, get_dependency_path_from_env,
         },
-        test_setup::InfraProvider,
+        test_setup::SystemTestBackend,
         universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
     },
     retry_with_msg_async,
@@ -164,11 +164,11 @@ sudo networkctl reconfigure enp2s0
             None
         };
 
-        let infra_provider = InfraProvider::read_attribute(env);
+        let backend = SystemTestBackend::read_attribute(env);
         let demo_domain_env = std::env::var("DEMO_DOMAIN").ok().filter(|s| !s.is_empty());
 
-        let (ic_gateway_fqdn, cert, aaaa_records, a_records) = match infra_provider {
-            InfraProvider::Local => {
+        let (ic_gateway_fqdn, cert, aaaa_records, a_records) = match backend {
+            SystemTestBackend::Local => {
                 // The Local backend has no playnet TLS service, so generate a
                 // self-signed certificate for a local domain and skip DNS
                 // configuration entirely.
@@ -180,7 +180,7 @@ sudo networkctl reconfigure enp2s0
                     playnet.a_records.clone(),
                 )
             }
-            InfraProvider::Farm => {
+            SystemTestBackend::Farm => {
                 if let Some(demo_domain) = demo_domain_env {
                     let demo =
                         self.load_or_create_demo_domain(env, &demo_domain, vm_ipv6, vm_ipv4)?;
@@ -238,12 +238,12 @@ sudo networkctl reconfigure enp2s0
         );
         // The Local backend has no DNS for the self-signed domain, so resolve it
         // directly to the VM's IPv6 address and accept the self-signed cert.
-        let resolve = match infra_provider {
-            InfraProvider::Local => Some((
+        let resolve = match backend {
+            SystemTestBackend::Local => Some((
                 ic_gateway_fqdn.clone(),
                 SocketAddr::new(IpAddr::V6(vm_ipv6), 443),
             )),
-            InfraProvider::Farm => None,
+            SystemTestBackend::Farm => None,
         };
         block_on(await_status_is_healthy(
             &env.logger(),
@@ -343,15 +343,15 @@ sudo networkctl reconfigure enp2s0
         Ok(playnet)
     }
 
-    /// Configures DNS records based on infrastructure provider.
+    /// Configures DNS records based on the system-test backend.
     fn configure_dns_records(
         &self,
         env: &TestEnv,
         playnet: &Playnet,
         ic_gateway_fqdn: &str,
     ) -> Result<()> {
-        let mut records = match InfraProvider::read_attribute(env) {
-            InfraProvider::Farm => {
+        let mut records = match SystemTestBackend::read_attribute(env) {
+            SystemTestBackend::Farm => {
                 vec![
                     DnsRecord {
                         name: "".to_string(),
@@ -370,7 +370,7 @@ sudo networkctl reconfigure enp2s0
                     },
                 ]
             }
-            InfraProvider::Local => {
+            SystemTestBackend::Local => {
                 // The Local backend has no playnet DNS service. Return an empty
                 // set; downstream code on the Local path is expected to skip
                 // playnet DNS configuration entirely.
@@ -496,15 +496,15 @@ docker run --name=ic-gateway -d \
         Ok(demo)
     }
 
-    /// Configures DNS records for the demo-domain flow based on infrastructure provider.
+    /// Configures DNS records for the demo-domain flow based on the system-test backend.
     fn configure_demo_domain_dns_records(
         &self,
         env: &TestEnv,
         demo: &DemoDomain,
         ic_gateway_fqdn: &str,
     ) -> Result<()> {
-        let mut records = match InfraProvider::read_attribute(env) {
-            InfraProvider::Farm => {
+        let mut records = match SystemTestBackend::read_attribute(env) {
+            SystemTestBackend::Farm => {
                 vec![
                     DnsRecord {
                         name: "".to_string(),
@@ -523,7 +523,7 @@ docker run --name=ic-gateway -d \
                     },
                 ]
             }
-            InfraProvider::Local => {
+            SystemTestBackend::Local => {
                 slog::warn!(
                     env.logger(),
                     "LocalBackend: skipping configure_demo_domain_dns_records (no playnet)"

@@ -23,7 +23,7 @@ use crate::driver::{
         get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
         get_setupos_img_sha256, get_setupos_img_url, try_get_guestos_img_version,
     },
-    test_setup::InfraProvider,
+    test_setup::SystemTestBackend,
 };
 use anyhow::{Context, Result, bail};
 use bare_metal_deployment::SshAuthMethod;
@@ -193,12 +193,12 @@ pub fn init_ic(
 
     let whitelist = ProvisionalWhitelist::All;
     let (ic_os_update_img_sha256, ic_os_update_img_url) =
-        match InfraProvider::read_attribute(test_env) {
-            InfraProvider::Farm => (
+        match SystemTestBackend::read_attribute(test_env) {
+            SystemTestBackend::Farm => (
                 get_guestos_initial_update_img_sha256(),
                 get_guestos_initial_update_img_url(),
             ),
-            InfraProvider::Local => {
+            SystemTestBackend::Local => {
                 // In Local mode the GuestOS initial update image is provided as a local
                 // file path rather than uploaded to Farm, so its URL/hash env vars are
                 // never set. Derive a `file://` URL and the matching sha256 from the path.
@@ -330,8 +330,8 @@ pub fn setup_and_start_vms(
             )?;
 
             let conf_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
-            match InfraProvider::read_attribute(&t_env) {
-                InfraProvider::Farm => {
+            match SystemTestBackend::read_attribute(&t_env) {
+                SystemTestBackend::Farm => {
                     let image_spec = AttachImageSpec::new(upload_config_disk_image(
                         &group_name,
                         &node,
@@ -345,7 +345,7 @@ pub fn setup_and_start_vms(
                     )?;
                     t_farm.start_vm(&group_name, &vm_name)?;
                 }
-                InfraProvider::Local => {
+                SystemTestBackend::Local => {
                     let backend =
                         crate::driver::local_backend::LocalBackend::from_test_env(&t_env)?;
                     backend.attach_disk_images(&vm_name, std::slice::from_ref(&conf_img_path))?;

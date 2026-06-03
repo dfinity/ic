@@ -29,7 +29,7 @@ use crate::driver::{
     log_events,
     pot_dsl::{PotSetupFn, SysTestFn},
     test_env::{TestEnv, TestEnvAttribute},
-    test_setup::{GroupSetup, InfraProvider},
+    test_setup::{GroupSetup, SystemTestBackend},
 };
 use crate::util::block_on;
 use anyhow::{Result, bail};
@@ -977,9 +977,11 @@ impl SystemTestGroup {
         // The Local backend has no TTL; libvirt resources live for the lifetime of the
         // libvirtd subprocess owned by the LocalBackend instance, so the keepalive task
         // (which refreshes the Farm group TTL) is not needed there.
-        let is_local_infra = matches!(std::env::var("SYSTEM_TEST_INFRA").as_deref(), Ok("local"));
+        let use_local_backend =
+            matches!(std::env::var("SYSTEM_TEST_BACKEND").as_deref(), Ok("local"));
         let keepalive_task_id = TaskId::Test(String::from(KEEPALIVE_TASK_NAME));
-        let keepalive_task = if self.with_farm && !group_ctx.no_farm_keepalive && !is_local_infra {
+        let keepalive_task = if self.with_farm && !group_ctx.no_farm_keepalive && !use_local_backend
+        {
             Box::from(subproc(
                 keepalive_task_id.clone(),
                 {
@@ -1330,11 +1332,11 @@ impl SystemTestGroup {
             if let Some(required_args) = args.required_host_features {
                 required_args.write_attribute(&root_env);
             }
-            let infra_provider = match std::env::var("SYSTEM_TEST_INFRA").as_deref() {
-                Ok("local") => InfraProvider::Local,
-                _ => InfraProvider::Farm,
+            let backend = match std::env::var("SYSTEM_TEST_BACKEND").as_deref() {
+                Ok("local") => SystemTestBackend::Local,
+                _ => SystemTestBackend::Farm,
             };
-            infra_provider.write_attribute(&root_env);
+            backend.write_attribute(&root_env);
             // Become a child-subreaper so that orphaned, double-forked daemons
             // (e.g. libvirtd/virtlogd/QEMU started by the local backend, or any
             // stray subprocess) are reparented to this long-lived parent process
@@ -1497,15 +1499,15 @@ impl SystemTestGroup {
         let env = ensure_setup_env(ctx);
         let group_setup = GroupSetup::read_attribute(&env);
         let group_name = group_setup.infra_group_name;
-        match InfraProvider::read_attribute(&env) {
-            InfraProvider::Farm => {
+        match SystemTestBackend::read_attribute(&env) {
+            SystemTestBackend::Farm => {
                 info!(env.logger(), "Deleting farm group.");
                 let farm_url = env.get_farm_url().unwrap();
                 let farm = Farm::new(farm_url, env.logger());
                 farm.delete_group(&group_name)
                     .expect("failed to delete the farm group");
             }
-            InfraProvider::Local => {
+            SystemTestBackend::Local => {
                 info!(env.logger(), "Deleting local libvirt group.");
                 match crate::driver::local_backend::LocalBackend::from_test_env(&env) {
                     Ok(backend) => {

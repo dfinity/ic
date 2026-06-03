@@ -135,7 +135,7 @@ use super::{
     config::NODES_INFO,
     driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR,
     farm::{DemoCertificate, DnsRecord, HostFeature, PlaynetCertificate},
-    test_setup::{GroupSetup, InfraProvider},
+    test_setup::{GroupSetup, SystemTestBackend},
 };
 use crate::{
     driver::{
@@ -1475,8 +1475,8 @@ impl HasGroupSetup for TestEnv {
             // Afterwards, the group's TTL should be bumped via a keepalive task
             let timeout = if no_group_ttl { None } else { Some(GROUP_TTL) };
             let group_setup = GroupSetup::new(group_base_name.clone(), timeout);
-            match InfraProvider::read_attribute(self) {
-                InfraProvider::Farm => {
+            match SystemTestBackend::read_attribute(self) {
+                SystemTestBackend::Farm => {
                     let required_host_features = allocate_testnet_to_local_dc
                         .then(|| std::env::var("DC").ok())
                         .flatten()
@@ -1506,7 +1506,7 @@ impl HasGroupSetup for TestEnv {
                     )
                     .unwrap();
                 }
-                InfraProvider::Local => {
+                SystemTestBackend::Local => {
                     info!(
                         log,
                         "Creating local group {} ...", group_setup.infra_group_name,
@@ -2365,8 +2365,8 @@ where
         let vm_name = self.vm_name();
         let group_name = pot_setup.infra_group_name;
 
-        match InfraProvider::read_attribute(&env) {
-            InfraProvider::Farm => {
+        match SystemTestBackend::read_attribute(&env) {
+            SystemTestBackend::Farm => {
                 let farm_base_url = self.get_farm_url().unwrap();
                 let farm = Farm::new(farm_base_url, env.logger());
                 Box::new(HostedVm::Farm {
@@ -2375,7 +2375,7 @@ where
                     vm_name,
                 })
             }
-            InfraProvider::Local => {
+            SystemTestBackend::Local => {
                 let backend = crate::driver::local_backend::LocalBackend::from_test_env(&env)
                     .expect("LocalBackend::from_test_env failed");
                 Box::new(HostedVm::Local {
@@ -2803,7 +2803,7 @@ where
     fn create_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
-        if InfraProvider::read_attribute(&env) == InfraProvider::Local {
+        if SystemTestBackend::read_attribute(&env) == SystemTestBackend::Local {
             slog::warn!(
                 log,
                 "LocalBackend: create_dns_records is a no-op ({} records ignored)",
@@ -2822,7 +2822,7 @@ where
     fn create_demo_dns_records(&self, domain: &str, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
-        if InfraProvider::read_attribute(&env) == InfraProvider::Local {
+        if SystemTestBackend::read_attribute(&env) == SystemTestBackend::Local {
             slog::warn!(
                 log,
                 "LocalBackend: create_demo_dns_records is a no-op for domain {domain}"
@@ -2854,7 +2854,7 @@ where
     fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
-        if InfraProvider::read_attribute(&env) == InfraProvider::Local {
+        if SystemTestBackend::read_attribute(&env) == SystemTestBackend::Local {
             slog::warn!(
                 log,
                 "LocalBackend: create_playnet_dns_records is a no-op ({} records ignored)",
@@ -2884,7 +2884,7 @@ where
     fn acquire_playnet_certificate(&self) -> PlaynetCertificate {
         let env = self.test_env();
         let log = env.logger();
-        if InfraProvider::read_attribute(&env) == InfraProvider::Local {
+        if SystemTestBackend::read_attribute(&env) == SystemTestBackend::Local {
             panic!(
                 "LocalBackend: acquire_playnet_certificate is not supported (no TLS playnet); guard the caller with InfraProvider"
             );
