@@ -296,12 +296,23 @@ def system_test(
             "//conditions:default": [],
         })
 
-    # The local backend doesn't strictly require network access, but the
-    # `requires-network` tag is harmless there (it just grants the sandbox
-    # network access) and adding it unconditionally avoids having to make the
-    # non-configurable `tags` attribute depend on the backend (which Bazel
-    # doesn't allow).
-    tags = tags + ["system_test", "requires-network"]
+    # The Farm backend needs sandbox network access, so it gets `requires-network`.
+    # The local backend is the opposite: it creates its bridge/TAPs and boots VMs
+    # inside the test's own network namespace, which (with
+    # `--nosandbox_default_allow_network`) only works when the test runs in a fresh
+    # network namespace owned by the sandbox's user namespace -- i.e. when
+    # `requires-network` is *absent*. With the tag present the test runs in the host
+    # network namespace, where the user-namespaced sandbox process lacks effective
+    # CAP_NET_ADMIN and bridge creation fails with
+    # `RTNETLINK answers: Operation not permitted`.
+    #
+    # `tags` is non-configurable and cannot depend on the selected backend, so:
+    #   * for `infra == "local"` (forced) we simply omit the tag here, and
+    #   * for the flag-selected path (`--config=systest_local`) the tag is stripped
+    #     via `--modify_execution_info` in `bazel/conf/.bazelrc.build`.
+    tags = tags + ["system_test"]
+    if infra != "local":
+        tags = tags + ["requires-network"]
 
     sh_test(
         name = test_name,

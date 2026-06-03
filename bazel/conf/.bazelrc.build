@@ -60,6 +60,17 @@ test:testnet --test_output=streamed --test_tag_filters=
 # Usage: `bazel test //rs/tests/... --config=systest_local`
 build:systest_local --//bazel:system_test_infra=local
 test:systest_local --//bazel:system_test_infra=local
+# The local backend creates its bridge/TAPs and boots VMs inside the test's own
+# network namespace. Combined with `--nosandbox_default_allow_network` (above), a
+# test *without* `requires-network` runs in a fresh network namespace owned by the
+# sandbox's user namespace, where the capability launcher's CAP_NET_ADMIN is
+# effective and the bridge can be created. The `system_test` macro adds
+# `requires-network` unconditionally (Farm needs it), which instead places the
+# test in the *host* network namespace, where the user-namespaced sandbox process
+# cannot create a bridge (`RTNETLINK answers: Operation not permitted`). Since
+# `tags` is non-configurable and cannot depend on the selected backend, strip the
+# network requirement here so local runs get their own isolated namespace.
+test:systest_local --modify_execution_info=TestRunner=-requires-network
 
 # Set all tests (including those marked as flaky) to fail explicitly on the
 # first try (can be overriden). This is useful when developing locally to

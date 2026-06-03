@@ -258,14 +258,18 @@ impl LocalBackend {
     /// launcher is missing or the script exits non-zero. `what` describes the
     /// operation for error context.
     fn run_net_admin(script: &str, what: &str) -> Result<()> {
-        let status = Self::net_admin(script)
+        let output = Self::net_admin(script)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
+            .stderr(Stdio::piped())
+            .output()
             .with_context(|| format!("running net-admin launcher for {what}"))?;
-        if !status.success() {
-            bail!("net-admin operation '{what}' failed with status {status}");
+        if !output.status.success() {
+            bail!(
+                "net-admin operation '{what}' failed with status {}: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
         }
         Ok(())
     }
