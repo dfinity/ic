@@ -897,7 +897,7 @@ impl SchedulerImpl {
         }
     }
 
-    /// Iterates over all canisters on the subnet, checking if a source canister
+    /// Iterates over all hot canisters on the subnet, checking if a source canister
     /// has output messages for a destination canister on the same subnet and
     /// moving them from the source to the destination canister if the
     /// destination canister has room for them.

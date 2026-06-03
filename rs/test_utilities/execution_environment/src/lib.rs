@@ -2211,8 +2211,6 @@ impl ExecutionTest {
             let canister_state = Arc::make_mut(canister_state);
             let Some(es) = canister_state.execution_state.as_mut() else {
                 // Nothing to checkpoint for a canister without an execution state.
-                //
-                // Note: This used to be a `break`, but likely `continue` was intended.
                 return;
             };
 
