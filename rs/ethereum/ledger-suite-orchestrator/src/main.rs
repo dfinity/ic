@@ -1,7 +1,4 @@
-#![allow(deprecated)]
-use ic_cdk::api::management_canister::main::{
-    CanisterIdRecord, CanisterStatusResponse, canister_status,
-};
+use ic_cdk::management_canister::{CanisterStatusArgs, CanisterStatusResult, canister_status};
 use ic_cdk::{init, post_upgrade, query, update};
 use ic_ledger_suite_orchestrator::candid::Erc20Contract as CandidErc20Contract;
 use ic_ledger_suite_orchestrator::candid::{ManagedCanisterIds, OrchestratorArg, OrchestratorInfo};
@@ -96,13 +93,12 @@ fn post_upgrade(orchestrator_arg: Option<OrchestratorArg>) {
 }
 
 #[update]
-async fn get_canister_status() -> CanisterStatusResponse {
-    canister_status(CanisterIdRecord {
-        canister_id: ic_cdk::id(),
+async fn get_canister_status() -> CanisterStatusResult {
+    canister_status(&CanisterStatusArgs {
+        canister_id: ic_cdk::api::canister_self(),
     })
     .await
     .expect("failed to fetch canister status")
-    .0
 }
 
 #[query(hidden = true)]
@@ -200,7 +196,7 @@ fn http_request(req: ic_http_types::HttpRequest) -> ic_http_types::HttpResponse 
 
                 w.encode_gauge(
                     "stable_memory_bytes",
-                    ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
+                    ic_cdk::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
                     "Size of the stable memory allocated by this canister.",
                 )?;
 
@@ -213,7 +209,7 @@ fn http_request(req: ic_http_types::HttpRequest) -> ic_http_types::HttpResponse 
                 w.gauge_vec("cycle_balance", "Cycle balance of this canister.")?
                     .value(
                         &[("canister", "ledger-suite-orchestrator")],
-                        ic_cdk::api::canister_balance128() as f64,
+                        ic_cdk::api::canister_cycle_balance() as f64,
                     )?;
 
                 read_state(|s| {
