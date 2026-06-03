@@ -3049,17 +3049,17 @@ fn test_canister_log_with_zero_log_memory_limit() {
     );
 
     // Produce a second log with no ring buffer. canister_log advances to
-    // next_idx == 2, but lms.persistent_next_idx stays at 1.
+    // next_idx == 2, but persistent_next_idx stays at 1.
     let _ = env.execute_ingress(
         canister_id,
         "update",
         wasm().debug_print(b"log").reply().build(),
     );
 
-    // canister_log.next_idx() == 2 and lms.next_idx() == 1 must agree before
+    // canister_log.next_idx() == 2 and lms.next_idx() == 1 must hold before
     // and after a checkpoint/reload cycle. Before the CanisterStateBits fix,
     // the reload would wrongly restore lms.persistent_next_idx from
-    // next_canister_log_record_idx (== 2) instead of the stored 1.
+    // next_canister_log_record_idx (== 2) instead of the (by now) stored 1.
     let check_next_idx = |env: &StateMachine| {
         let state = env.get_latest_state();
         let ss = &state.canister_state(&canister_id).unwrap().system_state;
