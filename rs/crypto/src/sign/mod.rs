@@ -209,6 +209,44 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, H: Signable> BasicSigVerif
         );
         result
     }
+
+    fn verify_basic_sig_batch_multi_msg(
+        &self,
+        inputs: &[(NodeId, &BasicSigOf<H>, &H)],
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<()> {
+        let log_id = get_log_id(&self.logger);
+        let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
+            crypto.trait_name => "BasicSigVerifier",
+            crypto.method_name => "verify_basic_sig_batch_multi_msg",
+        );
+        debug!(logger;
+            crypto.description => "start",
+            crypto.registry_version => registry_version.get(),
+            crypto.signature => format!("{:?}", inputs.iter().map(|(s, sig, _)| (s, sig)).collect::<Vec<_>>()),
+        );
+        let start_time = self.metrics.now();
+        let result = BasicSigVerifierInternal::verify_basic_sig_batch_multi_msg(
+            &self.csprng,
+            self.registry_client.as_ref(),
+            inputs,
+            registry_version,
+        );
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::BasicSignature,
+            MetricsScope::Full,
+            "verify_basic_sig_batch_multi_msg",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        debug!(logger;
+            crypto.description => "end",
+            crypto.is_ok => result.is_ok(),
+            crypto.error => log_err(result.as_ref().err()),
+        );
+        result
+    }
 }
 
 impl<C: CryptoServiceProvider, R: CryptoComponentRng, S: Signable> BasicSigVerifierByPublicKey<S>

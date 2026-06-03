@@ -160,6 +160,13 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
             build_axum_router(pool_clone),
         )
     }
+
+    /// Returns a watcher over the bouncer used by this assembler, so callers can react to the
+    /// artifact becoming [`BouncerValue::Unwanted`] (e.g. to cancel in-progress assembly work).
+    pub(crate) fn bouncer_watcher(&self) -> watch::Receiver<Bouncer<Artifact::Id>> {
+        self.bouncer_rx.clone()
+    }
+
     /// Waits until advert resolves to wanted. If the bouncer value becomes Unwanted, false is returned.
     #[instrument(skip_all)]
     async fn should_download(
