@@ -15,7 +15,7 @@
   "workspaceMount": "source=${localWorkspaceFolder},target=/ic,type=bind",
   "workspaceFolder": "/ic",
   "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache/cargo ~/.cache/zig-cache ~/.claude ~/.local/share/fish /tmp/ict_testnets && touch ~/.zsh_history ~/.bash_history",
-  "postStartCommand": "/ic/ci/container/setup-local-backend.sh",
+  "postStartCommand": "/ic/ci/container/setup-local-system-test-backend.sh",
   "containerEnv": {
     "CARGO_TARGET_DIR": "/home/ubuntu/.cache/cargo",
     "USER": "${localEnv:USER}"

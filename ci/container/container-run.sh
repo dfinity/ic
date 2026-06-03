@@ -255,7 +255,7 @@ fi
 
 # Grant /dev/kvm access from container start.
 #
-# /dev/kvm is owned by root:<kvm-gid> (mode 0660). setup-local-backend.sh runs
+# /dev/kvm is owned by root:<kvm-gid> (mode 0660). setup-local-system-test-backend.sh runs
 # `usermod -aG kvm` inside the container, but supplementary group membership is
 # fixed when a process is created: the container's main process and all its
 # descendants (bazel, the test driver, the on-demand libvirtd and qemu) inherit
@@ -276,6 +276,6 @@ set -x
 # command: align the container's `kvm` group GID with the host's /dev/kvm and
 # provision the `ic-net-admin` capability launcher. These depend on the host
 # runtime and cannot be baked into the image.
-BOOTSTRAP='/ic/ci/container/setup-local-backend.sh && exec "$@"'
+BOOTSTRAP='/ic/ci/container/setup-local-system-test-backend.sh && exec "$@"'
 exec "${CONTAINER_CMD[@]}" run "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" \
     /usr/bin/bash -c "$BOOTSTRAP" bootstrap "${cmd[@]}"

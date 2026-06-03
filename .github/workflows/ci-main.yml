@@ -258,7 +258,7 @@ jobs:
         # already-running server (manifesting as libvirtd reporting the emulator
         # does not support `virt type 'kvm'`).
         shell: bash
-        run: ci/container/setup-local-backend.sh
+        run: ci/container/setup-local-system-test-backend.sh
 
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
