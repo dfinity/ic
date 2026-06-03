@@ -30,19 +30,11 @@ pub enum StatusError {
     CatchUpContentsDeserializationError(ProxyDecodeError),
 }
 
-#[derive(Debug)]
-pub struct Context {
-    pub last_summary_block_registry_version: RegistryVersion,
-    pub current_registry_version: RegistryVersion,
-}
-
 pub fn get_status(
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
-    Context {
-        last_summary_block_registry_version,
-        current_registry_version,
-    }: Context,
+    last_summary_block_registry_version: RegistryVersion,
+    current_registry_version: RegistryVersion,
 ) -> Result<Status, StatusError> {
     let versioned_record = registry_client
         .get_cup_contents(subnet_id, current_registry_version)
@@ -192,10 +184,8 @@ mod tests {
         let status = get_status(
             registry.as_ref(),
             SUBNET_1,
-            Context {
-                last_summary_block_registry_version: REGISTRY_CUP_REGISTRY_VERSION.decrement(),
-                current_registry_version: REGISTRY_CUP_REGISTRY_VERSION,
-            },
+            REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+            REGISTRY_CUP_REGISTRY_VERSION,
         )
         .expect("Should succeed given correct inputs");
 
@@ -213,10 +203,8 @@ mod tests {
         let status = get_status(
             registry.as_ref(),
             SOURCE_SUBNET_ID,
-            Context {
-                last_summary_block_registry_version: REGISTRY_CUP_REGISTRY_VERSION.decrement(),
-                current_registry_version: REGISTRY_CUP_REGISTRY_VERSION,
-            },
+            REGISTRY_CUP_REGISTRY_VERSION.decrement(),
+            REGISTRY_CUP_REGISTRY_VERSION,
         )
         .expect("Should succeed given correct inputs");
 
@@ -240,10 +228,8 @@ mod tests {
         let status = get_status(
             registry.as_ref(),
             SOURCE_SUBNET_ID,
-            Context {
-                last_summary_block_registry_version: REGISTRY_CUP_REGISTRY_VERSION,
-                current_registry_version: REGISTRY_CUP_REGISTRY_VERSION,
-            },
+            REGISTRY_CUP_REGISTRY_VERSION,
+            REGISTRY_CUP_REGISTRY_VERSION,
         )
         .expect("Should succeed given correct inputs");
 

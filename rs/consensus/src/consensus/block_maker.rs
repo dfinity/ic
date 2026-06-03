@@ -560,10 +560,8 @@ impl BlockMaker {
             let subnet_splitting_status = subnet_splitting::get_status(
                 self.registry_client.as_ref(),
                 self.replica_config.subnet_id,
-                subnet_splitting::Context {
-                    last_summary_block_registry_version,
-                    current_registry_version: version,
-                },
+                last_summary_block_registry_version,
+                version,
             )
             .inspect_err(|err| {
                 warn!(

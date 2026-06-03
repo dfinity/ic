@@ -1323,12 +1323,8 @@ impl Validator {
             match subnet_splitting::get_status(
                 self.registry_client.as_ref(),
                 self.replica_config.subnet_id,
-                subnet_splitting::Context {
-                    last_summary_block_registry_version: last_summary_block
-                        .context
-                        .registry_version,
-                    current_registry_version: proposal.context.registry_version,
-                },
+                last_summary_block.context.registry_version,
+                proposal.context.registry_version,
             )
             .map_err(ValidationFailure::SubnetSplittingStatusError)?
             {

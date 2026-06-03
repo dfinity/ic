@@ -530,10 +530,8 @@ pub(super) fn create_summary_payload(
     // let subnet_splitting_status = match subnet_splitting::get_status(
     //     registry_client,
     //     subnet_id,
-    //     subnet_splitting::Context {
-    //         last_summary_block_registry_version: registry_version,
-    //         current_registry_version: validation_context.registry_version,
-    //     },
+    //     registry_version,
+    //     validation_context.registry_version,
     // )
     // .map_err(|err| DkgPayloadCreationError::SubnetSplittingStatusError(err.to_string()))?
     // {
