@@ -5626,6 +5626,47 @@ fn update_settings_heap_delta_log_memory_limit_increased() {
     );
 }
 
+#[test]
+fn update_settings_fails_when_heap_delta_rate_limited() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const MIB: u64 = 1024 * 1024;
+    const LIMIT: NumBytes = NumBytes::new(10 * MIB);
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_heap_delta_rate_limit(LIMIT)
+        .with_log_memory_store_feature_enabled()
+        .build();
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(2 * MIB)
+                .build(),
+        )
+        .unwrap();
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    test.canister_state_mut(canister_id)
+        .scheduler_state
+        .heap_delta_debit = LIMIT;
+
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(MIB)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, args)
+        .unwrap_err()
+        .assert_contains(
+            ErrorCode::CanisterHeapDeltaRateLimited,
+            &format!("Canister {canister_id} is heap delta rate limited: current delta debit is 10485760, but limit is 10485760"),
+        );
+}
+
 // Canister creation without log_memory_limit → first-time log store allocation
 // must not contribute to heap delta.
 #[test]
