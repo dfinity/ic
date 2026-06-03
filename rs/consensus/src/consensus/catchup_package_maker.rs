@@ -987,6 +987,7 @@ mod tests {
                     registry,
                     crypto,
                     state_manager,
+                    replica_config,
                     ..
                 } = DependenciesBuilder::new(
                     pool_config,
@@ -1041,10 +1042,7 @@ mod tests {
                 let message_routing = Arc::new(message_routing);
 
                 let cup_maker = CatchUpPackageMaker::new(
-                    ReplicaConfig {
-                        node_id,
-                        subnet_id: SOURCE_SUBNET_ID,
-                    },
+                    replica_config,
                     membership,
                     crypto,
                     state_manager,
