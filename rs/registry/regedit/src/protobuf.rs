@@ -9,7 +9,7 @@ use ic_protobuf::{
         nns::v1::NnsCanisterRecords,
         node_operator::v1::NodeOperatorRecord,
         provisional_whitelist::v1::ProvisionalWhitelist,
-        replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+        replica_version::v1::ReplicaVersionRecord,
         routing_table::v1::{CanisterMigrations, RoutingTable},
         subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
     },
@@ -20,9 +20,9 @@ use ic_registry_keys::{
     CANISTER_RANGES_PREFIX, CRYPTO_RECORD_KEY_PREFIX, CRYPTO_THRESHOLD_SIGNING_KEY_PREFIX,
     CRYPTO_TLS_CERT_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
     REPLICA_VERSION_KEY_PREFIX, ROOT_SUBNET_ID_KEY, SUBNET_RECORD_KEY_PREFIX,
-    make_blessed_replica_versions_key, make_canister_migrations_record_key,
-    make_firewall_config_record_key, make_nns_canister_records_key,
-    make_provisional_whitelist_record_key, make_subnet_list_record_key,
+    make_canister_migrations_record_key, make_firewall_config_record_key,
+    make_nns_canister_records_key, make_provisional_whitelist_record_key,
+    make_subnet_list_record_key,
 };
 pub(crate) trait Transformable {
     fn pb_to_value(data: &[u8]) -> Value;
@@ -88,8 +88,6 @@ fn get_transformer(key: &str) -> Transformers {
         PublicKey::transformers()
     } else if key.starts_with(&make_firewall_config_record_key()) {
         FirewallConfig::transformers()
-    } else if key.starts_with(&make_blessed_replica_versions_key()) {
-        BlessedReplicaVersions::transformers()
     } else if key.starts_with(CANISTER_RANGES_PREFIX) || key == "routing_table" {
         RoutingTable::transformers()
     } else if key.starts_with(&make_canister_migrations_record_key()) {

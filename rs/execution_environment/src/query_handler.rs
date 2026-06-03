@@ -197,7 +197,7 @@ impl InternalHttpQueryHandler {
                     }
                 }
                 let mut canisters: Vec<CanisterIdRange> = Vec::new();
-                for id in state.canister_states().keys() {
+                for id in state.canister_states().all_keys() {
                     let id_u64 = canister_id_into_u64(*id);
                     match canisters.last_mut() {
                         Some(last)

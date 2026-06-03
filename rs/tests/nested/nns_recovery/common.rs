@@ -590,7 +590,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         upgrade_image_url: Some(upgrade_image_url),
         upgrade_image_hash: Some(upgrade_image_hash),
         upgrade_image_launch_measurements_path: Some(env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH)),
-        add_and_bless_upgrade_version: Some(cfg.add_upgrade_version),
+        add_upgrade_version: Some(cfg.add_upgrade_version),
         replay_until_height: Some(highest_cert_share),
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         admin_access_location: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),

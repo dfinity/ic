@@ -8,8 +8,9 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CallContext, CallOrigin, CanisterState, ExecutionState, ExportedFunctions, InputQueueType,
-    Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
+    CallContext, CallOrigin, CanisterState, CanisterStates, ExecutionState, ExportedFunctions,
+    InputQueueType, Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology,
+    SystemState,
     canister_state::{
         canister_snapshots::CanisterSnapshots,
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
@@ -806,7 +807,7 @@ pub fn get_initial_state_with_balance(
 
 /// Returns the ordered IDs of the canisters contained within `state`.
 pub fn canister_ids(state: &ReplicatedState) -> Vec<CanisterId> {
-    state.canister_states().keys().cloned().collect()
+    state.canister_states().all_keys().cloned().collect()
 }
 
 pub fn new_canister_state(
@@ -1236,7 +1237,7 @@ fn new_replicated_state_with_output_queues(
         .network_topology
         .set_routing_table(routing_table);
 
-    replicated_state.put_canister_states(canister_states);
+    replicated_state.put_canister_states(CanisterStates::new(canister_states));
     if let Some(subnet_queues) = subnet_queues {
         replicated_state.put_subnet_queues(subnet_queues);
     }

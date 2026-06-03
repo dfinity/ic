@@ -70,10 +70,10 @@ pub enum StepType {
     /// This step is only required if we want to deploy a new replica version to the troubled subnet
     /// before we resume its computation. Obviously, this step should not be skipped if the subnet
     /// has stalled due to a deterministic bug. You can continue with this step, if a problem was
-    /// already identified, fixed and a hotfix version is ready to be proposed as a blessed version.
-    /// If a version exists that does not need to be blessed, this step can be skipped, as the
+    /// already identified, fixed and a hotfix version is ready to be proposed as an elected version.
+    /// If a version exists that does not need to be elected, this step can be skipped, as the
     /// actual subnet upgrade will happen in the next step.
-    BlessVersion,
+    ElectVersion,
     /// This step issues an ic-admin command that will create an upgrade proposal for the troubled
     /// subnet. Note that the subnet nodes will only upgrade after we proposed the corresponding
     /// recovery CUP referencing the new registry version.
@@ -361,7 +361,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
             }
 
-            StepType::BlessVersion => {
+            StepType::ElectVersion => {
                 if self.params.upgrade_version.is_none() {
                     self.params.upgrade_version =
                         read_optional(&self.logger, "Version to bless (and upgrade to): ");
@@ -536,7 +536,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
             }
 
-            StepType::BlessVersion => {
+            StepType::ElectVersion => {
                 if let Some(upgrade_version) = &self.params.upgrade_version {
                     let params = self.params.clone();
                     let (url, hash, measurements_path) = match (

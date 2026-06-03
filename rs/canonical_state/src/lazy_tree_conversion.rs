@@ -20,7 +20,7 @@ use ic_error_types::RejectCode;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    ExecutionState, ReplicatedState, Stream,
+    CanisterStates, ExecutionState, ReplicatedState, Stream,
     canister_state::CanisterState,
     metadata_state::{
         ApiBoundaryNodeEntry, IngressHistoryState, StreamMap, SubnetMetrics, SubnetTopology,
@@ -873,20 +873,52 @@ fn api_boundary_nodes_as_tree(
 }
 
 fn canisters_as_tree(
-    canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
+    canisters: &CanisterStates,
     certification_version: CertificationVersion,
 ) -> LazyTree<'_> {
-    fork(MapTransformFork {
-        map: canisters,
-        map_filter: NoFilter,
+    fork(CanisterStatesFork {
+        canisters,
         certification_version,
-        mk_tree: |_canister_id, canister, certification_version| {
+    })
+}
+
+/// A `LazyFork` view of a [`CanisterStates`].
+///
+/// Iterates over the merged hot+cold pools in `CanisterId` order, producing the
+/// same `LazyTree` shape that a plain `BTreeMap` + `MapTransformFork` would.
+#[derive(Clone)]
+struct CanisterStatesFork<'a> {
+    canisters: &'a CanisterStates,
+    certification_version: CertificationVersion,
+}
+
+impl<'a> LazyFork<'a> for CanisterStatesFork<'a> {
+    fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
+        let k = CanisterId::from_label(label.as_bytes())?;
+        self.canisters.get(&k).map(|canister| {
             fork(CanisterFork {
                 canister,
-                version: certification_version,
+                version: self.certification_version,
             })
-        },
-    })
+        })
+    }
+
+    fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
+        Box::new(self.canisters.all_keys().map(|k| k.to_label()))
+    }
+
+    fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + '_> {
+        let version = self.certification_version;
+        Box::new(
+            self.canisters
+                .all_iter()
+                .map(move |(k, canister)| (k.to_label(), fork(CanisterFork { canister, version }))),
+        )
+    }
+
+    fn len(&self) -> usize {
+        self.canisters.len()
+    }
 }
 
 fn subnets_as_tree<'a>(
