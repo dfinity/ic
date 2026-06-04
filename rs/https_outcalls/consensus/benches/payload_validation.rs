@@ -23,7 +23,7 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    Height, RegistryVersion, ReplicaVersion,
+    CountBytes, Height, NodeId, RegistryVersion, ReplicaVersion,
     batch::{
         CanisterHttpPayload, FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
         ValidationContext,
@@ -39,7 +39,6 @@ use ic_types::{
     messages::CallbackId,
     signature::{BasicSignature, BasicSignatureBatch},
     time::UNIX_EPOCH,
-    CountBytes, NodeId,
 };
 
 /// Registry version that the whole benchmark operates at. The subnet record,
@@ -139,25 +138,21 @@ fn bench_payload_verification(c: &mut Criterion) {
         // Each configuration gets its own temporary consensus pool.
         with_test_pool_config(|pool_config| {
             let target = build_target(pool_config, config);
-            group.bench_with_input(
-                BenchmarkId::from_parameter(config.label),
-                config,
-                |b, _| {
-                    b.iter(|| {
-                        black_box(
-                            target
-                                .builder
-                                .validate_canister_http_payload_impl(
-                                    black_box(target.height),
-                                    black_box(&target.payload),
-                                    black_box(&target.validation_context),
-                                    black_box(HashSet::new()),
-                                )
-                                .expect("validation failed"),
-                        );
-                    })
-                },
-            );
+            group.bench_with_input(BenchmarkId::from_parameter(config.label), config, |b, _| {
+                b.iter(|| {
+                    black_box(
+                        target
+                            .builder
+                            .validate_canister_http_payload_impl(
+                                black_box(target.height),
+                                black_box(&target.payload),
+                                black_box(&target.validation_context),
+                                black_box(HashSet::new()),
+                            )
+                            .expect("validation failed"),
+                    );
+                })
+            });
         });
     }
 
@@ -310,8 +305,7 @@ impl<'a> PayloadAssembler<'a> {
         );
 
         let response_size = self.config.response_size;
-        let success_content =
-            || CanisterHttpResponseContent::Success(vec![0u8; response_size]);
+        let success_content = || CanisterHttpResponseContent::Success(vec![0u8; response_size]);
 
         let mut responses = Vec::new();
 
@@ -329,8 +323,10 @@ impl<'a> PayloadAssembler<'a> {
                     signature: BasicSignatureBatch { signatures_map },
                 },
             });
-            self.contexts
-                .push((CallbackId::new(callback_id), request_context(Replication::FullyReplicated)));
+            self.contexts.push((
+                CallbackId::new(callback_id),
+                request_context(Replication::FullyReplicated),
+            ));
         }
 
         // Non-replicated responses (a single designated signer).
@@ -339,7 +335,10 @@ impl<'a> PayloadAssembler<'a> {
             let designated = (callback_id as usize) % subnet_size;
             let (response, metadata) = response_and_metadata(callback_id, success_content());
             let mut signatures_map = BTreeMap::new();
-            signatures_map.insert(self.committee[designated], signer.sign(designated, &metadata));
+            signatures_map.insert(
+                self.committee[designated],
+                signer.sign(designated, &metadata),
+            );
             responses.push(CanisterHttpResponseWithConsensus {
                 content: response,
                 proof: Signed {
@@ -375,8 +374,10 @@ impl<'a> PayloadAssembler<'a> {
                 })
                 .collect();
             divergence_responses.push(CanisterHttpResponseDivergence { shares });
-            self.contexts
-                .push((CallbackId::new(callback_id), request_context(Replication::FullyReplicated)));
+            self.contexts.push((
+                CallbackId::new(callback_id),
+                request_context(Replication::FullyReplicated),
+            ));
         }
 
         // Flexible responses: each group carries `threshold` entries, each
