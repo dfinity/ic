@@ -2584,6 +2584,7 @@ fn assert_http_json_response(
         HttpMethod::HEAD => "HEAD",
         HttpMethod::PUT => "PUT",
         HttpMethod::DELETE => "DELETE",
+        HttpMethod::PATCH => "PATCH",
     };
 
     assert_eq!(
