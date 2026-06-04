@@ -443,7 +443,7 @@ pub fn construct_state_sync_only_stack(
         .get_root_subnet_id(catch_up_package.content.registry_version())
         .expect("cannot read from registry")
         .expect("cannot find root subnet id");
-    let subnet_type = get_subnet_type(
+    let (subnet_type, _) = get_subnet_type_and_security(
         log,
         subnet_id,
         registry.get_latest_version(),
