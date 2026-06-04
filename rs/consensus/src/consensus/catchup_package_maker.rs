@@ -182,11 +182,15 @@ impl CatchUpPackageMaker {
                 &self.log,
             ) == Some(true)
         };
-        // Skip if the state referenced by finalization tip has not caught up to
-        // this height. This is to increase the chance that states are available to
-        // validate payloads at the chain tip.
-        // We make an exception if we are halting at this height, which was introduced after the
-        // incident on subnet `3hhby` on 2026-05-22.
+        // Wait for the finalization tip's validation context's certified height to reach the
+        // summary height to ensure that states and payloads before the summary are not purged too
+        // early: they may still be required to validate non-notarized blocks after the summary.
+        // It is only safe to purge these states and payloads once we know that all blocks
+        // referencing them have been notarized (which is implied by the condition below), because
+        // then, catching up nodes may validate those blocks via the notarization fast path
+        // instead, even if the referenced states and payloads no longer exist.
+        // Though, we make an exception if we are halting at this height, which was introduced
+        // after the incident on subnet `3hhby` on 2026-05-22.
         // Checkpointing was slow at an upgrade boundary, and consensus continued creating blocks
         // until reaching `ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP`, each with a validation
         // context's certified height equal to the upgrade height minus 1. When checkpointing
@@ -198,9 +202,9 @@ impl CatchUpPackageMaker {
         // created, and the subnet stalled.
         // By allowing the CUP maker to make a CUP share even when the finalized tip's validation
         // context has not caught up to the CUP height, we can ensure that a CUP will be created.
-        // It is not a problem for the finalized tip's validation context to be behind the CUP
-        // height, because when we are halting, all blocks have empty payloads anyways, and thus do
-        // not even need to access states at the validation context's certified height.
+        // It is not a problem to make this exception, because when we are halting, all blocks have
+        // empty payloads, and thus do not need to access states and payloads at the validation
+        // context's certified height.
         if pool.get_finalized_tip().context.certified_height < height && !halting() {
             return None;
         }
