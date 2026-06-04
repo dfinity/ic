@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "MAINNET_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "MAINNET_ENV", "MIN_LOCAL_CPUS", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -6,6 +6,7 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 system_test_nns(
     name = "xnet_slo_120_subnets_staging_test",
     colocated_test_driver_vm_required_host_features = ["performance"],
+    cpus = MIN_LOCAL_CPUS + 120 * DEFAULT_VCPUS_PER_VM,  # 120 subnets * 1 node * 6 vCPUs.
     enable_head_nns_variant = False,  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
     tags = [
         "colocate",
@@ -24,6 +25,7 @@ system_test_nns(
 system_test_nns(
     name = "xnet_slo_3_subnets_hotfix_test",
     colocated_test_driver_vm_required_host_features = ["performance"],
+    cpus = MIN_LOCAL_CPUS + 3 * 4 * DEFAULT_VCPUS_PER_VM,  # 3 subnets * 4 nodes * 6 vCPUs.
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     tags = [
         "colocate",
@@ -41,6 +43,7 @@ system_test_nns(
 system_test_nns(
     name = "xnet_slo_3_subnets_test",
     colocated_test_driver_vm_required_host_features = ["performance"],
+    cpus = MIN_LOCAL_CPUS + 3 * 4 * DEFAULT_VCPUS_PER_VM,  # 3 subnets * 4 nodes * 6 vCPUs.
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     tags = [
         "colocate",
@@ -58,6 +61,7 @@ system_test_nns(
 system_test_nns(
     name = "xnet_slo_29_subnets_test",
     colocated_test_driver_vm_required_host_features = ["performance"],
+    cpus = MIN_LOCAL_CPUS + 29 * DEFAULT_VCPUS_PER_VM,  # 29 subnets * 1 node * 6 vCPUs.
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     tags = [
         "colocate",
@@ -75,6 +79,7 @@ system_test_nns(
 
 system_test(
     name = "xnet_malicious_slices",
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM,  # 2 subnets * 1 node * 6 vCPUs.
     guestos = "malicious",
     runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -91,6 +96,7 @@ system_test(
 
 system_test_nns(
     name = "xnet_compatibility",
+    cpus = MIN_LOCAL_CPUS + 3 * 16,  # 3 subnets (1 System + 2 Application) * 1 node * 16 vCPUs (resource override).
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     env = MAINNET_ENV,
     guestos = "mainnet_nns",
@@ -114,6 +120,7 @@ system_test_nns(
 
 system_test(
     name = "xnet_cloud_engine_isolation_test",
+    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM,  # 4 subnets * 1 node + 1 API boundary node, 6 vCPUs each.
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//packages/ic-error-types",

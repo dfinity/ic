@@ -2,11 +2,13 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 load(
     "//rs/tests:common.bzl",
     "CANISTER_SANDBOX_RUNTIME_DEPS",
+    "DEFAULT_VCPUS_PER_VM",
     "IC_GATEWAY_RUNTIME_DEPS",
     "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS",
     "MAINNET_ENV",
     "MAINNET_NNS_SYSTEM_TEST_RUNTIME_DEPS",
     "MESSAGE_CANISTER_RUNTIME_DEPS",
+    "MIN_LOCAL_CPUS",
 )
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
@@ -46,6 +48,7 @@ rust_library(
 
 system_test_nns(
     name = "nr_broken_dfinity_node",
+    cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM + 4 * 40,  # 1 UVM + 1 GuestOS system node + 1 API BN + 1 ic-gateway (6 vCPUs each) + 4 nested HostOS nodes (40 vCPUs each, NNS_RECOVERY_VM_RESOURCE_OVERRIDES).
     env = ENV,
     guestos_update = "test",
     setupos = True,
@@ -79,6 +82,7 @@ system_test_nns(
         "memory_kibibytes": None,
         "boot_image_minimal_size_gibibytes": 128,
     },
+    cpus = MIN_LOCAL_CPUS + 6 * DEFAULT_VCPUS_PER_VM + 40 * 64,  # 1 UVM + mainnet_nns setup (1 fast system node + 1 API BN + 1 unassigned + 1 aux UVM + 1 ic-gateway = 5 VMs, 6 vCPUs each) + 40 nested HostOS nodes (64 vCPUs each override).
     enable_head_nns_variant = False,
     env = ENV,
     env_inherit = ["SSH_AUTH_SOCK"],
@@ -103,6 +107,7 @@ system_test_nns(
 
 system_test_nns(
     name = "nr_local",
+    cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM + 4 * 40,  # 1 UVM + 1 GuestOS system node + 1 API BN + 1 ic-gateway (6 vCPUs each) + 4 nested HostOS nodes (40 vCPUs each, NNS_RECOVERY_VM_RESOURCE_OVERRIDES).
     env = ENV,
     guestos_update = "test",
     setupos = True,
@@ -119,6 +124,7 @@ system_test_nns(
 
 system_test_nns(
     name = "nr_no_bless_fix_like_np",
+    cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM + 4 * 40,  # 1 UVM + 1 GuestOS system node + 1 API BN + 1 ic-gateway (6 vCPUs each) + 4 nested HostOS nodes (40 vCPUs each, NNS_RECOVERY_VM_RESOURCE_OVERRIDES).
     env = ENV,
     guestos_update = "test",
     setupos = True,
@@ -135,6 +141,7 @@ system_test_nns(
 
 system_test_nns(
     name = "nr_all_broken_seq_np_actions",
+    cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM + 4 * 40,  # 1 UVM + 1 GuestOS system node + 1 API BN + 1 ic-gateway (6 vCPUs each) + 4 nested HostOS nodes (40 vCPUs each, NNS_RECOVERY_VM_RESOURCE_OVERRIDES).
     env = ENV,
     guestos_update = "test",
     setupos = True,

@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "MAINNET_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "MAINNET_ENV", "MIN_LOCAL_CPUS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -9,6 +9,7 @@ exports_files([
 
 system_test_nns(
     name = "global_reboot_test",
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM,  # 2 fast-single-node Application subnets (1 IC Node VM each) * 6 vCPUs.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -35,6 +36,7 @@ system_test(
     compile_data = [
         "memory_safety.wasm",
     ],
+    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM,  # 1 System (fast single node) + 4 Application IC Node VMs = 5 VMs * 6 vCPUs.
     tags = [
         "long_test",
     ],
@@ -56,6 +58,7 @@ system_test(
 
 system_test_nns(
     name = "rejoin_test",
+    cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM,  # 1 System subnet with NUM_NODES=4 IC Node VMs * 6 vCPUs.
     tags = [
         "long_test",
     ],
@@ -72,6 +75,7 @@ system_test_nns(
 
 system_test_nns(
     name = "rejoin_test_large_state",
+    cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM,  # 1 System subnet with NUM_NODES=4 IC Node VMs * 6 vCPUs (override sets memory/boot image only).
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     tags = [
         "system_test_large",
@@ -91,6 +95,7 @@ system_test_nns(
 
 system_test_nns(
     name = "rejoin_test_long_rounds",
+    cpus = MIN_LOCAL_CPUS + 13 * 64,  # 1 Application subnet with NUM_NODES=13 IC Node VMs * 64 vCPUs (resource override).
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     enable_metrics = True,
     tags = [
@@ -112,6 +117,7 @@ system_test_nns(
 
 system_test_nns(
     name = "state_sync_malicious_chunk_test",
+    cpus = MIN_LOCAL_CPUS + 14 * DEFAULT_VCPUS_PER_VM,  # System subnet (6 + 1 malicious) + Application subnet (5 + 2 malicious) = 14 IC Node VMs * 6 vCPUs (override sets memory/boot image only).
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     guestos = "malicious",
     tags = [
@@ -133,6 +139,7 @@ system_test_nns(
 
 system_test(
     name = "queues_compatibility_test",
+    cpus = MIN_LOCAL_CPUS,  # setup is `|_| ()`, no Farm VMs deployed.
     env = MAINNET_ENV,
     runtime_deps = {
         "REPLICATED_STATE_TEST_BINARY_PATH": "//rs/replicated_state:replicated_state_test_binary",

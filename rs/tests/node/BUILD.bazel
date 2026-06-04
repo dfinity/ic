@@ -1,10 +1,12 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "MIN_LOCAL_CPUS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test_nns(
     name = "ipv4_integration_test",
+    cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 3 IC Node VMs (1 System + 1 Application + 1 unassigned) * 6 vCPUs.
     proc_macro_deps = [
         "@crate_index//:indoc",
     ],
@@ -30,6 +32,7 @@ system_test_nns(
 # Unit tests that require root privileges to run.
 system_test(
     name = "root_tests",
+    cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM,  # 1 UniversalVm * 6 vCPUs.
     guestos = False,
     proc_macro_deps = [
         "@crate_index//:indoc",
@@ -58,6 +61,7 @@ uvm_config_image(
 
 system_test(
     name = "reboot_toy",
+    cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
     tags = [
         "manual",
     ],
@@ -76,6 +80,7 @@ system_test(
 # bazel run //rs/tests/node:launch_single_guest -- --quiet
 system_test(
     name = "launch_single_guest",
+    cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
     tags = [
         "dynamic_testnet",
         "manual",
@@ -94,6 +99,7 @@ system_test(
 # bazel run //rs/tests/node:launch_single_host -- --quiet
 system_test(
     name = "launch_single_host",
+    cpus = MIN_LOCAL_CPUS + 1 * 8,  # 1 Nested/HostOS Node VM * 8 vCPUs.
     guestos = False,
     setupos = True,
     tags = [
@@ -126,6 +132,7 @@ rust_binary(
 # Doesn't run on PRs by default since we do multiple kill-start iterations which takes around 7 minutes.
 system_test(
     name = "kill_start_long_test",
+    cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
     env = {
         "NUM_KILL_START_ITERATIONS": "5",
     },
@@ -136,6 +143,7 @@ system_test(
 # Tests if killing and starting a node still allows the node to boot normally.
 system_test(
     name = "kill_start_short_test",
+    cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
     env = {
         "NUM_KILL_START_ITERATIONS": "1",
     },
@@ -145,6 +153,7 @@ system_test(
 # Tests that no systemd units have failed on GuestOS nodes after they boot.
 system_test(
     name = "guestos_no_failed_systemd_units",
+    cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",

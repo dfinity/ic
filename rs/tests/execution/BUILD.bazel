@@ -1,10 +1,11 @@
-load("//rs/tests:common.bzl", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "MIN_LOCAL_CPUS", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test(
     name = "compute_allocation_test",
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM,  # 2 IC Node VMs * 6 vCPUs.
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/config",
@@ -23,6 +24,7 @@ system_test(
 
 system_test(
     name = "cycles_restrictions_test",
+    cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 3 IC Node VMs * 6 vCPUs.
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
@@ -36,6 +38,7 @@ system_test(
 
 system_test(
     name = "cycles_cost_schedule_test",
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM + 1 unassigned node, 6 vCPUs each.
     tags = [
         "long_test",
     ],
@@ -62,7 +65,7 @@ system_test(
 system_test(
     name = "general_execution_test",
     srcs = glob(["general_execution_tests/*.rs"]),
-    cpus = 1 + 3 * 6,  # 1 CPU for the test + 3 VMs * 6 vCPUs.
+    cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 3 IC Node VMs * 6 vCPUs.
     crate_root = "general_execution_test.rs",
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -98,6 +101,7 @@ system_test(
 system_test(
     name = "inter_canister_queries_test",
     srcs = glob(["inter_canister_queries_tests/*.rs"]),
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM,  # 2 IC Node VMs * 6 vCPUs.
     crate_root = "inter_canister_queries_test.rs",
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -114,6 +118,7 @@ system_test(
 
 system_test(
     name = "max_number_of_canisters_test",
+    cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
@@ -129,6 +134,7 @@ system_test(
 
 system_test(
     name = "resource_limits_test",
+    cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/config",
@@ -143,6 +149,7 @@ system_test(
 
 system_test_nns(
     name = "canister_migration_test",
+    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM,  # 4 IC Node VMs + 1 API boundary node VM, 6 vCPUs each.
     enable_mainnet_nns_variant = False,
     tags = [
         "long_test",
@@ -171,6 +178,7 @@ system_test_nns(
 
 system_test(
     name = "system_api_security_test",
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM,  # 2 IC Node VMs * 6 vCPUs.
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
@@ -185,6 +193,7 @@ system_test(
 
 system_test(
     name = "system_subnets_test",
+    cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM,  # 4 IC Node VMs * 6 vCPUs.
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
@@ -202,6 +211,10 @@ system_test(
 
 system_test(
     name = "fill_execution_rounds_workload",
+    # TODO: figure out the number of vCPUs used by this performance test's setup
+    # (Jaeger UVM + an Application subnet of `subnet_size` nodes, all overridden
+    # to 16 vCPUs). It is tagged `manual` and not meant to run on the local backend.
+    cpus = MIN_LOCAL_CPUS,
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
     tags = [

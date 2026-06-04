@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "DEFAULT_VCPUS_PER_VM", "MESSAGE_CANISTER_RUNTIME_DEPS", "MIN_LOCAL_CPUS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -52,6 +52,7 @@ HTTP_ENDPOINTS_DEPS = [
 
 system_test_nns(
     name = "canister_http_test",
+    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -63,6 +64,7 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_flexible_test",
+    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
     runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
         "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
     },
@@ -73,6 +75,7 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_stress_test",
+    cpus = MIN_LOCAL_CPUS + (1 + 13 + 28 + 40 + 1) * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 83 IC Node VMs (1 system + 13+28+40 app + 1 API BN) + 1 UVM, 6 vCPUs each.
     enable_metrics = True,
     tags = ["manual"],  # not meant to be run on CI
     test_timeout = "eternal",
@@ -95,6 +98,7 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_soak_test",
+    cpus = MIN_LOCAL_CPUS + (1 + 13 + 28 + 40 + 1) * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 83 IC Node VMs (1 system + 13+28+40 app + 1 API BN) + 1 UVM, 6 vCPUs each.
     enable_metrics = True,
     tags = [
         "dynamic_testnet",
@@ -121,6 +125,7 @@ system_test_nns(
 # NOTE: This test is currently non-functional because API boundary nodes running GuestOS on Farm VMs do not support IPv4.
 system_test_nns(
     name = "canister_http_socks_test",
+    cpus = MIN_LOCAL_CPUS + 7 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 7 IC Node VMs (1 system + 4 app + 2 API BN) + 1 UVM (httpbin), 6 vCPUs each.
     tags = [
         "dynamic_testnet",
         "long_test",
@@ -137,6 +142,7 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_correctness_test",
+    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
     runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
         "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
     },
@@ -159,6 +165,7 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_fault_tolerance_test",
+    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
     tags = [
         "long_test",
     ],
@@ -177,6 +184,7 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_non_replicated_test",
+    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
     runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
         "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
     },
@@ -185,6 +193,7 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_time_out_test",
+    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
     tags = [
         "long_test",
     ],
@@ -196,6 +205,7 @@ system_test_nns(
 
 system_test_nns(
     name = "read_state_test",
+    cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM,  # 4 IC Node VMs (3 single-node subnets + 1 API BN), 6 vCPUs each.
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS | UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -261,6 +271,7 @@ rust_binary(
 
 system_test_nns(
     name = "nns_delegation_mainnet_nns_version_test",
+    cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 4 single-node subnets + 1 API BN, 6 vCPUs each.
     guestos = "mainnet_nns",
     guestos_update = True,
     tags = [
@@ -274,6 +285,7 @@ system_test_nns(
 
 system_test_nns(
     name = "nns_delegation_branch_nns_version_test",
+    cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 4 single-node subnets + 1 API BN, 6 vCPUs each.
     guestos_update = True,
     tags = [
         "long_test",
@@ -285,6 +297,7 @@ system_test_nns(
 
 system_test_nns(
     name = "http_endpoints_public_spec_test",
+    cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 3 IC Node VMs (1 system + 1 app + 1 API BN), 6 vCPUs each.
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + HTTP_ENDPOINTS_DEPS + [
         "@crate_index//:futures",
@@ -296,6 +309,7 @@ system_test_nns(
 
 system_test_nns(
     name = "network_large_test",
+    cpus = MIN_LOCAL_CPUS + (49 + 1) * 8,  # 50 IC Node VMs (49 system + 1 app), 8 vCPUs each (resource override).
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     tags = [
         "colocate",
@@ -313,6 +327,7 @@ system_test_nns(
 
 system_test_nns(
     name = "network_reliability_test",
+    cpus = MIN_LOCAL_CPUS + (4 + 7) * 8,  # 11 IC Node VMs (4 system + 7 app), 8 vCPUs each (resource override).
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     tags = [
         "colocate",
@@ -328,6 +343,7 @@ system_test_nns(
 
 system_test_nns(
     name = "p2p_performance_test",
+    cpus = MIN_LOCAL_CPUS + (1 + 13) * 16 + 1 * 16,  # 14 IC Node VMs (1 system + 13 app) + 1 Jaeger UVM, 16 vCPUs each (resource override).
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
     tags = [
@@ -352,6 +368,7 @@ system_test_nns(
     colocated_test_driver_vm_resources = {
         "vcpus": 16,
     },
+    cpus = MIN_LOCAL_CPUS + (1 + 13 + 1) * 16,  # 15 IC Node VMs (1 system + 13 app + 1 API BN), 16 vCPUs each (resource override).
     enable_head_nns_variant = False,
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
@@ -369,6 +386,7 @@ system_test_nns(
 system_test_nns(
     name = "state_sync_performance",
     colocated_test_driver_vm_required_host_features = ["performance"],
+    cpus = MIN_LOCAL_CPUS + (1 + 12) * DEFAULT_VCPUS_PER_VM,  # 13 IC Node VMs (1 system node + 12 unassigned), 6 vCPUs each.
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
@@ -403,6 +421,7 @@ system_test_nns(
     colocated_test_driver_vm_resources = {
         "vcpus": 16,
     },
+    cpus = MIN_LOCAL_CPUS + (1 + 13 + 1) * 16,  # 15 IC Node VMs (1 system + 13 app + 1 API BN), 16 vCPUs each (resource override).
     enable_head_nns_variant = False,
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
@@ -419,6 +438,7 @@ system_test_nns(
 
 system_test(
     name = "cloner_canister_workload",
+    cpus = MIN_LOCAL_CPUS + 13 * 64,  # 13 IC Node VMs, 64 vCPUs each (resource override).
     enable_metrics = True,
     tags = [
         "manual",
