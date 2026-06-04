@@ -42,6 +42,7 @@ def system_test(
         additional_colocate_tags = [],
         logs = True,
         vm_allocation_mode = None,
+        cpus = None,
         **kwargs):
     """Declares a system-test.
 
@@ -92,6 +93,9 @@ def system_test(
         `"performanceOptimizedAllocation"`,
         `"minIntraDistanceLoadBalanceAllocation"` or `"distributeAcrossDcs"`.
         When None it defaults to `"minIntraDistanceLoadBalanceAllocation"`.
+      cpus: Optional number of CPU cores to reserve for the local variant of the test.
+        This will translate into a `cpu:N` tag for the `_local` variant.
+        Set it to 1 + number of vCPUs required for the whole testnet.
       **kwargs: additional arguments to pass to the rust_binary rule.
 
     Returns:
@@ -258,6 +262,8 @@ def system_test(
     }
     local_args = [] if "--no-logs" in extra_args_simple else ["--no-logs"]
 
+    reserve_cpus = [] if cpus == None else ["cpu:{}".format(cpus)]
+
     sh_test(
         name = test_name + "_local",
         srcs = ["//rs/tests:run_systest.sh"],
@@ -269,7 +275,7 @@ def system_test(
             "RUN_SCRIPT_RUNTIME_DEP_ENV_VARS": ";".join(_runtime_deps.keys() + _local_only_deps.keys()),
         },
         env_inherit = env_inherit,
-        tags = tags + ["manual", "local_system_test"],
+        tags = tags + ["manual", "local_system_test"] + reserve_cpus,
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,
