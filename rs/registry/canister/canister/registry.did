@@ -218,6 +218,38 @@ type GetApiBoundaryNodeIdsRequest = record {
 
 };
 
+type GetApiBoundaryNodeIdsResponse = variant {
+    Ok : vec ApiBoundaryNodeIdRecord;
+    Err : text;
+};
+
+type ApiBoundaryNodeIdRecord = record {
+  id : opt principal;
+};
+
+type GetChunkRequest = record {
+  content_sha256 : opt blob;
+};
+
+type GetChunkResponse = variant {
+  Ok : Chunk;
+  Err : text;
+};
+
+type Chunk = record {
+  content : opt blob;
+};
+
+type GetNodeOperatorsAndDcsOfNodeProviderResponse = variant {
+  Ok : vec record { DataCenterRecord; NodeOperatorRecord };
+  Err : text;
+};
+
+type GetNodeProvidersMonthlyXdrRewardsResponse = variant {
+  Ok : NodeProvidersMonthlyXdrRewards;
+  Err : text;
+};
+
 type GetSubnetRequest = record {
   subnet_id : opt principal;
 };
@@ -250,38 +282,6 @@ type SubnetRecord = record {
 
 type GetSubnetResponse = variant {
   Ok : SubnetRecord;
-  Err : text;
-};
-
-type GetApiBoundaryNodeIdsResponse = variant {
-    Ok : vec ApiBoundaryNodeIdRecord;
-    Err : text;
-};
-
-type ApiBoundaryNodeIdRecord = record {
-  id : opt principal;
-};
-
-type GetChunkRequest = record {
-  content_sha256 : opt blob;
-};
-
-type GetChunkResponse = variant {
-  Ok : Chunk;
-  Err : text;
-};
-
-type Chunk = record {
-  content : opt blob;
-};
-
-type GetNodeOperatorsAndDcsOfNodeProviderResponse = variant {
-  Ok : vec record { DataCenterRecord; NodeOperatorRecord };
-  Err : text;
-};
-
-type GetNodeProvidersMonthlyXdrRewardsResponse = variant {
-  Ok : NodeProvidersMonthlyXdrRewards;
   Err : text;
 };
 
