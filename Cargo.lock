@@ -25999,7 +25999,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
 name = "wasmparser"
 version = "0.251.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -26013,8 +26012,6 @@ dependencies = [
 ]
 
 [[package]]
-=======
->>>>>>> master
 name = "wasmprinter"
 version = "0.248.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -26026,7 +26023,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
 name = "wasmprinter"
 version = "0.251.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -26041,11 +26037,6 @@ dependencies = [
 name = "wasmtime"
 version = "45.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-=======
-name = "wasmtime"
-version = "45.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
->>>>>>> master
 checksum = "d35aec1e932d00a7c941f816ad589e65ad8db948b9e971bf8ec655a1669f1f67"
 dependencies = [
  "addr2line 0.26.0",
@@ -26106,11 +26097,7 @@ dependencies = [
  "target-lexicon",
  "wasm-encoder 0.248.0",
  "wasmparser 0.248.0",
-<<<<<<< HEAD
  "wasmprinter 0.248.0",
-=======
- "wasmprinter",
->>>>>>> master
  "wasmtime-internal-core",
 ]
 
