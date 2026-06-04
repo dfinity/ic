@@ -853,9 +853,7 @@ impl CanisterHttpPayloadBuilderImpl {
             }
         }
 
-        // Batch-verify the signatures of the deferred shares. An empty batch is
-        // skipped, since `verify_basic_sig_batch_multi_msg` rejects empty input
-        // with an `InvalidArgument` error.
+        // Batch-verify the signatures of the deferred shares.
         if !sig_inputs.is_empty() {
             self.crypto
                 .verify_basic_sig_batch_multi_msg(&sig_inputs, consensus_registry_version)
