@@ -140,17 +140,13 @@ fn bench_payload_verification(c: &mut Criterion) {
             let target = build_target(pool_config, config);
             group.bench_with_input(BenchmarkId::from_parameter(config.label), config, |b, _| {
                 b.iter(|| {
-                    black_box(
-                        target
-                            .builder
-                            .validate_canister_http_payload_impl(
-                                black_box(target.height),
-                                black_box(&target.payload),
-                                black_box(&target.validation_context),
-                                black_box(HashSet::new()),
-                            )
-                            .expect("validation failed"),
-                    );
+                    black_box(target.builder.validate_canister_http_payload_impl(
+                        black_box(target.height),
+                        black_box(&target.payload),
+                        black_box(&target.validation_context),
+                        black_box(HashSet::new()),
+                    ))
+                    .expect("validation failed");
                 })
             });
         });
@@ -171,7 +167,7 @@ fn build_target(
         .collect();
 
     // Subnet record with the canister HTTP feature enabled, at REGISTRY_VERSION.
-    let mut subnet_record = SubnetRecordBuilder::from(&committee)
+    let subnet_record = SubnetRecordBuilder::from(&committee)
         .with_features(SubnetFeatures {
             http_requests: true,
             ..SubnetFeatures::default()
