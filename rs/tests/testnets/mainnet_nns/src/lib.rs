@@ -288,6 +288,7 @@ async fn setup_recovered_nns(
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
+            subnet_admins: None,
             max_artifact_streams_per_peer: None,
             max_chunk_wait_ms: None,
             max_duplicity: None,

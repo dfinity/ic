@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 14.0.0 - 2026-05-26
+
 ### Added
 - The function `PocketIcBuilder::disable_ingress_validation` to specify that ingress validation
   should be disabled for mainnet-like endpoints `/instances/<instance_id>/api/...` of the instance.

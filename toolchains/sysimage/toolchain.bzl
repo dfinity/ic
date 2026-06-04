@@ -181,6 +181,8 @@ def _vfat_image_impl(ctx):
         ctx.attr.subdir,
         "--dflate",
         ctx.executable._dflate.path,
+        "--zstd",
+        ctx.executable._zstd.path,
     ])
 
     for input_target, install_target in ctx.attr.extra_files.items():
@@ -193,7 +195,7 @@ def _vfat_image_impl(ctx):
         arguments = args,
         inputs = inputs,
         outputs = outputs,
-        tools = [ctx.attr._tool.files_to_run, ctx.attr._dflate.files_to_run],
+        tools = [ctx.attr._tool.files_to_run, ctx.attr._dflate.files_to_run, ctx.attr._zstd.files_to_run],
     )
 
     return [DefaultInfo(files = depset(outputs))]
@@ -223,6 +225,11 @@ vfat_image = _icos_build_rule(
             executable = True,
             cfg = "exec",
         ),
+        "_zstd": attr.label(
+            default = "@zstd//:zstd_cli",
+            executable = True,
+            cfg = "exec",
+        ),
     },
 )
 
@@ -247,6 +254,8 @@ def _fat32_image_impl(ctx):
         ctx.attr.subdir,
         "--dflate",
         ctx.executable._dflate.path,
+        "--zstd",
+        ctx.executable._zstd.path,
     ])
 
     for input_target, install_target in ctx.attr.extra_files.items():
@@ -262,7 +271,7 @@ def _fat32_image_impl(ctx):
         arguments = args,
         inputs = inputs,
         outputs = outputs,
-        tools = [ctx.attr._tool.files_to_run, ctx.attr._dflate.files_to_run],
+        tools = [ctx.attr._tool.files_to_run, ctx.attr._dflate.files_to_run, ctx.attr._zstd.files_to_run],
     )
 
     return [DefaultInfo(files = depset(outputs))]
@@ -293,6 +302,11 @@ fat32_image = _icos_build_rule(
             executable = True,
             cfg = "exec",
         ),
+        "_zstd": attr.label(
+            default = "@zstd//:zstd_cli",
+            executable = True,
+            cfg = "exec",
+        ),
     },
 )
 
@@ -319,6 +333,8 @@ def _ext4_image_impl(ctx):
         ctx.executable._diroid.path,
         "--dflate",
         ctx.executable._dflate.path,
+        "--zstd",
+        ctx.executable._zstd.path,
     ])
 
     if ctx.attr.file_contexts:
@@ -340,7 +356,7 @@ def _ext4_image_impl(ctx):
         arguments = args,
         inputs = inputs,
         outputs = outputs,
-        tools = [ctx.attr._tool.files_to_run, ctx.attr._diroid.files_to_run, ctx.attr._dflate.files_to_run],
+        tools = [ctx.attr._tool.files_to_run, ctx.attr._diroid.files_to_run, ctx.attr._dflate.files_to_run, ctx.attr._zstd.files_to_run],
     )
 
     return [DefaultInfo(files = depset(outputs))]
@@ -376,6 +392,11 @@ ext4_image = _icos_build_rule(
         ),
         "_dflate": attr.label(
             default = "//rs/ic_os/build_tools/dflate",
+            executable = True,
+            cfg = "exec",
+        ),
+        "_zstd": attr.label(
+            default = "@zstd//:zstd_cli",
             executable = True,
             cfg = "exec",
         ),
@@ -462,6 +483,8 @@ def _lvm_image_impl(ctx):
         ctx.attr.pv_uuid,
         "--dflate",
         ctx.executable._dflate.path,
+        "--zstd",
+        ctx.executable._zstd.path,
     ])
     inputs.extend(ctx.files.layout)
 
@@ -475,7 +498,7 @@ def _lvm_image_impl(ctx):
         arguments = args,
         inputs = inputs,
         outputs = outputs,
-        tools = [ctx.attr._tool.files_to_run, ctx.attr._dflate.files_to_run],
+        tools = [ctx.attr._tool.files_to_run, ctx.attr._dflate.files_to_run, ctx.attr._zstd.files_to_run],
     )
 
     return [DefaultInfo(files = depset(outputs))]
@@ -500,6 +523,11 @@ lvm_image = _icos_build_rule(
         ),
         "_dflate": attr.label(
             default = "//rs/ic_os/build_tools/dflate",
+            executable = True,
+            cfg = "exec",
+        ),
+        "_zstd": attr.label(
+            default = "@zstd//:zstd_cli",
             executable = True,
             cfg = "exec",
         ),

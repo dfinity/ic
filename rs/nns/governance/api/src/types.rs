@@ -2869,6 +2869,7 @@ pub struct GuestLaunchMeasurement {
 )]
 pub struct GuestLaunchMeasurementMetadata {
     pub kernel_cmdline: Option<String>,
+    pub vcpu_type: Option<String>,
 }
 
 /// Loads a snapshot of the canister.

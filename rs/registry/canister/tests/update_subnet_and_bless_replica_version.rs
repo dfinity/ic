@@ -34,12 +34,14 @@ fn guest_launch_measurements_for_test() -> Option<GuestLaunchMeasurements> {
                 measurement: vec![0x42; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("foo=bar".into()),
+                    vcpu_type: None,
                 }),
             },
             GuestLaunchMeasurement {
                 measurement: vec![0x42; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("hello=world".into()),
+                    vcpu_type: None,
                 }),
             },
         ],

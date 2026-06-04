@@ -6,7 +6,7 @@ use std::{
 use thiserror::Error;
 
 use ic_interfaces::p2p::consensus::{
-    ArtifactAssembler, AssembleResult, BouncerFactory, Peers, ValidatedPoolReader,
+    ArtifactAssembler, AssembleResult, BouncerFactory, BouncerValue, Peers, ValidatedPoolReader,
 };
 use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
@@ -228,7 +228,23 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
         let mut messages_from_pool = BTreeMap::<StrippedMessageType, usize>::new();
         let mut messages_from_peers = BTreeMap::<StrippedMessageType, usize>::new();
 
-        while let Some(join_result) = join_set.join_next().await {
+        // Abort the assembly as soon as the block proposal is no longer wanted. Returning
+        // here drops `join_set`, which aborts all outstanding child fetch tasks.
+        let mut bouncer = self.fetch_stripped.bouncer_watcher();
+
+        loop {
+            let join_result = tokio::select! {
+                _ = bouncer.wait_for(|bouncer| matches!(bouncer(&id), BouncerValue::Unwanted)) => {
+                    self.metrics.report_aborted_block_assembly();
+                    return AssembleResult::Unwanted;
+                }
+                join_result = join_set.join_next() => join_result,
+            };
+
+            let Some(join_result) = join_result else {
+                break;
+            };
+
             let Ok((message, peer_id)) = join_result else {
                 return AssembleResult::Unwanted;
             };
@@ -1074,6 +1090,91 @@ mod tests {
                 peer_id: NODE_1
             }
         );
+    }
+
+    /// A peer set that advertises no peers (so missing stripped messages can never be fetched
+    /// from a peer) and signals the first time it is consulted, letting the test synchronize on
+    /// the assembler having reached the missing-stripped-message fetch.
+    #[derive(Clone)]
+    struct SignallingNoPeers(Arc<tokio::sync::Notify>);
+
+    impl Peers for SignallingNoPeers {
+        fn peers(&self) -> Vec<NodeId> {
+            self.0.notify_one();
+            Vec::new()
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn assemble_aborts_when_bouncer_becomes_unwanted() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        // A block proposal with a single ingress message that the receiver is missing.
+        let (ingress, _) = fake_ingress_message_with_sig("fake_1", vec![1, 2, 3]);
+        let block_proposal = fake_block_proposal_with_ingresses(vec![ingress]);
+
+        // The bouncer reports `Wants` until `wants` flips to `false`, after which it reports
+        // `Unwanted`.
+        let wants = Arc::new(AtomicBool::new(true));
+        let wants_clone = wants.clone();
+        let mut mock_bouncer_factory = MockBouncerFactory::default();
+        mock_bouncer_factory
+            .expect_new_bouncer()
+            .returning(move |_| {
+                let wants = wants_clone.clone();
+                Box::new(move |_: &ConsensusMessageId| {
+                    if wants.load(Ordering::SeqCst) {
+                        BouncerValue::Wants
+                    } else {
+                        BouncerValue::Unwanted
+                    }
+                })
+            });
+
+        // The missing ingress is never in the local pool, and there are no peers to fetch it
+        // from, so the fetch of the missing stripped message would otherwise stay pending forever.
+        let mut ingress_pool = MockValidatedPoolReader::<SignedIngress>::default();
+        ingress_pool.expect_get().returning(|_| None);
+        let consensus_pool = MockValidatedPoolReader::<ConsensusMessage>::default();
+        let idkg_pool = MockValidatedPoolReader::<IDkgMessage>::default();
+
+        let f = FetchStrippedConsensusArtifact::new(
+            no_op_logger(),
+            tokio::runtime::Handle::current(),
+            Arc::new(RwLock::new(consensus_pool)),
+            Arc::new(RwLock::new(ingress_pool)),
+            Arc::new(RwLock::new(idkg_pool)),
+            Arc::new(mock_bouncer_factory),
+            MetricsRegistry::new(),
+            NODE_1,
+        )
+        .0;
+        let assembler = (f)(Arc::new(MockTransport::new()));
+
+        let stripped_block_proposal =
+            assembler.disassemble_message(ConsensusMessage::BlockProposal(block_proposal));
+        let started = Arc::new(tokio::sync::Notify::new());
+        let peers = SignallingNoPeers(started.clone());
+        let handle = tokio::spawn(async move {
+            assembler
+                .assemble_message(
+                    stripped_block_proposal.id(),
+                    Some((stripped_block_proposal, NODE_1)),
+                    peers,
+                )
+                .await
+        });
+
+        // Wait until the assembler has downloaded the stripped proposal
+        started.notified().await;
+
+        // The proposal is no longer wanted. Advancing past the bouncer refresh period delivers
+        // the new `Unwanted` value, which must abort the assembly instead of waiting forever for
+        // the missing ingress.
+        wants.store(false, Ordering::SeqCst);
+        tokio::time::advance(Duration::from_secs(4)).await;
+
+        assert_eq!(handle.await.unwrap(), AssembleResult::Unwanted);
     }
 
     #[test]

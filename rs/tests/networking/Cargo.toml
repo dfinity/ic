@@ -104,14 +104,6 @@ name = "ic-systest-read-state-test"
 path = "read_state_test.rs"
 
 [[bin]]
-name = "ic-systest-firewall-max-connections-test"
-path = "firewall_max_connections_test.rs"
-
-[[bin]]
-name = "ic-systest-firewall-priority-test"
-path = "firewall_priority_test.rs"
-
-[[bin]]
 name = "ic-systest-http-endpoints-public-spec-test"
 path = "http_endpoints_public_spec_test.rs"
 

@@ -26,8 +26,10 @@ Success::
 end::catalog[] */
 
 use anyhow::Result;
-use candid::CandidType;
-use ic_nns_governance_api::NnsFunction;
+use ic_firewall_system_test_utils::{
+    BACKOFF_DELAY, execute_add_firewall_rules_proposal, execute_remove_firewall_rules_proposal,
+    execute_update_firewall_rules_proposal,
+};
 use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
 use ic_registry_keys::FirewallRulesScope;
 use ic_registry_subnet_type::SubnetType;
@@ -41,30 +43,15 @@ use ic_system_test_driver::{
             NnsInstallationBuilder, SshSession,
         },
     },
-    nns::{
-        await_proposal_execution, submit_external_proposal_with_test_id,
-        vote_execute_proposal_assert_executed,
-    },
     systest,
     util::{self, block_on},
-};
-use registry_canister::mutations::firewall::{
-    AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
-    compute_firewall_ruleset_hash,
 };
 use slog::{Logger, info};
 use std::time::Duration;
 use url::Url;
-const INITIAL_WAIT: Duration = Duration::from_secs(10);
-const WAIT_TIMEOUT: Duration = Duration::from_secs(60);
-const BACKOFF_DELAY: Duration = Duration::from_secs(5);
-const MAX_WAIT: Duration = Duration::from_secs(120);
 
-enum Proposal<T: CandidType> {
-    Add(T, NnsFunction),
-    Remove(T, NnsFunction),
-    Update(T, NnsFunction),
-}
+const INITIAL_WAIT: Duration = Duration::from_secs(10);
+const MAX_WAIT: Duration = Duration::from_secs(120);
 
 pub fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -158,16 +145,13 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
         user: None,
         direction: Some(FirewallRuleDirection::Inbound as i32),
     }];
-    let proposal = prepare_add_rules_proposal(
+    block_on(execute_add_firewall_rules_proposal(
+        &log,
+        &nns_node,
         FirewallRulesScope::Node(toggle_endpoint.node_id),
         node_rules.clone(),
         vec![0],
         vec![],
-    );
-    block_on(execute_proposal(
-        &log,
-        &nns_node,
-        Proposal::Add(proposal, NnsFunction::AddFirewallRules),
     ));
 
     info!(log, "New rule is set. Testing connectivity with backoff...");
@@ -192,18 +176,15 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
     let allow_port = FirewallAction::Allow;
     let mut new_rule = node_rules[0].clone();
     new_rule.action = allow_port.into();
-    let proposal = prepare_add_rules_proposal(
+    block_on(execute_add_firewall_rules_proposal(
+        &log,
+        &nns_node,
         FirewallRulesScope::Node(toggle_endpoint.node_id),
         vec![new_rule.clone()],
         vec![0],
         node_rules.clone(),
-    );
-    node_rules = vec![new_rule, node_rules[0].clone()];
-    block_on(execute_proposal(
-        &log,
-        &nns_node,
-        Proposal::Add(proposal, NnsFunction::AddFirewallRules),
     ));
+    node_rules = vec![new_rule, node_rules[0].clone()];
 
     info!(log, "New rule is set. Testing connectivity with backoff...");
     assert!(await_rule_execution_with_backoff(
@@ -223,17 +204,14 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
     );
 
     // Remove the last rule we added
-    let proposal = prepare_remove_rules_proposal(
+    block_on(execute_remove_firewall_rules_proposal(
+        &log,
+        &nns_node,
         FirewallRulesScope::Node(toggle_endpoint.node_id),
         vec![0],
         node_rules.clone(),
-    );
-    node_rules = vec![node_rules[1].clone()];
-    block_on(execute_proposal(
-        &log,
-        &nns_node,
-        Proposal::Remove(proposal, NnsFunction::RemoveFirewallRules),
     ));
+    node_rules = vec![node_rules[1].clone()];
 
     info!(log, "Rule is removed. Testing connectivity with backoff...");
     assert!(await_rule_execution_with_backoff(
@@ -256,18 +234,15 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
     // Update the other existing node-specific rule to block port 9091
     let mut updated_rule = node_rules[0].clone();
     updated_rule.ports = vec![9091];
-    let proposal = prepare_update_rules_proposal(
+    block_on(execute_update_firewall_rules_proposal(
+        &log,
+        &nns_node,
         FirewallRulesScope::Node(toggle_endpoint.node_id),
         vec![updated_rule.clone()],
         vec![0],
         node_rules,
-    );
-    node_rules = vec![updated_rule];
-    block_on(execute_proposal(
-        &log,
-        &nns_node,
-        Proposal::Update(proposal, NnsFunction::UpdateFirewallRules),
     ));
+    node_rules = vec![updated_rule];
 
     info!(log, "Rule is updated. Testing connectivity with backoff...");
     assert!(await_rule_execution_with_backoff(
@@ -290,16 +265,13 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
     // Update the existing node-specific rule to block port {http}
     let mut updated_rule = node_rules[0].clone();
     updated_rule.ports = vec![toggle_endpoint.get_public_url().port().unwrap().into()];
-    let proposal = prepare_update_rules_proposal(
+    block_on(execute_update_firewall_rules_proposal(
+        &log,
+        &nns_node,
         FirewallRulesScope::Node(toggle_endpoint.node_id),
         vec![updated_rule],
         vec![0],
         node_rules,
-    );
-    block_on(execute_proposal(
-        &log,
-        &nns_node,
-        Proposal::Update(proposal, NnsFunction::UpdateFirewallRules),
     ));
 
     info!(log, "Rule is updated. Testing connectivity with backoff...");
@@ -344,40 +316,16 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
 
 async fn set_default_registry_rules(log: &Logger, nns_node: &IcNodeSnapshot) {
     let firewall_config = util::get_config().firewall.unwrap();
-    let default_rules = firewall_config.default_rules.clone();
-    let proposal = prepare_add_rules_proposal(
+    let default_rules = firewall_config.default_rules;
+    execute_add_firewall_rules_proposal(
+        log,
+        nns_node,
         FirewallRulesScope::ReplicaNodes,
         default_rules.clone(),
         (0..default_rules.len()).map(|u| u as i32).collect(),
         vec![],
-    );
-    execute_proposal(
-        log,
-        nns_node,
-        Proposal::Add(proposal, NnsFunction::AddFirewallRules),
     )
-    .await;
-}
-
-async fn execute_proposal<T: Clone + CandidType>(
-    log: &Logger,
-    nns_node: &IcNodeSnapshot,
-    proposal: Proposal<T>,
-) {
-    let (proposal_payload, function) = match proposal {
-        Proposal::Add(payload, func) => (payload, func),
-        Proposal::Remove(payload, func) => (payload, func),
-        Proposal::Update(payload, func) => (payload, func),
-    };
-    let nns = util::runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    let governance = ic_system_test_driver::nns::get_governance_canister(&nns);
-    let proposal_id =
-        submit_external_proposal_with_test_id(&governance, function, proposal_payload.clone())
-            .await;
-    vote_execute_proposal_assert_executed(&governance, proposal_id).await;
-
-    // wait until proposal is executed
-    await_proposal_execution(log, &governance, proposal_id, BACKOFF_DELAY, WAIT_TIMEOUT).await;
+    .await
 }
 
 fn get_request_succeeds(url: &Url) -> bool {
@@ -389,63 +337,8 @@ fn get_request_succeeds(url: &Url) -> bool {
     http_client.get(url.clone()).send().is_ok()
 }
 
-fn prepare_add_rules_proposal(
-    scope: FirewallRulesScope,
-    new_rules: Vec<FirewallRule>,
-    positions_sorted: Vec<i32>,
-    previous_rules: Vec<FirewallRule>,
-) -> AddFirewallRulesPayload {
-    let mut all_rules = previous_rules;
-    for (rule, pos) in new_rules.iter().zip(positions_sorted.clone()) {
-        all_rules.insert(pos as usize, rule.clone());
-    }
-    AddFirewallRulesPayload {
-        scope,
-        rules: new_rules,
-        positions: positions_sorted,
-        expected_hash: compute_firewall_ruleset_hash(&all_rules),
-    }
-}
-
-fn prepare_remove_rules_proposal(
-    scope: FirewallRulesScope,
-    positions: Vec<i32>,
-    previous_rules: Vec<FirewallRule>,
-) -> RemoveFirewallRulesPayload {
-    let mut all_rules = previous_rules;
-    let mut positions_sorted = positions.clone();
-    positions_sorted.sort_unstable();
-    positions_sorted.reverse();
-    for pos in positions_sorted {
-        all_rules.remove(pos as usize);
-    }
-    RemoveFirewallRulesPayload {
-        scope,
-        positions,
-        expected_hash: compute_firewall_ruleset_hash(&all_rules),
-    }
-}
-
-fn prepare_update_rules_proposal(
-    scope: FirewallRulesScope,
-    new_rules: Vec<FirewallRule>,
-    positions_sorted: Vec<i32>,
-    previous_rules: Vec<FirewallRule>,
-) -> UpdateFirewallRulesPayload {
-    let mut all_rules = previous_rules;
-    for (rule, pos) in new_rules.iter().zip(positions_sorted.clone()) {
-        all_rules[pos as usize] = rule.clone();
-    }
-    UpdateFirewallRulesPayload {
-        scope,
-        rules: new_rules,
-        positions: positions_sorted,
-        expected_hash: compute_firewall_ruleset_hash(&all_rules),
-    }
-}
-
 fn await_rule_execution_with_backoff(
-    log: &slog::Logger,
+    log: &Logger,
     test: &dyn Fn() -> bool,
     initial_wait: Duration,
     linear_backoff: Duration,

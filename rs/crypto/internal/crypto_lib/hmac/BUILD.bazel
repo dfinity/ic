@@ -24,8 +24,6 @@ rust_test(
     deps = [
         # Keep sorted.
         "//rs/crypto/sha2",
-        "@crate_index//:hex",
-        "@crate_index//:wycheproof",
     ],
 )
 

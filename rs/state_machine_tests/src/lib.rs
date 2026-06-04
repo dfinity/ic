@@ -9,7 +9,7 @@ use ic_config::{
     execution_environment::Config as HypervisorConfig,
     message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES},
     state_manager::LsmtConfig,
-    subnet_config::SubnetConfig,
+    subnet_config::{SubnetConfig, SubnetSecurity},
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus_cup_utils::make_registry_cup_from_cup_contents;
@@ -1994,7 +1994,10 @@ impl StateMachine {
 
         let (mut subnet_config, hypervisor_config) = match config {
             Some(config) => (config.subnet_config, config.hypervisor_config),
-            None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
+            None => (
+                SubnetConfig::new(subnet_type, SubnetSecurity::None),
+                HypervisorConfig::default(),
+            ),
         };
         if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
             subnet_config
@@ -4421,7 +4424,7 @@ impl StateMachine {
             .get_latest_state()
             .take()
             .canister_states()
-            .keys()
+            .all_keys()
             .cloned()
             .collect()
     }
@@ -5218,10 +5221,10 @@ impl StateMachine {
             .collect();
         let (_height, mut replicated_state) = self.state_manager.take_tip();
         let mut synthetic_responses = vec![];
-        for canister_state in replicated_state.canisters_iter_mut() {
+        replicated_state.canisters_for_each_mut(|_, canister_state| {
             let Some(call_context_manager) = canister_state.system_state.call_context_manager()
             else {
-                continue;
+                return;
             };
             for (callback_id, callback) in call_context_manager.callbacks().iter() {
                 let is_remote = if callback.respondent.get() == self.get_subnet_id().get() {
@@ -5255,7 +5258,7 @@ impl StateMachine {
                     synthetic_responses.push(response);
                 }
             }
-        }
+        });
         let mut available_guaranteed_response_memory = self
             .hypervisor_config
             .guaranteed_response_message_memory_capacity
@@ -5596,7 +5599,7 @@ pub fn two_subnets_with_config(
 /// Sets up two `StateMachine` that can communicate with each other.
 pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
     let config = StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::Application),
+        SubnetConfig::new(SubnetType::Application, SubnetSecurity::None),
         HypervisorConfig::default(),
     );
     two_subnets_with_config(config.clone(), config)

@@ -40,7 +40,6 @@ rust_test(
         "//rs/crypto/tls_interfaces/mocks",
         "//rs/interfaces/registry/mocks",
         "//rs/interfaces/state_manager",
-        "//rs/registry/keys",
         "//rs/replicated_state",
         "//rs/test_utilities",
         "//rs/test_utilities/logger",

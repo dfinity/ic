@@ -101,13 +101,18 @@ impl<T: CountBytes, S: CountBytes> CountBytes for Signed<T, S> {
 
 /// Signed bytes, not containing a domain separator. Also refer to the doc of
 /// `SignedBytesWithoutDomainSeparator::
-/// as_signed_bytes_without_domain_separator`.
+/// write_signed_bytes_without_domain_separator`.
 pub trait SignedBytesWithoutDomainSeparator {
-    /// Returns a bytes-representation of the object for digital signatures.
-    /// The returned value together with a domain-separator (that can be empty,
-    /// depending on the type) are the bytes that are used for
+    /// Appends the bytes-representation of the object for digital signatures to
+    /// `bytes`. The appended value together with a domain-separator (that can
+    /// be empty, depending on the type) are the bytes that are used for
     /// signing/verification.
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8>;
+    ///
+    /// Writing directly into `bytes` allows callers that assemble the full
+    /// signed bytes (e.g. a domain separator followed by these bytes) to avoid
+    /// materializing an intermediate `Vec` and copying it into the output
+    /// buffer.
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>);
 }
 
 /// A purpose of a key. This is used for storing and retrieving keys from the

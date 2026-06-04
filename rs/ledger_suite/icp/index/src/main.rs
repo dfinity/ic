@@ -1,8 +1,8 @@
-#![allow(deprecated)]
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_canister_log::{export as export_logs, log};
-use ic_cdk::api::caller;
+use ic_cdk::api::msg_caller;
+use ic_cdk::call::Call;
 use ic_cdk::{init, post_upgrade, query, trap};
 use ic_cdk_timers::TimerId;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
@@ -125,6 +125,7 @@ impl State {
 // a Default impl for the initialization of the [STATE] variable above.
 impl Default for State {
     fn default() -> Self {
+        #[allow(deprecated)]
         Self {
             is_build_index_running: false,
             ledger_id: Principal::management_canister(),
@@ -315,10 +316,12 @@ async fn get_blocks_from_ledger(start: u64) -> Result<QueryEncodedBlocksResponse
         start,
         length: DEFAULT_MAX_BLOCKS_PER_RESPONSE as u64,
     };
-    let (res,): (QueryEncodedBlocksResponse,) =
-        ic_cdk::call(ledger_id, "query_encoded_blocks", (req,))
-            .await
-            .map_err(|(code, str)| format!("code: {code:#?} message: {str}"))?;
+    let res: QueryEncodedBlocksResponse = Call::unbounded_wait(ledger_id, "query_encoded_blocks")
+        .with_arg(&req)
+        .await
+        .map_err(|err| format!("{err}"))?
+        .candid()
+        .map_err(|err| format!("candid decode failed: {err}"))?;
     Ok(res)
 }
 
@@ -329,13 +332,15 @@ async fn get_blocks_from_archive(
         start: block_range.start,
         length: block_range.length,
     };
-    let (blocks_res,): (GetEncodedBlocksResult,) = ic_cdk::call(
+    let blocks_res: GetEncodedBlocksResult = Call::unbounded_wait(
         block_range.callback.canister_id,
         &block_range.callback.method,
-        (req,),
     )
+    .with_arg(&req)
     .await
-    .map_err(|(code, str)| format!("code: {code:#?} message: {str}"))?;
+    .map_err(|err| format!("{err}"))?
+    .candid()
+    .map_err(|err| format!("candid decode failed: {err}"))?;
     let blocks = blocks_res.map_err(|err| match err {
         icp_ledger::GetBlocksError::BadFirstBlockIndex {
             requested_index,
@@ -558,7 +563,7 @@ fn get_block_range_from_stable_memory(
     length: u64,
 ) -> Result<Vec<EncodedBlock>, String> {
     let length =
-        length.min(icp_ledger::max_blocks_per_request(&PrincipalId::from(caller())) as u64);
+        length.min(icp_ledger::max_blocks_per_request(&PrincipalId::from(msg_caller())) as u64);
     with_blocks(|blocks| {
         let limit = blocks.len().min(start.saturating_add(length));
         let mut res = vec![];
@@ -597,12 +602,12 @@ fn get_oldest_tx_id(account_identifier: AccountIdentifier) -> Option<BlockIndex>
 pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "index_stable_memory_pages",
-        ic_cdk::api::stable::stable_size() as f64,
+        ic_cdk::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "stable_memory_bytes",
-        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
+        (ic_cdk::stable::stable_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
@@ -611,7 +616,7 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
         "Size of the heap memory allocated by this canister measured in bytes.",
     )?;
 
-    let cycle_balance = ic_cdk::api::canister_balance128() as f64;
+    let cycle_balance = ic_cdk::api::canister_cycle_balance() as f64;
     w.encode_gauge(
         "index_cycle_balance",
         cycle_balance,
@@ -651,7 +656,7 @@ fn get_account_identifier_transactions(
 ) -> GetAccountIdentifierTransactionsResult {
     let length = arg
         .max_results
-        .min(icp_ledger::max_blocks_per_request(&PrincipalId::from(caller())) as u64)
+        .min(icp_ledger::max_blocks_per_request(&PrincipalId::from(msg_caller())) as u64)
         .min(usize::MAX as u64) as usize;
     // TODO: deal with the user setting start to u64::MAX
     let start = arg.start.map_or(u64::MAX, |n| n);

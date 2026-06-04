@@ -2232,7 +2232,7 @@ pub(crate) mod tests {
         }
     }
 
-    /// Generates a list of ingress messages with given parameters, and 500 billion cycles
+    /// Generates a list of ingress messages with given parameters, and 50 trillion cycles
     pub(crate) fn generate_ingress_messages_with_params(
         cid: CanisterId,
         msg_count: usize,
@@ -2247,7 +2247,7 @@ pub(crate) mod tests {
             msgs,
             CanisterStateBuilder::default()
                 .with_canister_id(cid)
-                .with_cycles(Cycles::new(500_000_000_000))
+                .with_cycles(Cycles::new(50_000_000_000_000))
                 .build(),
         )
     }
