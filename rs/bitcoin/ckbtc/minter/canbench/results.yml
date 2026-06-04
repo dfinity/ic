@@ -2,185 +2,185 @@ benches:
   build_estimate_retrieve_btc_fee_1_50k_sats:
     total:
       calls: 1
-      instructions: 419644
+      instructions: 255852
       heap_increase: 0
       stable_memory_increase: 0
     scopes:
       build_unsigned_transaction_from_inputs:
         calls: 1
-        instructions: 3446
+        instructions: 3165
         heap_increase: 0
         stable_memory_increase: 0
       greedy:
         calls: 1
-        instructions: 5043
+        instructions: 4358
         heap_increase: 0
         stable_memory_increase: 0
       utxos_selection:
         calls: 1
-        instructions: 413500
+        instructions: 250009
         heap_increase: 0
         stable_memory_increase: 0
   build_unsigned_transaction_1_50k_sats:
     total:
       calls: 1
-      instructions: 421760
+      instructions: 257896
       heap_increase: 0
       stable_memory_increase: 0
     scopes:
       build_unsigned_transaction:
         calls: 1
-        instructions: 419177
+        instructions: 255351
         heap_increase: 0
         stable_memory_increase: 0
       build_unsigned_transaction_from_inputs:
         calls: 1
-        instructions: 3446
+        instructions: 3165
         heap_increase: 0
         stable_memory_increase: 0
       greedy:
         calls: 1
-        instructions: 5043
+        instructions: 4358
         heap_increase: 0
         stable_memory_increase: 0
       utxos_selection:
         calls: 1
-        instructions: 413500
+        instructions: 250009
         heap_increase: 0
         stable_memory_increase: 0
   build_unsigned_transaction_2_100k_sats:
     total:
       calls: 1
-      instructions: 421806
+      instructions: 257942
       heap_increase: 0
       stable_memory_increase: 0
     scopes:
       build_unsigned_transaction:
         calls: 1
-        instructions: 419223
+        instructions: 255397
         heap_increase: 0
         stable_memory_increase: 0
       build_unsigned_transaction_from_inputs:
         calls: 1
-        instructions: 3446
+        instructions: 3165
         heap_increase: 0
         stable_memory_increase: 0
       greedy:
         calls: 1
-        instructions: 5089
+        instructions: 4404
         heap_increase: 0
         stable_memory_increase: 0
       utxos_selection:
         calls: 1
-        instructions: 413546
+        instructions: 250055
         heap_increase: 0
         stable_memory_increase: 0
   build_unsigned_transaction_3_1m_sats:
     total:
       calls: 1
-      instructions: 421709
+      instructions: 258018
       heap_increase: 0
       stable_memory_increase: 0
     scopes:
       build_unsigned_transaction:
         calls: 1
-        instructions: 419126
+        instructions: 255473
         heap_increase: 0
         stable_memory_increase: 0
       build_unsigned_transaction_from_inputs:
         calls: 1
-        instructions: 3446
+        instructions: 3165
         heap_increase: 0
         stable_memory_increase: 0
       greedy:
         calls: 1
-        instructions: 3529
+        instructions: 3065
         heap_increase: 0
         stable_memory_increase: 0
       utxos_selection:
         calls: 1
-        instructions: 413449
+        instructions: 250131
         heap_increase: 0
         stable_memory_increase: 0
   build_unsigned_transaction_4_10m_sats:
     total:
       calls: 1
-      instructions: 422884
+      instructions: 259016
       heap_increase: 0
       stable_memory_increase: 0
     scopes:
       build_unsigned_transaction:
         calls: 1
-        instructions: 420301
+        instructions: 256471
         heap_increase: 0
         stable_memory_increase: 0
       build_unsigned_transaction_from_inputs:
         calls: 1
-        instructions: 3446
+        instructions: 3165
         heap_increase: 0
         stable_memory_increase: 0
       greedy:
         calls: 1
-        instructions: 4791
+        instructions: 4113
         heap_increase: 0
         stable_memory_increase: 0
       utxos_selection:
         calls: 1
-        instructions: 414624
+        instructions: 251129
         heap_increase: 0
         stable_memory_increase: 0
   build_unsigned_transaction_5_1_btc:
     total:
       calls: 1
-      instructions: 422884
+      instructions: 259016
       heap_increase: 0
       stable_memory_increase: 0
     scopes:
       build_unsigned_transaction:
         calls: 1
-        instructions: 420301
+        instructions: 256471
         heap_increase: 0
         stable_memory_increase: 0
       build_unsigned_transaction_from_inputs:
         calls: 1
-        instructions: 3446
+        instructions: 3165
         heap_increase: 0
         stable_memory_increase: 0
       greedy:
         calls: 1
-        instructions: 4791
+        instructions: 4113
         heap_increase: 0
         stable_memory_increase: 0
       utxos_selection:
         calls: 1
-        instructions: 414624
+        instructions: 251129
         heap_increase: 0
         stable_memory_increase: 0
   build_unsigned_transaction_6_10_btc:
     total:
       calls: 1
-      instructions: 429556
+      instructions: 264579
       heap_increase: 0
       stable_memory_increase: 0
     scopes:
       build_unsigned_transaction:
         calls: 1
-        instructions: 426973
+        instructions: 262034
         heap_increase: 0
         stable_memory_increase: 0
       build_unsigned_transaction_from_inputs:
         calls: 1
-        instructions: 3913
+        instructions: 3603
         heap_increase: 0
         stable_memory_increase: 0
       greedy:
         calls: 1
-        instructions: 14050
+        instructions: 12043
         heap_increase: 0
         stable_memory_increase: 0
       utxos_selection:
         calls: 1
-        instructions: 420829
+        instructions: 256254
         heap_increase: 0
         stable_memory_increase: 0
 version: 0.4.1
