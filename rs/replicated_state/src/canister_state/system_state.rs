@@ -2689,12 +2689,13 @@ pub mod testing {
         };
     }
 
+    /// Builder for `OutputRequest`, for use in tests.
     pub struct OutputRequestBuilder {
         request: OutputRequest,
     }
 
     impl Default for OutputRequestBuilder {
-        /// Creates a dummy Request message with default values.
+        /// Creates an `OutputRequestBuilder`` with default values.
         fn default() -> Self {
             let name = "No-Op";
             fn prepayment<T: ic_types_cycles::CyclesUseCaseKind>() -> CompoundCycles<T> {
@@ -2728,37 +2729,31 @@ pub mod testing {
             Default::default()
         }
 
-        /// Sets the `receiver` field.
         pub fn receiver(mut self, receiver: CanisterId) -> Self {
             self.request.receiver = receiver;
             self
         }
 
-        /// Sets the `sender` field.
         pub fn sender(mut self, sender: CanisterId) -> Self {
             self.request.sender = sender;
             self
         }
 
-        /// Sets the `payment` field.
         pub fn payment(mut self, payment: Cycles) -> Self {
             self.request.payment = payment;
             self
         }
 
-        /// Sets the `method_name` field.
         pub fn method_name<S: ToString>(mut self, method_name: S) -> Self {
             self.request.method_name = method_name.to_string();
             self
         }
 
-        /// Sets the `method_payload` field.
         pub fn method_payload(mut self, method_payload: Vec<u8>) -> Self {
             self.request.method_payload = method_payload;
             self
         }
 
-        /// Sets the `deadline` field.
         pub fn deadline(mut self, deadline: ic_types::time::CoarseTime) -> Self {
             self.request.deadline = deadline;
             self
@@ -2787,6 +2782,7 @@ pub mod testing {
             self.request.prepayment_for_call_transmission = prepayment;
             self
         }
+
         /// Returns the built `OutputRequest`.
         pub fn build(self) -> OutputRequest {
             self.request

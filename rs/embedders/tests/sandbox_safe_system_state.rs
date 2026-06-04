@@ -14,7 +14,7 @@ use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
-use ic_replicated_state::testing::SystemStateTesting;
+use ic_replicated_state::testing::{OutputRequestBuilder, SystemStateTesting};
 use ic_replicated_state::{NetworkTopology, SystemState};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;

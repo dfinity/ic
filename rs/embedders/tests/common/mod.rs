@@ -17,7 +17,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
-    CallOrigin, Memory, NetworkTopology, NumWasmPages, OutputRequest, SubnetTopology, SystemState,
+    CallOrigin, Memory, NetworkTopology, NumWasmPages, SubnetTopology, SystemState,
 };
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{
@@ -29,10 +29,7 @@ use ic_types::{
     methods::SystemMethod,
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions,
-    RequestAndResponseTransmission,
-};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use std::collections::BTreeMap;
 
 pub const CANISTER_CURRENT_MEMORY_USAGE: NumBytes = NumBytes::new(0);
@@ -282,113 +279,4 @@ pub fn get_cmc_system_state() -> SystemState {
     let mut system_state = get_system_state();
     system_state.set_canister_id(CYCLES_MINTING_CANISTER_ID);
     system_state
-}
-
-// Not used in all tests.
-#[allow(dead_code)]
-pub struct OutputRequestBuilder {
-    request: OutputRequest,
-}
-
-impl Default for OutputRequestBuilder {
-    /// Creates a dummy Request message with default values.
-    fn default() -> Self {
-        let name = "No-Op";
-        fn prepayment<T: ic_types_cycles::CyclesUseCaseKind>() -> ic_types_cycles::CompoundCycles<T>
-        {
-            ic_types_cycles::CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
-        }
-
-        Self {
-            request: OutputRequest {
-                receiver: canister_test_id(0),
-                payment: Cycles::zero(),
-                deadline: NO_DEADLINE,
-                sender: canister_test_id(1),
-                method_name: name.to_string(),
-                method_payload: Vec::new(),
-                metadata: Default::default(),
-                call_context_id: call_context_test_id(1),
-                prepayment_for_response_execution: prepayment(),
-                prepayment_for_response_transmission: prepayment(),
-                prepayment_for_call_transmission: prepayment(),
-                on_reply: ic_types::methods::WasmClosure::new(0, 0),
-                on_reject: ic_types::methods::WasmClosure::new(0, 0),
-                on_cleanup: None,
-            },
-        }
-    }
-}
-
-// Not used in all tests.
-#[allow(dead_code)]
-impl OutputRequestBuilder {
-    /// Creates a new `RequestBuilder`.
-    pub fn new() -> Self {
-        Default::default()
-    }
-
-    /// Sets the `receiver` field.
-    pub fn receiver(mut self, receiver: CanisterId) -> Self {
-        self.request.receiver = receiver;
-        self
-    }
-
-    /// Sets the `sender` field.
-    pub fn sender(mut self, sender: CanisterId) -> Self {
-        self.request.sender = sender;
-        self
-    }
-
-    /// Sets the `payment` field.
-    pub fn payment(mut self, payment: Cycles) -> Self {
-        self.request.payment = payment;
-        self
-    }
-
-    /// Sets the `method_name` field.
-    pub fn method_name<S: ToString>(mut self, method_name: S) -> Self {
-        self.request.method_name = method_name.to_string();
-        self
-    }
-
-    /// Sets the `method_payload` field.
-    pub fn method_payload(mut self, method_payload: Vec<u8>) -> Self {
-        self.request.method_payload = method_payload;
-        self
-    }
-
-    /// Sets the `deadline` field.
-    pub fn deadline(mut self, deadline: ic_types::time::CoarseTime) -> Self {
-        self.request.deadline = deadline;
-        self
-    }
-
-    pub fn prepayment_for_response_execution(
-        mut self,
-        prepayment: CompoundCycles<Instructions>,
-    ) -> Self {
-        self.request.prepayment_for_response_execution = prepayment;
-        self
-    }
-
-    pub fn prepayment_for_response_transmission(
-        mut self,
-        prepayment: CompoundCycles<RequestAndResponseTransmission>,
-    ) -> Self {
-        self.request.prepayment_for_response_transmission = prepayment;
-        self
-    }
-
-    pub fn prepayment_for_call_transmission(
-        mut self,
-        prepayment: CompoundCycles<RequestAndResponseTransmission>,
-    ) -> Self {
-        self.request.prepayment_for_call_transmission = prepayment;
-        self
-    }
-    /// Returns the built `OutputRequest`.
-    pub fn build(self) -> OutputRequest {
-        self.request
-    }
 }

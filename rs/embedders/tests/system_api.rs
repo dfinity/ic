@@ -13,9 +13,8 @@ use ic_interfaces::execution_environment::{
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    CallOrigin, Memory, NetworkTopology, NumWasmPages, SystemState, testing::CanisterQueuesTesting,
-};
+use ic_replicated_state::testing::{CanisterQueuesTesting, OutputRequestBuilder};
+use ic_replicated_state::{CallOrigin, Memory, NetworkTopology, NumWasmPages, SystemState};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{

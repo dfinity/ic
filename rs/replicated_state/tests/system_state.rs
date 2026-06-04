@@ -86,14 +86,14 @@ impl SystemStateFixture {
         }
     }
 
-    fn to_stopping(&mut self) {
+    fn set_stopping(&mut self) {
         self.system_state.set_status(CanisterStatus::Stopping {
             call_context_manager: self.system_state.call_context_manager().unwrap().clone(),
             stop_contexts: Vec::default(),
         });
     }
 
-    fn to_stopped(&mut self) {
+    fn set_stopped(&mut self) {
         self.system_state.set_status(CanisterStatus::Stopped);
     }
 
@@ -245,7 +245,7 @@ fn induct_messages_to_self_in_stopped_status_does_not_work() {
         .push_output_request(default_request_to_self())
         .unwrap();
 
-    fixture.to_stopped();
+    fixture.set_stopped();
     fixture.induct_messages_to_self();
 
     assert!(!fixture.system_state.has_input());
@@ -259,7 +259,7 @@ fn induct_messages_to_self_in_stopping_status_does_not_work() {
         .push_output_request(default_request_to_self())
         .unwrap();
 
-    fixture.to_stopping();
+    fixture.set_stopping();
     fixture.induct_messages_to_self();
 
     assert!(!fixture.system_state.has_input());
@@ -349,12 +349,6 @@ fn induct_messages_to_self_memory_limit_test_impl(
         CANISTER_ID,
         CoarseTime::from_secs_since_unix_epoch(deadline),
     );
-
-    // let second_request = OutputRequestBuilder::default()
-    //     .sender(CANISTER_ID)
-    //     .receiver(CANISTER_ID)
-    //     .deadline(CoarseTime::from_secs_since_unix_epoch(deadline))
-    //     .build();
 
     fixture
         .system_state
@@ -527,7 +521,7 @@ fn simulate_outbound_call(
     // Reserve a response slot.
     fixture.pop_output().unwrap();
 
-    (response, callback.into())
+    (response, callback)
 }
 
 #[test]
