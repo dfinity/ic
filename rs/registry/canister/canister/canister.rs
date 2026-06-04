@@ -8,7 +8,8 @@ use ic_base_types::{NodeId, PrincipalId};
 use ic_certified_map::{AsHashTree, HashTree};
 use ic_nervous_system_string::clamp_debug_len;
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID, ROOT_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
+    ENGINE_CONTROLLER_CANISTER_ID, GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID, ROOT_CANISTER_ID,
+    SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
@@ -128,6 +129,15 @@ fn check_caller_is_governance_and_log(method_name: &str) {
     assert_eq!(
         caller,
         GOVERNANCE_CANISTER_ID.into(),
+        "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
+    );
+}
+
+fn check_caller_is_governance_or_engine_controller_and_log(method_name: &str) {
+    let caller = dfn_core::api::caller();
+    println!("{LOG_PREFIX}call: {method_name} from: {caller}");
+    assert!(
+        caller == GOVERNANCE_CANISTER_ID.into() || caller == ENGINE_CONTROLLER_CANISTER_ID.into(),
         "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
     );
 }
@@ -624,7 +634,7 @@ fn add_node_operator_(payload: AddNodeOperatorPayload) {
 
 #[unsafe(export_name = "canister_update create_subnet")]
 fn create_subnet() {
-    check_caller_is_governance_and_log("create_subnet");
+    check_caller_is_governance_or_engine_controller_and_log("create_subnet");
     over_async(candid_one, |payload: CreateSubnetPayload| async move {
         create_subnet_(payload).await
     });
@@ -643,7 +653,7 @@ async fn create_subnet_(payload: CreateSubnetPayload) -> Result<NewSubnet, Strin
 
 #[unsafe(export_name = "canister_update delete_subnet")]
 fn delete_subnet() {
-    check_caller_is_governance_and_log("delete_subnet");
+    check_caller_is_governance_or_engine_controller_and_log("delete_subnet");
     over(candid_one, |payload: DeleteSubnetPayload| {
         delete_subnet_(payload)
     });

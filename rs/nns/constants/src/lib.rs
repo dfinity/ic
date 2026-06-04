@@ -33,6 +33,7 @@ pub const ICP_LEDGER_ARCHIVE_2_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 14;
 pub const ICP_LEDGER_ARCHIVE_3_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 15;
 pub const NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 16;
 pub const MIGRATION_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 17;
+pub const ENGINE_CONTROLLER_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 18;
 
 // Canisters belonging to the II subnet, whose ID begins with uzr34.
 pub const EXCHANGE_RATE_CANISTER_INDEX: u64 = 0x_0210_0001;
@@ -137,6 +138,9 @@ pub const NODE_REWARDS_CANISTER_ID: CanisterId =
 /// 17: sbzkb-zqaaa-aaaaa-aaaiq-cai
 pub const MIGRATION_CANISTER_ID: CanisterId =
     CanisterId::from_u64(MIGRATION_CANISTER_INDEX_IN_NNS_SUBNET);
+/// 18: si2b5-pyaaa-aaaaa-aaaja-cai
+pub const ENGINE_CONTROLLER_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(ENGINE_CONTROLLER_CANISTER_INDEX_IN_NNS_SUBNET);
 /// 0x_0210_0001 (34_603_009): uf6dk-hyaaa-aaaaq-qaaaq-cai
 pub const EXCHANGE_RATE_CANISTER_ID: CanisterId =
     CanisterId::from_u64(EXCHANGE_RATE_CANISTER_INDEX);
