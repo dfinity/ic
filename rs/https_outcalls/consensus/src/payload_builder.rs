@@ -393,7 +393,7 @@ impl CanisterHttpPayloadBuilderImpl {
         }
     }
 
-    fn validate_canister_http_payload_impl(
+    pub fn validate_canister_http_payload_impl(
         &self,
         height: Height,
         payload: &CanisterHttpPayload,
