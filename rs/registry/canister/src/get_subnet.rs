@@ -58,9 +58,9 @@ impl TryFrom<SubnetRecordPb> for SubnetRecord {
                 .map_err(|e| format!("Invalid canister_cycles_cost_schedule: {e}"))?;
         let canister_cycles_cost_schedule = match cost_schedule_pb {
             CanisterCyclesCostSchedulePb::Free => CanisterCyclesCostSchedule::Free,
-            CanisterCyclesCostSchedulePb::Normal => CanisterCyclesCostSchedule::Normal,
-            CanisterCyclesCostSchedulePb::Unspecified => {
-                return Err("canister_cycles_cost_schedule is Unspecified".to_string());
+            // Per proto comment, Unspecified should be treated the same as Normal.
+            CanisterCyclesCostSchedulePb::Normal | CanisterCyclesCostSchedulePb::Unspecified => {
+                CanisterCyclesCostSchedule::Normal
             }
         };
 
