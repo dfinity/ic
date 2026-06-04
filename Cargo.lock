@@ -10234,10 +10234,13 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "candid",
+ "criterion",
  "hex",
  "ic-artifact-pool",
+ "ic-config",
  "ic-consensus-mocks",
  "ic-consensus-utils",
+ "ic-crypto-temp-crypto",
  "ic-error-types 0.2.0",
  "ic-interfaces",
  "ic-interfaces-adapter-client",
