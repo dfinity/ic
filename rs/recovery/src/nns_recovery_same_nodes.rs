@@ -244,32 +244,30 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
         // Depending on the next step we might require some user interaction before we can execute
         // it.
         match step_type {
-            StepType::StopReplica | StepType::DownloadState | StepType::UploadState => {
-                if self.params.admin_access_location.is_none() {
-                    self.params.admin_access_location = Some(read_data_location(
-                        &self.logger,
-                        "Enter state download/upload location (admin access required) [local/<ipv6>]:",
-                    ));
-                }
+            StepType::StopReplica | StepType::DownloadState | StepType::UploadState
+                if self.params.admin_access_location.is_none() =>
+            {
+                self.params.admin_access_location = Some(read_data_location(
+                    &self.logger,
+                    "Enter state download/upload location (admin access required) [local/<ipv6>]:",
+                ));
             }
             _ => {}
         }
         match step_type {
-            StepType::DownloadConsensusPool => {
-                if self.params.download_pool_node.is_none() {
-                    // We could pick a node with highest finalization and CUP height automatically,
-                    // but we might have a preference between nodes of same heights.
-                    print_height_info(
-                        &self.logger,
-                        &self.recovery.registry_helper,
-                        self.params.subnet_id,
-                    );
+            StepType::DownloadConsensusPool if self.params.download_pool_node.is_none() => {
+                // We could pick a node with highest finalization and CUP height automatically,
+                // but we might have a preference between nodes of same heights.
+                print_height_info(
+                    &self.logger,
+                    &self.recovery.registry_helper,
+                    self.params.subnet_id,
+                );
 
-                    self.params.download_pool_node = Some(read(
-                        &self.logger,
-                        "Enter consensus pool download IP (backup access required):",
-                    ));
-                }
+                self.params.download_pool_node = Some(read(
+                    &self.logger,
+                    "Enter consensus pool download IP (backup access required):",
+                ));
             }
 
             StepType::DownloadState => {
@@ -310,36 +308,32 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 }
             }
 
-            StepType::CreateArtifacts => {
-                if self.params.output_dir.is_none() {
-                    self.params.output_dir = read_optional(
-                        &self.logger,
-                        &format!(
-                            "Enter output directory for recovery artifacts (must be in a shared mount if doing local recovery, default: {}):",
-                            self.recovery.recovery_dir.join("output").display()
-                        ),
-                    );
-                }
+            StepType::CreateArtifacts if self.params.output_dir.is_none() => {
+                self.params.output_dir = read_optional(
+                    &self.logger,
+                    &format!(
+                        "Enter output directory for recovery artifacts (must be in a shared mount if doing local recovery, default: {}):",
+                        self.recovery.recovery_dir.join("output").display()
+                    ),
+                );
             }
 
-            StepType::UploadCUPAndRegistry => {
-                if self.params.wait_for_cup_node.is_none() {
-                    self.params.wait_for_cup_node = if let Some(DataLocation::Remote(ip)) =
-                        self.params.admin_access_location
-                    {
-                        consent_given(
+            StepType::UploadCUPAndRegistry if self.params.wait_for_cup_node.is_none() => {
+                self.params.wait_for_cup_node = if let Some(DataLocation::Remote(ip)) =
+                    self.params.admin_access_location
+                {
+                    consent_given(
                             &self.logger,
                             &format!(
                                 "Would you like to recover the admin node now, i.e. upload the CUP and registry local store to it? ({ip})"
                             ),
                         ).then_some(ip)
-                    } else {
-                        read_optional(
-                            &self.logger,
-                            "If you would like to recover the admin node now, i.e. upload the CUP and registry local store to it, enter its IP address:",
-                        )
-                    };
-                }
+                } else {
+                    read_optional(
+                        &self.logger,
+                        "If you would like to recover the admin node now, i.e. upload the CUP and registry local store to it, enter its IP address:",
+                    )
+                };
             }
 
             _ => {}

@@ -313,19 +313,17 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 wait_for_confirmation(&self.logger);
             }
 
-            StepType::DownloadConsensusPool => {
-                if self.params.download_pool_node.is_none() {
-                    // We could pick a node with highest finalization and CUP height automatically,
-                    // but we might have a preference between nodes of same heights.
-                    print_height_info(
-                        &self.logger,
-                        &self.recovery.registry_helper,
-                        self.params.subnet_id,
-                    );
+            StepType::DownloadConsensusPool if self.params.download_pool_node.is_none() => {
+                // We could pick a node with highest finalization and CUP height automatically,
+                // but we might have a preference between nodes of same heights.
+                print_height_info(
+                    &self.logger,
+                    &self.recovery.registry_helper,
+                    self.params.subnet_id,
+                );
 
-                    self.params.download_pool_node =
-                        Some(read(&self.logger, "Enter consensus pool download IP:"));
-                }
+                self.params.download_pool_node =
+                    Some(read(&self.logger, "Enter consensus pool download IP:"));
             }
 
             StepType::DownloadState => {
@@ -354,27 +352,21 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
             }
 
-            StepType::ICReplay => {
-                if self.params.replay_until_height.is_none() {
-                    self.params.replay_until_height =
-                        read_optional(&self.logger, "Replay until height: ");
-                }
+            StepType::ICReplay if self.params.replay_until_height.is_none() => {
+                self.params.replay_until_height =
+                    read_optional(&self.logger, "Replay until height: ");
             }
 
-            StepType::ElectVersion => {
-                if self.params.upgrade_version.is_none() {
-                    self.params.upgrade_version =
-                        read_optional(&self.logger, "Version to bless (and upgrade to): ");
-                }
+            StepType::ElectVersion if self.params.upgrade_version.is_none() => {
+                self.params.upgrade_version =
+                    read_optional(&self.logger, "Version to bless (and upgrade to): ");
             }
 
-            StepType::UpgradeVersion => {
-                if self.params.upgrade_version.is_none() {
-                    self.params.upgrade_version = read_optional(
-                        &self.logger,
-                        "Version to upgrade to (WARN: it should already be blessed): ",
-                    );
-                }
+            StepType::UpgradeVersion if self.params.upgrade_version.is_none() => {
+                self.params.upgrade_version = read_optional(
+                    &self.logger,
+                    "Version to upgrade to (WARN: it should already be blessed): ",
+                );
             }
 
             StepType::ProposeCup => {
@@ -398,25 +390,21 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
             }
 
-            StepType::UploadState => {
-                if self.params.upload_method.is_none() {
-                    self.params.upload_method = Some(read_data_location(
-                        &self.logger,
-                        "Are you performing a local recovery directly on the node, or a remote recovery? [local/<ipv6>]",
-                    ));
-                }
+            StepType::UploadState if self.params.upload_method.is_none() => {
+                self.params.upload_method = Some(read_data_location(
+                    &self.logger,
+                    "Are you performing a local recovery directly on the node, or a remote recovery? [local/<ipv6>]",
+                ));
             }
 
-            StepType::WaitForCUP => {
-                if self.params.wait_for_cup_node.is_none() {
-                    if let Some(DataLocation::Remote(ip)) = self.params.upload_method {
-                        self.params.wait_for_cup_node = Some(ip);
-                    } else {
-                        self.params.wait_for_cup_node = read_optional(
-                            &self.logger,
-                            "Enter IP of the node to be polled for the recovery CUP:",
-                        );
-                    }
+            StepType::WaitForCUP if self.params.wait_for_cup_node.is_none() => {
+                if let Some(DataLocation::Remote(ip)) = self.params.upload_method {
+                    self.params.wait_for_cup_node = Some(ip);
+                } else {
+                    self.params.wait_for_cup_node = read_optional(
+                        &self.logger,
+                        "Enter IP of the node to be polled for the recovery CUP:",
+                    );
                 }
             }
 

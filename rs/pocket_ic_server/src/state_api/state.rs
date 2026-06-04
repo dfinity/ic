@@ -850,16 +850,22 @@ impl ApiState {
 
                 let (_, reload_handle) = reload::Layer::new(EnvFilter::new("warn"));
                 let health_manager = Arc::new(HealthManager::default());
+                let prometheus_registry = ic_gateway::ic_bn_lib::prometheus::Registry::new();
+                let custom_domain_storage =
+                    Arc::new(ic_gateway::routing::domain::CustomDomainStorage::new(
+                        custom_domain_providers,
+                        &prometheus_registry,
+                    ));
                 let ic_gateway_router = setup_router(
                     &cli,
-                    custom_domain_providers,
+                    custom_domain_storage,
                     reload_handle,
                     &mut tasks,
                     health_manager,
                     http_client,
                     http_client_hyper,
                     Arc::new(route_provider),
-                    &ic_gateway::ic_bn_lib::prometheus::Registry::new(),
+                    &prometheus_registry,
                     CancellationToken::new(),
                     None,
                     None,

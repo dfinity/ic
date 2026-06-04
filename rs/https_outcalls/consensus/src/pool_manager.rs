@@ -2397,6 +2397,7 @@ pub mod test {
 
                 // `make_new_requests` will try to dispatch contexts to the adapter shim.
                 // Accept any number of `send` calls and treat them as no-ops.
+                #[allow(clippy::result_large_err)]
                 shim_mock.expect_send().returning(|_| Ok(()));
 
                 let mut sequence = Sequence::new();

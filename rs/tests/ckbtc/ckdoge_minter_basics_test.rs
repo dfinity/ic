@@ -307,11 +307,9 @@ async fn test_retrieve_doge_status<F: Fn(Txid) -> bool>(
             RetrieveDogeStatus::Confirmed { txid } => {
                 return txid;
             }
-            RetrieveDogeStatus::Submitted { txid } => {
-                if !blocks_generated {
-                    use bitcoin::hashes::Hash;
-                    blocks_generated = generate_blocks(Txid::from_byte_array(txid.into()));
-                }
+            RetrieveDogeStatus::Submitted { txid } if !blocks_generated => {
+                use bitcoin::hashes::Hash;
+                blocks_generated = generate_blocks(Txid::from_byte_array(txid.into()));
             }
             RetrieveDogeStatus::AmountTooLow => break,
             _ => {}

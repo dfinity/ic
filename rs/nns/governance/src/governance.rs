@@ -4660,17 +4660,15 @@ impl Governance {
                     ));
                 }
             }
-            Command::Follow(follow) => {
-                if follow.followees.len() > MAX_FOLLOWEES_PER_TOPIC {
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::InvalidCommand,
-                        format!(
-                            "Too many followees: {} (max: {})",
-                            follow.followees.len(),
-                            MAX_FOLLOWEES_PER_TOPIC
-                        ),
-                    ));
-                }
+            Command::Follow(follow) if follow.followees.len() > MAX_FOLLOWEES_PER_TOPIC => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidCommand,
+                    format!(
+                        "Too many followees: {} (max: {})",
+                        follow.followees.len(),
+                        MAX_FOLLOWEES_PER_TOPIC
+                    ),
+                ));
             }
             Command::SetFollowing(set_following) => {
                 set_following.validate_intrinsically()?;
@@ -4955,12 +4953,10 @@ impl Governance {
                 Self::validate_add_or_remove_data_centers_payload(&update.payload)
                     .map_err(invalid_proposal_error)?;
             }
-            ValidNnsFunction::SplitSubnet => {
-                if !are_subnet_splitting_proposals_enabled() {
-                    return Err(invalid_proposal_error(String::from(
-                        "Subnet Splitting proposals not yet enabled",
-                    )));
-                }
+            ValidNnsFunction::SplitSubnet if !are_subnet_splitting_proposals_enabled() => {
+                return Err(invalid_proposal_error(String::from(
+                    "Subnet Splitting proposals not yet enabled",
+                )));
             }
             _ => {}
         };
