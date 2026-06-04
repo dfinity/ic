@@ -1,6 +1,5 @@
 use CanisterHttpResponseContent::Reject;
 use ic_interfaces::canister_http::{CanisterHttpPool, InvalidCanisterHttpPayloadReason};
-use ic_interfaces::crypto::BasicSigVerifier;
 use ic_types::{
     CountBytes, NodeId, NumBytes, RegistryVersion,
     batch::{
@@ -11,7 +10,7 @@ use ic_types::{
         CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
         CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
     },
-    crypto::crypto_hash,
+    crypto::{BasicSigOf, crypto_hash},
     messages::CallbackId,
     signature::BasicSignature,
 };
@@ -182,40 +181,29 @@ pub(crate) fn validate_response_share(
     Ok(())
 }
 
-/// Batch-verifies the signatures of a collection of
-/// [`CanisterHttpResponseShare`]s, all against the given registry version.
-///
-/// In contrast to verifying each share individually, this allows the
-/// underlying crypto component to use batch signature verification for
-/// signatures on potentially different messages.
-///
-/// An empty `shares` collection is rejected via the underlying
-/// `verify_basic_sig_batch_multi_msg`'s `InvalidArgument` error. Callers
-/// should make sure that upstream payload-validation rejects empty share
-/// collections (e.g. via count/threshold checks) before reaching this
-/// function; an empty batch reaching this point is treated as a malformed
-/// payload.
-pub(crate) fn verify_response_share_signatures<'a, I>(
+/// A single `(signer, signature, message)` input as consumed by
+/// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
+pub(crate) type ResponseShareSigInput<'a> = (
+    NodeId,
+    &'a BasicSigOf<CanisterHttpResponseMetadata>,
+    &'a CanisterHttpResponseMetadata,
+);
+
+/// Maps response shares to the `(signer, signature, message)` inputs consumed by
+/// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
+pub(crate) fn response_share_sig_inputs<'a, I>(
     shares: I,
-    consensus_registry_version: RegistryVersion,
-    crypto: &dyn BasicSigVerifier<CanisterHttpResponseMetadata>,
-) -> Result<(), InvalidCanisterHttpPayloadReason>
+) -> impl Iterator<Item = ResponseShareSigInput<'a>>
 where
     I: IntoIterator<Item = &'a CanisterHttpResponseShare>,
 {
-    let inputs: Vec<_> = shares
-        .into_iter()
-        .map(|share| {
-            (
-                share.signature.signer,
-                &share.signature.signature,
-                &share.content,
-            )
-        })
-        .collect();
-    crypto
-        .verify_basic_sig_batch_multi_msg(&inputs, consensus_registry_version)
-        .map_err(|err| InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)))
+    shares.into_iter().map(|share| {
+        (
+            share.signature.signer,
+            &share.signature.signature,
+            &share.content,
+        )
+    })
 }
 
 /// This function takes a mapping of response metadata to supporting shares

@@ -4021,13 +4021,14 @@ fn flexible_error_responses_too_large_invalid_signature() {
     setup_test_with_flexible_context(4, callback_id, committee, 2, 4, |mut pb, _pool| {
         pb.crypto = Arc::new(mock_crypto_rejecting_signatures());
 
-        let share_a = metadata_share_with_content_size(callback_id.get(), 0, huge);
-        let share_b = metadata_share_with_content_size(callback_id.get(), 1, huge);
+        let all_seen_shares = (0..4)
+            .map(|node| metadata_share_with_content_size(callback_id.get(), node, huge))
+            .collect();
 
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
                 callback_id,
-                all_seen_shares: vec![share_a, share_b],
+                all_seen_shares,
                 total_requests: 4,
                 min_responses: 2,
             }],
