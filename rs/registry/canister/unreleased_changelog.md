@@ -19,6 +19,8 @@ on the process that this file is part of, see
   leaves the existing list unchanged; `Some(vec![])` clears it; `Some(vec![..])`
   replaces it.
 * Added `vcpu_type` to `GuestLaunchMeasurementMetadata` to record the virtual CPU type used for a guest launch measurement.
+* Added a new endpoint `get_subnet` to the registry canister, returning the subnet record
+  of a given subnet.
 
 ## Changed
 
