@@ -664,14 +664,12 @@ crate.spec(
     features = [
         "acme-alpn",
     ],
-    git = "https://github.com/mraszyk/ic-bn-lib",
     package = "ic-bn-lib",
-    rev = "f9ef198ffc1aabf075621b303e0c99afe5504928",
+    version = "^0.2.1",
 )
 crate.spec(
-    git = "https://github.com/mraszyk/ic-bn-lib",
     package = "ic-bn-lib-common",
-    rev = "f9ef198ffc1aabf075621b303e0c99afe5504928",
+    version = "^0.2.1",
 )
 crate.spec(
     package = "ic-btc-interface",
@@ -724,24 +722,21 @@ crate.spec(
 )
 crate.spec(
     default_features = False,
-    git = "https://github.com/mraszyk/ic-gateway",
+    git = "https://github.com/dfinity/ic-gateway",
     package = "ic-gateway",
-    rev = "e0d7dc5c0478ad9f58da80e240a9176bce2dfacf",
+    rev = "5f7f9fc1891fc0c832de059199090228bc441b3c",
 )
 crate.spec(
-    git = "https://github.com/mraszyk/custom-domains",
     package = "ic-custom-domains-backend",
-    rev = "62f9e109cb598f605166e988e8c7ce55f7a40bd9",
+    version = "^0.2.0",
 )
 crate.spec(
-    git = "https://github.com/mraszyk/custom-domains",
     package = "ic-custom-domains-base",
-    rev = "62f9e109cb598f605166e988e8c7ce55f7a40bd9",
+    version = "^0.2.0",
 )
 crate.spec(
-    git = "https://github.com/mraszyk/custom-domains",
     package = "ic-custom-domains-canister-client",
-    rev = "62f9e109cb598f605166e988e8c7ce55f7a40bd9",
+    version = "^0.2.0",
 )
 crate.spec(
     package = "ic-http-certification",
@@ -1695,11 +1690,11 @@ crate.spec(
 crate.spec(
     features = ["stats"],
     package = "tikv-jemalloc-ctl",
-    version = "^0.6",
+    version = "^0.7",
 )
 crate.spec(
     package = "tikv-jemallocator",
-    version = "^0.6",
+    version = "^0.7",
 )
 crate.spec(
     package = "time",
