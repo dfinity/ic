@@ -32,7 +32,6 @@ rust_library(
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
-        "//rs/state_layout",
         "//rs/sys",
         "//rs/types/base_types",
         "//rs/types/cycles",

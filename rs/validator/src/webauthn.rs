@@ -36,7 +36,7 @@ pub(crate) fn validate_webauthn_sig(
 
     // The challenge in the webauthn envelope must match signed bytes.
     let signed_bytes = signable.as_signed_bytes();
-    if envelope.challenge() != signed_bytes {
+    if envelope.challenge() != signed_bytes.as_slice() {
         Err(format!(
             "Challenge in webauthn is {:?} while it is expected to be {:?}",
             envelope.challenge(),

@@ -1,5 +1,5 @@
 use ic_base_types::NumSeconds;
-use ic_config::subnet_config::CyclesAccountManagerConfig;
+use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetSecurity};
 use ic_cycles_account_manager::{IngressInductionCost, ResourceSaturation};
 use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, MessageMemoryUsage};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -96,6 +96,9 @@ fn test_can_charge_application_subnets() {
                         .real()
                         + cycles_account_manager
                             .memory_cost(memory, duration, subnet_size, cost_schedule)
+                            .real()
+                        + cycles_account_manager
+                            .canister_base_cost(memory, duration, subnet_size, cost_schedule)
                             .real();
                     let initial_cycles = expected_fee;
                     canister.system_state.add_cycles(initial_cycles);
@@ -530,7 +533,15 @@ fn charge_canister_for_memory_usage() {
         assert_eq!(
             cycles_account_manager
                 .memory_cost(memory_usage, HOUR, SMALL_APP_SUBNET_MAX_SIZE, cost_schedule)
-                .real(),
+                .real()
+                + cycles_account_manager
+                    .canister_base_cost(
+                        memory_usage,
+                        HOUR,
+                        SMALL_APP_SUBNET_MAX_SIZE,
+                        cost_schedule
+                    )
+                    .real(),
             cycles_burned
         )
     })
@@ -1230,10 +1241,12 @@ fn withdraw_cycles_for_transfer_checks_reserved_balance() {
     let mut system_state = SystemState::new_running_for_testing(
         canister_test_id(1),
         canister_test_id(2).get(),
-        Cycles::new(2_000_000),
+        Cycles::new(21_000_000),
         NumSeconds::from(1_000),
     );
-    system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
+    system_state
+        .reserve_cycles(Cycles::new(20_000_000))
+        .unwrap();
     let mut new_balance = system_state.balance();
     cycles_account_manager
         .withdraw_cycles_for_transfer(
@@ -1340,7 +1353,7 @@ fn test_storage_reservation_cycles() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     const GB: u64 = 1024 * 1024 * 1024;
 
-    let cfg = CyclesAccountManagerConfig::application_subnet();
+    let cfg = CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None);
     let cam = CyclesAccountManagerBuilder::new().build();
 
     // Allocation of 100GB below the threshold.

@@ -1500,7 +1500,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
 /// it clamps the amount to the available cycles minus freeze threshold.
 #[test]
 fn cycles_burn128_clamps_to_available_cycles() {
-    const INITIAL_CYCLES: Cycles = Cycles::new(1000);
+    const INITIAL_CYCLES: Cycles = Cycles::new(200_000);
 
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_subnet_type(SubnetType::Application)
@@ -1560,7 +1560,9 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
         SubnetAvailableMemory::new_for_testing(subnet_available_memory_bytes, 0, 0);
     let wasm_custom_sections_available_memory_before =
         subnet_available_memory.get_wasm_custom_sections_memory();
-    let system_state = SystemStateBuilder::default().build();
+    let system_state = SystemStateBuilder::default()
+        .initial_cycles(Cycles::new(20_000_000_000_000))
+        .build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
     let execution_parameters = execution_parameters(api_type.execution_mode());

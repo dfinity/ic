@@ -833,6 +833,12 @@ fn get_canister_status_from_another_canister_when_memory_low() {
                 .real()
                 .get())
             / one_gib
+            + test
+                .cycles_account_manager()
+                .base_per_second_fee(test.subnet_size(), CanisterCyclesCostSchedule::Normal)
+                .real()
+                .get()
+                * seconds_per_day
     );
 }
 
@@ -4711,7 +4717,7 @@ fn output_requests_on_application_subnets_update_subnet_available_memory_reserve
 fn test_canister_settings_log_visibility_default_controllers() {
     // Arrange.
     let mut test = ExecutionTestBuilder::new().build();
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000));
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
     // Act.
     let canister_status = test.canister_status(canister_id).unwrap();
     // Assert.
@@ -4728,7 +4734,7 @@ fn test_canister_settings_log_visibility_create_with_settings() {
     // Act.
     let canister_id = test
         .create_canister_with_settings(
-            Cycles::new(1_000_000_000),
+            Cycles::new(1_000_000_000_000),
             ic00::CanisterSettingsArgsBuilder::new()
                 .with_log_visibility(LogVisibilityV2::Public)
                 .build(),
@@ -4746,7 +4752,7 @@ fn test_canister_settings_log_visibility_create_with_settings() {
 fn test_canister_settings_log_visibility_set_to_public() {
     // Arrange.
     let mut test = ExecutionTestBuilder::new().build();
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000));
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
     // Act.
     test.set_log_visibility(canister_id, LogVisibilityV2::Public)
         .unwrap();

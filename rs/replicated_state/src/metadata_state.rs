@@ -181,6 +181,18 @@ pub struct SystemMetadata {
     /// Modifications to the state that have not been applied yet to the next checkpoint.
     /// This field is transient and is emptied before writing the next checkpoint.
     pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
+
+    /// Whether the logs have been migrated from `CanisterLog` to `LogMemoryStore`
+    /// or from `LogMemoryStore` to `CanisterLog`, as per the
+    /// `log_memory_store_feature` flag.
+    ///
+    /// This is a (temporary) transient field tracking whether all canisters are
+    /// definitely using the log store required by the `log_memory_store_feature`
+    /// flag. It is intended to be used as a one-time trigger (when `false`) to
+    /// launch the (idempotent, if already performed) logs migration exactly once
+    /// per replica process (since the flag is hardcoded into the binary).
+    #[validate_eq(Ignore)]
+    pub logs_migrated: bool,
 }
 
 /// Unfiltered topology, including all subnets and the full routing table.
@@ -536,6 +548,7 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
+            logs_migrated: false,
         }
     }
 
@@ -838,6 +851,7 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: _,
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
+            logs_migrated: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
@@ -942,6 +956,7 @@ impl SystemMetadata {
             mut bitcoin_get_successors_follow_up_responses,
             blockmaker_metrics_time_series,
             unflushed_checkpoint_ops,
+            logs_migrated,
         } = self;
 
         assert_eq!(None, split_from);
@@ -1051,6 +1066,7 @@ impl SystemMetadata {
             // Just updated by `ReplicatedState::online_split()`, adding delete operations
             // for the snapshots of no longer hosted canisters.
             unflushed_checkpoint_ops,
+            logs_migrated,
         })
     }
 
@@ -2152,6 +2168,7 @@ pub mod testing {
             bitcoin_get_successors_follow_up_responses: Default::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
+            logs_migrated: false,
         };
     }
 }

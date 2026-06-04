@@ -1,3 +1,5 @@
+#[cfg(test)]
+use grub::BootAlternative;
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -9,8 +11,8 @@ use ratatui::{
 use tui_textarea::TextArea;
 
 use crate::{
-    AppState, ConfirmationOption, ConfirmationState, FailureState, Field, InputState,
-    RecoveryParams, RunningState,
+    AppState, ConfirmationOption, ConfirmationState, FailureState, Field, InputState, RecoveryMode,
+    RecoveryParams, RunningState, TargetBootAlternativeSelection,
 };
 
 // ============================================================================
@@ -127,16 +129,32 @@ fn render_if_too_small(f: &mut Frame, size: Rect) -> bool {
 
 fn create_parameter_lines(params: &RecoveryParams) -> Vec<Line<'_>> {
     let calculated_version_hash = params.version_hash_full.as_deref().unwrap_or("<pending>");
-    let calculated_recovery_hash = params.recovery_hash_full.as_deref().unwrap_or("<pending>");
-    let lines = vec![
+    let mut lines = vec![
         format!("Inputted parameters:"),
         format!("VERSION: {}", params.version),
-        format!("RECOVERY-HASH-PREFIX: {}", params.recovery_hash_prefix),
-        format!(""),
-        format!("Calculated hashes:"),
-        format!("    VERSION-HASH: {}", calculated_version_hash),
-        format!("    RECOVERY-HASH: {}", calculated_recovery_hash),
     ];
+
+    if params.mode.can_select_target_boot_alternative() {
+        lines.push(format!(
+            "TARGET-BOOT-ALTERNATIVE: {} ({})",
+            params.target_boot_alternative_selection.as_str(),
+            params.get_target_boot_alternative()
+        ));
+    }
+
+    if params.mode.requires_recovery_hash() {
+        let recovery_hash_prefix = params.recovery_hash_prefix.as_deref().unwrap_or("<empty>");
+        lines.push(format!("RECOVERY-HASH-PREFIX: {}", recovery_hash_prefix));
+    }
+
+    lines.push(String::new());
+    lines.push("Calculated hashes:".to_string());
+    lines.push(format!("    VERSION-HASH: {}", calculated_version_hash));
+
+    if params.mode.requires_recovery_hash() {
+        let calculated_recovery_hash = params.recovery_hash_full.as_deref().unwrap_or("<pending>");
+        lines.push(format!("    RECOVERY-HASH: {}", calculated_recovery_hash));
+    }
 
     lines
         .into_iter()
@@ -173,7 +191,7 @@ fn render_input_confirmation_screen(f: &mut Frame, state: &ConfirmationState, si
     render_input_screen(f, &state.input_state, size);
 
     // 2. Render the popup overlay
-    let area = centered_rect(Constraint::Percentage(85), 20, size);
+    let area = centered_rect(Constraint::Percentage(85), 21, size);
 
     f.render_widget(Clear, area);
 
@@ -185,7 +203,7 @@ fn render_input_confirmation_screen(f: &mut Frame, state: &ConfirmationState, si
             Constraint::Length(2), // Header spacing
             Constraint::Min(1),    // Parameters
             Constraint::Length(1), // Spacer
-            Constraint::Length(4), // Security warning
+            Constraint::Length(5), // Security warning
             Constraint::Length(1), // Spacer
             Constraint::Length(1), // Question
             Constraint::Length(1), // Buttons
@@ -201,26 +219,51 @@ fn render_input_confirmation_screen(f: &mut Frame, state: &ConfirmationState, si
 
     let warning_header_style = Style::default().fg(Color::Red).bold();
     let warning_text_style = Style::default().fg(Color::Yellow);
-    let warning = Paragraph::new(vec![
-        Line::styled("!! SECURITY WARNING !!", warning_header_style),
-        Line::styled(
-            "Only proceed if the calculated hashes exactly match those communicated",
-            warning_text_style,
-        ),
-        Line::styled(
-            "by the recovery coordinator on Matrix and the forum.",
-            warning_text_style,
-        ),
-        Line::styled(
-            "Proceeding with a wrong hash can have critical security implications.",
-            warning_text_style,
-        ),
-    ]);
+    let warning_lines = if state.params.mode == RecoveryMode::Tee {
+        vec![
+            Line::styled("!! SECURITY WARNING !!", warning_header_style),
+            Line::styled(
+                "Only proceed if the calculated version hash exactly matches what was",
+                warning_text_style,
+            ),
+            Line::styled(
+                "communicated by the recovery coordinator on Matrix and the forum.",
+                warning_text_style,
+            ),
+            Line::styled(
+                "Proceeding with a wrong version can have critical security implications.",
+                warning_text_style,
+            ),
+            Line::styled(
+                "TEE mode verifies only the version hash. Double-check it before continuing.",
+                warning_text_style,
+            ),
+        ]
+    } else {
+        vec![
+            Line::styled("!! SECURITY WARNING !!", warning_header_style),
+            Line::styled(
+                "Only proceed if the calculated hashes exactly match those communicated",
+                warning_text_style,
+            ),
+            Line::styled(
+                "by the recovery coordinator on Matrix and the forum.",
+                warning_text_style,
+            ),
+            Line::styled(
+                "Proceeding with a wrong hash can have critical security implications.",
+                warning_text_style,
+            ),
+        ]
+    };
+    let warning = Paragraph::new(warning_lines);
     f.render_widget(warning, layout[3]);
 
-    let question = Paragraph::new(
-        "Please confirm: do these input values match the recovery coordinator's information?",
-    )
+    let question = Paragraph::new(if state.params.mode == RecoveryMode::Tee {
+        "Please confirm: does this version information match the recovery coordinator's information?"
+    } else {
+        "Please confirm: do these input values match the recovery coordinator's information?"
+    })
     .alignment(Alignment::Center)
     .style(Style::default().fg(Color::White).bold());
     f.render_widget(question, layout[5]);
@@ -254,15 +297,16 @@ fn render_input_confirmation_screen(f: &mut Frame, state: &ConfirmationState, si
 // ============================================================================
 
 fn render_input_screen(f: &mut Frame, state: &InputState, size: Rect) {
+    let input_field_count = state.input_fields().len() as u16;
     let main_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1), // Title area
-            Constraint::Length(3), // Instructions area
-            Constraint::Length(6), // Input fields area (2 fields × 3 rows each)
-            Constraint::Length(1), // Button area
-            Constraint::Length(1), // Spacing after buttons
-            Constraint::Min(0),    // Remaining space
+            Constraint::Length(1),                     // Title area
+            Constraint::Length(3),                     // Instructions area
+            Constraint::Length(input_field_count * 3), // Input fields area
+            Constraint::Length(1),                     // Button area
+            Constraint::Length(1),                     // Spacing after buttons
+            Constraint::Min(0),                        // Remaining space
         ])
         .split(size);
 
@@ -276,33 +320,40 @@ fn render_input_screen(f: &mut Frame, state: &InputState, size: Rect) {
         .style(Style::default().bold());
     f.render_widget(title, main_layout[0]);
 
-    let instructions = vec![
-        Line::from("Enter the recovery version and the 6-character recovery hash prefix."),
-        Line::from("Use Up/Down arrows or TAB to move between fields."),
-    ];
+    let instructions = if state.mode == RecoveryMode::Tee {
+        vec![
+            Line::from("Enter the recovery version for TEE mode."),
+            Line::from("Adjust the target boot alternative if needed."),
+            Line::from("Use Left/Right on the target field; Up/Down or TAB moves focus."),
+        ]
+    } else {
+        vec![
+            Line::from("Enter the recovery version and the 6-character recovery hash prefix."),
+            Line::from("The install target will use the opposite boot alternative."),
+            Line::from("Use Up/Down or TAB to move focus."),
+        ]
+    };
     let instructions_para = Paragraph::new(instructions)
         .style(Style::default().fg(Color::White))
         .wrap(Wrap { trim: true });
     f.render_widget(instructions_para, main_layout[1]);
 
+    let field_constraints = vec![Constraint::Length(3); input_field_count as usize];
     let fields_layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3), // Version field
-            Constraint::Length(3), // Recovery hash prefix field
-        ])
+        .constraints(field_constraints)
         .split(main_layout[2]);
 
-    for (i, field) in Field::INPUT_FIELDS.iter().enumerate() {
+    for (i, field) in state.input_fields().iter().enumerate() {
         let meta = field.metadata();
-        render_input_field(
-            state,
-            f,
-            *field,
-            &format!("{}:", meta.name),
-            &state.inputs[i],
-            fields_layout[i],
-        );
+        let label = match *field {
+            Field::TargetBootAlternative => format!(
+                "{} (current alternative: {})",
+                meta.name, state.current_boot_alternative
+            ),
+            _ => format!("{}:", meta.name),
+        };
+        render_input_field(state, f, *field, &label, &state.inputs[i], fields_layout[i]);
     }
 
     let button_area = main_layout[3];
@@ -350,6 +401,11 @@ fn render_input_field(
     area: Rect,
 ) {
     let selected = state.current_field() == field;
+    if field == Field::TargetBootAlternative {
+        render_target_boot_alternative_field(state, f, label, area, selected);
+        return;
+    }
+
     let block = create_block(label, selected, false);
 
     // Clone textarea to modify styles for rendering without affecting state
@@ -365,6 +421,53 @@ fn render_input_field(
 
     ta.set_block(block);
     f.render_widget(&ta, area);
+}
+
+fn render_target_boot_alternative_field(
+    state: &InputState,
+    f: &mut Frame,
+    label: &str,
+    area: Rect,
+    selected: bool,
+) {
+    let block = create_block(label, selected, false);
+    let current_selected =
+        state.target_boot_alternative_selection == TargetBootAlternativeSelection::Current;
+    let current_boot_alternative =
+        state.resolve_boot_alternative(TargetBootAlternativeSelection::Current);
+    let opposite_boot_alternative =
+        state.resolve_boot_alternative(TargetBootAlternativeSelection::Opposite);
+
+    let selected_style = Style::default().fg(Color::White).bold();
+    let unselected_style = Style::default().fg(Color::Gray);
+    let (current_style, opposite_style) = if current_selected {
+        (selected_style, unselected_style)
+    } else {
+        (unselected_style, selected_style)
+    };
+
+    let line = Line::from(vec![
+        Span::styled(
+            if current_selected {
+                format!("(*) current ({current_boot_alternative})")
+            } else {
+                format!("( ) current ({current_boot_alternative})")
+            },
+            current_style,
+        ),
+        Span::raw("   "),
+        Span::styled(
+            if current_selected {
+                format!("( ) opposite ({opposite_boot_alternative})")
+            } else {
+                format!("(*) opposite ({opposite_boot_alternative})")
+            },
+            opposite_style,
+        ),
+    ]);
+
+    let para = Paragraph::new(line).block(block).wrap(Wrap { trim: true });
+    f.render_widget(para, area);
 }
 
 /// Renders buttons horizontally centered in the given area with spacing between them
@@ -616,6 +719,8 @@ mod tests {
         use crate::{RecoveryParams, RecoveryPhase, RecoveryTask};
         use ratatui::{Terminal, backend::TestBackend};
 
+        const TEST_CURRENT_BOOT_ALTERNATIVE: BootAlternative = BootAlternative::A;
+
         // ====================================================================
         // Test Helpers
         // ====================================================================
@@ -646,6 +751,22 @@ mod tests {
             buffer_to_string(terminal).contains(text)
         }
 
+        fn create_test_input_state(mode: RecoveryMode) -> InputState {
+            InputState::new(mode, TEST_CURRENT_BOOT_ALTERNATIVE)
+        }
+
+        fn default_recovery_params() -> RecoveryParams {
+            RecoveryParams {
+                version: String::new(),
+                recovery_hash_prefix: None,
+                version_hash_full: None,
+                recovery_hash_full: None,
+                mode: RecoveryMode::Nns,
+                current_boot_alternative: BootAlternative::A,
+                target_boot_alternative_selection: TargetBootAlternativeSelection::Opposite,
+            }
+        }
+
         fn create_test_failure_state() -> FailureState {
             let status = std::process::Command::new("false")
                 .status()
@@ -653,9 +774,12 @@ mod tests {
             FailureState {
                 params: RecoveryParams {
                     version: "a".repeat(40),
-                    recovery_hash_prefix: "abc123".to_string(),
+                    recovery_hash_prefix: Some("abc123".to_string()),
                     version_hash_full: Some("fullhash123".to_string()),
                     recovery_hash_full: Some("rechash456".to_string()),
+                    mode: RecoveryMode::Nns,
+                    current_boot_alternative: BootAlternative::A,
+                    target_boot_alternative_selection: TargetBootAlternativeSelection::Opposite,
                 },
                 logs: vec!["Error line 1".to_string(), "Error line 2".to_string()],
                 exit_status: status,
@@ -665,7 +789,7 @@ mod tests {
 
         #[test]
         fn too_small_terminal_hides_normal_ui() {
-            let state = AppState::Input(InputState::default());
+            let state = AppState::Input(create_test_input_state(RecoveryMode::Nns));
 
             // Width below minimum
             let terminal = render_state(&state, MIN_TERMINAL_WIDTH - 1, 20);
@@ -679,17 +803,20 @@ mod tests {
 
         #[test]
         fn input_screen_renders_all_elements() {
-            let state = AppState::Input(InputState::default());
+            let state = AppState::Input(create_test_input_state(RecoveryMode::Nns));
             let terminal = render_state(&state, 80, 24);
 
             // Title and instructions
             assert!(buffer_contains(&terminal, "Manual Recovery TUI"));
             assert!(buffer_contains(&terminal, "recovery version"));
-            assert!(buffer_contains(&terminal, "TAB"));
+            assert!(buffer_contains(&terminal, "opposite boot alternative"));
 
             // Field labels
             assert!(buffer_contains(&terminal, "VERSION"));
             assert!(buffer_contains(&terminal, "RECOVERY-HASH-PREFIX"));
+            assert!(!buffer_contains(&terminal, "TARGET-BOOT-ALTERNATIVE"));
+            assert!(!buffer_contains(&terminal, "current alternative: A"));
+            assert!(!buffer_contains(&terminal, "(*) opposite (B)"));
 
             // Buttons
             assert!(buffer_contains(&terminal, "<Run recovery>"));
@@ -697,10 +824,26 @@ mod tests {
         }
 
         #[test]
+        fn tee_mode_input_screen_hides_recovery_hash_field() {
+            let state = AppState::Input(InputState::new(
+                RecoveryMode::Tee,
+                TEST_CURRENT_BOOT_ALTERNATIVE,
+            ));
+            let terminal = render_state(&state, 80, 24);
+
+            assert!(buffer_contains(&terminal, "Manual Recovery TUI"));
+            assert!(buffer_contains(&terminal, "TEE mode"));
+            assert!(buffer_contains(&terminal, "VERSION"));
+            assert!(!buffer_contains(&terminal, "RECOVERY-HASH-PREFIX"));
+            assert!(buffer_contains(&terminal, "TARGET-BOOT-ALTERNATIVE"));
+            assert!(buffer_contains(&terminal, "(*) current (A)"));
+        }
+
+        #[test]
         fn input_screen_shows_error_popup() {
             let input = InputState {
                 error_message: Some("Validation failed".to_string()),
-                ..Default::default()
+                ..create_test_input_state(RecoveryMode::Nns)
             };
             let state = AppState::Input(input);
             let terminal = render_state(&state, 80, 24);
@@ -713,7 +856,7 @@ mod tests {
         fn input_screen_shows_exit_message() {
             let input = InputState {
                 exit_message: Some("Recovery cancelled".to_string()),
-                ..Default::default()
+                ..create_test_input_state(RecoveryMode::Nns)
             };
             let state = AppState::Input(input);
             let terminal = render_state(&state, 80, 24);
@@ -724,12 +867,15 @@ mod tests {
         #[test]
         fn confirmation_screen_renders_all_elements() {
             let state = AppState::InputConfirmation(ConfirmationState {
-                input_state: InputState::default(),
+                input_state: create_test_input_state(RecoveryMode::Nns),
                 params: RecoveryParams {
                     version: "abc123def456".to_string(),
-                    recovery_hash_prefix: "fedcba".to_string(),
+                    recovery_hash_prefix: Some("fedcba".to_string()),
                     version_hash_full: Some("fullversionhash".to_string()),
                     recovery_hash_full: Some("fullrecoveryhash".to_string()),
+                    mode: RecoveryMode::Nns,
+                    current_boot_alternative: BootAlternative::A,
+                    target_boot_alternative_selection: TargetBootAlternativeSelection::Opposite,
                 },
                 selected_option: ConfirmationOption::Yes,
             });
@@ -742,6 +888,7 @@ mod tests {
             // Input parameters
             assert!(buffer_contains(&terminal, "VERSION:"));
             assert!(buffer_contains(&terminal, "abc123def456"));
+            assert!(!buffer_contains(&terminal, "TARGET-BOOT-ALTERNATIVE:"));
             assert!(buffer_contains(&terminal, "RECOVERY-HASH-PREFIX:"));
             assert!(buffer_contains(&terminal, "fedcba"));
 
@@ -775,9 +922,12 @@ mod tests {
                 task: RecoveryTask::mock_with_logs(vec![]),
                 params: RecoveryParams {
                     version: "testversion123".to_string(),
-                    recovery_hash_prefix: "abc123".to_string(),
+                    recovery_hash_prefix: Some("abc123".to_string()),
                     version_hash_full: None,
                     recovery_hash_full: None,
+                    mode: RecoveryMode::Nns,
+                    current_boot_alternative: BootAlternative::A,
+                    target_boot_alternative_selection: TargetBootAlternativeSelection::Opposite,
                 },
                 phase: RecoveryPhase::Prep,
                 previous_input_state: None,
@@ -787,8 +937,36 @@ mod tests {
             assert!(buffer_contains(&terminal, "GuestOS Recovery Upgrader"));
             assert!(buffer_contains(&terminal, "VERSION:"));
             assert!(buffer_contains(&terminal, "testversion123"));
+            assert!(!buffer_contains(&terminal, "TARGET-BOOT-ALTERNATIVE:"));
             assert!(buffer_contains(&terminal, "<pending>"));
             assert!(buffer_contains(&terminal, "Recovery process logs"));
+        }
+
+        #[test]
+        fn tee_mode_confirmation_screen_hides_recovery_hash_details() {
+            let state = AppState::InputConfirmation(ConfirmationState {
+                input_state: InputState::new(RecoveryMode::Tee, BootAlternative::B),
+                params: RecoveryParams {
+                    version: "abc123def456".to_string(),
+                    recovery_hash_prefix: None,
+                    version_hash_full: Some("fullversionhash".to_string()),
+                    recovery_hash_full: None,
+                    mode: RecoveryMode::Tee,
+                    current_boot_alternative: BootAlternative::B,
+                    target_boot_alternative_selection: TargetBootAlternativeSelection::Current,
+                },
+                selected_option: ConfirmationOption::Yes,
+            });
+            let terminal = render_state(&state, 100, 30);
+
+            assert!(buffer_contains(&terminal, "VERSION:"));
+            assert!(buffer_contains(&terminal, "fullversionhash"));
+            assert!(buffer_contains(
+                &terminal,
+                "TARGET-BOOT-ALTERNATIVE: current (B)"
+            ));
+            assert!(!buffer_contains(&terminal, "RECOVERY-HASH-PREFIX"));
+            assert!(!buffer_contains(&terminal, "RECOVERY-HASH:"));
         }
 
         #[test]
@@ -798,7 +976,7 @@ mod tests {
                     "Downloading artifacts...".to_string(),
                     "Verifying checksums...".to_string(),
                 ]),
-                params: RecoveryParams::default(),
+                params: default_recovery_params(),
                 phase: RecoveryPhase::Prep,
                 previous_input_state: None,
             });

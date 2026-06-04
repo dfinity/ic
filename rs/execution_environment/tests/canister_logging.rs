@@ -4,7 +4,7 @@ use ic_config::execution_environment::{
     TEST_DEFAULT_LOG_MEMORY_USAGE,
 };
 use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::SubnetConfig;
+use ic_config::subnet_config::{SubnetConfig, SubnetSecurity};
 use ic_execution_environment::units::{KIB, MIB};
 use ic_management_canister_types_private::{
     self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
@@ -48,7 +48,7 @@ const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(5 * B);
 const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(25 * B);
 const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(5 * B);
 
-const CANISTER_INIT_CYCLES: Cycles = Cycles::new(310_000_000_000_u128);
+const CANISTER_INIT_CYCLES: Cycles = Cycles::new(400_000_000_000_u128);
 
 fn system_time_to_nanos(t: SystemTime) -> u64 {
     t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
@@ -93,7 +93,7 @@ fn readable_logs_without_backtraces(
 
 fn setup_env_with(replicated_inter_canister_log_fetch: FlagStatus) -> StateMachine {
     let subnet_type = SubnetType::Application;
-    let mut subnet_config = SubnetConfig::new(subnet_type);
+    let mut subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
     subnet_config.scheduler_config.max_instructions_per_round = MAX_INSTRUCTIONS_PER_ROUND;
     subnet_config.scheduler_config.max_instructions_per_message = MAX_INSTRUCTIONS_PER_MESSAGE;
     subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
@@ -148,7 +148,7 @@ fn setup_with_controller(controller: PrincipalId, wasm: Vec<u8>) -> (StateMachin
 
 fn restart_node(env: StateMachine) -> StateMachine {
     env.restart_node_with_config(StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::Application),
+        SubnetConfig::new(SubnetType::Application, SubnetSecurity::None),
         ExecutionConfig::default(),
     ))
 }
@@ -2135,14 +2135,21 @@ fn test_canister_reinstall_clears_logs_but_preserves_log_memory_limit() {
 }
 
 #[test]
-fn test_canister_uninstall_code_deallocates_logs() {
+fn test_canister_uninstall_code_clears_logs() {
     if !LOG_MEMORY_STORE_FEATURE_ENABLED {
         return;
     }
-    let (env, canister_id) = setup_with_controller(
-        PrincipalId::new_anonymous(),
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-    );
+    let controller = PrincipalId::new_anonymous();
+    let wasm = wat_canister()
+        .update("test", wat_fn().debug_print(b"hello"))
+        .build_wasm();
+    let (env, canister_id) = setup_with_controller(controller, wasm);
+
+    // Populate the log before uninstall.
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let logs_before = fetch_log_records(&env, controller, canister_id);
+    assert_eq!(logs_before.len(), 2);
 
     // Before uninstall code.
     let status = env.canister_status(canister_id).unwrap().unwrap();
@@ -2157,17 +2164,22 @@ fn test_canister_uninstall_code_deallocates_logs() {
 
     let _ = env.uninstall_code(canister_id).unwrap();
 
-    // After uninstall code.
+    // After uninstall code, the log entries are cleared but the memory store is not deallocated.
+    let logs_after = fetch_log_records(&env, controller, canister_id);
+    assert_eq!(logs_after.len(), 0);
     let status = env.canister_status(canister_id).unwrap().unwrap();
     assert_eq!(
         status.settings().log_memory_limit(),
-        candid::Nat::from(0_u64)
+        candid::Nat::from(TEST_DEFAULT_LOG_MEMORY_LIMIT)
     );
-    assert_eq!(status.log_memory_store_size().get(), 0_u64);
+    assert_eq!(
+        status.log_memory_store_size().get(),
+        TEST_DEFAULT_LOG_MEMORY_USAGE
+    );
 }
 
 #[test]
-fn test_canister_uninstall_and_install_clears_log_memory() {
+fn test_canister_uninstall_and_install_clears_log() {
     if !LOG_MEMORY_STORE_FEATURE_ENABLED {
         return;
     }
@@ -2193,11 +2205,11 @@ fn test_canister_uninstall_and_install_clears_log_memory() {
         vec![],
     );
 
-    // After uninstall code.
+    // After uninstall+install, the log is cleared but the memory store is kept.
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let logs_after = fetch_log_records(&env, controller, canister_id);
-    // Expect zero, because log memory store is deallocated.
-    assert_eq!(logs_after.len(), 0);
+    // Expect one entry from the single execution after reinstall.
+    assert_eq!(logs_after.len(), 1);
 }
 
 #[test]
@@ -2705,7 +2717,7 @@ fn test_log_memory_store_upgrade_downgrade() {
     // and produce log entries that land in canister_log (legacy storage).
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
-            SubnetConfig::new(subnet_type),
+            SubnetConfig::new(subnet_type, SubnetSecurity::None),
             ExecutionConfig {
                 log_memory_store_feature: FlagStatus::Disabled,
                 ..Default::default()
@@ -2792,7 +2804,7 @@ fn test_log_memory_store_upgrade_downgrade() {
     // executes, migration has not run yet: is_migrated=false, is_allocated=false,
     // but fetch_canister_logs still works via the canister_log fallback.
     let env = env.restart_node_with_config(StateMachineConfig::new(
-        SubnetConfig::new(subnet_type),
+        SubnetConfig::new(subnet_type, SubnetSecurity::None),
         ExecutionConfig {
             log_memory_store_feature: FlagStatus::Enabled,
             ..Default::default()
@@ -2907,7 +2919,7 @@ fn test_log_memory_store_upgrade_downgrade() {
     // Step 5: Downgrade — restart with log_memory_store feature disabled.
     // The checkpoint still has migrated=true since it was saved after step 3.
     let env = env.restart_node_with_config(StateMachineConfig::new(
-        SubnetConfig::new(subnet_type),
+        SubnetConfig::new(subnet_type, SubnetSecurity::None),
         ExecutionConfig {
             log_memory_store_feature: FlagStatus::Disabled,
             ..Default::default()
@@ -3009,4 +3021,134 @@ fn test_log_memory_store_upgrade_downgrade() {
     check_canister_log(&env, canister_few, 3);
     check_lms(&env, canister_few, false, false, true, 0);
     check_records(&env, canister_few, 3, 2, &log_2);
+}
+
+#[test]
+fn test_canister_log_with_zero_log_memory_limit() {
+    let subnet_type = SubnetType::Application;
+    let config = StateMachineConfig::new(
+        SubnetConfig::new(subnet_type, SubnetSecurity::None),
+        ExecutionConfig {
+            log_memory_store_feature: FlagStatus::Enabled,
+            ..Default::default()
+        },
+    );
+    let env = StateMachineBuilder::new()
+        .with_config(Some(config.clone()))
+        .with_subnet_type(subnet_type)
+        .with_checkpoints_enabled(true)
+        .build();
+
+    // Create canister with a non-zero log_memory_limit so that a ring buffer
+    // exists and the first log record advances persistent_next_idx to 1.
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT as u64)
+        .build();
+    let canister_id = create_and_install_canister(&env, settings, UNIVERSAL_CANISTER_WASM.to_vec());
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(b"log").reply().build(),
+    );
+
+    // Set log_memory_limit to 0: the ring buffer is deallocated but
+    // persistent_next_idx is preserved at 1.
+    let _ = env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(0)
+            .build(),
+    );
+
+    // Produce a second log with no ring buffer. canister_log advances to
+    // next_idx == 2, but persistent_next_idx stays at 1.
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(b"log").reply().build(),
+    );
+
+    // canister_log.next_idx() == 2 and lms.next_idx() == 1 must hold before
+    // and after a checkpoint/reload cycle. Before the CanisterStateBits fix,
+    // the reload would wrongly restore lms.persistent_next_idx from
+    // next_canister_log_record_idx (== 2) instead of the (by now) stored 1.
+    let check_next_idx = |env: &StateMachine| {
+        let state = env.get_latest_state();
+        let ss = &state.canister_state(&canister_id).unwrap().system_state;
+        assert_eq!(ss.canister_log.next_idx(), 2);
+        assert_eq!(ss.log_memory_store.next_idx(), 1);
+    };
+    check_next_idx(&env);
+
+    let env = env.restart_node_with_config(config);
+    check_next_idx(&env);
+}
+
+#[test]
+fn test_log_memory_store_deallocated_when_canister_out_of_cycles() {
+    // Test that the log memory store is deallocated when a canister runs out of cycles.
+    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
+        return;
+    }
+    let controller = PrincipalId::new_anonymous();
+    let env = setup_env();
+    // Use 300T cycles — enough to satisfy the freeze-threshold reserve for
+    // compute_allocation=1 (~25.52T) while still being drainable by time advance.
+    let canister_id = env.create_canister_with_cycles(
+        None,
+        Cycles::new(300_000_000_000_000_u128),
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![controller])
+                .with_compute_allocation(1)
+                .build(),
+        ),
+    );
+    env.install_wasm_in_mode(
+        canister_id,
+        CanisterInstallMode::Install,
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"hello"))
+            .build_wasm(),
+        vec![],
+    )
+    .unwrap();
+
+    // Populate the log memory store with a log record.
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+
+    // Verify the log memory store is allocated before cycles run out.
+    let state = env.get_latest_state();
+    assert!(
+        state
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .log_memory_store
+            .is_allocated()
+    );
+    drop(state);
+
+    // Advance time enough to drain the cycle balance given compute_allocation=1.
+    let compute_percent_allocated_per_second_fee =
+        SubnetConfig::new(SubnetType::Application, SubnetSecurity::None)
+            .cycles_account_manager_config
+            .compute_percent_allocated_per_second_fee;
+    let seconds_to_burn = env.cycle_balance(canister_id) as u64
+        / compute_percent_allocated_per_second_fee.get() as u64;
+    env.advance_time(Duration::from_secs(seconds_to_burn + 1));
+
+    // A checkpointed tick forces allocation charging and triggers the out-of-cycles uninstall.
+    env.checkpointed_tick();
+
+    // After running out of cycles, the log memory store must be deallocated.
+    let state = env.get_latest_state();
+    assert!(
+        !state
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .log_memory_store
+            .is_allocated()
+    );
 }

@@ -2,28 +2,28 @@ benches:
   get_subnet_for_canister_100_times_100:
     total:
       calls: 1
-      instructions: 31025759
+      instructions: 31023843
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   get_subnet_for_canister_100_times_10k:
     total:
       calls: 1
-      instructions: 694110012
+      instructions: 702766124
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   get_subnet_for_canister_100_times_1k:
     total:
       calls: 1
-      instructions: 90967747
+      instructions: 91777359
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   measure_routing_table_invariant_checks_shards_and_unsharded:
     total:
       calls: 1
-      instructions: 268353620
+      instructions: 266853620
       heap_increase: 138
       stable_memory_increase: 0
     scopes: {}
@@ -58,73 +58,73 @@ benches:
   migrate_canisters_10_times_100:
     total:
       calls: 1
-      instructions: 156361795
+      instructions: 153095442
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   migrate_canisters_10_times_10k:
     total:
       calls: 1
-      instructions: 10367776782
+      instructions: 10277865712
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
   migrate_canisters_10_times_1k:
     total:
       calls: 1
-      instructions: 1032517212
+      instructions: 1021704126
       heap_increase: 3
       stable_memory_increase: 0
     scopes: {}
   upgrade_with_routing_table_100:
     total:
       calls: 1
-      instructions: 186143660
+      instructions: 186048560
       heap_increase: 7
       stable_memory_increase: 0
     scopes:
       post_upgrade:
         calls: 1
-        instructions: 185263063
+        instructions: 185166586
         heap_increase: 4
         stable_memory_increase: 0
       pre_upgrade:
         calls: 1
-        instructions: 669662
+        instructions: 671039
         heap_increase: 3
         stable_memory_increase: 0
   upgrade_with_routing_table_10k:
     total:
       calls: 1
-      instructions: 5626018276
+      instructions: 5619725836
       heap_increase: 342
       stable_memory_increase: 0
     scopes:
       post_upgrade:
         calls: 1
-        instructions: 5603899441
+        instructions: 5597605966
         heap_increase: 217
         stable_memory_increase: 0
       pre_upgrade:
         calls: 1
-        instructions: 16603376
+        instructions: 16604363
         heap_increase: 125
         stable_memory_increase: 0
   upgrade_with_routing_table_1k:
     total:
       calls: 1
-      instructions: 686509309
+      instructions: 685851194
       heap_increase: 40
       stable_memory_increase: 0
     scopes:
       post_upgrade:
         calls: 1
-        instructions: 683633916
+        instructions: 682974410
         heap_increase: 25
         stable_memory_increase: 0
       pre_upgrade:
         calls: 1
-        instructions: 2201525
+        instructions: 2202916
         heap_increase: 15
         stable_memory_increase: 0
 version: 0.4.1

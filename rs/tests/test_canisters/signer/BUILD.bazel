@@ -13,7 +13,6 @@ rust_library(
         # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
-        "@crate_index//:ic_bls12_381",
         "@crate_index//:serde",
     ],
 )

@@ -274,6 +274,43 @@ fn non_rented_application_subnets_cannot_have_subnet_admins() {
 }
 
 #[test]
+fn subnets_cannot_have_more_than_max_subnet_admins() {
+    let system_subnet_id = subnet_test_id(1);
+    let test_subnet_id = subnet_test_id(2);
+    let (mut snapshot, mut test_subnet_record) =
+        setup_minimal_registry_snapshot_for_check_subnet_invariants(
+            system_subnet_id,
+            test_subnet_id,
+            1,     // num_nodes_in_test_subnet
+            false, // with_chip_id
+        );
+
+    // Make the subnet rented so the type/cost-schedule check passes.
+    test_subnet_record.subnet_type = i32::from(SubnetType::Application);
+    test_subnet_record.canister_cycles_cost_schedule = i32::from(CanisterCyclesCostSchedule::Free);
+
+    // Exactly `MAX_SUBNET_ADMINS` admins is allowed.
+    test_subnet_record.subnet_admins = (0..MAX_SUBNET_ADMINS as u64)
+        .map(|i| PrincipalIdPb::from(user_test_id(i).get()))
+        .collect();
+    snapshot.insert(
+        make_subnet_record_key(test_subnet_id).into_bytes(),
+        test_subnet_record.encode_to_vec(),
+    );
+    check_subnet_invariants(&snapshot).unwrap();
+
+    // One more than `MAX_SUBNET_ADMINS` is not.
+    test_subnet_record.subnet_admins = (0..(MAX_SUBNET_ADMINS as u64 + 1))
+        .map(|i| PrincipalIdPb::from(user_test_id(i).get()))
+        .collect();
+    snapshot.insert(
+        make_subnet_record_key(test_subnet_id).into_bytes(),
+        test_subnet_record.encode_to_vec(),
+    );
+    assert_non_compliant_record(&snapshot, "subnet admins, which exceeds the maximum of");
+}
+
+#[test]
 fn cloud_engine_subnets_must_have_type4_nodes() {
     let system_subnet_id = subnet_test_id(1);
     let test_subnet_id = subnet_test_id(2);

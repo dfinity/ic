@@ -38,7 +38,6 @@ rust_test(
         "@crate_index//:assert_matches",
         "@crate_index//:ic-cdk",
         "@crate_index//:lazy_static",
-        "@crate_index//:proptest",
         "@crate_index//:rust_decimal",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
