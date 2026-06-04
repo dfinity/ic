@@ -55,11 +55,12 @@ impl TryFrom<SubnetRecordPb> for SubnetRecord {
 
         let cost_schedule_pb =
             CanisterCyclesCostSchedulePb::try_from(pb.canister_cycles_cost_schedule)
-                .unwrap_or(CanisterCyclesCostSchedulePb::Unspecified);
+                .map_err(|e| format!("Invalid canister_cycles_cost_schedule: {e}"))?;
         let canister_cycles_cost_schedule = match cost_schedule_pb {
             CanisterCyclesCostSchedulePb::Free => CanisterCyclesCostSchedule::Free,
-            CanisterCyclesCostSchedulePb::Normal | CanisterCyclesCostSchedulePb::Unspecified => {
-                CanisterCyclesCostSchedule::Normal
+            CanisterCyclesCostSchedulePb::Normal => CanisterCyclesCostSchedule::Normal,
+            CanisterCyclesCostSchedulePb::Unspecified => {
+                return Err("canister_cycles_cost_schedule is Unspecified".to_string());
             }
         };
 
