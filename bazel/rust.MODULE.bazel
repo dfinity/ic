@@ -527,11 +527,11 @@ rust_library(
     deps = [
         "@crate_index__cfg-if-1.0.0//:cfg_if",
     ] + select({
-        "@rules_rust//rust/platform:aarch64-apple-darwin": ["@crate_index__libc-0.2.177//:libc"],
-        "@rules_rust//rust/platform:aarch64-unknown-linux-gnu": ["@crate_index__libc-0.2.177//:libc"],
+        "@rules_rust//rust/platform:aarch64-apple-darwin": ["@crate_index__libc-0.2.186//:libc"],
+        "@rules_rust//rust/platform:aarch64-unknown-linux-gnu": ["@crate_index__libc-0.2.186//:libc"],
         "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
-        "@rules_rust//rust/platform:x86_64-apple-darwin": ["@crate_index__libc-0.2.177//:libc"],
-        "@rules_rust//rust/platform:x86_64-unknown-linux-gnu": ["@crate_index__libc-0.2.177//:libc"],
+        "@rules_rust//rust/platform:x86_64-apple-darwin": ["@crate_index__libc-0.2.186//:libc"],
+        "@rules_rust//rust/platform:x86_64-unknown-linux-gnu": ["@crate_index__libc-0.2.186//:libc"],
         "//conditions:default": [],
     }),
     edition = "2018",
@@ -1925,7 +1925,7 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^44.0.1",
+    version = "^45.0.0",
 )
 crate.spec(
     package = "wast",
@@ -2182,6 +2182,16 @@ crate.annotation(
     crate = "aws-lc-sys",
     patch_args = ["-p1"],
     patches = ["@@//bazel:aws-lc-sys.patch"],
+)
+crate.annotation(
+    crate = "rustix",
+    # Patch for determinism issues: rustix's build script leaves a
+    # non-deterministic compiler-probe artifact (`rustix_test_can_compile`) in
+    # `OUT_DIR`, which rules_rust captures as a cacheable build output. This is
+    # the upstream fix: https://github.com/bytecodealliance/rustix/pull/1628
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:rustix.patch"],
+    version = "1.1.4",
 )
 crate.annotation(
     crate = "ic-wasm",

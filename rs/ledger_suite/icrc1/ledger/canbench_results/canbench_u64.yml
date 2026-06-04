@@ -2,7 +2,7 @@ benches:
   bench_icrc1_transfers:
     total:
       calls: 1
-      instructions: 52398136388
+      instructions: 52402415564
       heap_increase: 264
       stable_memory_increase: 256
     scopes:
@@ -13,17 +13,17 @@ benches:
         stable_memory_increase: 0
       icrc1_transfer:
         calls: 1
-        instructions: 12291787100
+        instructions: 12293017370
         heap_increase: 31
         stable_memory_increase: 0
       icrc2_approve:
         calls: 1
-        instructions: 18635288826
+        instructions: 18636519096
         heap_increase: 28
         stable_memory_increase: 128
       icrc2_transfer_from:
         calls: 1
-        instructions: 20769469441
+        instructions: 20771299711
         heap_increase: 3
         stable_memory_increase: 0
       icrc3_get_blocks:
@@ -33,39 +33,39 @@ benches:
         stable_memory_increase: 0
       post_upgrade:
         calls: 1
-        instructions: 350952651
+        instructions: 350952720
         heap_increase: 73
         stable_memory_increase: 0
       pre_upgrade:
         calls: 1
-        instructions: 148686593
+        instructions: 148656490
         heap_increase: 129
         stable_memory_increase: 128
       upgrade:
         calls: 1
-        instructions: 499641985
+        instructions: 499611951
         heap_increase: 202
         stable_memory_increase: 128
   bench_upgrade_baseline:
     total:
       calls: 1
-      instructions: 8698357
+      instructions: 8698423
       heap_increase: 258
       stable_memory_increase: 128
     scopes:
       post_upgrade:
         calls: 1
-        instructions: 8615874
+        instructions: 8615943
         heap_increase: 129
         stable_memory_increase: 0
       pre_upgrade:
         calls: 1
-        instructions: 79559
+        instructions: 79556
         heap_increase: 129
         stable_memory_increase: 128
       upgrade:
         calls: 1
-        instructions: 8697449
+        instructions: 8697515
         heap_increase: 258
         stable_memory_increase: 128
 version: 0.6.0
