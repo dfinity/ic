@@ -35,7 +35,7 @@ use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
-    CanisterState, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
+    CanisterState, CanisterStates, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
 };
 use ic_types::batch::ChainKeyData;
 use ic_types::ingress::{IngressState, IngressStatus};
@@ -48,7 +48,7 @@ use ic_types::{
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::str::FromStr;
 use std::sync::Arc;
 use strum::IntoEnumIterator;
@@ -71,6 +71,11 @@ pub(crate) mod tests;
 /// as 1/16 of the fixed limit. Any other value in the same ballpark would
 /// work here.
 const SUBNET_MESSAGES_LIMIT_FRACTION: u64 = 16;
+
+/// Because it is relatively expensive to make every canister mutable just to
+/// check whether 10 seconds have passed since it was last charged, only try to
+/// charge canisters every 50 rounds (and/or on checkpoint rounds).
+const CHARGE_INTERVAL_ROUNDS: u64 = 50;
 
 /// Contains limits (or budget) for various resources that affect duration of
 /// an execution round.
@@ -254,7 +259,7 @@ impl SchedulerImpl {
         chain_key_data: &ChainKeyData,
     ) -> ReplicatedState {
         let mut ongoing_long_install_code = state
-            .canisters_iter()
+            .hot_canisters_iter()
             .any(|canister| canister.has_long_install_code());
 
         loop {
@@ -359,7 +364,7 @@ impl SchedulerImpl {
         let cost_schedule = state.get_own_cost_schedule();
         let subnet_size = state.get_own_subnet_size();
 
-        for canister in state.canisters_iter_mut() {
+        for canister in state.hot_canisters_iter_mut() {
             // Add `Heartbeat` or `GlobalTimer` for running canisters only.
             match canister.system_state.status() {
                 CanisterStatusType::Running => {}
@@ -536,15 +541,12 @@ impl SchedulerImpl {
             total_heap_delta += heap_delta;
             state.metadata.heap_delta_estimate += heap_delta;
 
-            // Put back the executed canisters into the canisters map. Since usually most
-            // canisters have no messages to execute, this is likely to be more efficient
-            // than rebuilding the map from scratch.
+            // Put back the executed canisters. Since most canisters have no messages to
+            // execute, this is likely to be more efficient than rebuilding from scratch:
             let mut canisters = inactive_canisters;
-            canisters.extend(
-                active_canisters
-                    .into_iter()
-                    .map(|canister| (canister.canister_id(), canister)),
-            );
+            for canister in active_canisters {
+                canisters.insert(canister);
+            }
             state.put_canister_states(canisters);
 
             ingress_execution_results.append(&mut loop_ingress_execution_results);
@@ -781,7 +783,7 @@ impl SchedulerImpl {
         let current_time = state.time();
         let not_expired = |ingress: &Ingress| ingress.expiry_time >= current_time;
         let mut expired_ingress_messages = state.subnet_queues_retain_ingress_messages(not_expired);
-        for canister in state.canisters_iter_mut() {
+        for canister in state.hot_canisters_iter_mut() {
             if !canister.system_state.all_ingress_messages(not_expired) {
                 let canister = Arc::make_mut(canister);
                 expired_ingress_messages
@@ -815,14 +817,30 @@ impl SchedulerImpl {
     }
 
     /// Charge canisters for their resource allocation and usage. Canisters
-    /// that did not manage to pay are uninstalled.
-    /// This function is expected to be called at the end of a round.
+    /// that cannot pay are uninstalled.
+    ///
+    /// This function is expected to be called at the end of a round and
+    /// particularly after paused executions were aborted on checkpoint rounds.
     fn charge_canisters_for_resource_allocation_and_usage(
         &self,
         state: &mut ReplicatedState,
         subnet_size: usize,
         current_round: ExecutionRound,
+        current_round_type: ExecutionRoundType,
     ) {
+        // Because it is relatively expensive to make every canister mutable just to
+        // check whether 10 seconds have passed since it was last charged, only try to
+        // charge canisters every 50 rounds and/or on checkpoint rounds.
+        //
+        // The latter ensures that (because we skip canisters with paused
+        // executions), every canister is charged at least once per checkpoint
+        // interval.
+        if !current_round.get().is_multiple_of(CHARGE_INTERVAL_ROUNDS)
+            && current_round_type != ExecutionRoundType::CheckpointRound
+        {
+            return;
+        }
+
         let cost_schedule = state.get_own_cost_schedule();
         let state_time = state.time();
         let threshold_last_allocation_charge = state_time.saturating_sub(
@@ -830,19 +848,21 @@ impl SchedulerImpl {
                 .duration_between_allocation_charges(),
         );
         let mut all_rejects = Vec::new();
-        for canister in state.canisters_iter_mut() {
+        // TODO(DSM-103): Charge all canisters every N rounds / seconds (and otherwise
+        // do nothing). Ensure that paused execution canisters are charged eventually.
+        state.canisters_for_each_mut(|_id, canister| {
             if canister.system_state.time_of_last_allocation_charge
                 > threshold_last_allocation_charge
             {
                 // Skip charging for the resources in this round because not enough time has passed
                 // since the last charge happened.
-                continue;
+                return;
             }
 
             // Postpone charging for resources when a canister has a paused execution
             // to avoid modifying the balance of a canister during an unfinished operation.
             if canister.has_paused_execution_or_install_code() {
-                continue;
+                return;
             }
 
             let canister = Arc::make_mut(canister);
@@ -870,6 +890,7 @@ impl SchedulerImpl {
                 canister.system_state.compute_allocation = ComputeAllocation::zero();
                 canister.system_state.memory_allocation = MemoryAllocation::default();
                 canister.system_state.clear_canister_history();
+                canister.remove_log();
                 // Burn the remaining balance of the canister.
                 canister
                     .system_state
@@ -883,7 +904,7 @@ impl SchedulerImpl {
                 );
                 self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
             }
-        }
+        });
 
         // Send rejects to any requests that were forcibly closed while uninstalling.
         for rejects in all_rejects.into_iter() {
@@ -898,7 +919,7 @@ impl SchedulerImpl {
         }
     }
 
-    /// Iterates over all canisters on the subnet, checking if a source canister
+    /// Iterates over all hot canisters on the subnet, checking if a source canister
     /// has output messages for a destination canister on the same subnet and
     /// moving them from the source to the destination canister if the
     /// destination canister has room for them.
@@ -916,7 +937,7 @@ impl SchedulerImpl {
         // This is because we cannot hold an immutable reference to the map
         // while trying to simultaneously mutate it.
         let canisters_with_outputs: Vec<CanisterId> = state
-            .canisters_iter()
+            .hot_canisters_iter()
             .filter(|canister| canister.has_output())
             .map(|canister| canister.canister_id())
             .collect();
@@ -1040,7 +1061,7 @@ impl SchedulerImpl {
         let cost_schedule = state.get_own_cost_schedule();
         let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
         let mut paused_round_states = canister_states
-            .iter()
+            .hot_iter()
             .filter_map(|(canister_id, canister)| {
                 if canister.has_paused_execution() {
                     let canister_priority = subnet_schedule.get(canister_id);
@@ -1118,7 +1139,7 @@ impl Scheduler for SchedulerImpl {
                 .round_log_memory_store_migration_duration
                 .start_timer();
             let log_memory_store_feature = self.log_memory_store_feature;
-            for canister in state.canisters_iter_mut() {
+            state.canisters_for_each_mut(|_id, canister| {
                 if log_memory_store_feature == FlagStatus::Enabled
                     && !canister.system_state.log_memory_store.is_migrated()
                 {
@@ -1140,7 +1161,7 @@ impl Scheduler for SchedulerImpl {
                         .resize(0, Arc::clone(&self.fd_factory));
                     system_state.log_memory_store.clear_migrated();
                 }
-            }
+            });
             state.metadata.logs_migrated = true;
         }
 
@@ -1168,7 +1189,7 @@ impl Scheduler for SchedulerImpl {
 
             long_running_canisters = state
                 .canister_states()
-                .iter()
+                .hot_iter()
                 .filter_map(|(canister_id, canister)| {
                     if canister.has_long_execution_or_install_code() {
                         Some(*canister_id)
@@ -1222,7 +1243,7 @@ impl Scheduler for SchedulerImpl {
             );
 
             // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
-            // for canister in state.canisters_iter_mut() {
+            // for canister in state.canisters_iter() {
             //     cycles_in_sum += canister.system_state.balance();
             //     cycles_in_sum += canister.system_state.queues().input_queue_cycles();
             // }
@@ -1456,7 +1477,7 @@ impl Scheduler for SchedulerImpl {
 
             // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
             //
-            // for canister in state.canisters_iter_mut() {
+            // for canister in state.canisters_iter() {
             //     cycles_out_sum += canister.system_state.queues().output_queue_cycles();
             // }
             // cycles_out_sum += total_canister_balance;
@@ -1496,14 +1517,6 @@ impl Scheduler for SchedulerImpl {
                 let _timer = self.metrics.round_finalization_ingress.start_timer();
                 final_state.prune_ingress_history();
             }
-            {
-                let _timer = self.metrics.round_finalization_charge.start_timer();
-                self.charge_canisters_for_resource_allocation_and_usage(
-                    &mut final_state,
-                    registry_settings.subnet_size,
-                    current_round,
-                );
-            }
 
             // Update canister priorities.
             {
@@ -1511,7 +1524,19 @@ impl Scheduler for SchedulerImpl {
                 round_schedule.finish_round(&mut final_state, current_round, &self.metrics);
             }
 
+            // Abort (some) paused executions.
             self.finish_round(&mut final_state, current_round_type);
+
+            // Charge canisters after (some) paused executions were aborted.
+            {
+                let _timer = self.metrics.round_finalization_charge.start_timer();
+                self.charge_canisters_for_resource_allocation_and_usage(
+                    &mut final_state,
+                    registry_settings.subnet_size,
+                    current_round,
+                    current_round_type,
+                );
+            }
 
             final_state
                 .metadata
@@ -1805,7 +1830,7 @@ fn execute_canisters_on_thread(
 fn can_execute_subnet_msg(
     msg: &SubnetMessage,
     ongoing_long_install_code: bool,
-    canister_states: &BTreeMap<CanisterId, Arc<CanisterState>>,
+    canister_states: &CanisterStates,
     round_limits: &mut RoundLimits,
 ) -> bool {
     let Some(effective_canister_id) = msg.effective_canister_id() else {
@@ -2138,7 +2163,7 @@ pub fn abort_all_paused_executions(
     log: &ReplicaLogger,
 ) {
     let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
-    for canister in canister_states.values_mut() {
+    for canister in canister_states.hot_values_mut() {
         abort_canister(canister, subnet_schedule, exec_env, cost_schedule, log);
     }
 }

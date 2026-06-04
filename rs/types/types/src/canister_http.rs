@@ -1056,8 +1056,8 @@ impl CountBytes for CanisterHttpResponseMetadata {
 }
 
 impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseMetadata {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 

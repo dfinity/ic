@@ -2521,7 +2521,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -13469,6 +13469,7 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-local-store",
  "ic-registry-nns-data-provider",
+ "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-replicated-state",
@@ -13531,6 +13532,7 @@ dependencies = [
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-local-store",
+ "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-replica-setup-ic-network",
  "ic-replicated-state",
@@ -14963,7 +14965,6 @@ dependencies = [
  "num_cpus",
  "on_wire",
  "phantom_newtype",
- "prost 0.13.5",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "regex",
@@ -15062,6 +15063,8 @@ dependencies = [
  "hex-literal 0.4.1",
  "ic-artifact-pool",
  "ic-btc-replica-types",
+ "ic-canonical-state",
+ "ic-canonical-state-tree-hash",
  "ic-config",
  "ic-consensus-features",
  "ic-crypto-sha2",
@@ -15086,7 +15089,11 @@ dependencies = [
  "serde_cbor",
  "socket2 0.5.10",
  "tempfile",
+<<<<<<< HEAD
  "wasmprinter 0.251.0",
+=======
+ "wasmprinter",
+>>>>>>> master
  "wat",
 ]
 
@@ -17627,7 +17634,11 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",
+<<<<<<< HEAD
  "wasmprinter 0.251.0",
+=======
+ "wasmprinter",
+>>>>>>> master
 ]
 
 [[package]]
@@ -19103,9 +19114,9 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.79"
+version = "0.10.80"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf0b434746ee2832f4f0baf10137e1cabb18cbe6912c69e2e33263c45250f542"
+checksum = "a45fa2aa886c42762255da344f0a0d313e254066c46aad76f300c3d3da62d967"
 dependencies = [
  "bitflags 2.11.0",
  "cfg-if",
@@ -19143,9 +19154,9 @@ dependencies = [
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.115"
+version = "0.9.116"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "158fe5b292746440aa6e7a7e690e55aeb72d41505e2804c23c6973ad0e9c9781"
+checksum = "f28a22dc7140cda5f096e5e7724a6962ca81a7f8bfd2979f9b18c11af56318c4"
 dependencies = [
  "cc",
  "libc",
@@ -21815,19 +21826,19 @@ dependencies = [
 
 [[package]]
 name = "rkyv"
-version = "0.8.15"
+version = "0.8.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a30e631b7f4a03dee9056b8ef6982e8ba371dd5bedb74d3ec86df4499132c70"
+checksum = "73389e0c99e664f919275ab5b5b0471391fe9a8de61e1dff9b1eaf56a90f16e3"
 dependencies = [
  "bytecheck 0.8.2",
  "bytes",
- "hashbrown 0.16.1",
+ "hashbrown 0.17.0",
  "indexmap 2.14.0",
  "munge",
  "ptr_meta 0.3.1",
  "rancor",
  "rend 0.5.3",
- "rkyv_derive 0.8.15",
+ "rkyv_derive 0.8.16",
  "smallvec",
  "tinyvec",
  "uuid",
@@ -21846,9 +21857,9 @@ dependencies = [
 
 [[package]]
 name = "rkyv_derive"
-version = "0.8.15"
+version = "0.8.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8100bb34c0a1d0f907143db3149e6b4eea3c33b9ee8b189720168e818303986f"
+checksum = "5d2ed0b54125315fb36bd021e82d314d1c126548f871634b483f46b31d13cac6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -22184,7 +22195,7 @@ dependencies = [
  "errno 0.3.14",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -23448,7 +23459,7 @@ checksum = "71a120c9f2941389140711334f4aec8f54544cffd18b86bc20eb1230cd73191b"
 dependencies = [
  "either",
  "paste",
- "rkyv 0.8.15",
+ "rkyv 0.8.16",
  "serde",
  "smallvec",
 ]
@@ -23691,6 +23702,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "psm",
+ "windows-sys 0.52.0",
  "windows-sys 0.59.0",
 ]
 
@@ -24078,9 +24090,9 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "tar"
-version = "0.4.45"
+version = "0.4.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22692a6476a21fa75fdfc11d452fda482af402c008cdbaf3476414e122040973"
+checksum = "3f6221d9a6003c78398e3b239969f352578258df48c8eb051caadae0015bc840"
 dependencies = [
  "filetime",
  "libc",
@@ -25900,8 +25912,13 @@ dependencies = [
  "tokio",
  "wasm-encoder 0.251.0",
  "wasm-smith",
+<<<<<<< HEAD
  "wasmparser 0.251.0",
  "wasmprinter 0.251.0",
+=======
+ "wasmparser 0.248.0",
+ "wasmprinter",
+>>>>>>> master
  "wasmtime",
 ]
 
@@ -25995,6 +26012,7 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "wasmparser"
 version = "0.251.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -26008,6 +26026,8 @@ dependencies = [
 ]
 
 [[package]]
+=======
+>>>>>>> master
 name = "wasmprinter"
 version = "0.248.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -26019,6 +26039,7 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "wasmprinter"
 version = "0.251.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -26033,6 +26054,11 @@ dependencies = [
 name = "wasmtime"
 version = "45.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+=======
+name = "wasmtime"
+version = "45.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+>>>>>>> master
 checksum = "d35aec1e932d00a7c941f816ad589e65ad8db948b9e971bf8ec655a1669f1f67"
 dependencies = [
  "addr2line 0.26.0",
@@ -26093,7 +26119,11 @@ dependencies = [
  "target-lexicon",
  "wasm-encoder 0.248.0",
  "wasmparser 0.248.0",
+<<<<<<< HEAD
  "wasmprinter 0.248.0",
+=======
+ "wasmprinter",
+>>>>>>> master
  "wasmtime-internal-core",
 ]
 

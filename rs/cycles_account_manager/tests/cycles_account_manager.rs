@@ -1,5 +1,5 @@
 use ic_base_types::NumSeconds;
-use ic_config::subnet_config::CyclesAccountManagerConfig;
+use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetSecurity};
 use ic_cycles_account_manager::{IngressInductionCost, ResourceSaturation};
 use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, MessageMemoryUsage};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -1353,7 +1353,7 @@ fn test_storage_reservation_cycles() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     const GB: u64 = 1024 * 1024 * 1024;
 
-    let cfg = CyclesAccountManagerConfig::application_subnet();
+    let cfg = CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None);
     let cam = CyclesAccountManagerBuilder::new().build();
 
     // Allocation of 100GB below the threshold.

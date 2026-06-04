@@ -10,6 +10,22 @@ use ic_types::{ExecutionRound, NumInstructions};
 use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 
+/// Security model under which a subnet runs. Currently distinguishes subnets
+/// that use AMD SEV-SNP confidential VMs from those that don't.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum SubnetSecurity {
+    /// Subnet uses SEV-SNP confidential VMs.
+    Sev,
+    /// Subnet does not use SEV-SNP.
+    None,
+}
+
+impl SubnetSecurity {
+    pub fn from_sev_enabled(sev_enabled: bool) -> Self {
+        if sev_enabled { Self::Sev } else { Self::None }
+    }
+}
+
 const GIB: u64 = 1024 * 1024 * 1024;
 const M: u64 = 1_000_000;
 const B: u64 = 1_000_000_000;
@@ -134,6 +150,9 @@ pub const VETKD_FEE: Cycles = Cycles::new(10 * B as u128);
 /// All initial costs were calculated with the assumption that a subnet had 13 replicas.
 /// IMPORTANT: never set this value to zero.
 pub const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
+
+/// Reference subnet size for SEV-enabled application subnets.
+pub const SEV_REFERENCE_SUBNET_SIZE: usize = 7;
 
 /// Costs for each newly created dirty page in stable memory.
 const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(1_000);
@@ -460,10 +479,13 @@ pub struct CyclesAccountManagerConfig {
 }
 
 impl CyclesAccountManagerConfig {
-    pub fn application_subnet() -> Self {
+    pub fn application_subnet(subnet_security: SubnetSecurity) -> Self {
         let ten_update_instructions_execution_fee_in_cycles = 10;
         Self {
-            reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
+            reference_subnet_size: match subnet_security {
+                SubnetSecurity::Sev => SEV_REFERENCE_SUBNET_SIZE,
+                SubnetSecurity::None => DEFAULT_REFERENCE_SUBNET_SIZE,
+            },
             canister_creation_fee: CANISTER_CREATION_FEE,
             compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
 
@@ -499,8 +521,8 @@ impl CyclesAccountManagerConfig {
         }
     }
 
-    pub fn verified_application_subnet() -> Self {
-        Self::application_subnet()
+    pub fn verified_application_subnet(subnet_security: SubnetSecurity) -> Self {
+        Self::application_subnet(subnet_security)
     }
 
     /// All processing is free on system subnets
@@ -572,7 +594,7 @@ impl CyclesAccountManagerConfig {
     }
 
     pub fn cloud_engine() -> Self {
-        Self::application_subnet()
+        Self::application_subnet(SubnetSecurity::None)
     }
 }
 
@@ -585,20 +607,28 @@ pub struct SubnetConfig {
 }
 
 impl SubnetConfig {
-    pub fn new(own_subnet_type: SubnetType) -> Self {
+    /// `subnet_security` only affects the cycles cost scaling for `Application`
+    /// and `VerifiedApplication` subnets. For `System` and `CloudEngine`
+    /// subnets it is ignored, because those subnets either don't charge cycles
+    /// or use a separate cost model.
+    pub fn new(own_subnet_type: SubnetType, subnet_security: SubnetSecurity) -> Self {
         match own_subnet_type {
-            SubnetType::Application => Self::default_application_subnet(),
+            SubnetType::Application => Self::default_application_subnet(subnet_security),
             SubnetType::System => Self::default_system_subnet(),
-            SubnetType::VerifiedApplication => Self::default_verified_application_subnet(),
+            SubnetType::VerifiedApplication => {
+                Self::default_verified_application_subnet(subnet_security)
+            }
             SubnetType::CloudEngine => Self::default_cloud_engine(),
         }
     }
 
     /// Returns the subnet configuration for the application subnet type.
-    fn default_application_subnet() -> Self {
+    fn default_application_subnet(subnet_security: SubnetSecurity) -> Self {
         Self {
             scheduler_config: SchedulerConfig::application_subnet(),
-            cycles_account_manager_config: CyclesAccountManagerConfig::application_subnet(),
+            cycles_account_manager_config: CyclesAccountManagerConfig::application_subnet(
+                subnet_security,
+            ),
         }
     }
 
@@ -612,10 +642,11 @@ impl SubnetConfig {
 
     /// Returns the subnet configuration for the verified application subnet
     /// type.
-    fn default_verified_application_subnet() -> Self {
+    fn default_verified_application_subnet(subnet_security: SubnetSecurity) -> Self {
         Self {
             scheduler_config: SchedulerConfig::verified_application_subnet(),
             cycles_account_manager_config: CyclesAccountManagerConfig::verified_application_subnet(
+                subnet_security,
             ),
         }
     }
@@ -632,9 +663,11 @@ impl SubnetConfig {
 #[cfg(test)]
 mod tests {
     use super::{
-        B, MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE, MAX_INSTRUCTIONS_PER_ROUND,
-        MAX_INSTRUCTIONS_PER_SLICE,
+        B, DEFAULT_REFERENCE_SUBNET_SIZE, MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE,
+        MAX_INSTRUCTIONS_PER_ROUND, MAX_INSTRUCTIONS_PER_SLICE, SEV_REFERENCE_SUBNET_SIZE,
     };
+    use crate::subnet_config::{SubnetConfig, SubnetSecurity};
+    use ic_registry_subnet_type::SubnetType;
     use ic_types::NumInstructions;
 
     #[test]
@@ -643,6 +676,47 @@ mod tests {
             MAX_INSTRUCTIONS_PER_ROUND,
             MAX_INSTRUCTIONS_PER_SLICE.max(MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE)
                 + NumInstructions::from(2 * B)
+        );
+    }
+
+    #[test]
+    fn subnet_config_application_sev_disabled_uses_default_reference_subnet_size() {
+        let config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+        assert_eq!(
+            config.cycles_account_manager_config.reference_subnet_size,
+            DEFAULT_REFERENCE_SUBNET_SIZE
+        );
+    }
+
+    #[test]
+    fn subnet_config_application_sev_enabled_uses_sev_reference_subnet_size() {
+        let config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::Sev);
+        assert_eq!(
+            config.cycles_account_manager_config.reference_subnet_size,
+            SEV_REFERENCE_SUBNET_SIZE
+        );
+    }
+
+    #[test]
+    fn subnet_config_verified_application_sev_enabled_uses_sev_reference_subnet_size() {
+        let config = SubnetConfig::new(SubnetType::VerifiedApplication, SubnetSecurity::Sev);
+        assert_eq!(
+            config.cycles_account_manager_config.reference_subnet_size,
+            SEV_REFERENCE_SUBNET_SIZE
+        );
+    }
+
+    #[test]
+    fn subnet_config_system_ignores_sev_flag() {
+        let config_sev = SubnetConfig::new(SubnetType::System, SubnetSecurity::Sev);
+        let config_no_sev = SubnetConfig::new(SubnetType::System, SubnetSecurity::None);
+        assert_eq!(
+            config_sev
+                .cycles_account_manager_config
+                .reference_subnet_size,
+            config_no_sev
+                .cycles_account_manager_config
+                .reference_subnet_size
         );
     }
 }

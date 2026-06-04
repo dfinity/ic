@@ -2134,6 +2134,16 @@ crate.annotation(
     crate = "ring",
 )
 crate.annotation(
+    crate = "rustix",
+    # Patch for determinism issues: rustix's build script leaves a
+    # non-deterministic compiler-probe artifact (`rustix_test_can_compile`) in
+    # `OUT_DIR`, which rules_rust captures as a cacheable build output. This is
+    # the upstream fix: https://github.com/bytecodealliance/rustix/pull/1628
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:rustix.patch"],
+    version = "1.1.4",
+)
+crate.annotation(
     crate = "ic-wasm",
     gen_binaries = ["ic-wasm"],
 )

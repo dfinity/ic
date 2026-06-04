@@ -47,8 +47,8 @@ impl std::fmt::Debug for VetKdEncryptedKeyShareContent {
 impl_display_using_debug!(VetKdEncryptedKeyShareContent);
 
 impl SignedBytesWithoutDomainSeparator for VetKdEncryptedKeyShareContent {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        self.0.clone()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(&self.0);
     }
 }
 

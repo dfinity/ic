@@ -108,6 +108,7 @@ pub struct OpenIdConfig {
     pub auth_scope: Vec<String>,
     pub fedcm_uri: Option<String>,
     pub email_verification: Option<OpenIdEmailVerification>,
+    pub seed_jwks: Option<Vec<Vec<(String, String)>>>,
 }
 
 #[allow(dead_code)]

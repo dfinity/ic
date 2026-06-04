@@ -22,17 +22,17 @@ use crate::{
 };
 use allowed_panics::panic_with_replica_diverged_at_height;
 use crossbeam_channel::{Sender, bounded, unbounded};
-use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
+use ic_canonical_state::lazy_tree_conversion::{
+    compute_state_height_witness, replicated_state_as_lazy_tree,
+};
 use ic_canonical_state_tree_hash::{
     hash_tree::{HashTree, HashTreeError, hash_lazy_tree},
-    lazy_tree::LazyTree,
-    lazy_tree::materialize::materialize_partial,
+    lazy_tree::{LazyTree, materialize::materialize_partial},
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::Config;
 use ic_crypto_tree_hash::{
     Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness, recompute_digest,
-    sparse_labeled_tree_from_paths,
 };
 use ic_interfaces::certification::Verifier;
 use ic_interfaces_certified_stream_store::{
@@ -1732,7 +1732,7 @@ impl StateManagerImpl {
     fn observe_num_loaded_wasm_files(&self, state: &ReplicatedState) {
         let num_loaded_canister_wasm = state
             .canister_states()
-            .iter()
+            .all_iter()
             .filter_map(|(_, canister)| canister.execution_state.as_ref())
             .filter(|execution_state| {
                 execution_state.wasm_binary.binary.module_loading_status()
@@ -1742,7 +1742,7 @@ impl StateManagerImpl {
 
         let num_loaded_snapshot_wasm: usize = state
             .canister_states()
-            .values()
+            .all_values()
             .map(|canister| {
                 canister
                     .canister_snapshots
@@ -2721,13 +2721,7 @@ fn state_height_witness(
         .with_label_values(&["state_height_witness"])
         .start_timer();
 
-    let paths = vec![vec!["metadata".into(), "height".into()].into()];
-    let labeled_tree =
-        sparse_labeled_tree_from_paths(&paths).expect("Failed to compute labeled tree for height");
-    let partial_tree = materialize_partial(lazy_tree, &labeled_tree, None);
-    hash_tree
-        .witness::<Witness>(&partial_tree)
-        .expect("Failed to compute witness for state height")
+    compute_state_height_witness(lazy_tree, hash_tree)
 }
 
 fn update_latest_height(cached: &AtomicU64, h: Height) -> u64 {
@@ -3421,6 +3415,12 @@ impl StateManager for StateManagerImpl {
                 flush_checkpoint_ops_and_page_maps(&mut state, height, &self.tip_channel);
             }
         }
+
+        // Re-establish strict hot/cold partitioning of canister states. Mutations
+        // during the round may have left canisters that are now cold in `hot`. The
+        // partition must be canonical at checkpoint time so that a replica continuing
+        // through a checkpoint and one (re)starting from it agree on the partition.
+        state.repartition_canister_states();
 
         let assert_tip_is_none = |states: &SharedState| {
             // The following assert validates that we don't have two clients

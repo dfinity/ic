@@ -1,5 +1,5 @@
 {
-  "checksum": "93e3afdab83547289f874922d4d2891abdd99c71dd0eb6bee5f78bb139bd87f6",
+  "checksum": "7f96e5c133c203870fc997d52e080f72044bd53f1530c5332ba2230232e22d68",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21636,7 +21636,7 @@
               "target": "slog"
             },
             {
-              "id": "tar 0.4.45",
+              "id": "tar 0.4.46",
               "target": "tar"
             },
             {
@@ -23255,7 +23255,7 @@
               "target": "tabled"
             },
             {
-              "id": "tar 0.4.45",
+              "id": "tar 0.4.46",
               "target": "tar"
             },
             {
@@ -26253,7 +26253,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ]
@@ -35942,7 +35942,7 @@
               "target": "systemstat"
             },
             {
-              "id": "tar 0.4.45",
+              "id": "tar 0.4.46",
               "target": "tar"
             },
             {
@@ -46259,7 +46259,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.115",
+                "id": "openssl-sys 0.9.116",
                 "target": "openssl_sys"
               }
             ]
@@ -46314,7 +46314,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.115",
+                "id": "openssl-sys 0.9.116",
                 "target": "openssl_sys"
               }
             ]
@@ -54287,14 +54287,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "openssl 0.10.79": {
+    "openssl 0.10.80": {
       "name": "openssl",
-      "version": "0.10.79",
+      "version": "0.10.80",
       "package_url": "https://github.com/rust-openssl/rust-openssl",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/openssl/0.10.79/download",
-          "sha256": "bf0b434746ee2832f4f0baf10137e1cabb18cbe6912c69e2e33263c45250f542"
+          "url": "https://static.crates.io/crates/openssl/0.10.80/download",
+          "sha256": "a45fa2aa886c42762255da344f0a0d313e254066c46aad76f300c3d3da62d967"
         }
       },
       "targets": [
@@ -54347,11 +54347,11 @@
               "target": "libc"
             },
             {
-              "id": "openssl 0.10.79",
+              "id": "openssl 0.10.80",
               "target": "build_script_build"
             },
             {
-              "id": "openssl-sys 0.9.115",
+              "id": "openssl-sys 0.9.116",
               "target": "openssl_sys",
               "alias": "ffi"
             }
@@ -54368,7 +54368,7 @@
           ],
           "selects": {}
         },
-        "version": "0.10.79"
+        "version": "0.10.80"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -54383,7 +54383,7 @@
         "link_deps": {
           "common": [
             {
-              "id": "openssl-sys 0.9.115",
+              "id": "openssl-sys 0.9.116",
               "target": "openssl_sys",
               "alias": "ffi"
             }
@@ -54540,14 +54540,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "openssl-sys 0.9.115": {
+    "openssl-sys 0.9.116": {
       "name": "openssl-sys",
-      "version": "0.9.115",
+      "version": "0.9.116",
       "package_url": "https://github.com/rust-openssl/rust-openssl",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/openssl-sys/0.9.115/download",
-          "sha256": "158fe5b292746440aa6e7a7e690e55aeb72d41505e2804c23c6973ad0e9c9781"
+          "url": "https://static.crates.io/crates/openssl-sys/0.9.116/download",
+          "sha256": "f28a22dc7140cda5f096e5e7724a6962ca81a7f8bfd2979f9b18c11af56318c4"
         }
       },
       "targets": [
@@ -54588,14 +54588,14 @@
               "target": "libc"
             },
             {
-              "id": "openssl-sys 0.9.115",
+              "id": "openssl-sys 0.9.116",
               "target": "build_script_main"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.9.115"
+        "version": "0.9.116"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -68827,14 +68827,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rkyv 0.8.15": {
+    "rkyv 0.8.16": {
       "name": "rkyv",
-      "version": "0.8.15",
+      "version": "0.8.16",
       "package_url": "https://github.com/rkyv/rkyv",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rkyv/0.8.15/download",
-          "sha256": "1a30e631b7f4a03dee9056b8ef6982e8ba371dd5bedb74d3ec86df4499132c70"
+          "url": "https://static.crates.io/crates/rkyv/0.8.16/download",
+          "sha256": "73389e0c99e664f919275ab5b5b0471391fe9a8de61e1dff9b1eaf56a90f16e3"
         }
       },
       "targets": [
@@ -68881,13 +68881,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "rkyv_derive 0.8.15",
+              "id": "rkyv_derive 0.8.16",
               "target": "rkyv_derive"
             }
           ],
           "selects": {}
         },
-        "version": "0.8.15"
+        "version": "0.8.16"
       },
       "license": "MIT",
       "license_ids": [
@@ -68950,14 +68950,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rkyv_derive 0.8.15": {
+    "rkyv_derive 0.8.16": {
       "name": "rkyv_derive",
-      "version": "0.8.15",
+      "version": "0.8.16",
       "package_url": "https://github.com/rkyv/rkyv",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rkyv_derive/0.8.15/download",
-          "sha256": "8100bb34c0a1d0f907143db3149e6b4eea3c33b9ee8b189720168e818303986f"
+          "url": "https://static.crates.io/crates/rkyv_derive/0.8.16/download",
+          "sha256": "5d2ed0b54125315fb36bd021e82d314d1c126548f871634b483f46b31d13cac6"
         }
       },
       "targets": [
@@ -68997,7 +68997,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.8.15"
+        "version": "0.8.16"
       },
       "license": "MIT",
       "license_ids": [
@@ -70340,7 +70340,7 @@
                 "alias": "libc_errno"
               },
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ],
@@ -70396,7 +70396,13 @@
       "repository": {
         "Http": {
           "url": "https://static.crates.io/crates/rustix/1.1.4/download",
-          "sha256": "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190"
+          "sha256": "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190",
+          "patch_args": [
+            "-p1"
+          ],
+          "patches": [
+            "@@//bazel:rustix.patch"
+          ]
         }
       },
       "targets": [
@@ -81156,14 +81162,14 @@
       ],
       "license_file": "LICENSE.txt"
     },
-    "tar 0.4.45": {
+    "tar 0.4.46": {
       "name": "tar",
-      "version": "0.4.45",
-      "package_url": "https://github.com/alexcrichton/tar-rs",
+      "version": "0.4.46",
+      "package_url": "https://github.com/composefs/tar-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tar/0.4.45/download",
-          "sha256": "22692a6476a21fa75fdfc11d452fda482af402c008cdbaf3476414e122040973"
+          "url": "https://static.crates.io/crates/tar/0.4.46/download",
+          "sha256": "3f6221d9a6003c78398e3b239969f352578258df48c8eb051caadae0015bc840"
         }
       },
       "targets": [
@@ -81233,7 +81239,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.4.45"
+        "version": "0.4.46"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -101596,7 +101602,7 @@
     "sysinfo 0.37.2",
     "systemd 0.10.0",
     "tabled 0.20.0",
-    "tar 0.4.45",
+    "tar 0.4.46",
     "tarpc 0.34.0",
     "tempfile 3.23.0",
     "test-strategy 0.3.1",
