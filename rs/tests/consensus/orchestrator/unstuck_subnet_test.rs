@@ -90,16 +90,41 @@ fn test(test_env: TestEnv) {
     ));
     info!(logger, "Upgrade started");
 
+    // The orchestrator retries the failing image download with an exponential backoff, so it logs
+    // `FileHashMismatchError` with ever growing gaps. We therefore poll the whole journal for an
+    // already-logged occurrence of the error instead of following the journal and waiting for a new
+    // line to appear, which could block longer than the test timeout while the orchestrator is
+    // backing off.
+    //
+    // Before the orchestrator can log the first `FileHashMismatchError` it has to download the whole
+    // multi-hundred-MB GuestOS image and only then notices the hash mismatch. This download has a
+    // high variance and can occasionally take well over 10 minutes, so we give it a generous budget
+    // (matching the upgrade wait below) to avoid flaky timeouts on a slow image server.
     for nns_node in test_env.topology_snapshot().root_subnet().nodes() {
-        assert!(
-            JournalStreamer::new(nns_node.block_on_ssh_session().unwrap())
-                .follow()
-                .max_lines(1)
-                .contains("FileHashMismatchError")
-                .unwrap_or_default(),
-            "No hash mismatch error in the logs of node {}",
-            nns_node.node_id
-        );
+        ic_system_test_driver::retry_with_msg!(
+            format!(
+                "check for FileHashMismatchError in the logs of node {}",
+                nns_node.node_id
+            ),
+            logger.clone(),
+            secs(30 * 60),
+            secs(5),
+            || {
+                if JournalStreamer::new(nns_node.block_on_ssh_session()?)
+                    .contains("FileHashMismatchError")?
+                {
+                    Ok(())
+                } else {
+                    bail!("No hash mismatch error yet")
+                }
+            }
+        )
+        .unwrap_or_else(|err| {
+            panic!(
+                "No hash mismatch error in the logs of node {}: {}",
+                nns_node.node_id, err
+            )
+        });
     }
 
     info!(logger, "Check that system does not make progress");
@@ -200,6 +225,13 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(config)
         .add_test(systest!(test))
+        // The orchestrator and the test itself download the multi-hundred-MB GuestOS image several
+        // times (the failing upgrade, the manual re-download and the successful upgrade), and each of
+        // those downloads can occasionally take well over 10 minutes on a slow image server. The
+        // default 10-minute per-test and overall timeouts are far too tight for that, so we raise
+        // them generously to avoid the test driver killing the test mid-run.
+        .with_timeout_per_test(secs(60 * 60))
+        .with_overall_timeout(secs(65 * 60))
         .execute_from_args()?;
     Ok(())
 }
