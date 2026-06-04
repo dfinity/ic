@@ -392,6 +392,30 @@ impl LocalBackend {
             })?;
         }
 
+        // Pin the QEMU driver's core-dump limit. In session mode the QEMU
+        // driver reads its config from `$XDG_CONFIG_HOME/libvirt/qemu.conf`,
+        // and libvirt *unconditionally* sets the QEMU process's `RLIMIT_CORE`
+        // to `max_core` (whose built-in default is "unlimited", i.e.
+        // `RLIM_INFINITY` == `18446744073709551615`). Under the Bazel
+        // `linux-sandbox` QEMU runs in an unprivileged user namespace and thus
+        // lacks `CAP_SYS_RESOURCE` in the *initial* user namespace, so *raising*
+        // the hard `RLIMIT_CORE` to unlimited is rejected by the kernel with
+        // `EPERM` and the domain never starts (libvirt reports "cannot limit
+        // core file size of process ... to 18446744073709551615: Operation not
+        // permitted"). Setting `max_core = 0` makes libvirt *lower* the limit
+        // to 0 instead (disabling core dumps), which is always permitted
+        // regardless of capabilities or the inherited hard limit. Core dumps of
+        // the test QEMU are not needed.
+        let qemu_conf_dir = state_home.join(".config").join("libvirt");
+        std::fs::create_dir_all(&qemu_conf_dir).with_context(|| {
+            format!(
+                "creating libvirt qemu config dir {}",
+                qemu_conf_dir.display()
+            )
+        })?;
+        std::fs::write(qemu_conf_dir.join("qemu.conf"), "max_core = 0\n")
+            .with_context(|| format!("writing {}", qemu_conf_dir.join("qemu.conf").display()))?;
+
         // The backend is fully unprivileged: libvirtd runs as the current user
         // in session mode and connects to a per-user QEMU driver. There is no
         // `sudo`, no system-wide bridge, and no `virtlogd` (domain serial and
