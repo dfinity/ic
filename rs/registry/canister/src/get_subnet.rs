@@ -58,8 +58,9 @@ impl TryFrom<SubnetRecordPb> for SubnetRecord {
                 .unwrap_or(CanisterCyclesCostSchedulePb::Unspecified);
         let canister_cycles_cost_schedule = match cost_schedule_pb {
             CanisterCyclesCostSchedulePb::Free => CanisterCyclesCostSchedule::Free,
-            CanisterCyclesCostSchedulePb::Normal
-            | CanisterCyclesCostSchedulePb::Unspecified => CanisterCyclesCostSchedule::Normal,
+            CanisterCyclesCostSchedulePb::Normal | CanisterCyclesCostSchedulePb::Unspecified => {
+                CanisterCyclesCostSchedule::Normal
+            }
         };
 
         let chain_key_config = pb
