@@ -305,7 +305,7 @@ impl<'a> PayloadAssembler<'a> {
         );
 
         let response_size = self.config.response_size;
-        let success_content = || CanisterHttpResponseContent::Success(vec![0u8; response_size]);
+        let success_content = || CanisterHttpResponseContent::Success(vec![0_u8; response_size]);
 
         let mut responses = Vec::new();
 
