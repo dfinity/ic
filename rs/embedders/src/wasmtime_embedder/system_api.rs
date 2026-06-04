@@ -18,21 +18,16 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
-    Memory, NumWasmPages, canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_usage_of_request,
+    Memory, NumWasmPages, OutputRequest, canister_state::WASM_PAGE_SIZE_IN_BYTES,
 };
 use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes,
     NumInstructions, NumOsPages, PrincipalId, SubnetId, Time,
     ingress::WasmResult,
-    messages::{
-        CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, Request, SenderInfo,
-    },
+    messages::{CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, SenderInfo},
     methods::{SystemMethod, WasmClosure},
 };
-use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions,
-    RequestAndResponseTransmission,
-};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
 use request_in_prep::{RequestInPrep, into_request};
@@ -1716,7 +1711,6 @@ impl SystemApiImpl {
             ApiType::InspectMessage { .. } | ApiType::NonReplicatedQuery { .. } => {
                 SystemStateModifications {
                     new_certified_data: None,
-                    callback_updates: vec![],
                     cycles_balance_change: CyclesBalanceChange::zero(),
                     reserved_cycles: Cycles::zero(),
                     consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
@@ -1738,7 +1732,6 @@ impl SystemApiImpl {
             | ApiType::CompositeCleanup { .. } => match &self.execution_error {
                 Some(_) => SystemStateModifications {
                     new_certified_data: None,
-                    callback_updates: vec![],
                     cycles_balance_change: CyclesBalanceChange::zero(),
                     reserved_cycles: Cycles::zero(),
                     consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
@@ -1751,7 +1744,6 @@ impl SystemApiImpl {
                 },
                 None => SystemStateModifications {
                     new_certified_data: None,
-                    callback_updates: system_state_modifications.callback_updates,
                     cycles_balance_change: CyclesBalanceChange::zero(),
                     reserved_cycles: Cycles::zero(),
                     consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
@@ -1771,7 +1763,6 @@ impl SystemApiImpl {
                     self.add_canister_log_for_trap(err, time, &mut system_state_modifications);
                     SystemStateModifications {
                         new_certified_data: None,
-                        callback_updates: vec![],
                         cycles_balance_change: CyclesBalanceChange::zero(),
                         reserved_cycles: Cycles::zero(),
                         consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
@@ -1785,7 +1776,6 @@ impl SystemApiImpl {
                 }
                 None => SystemStateModifications {
                     new_certified_data: None,
-                    callback_updates: vec![],
                     cycles_balance_change: system_state_modifications.cycles_balance_change,
                     reserved_cycles: Cycles::zero(),
                     consumed_cycles_by_use_case: system_state_modifications
@@ -1811,7 +1801,6 @@ impl SystemApiImpl {
                     self.add_canister_log_for_trap(err, time, &mut system_state_modifications);
                     SystemStateModifications {
                         new_certified_data: None,
-                        callback_updates: vec![],
                         cycles_balance_change: CyclesBalanceChange::zero(),
                         reserved_cycles: Cycles::zero(),
                         consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
@@ -1841,7 +1830,6 @@ impl SystemApiImpl {
                     self.add_canister_log_for_trap(err, time, &mut system_state_modifications);
                     SystemStateModifications {
                         new_certified_data: None,
-                        callback_updates: vec![],
                         cycles_balance_change: CyclesBalanceChange::zero(),
                         reserved_cycles: Cycles::zero(),
                         consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
@@ -1866,30 +1854,20 @@ impl SystemApiImpl {
     ///
     /// Note that this function is made public only for the tests
     #[doc(hidden)]
-    pub fn push_output_request(
-        &mut self,
-        req: Request,
-        prepayment_for_response_execution: CompoundCycles<Instructions>,
-        prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
-    ) -> HypervisorResult<i32> {
-        let abort = |request: Request, sandbox_safe_system_state: &mut SandboxSafeSystemState| {
-            sandbox_safe_system_state.refund_cycles(request.payment);
-            sandbox_safe_system_state.unregister_callback(request.sender_reply_callback);
-        };
-
+    pub fn push_output_request(&mut self, req: OutputRequest) -> HypervisorResult<i32> {
         let memory_usage_of_request = if self.execution_parameters.subnet_type == SubnetType::System
         {
             // Effectively disable the memory limit checks on system subnets.
             MessageMemoryUsage::ZERO
         } else {
-            memory_usage_of_request(&req)
+            req.message_memory_usage()
         };
         if let Err(_err) = self.memory_usage.allocate_message_memory(
             memory_usage_of_request,
             &self.api_type,
             &self.sandbox_safe_system_state,
         ) {
-            abort(req, &mut self.sandbox_safe_system_state);
+            self.sandbox_safe_system_state.refund_cycles(req.payment);
             // Return an error code instead of trapping here in order to allow
             // the user code to handle the error gracefully.
             return Ok(RejectCode::SysTransient as i32);
@@ -1899,14 +1877,12 @@ impl SystemApiImpl {
             self.memory_usage.current_usage,
             self.memory_usage.current_message_usage,
             req,
-            prepayment_for_response_execution,
-            prepayment_for_call_transmission,
         ) {
             Ok(()) => Ok(0),
-            Err(request) => {
+            Err(req) => {
                 self.memory_usage
                     .deallocate_message_memory(memory_usage_of_request);
-                abort(request, &mut self.sandbox_safe_system_state);
+                self.sandbox_safe_system_state.refund_cycles(req.payment);
                 Ok(RejectCode::SysTransient as i32)
             }
         }
@@ -3294,12 +3270,7 @@ impl SystemApi for SystemApiImpl {
                     &self.log,
                     *time,
                 )?;
-
-                self.push_output_request(
-                    req.request,
-                    req.prepayment_for_response_execution,
-                    req.prepayment_for_call_transmission,
-                )
+                self.push_output_request(req)
             }
         };
         trace_syscall!(self, CallPerform, result);
