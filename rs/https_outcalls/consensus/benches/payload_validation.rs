@@ -171,14 +171,12 @@ fn build_target(
         .collect();
 
     // Subnet record with the canister HTTP feature enabled, at REGISTRY_VERSION.
-    let mut subnet_record = SubnetRecordBuilder::from(&committee).build();
-    subnet_record.features = Some(
-        SubnetFeatures {
+    let mut subnet_record = SubnetRecordBuilder::from(&committee)
+        .with_features(SubnetFeatures {
             http_requests: true,
             ..SubnetFeatures::default()
-        }
-        .into(),
-    );
+        })
+        .build();
 
     let deps = dependencies_with_subnet_params(
         pool_config,
