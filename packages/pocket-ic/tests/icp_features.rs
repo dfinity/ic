@@ -1081,7 +1081,9 @@ async fn with_all_icp_features_and_nns_subnet_state() {
 #[test]
 fn test_get_subnet_cloud_engine() {
     use ic_registry_subnet_type::SubnetType;
-    use pocket_ic::common::rest::{CanisterCyclesCostSchedule, ExtendedSubnetConfigSet, SubnetSpec};
+    use pocket_ic::common::rest::{
+        CanisterCyclesCostSchedule, ExtendedSubnetConfigSet, SubnetSpec,
+    };
     use registry_canister::get_subnet::{GetSubnetRequest, SubnetRecord};
 
     let registry_canister_id = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
