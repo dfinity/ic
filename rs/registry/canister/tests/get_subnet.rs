@@ -13,14 +13,12 @@ use registry_canister::{
 
 mod common;
 
-fn setup() -> impl std::future::Future<Output = pocket_ic::nonblocking::PocketIc> {
-    async {
-        let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
-        let mut builder = RegistryCanisterInitPayloadBuilder::new();
-        builder.push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0));
-        install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), false).await;
-        pocket_ic
-    }
+async fn setup() -> pocket_ic::nonblocking::PocketIc {
+    let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
+    let mut builder = RegistryCanisterInitPayloadBuilder::new();
+    builder.push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0));
+    install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), false).await;
+    pocket_ic
 }
 
 async fn call_get_subnet(

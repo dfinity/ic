@@ -24,7 +24,7 @@ use pocket_ic::common::rest::{
 };
 use pocket_ic::{
     CreateCanisterParams, PocketIc, PocketIcBuilder, PocketIcState, StartServerParams,
-    query_candid, start_server, update_candid, update_candid_as,
+    start_server, update_candid, update_candid_as,
 };
 use registry_canister::pb::v1::{GetSubnetForCanisterRequest, SubnetForCanister};
 use reqwest::StatusCode;
@@ -1084,6 +1084,7 @@ fn test_get_subnet_cloud_engine() {
     use pocket_ic::common::rest::{
         CanisterCyclesCostSchedule, ExtendedSubnetConfigSet, SubnetSpec,
     };
+    use pocket_ic::query_candid;
     use registry_canister::get_subnet::{GetSubnetRequest, SubnetRecord};
 
     let registry_canister_id = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();

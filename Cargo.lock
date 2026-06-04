@@ -19991,6 +19991,7 @@ dependencies = [
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-proto-data-provider",
+ "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-sns-wasm",
  "ic-transport-types",
