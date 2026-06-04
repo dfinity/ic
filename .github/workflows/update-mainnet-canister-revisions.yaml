@@ -25,7 +25,7 @@ jobs:
       labels: dind-small
     environment: CREATE_PR
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:d119a27b13c328fe00093eae4cd2af213404ccca6ee874f83e7ac05547545206
+      image: ghcr.io/dfinity/ic-build@sha256:55273ed5dc904e737bec678c8e7705aba76cc4b8b039574d5485f1d95d0193d3
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info --mount type=tmpfs,target="/tmp/containers"
     env:
@@ -42,11 +42,6 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ steps.app-token.outputs.token }}
-
-      - name: Setup python3.12
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version: "3.12"
 
       - name: Setup gh cli
         env:
@@ -79,7 +74,7 @@ jobs:
           retry \
             --times=10 \
             --delay=1,2,4,8,15,30,60,120,300,600 \
-            -- time python \
+            -- time python3 \
             ci/src/mainnet_revisions/mainnet_revisions.py \
             $DRY_RUN \
             canisters

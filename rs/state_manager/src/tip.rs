@@ -568,7 +568,11 @@ fn switch_to_checkpoint(
     layout: &CheckpointLayout<ReadOnly>,
     fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<(), Box<dyn std::error::Error + Send>> {
-    for tip_canister in tip.canisters_iter_mut() {
+    fn canister_switch_to_checkpoint(
+        tip_canister: &mut Arc<CanisterState>,
+        layout: &CheckpointLayout<ReadOnly>,
+        fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
         let tip_canister = Arc::make_mut(tip_canister);
         let tip_canister_id = tip_canister.canister_id();
         let canister_layout = layout.canister(&tip_canister.canister_id()).unwrap();
@@ -679,9 +683,14 @@ fn switch_to_checkpoint(
             );
             new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
         }
+        Ok(())
     }
 
-    Ok(())
+    tip.canisters_try_for_each_mut(
+        |_id, tip_canister| -> Result<(), Box<dyn std::error::Error + Send>> {
+            canister_switch_to_checkpoint(tip_canister, layout, fd_factory)
+        },
+    )
 }
 
 /// Update the tip directory files with the most recent checkpoint operations.

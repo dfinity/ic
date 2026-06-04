@@ -1878,7 +1878,7 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^44.0.1",
+    version = "^45.0.0",
 )
 crate.spec(
     package = "wast",
@@ -2132,6 +2132,16 @@ crate.annotation(
         "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
     },
     crate = "ring",
+)
+crate.annotation(
+    crate = "rustix",
+    # Patch for determinism issues: rustix's build script leaves a
+    # non-deterministic compiler-probe artifact (`rustix_test_can_compile`) in
+    # `OUT_DIR`, which rules_rust captures as a cacheable build output. This is
+    # the upstream fix: https://github.com/bytecodealliance/rustix/pull/1628
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:rustix.patch"],
+    version = "1.1.4",
 )
 crate.annotation(
     crate = "ic-wasm",
