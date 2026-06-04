@@ -60,8 +60,8 @@
     "sha256": "8df72887ab235f4533ee613b1bc7293ec8d62c866525b1425934cf992ef894a7"
   },
   "dogecoin": {
-    "sha256": "1fe3ce73e9422a0a3e0444ea7b5a615d2b36c4b940d3cbcfe9e3d5c6cdc32494",
-    "tag": "release/2026-03-12"
+    "sha256": "1921396143c687dee142d3b8bbcc7b17f3684158a6e1d794e4491fdf7058e1ba",
+    "tag": "release/2026-05-27"
   },
   "genesis-token": {
     "rev": "36ceffe4c47f4c3a881e75951178f5413f777f6c",
@@ -80,12 +80,12 @@
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_backend": {
-    "sha256": "620d21e404330fa93ffa047a9302dbfa6c63ecef706d33f76b28adea104a05d9",
-    "tag": "release-2026-05-08"
+    "sha256": "39308aa8561e3b226050b3d7d366a277e61ab0c7f720dfca04439b6df8527ef5",
+    "tag": "release-2026-05-29"
   },
   "internet_identity_frontend": {
-    "sha256": "62e6539d4ddeeaf47456c10eda7b04c5bc2446f246542460c7f9c5bddc80a2e0",
-    "tag": "release-2026-05-08"
+    "sha256": "681274564544e675b604b541b8be28723ba9b3c75fbcdbfc5146a4b5c216429d",
+    "tag": "release-2026-06-01"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
@@ -148,8 +148,8 @@
     "sha256": "d26b930d8756bb75b6caa5195346499b18bbd6448810386e1b8f2f1f808ade86"
   },
   "subnet_rental": {
-    "sha256": "419fc07a8d46655030a5b3f438a764e0fcd67ae4e13a11deac045a6f38730db2",
-    "tag": "0.5.0"
+    "sha256": "7f15a1d822148eb9262fb799321ea780c9ab84a9f5f06657dba22ff7ec28d997",
+    "tag": "0.6.0"
   },
   "swap": {
     "rev": "0e4c8234a9e0508ae30c5b8a7498406294c25e95",

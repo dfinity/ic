@@ -56,6 +56,7 @@ fn convert_guest_launch_measurement_metadata_from_pb_to_api(
 ) -> api::GuestLaunchMeasurementMetadata {
     api::GuestLaunchMeasurementMetadata {
         kernel_cmdline: item.kernel_cmdline,
+        vcpu_type: item.vcpu_type,
     }
 }
 
@@ -64,5 +65,6 @@ fn convert_guest_launch_measurement_metadata_from_api_to_pb(
 ) -> pb::GuestLaunchMeasurementMetadata {
     pb::GuestLaunchMeasurementMetadata {
         kernel_cmdline: item.kernel_cmdline,
+        vcpu_type: item.vcpu_type,
     }
 }

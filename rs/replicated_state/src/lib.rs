@@ -56,6 +56,7 @@
 //!
 mod bitcoin;
 pub mod canister_state;
+mod canister_states;
 pub(crate) mod hash;
 pub mod metadata_state;
 pub mod metrics;
@@ -71,6 +72,7 @@ pub use canister_state::{
         CanisterStatus, ExecutionTask, SystemState, memory_usage_of_request,
     },
 };
+pub use canister_states::CanisterStates;
 pub use metadata_state::subnet_schedule::{CanisterPriority, SubnetSchedule};
 pub use metadata_state::{
     FullTopology, IngressHistoryState, NetworkTopology, Stream, SubnetTopology, SystemMetadata,

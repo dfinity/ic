@@ -13,7 +13,6 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/crypto/sha2",
-        "@crate_index//:hex",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",
         "@crate_index//:serde",
@@ -27,7 +26,6 @@ rust_test(
     deps = [
         # Keep sorted.
         "//rs/crypto/sha2",
-        "@crate_index//:hex",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",
         "@crate_index//:serde",

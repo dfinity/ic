@@ -178,8 +178,8 @@ impl CertificationContent {
 }
 
 impl SignedBytesWithoutDomainSeparator for CertificationContent {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        self.hash.get_ref().0.clone()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(&self.hash.get_ref().0);
     }
 }
 

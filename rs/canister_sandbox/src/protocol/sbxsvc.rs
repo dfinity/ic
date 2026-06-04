@@ -318,7 +318,7 @@ mod tests {
     use std::time::Duration;
 
     use ic_base_types::NumSeconds;
-    use ic_config::subnet_config::CyclesAccountManagerConfig;
+    use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetSecurity};
     use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
     use ic_embedders::wasmtime_embedder::system_api::{
         ApiType, ExecutionParameters, InstructionLimits,
@@ -489,7 +489,7 @@ mod tests {
                         NumInstructions::new(10),
                         SubnetType::Application,
                         SubnetId::new(canister_test_id(1).get()),
-                        CyclesAccountManagerConfig::application_subnet(),
+                        CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None),
                     ),
                     &NetworkTopology::default(),
                     NumInstructions::new(42),

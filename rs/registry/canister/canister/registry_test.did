@@ -356,7 +356,7 @@ type ReviseElectedGuestosVersionsPayload = record {
 
 type GuestLaunchMeasurements = record {
  guest_launch_measurements : vec record {
-   metadata : opt record { kernel_cmdline : opt text };
+   metadata : opt record { kernel_cmdline : opt text; vcpu_type : opt text };
    measurement : blob;
  };
 };
@@ -486,6 +486,7 @@ type UpdateSubnetPayload = record {
   max_artifact_streams_per_peer : opt nat32;
   subnet_type : opt SubnetType;
   ssh_readonly_access : opt vec text;
+  subnet_admins : opt vec principal;
   chain_key_config : opt ChainKeyConfig;
   chain_key_signing_enable : opt vec MasterPublicKeyId;
   chain_key_signing_disable : opt vec MasterPublicKeyId;

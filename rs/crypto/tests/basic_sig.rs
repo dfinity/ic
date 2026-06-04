@@ -1,5 +1,5 @@
 use assert_matches::assert_matches;
-use ic_crypto::CryptoComponentImpl;
+use ic_crypto::{CryptoComponentImpl, CryptoComponentRng};
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::vault::api::CspBasicSignatureError;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
@@ -46,11 +46,12 @@ fn should_sign_and_verify() {
 
 #[test]
 fn should_fail_signing_with_internal_error_if_secret_key_not_found_in_key_store() {
+    let rng = ReproducibleRng::new();
     let mut vault = MockLocalCspVault::new();
     vault
         .expect_sign()
         .return_once(|_msg| Err(CspBasicSignatureError::SecretKeyNotFound(dummy_key_id())));
-    let crypto = crypto_component_with_vault(vault, registry_panicking_on_usage());
+    let crypto = crypto_component_with_vault(vault, registry_panicking_on_usage(), rng);
 
     let result = crypto.sign_basic(&SignableMock::new(b"message".to_vec()));
 
@@ -59,11 +60,12 @@ fn should_fail_signing_with_internal_error_if_secret_key_not_found_in_key_store(
 
 #[test]
 fn should_fail_signing_with_internal_error_if_public_key_not_found_in_key_store() {
+    let rng = ReproducibleRng::new();
     let mut vault = MockLocalCspVault::new();
     vault
         .expect_sign()
         .return_once(|_msg| Err(CspBasicSignatureError::PublicKeyNotFound));
-    let crypto = crypto_component_with_vault(vault, registry_panicking_on_usage());
+    let crypto = crypto_component_with_vault(vault, registry_panicking_on_usage(), rng);
 
     let result = crypto.sign_basic(&SignableMock::new(b"message".to_vec()));
 
@@ -72,13 +74,14 @@ fn should_fail_signing_with_internal_error_if_public_key_not_found_in_key_store(
 
 #[test]
 fn should_fail_signing_with_internal_error_if_public_key_is_malformed() {
+    let rng = ReproducibleRng::new();
     let mut vault = MockLocalCspVault::new();
     vault.expect_sign().return_once(|_msg| {
         Err(CspBasicSignatureError::MalformedPublicKey(
             "invalid key format".to_string(),
         ))
     });
-    let crypto = crypto_component_with_vault(vault, registry_panicking_on_usage());
+    let crypto = crypto_component_with_vault(vault, registry_panicking_on_usage(), rng);
 
     let result = crypto.sign_basic(&SignableMock::new(b"message".to_vec()));
 
@@ -87,13 +90,14 @@ fn should_fail_signing_with_internal_error_if_public_key_is_malformed() {
 
 #[test]
 fn should_fail_signing_with_internal_error_if_secret_key_type_is_wrong() {
+    let rng = ReproducibleRng::new();
     let mut vault = MockLocalCspVault::new();
     vault.expect_sign().return_once(|_msg| {
         Err(CspBasicSignatureError::WrongSecretKeyType {
             secret_key_variant: "EcdsaP256".to_string(),
         })
     });
-    let crypto = crypto_component_with_vault(vault, registry_panicking_on_usage());
+    let crypto = crypto_component_with_vault(vault, registry_panicking_on_usage(), rng);
 
     let result = crypto.sign_basic(&SignableMock::new(b"message".to_vec()));
 
@@ -102,13 +106,14 @@ fn should_fail_signing_with_internal_error_if_secret_key_type_is_wrong() {
 
 #[test]
 fn should_fail_signing_with_transient_internal_error_if_vault_returns_transient_error() {
+    let rng = ReproducibleRng::new();
     let mut vault = MockLocalCspVault::new();
     vault.expect_sign().return_once(|_msg| {
         Err(CspBasicSignatureError::TransientInternalError {
             internal_error: "vault temporarily unavailable".to_string(),
         })
     });
-    let crypto = crypto_component_with_vault(vault, registry_panicking_on_usage());
+    let crypto = crypto_component_with_vault(vault, registry_panicking_on_usage(), rng);
 
     let result = crypto.sign_basic(&SignableMock::new(b"message".to_vec()));
 
@@ -183,10 +188,11 @@ fn should_fail_verifying_for_wrong_node_id() {
     );
 }
 
-pub fn crypto_component_with_vault(
+pub fn crypto_component_with_vault<R: CryptoComponentRng>(
     vault: MockLocalCspVault,
     registry_client: Arc<dyn RegistryClient>,
-) -> CryptoComponentImpl<MockAllCryptoServiceProvider> {
+    rng: R,
+) -> CryptoComponentImpl<MockAllCryptoServiceProvider, R> {
     CryptoComponentImpl::new_for_test(
         MockAllCryptoServiceProvider::new(),
         Arc::new(vault),
@@ -195,6 +201,7 @@ pub fn crypto_component_with_vault(
         NODE_1,
         Arc::new(CryptoMetrics::none()),
         None,
+        rng,
     )
 }
 

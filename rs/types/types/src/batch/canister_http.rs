@@ -1,9 +1,10 @@
 use crate::{
     CanisterId, CountBytes, ReplicaVersion,
     canister_http::{
-        CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponse,
-        CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
-        CanisterHttpResponseMetadata, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
+        CanisterHttpPaymentReceipt, CanisterHttpReject, CanisterHttpRequestId,
+        CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseContent,
+        CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
+        CanisterHttpResponseWithConsensus,
     },
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed},
     messages::CallbackId,
@@ -178,6 +179,23 @@ impl CanisterHttpPayload {
     /// Returns true, if this is an empty payload
     pub fn is_empty(&self) -> bool {
         self.num_responses() == 0
+    }
+}
+
+impl From<CanisterHttpPaymentReceipt> for pb::CanisterHttpPaymentReceipt {
+    fn from(receipt: CanisterHttpPaymentReceipt) -> Self {
+        pb::CanisterHttpPaymentReceipt {
+            refund: Some(receipt.refund.into()),
+        }
+    }
+}
+
+impl TryFrom<pb::CanisterHttpPaymentReceipt> for CanisterHttpPaymentReceipt {
+    type Error = ProxyDecodeError;
+    fn try_from(receipt: pb::CanisterHttpPaymentReceipt) -> Result<Self, Self::Error> {
+        Ok(CanisterHttpPaymentReceipt {
+            refund: try_from_option_field(receipt.refund, "CanisterHttpPaymentReceipt::refund")?,
+        })
     }
 }
 

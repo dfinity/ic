@@ -45,7 +45,7 @@ impl Args {
 
 #[cfg(target_os = "linux")]
 fn main() -> Result<()> {
-    ic_os_logging::init_logging();
+    ic_os_logging::init_logging_with_level(tracing::Level::INFO);
 
     let args = Args::parse();
 

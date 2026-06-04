@@ -518,6 +518,11 @@ pub struct ThresholdSignatureShare {
     pub signer: ::core::option::Option<NodeId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpPaymentReceipt {
+    #[prost(message, optional, tag = "1")]
+    pub refund: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HttpHeader {
     #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
