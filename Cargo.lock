@@ -15089,11 +15089,7 @@ dependencies = [
  "serde_cbor",
  "socket2 0.5.10",
  "tempfile",
-<<<<<<< HEAD
  "wasmprinter 0.251.0",
-=======
- "wasmprinter",
->>>>>>> master
  "wat",
 ]
 
@@ -17634,11 +17630,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",
-<<<<<<< HEAD
  "wasmprinter 0.251.0",
-=======
- "wasmprinter",
->>>>>>> master
 ]
 
 [[package]]
@@ -25912,13 +25904,8 @@ dependencies = [
  "tokio",
  "wasm-encoder 0.251.0",
  "wasm-smith",
-<<<<<<< HEAD
  "wasmparser 0.251.0",
  "wasmprinter 0.251.0",
-=======
- "wasmparser 0.248.0",
- "wasmprinter",
->>>>>>> master
  "wasmtime",
 ]
 
