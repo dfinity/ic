@@ -51,7 +51,7 @@ async fn test_get_subnet_returns_correct_record() {
         },
     )
     .await
-    .expect("get_subnet should succeed for the NNS subnet");
+    .expect("get_subnet should succeed for the System subnet");
 
     assert_eq!(result.subnet_type, SubnetType::System);
     assert_eq!(result.unit_delay_millis, 600);
