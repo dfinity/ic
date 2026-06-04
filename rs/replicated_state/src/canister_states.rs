@@ -247,6 +247,12 @@ impl CanisterStates {
         self.hot.len() + self.cold.len()
     }
 
+    /// Returns the number of canisters in the `hot` pool (which may or may not be
+    /// actually hot).
+    pub fn hot_len(&self) -> usize {
+        self.hot.len()
+    }
+
     /// Returns true iff there are no canisters at all.
     pub fn is_empty(&self) -> bool {
         self.hot.is_empty() && self.cold.is_empty()
