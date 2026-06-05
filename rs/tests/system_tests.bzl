@@ -21,6 +21,7 @@ def system_test(
         test_driver_target = None,
         runtime_deps = {},
         tags = [],
+        backend = None,
         test_timeout = "long",
         enable_metrics = False,
         prometheus_vm_required_host_features = [],
@@ -52,6 +53,10 @@ def system_test(
       test_driver_target: optional string to identify the target of the test driver binary. Defaults to None which means declare a rust_binary from <name>.rs.
       runtime_deps: dependencies to make available to the test when it runs.
       tags: additional tags for the system_test.
+      backend: None | "farm" | "local".
+        If "farm" the `_local` variant will be tagged as "manual".
+        If "local" the non `_local` variants will be tagged as "manual".
+        If None, both the `_local` and the non `_local` variants won't be tagged as "manual" and will run by default.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
       enable_metrics: if True, a PrometheusVm will be spawned running both p8s (configured to scrape the testnet) & Grafana.
       prometheus_vm_required_host_features: a list of strings specifying the required host features of the PrometheusVm.
@@ -230,6 +235,13 @@ def system_test(
     RUN_SCRIPT_RUNTIME_DEP_ENV_VARS = ";".join(_runtime_deps.keys())
     env["RUN_SCRIPT_RUNTIME_DEP_ENV_VARS"] = RUN_SCRIPT_RUNTIME_DEP_ENV_VARS
 
+    valid_backends = [None, "farm", "local"]
+    if backend not in valid_backends:
+        fail("Invalid backend {}: must be one of {}".format(
+            repr(backend),
+            valid_backends,
+        ))
+
     tags = tags + ["system_test"]
 
     # The Farm backend needs sandbox network access, so it gets `requires-network`.
@@ -275,7 +287,7 @@ def system_test(
             "RUN_SCRIPT_RUNTIME_DEP_ENV_VARS": ";".join(_runtime_deps.keys() + _local_only_deps.keys()),
         },
         env_inherit = env_inherit,
-        tags = tags + ["local_system_test"] + reserve_cpus,
+        tags = tags + ["local_system_test"] + reserve_cpus + (["manual"] if backend == "farm" else []),
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,
@@ -290,7 +302,7 @@ def system_test(
             "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath {})".format(test_driver_target),
         },
         env_inherit = env_inherit,
-        tags = farm_tags + (["manual"] if "colocate" in tags else []),
+        tags = farm_tags + (["manual"] if "colocate" in tags or backend == "local" else []),
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,
@@ -314,7 +326,7 @@ def system_test(
                   "COLOCATED_TEST_DRIVER_VM_RESOURCES": json.encode(colocated_test_driver_vm_resources),
               } | ({"COLOCATED_TEST_DRIVER_VM_ENABLE_IPV4": "1"} if colocated_test_driver_vm_enable_ipv4 else {}) |
               ({"COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT": "1"} if colocated_test_driver_vm_forward_ssh_agent else {}),
-        tags = farm_tags + (["manual"] if not "colocate" in tags else []) + additional_colocate_tags,
+        tags = farm_tags + (["manual"] if not "colocate" in tags or backend == "local" else []) + additional_colocate_tags,
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,
