@@ -137,15 +137,6 @@ fn check_caller_is_governance_and_log(method_name: &str) {
     );
 }
 
-fn check_caller_is_governance_or_engine_controller_and_log(method_name: &str) {
-    let caller = dfn_core::api::caller();
-    println!("{LOG_PREFIX}call: {method_name} from: {caller}");
-    assert!(
-        caller == GOVERNANCE_CANISTER_ID.into() || caller == ENGINE_CONTROLLER_CANISTER_ID.into(),
-        "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
-    );
-}
-
 fn check_caller_is_canister_migration_orchestrator_and_log(method_name: &str) {
     let caller = dfn_core::api::caller();
     println!("{LOG_PREFIX}call: {method_name} from: {caller}");
