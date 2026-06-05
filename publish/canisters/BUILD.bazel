@@ -13,6 +13,7 @@ CANISTERS = {
     "canister-creator-canister.wasm.gz": "//rs/rust_canisters/canister_creator:canister_creator_canister",
     "load_simulator_canister.wasm.gz": "//rs/rust_canisters/load_simulator:load_simulator_canister",
     "cycles-minting-canister.wasm.gz": "//rs/nns/cmc:cycles-minting-canister",
+    "engine-controller-canister.wasm.gz": "//rs/engine_controller:engine-controller-canister",
     "genesis-token-canister.wasm.gz": "//rs/nns/gtc:genesis-token-canister",
     "governance-canister.wasm.gz": "//rs/nns/governance:governance-canister",
     "governance-canister_test.wasm.gz": "//rs/nns/governance:governance-canister-test",

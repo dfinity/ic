@@ -1,0 +1,21 @@
+type CreateEngineArgs = record {
+  node_ids : vec principal;
+  subnet_admins : vec principal;
+  replica_version_id : text;
+};
+
+type DeleteEngineArgs = record {
+  subnet_id : principal;
+};
+
+type Result = variant { Ok; Err : text };
+
+type EngineControllerInitArgs = record {
+  authorized_caller : opt principal;
+  initial_dkg_subnet_id : opt principal;
+};
+
+service : (opt EngineControllerInitArgs) -> {
+  create_engine : (CreateEngineArgs) -> (Result);
+  delete_engine : (DeleteEngineArgs) -> (Result);
+}
