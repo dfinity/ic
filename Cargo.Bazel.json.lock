@@ -1,5 +1,5 @@
 {
-  "checksum": "2e47cb4eae8be528d0c063d112e940e5d9810c2e50df959af5dbbe1a5065c509",
+  "checksum": "7f96e5c133c203870fc997d52e080f72044bd53f1530c5332ba2230232e22d68",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -23443,19 +23443,19 @@
               "target": "warp"
             },
             {
-              "id": "wasm-encoder 0.248.0",
+              "id": "wasm-encoder 0.251.0",
               "target": "wasm_encoder"
             },
             {
-              "id": "wasm-smith 0.248.0",
+              "id": "wasm-smith 0.251.0",
               "target": "wasm_smith"
             },
             {
-              "id": "wasmparser 0.248.0",
+              "id": "wasmparser 0.251.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmprinter 0.248.0",
+              "id": "wasmprinter 0.251.0",
               "target": "wasmprinter"
             },
             {
@@ -23463,11 +23463,11 @@
               "target": "wasmtime"
             },
             {
-              "id": "wast 248.0.0",
+              "id": "wast 251.0.0",
               "target": "wast"
             },
             {
-              "id": "wat 1.248.0",
+              "id": "wat 1.251.0",
               "target": "wat"
             },
             {
@@ -91416,6 +91416,62 @@
           "common": [
             "component-model",
             "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "leb128fmt 0.1.0",
+              "target": "leb128fmt"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.248.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "wasm-encoder 0.251.0": {
+      "name": "wasm-encoder",
+      "version": "0.251.0",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasm-encoder/0.251.0/download",
+          "sha256": "5a879a421bd17c528b74721b2abf4c62e8f1d1889c2ba8c3c50d02deaf2ce395"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasm_encoder",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasm_encoder",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "component-model",
+            "default",
             "std",
             "wasmparser"
           ],
@@ -91428,14 +91484,14 @@
               "target": "leb128fmt"
             },
             {
-              "id": "wasmparser 0.248.0",
+              "id": "wasmparser 0.251.0",
               "target": "wasmparser"
             }
           ],
           "selects": {}
         },
         "edition": "2024",
-        "version": "0.248.0"
+        "version": "0.251.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -91504,14 +91560,14 @@
       ],
       "license_file": null
     },
-    "wasm-smith 0.248.0": {
+    "wasm-smith 0.251.0": {
       "name": "wasm-smith",
-      "version": "0.248.0",
+      "version": "0.251.0",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-smith",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-smith/0.248.0/download",
-          "sha256": "050b559c1cec6dd6b9a558ae984d91d61e5e7b4c3e47081305a13efe6869eea0"
+          "url": "https://static.crates.io/crates/wasm-smith/0.251.0/download",
+          "sha256": "1a688bc58124e6547e83d2fdc255463543f8ee4829112d5ac30479d4e7b76b11"
         }
       },
       "targets": [
@@ -91554,18 +91610,18 @@
               "target": "flagset"
             },
             {
-              "id": "wasm-encoder 0.248.0",
+              "id": "wasm-encoder 0.251.0",
               "target": "wasm_encoder"
             },
             {
-              "id": "wasmparser 0.248.0",
+              "id": "wasmparser 0.251.0",
               "target": "wasmparser"
             }
           ],
           "selects": {}
         },
         "edition": "2024",
-        "version": "0.248.0"
+        "version": "0.251.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -92178,6 +92234,73 @@
         "crate_features": {
           "common": [
             "component-model",
+            "features",
+            "serde",
+            "simd",
+            "std",
+            "validate"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.10.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "semver 1.0.27",
+              "target": "semver"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.248.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "wasmparser 0.251.0": {
+      "name": "wasmparser",
+      "version": "0.251.0",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasmparser/0.251.0/download",
+          "sha256": "437970b35b1a85cfde9c74b2398352d8d653f3bd8e3a3db0c063ea8f5b4b36ff"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmparser",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasmparser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "component-model",
             "default",
             "features",
             "hash-collections",
@@ -92214,7 +92337,7 @@
           "selects": {}
         },
         "edition": "2024",
-        "version": "0.248.0"
+        "version": "0.251.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -92279,6 +92402,70 @@
         },
         "edition": "2024",
         "version": "0.248.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "wasmprinter 0.251.0": {
+      "name": "wasmprinter",
+      "version": "0.251.0",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmprinter",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasmprinter/0.251.0/download",
+          "sha256": "8798c1a699bd25648b6708eefe94d97c6f9891febb94b42cca1f7a4b086ea64e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmprinter",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasmprinter",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "component-model",
+            "default",
+            "validate"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "anyhow 1.0.100",
+              "target": "anyhow"
+            },
+            {
+              "id": "termcolor 1.4.1",
+              "target": "termcolor"
+            },
+            {
+              "id": "wasmparser 0.251.0",
+              "target": "wasmparser"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.251.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -93458,14 +93645,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wast 248.0.0": {
+    "wast 251.0.0": {
       "name": "wast",
-      "version": "248.0.0",
+      "version": "251.0.0",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wast",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wast/248.0.0/download",
-          "sha256": "acc54622ed5a5cddafcdf152043f9d4aed54d4a653d686b7dfe874809fca99d7"
+          "url": "https://static.crates.io/crates/wast/251.0.0/download",
+          "sha256": "5cc7467dda0a96142eb2c980329dfb62480b1e1d3622fdeb1a44e2bca6ceed74"
         }
       },
       "targets": [
@@ -93514,14 +93701,14 @@
               "target": "unicode_width"
             },
             {
-              "id": "wasm-encoder 0.248.0",
+              "id": "wasm-encoder 0.251.0",
               "target": "wasm_encoder"
             }
           ],
           "selects": {}
         },
         "edition": "2024",
-        "version": "248.0.0"
+        "version": "251.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -93530,14 +93717,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wat 1.248.0": {
+    "wat 1.251.0": {
       "name": "wat",
-      "version": "1.248.0",
+      "version": "1.251.0",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wat",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wat/1.248.0/download",
-          "sha256": "d75cd9e510603909748e6ebab89f27cd04472c1d9d85a3c88a7a6fc51a1a7934"
+          "url": "https://static.crates.io/crates/wat/1.251.0/download",
+          "sha256": "81b1086c9e85b95bd6a229a928bc6c6d0662e42af0250c88d067b418831ea4d4"
         }
       },
       "targets": [
@@ -93569,14 +93756,14 @@
         "deps": {
           "common": [
             {
-              "id": "wast 248.0.0",
+              "id": "wast 251.0.0",
               "target": "wast"
             }
           ],
           "selects": {}
         },
         "edition": "2024",
-        "version": "1.248.0"
+        "version": "1.251.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -101463,13 +101650,13 @@
     "walkdir 2.5.0",
     "walrus 0.23.3",
     "warp 0.3.7",
-    "wasm-encoder 0.248.0",
-    "wasm-smith 0.248.0",
-    "wasmparser 0.248.0",
-    "wasmprinter 0.248.0",
+    "wasm-encoder 0.251.0",
+    "wasm-smith 0.251.0",
+    "wasmparser 0.251.0",
+    "wasmprinter 0.251.0",
     "wasmtime 45.0.0",
-    "wast 248.0.0",
-    "wat 1.248.0",
+    "wast 251.0.0",
+    "wat 1.251.0",
     "webpki-roots 1.0.6",
     "which 4.4.0",
     "wirm 4.0.4",
