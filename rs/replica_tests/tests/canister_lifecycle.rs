@@ -738,6 +738,7 @@ fn can_get_canister_information() {
                 Some(DEFAULT_WASM_MEMORY_LIMIT.get()),
                 0_u64,
                 Default::default(),
+                None,
             )
         );
 
@@ -809,6 +810,7 @@ fn can_get_canister_information() {
                     Some(DEFAULT_WASM_MEMORY_LIMIT.get()),
                     0_u64,
                     Default::default(),
+                    None,
                 ),
                 CanisterStatusResultV2::decode(&res).unwrap(),
                 2 * BALANCE_EPSILON,

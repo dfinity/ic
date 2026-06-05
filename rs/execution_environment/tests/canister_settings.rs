@@ -14,6 +14,16 @@ use ic_types::NumBytes;
 use ic_types::ingress::WasmResult;
 use ic_types_cycles::Cycles;
 
+fn update_settings(env: &StateMachine, canister_id: CanisterId, settings: CanisterSettingsArgs) {
+    let update_settings_args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings,
+        sender_canister_version: None,
+    };
+    env.execute_ingress(IC_00, Method::UpdateSettings, update_settings_args.encode())
+        .unwrap();
+}
+
 // The following test uses `StateMachine` instead of `ExecutionTest`
 // because the compute capacity of the subnet is not initialized
 // properly in `ExecutionTest`.
@@ -276,4 +286,95 @@ fn failed_create_canister_does_not_reuse_canister_id() {
         WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
     };
     assert_eq!(canister_id, CanisterId::from_u64(1));
+}
+
+fn setup_two_canisters(min_cycles: u128) -> (StateMachine, CanisterId, CanisterId) {
+    let env = StateMachine::new();
+    let callee_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            Cycles::new(100_000_000_000_000),
+        )
+        .unwrap();
+    let caller_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            Cycles::new(100_000_000_000_000),
+        )
+        .unwrap();
+    update_settings(
+        &env,
+        callee_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_minimum_msg_cycles_available(min_cycles)
+            .build(),
+    );
+    (env, callee_id, caller_id)
+}
+
+// Ingress messages must be accepted regardless of minimum_msg_cycles_available.
+#[test]
+fn minimum_msg_cycles_available_does_not_affect_ingress() {
+    let (env, callee_id, _caller_id) = setup_two_canisters(u128::MAX);
+
+    let res = env
+        .execute_ingress(callee_id, "update", wasm().reply_data(b"ok").build())
+        .unwrap();
+    assert_matches!(res, WasmResult::Reply(_));
+}
+
+// Inter-canister calls with at least minimum_msg_cycles_available cycles must succeed.
+#[test]
+fn inter_canister_call_accepted_when_cycles_sufficient() {
+    let min_cycles: u128 = 1_000_000;
+    let (env, callee_id, caller_id) = setup_two_canisters(min_cycles);
+
+    let call_args = CallArgs::default()
+        .other_side(wasm().reply_data(b"ok").build())
+        .on_reply(wasm().reply_data(b"got reply").build())
+        .on_reject(wasm().reject_message().reject().build());
+    let res = env
+        .execute_ingress(
+            caller_id,
+            "update",
+            wasm()
+                .call_with_cycles(callee_id, "update", call_args, min_cycles as u64)
+                .build(),
+        )
+        .unwrap();
+    assert_matches!(res, WasmResult::Reply(_));
+}
+
+// Inter-canister calls with fewer than minimum_msg_cycles_available cycles must be
+// rejected with CanisterError.
+#[test]
+fn inter_canister_call_rejected_when_cycles_insufficient() {
+    let min_cycles: u128 = 1_000_000;
+    let (env, callee_id, caller_id) = setup_two_canisters(min_cycles);
+
+    let call_args = CallArgs::default()
+        .other_side(wasm().reply_data(b"ok").build())
+        .on_reply(wasm().reply_data(b"got reply").build())
+        .on_reject(wasm().reject_message().reject().build());
+    let res = env
+        .execute_ingress(
+            caller_id,
+            "update",
+            wasm()
+                .call_with_cycles(callee_id, "update", call_args, (min_cycles - 1) as u64)
+                .build(),
+        )
+        .unwrap();
+    let reject_msg = match res {
+        WasmResult::Reject(msg) => msg,
+        other => panic!("Expected reject, got {:?}", other),
+    };
+    assert!(
+        reject_msg.contains("requires a minimum of"),
+        "Unexpected reject message: {reject_msg}"
+    );
 }

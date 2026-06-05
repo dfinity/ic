@@ -1294,6 +1294,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .environment_variables
                 .clone()
                 .into(),
+            minimum_msg_cycles_available: canister_state.system_state.minimum_msg_cycles_available,
             instructions_executed: canister_state
                 .system_state
                 .canister_metrics()

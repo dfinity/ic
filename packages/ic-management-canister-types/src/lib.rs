@@ -161,6 +161,14 @@ pub struct CanisterSettings {
     ///
     /// Default value: `null` (i.e., no environment variables provided).
     pub environment_variables: Option<Vec<EnvironmentVariable>>,
+    /// Indicates the minimum number of cycles required for an incoming message
+    /// from another canister. Messages with fewer cycles are rejected with a
+    /// `CanisterError`. Ingress messages are not affected.
+    ///
+    /// Must be a number between 0 and 2<sup>128</sup>-1, inclusively.
+    ///
+    /// Default value: `0` (i.e., no minimum enforced).
+    pub minimum_msg_cycles_available: Option<Nat>,
 }
 
 /// # Definite Canister Settings
@@ -194,6 +202,8 @@ pub struct DefiniteCanisterSettings {
     pub wasm_memory_threshold: Nat,
     /// A list of environment variables.
     pub environment_variables: Vec<EnvironmentVariable>,
+    /// Minimum number of cycles required for an incoming canister-to-canister message.
+    pub minimum_msg_cycles_available: Nat,
 }
 
 /// # Create Canister Args

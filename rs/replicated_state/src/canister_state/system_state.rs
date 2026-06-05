@@ -472,6 +472,11 @@ pub struct SystemState {
 
     /// Environment variables.
     pub environment_variables: EnvironmentVariables,
+
+    /// Minimum number of cycles required for an incoming canister-to-canister message.
+    /// Messages with fewer cycles are rejected with a CanisterError.
+    /// Ingress messages are not affected.
+    pub minimum_msg_cycles_available: Option<Cycles>,
 }
 
 /// A wrapper around the different canister statuses.
@@ -649,6 +654,7 @@ impl SystemState {
             log_memory_store: LogMemoryStore::new(log_memory_store_feature),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
+            minimum_msg_cycles_available: None,
         }
     }
 
@@ -685,6 +691,7 @@ impl SystemState {
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
         environment_variables: BTreeMap<String, String>,
+        minimum_msg_cycles_available: Option<Cycles>,
         metrics: &dyn CheckpointLoadingMetrics,
     ) -> Self {
         let system_state = Self {
@@ -723,6 +730,7 @@ impl SystemState {
             wasm_memory_limit,
             next_snapshot_id,
             environment_variables: EnvironmentVariables::new(environment_variables),
+            minimum_msg_cycles_available,
         };
         system_state.check_invariants().unwrap_or_else(|msg| {
             metrics.observe_broken_soft_invariant(msg);
@@ -2544,6 +2552,7 @@ pub mod testing {
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),
             environment_variables: Default::default(),
+            minimum_msg_cycles_available: None,
         };
     }
 }

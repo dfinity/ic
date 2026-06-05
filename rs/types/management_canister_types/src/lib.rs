@@ -1402,9 +1402,11 @@ pub struct DefiniteCanisterSettingsArgs {
     wasm_memory_limit: candid::Nat,
     wasm_memory_threshold: candid::Nat,
     environment_variables: Vec<EnvironmentVariable>,
+    minimum_msg_cycles_available: candid::Nat,
 }
 
 impl DefiniteCanisterSettingsArgs {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         controller: PrincipalId,
         controllers: Vec<PrincipalId>,
@@ -1418,10 +1420,13 @@ impl DefiniteCanisterSettingsArgs {
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
         environment_variables: EnvironmentVariables,
+        minimum_msg_cycles_available: Option<u128>,
     ) -> Self {
         let memory_allocation = candid::Nat::from(memory_allocation.unwrap_or(0));
         let reserved_cycles_limit = candid::Nat::from(reserved_cycles_limit.unwrap_or(0));
         let wasm_memory_limit = candid::Nat::from(wasm_memory_limit.unwrap_or(0));
+        let minimum_msg_cycles_available =
+            candid::Nat::from(minimum_msg_cycles_available.unwrap_or(0));
         let environment_variables = environment_variables
             .iter()
             .map(|(name, value)| EnvironmentVariable {
@@ -1442,6 +1447,7 @@ impl DefiniteCanisterSettingsArgs {
             wasm_memory_limit,
             wasm_memory_threshold: candid::Nat::from(wasm_memory_threshold),
             environment_variables,
+            minimum_msg_cycles_available,
         }
     }
 
@@ -1601,6 +1607,7 @@ impl CanisterStatusResultV2 {
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
         environment_variables: EnvironmentVariables,
+        minimum_msg_cycles_available: Option<u128>,
     ) -> Self {
         Self {
             status,
@@ -1637,6 +1644,7 @@ impl CanisterStatusResultV2 {
                 wasm_memory_limit,
                 wasm_memory_threshold,
                 environment_variables,
+                minimum_msg_cycles_available,
             ),
             freezing_threshold: candid::Nat::from(freezing_threshold),
             idle_cycles_burned_per_day: candid::Nat::from(idle_cycles_burned_per_day),
@@ -2380,6 +2388,7 @@ pub struct CanisterSettingsArgs {
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
     pub environment_variables: Option<Vec<EnvironmentVariable>>,
+    pub minimum_msg_cycles_available: Option<candid::Nat>,
 }
 
 impl Payload<'_> for CanisterSettingsArgs {}
@@ -2400,6 +2409,7 @@ impl CanisterSettingsArgs {
             wasm_memory_limit: None,
             wasm_memory_threshold: None,
             environment_variables: None,
+            minimum_msg_cycles_available: None,
         }
     }
 }
@@ -2417,6 +2427,7 @@ pub struct CanisterSettingsArgsBuilder {
     wasm_memory_limit: Option<candid::Nat>,
     wasm_memory_threshold: Option<candid::Nat>,
     environment_variables: Option<Vec<EnvironmentVariable>>,
+    minimum_msg_cycles_available: Option<candid::Nat>,
 }
 
 #[allow(dead_code)]
@@ -2438,6 +2449,7 @@ impl CanisterSettingsArgsBuilder {
             wasm_memory_limit: self.wasm_memory_limit,
             wasm_memory_threshold: self.wasm_memory_threshold,
             environment_variables: self.environment_variables,
+            minimum_msg_cycles_available: self.minimum_msg_cycles_available,
         }
     }
 
@@ -2557,6 +2569,14 @@ impl CanisterSettingsArgsBuilder {
     ) -> Self {
         Self {
             environment_variables: Some(environment_variables),
+            ..self
+        }
+    }
+
+    /// Sets the minimum number of cycles required for an incoming canister-to-canister message.
+    pub fn with_minimum_msg_cycles_available(self, minimum_msg_cycles_available: u128) -> Self {
+        Self {
+            minimum_msg_cycles_available: Some(candid::Nat::from(minimum_msg_cycles_available)),
             ..self
         }
     }

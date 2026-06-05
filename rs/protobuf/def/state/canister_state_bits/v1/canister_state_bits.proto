@@ -520,4 +520,6 @@ message CanisterStateBits {
   map<string, string> environment_variables = 55;
   // Snapshot visibility for the canister.
   SnapshotVisibility snapshot_visibility = 64;
+  // The minimum number of cycles required for an incoming canister-to-canister message.
+  state.queues.v1.Cycles minimum_msg_cycles_available = 68;
 }

@@ -30,6 +30,7 @@ pub(crate) struct CanisterSettings {
     pub(crate) log_memory_limit: Option<NumBytes>,
     pub(crate) wasm_memory_limit: Option<NumBytes>,
     pub(crate) environment_variables: Option<EnvironmentVariables>,
+    pub(crate) minimum_msg_cycles_available: Option<Cycles>,
 }
 
 impl CanisterSettings {
@@ -45,6 +46,7 @@ impl CanisterSettings {
         log_memory_limit: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
         environment_variables: Option<EnvironmentVariables>,
+        minimum_msg_cycles_available: Option<Cycles>,
     ) -> Self {
         Self {
             controllers,
@@ -58,6 +60,7 @@ impl CanisterSettings {
             log_memory_limit,
             wasm_memory_limit,
             environment_variables,
+            minimum_msg_cycles_available,
         }
     }
 
@@ -103,6 +106,10 @@ impl CanisterSettings {
 
     pub fn environment_variables(&self) -> Option<&EnvironmentVariables> {
         self.environment_variables.as_ref()
+    }
+
+    pub fn minimum_msg_cycles_available(&self) -> Option<Cycles> {
+        self.minimum_msg_cycles_available
     }
 }
 
@@ -189,6 +196,13 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             None => None,
         };
 
+        let minimum_msg_cycles_available = match input.minimum_msg_cycles_available {
+            Some(min) => Some(Cycles::from(min.0.to_u128().ok_or(
+                UpdateSettingsError::MinimumMsgCyclesAvailableOutOfRange { provided: min },
+            )?)),
+            None => None,
+        };
+
         Ok(CanisterSettings::new(
             input
                 .controllers
@@ -203,6 +217,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             log_memory_limit,
             wasm_memory_limit,
             environment_variables,
+            minimum_msg_cycles_available,
         ))
     }
 }
@@ -230,6 +245,7 @@ pub(crate) struct CanisterSettingsBuilder {
     log_memory_limit: Option<NumBytes>,
     wasm_memory_limit: Option<NumBytes>,
     environment_variables: Option<EnvironmentVariables>,
+    minimum_msg_cycles_available: Option<Cycles>,
 }
 
 #[allow(dead_code)]
@@ -247,6 +263,7 @@ impl CanisterSettingsBuilder {
             log_memory_limit: None,
             wasm_memory_limit: None,
             environment_variables: None,
+            minimum_msg_cycles_available: None,
         }
     }
 
@@ -263,6 +280,7 @@ impl CanisterSettingsBuilder {
             log_memory_limit: self.log_memory_limit,
             wasm_memory_limit: self.wasm_memory_limit,
             environment_variables: self.environment_variables,
+            minimum_msg_cycles_available: self.minimum_msg_cycles_available,
         }
     }
 
@@ -342,6 +360,13 @@ impl CanisterSettingsBuilder {
             ..self
         }
     }
+
+    pub fn with_minimum_msg_cycles_available(self, minimum_msg_cycles_available: Cycles) -> Self {
+        Self {
+            minimum_msg_cycles_available: Some(minimum_msg_cycles_available),
+            ..self
+        }
+    }
 }
 
 pub enum UpdateSettingsError {
@@ -353,6 +378,7 @@ pub enum UpdateSettingsError {
     WasmMemoryThresholdOutOfRange { provided: candid::Nat },
     DuplicateEnvironmentVariables,
     LogMemoryLimitOutOfRange { provided: candid::Nat },
+    MinimumMsgCyclesAvailableOutOfRange { provided: candid::Nat },
 }
 
 impl From<UpdateSettingsError> for UserError {
@@ -405,6 +431,14 @@ impl From<UpdateSettingsError> for UserError {
                     "Log memory limit expected to be in the range of [0..2^64-1], got {provided}"
                 ),
             ),
+            UpdateSettingsError::MinimumMsgCyclesAvailableOutOfRange { provided } => {
+                UserError::new(
+                    ErrorCode::CanisterContractViolation,
+                    format!(
+                        "Minimum message cycles available expected to be in the range of [0..2^128-1], got {provided}"
+                    ),
+                )
+            }
         }
     }
 }

@@ -2300,6 +2300,36 @@ impl ExecutionEnvironment {
                 );
             }
             CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
+                if let Some(min_cycles) = canister.system_state.minimum_msg_cycles_available
+                    && request.payment < min_cycles
+                {
+                    let canister_id = canister.canister_id();
+                    let payment = request.payment;
+                    let originator = request.sender;
+                    let originator_reply_callback = request.sender_reply_callback;
+                    let deadline = request.deadline;
+                    return ExecuteMessageResult::Finished {
+                        canister,
+                        response: ExecutionResponse::Request(Response {
+                            originator,
+                            respondent: canister_id,
+                            originator_reply_callback,
+                            refund: payment,
+                            response_payload: Payload::Reject(RejectContext::new(
+                                RejectCode::CanisterError,
+                                format!(
+                                    "Canister {} requires a minimum of {} cycles per message, \
+                                     but the message only has {} cycles.",
+                                    canister_id, min_cycles, payment,
+                                ),
+                            )),
+                            deadline,
+                        }),
+                        instructions_used: NumInstructions::from(0),
+                        heap_delta: NumBytes::from(0),
+                        call_duration: None,
+                    };
+                }
                 CanisterCall::Request(request)
             }
             CanisterMessageOrTask::Message(CanisterMessage::Ingress(ingress)) => {
