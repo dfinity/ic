@@ -178,7 +178,7 @@ pub const SNS_AGGREGATOR_CANISTER_ID: CanisterId =
 ///
 /// As of May 2024, it looks like this is only used by (a whole bunch of) tests, mostly as the
 /// argument to send_whitelist.
-pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 18] = [
+pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 19] = [
     &REGISTRY_CANISTER_ID,
     &GOVERNANCE_CANISTER_ID,
     &LEDGER_CANISTER_ID,
@@ -197,9 +197,10 @@ pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 18] = [
     &ICP_LEDGER_ARCHIVE_3_CANISTER_ID,
     &NODE_REWARDS_CANISTER_ID,
     &MIGRATION_CANISTER_ID,
+    &ENGINE_CONTROLLER_CANISTER_ID,
 ];
 
-pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 23] = [
+pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 24] = [
     &REGISTRY_CANISTER_ID,
     &GOVERNANCE_CANISTER_ID,
     &LEDGER_CANISTER_ID,
@@ -223,6 +224,7 @@ pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 23] = [
     &DOGECOIN_CANISTER_ID,
     &BITCOIN_WATCHDOG_CANISTER_ID,
     &DOGECOIN_WATCHDOG_CANISTER_ID,
+    &ENGINE_CONTROLLER_CANISTER_ID,
 ];
 
 /// The current value is 4 GiB, s.t. the SNS governance canister never hits the soft memory limit.
@@ -275,7 +277,8 @@ pub fn canister_id_to_nns_canister_name(canister_id: CanisterId) -> String {
         ROOT_CANISTER_ID                 => "root",
         SNS_WASM_CANISTER_ID             => "sns-wasm",
         SUBNET_RENTAL_CANISTER_ID        => "subnet-rental",
-        MIGRATION_CANISTER_ID            => "migration"
+        MIGRATION_CANISTER_ID            => "migration",
+        ENGINE_CONTROLLER_CANISTER_ID    => "engine-controller"
     };
     debug_assert_eq!(
         id_to_name.len(),
