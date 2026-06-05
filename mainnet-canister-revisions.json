@@ -63,6 +63,10 @@
     "sha256": "1921396143c687dee142d3b8bbcc7b17f3684158a6e1d794e4491fdf7058e1ba",
     "tag": "release/2026-05-27"
   },
+  "engine-controller": {
+    "rev": "c8649149f75040378e608e2a77eb3433122e7bf9",
+    "sha256": "8b43f08214be71bbabd3afbe0072a7ed493a3fe8a1f1d3b2fb7ee64512bdc289"
+  },
   "genesis-token": {
     "rev": "36ceffe4c47f4c3a881e75951178f5413f777f6c",
     "sha256": "bce508df3db43b47b158c0aab9a7c9a3709a78e055a7ced76d5ff89832f9e778"
@@ -80,8 +84,8 @@
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_backend": {
-    "sha256": "6fdd066d91128a083f9bdfe6e781279de075b2f1438c99909a584973ca5bd5de",
-    "tag": "release-2026-06-02"
+    "sha256": "14d511fe978c703ffefbc2dd7b8c1d077a22955a4111c90f2228f82e47ad4132",
+    "tag": "release-2026-06-05-hotfix"
   },
   "internet_identity_frontend": {
     "sha256": "bdad750cb58b0b7ea336adea977c33d581733ed29591bb1451e8a388e8aafc76",
