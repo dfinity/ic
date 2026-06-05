@@ -1494,6 +1494,10 @@ impl DefiniteCanisterSettingsArgs {
     pub fn environment_variables(&self) -> &[EnvironmentVariable] {
         &self.environment_variables
     }
+
+    pub fn minimum_msg_cycles_available(&self) -> candid::Nat {
+        self.minimum_msg_cycles_available.clone()
+    }
 }
 
 impl Payload<'_> for DefiniteCanisterSettingsArgs {}

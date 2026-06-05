@@ -135,6 +135,18 @@ fn canister_settings_ranges() {
             assert_eq!(settings.freezing_threshold(), valid_freezing_threshold);
         });
 
+    let valid_minimum_msg_cycles_available = u128::MAX;
+    let valid_minimum_msg_cycles_available_settings = CanisterSettingsArgsBuilder::new()
+        .with_minimum_msg_cycles_available(valid_minimum_msg_cycles_available)
+        .build();
+    let test_minimum_msg_cycles_available_settings: Box<dyn Fn(DefiniteCanisterSettingsArgs)> =
+        Box::new(|settings: DefiniteCanisterSettingsArgs| {
+            assert_eq!(
+                settings.minimum_msg_cycles_available(),
+                valid_minimum_msg_cycles_available
+            );
+        });
+
     for (valid_settings, test_settings_after) in [
         (
             valid_compute_allocation_settings,
@@ -147,6 +159,10 @@ fn canister_settings_ranges() {
         (
             valid_freezing_threshold_settings,
             test_freezing_threshold_settings,
+        ),
+        (
+            valid_minimum_msg_cycles_available_settings,
+            test_minimum_msg_cycles_available_settings,
         ),
     ] {
         let settings_after = via_update_settings(valid_settings.clone()).unwrap();
@@ -187,6 +203,19 @@ fn canister_settings_ranges() {
         Nat::from(invalid_freezing_threshold)
     );
 
+    let invalid_minimum_msg_cycles_available = Nat::from(u128::MAX) + Nat::from(1u8);
+    let invalid_minimum_msg_cycles_available_settings = {
+        let mut s = CanisterSettingsArgsBuilder::new().build();
+        s.minimum_msg_cycles_available = Some(invalid_minimum_msg_cycles_available.clone());
+        s
+    };
+    let expected_invalid_minimum_msg_cycles_available_err_code =
+        ErrorCode::CanisterContractViolation;
+    let expected_invalid_minimum_msg_cycles_available_err = format!(
+        "Minimum message cycles available expected to be in the range of [0..2^128-1], got {}",
+        invalid_minimum_msg_cycles_available
+    );
+
     for (invalid_settings, expected_err_code, expected_err) in [
         (
             invalid_compute_allocation_settings,
@@ -202,6 +231,11 @@ fn canister_settings_ranges() {
             invalid_freezing_threshold_settings,
             expected_invalid_freezing_threshold_err_code,
             expected_invalid_freezing_threshold_err,
+        ),
+        (
+            invalid_minimum_msg_cycles_available_settings,
+            expected_invalid_minimum_msg_cycles_available_err_code,
+            expected_invalid_minimum_msg_cycles_available_err,
         ),
     ] {
         let err = via_update_settings(invalid_settings.clone()).unwrap_err();
@@ -286,6 +320,57 @@ fn failed_create_canister_does_not_reuse_canister_id() {
         WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
     };
     assert_eq!(canister_id, CanisterId::from_u64(1));
+}
+
+#[test]
+fn minimum_msg_cycles_available_in_canister_status() {
+    let env = StateMachine::new();
+
+    // Default value is 0 when no setting is provided.
+    let canister_id = env.create_canister(None);
+    let settings = env
+        .canister_status(canister_id)
+        .unwrap()
+        .unwrap()
+        .settings();
+    assert_eq!(settings.minimum_msg_cycles_available(), 0u128);
+
+    // create_canister with the setting applied.
+    let min_cycles: u128 = 1_000_000;
+    let bytes = get_reply(
+        env.create_canister_with_cycles_impl(
+            None,
+            Cycles::zero(),
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_minimum_msg_cycles_available(min_cycles)
+                    .build(),
+            ),
+        ),
+    );
+    let created_canister_id = CanisterIdRecord::decode(&bytes).unwrap().get_canister_id();
+    let settings = env
+        .canister_status(created_canister_id)
+        .unwrap()
+        .unwrap()
+        .settings();
+    assert_eq!(settings.minimum_msg_cycles_available(), min_cycles);
+
+    // update_settings changes the value.
+    let new_min_cycles: u128 = 2_000_000;
+    update_settings(
+        &env,
+        canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_minimum_msg_cycles_available(new_min_cycles)
+            .build(),
+    );
+    let settings = env
+        .canister_status(canister_id)
+        .unwrap()
+        .unwrap()
+        .settings();
+    assert_eq!(settings.minimum_msg_cycles_available(), new_min_cycles);
 }
 
 fn setup_two_canisters(min_cycles: u128) -> (StateMachine, CanisterId, CanisterId) {
