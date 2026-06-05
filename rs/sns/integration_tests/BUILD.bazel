@@ -133,6 +133,7 @@ DATA_DEPS = [
     # Keep sorted.
     ":sns-governance-mem-test-canister",
     ":sns-test-dapp-canister",
+    "//rs/engine_controller:engine-controller-canister",
     "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
     "//rs/ledger_suite/icrc1/archive:archive_canister",
     "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
@@ -179,6 +180,7 @@ ENV = {
     "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     "MAINNET_IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath @mainnet_canisters//:sns_ledger.wasm.gz)",
     "MIGRATION_CANISTER_WASM_PATH": "$(rootpath //rs/migration_canister:migration-canister)",
+    "ENGINE_CONTROLLER_CANISTER_WASM_PATH": "$(rootpath //rs/engine_controller:engine-controller-canister)",
 }
 
 rust_ic_test_suite_with_extra_srcs(

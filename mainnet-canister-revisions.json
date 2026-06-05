@@ -63,6 +63,10 @@
     "sha256": "1921396143c687dee142d3b8bbcc7b17f3684158a6e1d794e4491fdf7058e1ba",
     "tag": "release/2026-05-27"
   },
+  "engine-controller": {
+    "rev": "c8649149f75040378e608e2a77eb3433122e7bf9",
+    "sha256": "8b43f08214be71bbabd3afbe0072a7ed493a3fe8a1f1d3b2fb7ee64512bdc289"
+  },
   "genesis-token": {
     "rev": "36ceffe4c47f4c3a881e75951178f5413f777f6c",
     "sha256": "bce508df3db43b47b158c0aab9a7c9a3709a78e055a7ced76d5ff89832f9e778"
