@@ -630,6 +630,7 @@ pub enum HttpMethod {
     Head = 3,
     Put = 4,
     Delete = 5,
+    Patch = 6,
 }
 impl HttpMethod {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -644,6 +645,7 @@ impl HttpMethod {
             Self::Head => "HTTP_METHOD_HEAD",
             Self::Put => "HTTP_METHOD_PUT",
             Self::Delete => "HTTP_METHOD_DELETE",
+            Self::Patch => "HTTP_METHOD_PATCH",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -655,6 +657,7 @@ impl HttpMethod {
             "HTTP_METHOD_HEAD" => Some(Self::Head),
             "HTTP_METHOD_PUT" => Some(Self::Put),
             "HTTP_METHOD_DELETE" => Some(Self::Delete),
+            "HTTP_METHOD_PATCH" => Some(Self::Patch),
             _ => None,
         }
     }
