@@ -1076,3 +1076,50 @@ async fn with_all_icp_features_and_nns_subnet_state() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     assert!(response.text().await.unwrap().contains("Subnet config failed to validate: The NNS subnet must be empty when specifying the `registry` ICP feature."));
 }
+
+#[cfg(feature = "head_nns")]
+#[test]
+fn test_get_subnet_cloud_engine() {
+    use ic_registry_subnet_type::SubnetType;
+    use pocket_ic::common::rest::{
+        CanisterCyclesCostSchedule, ExtendedSubnetConfigSet, SubnetSpec,
+    };
+    use pocket_ic::query_candid;
+    use registry_canister::get_subnet::{GetSubnetRequest, SubnetRecord};
+
+    let registry_canister_id = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
+
+    // Create a PocketIC instance with an NNS subnet, a CloudEngine subnet, and the registry
+    // ICP feature so that the registry canister is populated with the subnet records.
+    let icp_features = IcpFeatures {
+        registry: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
+    let subnet_spec = SubnetSpec::default().with_cost_schedule(CanisterCyclesCostSchedule::Free);
+    let config = ExtendedSubnetConfigSet {
+        nns: Some(SubnetSpec::default()),
+        cloud_engine: vec![subnet_spec],
+        ..Default::default()
+    };
+    let pic = PocketIcBuilder::new_with_config(config)
+        .with_icp_features(icp_features)
+        .build();
+
+    // Retrieve the cloud engine subnet ID from the PocketIC topology.
+    let subnet_id = pic.topology().get_cloud_engines()[0];
+
+    // Query get_subnet and verify the subnet type is CloudEngine.
+    let result = query_candid::<_, (Result<SubnetRecord, String>,)>(
+        &pic,
+        registry_canister_id,
+        "get_subnet",
+        (GetSubnetRequest {
+            subnet_id: Some(subnet_id.into()),
+        },),
+    )
+    .unwrap()
+    .0
+    .unwrap();
+
+    assert_eq!(result.subnet_type, SubnetType::CloudEngine);
+}

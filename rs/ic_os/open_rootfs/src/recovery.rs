@@ -5,11 +5,15 @@ use attestation::attestation_package::AttestationPackageVerifier;
 use attestation::custom_data::{SevCustomData, SevCustomDataNamespace};
 use command_runner::CommandRunner;
 use config_types::GuestOSConfig;
-use ic_device::mount::{FileSystem, MountOptions, PartitionProvider, PartitionSelector};
+use ic_device::mount::{
+    FileSystem, MountOptions, MountedPartition, PartitionProvider, PartitionSelector,
+};
 use rand::prelude::thread_rng;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::firmware::SevGuestFirmware;
 use std::path::Path;
+use std::thread::sleep;
+use std::time::Duration;
 #[cfg(any(feature = "dev", test))]
 use tracing::info;
 
@@ -24,15 +28,8 @@ pub fn extract_and_verify_recovery_rootfs_hash(
     command_runner: &dyn CommandRunner,
     partition_provider: &dyn PartitionProvider,
 ) -> Result<String> {
-    let config_mount = partition_provider
-        .mount_partition(
-            PartitionSelector::ByLabel(CONFIG_DEVICE_LABEL.to_string()),
-            MountOptions {
-                file_system: FileSystem::Vfat,
-                read_only: true,
-            },
-        )
-        .context("Failed to mount CONFIG partition")?;
+    let config_mount = mount_config_device_with_retry(partition_provider)?;
+
     let config_path = config_mount.mount_point().join("config.json");
     let guest_config: GuestOSConfig = config_tool::deserialize_config(&config_path)
         .context("Failed to deserialize GuestOS config")?;
@@ -95,6 +92,33 @@ pub fn extract_and_verify_recovery_rootfs_hash(
         .context("This node is not running a GuestOS with one of the base launch measurements")?;
 
     proposal.rootfs_hash.context("Proposal missing rootfs_hash")
+}
+
+/// Opens the device containing the config. Since the device may not be available in early boot,
+/// retries a few times.
+fn mount_config_device_with_retry(
+    partition_provider: &dyn PartitionProvider,
+) -> Result<Box<dyn MountedPartition>> {
+    // We choose a high retry count since if this fails, there is no other recovery option.
+    let mut attempts = 20;
+    let config_mount = loop {
+        match partition_provider.mount_partition(
+            PartitionSelector::ByLabel(CONFIG_DEVICE_LABEL.to_string()),
+            MountOptions {
+                file_system: FileSystem::Vfat,
+                read_only: true,
+            },
+        ) {
+            Ok(config_mount) => break config_mount,
+            Err(_err) if attempts > 0 => {
+                attempts -= 1;
+                sleep(Duration::from_secs(1));
+            }
+            Err(err) => return Err(err).context("Failed to mount CONFIG partition"),
+        }
+    };
+
+    Ok(config_mount)
 }
 
 #[cfg(any(feature = "dev", test))]

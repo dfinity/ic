@@ -19,9 +19,14 @@ on the process that this file is part of, see
   leaves the existing list unchanged; `Some(vec![])` clears it; `Some(vec![..])`
   replaces it.
 * Added `vcpu_type` to `GuestLaunchMeasurementMetadata` to record the virtual CPU type used for a guest launch measurement.
+* Added a new endpoint `get_subnet` to the registry canister, returning the subnet record
+  of a given subnet.
 
 ## Changed
 
+* One-time post-upgrade migration converting the reward type of 100 currently
+  unassigned nodes from `type1.1` to `type4.5`. The migration only mutates nodes
+  whose reward type is still `type1.1`, so it is idempotent across upgrades.
 * The `create_subnet` and `delete_subnet` endpoints can now be called by the
   engine controller canister (`si2b5-pyaaa-aaaaa-aaaja-cai`) in addition to the
   governance canister.
