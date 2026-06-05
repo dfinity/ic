@@ -183,3 +183,7 @@ async fn delete_engine(args: DeleteEngineArgs) -> Result<(), String> {
 
     response
 }
+
+fn main() {
+    // This block is intentionally left blank.
+}
