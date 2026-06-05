@@ -179,6 +179,51 @@ async fn test_engine_controller_can_delete_a_cloud_engine_subnet() {
     cloud_engine_subnet_can_be_deleted_by(ENGINE_CONTROLLER_CANISTER_ID.get()).await;
 }
 
+#[tokio::test]
+async fn test_authorized_callers_cannot_delete_a_non_cloud_engine_subnet() {
+    let (pocket_ic, subnet_id) = setup_with_existing_subnet().await;
+
+    let payload = DeleteSubnetPayload { subnet_id };
+
+    // The existing subnet is a system subnet, not a CloudEngine. Even authorized
+    // callers must not be able to delete it: the call passes the authorization
+    // check but is then rejected by the business logic. Deletion fails, so the
+    // subnet is not consumed and both callers can be checked against it.
+    for caller in [
+        GOVERNANCE_CANISTER_ID.get(),
+        ENGINE_CONTROLLER_CANISTER_ID.get(),
+    ] {
+        let response = pocket_ic
+            .update_call(
+                REGISTRY_CANISTER_ID.get().0,
+                caller.0,
+                "delete_subnet",
+                Encode!(&payload).unwrap(),
+            )
+            .await
+            .unwrap_or_else(|err| {
+                panic!("delete_subnet call by authorized caller {caller} was unexpectedly rejected: {err:?}")
+            });
+
+        let result = Decode!(&response, Result<(), String>).unwrap();
+        assert_eq!(
+            result,
+            Err("Only CloudEngines may be deleted".to_string()),
+            "caller {caller} should not be able to delete a non-cloud-engine subnet"
+        );
+    }
+
+    // The subnet should still be present.
+    let subnets =
+        decode_registry_value::<SubnetListRecordPb>(&pocket_ic, make_subnet_list_record_key())
+            .await
+            .subnets;
+    assert!(
+        subnets.contains(&subnet_id.as_slice().to_vec()),
+        "the non-cloud-engine subnet should not have been deleted"
+    );
+}
+
 /// Creates a CloudEngine subnet (the only subnet type that may be deleted) and
 /// verifies that `caller` is authorized to delete it and that the subnet is
 /// actually removed from the registry.
