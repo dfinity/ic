@@ -37,6 +37,7 @@ use prost::Message;
 use registry_canister::{
     certification::{current_version_tree, hash_tree_to_proto},
     common::LOG_PREFIX,
+    get_subnet::{GetSubnetRequest, SubnetRecord},
     init::RegistryCanisterInitPayload,
     mutations::{
         complete_canister_migration::CompleteCanisterMigrationPayload,
@@ -132,6 +133,15 @@ fn check_caller_is_governance_and_log(method_name: &str) {
     assert_eq!(
         caller,
         GOVERNANCE_CANISTER_ID.into(),
+        "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
+    );
+}
+
+fn check_caller_is_governance_or_engine_controller_and_log(method_name: &str) {
+    let caller = dfn_core::api::caller();
+    println!("{LOG_PREFIX}call: {method_name} from: {caller}");
+    assert!(
+        caller == GOVERNANCE_CANISTER_ID.into() || caller == ENGINE_CONTROLLER_CANISTER_ID.into(),
         "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
     );
 }
@@ -656,7 +666,7 @@ async fn create_subnet_(payload: CreateSubnetPayload) -> Result<NewSubnet, Strin
 
 #[unsafe(export_name = "canister_update delete_subnet")]
 fn delete_subnet() {
-    check_caller_is_governance_and_log("delete_subnet");
+    check_caller_is_governance_or_engine_controller_and_log("delete_subnet");
     over(candid_one, |payload: DeleteSubnetPayload| {
         delete_subnet_(payload)
     });
@@ -1253,6 +1263,16 @@ fn get_subnet_for_canister_(arg: GetSubnetForCanisterRequest) -> Result<SubnetFo
     registry()
         .get_subnet_for_canister(&principal)
         .map_err(|e| e.to_string())
+}
+
+#[unsafe(export_name = "canister_query get_subnet")]
+fn get_subnet() {
+    over(candid_one, get_subnet_)
+}
+
+#[candid_method(query, rename = "get_subnet")]
+fn get_subnet_(arg: GetSubnetRequest) -> Result<SubnetRecord, String> {
+    registry().get_subnet_record(arg)
 }
 
 #[unsafe(export_name = "canister_update add_node")]

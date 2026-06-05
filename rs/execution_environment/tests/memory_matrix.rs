@@ -1075,15 +1075,9 @@ fn test_memory_suite_take_snapshot_and_uninstall_code() {
         )
         .err()
     };
-    let memory_usage_change = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        // Uninstalling code removes canister log allocated memory.
-        MemoryUsageChange::Decrease
-    } else {
-        MemoryUsageChange::None
-    };
     let params = ScenarioParams {
         scenario: Scenario::OtherManagement,
-        memory_usage_change,
+        memory_usage_change: MemoryUsageChange::None,
         setup,
         op,
     };

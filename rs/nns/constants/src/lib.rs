@@ -200,7 +200,7 @@ pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 19] = [
     &ENGINE_CONTROLLER_CANISTER_ID,
 ];
 
-pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 23] = [
+pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 24] = [
     &REGISTRY_CANISTER_ID,
     &GOVERNANCE_CANISTER_ID,
     &LEDGER_CANISTER_ID,
@@ -224,6 +224,7 @@ pub const PROTOCOL_CANISTER_IDS: [&CanisterId; 23] = [
     &DOGECOIN_CANISTER_ID,
     &BITCOIN_WATCHDOG_CANISTER_ID,
     &DOGECOIN_WATCHDOG_CANISTER_ID,
+    &ENGINE_CONTROLLER_CANISTER_ID,
 ];
 
 /// The current value is 4 GiB, s.t. the SNS governance canister never hits the soft memory limit.
@@ -281,8 +282,8 @@ pub fn canister_id_to_nns_canister_name(canister_id: CanisterId) -> String {
     };
     debug_assert_eq!(
         id_to_name.len(),
-        // Because 0 through 14 accounts for the first 15 canister +
-        // 1 for exchange rate canister.
+        // This must match the number of entries in the `id_to_name` map above;
+        // bump it whenever a canister is added or removed.
         20,
         "{id_to_name:#?}"
     );

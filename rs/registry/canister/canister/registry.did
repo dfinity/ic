@@ -255,6 +255,41 @@ type GetNodeProvidersMonthlyXdrRewardsResponse = variant {
   Err : text;
 };
 
+type GetSubnetRequest = record {
+  subnet_id : opt principal;
+};
+
+type SubnetRecord = record {
+  membership : vec blob;
+  max_ingress_bytes_per_message : nat64;
+  unit_delay_millis : nat64;
+  initial_notary_delay_millis : nat64;
+  replica_version_id : text;
+  dkg_interval_length : nat64;
+  start_as_nns : bool;
+  subnet_type : SubnetType;
+  dkg_dealings_per_block : nat64;
+  is_halted : bool;
+  max_ingress_messages_per_block : nat64;
+  max_ingress_bytes_per_block : nat64;
+  max_block_payload_size : nat64;
+  features : opt SubnetFeatures;
+  max_number_of_canisters : nat64;
+  ssh_readonly_access : vec text;
+  ssh_backup_access : vec text;
+  halt_at_cup_height : bool;
+  chain_key_config : opt ChainKeyConfig;
+  canister_cycles_cost_schedule : CanisterCyclesCostSchedule;
+  subnet_admins : vec principal;
+  recalled_replica_version_ids : vec text;
+  resource_limits : opt ResourceLimits;
+};
+
+type GetSubnetResponse = variant {
+  Ok : SubnetRecord;
+  Err : text;
+};
+
 type GetSubnetForCanisterRequest = record { "principal" : opt principal };
 
 type GetSubnetForCanisterResponse = variant {
@@ -617,6 +652,7 @@ service : {
   get_chunk : (GetChunkRequest) -> (GetChunkResponse) query;
   get_node_operators_and_dcs_of_node_provider : (principal) -> (GetNodeOperatorsAndDcsOfNodeProviderResponse) query;
   get_node_providers_monthly_xdr_rewards : (opt GetNodeProvidersMonthlyXdrRewardsRequest) -> (GetNodeProvidersMonthlyXdrRewardsResponse) query;
+  get_subnet : (GetSubnetRequest) -> (GetSubnetResponse) query;
   get_subnet_for_canister : (GetSubnetForCanisterRequest) -> (GetSubnetForCanisterResponse) query;
   migrate_canisters: (MigrateCanistersPayload) -> (MigrateCanistersResponse);
   migrate_node_operator_directly : (MigrateNodeOperatorPayload) -> ();

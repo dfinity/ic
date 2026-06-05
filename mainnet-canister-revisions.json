@@ -80,12 +80,12 @@
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_backend": {
-    "sha256": "39308aa8561e3b226050b3d7d366a277e61ab0c7f720dfca04439b6df8527ef5",
-    "tag": "release-2026-05-29"
+    "sha256": "6fdd066d91128a083f9bdfe6e781279de075b2f1438c99909a584973ca5bd5de",
+    "tag": "release-2026-06-02"
   },
   "internet_identity_frontend": {
-    "sha256": "81c09f98ae154846cba6c42798f3ce89e77026d04d0a3c0968b889827a1175b3",
-    "tag": "release-2026-05-26"
+    "sha256": "bdad750cb58b0b7ea336adea977c33d581733ed29591bb1451e8a388e8aafc76",
+    "tag": "release-2026-06-02"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",

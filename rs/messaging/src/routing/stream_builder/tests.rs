@@ -9,7 +9,7 @@ use ic_management_canister_types_private::Method;
 use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterState, InputQueueType, ReplicatedState, Stream, SubnetTopology,
+    CanisterState, CanisterStates, InputQueueType, ReplicatedState, Stream, SubnetTopology,
     metadata_state::testing::NetworkTopologyTesting,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, StreamTesting, SystemStateTesting},
 };
@@ -272,17 +272,17 @@ fn build_streams_local_canisters() {
         // messages, but also the destination canisters of all messages.
         let mut provided_canister_states = canister_states_with_outputs(msgs.clone());
         for msg in &msgs {
-            provided_canister_states
-                .entry(msg.receiver)
-                .or_insert_with(|| {
+            if provided_canister_states.get(&msg.receiver).is_none() {
+                provided_canister_states.insert(
                     new_canister_state(
                         msg.receiver,
                         msg.sender.get(),
                         *INITIAL_CYCLES,
                         NumSeconds::from(100_000),
                     )
-                    .into()
-                });
+                    .into(),
+                );
+            }
         }
 
         // Establish that the provided_state has the provided_canister_states.
@@ -1604,9 +1604,7 @@ fn generate_message_for_test(
 }
 
 // Generates `CanisterStates` with the given messages in output queues.
-fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
-    msgs: Vec<M>,
-) -> BTreeMap<CanisterId, Arc<CanisterState>> {
+fn canister_states_with_outputs<M: Into<RequestOrResponse>>(msgs: Vec<M>) -> CanisterStates {
     let mut canister_states = BTreeMap::<CanisterId, Arc<CanisterState>>::new();
 
     for msg in msgs {
@@ -1650,7 +1648,7 @@ fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
         }
     }
 
-    canister_states
+    CanisterStates::new(canister_states)
 }
 
 /// Returns a clone of the provided state with all output messages consumed.

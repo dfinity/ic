@@ -45,7 +45,7 @@ use ic_interfaces_state_manager::{
 use ic_logger::{ReplicaLogger, debug, error, fatal, info, warn};
 use ic_metrics::{
     MetricsRegistry,
-    buckets::{decimal_buckets, exponential_buckets},
+    buckets::{decimal_buckets, decimal_buckets_with_zero, exponential_buckets},
 };
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::{messaging::xnet::v1, state::v1 as pb};
@@ -183,6 +183,7 @@ pub struct StateManagerMetrics {
     state_sync_metrics: StateSyncMetrics,
     state_size: IntGauge,
     states_metadata_pbuf_size: IntGauge,
+    hot_canisters_count: Histogram,
     checkpoint_metrics: CheckpointMetrics,
     manifest_metrics: ManifestMetrics,
     tip_handler_queue_length: IntGauge,
@@ -446,6 +447,13 @@ impl StateManagerMetrics {
             "Size of states_metadata.pbuf in bytes.",
         );
 
+        let hot_canisters_count = metrics_registry.histogram(
+            "state_manager_hot_canisters_count",
+            "Number of canisters in the hot pool before repartitioning.",
+            // 0, 1, 2, 5, 10, …, 500_000, 1_000_000
+            decimal_buckets_with_zero(0, 5),
+        );
+
         let tip_handler_queue_length = metrics_registry.int_gauge(
             "state_manager_tip_handler_queue_length",
             "Length of TipChannel queue.",
@@ -517,6 +525,7 @@ impl StateManagerMetrics {
             state_sync_metrics: StateSyncMetrics::new(metrics_registry),
             state_size,
             states_metadata_pbuf_size,
+            hot_canisters_count,
             checkpoint_metrics: CheckpointMetrics::new(metrics_registry, log),
             manifest_metrics: ManifestMetrics::new(metrics_registry),
             tip_handler_queue_length,
@@ -1732,7 +1741,7 @@ impl StateManagerImpl {
     fn observe_num_loaded_wasm_files(&self, state: &ReplicatedState) {
         let num_loaded_canister_wasm = state
             .canister_states()
-            .iter()
+            .all_iter()
             .filter_map(|(_, canister)| canister.execution_state.as_ref())
             .filter(|execution_state| {
                 execution_state.wasm_binary.binary.module_loading_status()
@@ -1742,7 +1751,7 @@ impl StateManagerImpl {
 
         let num_loaded_snapshot_wasm: usize = state
             .canister_states()
-            .values()
+            .all_values()
             .map(|canister| {
                 canister
                     .canister_snapshots
@@ -3415,6 +3424,15 @@ impl StateManager for StateManagerImpl {
                 flush_checkpoint_ops_and_page_maps(&mut state, height, &self.tip_channel);
             }
         }
+
+        // Re-establish strict hot/cold partitioning of canister states. Mutations
+        // during the round may have left canisters that are now cold in `hot`. The
+        // partition must be canonical at checkpoint time so that a replica continuing
+        // through a checkpoint and one (re)starting from it agree on the partition.
+        self.metrics
+            .hot_canisters_count
+            .observe(state.canister_states().hot_len() as f64);
+        state.repartition_canister_states();
 
         let assert_tip_is_none = |states: &SharedState| {
             // The following assert validates that we don't have two clients

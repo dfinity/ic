@@ -14,7 +14,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:3a3ee1e8e4b2d79dc9ca6c0840d4917a462049a47a492e2826900cd7112c02b5
+      image: ghcr.io/dfinity/ic-build@sha256:55273ed5dc904e737bec678c8e7705aba76cc4b8b039574d5485f1d95d0193d3
       options: >-
         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 720 # 12 hours
@@ -27,14 +27,15 @@ jobs:
       - &backup-pod-access
         name: Set up backup pod access
         run: |
-          # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
-          if [ -z "${SSH_AUTH_SOCK:-}" ]; then
-            eval "$(ssh-agent -s)"
-            ssh-add - <<'EOF'
+          # Start a dedicated ssh-agent with an explicit socket path under /tmp (outside ~/.ssh, so it
+          # survives the `rm -rf ~/.ssh` below) and load the backup-pod private key so CI can SSH into
+          # the backup pod. We don't reuse any pre-existing agent because its socket may live under
+          # ~/.ssh (as in the 26.04 image) and would be removed below.
+          eval "$(ssh-agent -s -a /tmp/backup-pod-agent.sock)"
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          ssh-add - <<'EOF'
           ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
           EOF
-            echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
-          fi
 
           rm -rf ~/.ssh
           mkdir -p ~/.ssh
