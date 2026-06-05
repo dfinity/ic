@@ -26,7 +26,7 @@ use std::collections::HashSet;
 const DEFAULT_AUTHORIZED_CALLER: &str =
     "bct5z-vccu4-6q4t2-3lb6l-wm43p-ulppt-o5sqq-w6het-rthdz-qp4yn-fqe";
 
-/// Exactly this many nodes are expected when creating a new engine.
+/// This many nodes are expected when creating a new engine as a minimum.
 const REQUIRED_NODE_COUNT: usize = 4;
 
 thread_local! {
@@ -153,7 +153,7 @@ async fn create_engine(args: CreateEngineArgs) -> Result<(), String> {
     };
 
     let response: Result<NewSubnet, String> =
-        Call::bounded_wait(REGISTRY_CANISTER_ID.into(), "create_subnet")
+        Call::unbounded_wait(REGISTRY_CANISTER_ID.into(), "create_subnet")
             .with_arg(payload)
             .await
             .map_err(|e| format!("registry.create_subnet call failed: {e:?}"))?
@@ -172,7 +172,7 @@ async fn delete_engine(args: DeleteEngineArgs) -> Result<(), String> {
     };
 
     let response: Result<(), String> =
-        Call::bounded_wait(REGISTRY_CANISTER_ID.into(), "delete_subnet")
+        Call::unbounded_wait(REGISTRY_CANISTER_ID.into(), "delete_subnet")
             .with_arg(payload)
             .await
             .map_err(|e| format!("registry.delete_subnet call failed: {e:?}"))?

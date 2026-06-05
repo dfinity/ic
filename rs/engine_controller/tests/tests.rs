@@ -77,8 +77,6 @@ async fn install_at(
     )
     .await
     .unwrap();
-    pic.add_cycles(canister_id.into(), 1_000_000_000_000_000)
-        .await;
     pic.install_canister(canister_id.into(), wasm, arg, Some(controller))
         .await;
 }
@@ -143,7 +141,7 @@ async fn setup(num_nodes: u64) -> (PocketIc, Vec<NodeId>) {
         ENGINE_CONTROLLER_CANISTER_ID,
         engine_controller_wasm.bytes(),
         vec![],
-        Principal::anonymous(),
+        ROOT_CANISTER_ID.into(),
     )
     .await;
 
