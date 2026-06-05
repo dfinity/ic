@@ -27,6 +27,9 @@ on the process that this file is part of, see
 * One-time post-upgrade migration converting the reward type of 100 currently
   unassigned nodes from `type1.1` to `type4.5`. The migration only mutates nodes
   whose reward type is still `type1.1`, so it is idempotent across upgrades.
+* The `create_subnet` and `delete_subnet` endpoints can now be called by the
+  engine controller canister (`si2b5-pyaaa-aaaaa-aaaja-cai`) in addition to the
+  governance canister.
 * **SEV on existing subnets:** Reverted — `sev_enabled` can once again only be set at subnet creation;
   any update_subnet proposal that would change the effective `sev_enabled` value (in either direction,
   including via wholesale `features` replacement with `sev_enabled` left unset) is rejected.
