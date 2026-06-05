@@ -6,6 +6,10 @@ edition.workspace = true
 name = "ic-engine-controller"
 version.workspace = true
 
+[[bin]]
+name = "engine-controller-canister"
+path = "canister/canister.rs"
+
 [dependencies]
 candid = { workspace = true }
 ic-base-types = { path = "../types/base_types" }

@@ -17,8 +17,8 @@ DEPS = [
 
 rust_canister(
     name = "engine-controller-canister",
-    srcs = ["src/lib.rs"],
-    crate_root = "src/lib.rs",
+    srcs = ["canister/canister.rs"],
+    crate_root = "canister/canister.rs",
     service_file = ":engine_controller.did",
     deps = DEPS,
 )
