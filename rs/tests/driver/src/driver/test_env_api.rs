@@ -2041,6 +2041,10 @@ pub struct NnsCustomizations {
     pub neurons: Option<Vec<Neuron>>,
     pub install_at_ids: bool,
     pub registry_canister_init_payload: RegistryCanisterInitPayload,
+    /// Optional init args for the engine controller canister. When `Some`,
+    /// installed in place of the canister's hard-coded defaults.
+    pub engine_controller_init_args:
+        Option<ic_nns_test_utils::itest_helpers::EngineControllerInitArgs>,
 }
 
 impl NnsCustomizations {
@@ -2092,6 +2096,14 @@ impl NnsInstallationBuilder {
 
     pub fn with_subnet_rental_canister(mut self) -> Self {
         self.is_subnet_rental_canister_enabled = true;
+        self
+    }
+
+    pub fn with_engine_controller_init_args(
+        mut self,
+        args: ic_nns_test_utils::itest_helpers::EngineControllerInitArgs,
+    ) -> Self {
+        self.customizations.engine_controller_init_args = Some(args);
         self
     }
 
@@ -2605,9 +2617,14 @@ pub async fn install_nns_canisters(
         ledger_balances,
         neurons,
         mut registry_canister_init_payload,
+        engine_controller_init_args,
     } = nns_installation_builder.customizations.clone();
 
     let mut init_payloads = NnsInitPayloadsBuilder::new();
+
+    if let Some(args) = engine_controller_init_args {
+        init_payloads.with_engine_controller_init_args(args);
+    }
 
     if nns_installation_builder.is_subnet_rental_canister_enabled {
         init_payloads.with_subnet_rental_canister();

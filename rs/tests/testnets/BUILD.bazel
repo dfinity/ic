@@ -228,6 +228,8 @@ system_test_nns(
     },
     deps = [
         # Keep sorted.
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/test_utils",
         "//rs/protobuf",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",

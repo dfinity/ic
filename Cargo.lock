@@ -24262,6 +24262,8 @@ dependencies = [
  "candid",
  "ic-base-types",
  "ic-limits",
+ "ic-nervous-system-common-test-keys",
+ "ic-nns-test-utils",
  "ic-protobuf",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
