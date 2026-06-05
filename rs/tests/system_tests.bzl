@@ -275,7 +275,7 @@ def system_test(
             "RUN_SCRIPT_RUNTIME_DEP_ENV_VARS": ";".join(_runtime_deps.keys() + _local_only_deps.keys()),
         },
         env_inherit = env_inherit,
-        tags = tags + ["manual", "local_system_test"] + reserve_cpus,
+        tags = tags + ["local_system_test"] + reserve_cpus,
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,
