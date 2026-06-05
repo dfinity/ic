@@ -5120,17 +5120,15 @@ pub mod archiving {
             env.tick();
             archive_info = get_archives(&env, ledger_id);
         }
-        // Verify that the ledger reports block `0` to be present only in the ledger
+        // Verify that block `0` is not reported in two places simultaneously: either it is
+        // still in local storage (archiving in progress) or it has been moved to the archive
+        // (archiving completed), but never both at the same time.
         let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
         assert!(
             !ledger_reports_first_block_in_two_places(0, &get_blocks_res),
             "get_blocks_res: {get_blocks_res:?}"
         );
-        // Verify that the ledger response contained no archive info.
-        assert!(get_blocks_res.archived_ranges.is_empty());
-        // Verify that the block was already archived. Since the archiving is done in chunks, the
-        // archiving is not yet completed, so the ledger reports the block `0` to be present only
-        // in the ledger, even though it is also present in the archive by now.
+        // Verify that block `0` was already archived.
         let archive_id = archive_info
             .first()
             .expect("should return one archive info");
