@@ -582,7 +582,7 @@ fn inter_canister_call_rejected_when_cycles_insufficient() {
         other => panic!("Expected reject, got {:?}", other),
     };
     assert!(
-        reject_msg.contains("requires a minimum of"),
+        reject_msg.contains("requires at least"),
         "Unexpected reject message: {reject_msg}"
     );
 }
