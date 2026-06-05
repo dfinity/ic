@@ -278,28 +278,9 @@ async fn create_engine_caller_must_be_authorized() {
 }
 
 #[tokio::test]
-async fn create_engine_requires_exactly_four_nodes() {
+async fn create_engine_rejects_fewer_than_four_nodes() {
     let (pic, node_ids) = setup(5).await;
     let mut nodes = node_principals(&node_ids);
-
-    // Too many.
-    let err = call_create_engine(
-        &pic,
-        authorized(),
-        &CreateEngineArgs {
-            node_ids: nodes.clone(),
-            subnet_admins: vec![],
-            replica_version_id: test_replica_version(),
-        },
-    )
-    .await
-    .unwrap_err();
-    assert!(
-        err.contains("Expected exactly 4"),
-        "unexpected error: {err}"
-    );
-
-    // Too few.
     nodes.truncate(3);
     let err = call_create_engine(
         &pic,
@@ -313,9 +294,32 @@ async fn create_engine_requires_exactly_four_nodes() {
     .await
     .unwrap_err();
     assert!(
-        err.contains("Expected exactly 4"),
+        err.contains("Expected at least 4"),
         "unexpected error: {err}"
     );
+}
+
+#[tokio::test]
+async fn create_engine_accepts_more_than_four_nodes() {
+    let (pic, node_ids) = setup(7).await;
+    assert_eq!(node_ids.len(), 7);
+    let create_args = CreateEngineArgs {
+        node_ids: node_principals(&node_ids),
+        subnet_admins: vec![],
+        replica_version_id: test_replica_version(),
+    };
+
+    let initial_subnets = subnet_list(&pic).await;
+    call_create_engine(&pic, authorized(), &create_args)
+        .await
+        .expect("create_engine should accept >4 nodes");
+
+    let after = subnet_list(&pic).await;
+    let new_subnets: Vec<_> = after
+        .iter()
+        .filter(|s| !initial_subnets.contains(s))
+        .collect();
+    assert_eq!(new_subnets.len(), 1, "exactly one new subnet must appear");
 }
 
 #[tokio::test]

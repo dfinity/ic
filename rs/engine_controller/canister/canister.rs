@@ -104,9 +104,9 @@ async fn create_engine(args: CreateEngineArgs) -> Result<(), String> {
     let caller = ensure_authorized()?;
 
     // Validate node list.
-    if args.node_ids.len() != REQUIRED_NODE_COUNT {
+    if args.node_ids.len() < REQUIRED_NODE_COUNT {
         return Err(format!(
-            "Expected exactly {REQUIRED_NODE_COUNT} node ids, got {}",
+            "Expected at least {REQUIRED_NODE_COUNT} node ids, got {}",
             args.node_ids.len()
         ));
     }
@@ -149,8 +149,6 @@ async fn create_engine(args: CreateEngineArgs) -> Result<(), String> {
             http_requests: true,
             sev_enabled: Some(false),
         },
-        // Maybe this can be used to know subnet id ahead of time?
-        // subnet_id_override: todo!(),
         ..Default::default()
     };
 
