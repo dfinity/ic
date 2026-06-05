@@ -65,7 +65,7 @@ async fn test_the_anonymous_user_cannot_delete_a_subnet() {
 }
 
 #[tokio::test]
-async fn test_an_unauthorized_canister_cannot_delete_a_subnet() {
+async fn test_an_unauthorized_principal_cannot_delete_a_subnet() {
     let (pocket_ic, subnet_id) = setup_with_existing_subnet().await;
 
     // A principal that is neither governance nor the engine controller.
