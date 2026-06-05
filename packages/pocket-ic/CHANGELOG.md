@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- Added the `PATCH` variant to the `CanisterHttpMethod` enum (canister HTTPS outcalls). Note: `PATCH` outcalls are currently rejected by the execution layer until support has rolled out to all replicas.
+
 ## 14.0.0 - 2026-05-26
 
 ### Added
