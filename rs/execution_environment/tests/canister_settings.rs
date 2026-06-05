@@ -434,6 +434,56 @@ fn inter_canister_call_accepted_when_cycles_sufficient() {
     assert_matches!(res, WasmResult::Reply(_));
 }
 
+// Verifies that attached cycles can be partially consumed before a downstream call
+// and the rest consumed in the reply callback, even though the remaining amount is
+// below minimum_msg_cycles_available (which only gates incoming call admission).
+#[test]
+fn attached_cycles_consumed_in_update_and_reply_below_minimum_msg_cycles_available() {
+    let min_cycles: u128 = 1_000_000;
+    let half_cycles: u128 = min_cycles / 2;
+    let (env, callee_id, caller_id) = setup_two_canisters(min_cycles);
+    let initial_callee_balance = env.cycle_balance(callee_id);
+
+    // Callee accepts half_cycles in the update handler, then makes a downstream
+    // call to caller_id. In the reply callback, the callee accepts the remaining
+    // min_cycles - half_cycles, which is below minimum_msg_cycles_available —
+    // reply callbacks are not subject to the minimum check.
+    let callee_args = wasm()
+        .accept_cycles(half_cycles)
+        .call_simple(
+            caller_id,
+            "update",
+            CallArgs::default()
+                .other_side(wasm().reply_data(b"ok").build())
+                .on_reply(
+                    wasm()
+                        .accept_cycles(min_cycles - half_cycles)
+                        .reply_data(b"done")
+                        .build(),
+                )
+                .on_reject(wasm().reject_message().reject().build()),
+        )
+        .build();
+    let call_args = CallArgs::default()
+        .other_side(callee_args)
+        .on_reply(wasm().message_payload().append_and_reply().build())
+        .on_reject(wasm().reject_message().reject().build());
+    let res = env
+        .execute_ingress(
+            caller_id,
+            "update",
+            wasm()
+                .call_with_cycles(callee_id, "update", call_args, min_cycles as u64)
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(get_reply(res), b"done");
+    assert_eq!(
+        env.cycle_balance(callee_id),
+        initial_callee_balance + min_cycles
+    );
+}
+
 // Inter-canister calls with fewer than minimum_msg_cycles_available cycles must be
 // rejected with CanisterError.
 #[test]
