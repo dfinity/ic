@@ -95,6 +95,7 @@ system_test_nns(
 
 system_test_nns(
     name = "tecdsa_key_rotation_test",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + (4 + 4 + 4) * DEFAULT_VCPUS_PER_VM,  # System + Application subnet + unassigned nodes, 4 IC Node VMs each, 6 vCPUs each.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
@@ -139,6 +140,7 @@ system_test_nns(
 
 system_test_nns(
     name = "tecdsa_signature_fails_without_cycles_test",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + (4 + 4 + 4 + 4) * DEFAULT_VCPUS_PER_VM,  # System + 2 Application subnets + unassigned nodes, 4 IC Node VMs each, 6 vCPUs each.
     tags = [
         "long_test",
@@ -161,6 +163,7 @@ system_test_nns(
 
 system_test_nns(
     name = "tecdsa_signature_from_nns_without_cycles_test",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + (4 + 4 + 4 + 4) * DEFAULT_VCPUS_PER_VM,  # System + 2 Application subnets + unassigned nodes, 4 IC Node VMs each, 6 vCPUs each.
     tags = [
         "long_test",
@@ -179,6 +182,7 @@ system_test_nns(
 
 system_test_nns(
     name = "tecdsa_signature_from_other_subnet_test",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + (4 + 4 + 4 + 4) * DEFAULT_VCPUS_PER_VM,  # System + 2 Application subnets + unassigned nodes, 4 IC Node VMs each, 6 vCPUs each.
     tags = [
         "long_test",
@@ -223,6 +227,7 @@ system_test_nns(
 
 system_test_nns(
     name = "tecdsa_signature_life_cycle_test",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + (4 + 4 + 4) * DEFAULT_VCPUS_PER_VM,  # System + Application subnet + unassigned nodes, 4 IC Node VMs each, 6 vCPUs each.
     # Remove when CON-937 is resolved
     tags = [
@@ -251,6 +256,7 @@ system_test_nns(
 
 system_test_nns(
     name = "tecdsa_signature_same_subnet_test",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + (4 + 4 + 4 + 4) * DEFAULT_VCPUS_PER_VM,  # System + 2 Application subnets + unassigned nodes, 4 IC Node VMs each, 6 vCPUs each.
     tags = [
         "long_test",
@@ -269,6 +275,7 @@ system_test_nns(
 
 system_test_nns(
     name = "tecdsa_signature_timeout_test",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + (4 + 4 + 4) * DEFAULT_VCPUS_PER_VM,  # System + Application subnet + unassigned nodes, 4 IC Node VMs each, 6 vCPUs each.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
@@ -290,6 +297,7 @@ system_test_nns(
 
 tecdsa_performance_test_template = system_test_nns(
     name = "tecdsa_performance_test_template",
+    backend = "farm",
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
@@ -339,6 +347,7 @@ system_test_nns(
     additional_colocate_tags = [
         "system_test_benchmark",
     ],
+    backend = "farm",
     colocated_test_driver_vm_required_host_features = [
         "performance",
         "spm",
@@ -375,6 +384,7 @@ system_test_nns(
     additional_colocate_tags = [
         "system_test_benchmark",
     ],
+    backend = "farm",
     colocated_test_driver_vm_required_host_features = [
         "performance",
         "spm",
@@ -411,6 +421,7 @@ system_test_nns(
     additional_colocate_tags = [
         "system_test_benchmark",
     ],
+    backend = "farm",
     colocated_test_driver_vm_required_host_features = [
         "performance",
         "spm",
@@ -447,6 +458,7 @@ system_test_nns(
     additional_colocate_tags = [
         "system_test_benchmark",
     ],
+    backend = "farm",
     colocated_test_driver_vm_required_host_features = [
         "performance",
         "spm",

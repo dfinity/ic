@@ -17,6 +17,7 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test(
     name = "single_large_node",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 64,  # 1 System node @ 64 vCPUs (subnet resource override).
     enable_metrics = True,
     tags = [
@@ -34,6 +35,7 @@ system_test(
 
 system_test(
     name = "single_app_large_node",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 64,  # 1 Application node @ 64 vCPUs (subnet resource override).
     enable_metrics = True,
     tags = [
@@ -50,6 +52,7 @@ system_test(
 
 system_test_nns(
     name = "single_app_large_node_with_nns",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + DEFAULT_VCPUS_PER_VM + 64,  # 1 System node @ 6 vCPUs + 1 Application node @ 64 vCPUs (subnet resource override).
     enable_metrics = True,
     tags = [
@@ -101,6 +104,7 @@ system_test_nns(
 
 system_test_nns(
     name = "small_bitcoin",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 64 + 2 * DEFAULT_VCPUS_PER_VM,  # 1 System node @ 64 vCPUs (subnet override) + 1 API boundary node + 1 ic-gateway VM @ 6 vCPUs.
     enable_metrics = True,
     tags = [
@@ -120,6 +124,7 @@ system_test_nns(
 
 system_test_nns(
     name = "small_high_perf",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 64 + 3 * DEFAULT_VCPUS_PER_VM,  # 1 Application node @ 64 vCPUs (subnet override) + 1 System + 1 API boundary node + 1 ic-gateway VM @ 6 vCPUs.
     enable_metrics = True,
     tags = [
@@ -228,6 +233,7 @@ system_test_nns(
 
 system_test_nns(
     name = "cloud_engine",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 23 * DEFAULT_VCPUS_PER_VM,  # 1 System + 20 unassigned nodes (NUM_UNASSIGNED_NODES default) + 1 API boundary node + 1 ic-gateway VM, all 6 vCPUs.
     enable_metrics = True,
     tags = [
@@ -254,6 +260,7 @@ system_test_nns(
 
 system_test_nns(
     name = "medium",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 11 * DEFAULT_VCPUS_PER_VM,  # 4 System + 4 Application + 1 unassigned + 1 API boundary node + 1 ic-gateway VM, all 6 vCPUs.
     enable_metrics = True,
     tags = [
@@ -272,6 +279,7 @@ system_test_nns(
 
 system_test_nns(
     name = "large",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 10 * 64 + DEFAULT_VCPUS_PER_VM,  # 9 subnet nodes (4 System + 4 + 1 Application) + 1 API boundary node @ 64 vCPUs (IC-level override) + 1 ic-gateway VM @ 6 vCPUs.
     enable_metrics = True,
     tags = [
@@ -297,6 +305,7 @@ system_test_nns(
 
 system_test_nns(
     name = "io_perf_benchmark",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 64 + 3 * DEFAULT_VCPUS_PER_VM,  # 1 Application node @ 64 vCPUs (subnet override, default 1 perf host) + 1 System + 1 API boundary node + 1 ic-gateway VM @ 6 vCPUs.
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
@@ -348,6 +357,7 @@ system_test_nns(
 
 system_test_nns(
     name = "src_testing",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 36 * DEFAULT_VCPUS_PER_VM,  # 32 Application + 2 System + 1 API boundary node + 1 ic-gateway VM, all 6 vCPUs.
     enable_metrics = True,
     tags = [

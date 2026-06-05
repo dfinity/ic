@@ -75,6 +75,7 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_stress_test",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + (1 + 13 + 28 + 40 + 1) * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 83 IC Node VMs (1 system + 13+28+40 app + 1 API BN) + 1 UVM, 6 vCPUs each.
     enable_metrics = True,
     tags = ["manual"],  # not meant to be run on CI
@@ -98,6 +99,7 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_soak_test",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + (1 + 13 + 28 + 40 + 1) * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 83 IC Node VMs (1 system + 13+28+40 app + 1 API BN) + 1 UVM, 6 vCPUs each.
     enable_metrics = True,
     tags = [
@@ -309,6 +311,7 @@ system_test_nns(
 
 system_test_nns(
     name = "network_large_test",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + (49 + 1) * 8,  # 50 IC Node VMs (49 system + 1 app), 8 vCPUs each (resource override).
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     tags = [
@@ -327,6 +330,7 @@ system_test_nns(
 
 system_test_nns(
     name = "network_reliability_test",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + (4 + 7) * 8,  # 11 IC Node VMs (4 system + 7 app), 8 vCPUs each (resource override).
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     tags = [
@@ -343,6 +347,7 @@ system_test_nns(
 
 system_test_nns(
     name = "p2p_performance_test",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + (1 + 13) * 16 + 1 * 16,  # 14 IC Node VMs (1 system + 13 app) + 1 Jaeger UVM, 16 vCPUs each (resource override).
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
@@ -364,6 +369,7 @@ system_test_nns(
     additional_colocate_tags = [
         "system_test_benchmark",
     ],
+    backend = "farm",
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 16,
@@ -385,6 +391,7 @@ system_test_nns(
 
 system_test_nns(
     name = "state_sync_performance",
+    backend = "farm",
     colocated_test_driver_vm_required_host_features = ["performance"],
     cpus = MIN_LOCAL_CPUS + (1 + 12) * DEFAULT_VCPUS_PER_VM,  # 13 IC Node VMs (1 system node + 12 unassigned), 6 vCPUs each.
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
@@ -417,6 +424,7 @@ system_test_nns(
     additional_colocate_tags = [
         "system_test_benchmark",
     ],
+    backend = "farm",
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 16,
@@ -438,6 +446,7 @@ system_test_nns(
 
 system_test(
     name = "cloner_canister_workload",
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 13 * 64,  # 13 IC Node VMs, 64 vCPUs each (resource override).
     enable_metrics = True,
     tags = [

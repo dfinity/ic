@@ -21,6 +21,7 @@ system_test_nns(
     additional_colocate_tags = [
         "system_test_benchmark",
     ],
+    backend = "farm",
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 16,
@@ -107,6 +108,7 @@ system_test_nns(
 
 system_test_nns(
     name = "api_bn_performance_test",
+    backend = "farm",
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
