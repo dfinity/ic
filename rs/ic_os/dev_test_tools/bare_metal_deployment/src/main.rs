@@ -1,11 +1,13 @@
 use anyhow::{Context, Result, bail, ensure};
 use bare_metal_deployment::deploy::{
-    DeploymentConfig, DeploymentError, ImageSource, deploy_to_bare_metal, establish_ssh_connection,
+    DeploymentConfig, DeploymentError, GuestOsDeploymentConfig, ImageSource, deploy_to_bare_metal,
+    establish_ssh_connection,
 };
 use bare_metal_deployment::{
     BareMetalIpmiSession, LoginInfo, SshAuthMethod, parse_login_info_from_ini,
 };
-use clap::Parser;
+use clap::{Parser, ValueEnum};
+use grub::BootAlternative;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -21,15 +23,43 @@ struct Args {
     #[arg(long)]
     login_info: PathBuf,
 
-    /// HostOS environment to build (e.g., "dev", "prod").
+    /// HostOS image spec.
+    ///
+    /// Can be an environment name to build locally (e.g., "dev", "prod") or a 40-character
+    /// git hash to download a HostOS update image from download.dfinity.systems.
     /// If left empty, HostOS will not be deployed.
     #[arg(long)]
     hostos: Option<String>,
 
-    /// GuestOS environment to build (e.g., "dev", "prod").
+    /// GuestOS image spec.
+    ///
+    /// Can be an environment name to build locally (e.g., "dev", "prod"). When used with
+    /// `--guestos-mode=upgrade`, it can also be a 40-character git hash to download a GuestOS
+    /// update image from download.dfinity.systems. Git-hash specs are not supported for
+    /// `--guestos-mode=full`.
     /// If left empty, GuestOS will not be deployed.
     #[arg(long)]
     guestos: Option<String>,
+
+    /// How to deploy the GuestOS image (via full image or upgrade image).
+    /// Upgrade image replaces just the root+boot partitions appointed by
+    /// guestos_target_boot_alternative and optionally wipes the corresponding var partition
+    /// (with --guestos_wipe_var_partition).
+    #[arg(long, value_enum, requires = "guestos")]
+    guestos_mode: Option<ImageType>,
+
+    /// Target GuestOS boot alternative for GuestOS upgrade-image deployment.
+    #[arg(
+        long,
+        value_enum,
+        requires_all = ["guestos", "guestos_mode"],
+        required_if_eq("guestos_mode", "upgrade")
+    )]
+    guestos_target_boot_alternative: Option<BootAlternative>,
+
+    /// Wipe the GuestOS var partition during GuestOS upgrade-image deployment.
+    #[arg(long, requires_all = ["guestos", "guestos_mode", "guestos_target_boot_alternative"])]
+    guestos_wipe_var_partition: bool,
 
     /// Skip building images with Bazel, use a previously built image.
     /// Fails if images are not found at expected paths.
@@ -46,6 +76,12 @@ struct Args {
 enum OsType {
     HostOs,
     GuestOs,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
+enum ImageType {
+    Full,
+    Upgrade,
 }
 
 impl Display for OsType {
@@ -112,10 +148,17 @@ fn get_ssh_keys(public_key_path: Option<&Path>) -> Result<(String, SshAuthMethod
     )
 }
 
-fn build_image(os_type: OsType, env: &str) -> Result<()> {
+/// Builds a local image artifact for an environment-based image spec such as `dev` or `prod`.
+/// Git-hash specs are resolved to download URLs by `resolve_image_source` instead.
+fn build_image(os_type: OsType, spec: &str, guestos_mode: ImageType) -> Result<()> {
     let bazel_target = match os_type {
-        OsType::HostOs => format!("//ic-os/hostos/envs/{env}:update-img.tar.zst"),
-        OsType::GuestOs => format!("//ic-os/guestos/envs/{env}:disk-img.tar.zst"),
+        OsType::HostOs => format!("//ic-os/hostos/envs/{spec}:update-img.tar.zst"),
+        OsType::GuestOs => match guestos_mode {
+            ImageType::Full => format!("//ic-os/guestos/envs/{spec}:disk-img.tar.zst"),
+            ImageType::Upgrade => {
+                format!("//ic-os/guestos/envs/{spec}:update-img.tar.zst")
+            }
+        },
     };
 
     println!("Building {bazel_target}");
@@ -132,24 +175,68 @@ fn build_image(os_type: OsType, env: &str) -> Result<()> {
     Ok(())
 }
 
-fn artifact_path(os_type: OsType, env: &str) -> PathBuf {
-    match os_type {
-        OsType::HostOs => PathBuf::from(format!(
-            "bazel-bin/ic-os/hostos/envs/{env}/update-img.tar.zst",
-        )),
-        OsType::GuestOs => PathBuf::from(format!(
-            "bazel-bin/ic-os/guestos/envs/{env}/disk-img.tar.zst",
-        )),
+/// Resolves an image spec to either a local build artifact or a remote update-image URL.
+///
+/// Environment specs such as `dev` and `prod` are built/resolved locally. A 40-character git hash
+/// resolves to a download URL on download.dfinity.systems, but only for update-image flows.
+fn resolve_image_source(
+    os_type: OsType,
+    spec: &str,
+    build: bool,
+    image_type: ImageType,
+) -> Result<ImageSource> {
+    if is_git_hash_spec(spec) {
+        if os_type == OsType::GuestOs {
+            ensure!(
+                image_type == ImageType::Upgrade,
+                "GuestOS git-hash specs are only supported with --guestos-mode=upgrade \
+                (we only publish upgrade images)"
+            );
+        }
+
+        let url = get_released_upgrade_image_url(os_type, spec);
+        println!("Using {os_type} update image URL for git revision {spec}: {url}");
+        return Ok(ImageSource::Url(
+            url.parse()
+                .with_context(|| format!("Failed to parse image URL: {url}"))?,
+        ));
     }
+
+    Ok(ImageSource::File(get_or_build_image(
+        os_type, spec, build, image_type,
+    )?))
 }
 
-fn get_or_build_image(os_type: OsType, env: &str, build: bool) -> Result<PathBuf> {
+/// Returns true if `spec` looks like a 40-character git hash.
+fn is_git_hash_spec(spec: &str) -> bool {
+    spec.len() == 40 && spec.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn get_released_upgrade_image_url(os_type: OsType, git_hash: &str) -> String {
+    let directory = match os_type {
+        OsType::HostOs => "host-os",
+        OsType::GuestOs => "guest-os",
+    };
+
+    format!(
+        "https://download.dfinity.systems/ic/{git_hash}/{directory}/update-img/update-img.tar.zst"
+    )
+}
+
+/// Builds (unless `build` is false) and resolves the local artifact path for an environment-based
+/// image spec. Git-hash specs are handled by `resolve_image_source` instead.
+fn get_or_build_image(
+    os_type: OsType,
+    spec: &str,
+    build: bool,
+    guestos_mode: ImageType,
+) -> Result<PathBuf> {
     if build {
-        build_image(os_type, env)?;
+        build_image(os_type, spec, guestos_mode)?;
     } else {
         println!("Skipping {} build (--nobuild specified)", os_type);
     }
-    let path = artifact_path(os_type, env);
+    let path = artifact_path(os_type, spec, guestos_mode);
     ensure!(
         path.exists(),
         "{os_type} image not found at {}.",
@@ -159,23 +246,75 @@ fn get_or_build_image(os_type: OsType, env: &str, build: bool) -> Result<PathBuf
     Ok(path)
 }
 
+/// Returns the local artifact path for an environment-based image spec.
+fn artifact_path(os_type: OsType, spec: &str, guestos_mode: ImageType) -> PathBuf {
+    match os_type {
+        OsType::HostOs => PathBuf::from(format!(
+            "bazel-bin/ic-os/hostos/envs/{spec}/update-img.tar.zst",
+        )),
+        OsType::GuestOs => match guestos_mode {
+            ImageType::Full => PathBuf::from(format!(
+                "bazel-bin/ic-os/guestos/envs/{spec}/disk-img.tar.zst",
+            )),
+            ImageType::Upgrade => PathBuf::from(format!(
+                "bazel-bin/ic-os/guestos/envs/{spec}/update-img.tar.zst",
+            )),
+        },
+    }
+}
+
+fn get_guestos_deployment_config(args: &Args) -> Result<Option<GuestOsDeploymentConfig>> {
+    if args.guestos.is_none() {
+        return Ok(None);
+    }
+
+    let guestos_image_type = args.guestos_mode.unwrap_or(ImageType::Full);
+    let guestos_spec = args.guestos.as_deref().unwrap();
+    let image = resolve_image_source(
+        OsType::GuestOs,
+        guestos_spec,
+        !args.nobuild,
+        guestos_image_type,
+    )?;
+
+    let config = match guestos_image_type {
+        ImageType::Full => {
+            ensure!(
+                args.guestos_target_boot_alternative.is_none(),
+                "--guestos-target-boot-alternative can only be used with --guestos-mode=upgrade"
+            );
+            ensure!(
+                !args.guestos_wipe_var_partition,
+                "--guestos-wipe-var-partition can only be used with --guestos-mode=upgrade"
+            );
+            GuestOsDeploymentConfig::full(image)
+        }
+        ImageType::Upgrade => GuestOsDeploymentConfig::upgrade(
+            image,
+            args.guestos_target_boot_alternative.unwrap(),
+            args.guestos_wipe_var_partition,
+        ),
+    };
+
+    Ok(Some(config))
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
     if let Some(working_dir) = env::var_os("BUILD_WORKING_DIRECTORY") {
         env::set_current_dir(working_dir)?;
     }
 
+    let guestos = get_guestos_deployment_config(&args)?;
+
     let config = DeploymentConfig {
         hostos_upgrade_image: args
             .hostos
-            .map(|env| get_or_build_image(OsType::HostOs, &env, !args.nobuild))
-            .transpose()?
-            .map(ImageSource::File),
-        guestos_image: args
-            .guestos
-            .map(|env| get_or_build_image(OsType::GuestOs, &env, !args.nobuild))
-            .transpose()?
-            .map(ImageSource::File),
+            .map(|spec| {
+                resolve_image_source(OsType::HostOs, &spec, !args.nobuild, ImageType::Upgrade)
+            })
+            .transpose()?,
+        guestos,
         setupos_config_image: None,
     };
 
@@ -195,7 +334,7 @@ fn main() -> Result<()> {
 
     // Check if we need to deploy or just verify SSH connection
     let has_images = config.hostos_upgrade_image.is_some()
-        || config.guestos_image.is_some()
+        || config.guestos.is_some()
         || config.setupos_config_image.is_some();
 
     let final_host_ip = if has_images {

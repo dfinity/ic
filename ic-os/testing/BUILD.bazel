@@ -3,10 +3,16 @@ load("//ic-os/components:setupos.bzl", "component_files")
 package(default_visibility = ["//rs:ic-os-pkg"])
 
 # Components required by the reload_icos script to reload HostOS
-all_component_files = component_files | {
+# Should be kept in sync with STAGED_OPT_IC_BIN_FILES in reload_icos.sh
+all_component_files = {
     "//ic-os/testing:reload_icos.sh": "/opt/ic/bin/reload_icos.sh",
     "//ic-os/components:upgrade/boot-state.sh": "/opt/ic/bin/boot-state.sh",
+    "//ic-os/components/setupos:functions.sh": "/opt/ic/bin/functions.sh",
+    "//ic-os/components/setupos:setup-hostos-config.sh": "/opt/ic/bin/setup-hostos-config.sh",
+    "//ic-os/components:misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-launcher.sh": "/opt/ic/bin/guestos-recovery-launcher.sh",
+    "//ic-os/components:misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.sh": "/opt/ic/bin/guestos-recovery-upgrader.sh",
     "//rs/ic_os/config/tool:config_tool_dev": "/opt/ic/bin/config_tool",
+    "//ic-os/components/setupos:preload-config.sh": "/opt/ic/bin/preload-config.sh",
     "//ic-os/components:upgrade/manageboot/manageboot.sh": "/opt/ic/bin/manageboot.sh",
     "//ic-os/components:monitoring/metrics.sh": "/opt/ic/bin/metrics.sh",
 }
@@ -34,6 +40,7 @@ genrule(
 # Self-extracting bash script containing all dependencies to reload a HostOS (and the GuestOS in it)
 # Usage:
 # ./reload_icos_cmd --setupos-config-img=<path-to-setupos-config-image> --hostos-upgrade-img=<path-to-hostos-upgrade-image> --guestos-img=<path-to-guestos-image>
+# ./reload_icos_cmd --guestos-upgrade-img=<path-to-guestos-upgrade-image> --guestos-target-boot-alternative=<A|B> [--guestos-wipe-var-partition]
 genrule(
     name = "reload_icos",
     srcs = [":reload_icos_tar"],
