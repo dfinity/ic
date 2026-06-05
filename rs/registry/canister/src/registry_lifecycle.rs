@@ -435,10 +435,10 @@ fn convert_type1dot1_nodes_to_type4dot5(registry: &Registry) -> Vec<RegistryMuta
         }
 
         // Safety guard: only convert nodes that are still unassigned. If a node
-        // from the fixed list got assigned to a (non-cloud-engine) subnet
-        // between selection and upgrade, converting it to `type4.5` would
-        // violate the `check_node_type4_iff_cloud_engine` invariant during
-        // `check_global_state_invariants` and could make the upgrade fail.
+        // from the fixed list got assigned to a subnet between selection and
+        // upgrade, we skip it to keep this migration scoped to unassigned nodes
+        // and to avoid violating the `check_node_type4_iff_cloud_engine` invariant
+        // (e.g. if it was assigned to a non-cloud-engine subnet).
         if find_subnet_for_node(registry, node_id, &subnet_list_record).is_some() {
             ic_cdk::println!("Node {node_id} is assigned to a subnet, skipping type4.5 conversion");
             continue;
