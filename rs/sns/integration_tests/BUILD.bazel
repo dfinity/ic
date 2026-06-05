@@ -133,11 +133,11 @@ DATA_DEPS = [
     # Keep sorted.
     ":sns-governance-mem-test-canister",
     ":sns-test-dapp-canister",
+    "//rs/engine_controller:engine-controller-canister",
     "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
     "//rs/ledger_suite/icrc1/archive:archive_canister",
     "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
     "//rs/ledger_suite/icrc1/ledger:ledger_canister",
-    "//rs/engine_controller:engine-controller-canister",
     "//rs/migration_canister:migration-canister",
     "//rs/nervous_system/common/test_canister",
     "//rs/nns/cmc:cycles-minting-canister",
