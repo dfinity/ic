@@ -4,10 +4,11 @@ use crate::{pb::v1::RegistryCanisterStableStorage, registry::Registry};
 use ic_base_types::PrincipalId;
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_protobuf::registry::subnet::v1::SubnetRecord as SubnetRecordPb;
+use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord as SubnetRecordPb};
 use ic_protobuf::types::v1::master_public_key_id::KeyId;
 use ic_registry_keys::{
-    make_node_operator_record_key, make_node_record_key, make_subnet_record_key,
+    make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key,
+    make_subnet_record_key,
 };
 use ic_registry_transport::{pb::v1::RegistryMutation, update};
 use ic_types::{NodeId, SubnetId};
@@ -400,7 +401,19 @@ fn convert_type1dot1_nodes_to_type4dot5(registry: &Registry) -> Vec<RegistryMuta
         "ccosg-l4vd4-wl6t2-jmrbs-zai42-zctdm-svvgu-fb3zg-jmot3-cjn64-2qe",
     ];
 
-    let subnet_list_record = registry.get_subnet_list_record();
+    // Fetched defensively: a registry without a subnet list record (e.g. in
+    // tests) means no node is assigned, so we treat it as empty rather than
+    // panicking like `Registry::get_subnet_list_record`.
+    let subnet_list_record = registry
+        .get(
+            make_subnet_list_record_key().as_bytes(),
+            registry.latest_version(),
+        )
+        .map(|registry_value| {
+            SubnetListRecord::decode(registry_value.value.as_slice())
+                .expect("Failed to decode SubnetListRecord")
+        })
+        .unwrap_or_default();
     let mut mutations = Vec::new();
 
     for node_id_str in NODE_IDS_TO_CONVERT {
