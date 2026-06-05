@@ -203,7 +203,7 @@ fn canister_settings_ranges() {
         Nat::from(invalid_freezing_threshold)
     );
 
-    let invalid_minimum_msg_cycles_available = Nat::from(u128::MAX) + Nat::from(1u8);
+    let invalid_minimum_msg_cycles_available = Nat::from(u128::MAX) + Nat::from(1_u8);
     let invalid_minimum_msg_cycles_available_settings = {
         let mut s = CanisterSettingsArgsBuilder::new().build();
         s.minimum_msg_cycles_available = Some(invalid_minimum_msg_cycles_available.clone());
@@ -333,7 +333,7 @@ fn minimum_msg_cycles_available_in_canister_status() {
         .unwrap()
         .unwrap()
         .settings();
-    assert_eq!(settings.minimum_msg_cycles_available(), 0u128);
+    assert_eq!(settings.minimum_msg_cycles_available(), 0_u128);
 
     // create_canister with the setting applied.
     let min_cycles: u128 = 1_000_000;
