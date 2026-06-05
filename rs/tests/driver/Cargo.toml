@@ -10,6 +10,7 @@ documentation.workspace = true
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 askama = { workspace = true }
+axum = { workspace = true }
 bare_metal_deployment = { path = "../../ic_os/dev_test_tools/bare_metal_deployment" }
 bincode = { workspace = true }
 candid = { workspace = true }
@@ -108,6 +109,7 @@ tempfile = { workspace = true }
 thiserror = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 url = { workspace = true }
 virt = { workspace = true }
 walkdir = { workspace = true }

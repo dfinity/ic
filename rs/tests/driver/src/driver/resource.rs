@@ -193,7 +193,7 @@ pub fn get_resource_request(
     let primary_image = match SystemTestBackend::read_attribute(test_env) {
         SystemTestBackend::Farm => DiskImage::Url {
             image_type: ImageType::IcOsImage,
-            url: get_guestos_img_url(),
+            url: get_guestos_img_url(test_env),
             sha256: get_guestos_img_sha256(),
         },
         SystemTestBackend::Local => {

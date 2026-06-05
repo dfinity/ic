@@ -192,30 +192,12 @@ pub fn init_ic(
     }
 
     let whitelist = ProvisionalWhitelist::All;
-    let (ic_os_update_img_sha256, ic_os_update_img_url) =
-        match SystemTestBackend::read_attribute(test_env) {
-            SystemTestBackend::Farm => (
-                get_guestos_initial_update_img_sha256(),
-                get_guestos_initial_update_img_url(),
-            ),
-            SystemTestBackend::Local => {
-                // In Local mode the GuestOS initial update image is provided as a local
-                // file path rather than uploaded to Farm, so its URL/hash env vars are
-                // never set. Derive a `file://` URL and the matching sha256 from the path.
-                let var = "ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_PATH";
-                let path = PathBuf::from(
-                    std::env::var(var)
-                        .unwrap_or_else(|_| panic!("Failed to read '{var}' for Local backend")),
-                );
-                let url = Url::from_file_path(&path).unwrap_or_else(|_| {
-                    panic!("Failed to build file URL from '{}'", path.display())
-                });
-                let sha256 = crate::driver::farm::id_of_file(path.clone())
-                    .unwrap_or_else(|e| panic!("Failed to hash '{}': {e}", path.display()))
-                    .to_string();
-                (sha256, url)
-            }
-        };
+    // Both the URL and the sha256 are backend-aware: under Farm they point at
+    // Farm's content-addressed store; under the Local backend the URL points at
+    // the per-group file server (see `serve_files_task`) and the sha256 is
+    // exported by `run_systest.sh`.
+    let ic_os_update_img_sha256 = get_guestos_initial_update_img_sha256();
+    let ic_os_update_img_url = get_guestos_initial_update_img_url(test_env);
     let ic_os_launch_measurements = get_guestos_launch_measurements();
     let mut ic_config = IcConfig::new(
         working_dir.path(),
@@ -444,7 +426,7 @@ pub fn setup_and_start_nested_vms(
                     NESTED_CONFIG_IMAGE_PATH,
                 )?);
                 let setupos_image =
-                    AttachImageSpec::via_url(get_setupos_img_url(), get_setupos_img_sha256());
+                    AttachImageSpec::via_url(get_setupos_img_url(&t_env), get_setupos_img_sha256());
                 t_farm.attach_disk_images(
                     &t_group_name,
                     &vm_name,
@@ -715,11 +697,11 @@ pub fn setup_baremetal_instance(
         .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
         .join(SSH_USERNAME);
 
-    let hostos_url = get_hostos_initial_update_img_url().as_str().parse()?;
+    let hostos_url = get_hostos_initial_update_img_url(env).as_str().parse()?;
 
     let nested_vm_config = nested_vm.get_nested_vm_config()?;
     let guestos_image_source = match &nested_vm_config.boot_image {
-        BootImage::GroupDefault => ImageSource::Url(get_guestos_img_url().as_str().parse()?),
+        BootImage::GroupDefault => ImageSource::Url(get_guestos_img_url(env).as_str().parse()?),
         BootImage::Image(disk_image) => match disk_image {
             DiskImage::Url { url, .. } => ImageSource::Url(url.as_str().parse()?),
             DiskImage::Local { .. } => {

@@ -19,6 +19,7 @@ use crate::driver::{
     metrics_setup_task::{METRICS_SETUP_TASK_NAME, metrics_setup_task},
     metrics_sync_task::{METRICS_SYNC_TASK_NAME, metrics_sync_task},
     report::SystemTestGroupError,
+    serve_files_task::{SERVE_FILES_TASK_NAME, serve_files_task},
     subprocess_task::SubprocessTask,
     task::{SkipTestTask, Task},
     timeout::TimeoutTask,
@@ -219,6 +220,7 @@ pub fn is_task_visible_to_user(task_id: &TaskId) -> bool {
            && task_name.ne(METRICS_SETUP_TASK_NAME)
            && task_name.ne(METRICS_SYNC_TASK_NAME)
            && task_name.ne(VECTOR_LOGGING_TASK_NAME)
+           && task_name.ne(SERVE_FILES_TASK_NAME)
            && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX)
            && !task_name.starts_with("dummy(")
     )
@@ -995,6 +997,27 @@ impl SystemTestGroup {
             Box::from(EmptyTask::new(keepalive_task_id)) as Box<dyn Task>
         };
 
+        // Under the Local backend there is no external network, so IC nodes
+        // cannot download `icos_images` (e.g. GuestOS/HostOS update images used
+        // by upgrade tests) from Farm's content-addressed HTTP store. Spawn a
+        // small per-group file server that serves those images from local disk;
+        // the `..._url` helpers in `ic_images` point nodes at it. On Farm this
+        // is a no-op (the images are served by Farm).
+        let serve_files_task_id = TaskId::Test(String::from(SERVE_FILES_TASK_NAME));
+        let serve_files_task = if use_local_backend {
+            Box::from(subproc(
+                serve_files_task_id,
+                {
+                    let group_ctx = group_ctx.clone();
+                    move || serve_files_task(group_ctx)
+                },
+                &mut compose_ctx,
+                quiet,
+            )) as Box<dyn Task>
+        } else {
+            Box::from(EmptyTask::new(serve_files_task_id)) as Box<dyn Task>
+        };
+
         // The metrics_sync_task periodically syncs the targets in the current IC topology with Prometheus.
         let metrics_sync_task_id = TaskId::Test(String::from(METRICS_SYNC_TASK_NAME));
         let metrics_sync_task = if group_ctx.enable_metrics {
@@ -1197,10 +1220,17 @@ impl SystemTestGroup {
                 &mut compose_ctx,
             );
 
+            let serve_files_plan = compose(
+                Some(serve_files_task),
+                EvalOrder::Sequential,
+                vec![keepalive_plan],
+                &mut compose_ctx,
+            );
+
             let uvms_stream_plan = compose(
                 Some(uvms_logs_stream_task),
                 EvalOrder::Sequential,
-                vec![keepalive_plan],
+                vec![serve_files_plan],
                 &mut compose_ctx,
             );
 
@@ -1248,10 +1278,17 @@ impl SystemTestGroup {
             )),
         };
 
+        let serve_files_plan = compose(
+            Some(serve_files_task),
+            EvalOrder::Sequential,
+            vec![keepalive_plan],
+            &mut compose_ctx,
+        );
+
         let uvms_stream_plan = compose(
             Some(uvms_logs_stream_task),
             EvalOrder::Sequential,
-            vec![keepalive_plan],
+            vec![serve_files_plan],
             &mut compose_ctx,
         );
 
