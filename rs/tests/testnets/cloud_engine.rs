@@ -459,20 +459,10 @@ pub fn setup(env: TestEnv) {
 
     ic.setup_and_start(&env)
         .expect("Failed to setup IC under test");
-    // Configure the engine controller to (a) authorize TEST_NEURON_1_OWNER as
-    // the sole caller of its endpoints (b2ucp-4x6ou-...), and (b) bootstrap
-    // new engines from the same subnet it's hosted on (the NNS subnet).
-    let topology = env.topology_snapshot();
-    let nns_subnet_id = topology.root_subnet_id();
-    let mut customizations = nns_dapp_customizations();
-    customizations.engine_controller_init_args =
-        Some(ic_nns_test_utils::itest_helpers::EngineControllerInitArgs {
-            authorized_caller: Some(
-                ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL.0,
-            ),
-            initial_dkg_subnet_id: Some(nns_subnet_id.get().0),
-        });
-    install_nns_with_customizations_and_check_progress(topology, customizations);
+    install_nns_with_customizations_and_check_progress(
+        env.topology_snapshot(),
+        nns_dapp_customizations(),
+    );
     // deploy ic-gateway on dm1-dmz with static IPv4
     let mut ic_gateway_vm =
         IcGatewayVm::new(IC_GATEWAY_VM_NAME).with_required_host_features(dm1_dmz_features);

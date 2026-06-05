@@ -2130,10 +2130,13 @@ impl NnsInstallationBuilder {
             Some(v) => v,
             None => bail!("Prep Dir for IC {:?} does not exist.", ic_name),
         };
+        let nns_subnet_id = node
+            .subnet_id()
+            .expect("NNS installation node must belong to a subnet");
         info!(log, "Wait for node reporting healthy status");
         node.await_status_is_healthy().unwrap();
 
-        let install_future = install_nns_canisters(&log, url, &prep_dir, self);
+        let install_future = install_nns_canisters(&log, url, &prep_dir, self, nns_subnet_id);
         block_on(async {
             let timeout_result =
                 tokio::time::timeout(self.installation_timeout, install_future).await;
@@ -2606,6 +2609,7 @@ pub async fn install_nns_canisters(
     url: Url,
     ic_prep_state_dir: &IcPrepStateDir,
     nns_installation_builder: &NnsInstallationBuilder,
+    nns_subnet_id: SubnetId,
 ) {
     info!(
         logger,
@@ -2622,9 +2626,20 @@ pub async fn install_nns_canisters(
 
     let mut init_payloads = NnsInitPayloadsBuilder::new();
 
-    if let Some(args) = engine_controller_init_args {
-        init_payloads.with_engine_controller_init_args(args);
-    }
+    // If the caller did not supply explicit engine-controller init args, fall
+    // back to authorizing `TEST_NEURON_1_OWNER_PRINCIPAL` and pinning the
+    // initial DKG subnet to the NNS subnet we're installing on. This matches
+    // what the typical testnet setup wants and avoids every testnet repeating
+    // the same wiring.
+    let engine_controller_init_args = engine_controller_init_args.unwrap_or_else(|| {
+        ic_nns_test_utils::itest_helpers::EngineControllerInitArgs {
+            authorized_caller: Some(
+                ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL.0,
+            ),
+            initial_dkg_subnet_id: Some(nns_subnet_id.get().0),
+        }
+    });
+    init_payloads.with_engine_controller_init_args(engine_controller_init_args);
 
     if nns_installation_builder.is_subnet_rental_canister_enabled {
         init_payloads.with_subnet_rental_canister();
