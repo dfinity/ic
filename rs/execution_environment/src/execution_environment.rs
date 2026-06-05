@@ -2317,8 +2317,7 @@ impl ExecutionEnvironment {
                             response_payload: Payload::Reject(RejectContext::new(
                                 RejectCode::CanisterError,
                                 format!(
-                                    "Canister {} requires a minimum of {} cycles per message, \
-                                     but the message only has {} cycles.",
+                                    "Canister {} requires at least {} transferred cycles for incoming inter-canister messages, but the message only has {} cycles.",
                                     canister_id, min_cycles, payment,
                                 ),
                             )),
