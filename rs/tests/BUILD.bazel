@@ -25,6 +25,7 @@ PACKAGES = [
     "@resolute//gzip/amd64",
     "@resolute//libssl3t64/amd64",
     "@resolute//libunwind8/amd64",
+    "@resolute//libvirt0-hwe/amd64",
     "@resolute//mtools/amd64",
     "@resolute//openssh-client/amd64",
     "@resolute//rsync/amd64",
