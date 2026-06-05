@@ -151,7 +151,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_create_a_subnet() {
 }
 
 #[tokio::test]
-async fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
+async fn test_governance_canister_can_create_a_subnet() {
     create_subnet_succeeds_when_called_by(GOVERNANCE_CANISTER_ID.get()).await;
 }
 
