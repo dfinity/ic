@@ -1,4 +1,5 @@
 use crate::certification::recertify_registry;
+use crate::mutations::node_management::common::find_subnet_for_node;
 use crate::{pb::v1::RegistryCanisterStableStorage, registry::Registry};
 use ic_base_types::PrincipalId;
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
@@ -399,6 +400,7 @@ fn convert_type1dot1_nodes_to_type4dot5(registry: &Registry) -> Vec<RegistryMuta
         "ccosg-l4vd4-wl6t2-jmrbs-zai42-zctdm-svvgu-fb3zg-jmot3-cjn64-2qe",
     ];
 
+    let subnet_list_record = registry.get_subnet_list_record();
     let mut mutations = Vec::new();
 
     for node_id_str in NODE_IDS_TO_CONVERT {
@@ -432,6 +434,16 @@ fn convert_type1dot1_nodes_to_type4dot5(registry: &Registry) -> Vec<RegistryMuta
             continue;
         }
 
+        // Safety guard: only convert nodes that are still unassigned. If a node
+        // from the fixed list got assigned to a (non-cloud-engine) subnet
+        // between selection and upgrade, converting it to `type4.5` would
+        // violate the `check_node_type4_iff_cloud_engine` invariant during
+        // `check_global_state_invariants` and could make the upgrade fail.
+        if find_subnet_for_node(registry, node_id, &subnet_list_record).is_some() {
+            ic_cdk::println!("Node {node_id} is assigned to a subnet, skipping type4.5 conversion");
+            continue;
+        }
+
         node_record.node_reward_type = Some(NodeRewardType::Type4dot5 as i32);
         mutations.push(update(node_key, node_record.encode_to_vec()));
     }
@@ -460,9 +472,9 @@ mod test {
         MasterPublicKeyId as MasterPublicKeyIdPb, VetKdCurve as VetKdCurvePb,
         VetKdKeyId as VetKdKeyIdPb, master_public_key_id::KeyId,
     };
-    use ic_registry_keys::make_subnet_record_key;
+    use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
-    use ic_registry_transport::insert;
+    use ic_registry_transport::{insert, upsert};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use maplit::btreemap;
     use std::str::FromStr;
@@ -1064,6 +1076,21 @@ mod test {
             ..NodeRecord::default()
         };
 
+        // A listed `type1.1` node that has since been assigned to a
+        // (non-cloud-engine) subnet. The safety guard must leave it untouched,
+        // because converting an assigned node to `type4.5` would violate the
+        // `check_node_type4_iff_cloud_engine` invariant.
+        let listed_assigned_node = NodeId::from(
+            PrincipalId::from_str(
+                "2h77x-ywmcq-vxt3r-t2ml4-43px2-wdn6u-kqus7-hmdzo-eu4qm-4afbe-pqe",
+            )
+            .unwrap(),
+        );
+        let listed_assigned_record = NodeRecord {
+            node_reward_type: Some(NodeRewardType::Type1dot1 as i32),
+            ..NodeRecord::default()
+        };
+
         registry.apply_mutations_for_test(vec![
             insert(
                 make_node_record_key(listed_node),
@@ -1077,10 +1104,35 @@ mod test {
                 make_node_record_key(unlisted_node),
                 unlisted_record.encode_to_vec(),
             ),
+            insert(
+                make_node_record_key(listed_assigned_node),
+                listed_assigned_record.encode_to_vec(),
+            ),
+        ]);
+
+        // Assign `listed_assigned_node` to a (non-cloud-engine) subnet by
+        // inserting a subnet record whose membership contains it and listing
+        // the subnet in the subnet list. We bypass `add_fake_subnet` (and its
+        // NI-DKG/CUP setup) because the guard only reads subnet membership.
+        let assigned_subnet_id = subnet_test_id(2024);
+        let mut subnet_list_record = registry.get_subnet_list_record();
+        subnet_list_record
+            .subnets
+            .push(assigned_subnet_id.get().into_vec());
+        registry.apply_mutations_for_test(vec![
+            insert(
+                make_subnet_record_key(assigned_subnet_id),
+                get_invariant_compliant_subnet_record(vec![listed_assigned_node]).encode_to_vec(),
+            ),
+            upsert(
+                make_subnet_list_record_key(),
+                subnet_list_record.encode_to_vec(),
+            ),
         ]);
 
         let mutations = convert_type1dot1_nodes_to_type4dot5(&registry);
-        // Only the listed `type1.1` node should be mutated.
+        // Only the unassigned listed `type1.1` node should be mutated; the
+        // assigned one is skipped by the safety guard.
         assert_eq!(mutations.len(), 1);
         registry.apply_mutations_for_test(mutations);
 
@@ -1100,6 +1152,13 @@ mod test {
             registry.get_node_or_panic(unlisted_node).node_reward_type,
             Some(NodeRewardType::Type1dot1 as i32),
             "Unlisted type1.1 node should be untouched"
+        );
+        assert_eq!(
+            registry
+                .get_node_or_panic(listed_assigned_node)
+                .node_reward_type,
+            Some(NodeRewardType::Type1dot1 as i32),
+            "Listed type1.1 node assigned to a subnet should be untouched"
         );
 
         // Idempotency: a second run produces no further mutations.
