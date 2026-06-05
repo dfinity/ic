@@ -78,6 +78,7 @@ pub fn nns_dapp_customizations() -> NnsCustomizations {
         neurons: None,
         install_at_ids: false,
         registry_canister_init_payload: Default::default(),
+        engine_controller_init_args: None,
     }
 }
 
