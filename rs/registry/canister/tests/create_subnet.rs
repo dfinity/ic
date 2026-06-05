@@ -16,7 +16,9 @@ use ic_management_canister_types_private::{
     VetKdKeyId,
 };
 use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::decode_registry_value;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
+use ic_nns_constants::{
+    ENGINE_CONTROLLER_CANISTER_ID, GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID,
+};
 use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
 use ic_nns_test_utils::{
     itest_helpers::{
@@ -150,6 +152,17 @@ fn test_a_canister_other_than_the_governance_canister_cannot_create_a_subnet() {
 
 #[tokio::test]
 async fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
+    create_subnet_succeeds_when_called_by(GOVERNANCE_CANISTER_ID.get()).await;
+}
+
+#[tokio::test]
+async fn test_engine_controller_can_create_a_subnet() {
+    create_subnet_succeeds_when_called_by(ENGINE_CONTROLLER_CANISTER_ID.get()).await;
+}
+
+/// Verifies that `caller` is authorized to call `create_subnet` and that doing
+/// so actually adds a new subnet to the registry.
+async fn create_subnet_succeeds_when_called_by(caller: PrincipalId) {
     let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
 
     let (init_mutate, node_ids) = prepare_registry_with_nodes(5, INITIAL_MUTATION_ID);
@@ -170,16 +183,16 @@ async fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
 
     let payload = make_create_subnet_payload(node_ids.clone());
 
-    // Create a subnet via governance
+    // Create a subnet via the authorized caller
     pocket_ic
         .update_call(
             REGISTRY_CANISTER_ID.get().0,
-            GOVERNANCE_CANISTER_ID.get().0,
+            caller.0,
             "create_subnet",
             Encode!(&payload).unwrap(),
         )
         .await
-        .expect("create_subnet call via governance should succeed");
+        .expect("create_subnet call by an authorized caller should succeed");
 
     // Verify a new subnet appeared in the subnet list
     let updated_subnet_list_record =
