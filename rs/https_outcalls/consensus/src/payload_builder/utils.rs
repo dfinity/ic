@@ -1,5 +1,4 @@
 use CanisterHttpResponseContent::Reject;
-use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::canister_http::{CanisterHttpPool, InvalidCanisterHttpPayloadReason};
 use ic_types::{
     CountBytes, NodeId, NumBytes, RegistryVersion,
@@ -11,7 +10,7 @@ use ic_types::{
         CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
         CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
     },
-    crypto::crypto_hash,
+    crypto::{BasicSigOf, crypto_hash},
     messages::CallbackId,
     signature::BasicSignature,
 };
@@ -77,13 +76,16 @@ pub(crate) fn check_response_consistency(
 ///
 /// Checks callback-id consistency, share validity (using
 /// [`validate_response_share`]), content hash, and content size.
+///
+/// **NOTE**: The signature on the share is not verified. Callers are expected
+/// to batch-verify the signatures of all shares in the surrounding group via
+/// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
 pub(crate) fn validate_flexible_response_with_proof(
     response_with_proof: &FlexibleCanisterHttpResponseWithProof,
     callback_id: CallbackId,
     flex_committee: &BTreeSet<NodeId>,
     seen_signers: &mut HashSet<NodeId>,
     consensus_registry_version: RegistryVersion,
-    crypto: &dyn ConsensusCrypto,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
     if response_with_proof.response.id != callback_id {
         return Err(
@@ -100,7 +102,6 @@ pub(crate) fn validate_flexible_response_with_proof(
         flex_committee,
         seen_signers,
         consensus_registry_version,
-        crypto,
     )?;
 
     let calculated_hash = crypto_hash(&response_with_proof.response);
@@ -130,17 +131,20 @@ pub(crate) fn validate_flexible_response_with_proof(
     Ok(())
 }
 
-/// Validates a single [`CanisterHttpResponseShare`] (metadata + signature).
+/// Validates a single [`CanisterHttpResponseShare`]'s metadata.
 ///
 /// Checks callback-id consistency, duplicate signers, committee membership,
-/// registry version, and performs signature verification.
+/// and registry version.
+///
+/// **NOTE**: The signature is not verified. Callers are expected to
+/// batch-verify the signatures of all shares in the surrounding group via
+/// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
 pub(crate) fn validate_response_share(
     share: &CanisterHttpResponseShare,
     callback_id: CallbackId,
     flex_committee: &BTreeSet<NodeId>,
     seen_signers: &mut HashSet<NodeId>,
     consensus_registry_version: RegistryVersion,
-    crypto: &dyn ConsensusCrypto,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
     if share.content.id != callback_id {
         return Err(
@@ -174,11 +178,32 @@ pub(crate) fn validate_response_share(
         });
     }
 
-    crypto
-        .verify(share, consensus_registry_version)
-        .map_err(|err| InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)))?;
-
     Ok(())
+}
+
+/// A single `(signer, signature, message)` input as consumed by
+/// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
+pub(crate) type ResponseShareSigInput<'a> = (
+    NodeId,
+    &'a BasicSigOf<CanisterHttpResponseMetadata>,
+    &'a CanisterHttpResponseMetadata,
+);
+
+/// Maps response shares to the `(signer, signature, message)` inputs consumed by
+/// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
+pub(crate) fn response_share_sig_inputs<'a, I>(
+    shares: I,
+) -> impl Iterator<Item = ResponseShareSigInput<'a>>
+where
+    I: IntoIterator<Item = &'a CanisterHttpResponseShare>,
+{
+    shares.into_iter().map(|share| {
+        (
+            share.signature.signer,
+            &share.signature.signature,
+            &share.content,
+        )
+    })
 }
 
 /// This function takes a mapping of response metadata to supporting shares
