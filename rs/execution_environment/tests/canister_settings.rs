@@ -6,9 +6,12 @@ use ic_management_canister_types_private::{
     DefiniteCanisterSettingsArgs, IC_00, Method, Payload, UpdateSettingsArgs,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::NextExecution;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities::universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
-use ic_test_utilities_execution_environment::get_reply;
+use ic_test_utilities_execution_environment::{
+    ExecutionTestBuilder, check_ingress_status, get_reply,
+};
 use ic_types::CanisterId;
 use ic_types::NumBytes;
 use ic_types::ingress::WasmResult;
@@ -437,19 +440,46 @@ fn inter_canister_call_accepted_when_cycles_sufficient() {
 // Verifies that attached cycles can be partially consumed before a downstream call
 // and the rest consumed in the reply callback, even though the remaining amount is
 // below minimum_msg_cycles_available (which only gates incoming call admission).
+// DTS is triggered after each accept_cycles (via instruction_counter_is_at_least)
+// to ensure that minimum_msg_cycles_available is not re-enforced at slice boundaries.
+// Uses a system subnet (ExecutionTestBuilder default) so execution is free and
+// the cycle balance assertion is exact.
 #[test]
 fn attached_cycles_consumed_in_update_and_reply_below_minimum_msg_cycles_available() {
-    let min_cycles: u128 = 1_000_000;
+    const SLICE_INSTRUCTIONS: u64 = 1_000_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(SLICE_INSTRUCTIONS)
+        .with_manual_execution()
+        .build();
+
+    let min_cycles: u128 = 1_000_000_000_000;
     let half_cycles: u128 = min_cycles / 2;
-    let (env, callee_id, caller_id) = setup_two_canisters(min_cycles);
-    let initial_callee_balance = env.cycle_balance(callee_id);
+
+    let callee_id = test
+        .universal_canister_with_cycles(Cycles::new(100_000_000_000_000_000))
+        .unwrap();
+    let caller_id = test
+        .universal_canister_with_cycles(Cycles::new(100_000_000_000_000_000))
+        .unwrap();
+    test.update_settings(
+        callee_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_minimum_msg_cycles_available(min_cycles)
+            .build(),
+    )
+    .unwrap();
+    let initial_callee_balance = test.canister_state(callee_id).system_state.balance();
 
     // Callee accepts half_cycles in the update handler, then makes a downstream
     // call to caller_id. In the reply callback, the callee accepts the remaining
     // min_cycles - half_cycles, which is below minimum_msg_cycles_available —
     // reply callbacks are not subject to the minimum check.
+    // instruction_counter_is_at_least after each accept_cycles forces a DTS slice
+    // boundary to verify minimum_msg_cycles_available is not re-enforced on resume.
     let callee_args = wasm()
         .accept_cycles(half_cycles)
+        .instruction_counter_is_at_least(SLICE_INSTRUCTIONS)
         .call_simple(
             caller_id,
             "update",
@@ -458,6 +488,7 @@ fn attached_cycles_consumed_in_update_and_reply_below_minimum_msg_cycles_availab
                 .on_reply(
                     wasm()
                         .accept_cycles(min_cycles - half_cycles)
+                        .instruction_counter_is_at_least(SLICE_INSTRUCTIONS)
                         .reply_data(b"done")
                         .build(),
                 )
@@ -468,19 +499,61 @@ fn attached_cycles_consumed_in_update_and_reply_below_minimum_msg_cycles_availab
         .other_side(callee_args)
         .on_reply(wasm().message_payload().append_and_reply().build())
         .on_reject(wasm().reject_message().reject().build());
-    let res = env
-        .execute_ingress(
-            caller_id,
-            "update",
-            wasm()
-                .call_with_cycles(callee_id, "update", call_args, min_cycles as u64)
-                .build(),
-        )
-        .unwrap();
-    assert_eq!(get_reply(res), b"done");
+
+    let (ingress_id, _) = test.ingress_raw(
+        caller_id,
+        "update",
+        wasm()
+            .call_with_cycles(callee_id, "update", call_args, min_cycles)
+            .build(),
+    );
+
+    // Execute caller: sends call to callee with min_cycles attached.
+    test.execute_message(caller_id);
+    test.induct_messages();
+
+    // Execute callee update slice 1: accepts half_cycles, then
+    // instruction_counter_is_at_least exhausts the slice → DTS pause.
+    test.execute_slice(callee_id);
     assert_eq!(
-        env.cycle_balance(callee_id),
-        initial_callee_balance + min_cycles
+        test.canister_state(callee_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    // Execute callee update slice 2: loop exits, sends downstream call to caller.
+    test.execute_slice(callee_id);
+    test.induct_messages();
+
+    // Execute caller: replies "ok" to callee.
+    test.execute_message(caller_id);
+    test.induct_messages();
+
+    // Execute callee reply callback slice 1: accepts remaining half_cycles, then
+    // instruction_counter_is_at_least exhausts the slice → DTS pause.
+    test.execute_slice(callee_id);
+    assert_eq!(
+        test.canister_state(callee_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    // Execute callee reply callback slice 2: loop exits, replies "done".
+    test.execute_slice(callee_id);
+    test.induct_messages();
+
+    // Execute caller: forwards "done" to the ingress.
+    test.execute_message(caller_id);
+
+    assert_eq!(
+        get_reply(check_ingress_status(test.ingress_status(&ingress_id))),
+        b"done"
+    );
+    // Fees (call/reply transmission) are small relative to min_cycles; assert
+    // the callee gained at least 99% of the transferred cycles.
+    let expected = (initial_callee_balance + Cycles::new(min_cycles)).get();
+    let actual = test.canister_state(callee_id).system_state.balance().get();
+    assert!(
+        actual <= expected && expected.saturating_sub(actual) <= expected / 100,
+        "cycle balance mismatch: got {actual}, expected ~{expected}"
     );
 }
 
