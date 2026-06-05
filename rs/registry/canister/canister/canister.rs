@@ -36,6 +36,7 @@ use prost::Message;
 use registry_canister::{
     certification::{current_version_tree, hash_tree_to_proto},
     common::LOG_PREFIX,
+    get_subnet::{GetSubnetRequest, SubnetRecord},
     init::RegistryCanisterInitPayload,
     mutations::{
         complete_canister_migration::CompleteCanisterMigrationPayload,
@@ -1170,6 +1171,16 @@ fn get_subnet_for_canister_(arg: GetSubnetForCanisterRequest) -> Result<SubnetFo
     registry()
         .get_subnet_for_canister(&principal)
         .map_err(|e| e.to_string())
+}
+
+#[unsafe(export_name = "canister_query get_subnet")]
+fn get_subnet() {
+    over(candid_one, get_subnet_)
+}
+
+#[candid_method(query, rename = "get_subnet")]
+fn get_subnet_(arg: GetSubnetRequest) -> Result<SubnetRecord, String> {
+    registry().get_subnet_record(arg)
 }
 
 #[unsafe(export_name = "canister_update add_node")]
