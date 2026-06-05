@@ -140,7 +140,7 @@ async fn setup(num_nodes: u64) -> (PocketIc, Vec<NodeId>) {
         &pic,
         ENGINE_CONTROLLER_CANISTER_ID,
         engine_controller_wasm.bytes(),
-        vec![],
+        Encode!(&None::<EngineControllerInitArgs>).unwrap(),
         ROOT_CANISTER_ID.into(),
     )
     .await;
@@ -394,7 +394,7 @@ async fn init_arg_overrides_authorized_caller_and_survives_upgrade() {
     pic.upgrade_canister(
         ENGINE_CONTROLLER_CANISTER_ID.into(),
         wasm.bytes(),
-        vec![],
+        Encode!(&None::<EngineControllerInitArgs>).unwrap(),
         Some(Principal::anonymous()),
     )
     .await

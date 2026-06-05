@@ -9686,6 +9686,7 @@ name = "ic-engine-controller"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "candid_parser",
  "canister-test",
  "ic-base-types",
  "ic-cdk",

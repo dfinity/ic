@@ -24,6 +24,16 @@ rust_canister(
 )
 
 rust_test(
+    name = "engine_controller_canister_test",
+    srcs = glob(["canister/*.rs"]),
+    compile_data = ["engine_controller.did"],
+    crate_root = "canister/canister.rs",
+    deps = DEPS + [
+        "@crate_index//:candid_parser",
+    ],
+)
+
+rust_test(
     name = "engine_controller_integration_test",
     timeout = "long",
     srcs = ["tests/tests.rs"],

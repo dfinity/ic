@@ -3,13 +3,9 @@
 //! This canister provides a thin user-facing API on top of the registry
 //! canister's `create_subnet` / `delete_subnet` endpoints. Only a single,
 //! hard-coded authorized principal may invoke its methods.
-use candid::{CandidType, Decode, Principal};
+use candid::{CandidType, Principal};
 use ic_base_types::{NodeId, PrincipalId};
-use ic_cdk::{
-    api::{msg_arg_data, msg_caller},
-    call::Call,
-    init, post_upgrade, println, update,
-};
+use ic_cdk::{api::msg_caller, call::Call, init, post_upgrade, println, update};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -47,17 +43,7 @@ pub struct EngineControllerInitArgs {
     pub authorized_caller: Option<Principal>,
 }
 
-fn apply_init_args() {
-    // Accept either an empty argument (Candid cannot encode "no arg" for
-    // `opt T` as zero bytes, but installs/upgrades commonly omit the arg
-    // entirely) or a Candid-encoded `opt EngineControllerInitArgs`.
-    let raw = msg_arg_data();
-    let args: Option<EngineControllerInitArgs> = if raw.is_empty() {
-        None
-    } else {
-        Decode!(&raw, Option<EngineControllerInitArgs>)
-            .expect("Failed to decode engine_controller init args")
-    };
+fn apply_init_args(args: Option<EngineControllerInitArgs>) {
     let authorized = args
         .and_then(|a| a.authorized_caller)
         .unwrap_or_else(default_authorized_caller);
@@ -66,13 +52,13 @@ fn apply_init_args() {
 }
 
 #[init]
-fn init() {
-    apply_init_args();
+fn init(args: Option<EngineControllerInitArgs>) {
+    apply_init_args(args);
 }
 
 #[post_upgrade]
-fn post_upgrade() {
-    apply_init_args();
+fn post_upgrade(args: Option<EngineControllerInitArgs>) {
+    apply_init_args(args);
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -185,3 +171,6 @@ async fn delete_engine(args: DeleteEngineArgs) -> Result<(), String> {
 fn main() {
     // This block is intentionally left blank.
 }
+
+#[cfg(test)]
+mod tests;
