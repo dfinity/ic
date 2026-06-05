@@ -65,7 +65,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         wasm_memory_limit: None,
         next_snapshot_id: 0,
         environment_variables: BTreeMap::new(),
-        minimum_msg_cycles_available: None,
+        minimum_msg_cycles_available: Default::default(),
         instructions_executed: NumInstructions::new(0),
         ingress_messages_executed: 0,
         remote_subnet_messages_executed: 0,

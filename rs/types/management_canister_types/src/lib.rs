@@ -1420,13 +1420,12 @@ impl DefiniteCanisterSettingsArgs {
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
         environment_variables: EnvironmentVariables,
-        minimum_msg_cycles_available: Option<u128>,
+        minimum_msg_cycles_available: u128,
     ) -> Self {
         let memory_allocation = candid::Nat::from(memory_allocation.unwrap_or(0));
         let reserved_cycles_limit = candid::Nat::from(reserved_cycles_limit.unwrap_or(0));
         let wasm_memory_limit = candid::Nat::from(wasm_memory_limit.unwrap_or(0));
-        let minimum_msg_cycles_available =
-            candid::Nat::from(minimum_msg_cycles_available.unwrap_or(0));
+        let minimum_msg_cycles_available = candid::Nat::from(minimum_msg_cycles_available);
         let environment_variables = environment_variables
             .iter()
             .map(|(name, value)| EnvironmentVariable {
@@ -1611,7 +1610,7 @@ impl CanisterStatusResultV2 {
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
         environment_variables: EnvironmentVariables,
-        minimum_msg_cycles_available: Option<u128>,
+        minimum_msg_cycles_available: u128,
     ) -> Self {
         Self {
             status,

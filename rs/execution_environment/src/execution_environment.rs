@@ -2300,9 +2300,8 @@ impl ExecutionEnvironment {
                 );
             }
             CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
-                if let Some(min_cycles) = canister.system_state.minimum_msg_cycles_available
-                    && request.payment < min_cycles
-                {
+                let min_cycles = canister.system_state.minimum_msg_cycles_available;
+                if request.payment < min_cycles {
                     let canister_id = canister.canister_id();
                     let payment = request.payment;
                     let originator = request.sender;

@@ -476,7 +476,8 @@ pub struct SystemState {
     /// Minimum number of cycles required for an incoming canister-to-canister message.
     /// Messages with fewer cycles are rejected with a CanisterError.
     /// Ingress messages are not affected.
-    pub minimum_msg_cycles_available: Option<Cycles>,
+    /// A value of 0 means no minimum is enforced.
+    pub minimum_msg_cycles_available: Cycles,
 }
 
 /// A wrapper around the different canister statuses.
@@ -654,7 +655,7 @@ impl SystemState {
             log_memory_store: LogMemoryStore::new(log_memory_store_feature),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
-            minimum_msg_cycles_available: None,
+            minimum_msg_cycles_available: Cycles::zero(),
         }
     }
 
@@ -691,7 +692,7 @@ impl SystemState {
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
         environment_variables: BTreeMap<String, String>,
-        minimum_msg_cycles_available: Option<Cycles>,
+        minimum_msg_cycles_available: Cycles,
         metrics: &dyn CheckpointLoadingMetrics,
     ) -> Self {
         let system_state = Self {
@@ -2552,7 +2553,7 @@ pub mod testing {
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),
             environment_variables: Default::default(),
-            minimum_msg_cycles_available: None,
+            minimum_msg_cycles_available: Cycles::zero(),
         };
     }
 }
