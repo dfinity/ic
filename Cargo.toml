@@ -141,6 +141,7 @@ members = [
     "rs/embedders",
     "rs/embedders/benches/embedders_bench",
     "rs/embedders/fuzz",
+    "rs/engine_controller",
     "rs/ethereum/cketh/minter",
     "rs/ethereum/cketh/test_utils",
     "rs/ethereum/ledger-suite-orchestrator",
