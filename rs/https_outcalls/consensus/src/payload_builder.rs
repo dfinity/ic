@@ -597,7 +597,7 @@ impl CanisterHttpPayloadBuilderImpl {
             }
 
             // Defer signature verification.
-            sig_inputs.extend(response_share_sig_inputs(response.shares.iter()));
+            sig_inputs.extend(response_share_sig_inputs(&response.shares));
 
             let grouped_shares = group_shares_by_callback_id(response.shares.iter());
             if grouped_shares.len() != 1 {
@@ -814,7 +814,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     }
 
                     // Defer signature verification.
-                    sig_inputs.extend(response_share_sig_inputs(all_seen_shares.iter()));
+                    sig_inputs.extend(response_share_sig_inputs(all_seen_shares));
 
                     let num_unseen = flex_committee.len().saturating_sub(all_seen_shares.len());
                     let min_known_ok_needed = min_responses.saturating_sub(num_unseen);
