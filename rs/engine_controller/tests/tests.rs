@@ -11,7 +11,7 @@ use ic_management_canister_types::CanisterSettings;
 use ic_nns_constants::{ENGINE_CONTROLLER_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_test_utils::common::build_registry_wasm;
 use ic_nns_test_utils::registry::{
-    INITIAL_MUTATION_ID, invariant_compliant_mutation_as_atomic_req, new_node_keys_and_node_id,
+    INITIAL_MUTATION_ID, invariant_compliant_mutation_with_subnet_id, new_node_keys_and_node_id,
 };
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::subnet::v1::{
@@ -19,6 +19,7 @@ use ic_protobuf::registry::subnet::v1::{
 };
 use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
+use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_registry_transport::pb::v1::high_capacity_registry_get_value_response::Content;
 use ic_registry_transport::{deserialize_get_value_response, serialize_get_value_request};
 use ic_types::ReplicaVersion;
@@ -37,6 +38,7 @@ const AUTHORIZED_CALLER: &str = "bct5z-vccu4-6q4t2-3lb6l-wm43p-ulppt-o5sqq-w6het
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 struct EngineControllerInitArgs {
     authorized_caller: Option<Principal>,
+    initial_dkg_subnet_id: Option<Principal>,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -115,13 +117,36 @@ fn prepare_nodes(n: u64, starting_mutation_id: u8) -> (RegistryAtomicMutateReque
     )
 }
 
-async fn setup(num_nodes: u64) -> (PocketIc, Vec<NodeId>) {
+/// Returns PocketIC's actual NNS subnet id, so the registry's bootstrap
+/// state can claim *that* subnet as the NNS and `initial_dkg_subnet_id`
+/// resolution at create-subnet time routes to a real subnet.
+async fn pocket_ic_nns_subnet_id(pic: &PocketIc) -> SubnetId {
+    let topology = pic.topology().await;
+    let nns = topology.get_nns().expect("pocket-ic has no NNS subnet");
+    SubnetId::new(PrincipalId(nns))
+}
+
+fn invariant_compliant_mutation_as_atomic_req(
+    mutation_id: u8,
+    subnet_id: SubnetId,
+) -> RegistryAtomicMutateRequest {
+    RegistryAtomicMutateRequest {
+        mutations: invariant_compliant_mutation_with_subnet_id(mutation_id, subnet_id, None)
+            .into_iter()
+            .collect::<Vec<RegistryMutation>>(),
+        preconditions: vec![],
+    }
+}
+
+async fn setup(num_nodes: u64) -> (PocketIc, Vec<NodeId>, SubnetId) {
     let pic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
+    let nns_subnet_id = pocket_ic_nns_subnet_id(&pic).await;
 
     let (init_mutate, node_ids) = prepare_nodes(num_nodes, INITIAL_MUTATION_ID);
     let mut builder = RegistryCanisterInitPayloadBuilder::new();
     builder.push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(
         num_nodes as u8 + INITIAL_MUTATION_ID,
+        nns_subnet_id,
     ));
     builder.push_init_mutate_request(init_mutate);
 
@@ -140,12 +165,16 @@ async fn setup(num_nodes: u64) -> (PocketIc, Vec<NodeId>) {
         &pic,
         ENGINE_CONTROLLER_CANISTER_ID,
         engine_controller_wasm.bytes(),
-        Encode!(&None::<EngineControllerInitArgs>).unwrap(),
+        Encode!(&Some(EngineControllerInitArgs {
+            authorized_caller: None,
+            initial_dkg_subnet_id: Some(nns_subnet_id.get().0),
+        }))
+        .unwrap(),
         ROOT_CANISTER_ID.into(),
     )
     .await;
 
-    (pic, node_ids)
+    (pic, node_ids, nns_subnet_id)
 }
 
 async fn call_create_engine(
@@ -213,7 +242,7 @@ fn node_principals(node_ids: &[NodeId]) -> Vec<Principal> {
 
 #[tokio::test]
 async fn create_engine_then_delete_engine_succeeds() {
-    let (pic, node_ids) = setup(4).await;
+    let (pic, node_ids, _nns_subnet_id) = setup(4).await;
 
     let initial_subnets = subnet_list(&pic).await;
 
@@ -264,7 +293,7 @@ async fn create_engine_then_delete_engine_succeeds() {
 
 #[tokio::test]
 async fn create_engine_caller_must_be_authorized() {
-    let (pic, node_ids) = setup(4).await;
+    let (pic, node_ids, _nns_subnet_id) = setup(4).await;
     let attacker = Principal::self_authenticating(b"attacker");
     let args = CreateEngineArgs {
         node_ids: node_principals(&node_ids),
@@ -277,7 +306,7 @@ async fn create_engine_caller_must_be_authorized() {
 
 #[tokio::test]
 async fn create_engine_rejects_fewer_than_four_nodes() {
-    let (pic, node_ids) = setup(5).await;
+    let (pic, node_ids, _nns_subnet_id) = setup(5).await;
     let mut nodes = node_principals(&node_ids);
     nodes.truncate(3);
     let err = call_create_engine(
@@ -299,7 +328,7 @@ async fn create_engine_rejects_fewer_than_four_nodes() {
 
 #[tokio::test]
 async fn create_engine_accepts_more_than_four_nodes() {
-    let (pic, node_ids) = setup(7).await;
+    let (pic, node_ids, _nns_subnet_id) = setup(7).await;
     assert_eq!(node_ids.len(), 7);
     let create_args = CreateEngineArgs {
         node_ids: node_principals(&node_ids),
@@ -322,7 +351,7 @@ async fn create_engine_accepts_more_than_four_nodes() {
 
 #[tokio::test]
 async fn create_engine_rejects_duplicates() {
-    let (pic, node_ids) = setup(4).await;
+    let (pic, node_ids, _nns_subnet_id) = setup(4).await;
     let mut nodes = node_principals(&node_ids);
     nodes[1] = nodes[0];
     let err = call_create_engine(
@@ -343,12 +372,14 @@ async fn create_engine_rejects_duplicates() {
 async fn init_arg_overrides_authorized_caller_and_survives_upgrade() {
     let custom_caller = Principal::self_authenticating(b"custom-caller");
     let pic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
+    let nns_subnet_id = pocket_ic_nns_subnet_id(&pic).await;
 
     // Bootstrap the registry with 4 nodes so create_engine has something to work with.
     let (init_mutate, node_ids) = prepare_nodes(4, INITIAL_MUTATION_ID);
     let mut builder = RegistryCanisterInitPayloadBuilder::new();
     builder.push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(
         4 + INITIAL_MUTATION_ID,
+        nns_subnet_id,
     ));
     builder.push_init_mutate_request(init_mutate);
     install_at(
@@ -368,6 +399,7 @@ async fn init_arg_overrides_authorized_caller_and_survives_upgrade() {
         wasm.clone().bytes(),
         Encode!(&Some(EngineControllerInitArgs {
             authorized_caller: Some(custom_caller),
+            initial_dkg_subnet_id: Some(nns_subnet_id.get().0),
         }))
         .unwrap(),
         Principal::anonymous(),
@@ -411,7 +443,7 @@ async fn init_arg_overrides_authorized_caller_and_survives_upgrade() {
 
 #[tokio::test]
 async fn delete_engine_caller_must_be_authorized() {
-    let (pic, _) = setup(4).await;
+    let (pic, _, _) = setup(4).await;
     let attacker = Principal::self_authenticating(b"attacker");
     let err = call_delete_engine(
         &pic,

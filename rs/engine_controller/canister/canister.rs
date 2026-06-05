@@ -4,7 +4,7 @@
 //! canister's `create_subnet` / `delete_subnet` endpoints. Only a single,
 //! hard-coded authorized principal may invoke its methods.
 use candid::{CandidType, Principal};
-use ic_base_types::{NodeId, PrincipalId};
+use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_cdk::{api::msg_caller, call::Call, init, post_upgrade, println, update};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures;
@@ -22,6 +22,19 @@ use std::collections::HashSet;
 const DEFAULT_AUTHORIZED_CALLER: &str =
     "bct5z-vccu4-6q4t2-3lb6l-wm43p-ulppt-o5sqq-w6het-rthdz-qp4yn-fqe";
 
+/// Subnet whose DKG transcript is used to bootstrap newly created engine
+/// subnets when the init/post-upgrade argument does not override it.
+///
+/// While the mainnet registry still defaults `initial_dkg_subnet_id` to the
+/// NNS subnet, leaving this `None` would cause new cloud engines to be
+/// bootstrapped from the NNS — which we want to avoid. Pinning it to a
+/// non-NNS subnet here is a deliberate workaround until the registry's
+/// default is changed (see proposal in PR #10242). Once that lands on
+/// mainnet, this default can be dropped and the field can be left
+/// unconditionally `None`.
+const DEFAULT_INITIAL_DKG_SUBNET_ID: &str =
+    "fuqsr-in2lc-zbcjj-ydmcw-pzq7h-4xm2z-pto4i-dcyee-5z4rz-x63ji-nae";
+
 /// This many nodes are expected when creating a new engine as a minimum.
 const REQUIRED_NODE_COUNT: usize = 4;
 
@@ -29,6 +42,11 @@ thread_local! {
     /// The principal currently allowed to call the canister's methods. Set on
     /// `init` and re-evaluated on every `post_upgrade`.
     static AUTHORIZED_CALLER: RefCell<Principal> = RefCell::new(default_authorized_caller());
+
+    /// The subnet whose DKG is used to bootstrap newly created engines. Set
+    /// on `init` and re-evaluated on every `post_upgrade`.
+    static INITIAL_DKG_SUBNET_ID: RefCell<SubnetId> =
+        RefCell::new(default_initial_dkg_subnet_id());
 }
 
 fn default_authorized_caller() -> Principal {
@@ -36,19 +54,38 @@ fn default_authorized_caller() -> Principal {
         .expect("hardcoded DEFAULT_AUTHORIZED_CALLER must be a valid principal")
 }
 
+fn default_initial_dkg_subnet_id() -> SubnetId {
+    let p = Principal::from_text(DEFAULT_INITIAL_DKG_SUBNET_ID)
+        .expect("hardcoded DEFAULT_INITIAL_DKG_SUBNET_ID must be a valid principal");
+    SubnetId::new(PrincipalId(p))
+}
+
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 pub struct EngineControllerInitArgs {
     /// If `Some`, replaces the default authorized caller; if `None`, the
     /// default is kept.
     pub authorized_caller: Option<Principal>,
+    /// If `Some`, replaces the default `initial_dkg_subnet_id` used when
+    /// forwarding `CreateSubnetPayload` to the registry; if `None`, the
+    /// hard-coded default is kept.
+    pub initial_dkg_subnet_id: Option<Principal>,
 }
 
 fn apply_init_args(args: Option<EngineControllerInitArgs>) {
+    let args = args.unwrap_or_default();
     let authorized = args
-        .and_then(|a| a.authorized_caller)
+        .authorized_caller
         .unwrap_or_else(default_authorized_caller);
     AUTHORIZED_CALLER.with(|c| *c.borrow_mut() = authorized);
-    println!("engine_controller: authorized caller set to {authorized}");
+    let initial_dkg_subnet_id = args
+        .initial_dkg_subnet_id
+        .map(|p| SubnetId::new(PrincipalId(p)))
+        .unwrap_or_else(default_initial_dkg_subnet_id);
+    INITIAL_DKG_SUBNET_ID.with(|c| *c.borrow_mut() = initial_dkg_subnet_id);
+    println!(
+        "engine_controller: authorized caller set to {authorized}, \
+         initial_dkg_subnet_id set to {initial_dkg_subnet_id}"
+    );
 }
 
 #[init]
@@ -117,11 +154,14 @@ async fn create_engine(args: CreateEngineArgs) -> Result<(), String> {
         .map(|p| NodeId::from(PrincipalId(p)))
         .collect();
 
+    let initial_dkg_subnet_id = INITIAL_DKG_SUBNET_ID.with(|c| *c.borrow());
+
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_admins: Some(subnet_admins),
         replica_version_id: args.replica_version_id,
         subnet_type: SubnetType::CloudEngine,
+        initial_dkg_subnet_id: Some(initial_dkg_subnet_id),
         dkg_interval_length: 499,
         dkg_dealings_per_block: 1,
         initial_notary_delay_millis: 300,

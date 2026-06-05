@@ -12,6 +12,7 @@ type Result = variant { Ok; Err : text };
 
 type EngineControllerInitArgs = record {
   authorized_caller : opt principal;
+  initial_dkg_subnet_id : opt principal;
 };
 
 service : (opt EngineControllerInitArgs) -> {
