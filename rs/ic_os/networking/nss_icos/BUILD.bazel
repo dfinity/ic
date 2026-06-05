@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+load("@rules_rust//rust:defs.bzl", "rust_shared_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -17,4 +17,9 @@ rust_shared_library(
         "@crate_index//:libnss",
         "@crate_index//:local-ip-address",
     ],
+)
+
+rust_test(
+    name = "nss_icos_test",
+    crate = ":nss_icos",
 )

@@ -239,6 +239,26 @@ pub fn init_ic(
 
     ic_config.set_use_specified_ids_allocation_range(specific_ids);
 
+    // On the Local backend the test driver reaches the nodes over the group's
+    // IPv6 ULA bridge (`fd00::/8`). Unlike Farm — whose management prefixes are
+    // covered by the firewall template's built-in `default_rules` — these ULA
+    // source addresses are not whitelisted by default. Once the orchestrator
+    // applies its nftables ruleset (whose presence several tests assert on), the
+    // driver would otherwise be locked out of the replica endpoints it needs
+    // (`:8080`, SSH, metrics, ...). Whitelist the ULA range on the same ports
+    // the Farm `default_rules` cover so the firewall can be fully active while
+    // keeping the nodes reachable from the driver. Port 8080 is always included
+    // by `ic-prep`.
+    if matches!(
+        SystemTestBackend::read_attribute(test_env),
+        SystemTestBackend::Local
+    ) {
+        ic_config.set_whitelisted_prefixes(Some("fd00::/8".to_string()));
+        ic_config.set_whitelisted_ports(Some(
+            "22,2497,4100,7070,9090,9091,9100,19100,19523,19531".to_string(),
+        ));
+    }
+
     for dc_record in &ic.data_centers {
         ic_config.add_data_center_record(dc_record.clone());
     }
