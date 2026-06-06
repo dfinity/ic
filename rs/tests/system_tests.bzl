@@ -265,6 +265,16 @@ def system_test(
         image_name + "_PATH": image_path
         for image_name, image_path in icos_images.items()
     }
+
+    # Images that are only served by the Local backend's file server (and never
+    # uploaded to Farm): e.g. the mainnet GuestOS update images. These get a
+    # `_PATH` runtime dep for the local backend; their `_HASH` is already set in
+    # the environment by `configure_icos`, so the file server can advertise them
+    # under the correct content hash. They are intentionally *not* added to
+    # `icos_images` so the Farm variant keeps downloading them from the CDN.
+    for image_name, image_path in icos_config.local_only_icos_images.items():
+        _local_only_deps[image_name + "_PATH"] = image_path
+
     _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
     _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
 
