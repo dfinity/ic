@@ -63,6 +63,7 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
         icos_images["ENV_DEPS__GUESTOS" + suffix + "_DISK_IMG"] = repo + "//:guest-img"
         env["ENV_DEPS__GUESTOS" + suffix + "_INITIAL_UPDATE_IMG_URL"] = url_fn(version_dict["version"], "guest-os", True)
         env["ENV_DEPS__GUESTOS" + suffix + "_INITIAL_UPDATE_IMG_HASH"] = version_dict["dev_hash" if dev else "hash"]
+
         # Serve the initial (mainnet) update image from the Local backend's file server.
         local_only_icos_images["ENV_DEPS__GUESTOS" + suffix + "_INITIAL_UPDATE_IMG"] = repo + "//:guest-update-img.tar.zst"
         runtime_deps["ENV_DEPS__GUESTOS" + suffix + "_LAUNCH_MEASUREMENTS_FILE"] = repo + "//:launch-measurements-guest.json"
@@ -81,6 +82,7 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = version_dict["version"]
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = url_fn(version_dict["version"], "guest-os", True)
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = version_dict["dev_hash" if dev else "hash"]
+
         # Serve the (mainnet) update image from the Local backend's file server.
         local_only_icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = repo + "//:guest-update-img.tar.zst"
         runtime_deps["ENV_DEPS__GUESTOS_UPDATE_LAUNCH_MEASUREMENTS_FILE"] = repo + "//:launch-measurements-guest.json"
