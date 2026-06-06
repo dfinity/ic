@@ -36,6 +36,16 @@ system_test_nns(
 
 system_test_nns(
     name = "ic_xc_cketh_test",
+    # TODO: support this test on the local backend (drop `backend = "farm"`).
+    # The test currently fails on the local backend because it tries to download from an external URL
+    # and we don't allow network access for local tests:
+    #
+    #   thread 'main' (727) panicked at rs/tests/cross_chain/ic_xc_cketh_test.rs:829:58:
+    #   called `Result::unwrap()` on an `Err` value: block_on_bash_script: exit_status = 1.
+    #     Output:  Err: Error: error sending request for url (https://binaries.soliditylang.org/linux-amd64/list.json)
+    #
+    # Maybe that artifact can be provided via a bazel dependency.
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM + DEFAULT_VCPUS_PER_VM,  # 2 IC Node VMs * 6 vCPUs + 1 UniversalVm (foundry/anvil) * 6 vCPUs.
     tags = ["long_test"],
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS | {
