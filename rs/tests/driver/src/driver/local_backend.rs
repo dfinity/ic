@@ -549,6 +549,33 @@ impl LocalBackend {
         format!("{}1", Self::group_ipv6_prefix(group_name))
     }
 
+    /// Returns the per-group IPv6 *management* address used as the source for
+    /// host→node traffic that the test driver originates on the Local backend.
+    ///
+    /// It is `<prefix>:1::1`, sharing the group hash with
+    /// [`group_ipv6_prefix`](Self::group_ipv6_prefix): the node `/64`
+    /// `fd00:AABB:CCDD::/64` yields the management address `fd00:AABB:CCDD:1::1`
+    /// (subnet-id `1` instead of the nodes' subnet-id `0`). It therefore lies
+    /// *outside* every node `/64` — so the GuestOS firewall's hard-coded accept
+    /// for a node's own prefix does not match the driver, letting
+    /// registry-derived deny rules actually be exercised on the Local backend —
+    /// while staying within the ULA range `fd00::/8` that the Local backend
+    /// whitelists at bootstrap. Reusing the group hash keeps it per-group
+    /// unique, introducing no new collision class beyond the node `/64`'s
+    /// existing per-group uniqueness.
+    ///
+    /// The address is assigned to `lo` (not the bridge) so `dnsmasq` does not
+    /// advertise it for SLAAC; [`create_group`](Self::create_group) overrides
+    /// the node `/64`'s connected-route source to it.
+    fn group_mgmt_ipv6(group_name: &str) -> String {
+        use ic_crypto_sha2::Sha256;
+        let hash = Sha256::hash(group_name.as_bytes());
+        format!(
+            "fd00:{:02x}{:02x}:{:02x}{:02x}:1::1",
+            hash[0], hash[1], hash[2], hash[3]
+        )
+    }
+
     /// Returns the per-group private IPv4 `/24` (a deterministic subnet in the
     /// RFC 1918 `10.0.0.0/8` range). Derived from a hash of the group name —
     /// like [`group_ipv6_prefix`](Self::group_ipv6_prefix) — so concurrently
@@ -613,18 +640,28 @@ impl LocalBackend {
     /// global address via SLAAC from a Router Advertisement (the global address
     /// is the group `/64` prefix plus the EUI-64 of the deterministic MAC). We
     /// therefore run a minimal `dnsmasq` purely as an RA daemon on the bridge.
-    /// Crucially the RA is sent with a **router lifetime of 0**
-    /// (`--ra-param=<bridge>,10,0`): this advertises the on-link, autonomous
-    /// prefix so guests perform SLAAC, but does **not** install `dnsmasq` as a
-    /// default router. A default route is neither needed (the driver lives on
-    /// the same `/64`, on-link) nor wanted (this `dnsmasq` does not forward, so
-    /// a default route through it would black-hole all off-link traffic and the
-    /// replica would never become reachable).
+    /// The RA advertises the on-link, autonomous prefix (so guests perform
+    /// SLAAC) *and* a non-zero router lifetime (`--ra-param=<bridge>,10,1800`),
+    /// which installs the bridge — i.e. the host — as the guests' default
+    /// router.
+    ///
+    /// The default route is what lets a guest reply to the driver's per-group
+    /// *management* address ([`group_mgmt_ipv6`](Self::group_mgmt_ipv6)), which
+    /// lives in a second `/64` *outside* the node `/64`. The driver uses that
+    /// off-`/64` source so the GuestOS firewall's built-in accept for the
+    /// node's own prefix does not shadow the registry rules under test. No IP
+    /// forwarding is involved — the management address is assigned to `lo`, so
+    /// traffic to it terminates on the host and is delivered locally rather
+    /// than forwarded.
     pub fn create_group(&self, group_name: &str) -> Result<()> {
         let bridge = Self::bridge_name(group_name);
         let prefix = Self::group_ipv6_prefix(group_name);
         // The gateway address (`<prefix>1`) lives on the bridge.
         let gateway = format!("{prefix}1");
+        // The driver's per-group management address (`<mgmt-prefix>:1::1`, a
+        // second `/64` outside the node `/64`) is assigned to `lo` and used as
+        // the source for host→node traffic; see `group_mgmt_ipv6`.
+        let mgmt = Self::group_mgmt_ipv6(group_name);
         // The IPv4 gateway (`<ipv4_prefix>.1`) also lives on the bridge so
         // `dnsmasq` can serve DHCPv4 to VMs that requested a second NIC.
         let ipv4_prefix = Self::group_ipv4_prefix(group_name);
@@ -641,12 +678,26 @@ impl LocalBackend {
         // The IPv4 `/24` gateway is always assigned (harmless when no VM in the
         // group requests IPv4); it is what lets `dnsmasq` answer DHCPv4
         // requests from the guests' second NIC.
+        //
+        // Finally, assign the per-group management address to `lo` (idempotent
+        // via `replace`, since `lo` is shared across groups and survives the
+        // bridge delete above) and override the preferred source of the node
+        // `/64`'s connected route to it, so host→node traffic is sourced from
+        // the off-`/64` management address rather than the on-bridge gateway.
+        // The override must target the *kernel* connected route that
+        // `ip -6 addr add {gateway}/64` auto-creates (`proto kernel metric
+        // 256`): replacing it in place sets its preferred source. Adding a
+        // separate route instead would land at a higher metric (1024) and lose
+        // to the still-present metric-256 kernel route, leaving source
+        // selection on the on-`/64` gateway.
         let create_script = format!(
             "ip link del {bridge} 2>/dev/null; \
              ip link add name {bridge} type bridge && \
              ip link set dev {bridge} up && \
              ip -6 addr add {gateway}/64 dev {bridge} nodad && \
-             ip addr add {ipv4_gateway}/24 dev {bridge}"
+             ip addr add {ipv4_gateway}/24 dev {bridge} && \
+             ip -6 addr replace {mgmt}/128 dev lo && \
+             ip -6 route replace {prefix}/64 dev {bridge} proto kernel metric 256 src {mgmt}"
         );
         Self::run_net_admin(&create_script, "create group bridge")?;
 
@@ -666,11 +717,12 @@ impl LocalBackend {
     }
 
     /// Spawn a minimal `dnsmasq` as an IPv6 Router Advertisement daemon on
-    /// `bridge`, advertising the group's `/64` for SLAAC with a router lifetime
-    /// of 0 (so it is not selected as a default router). The same daemon also
-    /// serves DHCPv4 on the group's IPv4 `/24` (`ipv4_prefix`) so VMs that
-    /// requested a second NIC obtain an IPv4 address. See
-    /// [`create_group`](Self::create_group) for the rationale.
+    /// `bridge`, advertising the group's `/64` for SLAAC with a non-zero router
+    /// lifetime (so the bridge — i.e. the host — is installed as the guests'
+    /// default router, letting them reply to the driver's off-`/64` management
+    /// address). The same daemon also serves DHCPv4 on the group's IPv4 `/24`
+    /// (`ipv4_prefix`) so VMs that requested a second NIC obtain an IPv4
+    /// address. See [`create_group`](Self::create_group) for the rationale.
     fn start_ra_daemon(
         &self,
         group_name: &str,
@@ -695,9 +747,11 @@ impl LocalBackend {
 
         // `dnsmasq` needs `CAP_NET_RAW`/`CAP_NET_ADMIN` to open the ICMPv6 raw
         // socket and send Router Advertisements, so it runs through the
-        // capability launcher. `--ra-param=<bridge>,,0` sets the router lifetime
-        // to 0; `--dhcp-range=<prefix>,ra-only` advertises the on-link,
-        // autonomous prefix for SLAAC without handing out stateful leases.
+        // capability launcher. `--ra-param=<bridge>,10,1800` sends an RA every
+        // 10s with a router lifetime of 1800s, installing the bridge (the host)
+        // as the guests' default router; `--dhcp-range=<prefix>,ra-only`
+        // advertises the on-link, autonomous prefix for SLAAC without handing
+        // out stateful leases.
         // A second `--dhcp-range=<ipv4_prefix>.2,<ipv4_prefix>.254,...` enables
         // stateful DHCPv4 on the group's IPv4 `/24` (the `.1` gateway lives on
         // the bridge), which is what gives a VM's second NIC (the guest's
@@ -719,7 +773,7 @@ impl LocalBackend {
                  --enable-ra \
                  --dhcp-range={prefix},ra-only \
                  --dhcp-range={ipv4_prefix}.2,{ipv4_prefix}.254,255.255.255.0,1h \
-                 --ra-param={bridge},10,0",
+                 --ra-param={bridge},10,1800",
             pid = pid_path.display(),
             lease = lease_path.display(),
             log = log_path.display(),
@@ -743,10 +797,11 @@ impl LocalBackend {
         let _ = std::fs::remove_file(&pid_path);
     }
 
-    /// Tear down all domains in `group_name` and remove the bridge and any
-    /// TAPs attached to it.
+    /// Tear down all domains in `group_name`, remove the bridge and any TAPs
+    /// attached to it, and remove the per-group management address from `lo`.
     pub fn delete_group(&self, group_name: &str) -> Result<()> {
         let bridge = Self::bridge_name(group_name);
+        let mgmt = Self::group_mgmt_ipv6(group_name);
         info!(
             self.logger,
             "Deleting local group {group_name} (bridge {bridge})"
@@ -778,6 +833,7 @@ impl LocalBackend {
                  ip link del \"$tap\" 2>/dev/null; \
              done; \
              ip link del {bridge} 2>/dev/null; \
+             ip -6 addr del {mgmt}/128 dev lo 2>/dev/null; \
              true"
         );
         let _ = Self::run_net_admin(&delete_script, "delete group bridge");
