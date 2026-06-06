@@ -124,6 +124,7 @@ system_test_nns(
 
 system_test(
     name = "xnet_cloud_engine_isolation_test",
+    backend = "farm",  # Requires API boundary node playnet (with_api_boundary_nodes_playnet), unsupported on the local backend.
     cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM,  # 4 subnets * 1 node + 1 API boundary node, 6 vCPUs each.
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [

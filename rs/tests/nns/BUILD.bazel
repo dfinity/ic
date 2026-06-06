@@ -59,6 +59,7 @@ system_test_nns(
 
 system_test(
     name = "delete_subnet_test",
+    backend = "farm",  # Requires API boundary node playnet (with_api_boundary_nodes_playnet), unsupported on the local backend.
     cpus = MIN_LOCAL_CPUS + 8 * DEFAULT_VCPUS_PER_VM,  # 1 API boundary node + 1 System + 1 App + 1 VerifiedApp + 4 CloudEngine IC Node VMs * 6 vCPUs.
     tags = [
         "long_test",

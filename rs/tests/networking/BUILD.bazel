@@ -273,6 +273,7 @@ rust_binary(
 
 system_test_nns(
     name = "nns_delegation_mainnet_nns_version_test",
+    backend = "farm",  # Requires API boundary node playnet (with_api_boundary_nodes_playnet), unsupported on the local backend.
     cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 4 single-node subnets + 1 API BN, 6 vCPUs each.
     guestos = "mainnet_nns",
     guestos_update = True,
@@ -287,6 +288,7 @@ system_test_nns(
 
 system_test_nns(
     name = "nns_delegation_branch_nns_version_test",
+    backend = "farm",  # Requires API boundary node playnet (with_api_boundary_nodes_playnet), unsupported on the local backend.
     cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 4 single-node subnets + 1 API BN, 6 vCPUs each.
     guestos_update = True,
     tags = [

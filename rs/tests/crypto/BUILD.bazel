@@ -392,6 +392,7 @@ system_test(
 
 system_test(
     name = "cloud_engine_canister_sig_test",
+    backend = "farm",  # Requires API boundary node playnet (with_api_boundary_nodes_playnet), unsupported on the local backend.
     cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM,  # 3 IC Node VMs + 1 API boundary node VM * 6 vCPUs.
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {
         "II_BACKEND_WASM_PATH": "@mainnet_canisters//:internet_identity_backend.wasm.gz",

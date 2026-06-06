@@ -39,6 +39,7 @@ system_test_nns(
 
 system_test_nns(
     name = "firewall_correctness_test",
+    backend = "farm",  # Requires API boundary node playnet (with_api_boundary_nodes_playnet), unsupported on the local backend.
     cpus = MIN_LOCAL_CPUS + 6 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (System 1 + Application 2 + CloudEngine 2) + 1 API boundary node VM, all 6 vCPUs.
     deps = [
         ":ic_firewall_system_test_utils",
