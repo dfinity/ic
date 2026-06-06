@@ -231,13 +231,21 @@ pub fn init_ic(
     // the Farm `default_rules` cover so the firewall can be fully active while
     // keeping the nodes reachable from the driver. Port 8080 is always included
     // by `ic-prep`.
+    //
+    // Note: injecting this global registry rule makes the orchestrator use the
+    // registry firewall rules *instead of* the config-file `default_rules` (see
+    // `rs/orchestrator/src/firewall.rs`), so the ports here must also cover the
+    // API boundary node's `boundary_node_firewall` defaults. In particular 9324
+    // is `ic-boundary`'s observability/metrics port; without it the API BN's
+    // metrics endpoint is unreachable from the driver on Local (e.g. the
+    // boundary_nodes salt-sharing test scrapes `[api_bn]:9324`).
     if matches!(
         SystemTestBackend::read_attribute(test_env),
         SystemTestBackend::Local
     ) {
         ic_config.set_whitelisted_prefixes(Some("fd00::/8".to_string()));
         ic_config.set_whitelisted_ports(Some(
-            "22,2497,4100,7070,9090,9091,9100,19100,19523,19531".to_string(),
+            "22,2497,4100,7070,9090,9091,9100,9324,19100,19523,19531".to_string(),
         ));
     }
 
