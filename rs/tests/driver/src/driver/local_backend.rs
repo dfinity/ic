@@ -128,25 +128,44 @@ pub struct LocalBackend {
     /// no interior mutex is needed.
     connect: Connect,
     logger: Logger,
-    /// Per-VM extra disk paths, keyed by `vm_name`.
-    extra_disks: Mutex<HashMap<String, Vec<PathBuf>>>,
-    /// Per-VM primary disk path, keyed by `vm_name`.
-    primary_disks: Mutex<HashMap<String, DiskImage>>,
     /// Per-VM allocated IPv6, keyed by `vm_name`.
     vm_ipv6: Mutex<HashMap<String, Ipv6Addr>>,
-    /// Per-VM resource spec, keyed by `vm_name`.
-    vm_specs: Mutex<HashMap<String, VmSpec>>,
-    /// Per-VM minimum boot-image size in gibibytes, keyed by `vm_name`.
-    vm_min_boot_image_size_gib: Mutex<HashMap<String, u64>>,
-    /// Per-VM flag recording whether the VM requested a second (IPv4) NIC,
-    /// keyed by `vm_name`. When set, [`start_vm`](Self::start_vm) attaches an
-    /// additional TAP/interface (the guest's `enp2s0`) that obtains an IPv4
-    /// address via DHCP from the group bridge's `dnsmasq`.
-    vm_has_ipv4: Mutex<HashMap<String, bool>>,
-    /// Working directory under which to materialize VM disks. Only meaningful
-    /// in the setup process; forked tasks never call `create_vm` /
-    /// `attach_disk_images` / `start_vm`.
+    /// Working directory under which VM disks and the per-VM metadata
+    /// (`meta.json`) are materialized. It resolves to the same
+    /// `<group_dir>/local_backend` path in every process, so a `connect_only`
+    /// handle in a forked task subprocess (e.g. a test calling `vm.start()`)
+    /// reads back the metadata that the setup process persisted in
+    /// [`create_vm`](Self::create_vm) /
+    /// [`attach_disk_images`](Self::attach_disk_images).
     working_dir: PathBuf,
+}
+
+/// Per-VM configuration persisted to disk (as `meta.json` under the VM's
+/// working directory) by [`LocalBackend::create_vm`] and amended by
+/// [`LocalBackend::attach_disk_images`].
+///
+/// The per-VM state cannot live solely in the in-memory `LocalBackend`:
+/// `create_vm` / `attach_disk_images` run in the setup process, whereas
+/// [`LocalBackend::start_vm`] may run in a *forked task subprocess* (e.g. a
+/// test driving `vm.start()`), which holds a `connect_only` handle with no
+/// in-memory record of the VM. Persisting under `working_dir` — which resolves
+/// to the same `<group_dir>/local_backend` path in every process — lets
+/// `start_vm` recover everything it needs regardless of which process calls it.
+#[derive(Serialize, Deserialize, Clone)]
+struct PersistedVm {
+    /// Primary boot image. Must be a [`DiskImage::Local`] under the Local
+    /// backend (see [`LocalBackend::start_vm`]).
+    primary_image: DiskImage,
+    /// vCPU / memory spec used to render the domain XML.
+    spec: VmSpec,
+    /// Optional minimum boot-image size in gibibytes; the primary disk is grown
+    /// to at least this size before boot.
+    min_boot_image_size_gib: Option<u64>,
+    /// Whether the VM requested a second (IPv4) NIC.
+    has_ipv4: bool,
+    /// Absolute paths of extra disk images attached via
+    /// [`LocalBackend::attach_disk_images`]; empty until that call runs.
+    extra_disks: Vec<PathBuf>,
 }
 
 impl LocalBackend {
@@ -469,12 +488,7 @@ impl LocalBackend {
             pid_path: Some(pid_path),
             connect,
             logger,
-            extra_disks: Mutex::new(HashMap::new()),
-            primary_disks: Mutex::new(HashMap::new()),
             vm_ipv6: Mutex::new(HashMap::new()),
-            vm_specs: Mutex::new(HashMap::new()),
-            vm_min_boot_image_size_gib: Mutex::new(HashMap::new()),
-            vm_has_ipv4: Mutex::new(HashMap::new()),
             working_dir,
         })
     }
@@ -499,12 +513,7 @@ impl LocalBackend {
             pid_path: None,
             connect,
             logger,
-            extra_disks: Mutex::new(HashMap::new()),
-            primary_disks: Mutex::new(HashMap::new()),
             vm_ipv6: Mutex::new(HashMap::new()),
-            vm_specs: Mutex::new(HashMap::new()),
-            vm_min_boot_image_size_gib: Mutex::new(HashMap::new()),
-            vm_has_ipv4: Mutex::new(HashMap::new()),
             working_dir,
         })
     }
@@ -795,30 +804,28 @@ impl LocalBackend {
             .with_context(|| format!("calculating slaac for {mac} in {prefix}"))?;
 
         let hostname = Self::domain_name(group_name, vm_name);
-        let key = vm_name.to_string();
-        self.primary_disks
-            .lock()
-            .unwrap()
-            .insert(key.clone(), primary_image);
-        self.vm_ipv6.lock().unwrap().insert(key.clone(), ipv6);
         let spec = VmSpec {
             v_cpus: vcpus,
             memory_ki_b: memory_kib,
         };
-        self.vm_specs
+        // Cache the IPv6 in-process (currently write-only) and persist
+        // everything `start_vm` needs to disk, so a forked task subprocess —
+        // which holds a `connect_only` handle with empty in-memory state — can
+        // still start the VM (e.g. a test calling `vm.start()`).
+        self.vm_ipv6
             .lock()
             .unwrap()
-            .insert(key.clone(), spec.clone());
-        self.vm_has_ipv4
-            .lock()
-            .unwrap()
-            .insert(key.clone(), has_ipv4);
-        if let Some(min_gib) = boot_image_minimal_size_gibibytes {
-            self.vm_min_boot_image_size_gib
-                .lock()
-                .unwrap()
-                .insert(key, min_gib);
-        }
+            .insert(vm_name.to_string(), ipv6);
+        self.write_vm_meta(
+            vm_name,
+            &PersistedVm {
+                primary_image,
+                spec: spec.clone(),
+                min_boot_image_size_gib: boot_image_minimal_size_gibibytes,
+                has_ipv4,
+                extra_disks: Vec::new(),
+            },
+        )?;
 
         Ok(VMCreateResponse {
             ipv6,
@@ -846,36 +853,29 @@ impl LocalBackend {
             std::fs::set_permissions(&dst, std::fs::Permissions::from_mode(0o600))?;
             paths.push(dst);
         }
-        self.extra_disks
-            .lock()
-            .unwrap()
-            .insert(vm_name.to_string(), paths);
+        // Record the extra disks in the metadata persisted by `create_vm` so
+        // `start_vm` attaches them, including when it runs in a forked task
+        // subprocess.
+        let mut meta = self.read_vm_meta(vm_name)?;
+        meta.extra_disks = paths;
+        self.write_vm_meta(vm_name, &meta)?;
         Ok(())
     }
 
     /// Build the libvirt domain XML for `vm_name` and start it.
     pub fn start_vm(&self, group_name: &str, vm_name: &str) -> Result<()> {
-        let key = vm_name.to_string();
-        let primary_image = self
-            .primary_disks
-            .lock()
-            .unwrap()
-            .get(&key)
-            .cloned()
-            .ok_or_else(|| anyhow!("start_vm: no primary image registered for {vm_name}"))?;
-        let spec = self
-            .vm_specs
-            .lock()
-            .unwrap()
-            .get(&key)
-            .cloned()
-            .ok_or_else(|| anyhow!("start_vm: no spec registered for {vm_name}"))?;
-        let min_gib = self
-            .vm_min_boot_image_size_gib
-            .lock()
-            .unwrap()
-            .get(&key)
-            .copied();
+        // Recover the per-VM state persisted by `create_vm` /
+        // `attach_disk_images`. Reading it from disk (instead of an in-memory
+        // cache) is what lets `start_vm` run from a forked task subprocess —
+        // e.g. a test calling `vm.start()` — whose `connect_only` handle has no
+        // in-memory record of the VM.
+        let PersistedVm {
+            primary_image,
+            spec,
+            min_boot_image_size_gib: min_gib,
+            has_ipv4,
+            extra_disks: extra,
+        } = self.read_vm_meta(vm_name)?;
 
         let vm_dir = self.vm_dir(vm_name);
         std::fs::create_dir_all(&vm_dir)?;
@@ -899,14 +899,6 @@ impl LocalBackend {
                 .status()
                 .with_context(|| format!("truncating {} to {min_gib}G", primary_disk.display()))?;
         }
-
-        let extra = self
-            .extra_disks
-            .lock()
-            .unwrap()
-            .get(&key)
-            .cloned()
-            .unwrap_or_default();
 
         let mac = vm_mac(group_name, vm_name);
         let domain_name = Self::domain_name(group_name, vm_name);
@@ -935,13 +927,6 @@ impl LocalBackend {
         // If the VM requested IPv4, create a second TAP on the same bridge for
         // the guest's `enp2s0`, which obtains an address via DHCPv4 from the
         // group's `dnsmasq`.
-        let has_ipv4 = self
-            .vm_has_ipv4
-            .lock()
-            .unwrap()
-            .get(&key)
-            .copied()
-            .unwrap_or(false);
         let mac_ipv4 = vm_mac_ipv4(group_name, vm_name);
         let tap_ipv4 = Self::tap_name_ipv4(group_name, vm_name);
         if has_ipv4 {
@@ -1012,6 +997,37 @@ impl LocalBackend {
         self.working_dir
             .join("vms")
             .join(sanitize_libvirt_name(vm_name))
+    }
+
+    /// Path of the per-VM metadata file ([`PersistedVm`]) under the VM's dir.
+    fn vm_meta_path(&self, vm_name: &str) -> PathBuf {
+        self.vm_dir(vm_name).join("meta.json")
+    }
+
+    /// Persist `meta` for `vm_name`, creating its working directory if needed.
+    fn write_vm_meta(&self, vm_name: &str, meta: &PersistedVm) -> Result<()> {
+        let vm_dir = self.vm_dir(vm_name);
+        std::fs::create_dir_all(&vm_dir)
+            .with_context(|| format!("creating VM dir {}", vm_dir.display()))?;
+        let path = self.vm_meta_path(vm_name);
+        let json = serde_json::to_vec_pretty(meta)
+            .with_context(|| format!("serializing VM metadata for {vm_name}"))?;
+        std::fs::write(&path, json)
+            .with_context(|| format!("writing VM metadata {}", path.display()))?;
+        Ok(())
+    }
+
+    /// Read back the [`PersistedVm`] for `vm_name` persisted by `create_vm`.
+    fn read_vm_meta(&self, vm_name: &str) -> Result<PersistedVm> {
+        let path = self.vm_meta_path(vm_name);
+        let json = std::fs::read(&path).with_context(|| {
+            format!(
+                "reading VM metadata {} (was create_vm run for {vm_name} in this group?)",
+                path.display()
+            )
+        })?;
+        serde_json::from_slice(&json)
+            .with_context(|| format!("deserializing VM metadata {}", path.display()))
     }
 }
 
