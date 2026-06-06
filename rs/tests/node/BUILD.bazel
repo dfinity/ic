@@ -6,6 +6,26 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test_nns(
     name = "ipv4_integration_test",
+    # TODO: support this test on the local backend (drop `backend = "farm"`).
+    # It fails on the local backend during in-test node *self*-re-registration:
+    # the test wipes the unassigned node's keys + restarts its services and expects
+    # it to register itself again (registry version 3 -> 4), which never happens.
+    # Root cause: the local backend assigns nodes ULA `fd00::/8` IPv6 addresses, and
+    # the orchestrator's `assemble_add_node_message`
+    # (rs/orchestrator/src/registration.rs) treats a ULA / link-local address as a
+    # signal that it's running in a cloud: `if addr.is_unicast_link_local() ||
+    # addr.is_unique_local() { addr = CloudType::discover()?...obtain_public_ip()? }`.
+    # `CloudType::discover` (rs/ic_os/config/tool/src/guestos/cloud.rs) probes the
+    # cloud metadata server at http://169.254.169.254, which doesn't exist locally,
+    # so it errors out after exhausting its retries. `assemble_add_node_message`
+    # then fails on every iteration, the orchestrator never calls the registry
+    # `add_node` endpoint, and the registry never advances to version 4 -- so the
+    # 3rd `block_for_newer_registry_version()` in the test times out.
+    # Initial node setup is unaffected because those nodes are written to the
+    # registry by ic-prep/bootstrap on the driver side, bypassing the orchestrator's
+    # cloud-discovery self-registration path. On Farm the nodes get globally
+    # routable IPv6 addresses, so the cloud-discovery branch is skipped entirely.
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 3 IC Node VMs (1 System + 1 Application + 1 unassigned) * 6 vCPUs.
     proc_macro_deps = [
         "@crate_index//:indoc",
