@@ -210,7 +210,7 @@ jobs:
       name: ${{ case(needs.config.outputs.release-build == 'true', 'upload-artifacts', '') }}
     runs-on: *dind-large-setup
     container: *container-setup
-    timeout-minutes: 150
+    timeout-minutes: 240 # TODO: temporary bump from 150 to test the `_local` system-tests.
     steps:
       - *checkout
       - uses: ./.github/actions/netrc
