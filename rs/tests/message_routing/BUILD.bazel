@@ -141,6 +141,18 @@ system_test_nns(
 
 system_test(
     name = "queues_compatibility_test",
+    # TODO: support this test on the local backend (drop `backend = "farm"`).
+    # The test downloads the mainnet `replicated-state-test` / `state-layout-test`
+    # binaries from an external URL, which doesn't work on the local backend
+    # because we don't allow network access for local tests:
+    #
+    #   thread 'main' panicked at rs/tests/message_routing/queues_compatibility_test.rs:102:6:
+    #   Failed to Download: ... Error: error sending request for url
+    #     (https://download.dfinity.systems/ic/<version>/release/replicated-state-test.gz)
+    #
+    # To support this locally the mainnet test binaries would have to be provided
+    # via a bazel dependency instead of being downloaded from the CDN.
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS,  # setup is `|_| ()`, no Farm VMs deployed.
     env = MAINNET_ENV,
     runtime_deps = {
