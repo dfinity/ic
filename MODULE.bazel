@@ -1185,6 +1185,7 @@ canisters(
         "bitcoin_testnet": "ic-btc-canister.wasm.gz",
         "dogecoin": "ic-doge-canister.wasm.gz",
         "migration": "migration-canister.wasm.gz",
+        "engine-controller": "engine-controller-canister.wasm.gz",
         "subnet_rental": "subnet_rental_canister.wasm.gz",
     },
     path = "//:mainnet-canister-revisions.json",

@@ -56,6 +56,10 @@ NNS_CANISTER_WASM_PROVIDERS = {
         "tip-of-branch": "//rs/migration_canister:migration-canister",
         "mainnet": "@mainnet_canisters//:migration.wasm.gz",
     },
+    "engine-controller-canister": {
+        "tip-of-branch": "//rs/engine_controller:engine-controller-canister",
+        "mainnet": "@mainnet_canisters//:engine-controller.wasm.gz",
+    },
 }
 
 SNS_CANISTER_WASM_PROVIDERS = {
