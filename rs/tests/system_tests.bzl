@@ -282,7 +282,12 @@ def system_test(
         name: "$(rootpath {})".format(dep)
         for name, dep in _local_only_deps.items()
     }
-    local_args = [] if "--no-logs" in extra_args_simple else ["--no-logs"]
+
+    # The local backend runs in a sandbox without external network access, so it
+    # has no Vector VM to ship logs to ElasticSearch (--no-logs). Instead, stream
+    # the journald logs of all IC nodes directly to the test log
+    # (--stream-ic-node-logs).
+    local_args = ([] if "--no-logs" in extra_args_simple else ["--no-logs"]) + ["--stream-ic-node-logs"]
 
     reserve_cpus = [] if cpus == None else ["cpu:{}".format(cpus)]
 

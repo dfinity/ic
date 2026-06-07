@@ -16,7 +16,7 @@
 //! `system_test(local = True, ...)` Bazel macro and `run_systest.sh` provide.
 //!
 //! The task is modelled exactly like
-//! [`uvms_logs_stream_task`](crate::driver::uvms_logs_stream_task): it never
+//! [`logs_stream_task`](crate::driver::logs_stream_task): it never
 //! returns and is wired into the plan as a supervisor over the
 //! setup → tests → teardown subtree, so the task scheduler silently kills it
 //! once the subtree finishes (this is not treated as a failure).

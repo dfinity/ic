@@ -82,6 +82,10 @@ impl Task for SubprocessTask {
             child_cmd.arg("--no-logs");
         }
 
+        if self.group_ctx.stream_ic_node_logs {
+            child_cmd.arg("--stream-ic-node-logs");
+        }
+
         for pattern in &self.group_ctx.exclude_logs {
             child_cmd.arg("--exclude-logs").arg(pattern.as_str());
         }

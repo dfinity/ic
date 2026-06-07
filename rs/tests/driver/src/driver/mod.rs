@@ -13,7 +13,7 @@ pub mod ic;
 pub mod ic_gateway_vm;
 pub mod keepalive_task;
 pub mod local_backend;
-pub mod uvms_logs_stream_task;
+pub mod logs_stream_task;
 // Re-exported through test_env_api
 mod ic_images;
 pub mod log_events;

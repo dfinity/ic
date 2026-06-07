@@ -16,6 +16,7 @@ use crate::driver::{
 };
 use crate::driver::{
     keepalive_task::{KEEPALIVE_TASK_NAME, keepalive_task},
+    logs_stream_task::{LOGS_STREAM_TASK_NAME, logs_stream_task},
     metrics_setup_task::{METRICS_SETUP_TASK_NAME, metrics_setup_task},
     metrics_sync_task::{METRICS_SYNC_TASK_NAME, metrics_sync_task},
     report::SystemTestGroupError,
@@ -23,7 +24,6 @@ use crate::driver::{
     subprocess_task::SubprocessTask,
     task::{SkipTestTask, Task},
     timeout::TimeoutTask,
-    uvms_logs_stream_task::{UVMS_LOGS_STREAM_TASK_NAME, uvms_logs_stream_task},
     vector_logging_task::{VECTOR_LOGGING_TASK_NAME, vector_logging_task},
 };
 use crate::driver::{
@@ -135,6 +135,12 @@ pub struct CliArgs {
     )]
     pub exclude_logs: Vec<Regex>,
 
+    #[clap(
+        long = "stream-ic-node-logs",
+        help = "If set, the journald logs of all IC nodes are streamed to the test log. Used by the local backend which has no Vector VM to ship logs to ElasticSearch."
+    )]
+    pub stream_ic_node_logs: bool,
+
     #[clap(long, short, help = "Reduce terminal logging to mostly test output.")]
     pub quiet: bool,
 }
@@ -216,7 +222,7 @@ pub fn is_task_visible_to_user(task_id: &TaskId) -> bool {
         TaskId::Test(task_name)
         if task_name.ne(REPORT_TASK_NAME)
            && task_name.ne(KEEPALIVE_TASK_NAME)
-           && task_name.ne(UVMS_LOGS_STREAM_TASK_NAME)
+           && task_name.ne(LOGS_STREAM_TASK_NAME)
            && task_name.ne(METRICS_SETUP_TASK_NAME)
            && task_name.ne(METRICS_SYNC_TASK_NAME)
            && task_name.ne(VECTOR_LOGGING_TASK_NAME)
@@ -965,12 +971,12 @@ impl SystemTestGroup {
             timeout_per_test: self.effective_timeout_per_test(),
         };
 
-        let uvms_logs_stream_task_id = TaskId::Test(String::from(UVMS_LOGS_STREAM_TASK_NAME));
-        let uvms_logs_stream_task = Box::from(subproc(
-            uvms_logs_stream_task_id,
+        let logs_stream_task_id = TaskId::Test(String::from(LOGS_STREAM_TASK_NAME));
+        let logs_stream_task = Box::from(subproc(
+            logs_stream_task_id,
             {
                 let group_ctx = group_ctx.clone();
-                move || uvms_logs_stream_task(group_ctx)
+                move || logs_stream_task(group_ctx)
             },
             &mut compose_ctx,
             false,
@@ -1227,8 +1233,8 @@ impl SystemTestGroup {
                 &mut compose_ctx,
             );
 
-            let uvms_stream_plan = compose(
-                Some(uvms_logs_stream_task),
+            let logs_stream_plan = compose(
+                Some(logs_stream_task),
                 EvalOrder::Sequential,
                 vec![serve_files_plan],
                 &mut compose_ctx,
@@ -1237,7 +1243,7 @@ impl SystemTestGroup {
             let logs_plan = compose(
                 Some(vector_logging_task),
                 EvalOrder::Sequential,
-                vec![uvms_stream_plan],
+                vec![logs_stream_plan],
                 &mut compose_ctx,
             );
 
@@ -1285,8 +1291,8 @@ impl SystemTestGroup {
             &mut compose_ctx,
         );
 
-        let uvms_stream_plan = compose(
-            Some(uvms_logs_stream_task),
+        let logs_stream_plan = compose(
+            Some(logs_stream_task),
             EvalOrder::Sequential,
             vec![serve_files_plan],
             &mut compose_ctx,
@@ -1295,7 +1301,7 @@ impl SystemTestGroup {
         let logs_plan = compose(
             Some(vector_logging_task),
             EvalOrder::Sequential,
-            vec![uvms_stream_plan],
+            vec![logs_stream_plan],
             &mut compose_ctx,
         );
 
@@ -1358,6 +1364,7 @@ impl SystemTestGroup {
             args.enable_metrics,
             !args.no_logs,
             args.exclude_logs,
+            args.stream_ic_node_logs,
             args.quiet,
         )?;
 
