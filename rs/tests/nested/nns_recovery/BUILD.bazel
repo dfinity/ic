@@ -48,7 +48,7 @@ rust_library(
 
 system_test_nns(
     name = "nr_broken_dfinity_node",
-    backend = "farm",
+    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM + 4 * 40,  # 1 UVM + 1 GuestOS system node + 1 API BN + 1 ic-gateway (6 vCPUs each) + 4 nested HostOS nodes (40 vCPUs each, NNS_RECOVERY_VM_RESOURCE_OVERRIDES).
     env = ENV,
     guestos_update = "test",
@@ -76,7 +76,7 @@ system_test_nns(
 # should be running and have permission to fetch mainnet test data.
 system_test_nns(
     name = "nr_large_with_mainnet_state",
-    backend = "farm",
+    backend = "farm",  # Too big for the "local" backend.
     colocated_test_driver_vm_forward_ssh_agent = True,
     colocated_test_driver_vm_required_host_features = ["dc=zh1"],
     colocated_test_driver_vm_resources = {
@@ -109,7 +109,7 @@ system_test_nns(
 
 system_test_nns(
     name = "nr_local",
-    backend = "farm",
+    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM + 4 * 40,  # 1 UVM + 1 GuestOS system node + 1 API BN + 1 ic-gateway (6 vCPUs each) + 4 nested HostOS nodes (40 vCPUs each, NNS_RECOVERY_VM_RESOURCE_OVERRIDES).
     env = ENV,
     guestos_update = "test",
@@ -127,7 +127,7 @@ system_test_nns(
 
 system_test_nns(
     name = "nr_no_bless_fix_like_np",
-    backend = "farm",
+    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM + 4 * 40,  # 1 UVM + 1 GuestOS system node + 1 API BN + 1 ic-gateway (6 vCPUs each) + 4 nested HostOS nodes (40 vCPUs each, NNS_RECOVERY_VM_RESOURCE_OVERRIDES).
     env = ENV,
     guestos_update = "test",
@@ -145,7 +145,7 @@ system_test_nns(
 
 system_test_nns(
     name = "nr_all_broken_seq_np_actions",
-    backend = "farm",
+    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM + 4 * 40,  # 1 UVM + 1 GuestOS system node + 1 API BN + 1 ic-gateway (6 vCPUs each) + 4 nested HostOS nodes (40 vCPUs each, NNS_RECOVERY_VM_RESOURCE_OVERRIDES).
     env = ENV,
     guestos_update = "test",

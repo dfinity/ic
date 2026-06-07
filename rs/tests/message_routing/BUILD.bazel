@@ -95,7 +95,7 @@ system_test_nns(
 
 system_test_nns(
     name = "rejoin_test_long_rounds",
-    backend = "farm",
+    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 13 * 64,  # 1 Application subnet with NUM_NODES=13 IC Node VMs * 64 vCPUs (resource override).
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     enable_metrics = True,
@@ -118,7 +118,7 @@ system_test_nns(
 
 system_test_nns(
     name = "state_sync_malicious_chunk_test",
-    backend = "farm",
+    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 14 * DEFAULT_VCPUS_PER_VM,  # System subnet (6 + 1 malicious) + Application subnet (5 + 2 malicious) = 14 IC Node VMs * 6 vCPUs (override sets memory/boot image only).
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     guestos = "malicious",

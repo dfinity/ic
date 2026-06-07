@@ -5,7 +5,7 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test_nns(
     name = "xnet_slo_120_subnets_staging_test",
-    backend = "farm",
+    backend = "farm",  # Too big for the "local" backend.
     colocated_test_driver_vm_required_host_features = ["performance"],
     cpus = MIN_LOCAL_CPUS + 120 * DEFAULT_VCPUS_PER_VM,  # 120 subnets * 1 node * 6 vCPUs.
     enable_head_nns_variant = False,  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
@@ -25,7 +25,7 @@ system_test_nns(
 
 system_test_nns(
     name = "xnet_slo_3_subnets_hotfix_test",
-    backend = "farm",
+    backend = "farm",  # Too big for the "local" backend.
     colocated_test_driver_vm_required_host_features = ["performance"],
     cpus = MIN_LOCAL_CPUS + 3 * 4 * DEFAULT_VCPUS_PER_VM,  # 3 subnets * 4 nodes * 6 vCPUs.
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
@@ -44,7 +44,7 @@ system_test_nns(
 
 system_test_nns(
     name = "xnet_slo_3_subnets_test",
-    backend = "farm",
+    backend = "farm",  # Too big for the "local" backend.
     colocated_test_driver_vm_required_host_features = ["performance"],
     cpus = MIN_LOCAL_CPUS + 3 * 4 * DEFAULT_VCPUS_PER_VM,  # 3 subnets * 4 nodes * 6 vCPUs.
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
@@ -63,7 +63,7 @@ system_test_nns(
 
 system_test_nns(
     name = "xnet_slo_29_subnets_test",
-    backend = "farm",
+    backend = "farm",  # Too big for the "local" backend.
     colocated_test_driver_vm_required_host_features = ["performance"],
     cpus = MIN_LOCAL_CPUS + 29 * DEFAULT_VCPUS_PER_VM,  # 29 subnets * 1 node * 6 vCPUs.
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.

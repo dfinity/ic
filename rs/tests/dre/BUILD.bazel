@@ -5,7 +5,7 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test(
     name = "guest_os_qualification",
-    backend = "farm",
+    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 18 * DEFAULT_VCPUS_PER_VM,  # 12 subnet + 4 unassigned + 2 API boundary node VMs = 18 IC Node VMs * 6 vCPUs.
     env = MAINNET_ENV,
     tags = [

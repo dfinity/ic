@@ -260,7 +260,7 @@ system_test_nns(
 
 system_test_nns(
     name = "subnet_splitting_v2_test",
-    backend = "farm",
+    backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 11 * DEFAULT_VCPUS_PER_VM,  # 11 IC Node VMs (1+1 System + 8 Application + 1 VerifiedApplication) * 6 vCPUs.
     enable_metrics = True,
     tags = [
@@ -406,7 +406,7 @@ system_test_nns(
     additional_colocate_tags = [
         "system_test_benchmark",
     ],
-    backend = "farm",
+    backend = "farm",  # Too big for the "local" backend.
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
@@ -438,7 +438,7 @@ system_test_nns(
     additional_colocate_tags = [
         "system_test_benchmark",
     ],
-    backend = "farm",
+    backend = "farm",  # Too big for the "local" backend.
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
@@ -492,7 +492,7 @@ system_test_nns(
 
 system_test_nns(
     name = "nidkg_performance_test",
-    backend = "farm",
+    backend = "farm",  # Too big for the "local" backend.
     colocated_test_driver_vm_required_host_features = [
         "performance",
         "spm",
