@@ -67,6 +67,44 @@ impl DeployedIcGatewayVm {
     pub fn get_vm(&self) -> AllocatedVm {
         self.vm.clone()
     }
+
+    /// Returns a custom DNS resolution override for reaching the gateway at the
+    /// given `url`, if one is needed for the active system-test backend.
+    ///
+    /// On the [`SystemTestBackend::Local`] backend the gateway serves HTTPS with
+    /// a self-signed certificate for a local domain (`<name>.local` and its
+    /// wildcard) and there is no DNS service that resolves that domain (or the
+    /// per-canister subdomains `<canister_id>.<name>.local`). Clients reaching
+    /// the gateway therefore have to resolve the requested host themselves to
+    /// the gateway VM's IPv6 address. This returns `(host, [vm_ipv6]:443)` for
+    /// the host of `url` so a `reqwest` client can be configured with
+    /// `.resolve(host, addr)`.
+    ///
+    /// Note that `reqwest`'s `resolve` overrides only the *exact* host passed to
+    /// it (it does *not* apply to subdomains), so the host of the actual request
+    /// URL — e.g. `<canister_id>.<name>.local` — must be used, not the apex
+    /// domain. On the [`SystemTestBackend::Farm`] backend DNS resolves the
+    /// gateway domain, so no override is needed and `None` is returned.
+    pub fn resolve_override_for_url(&self, url: &Url) -> Option<(String, SocketAddr)> {
+        match SystemTestBackend::read_attribute(&self.env) {
+            SystemTestBackend::Local => {
+                let host = url.host_str()?.to_string();
+                Some((host, SocketAddr::new(IpAddr::V6(self.vm.ipv6), 443)))
+            }
+            SystemTestBackend::Farm => None,
+        }
+    }
+
+    /// Whether the gateway serves HTTPS with a self-signed certificate that
+    /// clients have to accept (i.e. `danger_accept_invalid_certs(true)`). This
+    /// is the case on the [`SystemTestBackend::Local`] backend; on Farm a
+    /// proper playnet certificate is used.
+    pub fn uses_self_signed_cert(&self) -> bool {
+        matches!(
+            SystemTestBackend::read_attribute(&self.env),
+            SystemTestBackend::Local
+        )
+    }
 }
 
 impl HasTestEnv for DeployedIcGatewayVm {
