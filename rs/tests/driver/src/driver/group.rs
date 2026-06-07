@@ -16,6 +16,7 @@ use crate::driver::{
 };
 use crate::driver::{
     keepalive_task::{KEEPALIVE_TASK_NAME, keepalive_task},
+    log_consoles_task::{LOG_CONSOLES_TASK_NAME, log_consoles_task},
     logs_stream_task::{LOGS_STREAM_TASK_NAME, logs_stream_task},
     metrics_setup_task::{METRICS_SETUP_TASK_NAME, metrics_setup_task},
     metrics_sync_task::{METRICS_SYNC_TASK_NAME, metrics_sync_task},
@@ -141,6 +142,12 @@ pub struct CliArgs {
     )]
     pub stream_ic_node_logs: bool,
 
+    #[clap(
+        long = "stream-console-logs",
+        help = "If set, the serial console logs of all VMs are streamed to the test log. Used by the local backend which captures each VM's console to a file on disk."
+    )]
+    pub stream_console_logs: bool,
+
     #[clap(long, short, help = "Reduce terminal logging to mostly test output.")]
     pub quiet: bool,
 }
@@ -223,6 +230,7 @@ pub fn is_task_visible_to_user(task_id: &TaskId) -> bool {
         if task_name.ne(REPORT_TASK_NAME)
            && task_name.ne(KEEPALIVE_TASK_NAME)
            && task_name.ne(LOGS_STREAM_TASK_NAME)
+           && task_name.ne(LOG_CONSOLES_TASK_NAME)
            && task_name.ne(METRICS_SETUP_TASK_NAME)
            && task_name.ne(METRICS_SYNC_TASK_NAME)
            && task_name.ne(VECTOR_LOGGING_TASK_NAME)
@@ -1024,6 +1032,24 @@ impl SystemTestGroup {
             Box::from(EmptyTask::new(serve_files_task_id)) as Box<dyn Task>
         };
 
+        // Stream each VM's serial console (captured to a file on disk by the
+        // Local backend) to the test log. Opt-in via `--stream-console-logs`,
+        // which only the Local backend sets; on Farm this is an `EmptyTask`.
+        let log_consoles_task_id = TaskId::Test(String::from(LOG_CONSOLES_TASK_NAME));
+        let log_consoles_task = if group_ctx.stream_console_logs {
+            Box::from(subproc(
+                log_consoles_task_id,
+                {
+                    let group_ctx = group_ctx.clone();
+                    move || log_consoles_task(group_ctx)
+                },
+                &mut compose_ctx,
+                quiet,
+            )) as Box<dyn Task>
+        } else {
+            Box::from(EmptyTask::new(log_consoles_task_id)) as Box<dyn Task>
+        };
+
         // The metrics_sync_task periodically syncs the targets in the current IC topology with Prometheus.
         let metrics_sync_task_id = TaskId::Test(String::from(METRICS_SYNC_TASK_NAME));
         let metrics_sync_task = if group_ctx.enable_metrics {
@@ -1240,10 +1266,17 @@ impl SystemTestGroup {
                 &mut compose_ctx,
             );
 
+            let log_consoles_plan = compose(
+                Some(log_consoles_task),
+                EvalOrder::Sequential,
+                vec![logs_stream_plan],
+                &mut compose_ctx,
+            );
+
             let logs_plan = compose(
                 Some(vector_logging_task),
                 EvalOrder::Sequential,
-                vec![logs_stream_plan],
+                vec![log_consoles_plan],
                 &mut compose_ctx,
             );
 
@@ -1298,10 +1331,17 @@ impl SystemTestGroup {
             &mut compose_ctx,
         );
 
+        let log_consoles_plan = compose(
+            Some(log_consoles_task),
+            EvalOrder::Sequential,
+            vec![logs_stream_plan],
+            &mut compose_ctx,
+        );
+
         let logs_plan = compose(
             Some(vector_logging_task),
             EvalOrder::Sequential,
-            vec![logs_stream_plan],
+            vec![log_consoles_plan],
             &mut compose_ctx,
         );
 
@@ -1365,6 +1405,7 @@ impl SystemTestGroup {
             !args.no_logs,
             args.exclude_logs,
             args.stream_ic_node_logs,
+            args.stream_console_logs,
             args.quiet,
         )?;
 

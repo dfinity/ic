@@ -79,6 +79,7 @@ ic-universal-canister = { path = "../../universal_canister/lib" }
 ic-utils = { workspace = true }
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+inotify = { workspace = true }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 libc = { workspace = true }

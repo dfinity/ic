@@ -1,5 +1,5 @@
 {
-  "checksum": "7f96e5c133c203870fc997d52e080f72044bd53f1530c5332ba2230232e22d68",
+  "checksum": "83af1c004c066c78c1b17ad2f185607d1f4f8b6c4f2eb1122ecfa3e2e6272cc2",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22654,6 +22654,10 @@
               "target": "inferno"
             },
             {
+              "id": "inotify 0.11.2",
+              "target": "inotify"
+            },
+            {
               "id": "insta 1.31.0",
               "target": "insta"
             },
@@ -26253,7 +26257,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.52.0",
+                "id": "windows-sys 0.59.0",
                 "target": "windows_sys"
               }
             ]
@@ -41573,6 +41577,124 @@
       "license": "CDDL-1.0",
       "license_ids": [
         "CDDL-1.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "inotify 0.11.2": {
+      "name": "inotify",
+      "version": "0.11.2",
+      "package_url": "https://github.com/hannobraun/inotify-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/inotify/0.11.2/download",
+          "sha256": "533e68a5842e734946fe159fb03fc9bbbb254f590dd0d8ad321ae5ff7beca2c1"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "inotify",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "inotify",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "futures-util",
+            "stream",
+            "tokio"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.10.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "futures-util 0.3.31",
+              "target": "futures_util"
+            },
+            {
+              "id": "inotify-sys 0.1.5",
+              "target": "inotify_sys"
+            },
+            {
+              "id": "libc 0.2.186",
+              "target": "libc"
+            },
+            {
+              "id": "tokio 1.48.0",
+              "target": "tokio"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.11.2"
+      },
+      "license": "ISC",
+      "license_ids": [
+        "ISC"
+      ],
+      "license_file": "LICENSE"
+    },
+    "inotify-sys 0.1.5": {
+      "name": "inotify-sys",
+      "version": "0.1.5",
+      "package_url": "https://github.com/hannobraun/inotify-sys",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/inotify-sys/0.1.5/download",
+          "sha256": "e05c02b5e89bff3b946cedeca278abc628fe811e604f027c45a8aa3cf793d0eb"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "inotify_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "inotify_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "libc 0.2.186",
+              "target": "libc"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.1.5"
+      },
+      "license": "ISC",
+      "license_ids": [
+        "ISC"
       ],
       "license_file": "LICENSE"
     },
@@ -70340,7 +70462,7 @@
                 "alias": "libc_errno"
               },
               {
-                "id": "windows-sys 0.52.0",
+                "id": "windows-sys 0.59.0",
                 "target": "windows_sys"
               }
             ],
@@ -101446,6 +101568,7 @@
     "indicatif 0.17.5",
     "indoc 1.0.9",
     "inferno 0.12.0",
+    "inotify 0.11.2",
     "insta 1.31.0",
     "instant-acme 0.7.2",
     "intmap 1.1.0",

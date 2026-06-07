@@ -286,8 +286,9 @@ def system_test(
     # The local backend runs in a sandbox without external network access, so it
     # has no Vector VM to ship logs to ElasticSearch (--no-logs). Instead, stream
     # the journald logs of all IC nodes directly to the test log
-    # (--stream-ic-node-logs).
-    local_args = ([] if "--no-logs" in extra_args_simple else ["--no-logs"]) + ["--stream-ic-node-logs"]
+    # (--stream-ic-node-logs) and tail each VM's serial console
+    # (--stream-console-logs).
+    local_args = ([] if "--no-logs" in extra_args_simple else ["--no-logs"]) + ["--stream-ic-node-logs", "--stream-console-logs"]
 
     reserve_cpus = [] if cpus == None else ["cpu:{}".format(cpus)]
 
