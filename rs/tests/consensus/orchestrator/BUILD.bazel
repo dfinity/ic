@@ -88,6 +88,13 @@ system_test_nns(
 
 system_test(
     name = "cup_compatibility_test",
+    # TODO: support this test on the local backend (drop `backend = "farm"`).
+    # The test downloads the mainnet `types-test` tool from:
+    # https://download.dfinity.systems/ic/{hash}/release/types-test.gz
+    # which requires external network access which is only available on the farm backend.
+    # Provide this dependency as a bazel dependency. Also see the same TODO in:
+    # rs/tests/consensus/orchestrator/cup_compatibility_test.rs.
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS,  # Empty setup (|_| ()), no VMs deployed.
     env = MAINNET_ENV,
     runtime_deps = {
