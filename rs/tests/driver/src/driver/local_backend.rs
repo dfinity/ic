@@ -936,24 +936,39 @@ impl LocalBackend {
         let vm_dir = self.vm_dir(vm_name);
         std::fs::create_dir_all(&vm_dir)?;
         let primary_disk = vm_dir.join("primary.img");
-        let local_src = match &primary_image {
-            DiskImage::Local { path, .. } => path.clone(),
-            DiskImage::Url { .. } => {
-                bail!(
-                    "LocalBackend cannot fetch URL-based primary image for {vm_name}; \
-                     a `DiskImage::Local` was expected. \
-                     Did the bazel `system_test` macro set `local = True`?"
-                );
+        // Only materialize the primary disk on first boot. On a subsequent
+        // `start_vm` — e.g. a test that stopped the VM via `vm().kill()`
+        // (`destroy_vm`) and restarted it via `vm().start()` — the extracted
+        // `primary.img` already exists and holds the node's persisted disk
+        // state: its data partition (crypto keys, registry local store,
+        // replicated/consensus state) and, crucially for upgrade tests, any
+        // GuestOS upgrade written to the previously-inactive root partition.
+        // Re-extracting the pristine image here would wipe all of that, so the
+        // node would come back as if freshly provisioned and never rejoin the
+        // subnet or become healthy again. Reuse the existing disk instead,
+        // mirroring how a real VM reboot preserves its disks.
+        if !primary_disk.exists() {
+            let local_src = match &primary_image {
+                DiskImage::Local { path, .. } => path.clone(),
+                DiskImage::Url { .. } => {
+                    bail!(
+                        "LocalBackend cannot fetch URL-based primary image for {vm_name}; \
+                         a `DiskImage::Local` was expected. \
+                         Did the bazel `system_test` macro set `local = True`?"
+                    );
+                }
+            };
+            extract_image(&local_src, &primary_disk, &self.logger)?;
+            std::fs::set_permissions(&primary_disk, std::fs::Permissions::from_mode(0o600))?;
+            if let Some(min_gib) = min_gib {
+                let _ = Command::new("truncate")
+                    .arg(format!("--size=>{min_gib}G"))
+                    .arg(&primary_disk)
+                    .status()
+                    .with_context(|| {
+                        format!("truncating {} to {min_gib}G", primary_disk.display())
+                    })?;
             }
-        };
-        extract_image(&local_src, &primary_disk, &self.logger)?;
-        std::fs::set_permissions(&primary_disk, std::fs::Permissions::from_mode(0o600))?;
-        if let Some(min_gib) = min_gib {
-            let _ = Command::new("truncate")
-                .arg(format!("--size=>{min_gib}G"))
-                .arg(&primary_disk)
-                .status()
-                .with_context(|| format!("truncating {} to {min_gib}G", primary_disk.display()))?;
         }
 
         let mac = vm_mac(group_name, vm_name);
