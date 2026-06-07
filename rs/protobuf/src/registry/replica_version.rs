@@ -5,7 +5,7 @@ pub mod v1;
 /// Length of SEV-SNP launch measurements in bytes.
 ///
 /// SEV-SNP (Secure Encrypted Virtualization - Secure Nested Paging) is an AMD
-/// technology that that protects a virtual machine's memory from being read
+/// technology that protects a virtual machine's memory from being read
 /// and/or modified by the host.
 ///
 /// A "launch measurement" is a cryptographic hash (48 bytes) of how the VM was

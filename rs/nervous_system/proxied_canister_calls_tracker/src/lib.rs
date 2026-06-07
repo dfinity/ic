@@ -279,7 +279,7 @@ struct CanisterCallArgsMetadata {
     // These could overlap.
     head: Vec<u8>,
     tail: Vec<u8>,
-    // We could also add hash, but it seems pretty unlikely that that would be
+    // We could also add hash, but it seems pretty unlikely that would be
     // useful.
     //
     // Another thing we could potentially put here: is_candid_deserializable.

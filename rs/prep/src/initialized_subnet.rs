@@ -55,7 +55,7 @@ impl InitializedSubnet {
         // Since this tool heavily mixes data handling and data persistence
         // we pass this argument here to ensure no subnet record is written
         // if instructed. Thus, if this is false, the function writes only
-        // the the node records.
+        // the node records.
         generate_subnet_records: bool,
     ) -> Result<(), InitializeSubnetError> {
         let subnet_id = self.subnet_id;

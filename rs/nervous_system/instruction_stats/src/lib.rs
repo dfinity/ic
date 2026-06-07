@@ -1,4 +1,4 @@
-//! Important limitation: This only only works within update methods, not query.
+//! Important limitation: This only works within update methods, not query.
 //! This is because canisters (in particular, their heap) are not changed by
 //! queries. This is a fundamental platform limitation, not just a limitation in
 //! the implementation of this library.
