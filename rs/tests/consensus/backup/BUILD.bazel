@@ -50,6 +50,14 @@ rust_binary(
 
 system_test_nns(
     name = "backup_manager_upgrade_test",
+    # TODO: support this test on the local backend (drop `backend = "farm"`).
+    # The mainnet GuestOS images are served correctly by the local backend's file
+    # server, but the subnet upgrade that this test relies on does not complete
+    # within the test's deadline on the local backend (the faulty node never picks
+    # up the new version; see the comment on
+    # //rs/tests/consensus/upgrade:upgrade_downgrade_app_subnet_test). Making this
+    # pass on the local backend needs the upgrade to reliably complete there first.
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM,  # 4 IC Node VMs * 6 vCPUs.
     guestos = "mainnet_nns",
     guestos_update = True,
@@ -66,6 +74,11 @@ system_test_nns(
 
 system_test_nns(
     name = "backup_manager_downgrade_test",
+    # TODO: support this test on the local backend (drop `backend = "farm"`).
+    # See the comment on `backup_manager_upgrade_test`: the subnet upgrade that
+    # this test relies on does not complete within the test's deadline on the
+    # local backend.
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM,  # 4 IC Node VMs * 6 vCPUs.
     guestos_update = "mainnet_nns",
     tags = [

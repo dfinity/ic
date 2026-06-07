@@ -50,6 +50,16 @@ rust_binary(
 
 system_test_nns(
     name = "upgrade_downgrade_app_subnet_test",
+    # TODO: support this test on the local backend (drop `backend = "farm"`).
+    # The mainnet GuestOS images are served correctly by the local backend's file
+    # server, but the subnet upgrade does not complete within the test's deadline:
+    # after a node is stopped and the upgrade is proposed, the (small) subnet does
+    # not make enough consensus progress under the chain-key workload to finalize
+    # the upgrade CUP, so the faulty node never picks up the new version and the
+    # test fails with `Replica was running the old version only!`
+    # (rs/tests/consensus/utils/src/upgrade.rs). Making this pass on the local
+    # backend needs the upgrade to reliably complete there first.
+    backend = "farm",
     colocated_test_driver_vm_resources = {
         "vcpus": 24,
     },
@@ -68,6 +78,10 @@ system_test_nns(
 
 system_test_nns(
     name = "upgrade_downgrade_old_app_subnet_test",
+    # TODO: support this test on the local backend (drop `backend = "farm"`).
+    # See the comment on `upgrade_downgrade_app_subnet_test`: the subnet upgrade
+    # does not complete within the test's deadline on the local backend.
+    backend = "farm",
     colocated_test_driver_vm_resources = {
         "vcpus": 24,
     },
@@ -120,6 +134,10 @@ system_test_nns(
 
 system_test_nns(
     name = "upgrade_downgrade_old_nns_subnet_test",
+    # TODO: support this test on the local backend (drop `backend = "farm"`).
+    # See the comment on `upgrade_downgrade_app_subnet_test`: the subnet upgrade
+    # does not complete within the test's deadline on the local backend.
+    backend = "farm",
     colocated_test_driver_vm_resources = {
         "vcpus": 24,
     },
