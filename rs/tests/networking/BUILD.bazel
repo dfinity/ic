@@ -127,6 +127,18 @@ system_test_nns(
 # NOTE: This test is currently non-functional because API boundary nodes running GuestOS on Farm VMs do not support IPv4.
 system_test_nns(
     name = "canister_http_socks_test",
+    # TODO: support this test on the local backend (drop `backend = "farm"`).
+    # The test makes a canister HTTP outcall to a `nip.io` hostname (which encodes
+    # the httpbin UVM's IPv6 address), but the IC nodes' canister-http adapter
+    # cannot resolve `nip.io` on the local backend because the nodes have no
+    # external network/DNS access:
+    #
+    #   Http request failed response: Err((SysTransient, "Connecting to
+    #   <ipv6>.ipv6.nip.io failed: ... dns error ..."))
+    #
+    # Supporting this locally needs the nip.io-style hostname to be resolvable by
+    # the nodes (e.g. via a local DNS resolver).
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 7 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 7 IC Node VMs (1 system + 4 app + 2 API BN) + 1 UVM (httpbin), 6 vCPUs each.
     tags = [
         "dynamic_testnet",
