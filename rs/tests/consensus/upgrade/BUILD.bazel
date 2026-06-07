@@ -116,6 +116,18 @@ rust_binary(
 
 system_test_nns(
     name = "upgrade_downgrade_nns_subnet_test",
+    # TODO: support this test on the local backend (drop `backend = "farm"`).
+    # The infrastructure works (mainnet GuestOS images are served and the
+    # KVM-accelerated VMs boot), and the test now runs the full upgrade flow, but it
+    # is flaky on the local backend: during the subnet upgrade each remaining node
+    # reboots into the new GuestOS, and the guest-initiated reboot occasionally fails
+    # to bring a VM back online. With the faulty node stopped the subnet has only the
+    # 2f+1 minimum of nodes, so a single node that does not come back stalls consensus
+    # and the upgrade never completes within the test's deadline, failing with
+    # `Replica did reboot, but never came back online!`
+    # (rs/tests/consensus/utils/src/upgrade.rs). Making this pass on the local backend
+    # needs the guest-initiated reboot to reliably restart the VM there first.
+    backend = "farm",
     colocated_test_driver_vm_resources = {
         "vcpus": 24,
     },
