@@ -8,7 +8,9 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
-use ic_test_utilities::universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
+use ic_test_utilities::universal_canister::{
+    CallArgs, UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM, wasm,
+};
 use ic_test_utilities_execution_environment::{
     ExecutionTestBuilder, check_ingress_status, get_reply,
 };
@@ -327,10 +329,12 @@ fn failed_create_canister_does_not_reuse_canister_id() {
 
 #[test]
 fn minimum_msg_cycles_available_in_canister_status() {
-    let env = StateMachine::new();
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
 
     // Default value is 0 when no setting is provided.
-    let canister_id = env.create_canister(None);
+    let canister_id = env.create_canister_with_cycles(None, Cycles::new(100_000_000_000_000), None);
     let settings = env
         .canister_status(canister_id)
         .unwrap()
@@ -343,7 +347,7 @@ fn minimum_msg_cycles_available_in_canister_status() {
     let bytes = get_reply(
         env.create_canister_with_cycles_impl(
             None,
-            Cycles::zero(),
+            Cycles::new(100_000_000_000_000),
             Some(
                 CanisterSettingsArgsBuilder::new()
                     .with_minimum_msg_cycles_available(min_cycles)
@@ -377,10 +381,14 @@ fn minimum_msg_cycles_available_in_canister_status() {
 }
 
 fn setup_two_canisters(min_cycles: u128) -> (StateMachine, CanisterId, CanisterId) {
-    let env = StateMachine::new();
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    // Use no-heartbeat WASM for the callee so that heartbeat charges don't
+    // interfere with cycle-balance assertions in tests.
     let callee_id = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
             vec![],
             None,
             Cycles::new(100_000_000_000_000),
