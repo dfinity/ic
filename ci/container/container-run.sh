@@ -328,4 +328,4 @@ set -x
 # runtime and cannot be baked into the image.
 BOOTSTRAP='/ic/ci/container/setup-local-system-test-backend.sh && exec "$@"'
 exec "${CONTAINER_CMD[@]}" run "${RUNTIME_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" \
-  /usr/bin/bash -c "$BOOTSTRAP" bootstrap "${cmd[@]}"
+    /usr/bin/bash -c "$BOOTSTRAP" bootstrap "${cmd[@]}"
