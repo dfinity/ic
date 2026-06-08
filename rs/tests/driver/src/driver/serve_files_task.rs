@@ -37,13 +37,14 @@ use crate::driver::{
 use axum::{
     Router,
     body::Body,
-    extract::{Path, State},
+    extract::{ConnectInfo, Path, State},
     http::{StatusCode, header},
     response::{IntoResponse, Response},
     routing::get,
 };
 use slog::{Logger, debug, info, warn};
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -125,9 +126,12 @@ pub(crate) fn serve_files_task(group_ctx: GroupContext) {
             }
         };
         info!(logger, "{SERVE_FILES_TASK_NAME}: listening on {addr}");
-        axum::serve(listener, app)
-            .await
-            .unwrap_or_else(|err| panic!("{SERVE_FILES_TASK_NAME}: server error: {err}"));
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .unwrap_or_else(|err| panic!("{SERVE_FILES_TASK_NAME}: server error: {err}"));
     });
 }
 
@@ -190,9 +194,20 @@ fn collect_served_files(logger: &Logger) -> HashMap<String, PathBuf> {
 /// offset, the appended full body produces a hash mismatch, after which the
 /// downloader deletes the file and restarts from offset 0 — so the download
 /// still converges to the correct file.
-async fn serve_file(State(state): State<Arc<ServerState>>, Path(sha256): Path<String>) -> Response {
+async fn serve_file(
+    State(state): State<Arc<ServerState>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Path(sha256): Path<String>,
+) -> Response {
+    info!(
+        state.logger,
+        "{SERVE_FILES_TASK_NAME}: {peer} requested '{sha256}'"
+    );
     let Some(path) = state.files.get(&sha256) else {
-        warn!(state.logger, "{SERVE_FILES_TASK_NAME}: 404 for '{sha256}'");
+        warn!(
+            state.logger,
+            "{SERVE_FILES_TASK_NAME}: 404 for '{sha256}' (requested by {peer})"
+        );
         return (StatusCode::NOT_FOUND, "no such image\n").into_response();
     };
 
@@ -220,6 +235,11 @@ async fn serve_file(State(state): State<Arc<ServerState>>, Path(sha256): Path<St
     };
 
     let body = Body::from_stream(ReaderStream::new(file));
+    info!(
+        state.logger,
+        "{SERVE_FILES_TASK_NAME}: serving '{sha256}' ('{}') ({len} bytes) to {peer}",
+        path.display()
+    );
     Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, "application/octet-stream")
