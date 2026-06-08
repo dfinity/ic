@@ -3678,7 +3678,7 @@ fn test_delete_subnet() {
     pic.delete_subnet(subnet_id_2);
 
     // (3) Verify that ingress message to canister_2 fails after subnet deletion.
-    // The server rejects the message before execution (BadIngressMessage), which panics in the client.
+    // The server rejects the message with a 4xx HTTP status (BadIngressMessage), causing the client to panic.
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         pic.update_call(
             canister_2,
@@ -3692,7 +3692,7 @@ fn test_delete_subnet() {
         "ingress call to canister_2 should fail after subnet deletion"
     );
 
-    // (3) Verify that inter-canister call to canister_2 fails with DestinationInvalid (3).
+    // (4) Verify that inter-canister call to canister_2 fails with DestinationInvalid (3).
     let reply = pic
         .update_call(
             canister_1,
@@ -3739,18 +3739,24 @@ fn test_delete_subnet_state_dir() {
         .with_application_subnet()
         .build();
 
+    let subnet_dirs_count = || {
+        std::fs::read_dir(&state_dir_path)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_dir())
+            .count()
+    };
+
     let subnet_ids = pic.topology().get_app_subnets();
     assert_eq!(subnet_ids.len(), 2);
+    assert_eq!(subnet_dirs_count(), 2);
+
     pic.delete_subnet(subnet_ids[1]);
+    assert_eq!(pic.topology().get_app_subnets(), vec![subnet_ids[0]]);
 
     // Drop to flush state to disk.
     drop(pic);
 
     // After deletion, only the remaining subnet's state directory should exist.
-    let subnet_dirs: Vec<_> = std::fs::read_dir(&state_dir_path)
-        .unwrap()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().is_dir())
-        .collect();
-    assert_eq!(subnet_dirs.len(), 1);
+    assert_eq!(subnet_dirs_count(), 1);
 }

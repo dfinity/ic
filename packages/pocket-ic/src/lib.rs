@@ -1488,6 +1488,7 @@ impl PocketIc {
     }
 
     /// Returns the subnet ID of the canister if the canister exists.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string()))]
     pub fn get_subnet(&self, canister_id: CanisterId) -> Option<SubnetId> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.get_subnet(canister_id).await })
