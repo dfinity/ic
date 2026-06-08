@@ -1104,6 +1104,7 @@ pub enum CanisterHttpMethod {
     HEAD,
     PUT,
     DELETE,
+    PATCH,
 }
 
 #[derive(
