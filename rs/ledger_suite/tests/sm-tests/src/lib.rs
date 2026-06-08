@@ -4676,7 +4676,6 @@ pub mod archiving {
     use ic_ledger_canister_core::range_utils;
     use ic_ledger_suite_state_machine_helpers::{get_logs, icrc3_get_blocks};
     use ic_state_machine_tests::StateMachineBuilder;
-    use ic_types::NumInstructions;
     use ic_types::ingress::{IngressState, IngressStatus};
     use ic_types::messages::MessageId;
     use icp_ledger::{GetEncodedBlocksResult, QueryEncodedBlocksResponse};
