@@ -192,9 +192,6 @@ pub struct IDkgPayload {
 
 impl Hash for IDkgPayload {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        if !self.empty_signature_agreements_flag {
-            BTreeMap::<PseudoRandomId, CompletedSignature>::new().hash(state);
-        }
         // empty_signature_agreements_flag is ignored
         self.available_pre_signatures.hash(state);
         self.pre_signatures_in_creation.hash(state);
