@@ -171,7 +171,6 @@ async fn create_engine(args: CreateEngineArgs) -> Result<NewSubnet, String> {
         unit_delay_millis: 1000,
         canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Free),
         features: SubnetFeatures {
-            canister_sandboxing: false,
             http_requests: true,
             sev_enabled: Some(false),
         },

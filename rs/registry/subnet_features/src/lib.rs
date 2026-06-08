@@ -14,10 +14,6 @@ pub const DEFAULT_ECDSA_MAX_QUEUE_SIZE: u32 = 20;
 #[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 #[serde(default)]
 pub struct SubnetFeatures {
-    /// This feature flag controls whether canister execution happens
-    /// in sandboxed process or not. It is disabled by default.
-    pub canister_sandboxing: bool,
-
     /// This feature flag controls whether canisters of this subnet are capable of
     /// performing http(s) requests to the web2. It is enabled by default.
     /// TODO: The feature should be disabled only in special circumstances.
@@ -37,7 +33,6 @@ fn default_http_requests() -> bool {
 impl Default for SubnetFeatures {
     fn default() -> Self {
         Self {
-            canister_sandboxing: bool::default(),
             http_requests: default_http_requests(),
             sev_enabled: bool::default(),
         }
@@ -47,7 +42,6 @@ impl Default for SubnetFeatures {
 impl From<SubnetFeatures> for pb::SubnetFeatures {
     fn from(features: SubnetFeatures) -> pb::SubnetFeatures {
         Self {
-            canister_sandboxing: features.canister_sandboxing,
             http_requests: features.http_requests,
             sev_enabled: features.sev_enabled.then_some(true),
         }
@@ -57,7 +51,6 @@ impl From<SubnetFeatures> for pb::SubnetFeatures {
 impl From<pb::SubnetFeatures> for SubnetFeatures {
     fn from(features: pb::SubnetFeatures) -> SubnetFeatures {
         Self {
-            canister_sandboxing: features.canister_sandboxing,
             http_requests: features.http_requests,
             sev_enabled: features.sev_enabled.unwrap_or_default(),
         }
@@ -77,7 +70,6 @@ impl FromStr for SubnetFeatures {
 
         for feature in string.split(',') {
             match feature {
-                "canister_sandboxing" => features.canister_sandboxing = true,
                 "http_requests" => features.http_requests = true,
                 "sev_enabled" => features.sev_enabled = true,
                 _ => return Err(format!("Unknown feature {feature:?} in {string:?}")),
@@ -214,11 +206,11 @@ mod tests {
 
     #[test]
     fn test_double_entries_are_handled() {
-        let result = SubnetFeatures::from_str("canister_sandboxing,canister_sandboxing").unwrap();
+        let result = SubnetFeatures::from_str("http_requests,http_requests").unwrap();
         assert_eq!(
             result,
             SubnetFeatures {
-                canister_sandboxing: true,
+                http_requests: true,
                 ..SubnetFeatures::default()
             }
         );

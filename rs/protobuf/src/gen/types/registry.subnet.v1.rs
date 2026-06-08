@@ -365,10 +365,6 @@ pub struct ExtendedDerivationPath {
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct SubnetFeatures {
-    /// This feature flag controls whether canister execution happens
-    /// in sandboxed process or not. It is disabled by default.
-    #[prost(bool, tag = "2")]
-    pub canister_sandboxing: bool,
     /// This feature flag controls whether canisters of this subnet are capable of
     /// performing http(s) requests to the web2.
     #[prost(bool, tag = "3")]

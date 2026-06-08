@@ -237,7 +237,6 @@ impl ValidFulfillSubnetRentalRequest {
             // from an ic_limits constant, then, I most likely grabbed the value
             // seen here from an adopted create application subnet NNS proposal.
             features: SubnetFeatures {
-                canister_sandboxing: false,
                 http_requests: true,
                 sev_enabled: None,
             },

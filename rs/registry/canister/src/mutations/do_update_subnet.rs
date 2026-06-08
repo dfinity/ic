@@ -654,7 +654,6 @@ mod tests {
             halt_at_cup_height: Some(false),
             features: Some(
                 SubnetFeatures {
-                    canister_sandboxing: false,
                     http_requests: false,
                     sev_enabled: false,
                 }
@@ -705,7 +704,6 @@ mod tests {
                 halt_at_cup_height: false,
                 features: Some(
                     SubnetFeatures {
-                        canister_sandboxing: false,
                         http_requests: false,
                         sev_enabled: false,
                     }
@@ -1128,7 +1126,6 @@ mod tests {
             .expect("should contain at least one node ID");
         let mut subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
         subnet_record.features = Some(SubnetFeaturesPb {
-            canister_sandboxing: false,
             http_requests: false,
             sev_enabled: Some(true),
         });
@@ -1153,7 +1150,6 @@ mod tests {
 
         let mut payload = make_empty_update_payload(subnet_id);
         payload.features = Some(SubnetFeaturesPb {
-            canister_sandboxing: false,
             http_requests: false,
             sev_enabled: Some(true),
         });
@@ -1170,7 +1166,6 @@ mod tests {
 
         let mut payload = make_empty_update_payload(subnet_id);
         payload.features = Some(SubnetFeaturesPb {
-            canister_sandboxing: false,
             http_requests: false,
             sev_enabled: Some(false),
         });
@@ -1190,7 +1185,6 @@ mod tests {
 
         let mut payload = make_empty_update_payload(subnet_id);
         payload.features = Some(SubnetFeaturesPb {
-            canister_sandboxing: true,
             http_requests: true,
             sev_enabled: None,
         });
@@ -1205,7 +1199,6 @@ mod tests {
         // Update non-SEV features while explicitly preserving sev_enabled = true.
         let mut payload = make_empty_update_payload(subnet_id);
         payload.features = Some(SubnetFeaturesPb {
-            canister_sandboxing: true,
             http_requests: true,
             sev_enabled: Some(true),
         });
@@ -1217,7 +1210,6 @@ mod tests {
             .features
             .expect("subnet should have features set");
         assert_eq!(subnet_features.sev_enabled, Some(true));
-        assert!(subnet_features.canister_sandboxing);
         assert!(subnet_features.http_requests);
     }
 
@@ -1227,7 +1219,6 @@ mod tests {
 
         let mut payload = make_empty_update_payload(subnet_id);
         payload.features = Some(SubnetFeaturesPb {
-            canister_sandboxing: true,
             http_requests: true,
             sev_enabled: None,
         });
@@ -1251,7 +1242,6 @@ mod tests {
         {
             let mut payload = make_empty_update_payload(subnet_id);
             payload.features = Some(SubnetFeaturesPb {
-                canister_sandboxing: true,
                 http_requests: true,
                 sev_enabled: None,
             });

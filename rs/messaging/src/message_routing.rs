@@ -877,14 +877,9 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .set(network_topology.routing_table().ranges(own_subnet_id).len() as i64);
         // Please export any new features via the `subnet_features` metric below.
         let SubnetFeatures {
-            canister_sandboxing,
             http_requests,
             sev_enabled,
         } = &subnet_features;
-        self.metrics
-            .subnet_features
-            .with_label_values(&["canister_sandboxing"])
-            .set(*canister_sandboxing as i64);
         self.metrics
             .subnet_features
             .with_label_values(&["http_requests"])
