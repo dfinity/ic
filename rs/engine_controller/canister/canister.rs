@@ -123,7 +123,7 @@ fn ensure_authorized() -> Result<Principal, String> {
 }
 
 #[update]
-async fn create_engine(args: CreateEngineArgs) -> Result<(), String> {
+async fn create_engine(args: CreateEngineArgs) -> Result<NewSubnet, String> {
     let caller = ensure_authorized()?;
 
     // Validate node list.
@@ -186,7 +186,7 @@ async fn create_engine(args: CreateEngineArgs) -> Result<(), String> {
             .candid()
             .map_err(|e| format!("Failed to decode registry response: {e}"))?;
 
-    response.map(|_new_subnet| ())
+    response
 }
 
 #[update]

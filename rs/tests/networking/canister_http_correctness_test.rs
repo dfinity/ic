@@ -128,6 +128,7 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_put_without_non_replicated_rejected))
                 .add_test(systest!(test_delete_call))
                 .add_test(systest!(test_delete_without_non_replicated_rejected))
+                .add_test(systest!(test_patch_rejected))
                 .add_test(systest!(test_max_possible_request_size))
                 .add_test(systest!(test_max_possible_request_size_exceeded))
                 // This section tests the request headers limits scenarios
@@ -1953,6 +1954,45 @@ fn test_delete_without_non_replicated_rejected(env: TestEnv) {
     });
 }
 
+// PATCH is plumbed through the types but not yet enabled on replicated subnets:
+// the execution layer rejects it so no PATCH context enters the replicated
+// state until support has rolled out to all replicas. This holds even for a
+// non-replicated request.
+fn test_patch_rejected(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let url = format!("https://[{webserver_ipv6}]/anything");
+    let body = Some("patch_request_body".as_bytes().to_vec());
+    let headers = vec![HttpHeader {
+        name: "name1".to_string(),
+        value: "value1".to_string(),
+    }];
+
+    let request = UnvalidatedCanisterHttpRequestArgs {
+        url,
+        headers,
+        method: HttpMethod::PATCH,
+        body,
+        transform: None,
+        max_response_bytes: None,
+        is_replicated: Some(false),
+        pricing_version: None,
+    };
+
+    let (response, _) = block_on(submit_outcall(
+        &handlers,
+        RemoteHttpRequest {
+            request: request.clone(),
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
+        },
+    ));
+
+    assert_matches!(response, Err(RejectResponse { reject_message, .. }) => {
+        assert!(reject_message.contains("PATCH HTTP method is not yet supported"));
+    });
+}
+
 fn test_only_headers_with_custom_max_response_bytes(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
@@ -2529,6 +2569,7 @@ fn assert_http_json_response(
         HttpMethod::HEAD => "HEAD",
         HttpMethod::PUT => "PUT",
         HttpMethod::DELETE => "DELETE",
+        HttpMethod::PATCH => "PATCH",
     };
 
     assert_eq!(
