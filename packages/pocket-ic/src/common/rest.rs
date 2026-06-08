@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
 pub type InstanceId = usize;
@@ -482,6 +483,23 @@ pub enum SubnetKind {
     VerifiedApplication,
 }
 
+impl SubnetKind {
+    pub fn is_named(self) -> bool {
+        match self {
+            SubnetKind::NNS
+            | SubnetKind::SNS
+            | SubnetKind::II
+            | SubnetKind::Fiduciary
+            | SubnetKind::Bitcoin
+            | SubnetKind::TestThresholdKeys => true,
+            SubnetKind::Application
+            | SubnetKind::CloudEngine
+            | SubnetKind::System
+            | SubnetKind::VerifiedApplication => false,
+        }
+    }
+}
+
 /// This represents which named subnets the user wants to create, and how
 /// many of the general app/system subnets, which are indistinguishable.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
@@ -805,25 +823,36 @@ impl SubnetStateConfig {
 }
 
 impl ExtendedSubnetConfigSet {
+    fn named_subnet_spec(&self, kind: SubnetKind) -> Option<SubnetSpec> {
+        match kind {
+            SubnetKind::NNS => self.nns.clone(),
+            SubnetKind::SNS => self.sns.clone(),
+            SubnetKind::II => self.ii.clone(),
+            SubnetKind::Fiduciary => self.fiduciary.clone(),
+            SubnetKind::Bitcoin => self.bitcoin.clone(),
+            SubnetKind::TestThresholdKeys => self.test_threshold_keys.clone(),
+            SubnetKind::Application
+            | SubnetKind::CloudEngine
+            | SubnetKind::System
+            | SubnetKind::VerifiedApplication => {
+                panic!(
+                    "named_subnet_spec called with non-named subnet kind {:?}",
+                    kind
+                )
+            }
+        }
+    }
+
     // Return the configured named subnets in order.
     #[allow(clippy::type_complexity)]
     pub fn get_named(&self) -> Vec<(SubnetKind, Option<PathBuf>, SubnetInstructionConfig)> {
-        use SubnetKind::*;
-        vec![
-            (self.nns.clone(), NNS),
-            (self.sns.clone(), SNS),
-            (self.ii.clone(), II),
-            (self.fiduciary.clone(), Fiduciary),
-            (self.bitcoin.clone(), Bitcoin),
-            (self.test_threshold_keys.clone(), TestThresholdKeys),
-        ]
-        .into_iter()
-        .filter(|(mb, _)| mb.is_some())
-        .map(|(mb, kind)| {
-            let spec = mb.unwrap();
-            (kind, spec.get_state_path(), spec.get_instruction_config())
-        })
-        .collect()
+        SubnetKind::iter()
+            .filter(|kind| kind.is_named())
+            .filter_map(|kind| {
+                self.named_subnet_spec(kind)
+                    .map(|spec| (kind, spec.get_state_path(), spec.get_instruction_config()))
+            })
+            .collect()
     }
 
     pub fn validate(&self) -> Result<(), String> {

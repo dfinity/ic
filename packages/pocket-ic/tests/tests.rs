@@ -3631,3 +3631,126 @@ fn cloud_engine_default_effective_canister_id() {
         topology.default_effective_canister_id.clone().into();
     assert_eq!(effective_canister_id, default_effective_canister_id);
 }
+
+#[test]
+fn test_delete_subnet() {
+    // Create a PocketIC instance with two application subnets.
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_application_subnet()
+        .build();
+
+    let subnet_id_1 = pic.topology().get_app_subnets()[0];
+    let subnet_id_2 = pic.topology().get_app_subnets()[1];
+    assert_ne!(subnet_id_1, subnet_id_2);
+
+    // Deploy test canisters on both subnets.
+    let canister_1 = pic.create_canister_on_subnet(None, None, subnet_id_1);
+    pic.add_cycles(canister_1, INIT_CYCLES);
+    pic.install_canister(canister_1, test_canister_wasm(), vec![], None);
+
+    let canister_2 = pic.create_canister_on_subnet(None, None, subnet_id_2);
+    pic.add_cycles(canister_2, INIT_CYCLES);
+    pic.install_canister(canister_2, test_canister_wasm(), vec![], None);
+
+    // (1) Verify that ingress message and inter-canister call to canister_2 work.
+    let reply = pic
+        .update_call(
+            canister_2,
+            Principal::anonymous(),
+            "whoami",
+            encode_one(()).unwrap(),
+        )
+        .expect("ingress call to canister_2 failed before subnet deletion");
+    assert_eq!(Decode!(&reply, String).unwrap(), canister_2.to_string());
+
+    let reply = pic
+        .update_call(
+            canister_1,
+            Principal::anonymous(),
+            "call_and_get_rejection_code",
+            Encode!(&canister_2).unwrap(),
+        )
+        .expect("inter-canister call via canister_1 failed before subnet deletion");
+    assert_eq!(Decode!(&reply, u32).unwrap(), 0);
+
+    // (2) Delete subnet_2.
+    pic.delete_subnet(subnet_id_2);
+
+    // (3) Verify that ingress message to canister_2 fails after subnet deletion.
+    // The server rejects the message before execution (BadIngressMessage), which panics in the client.
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        pic.update_call(
+            canister_2,
+            Principal::anonymous(),
+            "whoami",
+            encode_one(()).unwrap(),
+        )
+    }));
+    assert!(
+        result.is_err(),
+        "ingress call to canister_2 should fail after subnet deletion"
+    );
+
+    // (3) Verify that inter-canister call to canister_2 fails with DestinationInvalid (3).
+    let reply = pic
+        .update_call(
+            canister_1,
+            Principal::anonymous(),
+            "call_and_get_rejection_code",
+            Encode!(&canister_2).unwrap(),
+        )
+        .expect("inter-canister call via canister_1 should succeed");
+    assert_eq!(
+        Decode!(&reply, u32).unwrap(),
+        RejectCode::DestinationInvalid as u32
+    );
+}
+
+#[test]
+fn test_delete_named_subnet_fails() {
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_fiduciary_subnet()
+        .build();
+
+    let nns_subnet_id = pic.topology().get_nns().unwrap();
+    let fiduciary_subnet_id = pic.topology().get_fiduciary().unwrap();
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        pic.delete_subnet(nns_subnet_id);
+    }));
+    assert!(result.is_err(), "deleting NNS subnet should fail");
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        pic.delete_subnet(fiduciary_subnet_id);
+    }));
+    assert!(result.is_err(), "deleting fiduciary subnet should fail");
+}
+
+#[test]
+fn test_delete_subnet_state_dir() {
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path = state_dir.path().to_path_buf();
+
+    let pic = PocketIcBuilder::new()
+        .with_state_dir(state_dir_path.clone())
+        .with_application_subnet()
+        .with_application_subnet()
+        .build();
+
+    let subnet_ids = pic.topology().get_app_subnets();
+    assert_eq!(subnet_ids.len(), 2);
+    pic.delete_subnet(subnet_ids[1]);
+
+    // Drop to flush state to disk.
+    drop(pic);
+
+    // After deletion, only the remaining subnet's state directory should exist.
+    let subnet_dirs: Vec<_> = std::fs::read_dir(&state_dir_path)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().is_dir())
+        .collect();
+    assert_eq!(subnet_dirs.len(), 1);
+}

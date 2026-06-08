@@ -1480,8 +1480,14 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.canister_exists(canister_id).await })
     }
 
+    /// Deletes a subnet. Panics if the subnet does not exist or is a named subnet.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, subnet_id = %subnet_id.to_string()))]
+    pub fn delete_subnet(&self, subnet_id: SubnetId) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.delete_subnet(subnet_id).await })
+    }
+
     /// Returns the subnet ID of the canister if the canister exists.
-    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string()))]
     pub fn get_subnet(&self, canister_id: CanisterId) -> Option<SubnetId> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.get_subnet(canister_id).await })
