@@ -12,7 +12,7 @@ use ic_types::{
         CanisterHttpResponseShare, CanisterHttpResponseSignature,
         CanisterHttpResponseWithConsensus,
     },
-    crypto::{AlgorithmId, BasicSigOf, CryptoError, Signed, crypto_hash},
+    crypto::{BasicSigOf, Signed, crypto_hash},
     messages::CallbackId,
     signature::BasicSignature,
 };
@@ -85,14 +85,10 @@ pub(crate) fn check_refund_allowance(
     per_replica_allowance: Cycles,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
     if receipt.refund > per_replica_allowance {
-        return Err(InvalidCanisterHttpPayloadReason::SignatureError(Box::new(
-            CryptoError::MalformedSignature {
-                algorithm: AlgorithmId::Ed25519,
-                sig_bytes: vec![],
-                internal_error: "Refund in payment receipt exceeds per-replica allowance"
-                    .to_string(),
-            },
-        )));
+        return Err(InvalidCanisterHttpPayloadReason::RefundExceedsAllowance {
+            refund: receipt.refund,
+            per_replica_allowance,
+        });
     }
     Ok(())
 }

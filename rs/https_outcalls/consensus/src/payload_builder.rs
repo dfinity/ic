@@ -302,8 +302,7 @@ impl CanisterHttpPayloadBuilderImpl {
                             &*pool_access,
                         ) {
                             let candidate_size = response.count_bytes();
-                            let size =
-                                NumBytes::new((accumulated_size + response.count_bytes()) as u64);
+                            let size = NumBytes::new((accumulated_size + candidate_size) as u64);
                             if size < max_payload_size {
                                 responses.push(response);
                                 responses_included += 1;

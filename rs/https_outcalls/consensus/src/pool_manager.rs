@@ -486,7 +486,7 @@ impl CanisterHttpPoolManagerImpl {
                 let share = &artifact.share;
 
                 if existing_signed_requests.contains(&key_from_share(share)) {
-                    return match is_current_protocol_version(&share.content.replica_version()) {
+                    return match is_current_protocol_version(share.content.replica_version()) {
                         true => Some(CanisterHttpChangeAction::HandleInvalid(
                             share.clone(),
                             "Redundant share".into(),

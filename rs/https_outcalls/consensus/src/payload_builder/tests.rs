@@ -58,6 +58,7 @@ use ic_types::{
     signature::BasicSignature,
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::Cycles;
 use rand::Rng;
 use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
 use std::{
@@ -1063,6 +1064,58 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
         );
 
         assert!(validation_result.is_ok());
+    });
+}
+
+#[test]
+fn validate_payload_fails_for_refund_exceeding_allowance() {
+    test_config_with_http_feature(true, 4, |mut payload_builder, _| {
+        let delegated_node_id = node_test_id(1);
+        let callback_id = CallbackId::from(99);
+
+        // The helper uses the default `RefundStatus`, which has a zero
+        // per-replica allowance, so any positive refund claim is over the
+        // allowance.
+        let request_context = request_context(Replication::NonReplicated(delegated_node_id));
+        inject_request_contexts(&mut payload_builder, [(callback_id, request_context)]);
+
+        let (response, metadata) = test_response_and_metadata(callback_id.get());
+        let mut proof = response_and_metadata_to_proof(&response, &metadata);
+        // The delegated signer claims a refund of 1 cycle, exceeding the zero
+        // per-replica allowance.
+        let refund = Cycles::new(1);
+        proof.proof.signatures.insert(
+            delegated_node_id,
+            CanisterHttpResponseSignature {
+                payment_receipt: CanisterHttpPaymentReceipt { refund },
+                signature: BasicSigOf::new(BasicSig(vec![])),
+            },
+        );
+
+        let payload = CanisterHttpPayload {
+            responses: vec![proof],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+
+        let validation_result = payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+
+        assert_matches!(
+            validation_result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::RefundExceedsAllowance {
+                        refund: r,
+                        per_replica_allowance,
+                    },
+                ),
+            )) if r == refund && per_replica_allowance == Cycles::new(0)
+        );
     });
 }
 
