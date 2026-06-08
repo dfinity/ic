@@ -1,5 +1,4 @@
 use CanisterHttpResponseContent::Reject;
-use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::canister_http::{CanisterHttpPool, InvalidCanisterHttpPayloadReason};
 use ic_types::{
     CountBytes, NodeId, NumBytes, RegistryVersion,
@@ -8,13 +7,16 @@ use ic_types::{
         FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
     },
     canister_http::{
-        CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
-        CanisterHttpResponseProof, CanisterHttpResponseReceiptShare, CanisterHttpResponseShare,
-        CanisterHttpResponseSignature, CanisterHttpResponseWithConsensus,
+        CanisterHttpPaymentReceipt, CanisterHttpResponse, CanisterHttpResponseContent,
+        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseReceiptShare,
+        CanisterHttpResponseShare, CanisterHttpResponseSignature,
+        CanisterHttpResponseWithConsensus,
     },
-    crypto::crypto_hash,
+    crypto::{AlgorithmId, BasicSigOf, CryptoError, Signed, crypto_hash},
     messages::CallbackId,
+    signature::BasicSignature,
 };
+use ic_types_cycles::Cycles;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     mem::size_of,
@@ -73,53 +75,82 @@ pub(crate) fn check_response_consistency(
     Ok(())
 }
 
-/// Verifies every per-signer basic signature in the aggregated proof.
-///
-/// Each signer signs its own [`CanisterHttpResponseReceiptShare`]: the
-/// shared [`CanisterHttpResponseMetadata`] combined with that signer's own
-/// [`CanisterHttpPaymentReceipt`]. Since the signed messages differ per
-/// signer, the whole batch is verified in one call with the multi-message
-/// batch verification, which is cheaper than verifying each signature
-/// individually.
-pub(crate) fn verify_aggregate_proof(
-    proof: &CanisterHttpResponseProof,
-    consensus_registry_version: RegistryVersion,
-    crypto: &dyn ConsensusCrypto,
+/// Enforces the per-replica refund allowance from the request context: the
+/// `refund` claimed in the payment receipt must never exceed the
+/// `per_replica_allowance` derived from the request's payment. This is checked
+/// for every payment receipt that enters the payload, regardless of which
+/// payload section carries it.
+pub(crate) fn check_refund_allowance(
+    receipt: &CanisterHttpPaymentReceipt,
+    per_replica_allowance: Cycles,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    // The reconstructed per-signer messages must outlive `inputs`, which
-    // only borrows them.
-    let messages: Vec<CanisterHttpResponseReceiptShare> = proof
-        .signatures
-        .values()
-        .map(|sig| CanisterHttpResponseReceiptShare {
-            metadata: proof.metadata.clone(),
-            payment_receipt: sig.payment_receipt.clone(),
-        })
-        .collect();
+    if receipt.refund > per_replica_allowance {
+        return Err(InvalidCanisterHttpPayloadReason::SignatureError(Box::new(
+            CryptoError::MalformedSignature {
+                algorithm: AlgorithmId::Ed25519,
+                sig_bytes: vec![],
+                internal_error: "Refund in payment receipt exceeds per-replica allowance"
+                    .to_string(),
+            },
+        )));
+    }
+    Ok(())
+}
 
-    let inputs: Vec<_> = proof
+/// Reconstructs, for every signer of an aggregated proof, the
+/// [`CanisterHttpResponseShare`] that signer actually signed: the shared
+/// [`CanisterHttpResponseMetadata`] combined with that signer's own
+/// [`CanisterHttpPaymentReceipt`], paired with that signer's basic signature.
+///
+/// Returning the reconstructed shares lets the caller batch-verify their
+/// signatures together with the flexible and divergence shares of the payload
+/// in a single multi-message verification call (via
+/// [`response_share_sig_inputs`]), rather than verifying each aggregated proof
+/// on its own.
+///
+/// Also enforces the per-replica refund allowance on each signer's payment
+/// receipt via [`check_refund_allowance`].
+///
+/// **NOTE**: The signatures are not verified here. Callers must batch-verify
+/// them via [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
+pub(crate) fn reconstruct_aggregate_proof_shares(
+    proof: &CanisterHttpResponseProof,
+    per_replica_allowance: Cycles,
+) -> Result<Vec<CanisterHttpResponseShare>, InvalidCanisterHttpPayloadReason> {
+    proof
         .signatures
         .iter()
-        .zip(messages.iter())
-        .map(|((signer, sig), message)| (*signer, &sig.signature, message))
-        .collect();
-
-    crypto
-        .verify_basic_sig_batch_multi_msg(&inputs, consensus_registry_version)
-        .map_err(|err| InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)))
+        .map(|(signer, sig)| {
+            check_refund_allowance(&sig.payment_receipt, per_replica_allowance)?;
+            Ok(Signed {
+                content: CanisterHttpResponseReceiptShare {
+                    metadata: proof.metadata.clone(),
+                    payment_receipt: sig.payment_receipt.clone(),
+                },
+                signature: BasicSignature {
+                    signature: sig.signature.clone(),
+                    signer: *signer,
+                },
+            })
+        })
+        .collect()
 }
 
 /// Validates a single [`FlexibleCanisterHttpResponseWithProof`].
 ///
 /// Checks callback-id consistency, share validity (using
 /// [`validate_response_share`]), content hash, and content size.
+///
+/// **NOTE**: The signature on the share is not verified. Callers are expected
+/// to batch-verify the signatures of all shares in the surrounding group via
+/// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
 pub(crate) fn validate_flexible_response_with_proof(
     response_with_proof: &FlexibleCanisterHttpResponseWithProof,
     callback_id: CallbackId,
     flex_committee: &BTreeSet<NodeId>,
     seen_signers: &mut HashSet<NodeId>,
     consensus_registry_version: RegistryVersion,
-    crypto: &dyn ConsensusCrypto,
+    per_replica_allowance: Cycles,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
     if response_with_proof.response.id != callback_id {
         return Err(
@@ -136,7 +167,7 @@ pub(crate) fn validate_flexible_response_with_proof(
         flex_committee,
         seen_signers,
         consensus_registry_version,
-        crypto,
+        per_replica_allowance,
     )?;
 
     let calculated_hash = crypto_hash(&response_with_proof.response);
@@ -166,18 +197,25 @@ pub(crate) fn validate_flexible_response_with_proof(
     Ok(())
 }
 
-/// Validates a single [`CanisterHttpResponseShare`] (metadata + signature).
+/// Validates a single [`CanisterHttpResponseShare`]'s metadata.
 ///
 /// Checks callback-id consistency, duplicate signers, committee membership,
-/// registry version, and performs signature verification.
+/// registry version, and the per-replica refund allowance (via
+/// [`check_refund_allowance`]).
+///
+/// **NOTE**: The signature is not verified. Callers are expected to
+/// batch-verify the signatures of all shares in the surrounding group via
+/// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
 pub(crate) fn validate_response_share(
     share: &CanisterHttpResponseShare,
     callback_id: CallbackId,
     flex_committee: &BTreeSet<NodeId>,
     seen_signers: &mut HashSet<NodeId>,
     consensus_registry_version: RegistryVersion,
-    crypto: &dyn ConsensusCrypto,
+    per_replica_allowance: Cycles,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
+    check_refund_allowance(&share.content.payment_receipt, per_replica_allowance)?;
+
     if share.content.id() != callback_id {
         return Err(
             InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch {
@@ -210,11 +248,32 @@ pub(crate) fn validate_response_share(
         });
     }
 
-    crypto
-        .verify(share, consensus_registry_version)
-        .map_err(|err| InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)))?;
-
     Ok(())
+}
+
+/// A single `(signer, signature, message)` input as consumed by
+/// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
+pub(crate) type ResponseShareSigInput<'a> = (
+    NodeId,
+    &'a BasicSigOf<CanisterHttpResponseReceiptShare>,
+    &'a CanisterHttpResponseReceiptShare,
+);
+
+/// Maps response shares to the `(signer, signature, message)` inputs consumed by
+/// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
+pub(crate) fn response_share_sig_inputs<'a, I>(
+    shares: I,
+) -> impl Iterator<Item = ResponseShareSigInput<'a>>
+where
+    I: IntoIterator<Item = &'a CanisterHttpResponseShare>,
+{
+    shares.into_iter().map(|share| {
+        (
+            share.signature.signer,
+            &share.signature.signature,
+            &share.content,
+        )
+    })
 }
 
 /// This function takes a mapping of response metadata to supporting shares

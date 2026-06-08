@@ -23,6 +23,7 @@ ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-utils = { path = "../../utils" }
 prometheus = { workspace = true }
 rand = { workspace = true }
@@ -30,7 +31,9 @@ slog = { workspace = true }
 
 [dev-dependencies]
 ic-artifact-pool = { path = "../../artifact_pool" }
+ic-config = { path = "../../config" }
 ic-consensus-mocks = { path = "../../consensus/mocks" }
+ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-interfaces-mocks = { path = "../../interfaces/mocks" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
@@ -42,9 +45,14 @@ ic-test-utilities-time = { path = "../../test_utilities/time" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types-cycles = { path = "../../types/cycles" }
 assert_matches = { workspace = true }
+criterion = { workspace = true }
 mockall = { workspace = true }
 proptest = { workspace = true }
 rand_chacha = { workspace = true }
 
 [features]
 proptest = []
+
+[[bench]]
+name = "payload_validation"
+harness = false

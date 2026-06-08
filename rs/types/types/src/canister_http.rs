@@ -534,15 +534,24 @@ impl CanisterHttpRequestContext {
             None => Ok(None),
         }?;
 
-        // Allow PUT and DELETE only in non-replicated mode to avoid confusing
-        // race conditions that may occur.
+        // PATCH is plumbed through the types but not yet enabled on replicated
+        // subnets: reject it here in the execution layer so that no PATCH
+        // `http_method` enters the replicated state until support has rolled
+        // out to all replicas (mirroring how PUT/DELETE were staged in #8715 /
+        // #8717). A follow-up PR enables it once the rollout is complete.
+        if matches!(args.method, HttpMethod::PATCH) {
+            return Err(CanisterHttpRequestContextError::HttpMethodNotYetSupported);
+        }
+
+        // Allow PUT and DELETE only in non-replicated mode to avoid
+        // confusing race conditions that may occur.
         // For example, if first a DELETE outcall for resource R is made,
-        // directly followed by a PUT or POST outcall for R, in replicated
-        // mode it may happen that R is actually deleted after the PUT/POST
-        // outcall has finished, because the IC does not necessarily wait for
-        // all outcalls to complete before a result is delivered back to the
-        // canister: The IC only waits for sufficient calls to complete to
-        // reach consensus on the result.
+        // directly followed by a PUT or POST outcall for R, in
+        // replicated mode it may happen that R is actually deleted after the
+        // PUT/POST outcall has finished, because the IC does not
+        // necessarily wait for all outcalls to complete before a result is
+        // delivered back to the canister: The IC only waits for sufficient
+        // calls to complete to reach consensus on the result.
         if matches!(args.method, HttpMethod::PUT | HttpMethod::DELETE)
             && args.is_replicated != Some(false)
         {
@@ -645,17 +654,21 @@ impl CanisterHttpRequestContext {
         debug_assert!(min_responses <= max_responses && max_responses <= total_requests);
         debug_assert!(1 <= total_requests && total_requests <= n);
 
-        // Allow PUT and DELETE only if the response behavior is deterministic,
-        // to avoid confusing race conditions that may occur.
+        // Allow PUT, DELETE, and PATCH only if the response behavior is
+        // deterministic, to avoid confusing race conditions that may occur.
         // For flexible outcalls this means all delegated requests must complete,
         // i.e. min_responses == max_responses == total_requests.
         // Otherwise, if first a DELETE outcall for resource R is made,
-        // directly followed by a PUT or POST outcall for R, in a mode where
-        // min_responses < total_requests, it may happen that R is actually
-        // deleted after the PUT/POST outcall has finished, because the IC does
-        // not necessarily wait for all outcalls to complete before a result is
-        // delivered back to the canister: The IC only waits for sufficient calls
-        // to complete to reach consensus on the result.
+        // directly followed by a PUT, PATCH, or POST outcall for R, in a mode
+        // where min_responses < total_requests, it may happen that R is actually
+        // deleted after the PUT/PATCH/POST outcall has finished, because the IC
+        // does not necessarily wait for all outcalls to complete before a result
+        // is delivered back to the canister: The IC only waits for sufficient
+        // calls to complete to reach consensus on the result.
+        // PATCH is not yet enabled on replicated subnets (see generate_from_args).
+        if matches!(args.method, HttpMethod::PATCH) {
+            return Err(CanisterHttpRequestContextError::HttpMethodNotYetSupported);
+        }
         if matches!(args.method, HttpMethod::PUT | HttpMethod::DELETE)
             && !(min_responses == max_responses && max_responses == total_requests)
         {
@@ -727,6 +740,10 @@ pub enum CanisterHttpRequestContextError {
     NoNodesAvailableForDelegation,
     DeterministicResponseCountRequired,
     InvalidReplicationCounts(String),
+    /// The requested HTTP method is plumbed through the types but not yet
+    /// enabled on replicated subnets (currently PATCH); rejected until support
+    /// has rolled out to all replicas.
+    HttpMethodNotYetSupported,
 }
 
 impl From<CanisterHttpRequestContextError> for UserError {
@@ -794,6 +811,10 @@ impl From<CanisterHttpRequestContextError> for UserError {
             CanisterHttpRequestContextError::InvalidReplicationCounts(msg) => {
                 UserError::new(ErrorCode::CanisterRejectedMessage, msg)
             }
+            CanisterHttpRequestContextError::HttpMethodNotYetSupported => UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "The PATCH HTTP method is not yet supported.".to_string(),
+            ),
         }
     }
 }
@@ -919,6 +940,7 @@ pub enum CanisterHttpMethod {
     HEAD = 3,
     PUT = 4,
     DELETE = 5,
+    PATCH = 6,
 }
 
 impl CanisterHttpMethod {
@@ -929,6 +951,7 @@ impl CanisterHttpMethod {
             CanisterHttpMethod::HEAD => "HEAD",
             CanisterHttpMethod::PUT => "PUT",
             CanisterHttpMethod::DELETE => "DELETE",
+            CanisterHttpMethod::PATCH => "PATCH",
         }
     }
 }
@@ -941,6 +964,7 @@ impl From<&CanisterHttpMethod> for pb_metadata::HttpMethod {
             CanisterHttpMethod::HEAD => pb_metadata::HttpMethod::Head,
             CanisterHttpMethod::PUT => pb_metadata::HttpMethod::Put,
             CanisterHttpMethod::DELETE => pb_metadata::HttpMethod::Delete,
+            CanisterHttpMethod::PATCH => pb_metadata::HttpMethod::Patch,
         }
     }
 }
@@ -955,6 +979,7 @@ impl TryFrom<pb_metadata::HttpMethod> for CanisterHttpMethod {
             pb_metadata::HttpMethod::Head => Ok(CanisterHttpMethod::HEAD),
             pb_metadata::HttpMethod::Put => Ok(CanisterHttpMethod::PUT),
             pb_metadata::HttpMethod::Delete => Ok(CanisterHttpMethod::DELETE),
+            pb_metadata::HttpMethod::Patch => Ok(CanisterHttpMethod::PATCH),
             pb_metadata::HttpMethod::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "ic_protobuf::state::system_metadata::v1::HttpMethod",
                 err: "Unspecified HttpMethod".to_string(),
@@ -971,6 +996,7 @@ impl From<HttpMethod> for CanisterHttpMethod {
             HttpMethod::HEAD => CanisterHttpMethod::HEAD,
             HttpMethod::PUT => CanisterHttpMethod::PUT,
             HttpMethod::DELETE => CanisterHttpMethod::DELETE,
+            HttpMethod::PATCH => CanisterHttpMethod::PATCH,
         }
     }
 }
@@ -1341,7 +1367,7 @@ mod tests {
             CanisterHttpMethod::iter()
                 .map(|x| x as i32)
                 .collect::<Vec<i32>>(),
-            [1, 2, 3, 4, 5]
+            [1, 2, 3, 4, 5, 6]
         );
     }
 
@@ -1460,6 +1486,41 @@ mod tests {
                 assert_eq!(ctx.http_method, expected_method);
                 assert_matches!(ctx.replication, Replication::NonReplicated(_));
             }
+        );
+    }
+
+    #[test]
+    fn patch_is_rejected_until_rollout() {
+        let rng = &mut ReproducibleRng::new();
+        let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]);
+        let request = dummy_request();
+
+        // Rejected outright, regardless of is_replicated, so no PATCH context
+        // enters the replicated state until support has rolled out.
+        for is_replicated in [None, Some(true), Some(false)] {
+            let args = dummy_args(HttpMethod::PATCH, is_replicated);
+            let result = CanisterHttpRequestContext::generate_from_args(
+                UNIX_EPOCH, &request, args, &node_ids, rng,
+            );
+            assert_matches!(
+                result,
+                Err(CanisterHttpRequestContextError::HttpMethodNotYetSupported)
+            );
+        }
+
+        // Also rejected via the flexible API.
+        let mut args = dummy_flexible_args(Some(ReplicationCounts {
+            total_requests: 3,
+            min_responses: 3,
+            max_responses: 3,
+        }));
+        args.method = HttpMethod::PATCH;
+        let result = CanisterHttpRequestContext::generate_from_flexible_args(
+            UNIX_EPOCH, &request, args, &node_ids, rng,
+        );
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::HttpMethodNotYetSupported)
         );
     }
 

@@ -17,8 +17,8 @@ use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::page_map::PageAllocatorFileDescriptor;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{
-    CanisterQueues, CanisterState, CheckpointLoadingMetrics, DroppedMessageMetrics, InputQueueType,
-    PageMap, StateError,
+    CanisterQueues, CanisterStates, CheckpointLoadingMetrics, DroppedMessageMetrics,
+    InputQueueType, PageMap, StateError,
 };
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::{EnvironmentVariables, NumSeconds};
@@ -1686,7 +1686,7 @@ impl SystemState {
         &mut self,
         current_time: Time,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
+        local_canisters: &CanisterStates,
         refunds: &mut RefundPool,
         metrics: &impl DroppedMessageMetrics,
     ) {
@@ -1736,7 +1736,7 @@ impl SystemState {
         &mut self,
         current_time: CoarseTime,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
+        local_canisters: &CanisterStates,
     ) -> (usize, Vec<StateError>) {
         if self.status == CanisterStatus::Stopped {
             // Stopped canisters have no call context manager, so no callbacks.
@@ -1792,7 +1792,7 @@ impl SystemState {
     pub fn shed_largest_message(
         &mut self,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
+        local_canisters: &CanisterStates,
         refunds: &mut RefundPool,
         metrics: &impl DroppedMessageMetrics,
     ) -> bool {
@@ -1816,7 +1816,7 @@ impl SystemState {
     pub(crate) fn split_input_schedules(
         &mut self,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
+        local_canisters: &CanisterStates,
     ) {
         self.queues
             .split_input_schedules(own_canister_id, local_canisters);
@@ -2411,7 +2411,7 @@ pub mod testing {
         fn split_input_schedules(
             &mut self,
             own_canister_id: &CanisterId,
-            local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
+            local_canisters: &CanisterStates,
         );
     }
 
@@ -2490,7 +2490,7 @@ pub mod testing {
         fn split_input_schedules(
             &mut self,
             own_canister_id: &CanisterId,
-            local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
+            local_canisters: &CanisterStates,
         ) {
             self.split_input_schedules(own_canister_id, local_canisters)
         }

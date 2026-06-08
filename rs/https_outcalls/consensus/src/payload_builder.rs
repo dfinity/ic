@@ -5,9 +5,10 @@ use crate::{
     payload_builder::{
         parse::bytes_to_payload,
         utils::{
-            FlexibleFindResult, find_flexible_result, find_fully_replicated_response,
-            find_non_replicated_response, group_shares_by_callback_id,
-            grouped_shares_meet_divergence_criteria, validate_flexible_response_with_proof,
+            FlexibleFindResult, ResponseShareSigInput, find_flexible_result,
+            find_fully_replicated_response, find_non_replicated_response,
+            group_shares_by_callback_id, grouped_shares_meet_divergence_criteria,
+            response_share_sig_inputs, validate_flexible_response_with_proof,
             validate_response_share,
         },
     },
@@ -47,7 +48,8 @@ use ic_types::{
     },
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
-        CanisterHttpResponseContent, CanisterHttpResponseDivergence, Replication,
+        CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseShare,
+        Replication,
     },
     consensus::Committee,
     messages::{CallbackId, Payload, RejectContext},
@@ -353,7 +355,7 @@ impl CanisterHttpPayloadBuilderImpl {
         }
     }
 
-    fn validate_canister_http_payload_impl(
+    pub fn validate_canister_http_payload_impl(
         &self,
         height: Height,
         payload: &CanisterHttpPayload,
@@ -426,6 +428,25 @@ impl CanisterHttpPayloadBuilderImpl {
                 CanisterHttpPayloadValidationFailure::ConsensusRegistryVersionUnavailable,
             ))?;
 
+        let committee = self
+            .membership
+            .get_canister_http_committee(height)
+            .map_err(|_| {
+                CanisterHttpPayloadValidationError::ValidationFailed(
+                    CanisterHttpPayloadValidationFailure::Membership,
+                )
+            })?;
+
+        // Owned reconstruction of the per-signer shares behind each aggregated
+        // (fully/non-replicated) response proof. Declared before `sig_inputs` so
+        // that it outlives the borrows `sig_inputs` holds into it.
+        let mut aggregate_shares: Vec<CanisterHttpResponseShare> = Vec::new();
+        // Accumulates the signature-verification inputs of every response,
+        // flexible, and divergence share in the payload, so that all of them can
+        // be checked in a single batched multi-message verification call at the
+        // very end.
+        let mut sig_inputs: Vec<ResponseShareSigInput> = Vec::new();
+
         // Check conditions on individual responses
         for response in &payload.responses {
             // Check that response is consistent
@@ -448,21 +469,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     response.content.id,
                 ));
             }
-        }
 
-        let committee = self
-            .membership
-            .get_canister_http_committee(height)
-            .map_err(|_| {
-                CanisterHttpPayloadValidationError::ValidationFailed(
-                    CanisterHttpPayloadValidationFailure::Membership,
-                )
-            })?;
-
-        // Verify the signatures
-        // NOTE: We do this in a separate loop because this check is expensive and we want to
-        // do all the cheap checks first
-        for response in &payload.responses {
             let callback_id = response.content.id;
             let request_context = http_contexts.get(&callback_id).ok_or(
                 CanisterHttpPayloadValidationError::InvalidArtifact(
@@ -516,35 +523,22 @@ impl CanisterHttpPayloadBuilderImpl {
                 });
             }
 
-            // Each per-signer entry of the proof carries that signer's
-            // payment receipt alongside their signature. Each signature is
-            // verified individually against the shared metadata combined
-            // with that signer's receipt.
-            utils::verify_aggregate_proof(
-                &response.proof,
-                consensus_registry_version,
-                self.crypto.as_ref(),
-            )
-            .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
-
-            // Additionally enforce the per-replica refund allowance from
-            // the request context: no signer may claim a refund larger
-            // than the allowance set in `refund_status`.
-            for sig in response.proof.signatures.values() {
-                if sig.payment_receipt.refund > request_context.refund_status.per_replica_allowance
-                {
-                    return invalid_artifact(InvalidCanisterHttpPayloadReason::SignatureError(
-                        Box::new(ic_types::crypto::CryptoError::MalformedSignature {
-                            algorithm: ic_types::crypto::AlgorithmId::Ed25519,
-                            sig_bytes: vec![],
-                            internal_error:
-                                "Refund in payment receipt is greater than per-replica allowance"
-                                    .to_string(),
-                        }),
-                    ));
-                }
-            }
+            // Each per-signer entry of the proof carries that signer's payment
+            // receipt alongside their signature. Reconstruct, for each signer,
+            // the share they signed (shared metadata + their receipt) so its
+            // signature can be batch-verified with the rest. This also enforces
+            // the per-replica refund allowance on every receipt in the proof.
+            aggregate_shares.extend(
+                utils::reconstruct_aggregate_proof_shares(
+                    &response.proof,
+                    request_context.refund_status.per_replica_allowance,
+                )
+                .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?,
+            );
         }
+
+        // Defer signature verification of the reconstructed response shares.
+        sig_inputs.extend(response_share_sig_inputs(&aggregate_shares));
 
         let faults_tolerated = match self.membership.get_canister_http_committee(height) {
             Ok(members) => ic_types::consensus::get_faults_tolerated(members.len()),
@@ -570,32 +564,21 @@ impl CanisterHttpPayloadBuilderImpl {
             }
 
             for share in response.shares.iter() {
-                self.crypto
-                    .verify(share, consensus_registry_version)
-                    .map_err(|err| {
-                        CanisterHttpPayloadValidationError::InvalidArtifact(
-                            InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
-                        )
-                    })?;
                 // Enforce per-replica refund allowance for divergence
                 // shares. While a divergence proof does not deliver a
                 // refund directly, malformed refund claims should still
                 // be rejected to avoid leaking budget through the
                 // divergence codepath in any future extensions.
-                if let Some(ctx) = http_contexts.get(&share.content.id())
-                    && share.content.refund() > ctx.refund_status.per_replica_allowance
-                {
-                    return invalid_artifact(InvalidCanisterHttpPayloadReason::SignatureError(
-                        Box::new(ic_types::crypto::CryptoError::MalformedSignature {
-                            algorithm: ic_types::crypto::AlgorithmId::Ed25519,
-                            sig_bytes: vec![],
-                            internal_error:
-                                "Refund in divergence share exceeds per-replica allowance"
-                                    .to_string(),
-                        }),
-                    ));
+                if let Some(ctx) = http_contexts.get(&share.content.id()) {
+                    utils::check_refund_allowance(
+                        &share.content.payment_receipt,
+                        ctx.refund_status.per_replica_allowance,
+                    )
+                    .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
                 }
             }
+            // Defer signature verification.
+            sig_inputs.extend(response_share_sig_inputs(&response.shares));
 
             let grouped_shares = group_shares_by_callback_id(response.shares.iter());
             if grouped_shares.len() != 1 {
@@ -677,7 +660,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     flex_committee,
                     &mut seen_signers,
                     consensus_registry_version,
-                    &*self.crypto,
+                    context.refund_status.per_replica_allowance,
                 )
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
@@ -688,22 +671,12 @@ impl CanisterHttpPayloadBuilderImpl {
                         },
                     );
                 }
-
-                // Enforce the per-replica refund allowance: the share's
-                // refund claim must be at most the per-replica allowance.
-                if response_with_proof.proof.content.refund()
-                    > context.refund_status.per_replica_allowance
-                {
-                    return invalid_artifact(InvalidCanisterHttpPayloadReason::SignatureError(
-                        Box::new(ic_types::crypto::CryptoError::MalformedSignature {
-                            algorithm: ic_types::crypto::AlgorithmId::Ed25519,
-                            sig_bytes: vec![],
-                            internal_error:
-                                "Refund in flexible share exceeds per-replica allowance".to_string(),
-                        }),
-                    ));
-                }
             }
+
+            // Defer signature verification.
+            sig_inputs.extend(response_share_sig_inputs(
+                group.responses.iter().map(|r| &r.proof),
+            ));
         }
 
         // Validate flexible errors
@@ -754,7 +727,7 @@ impl CanisterHttpPayloadBuilderImpl {
                             flex_committee,
                             &mut seen_signers,
                             consensus_registry_version,
-                            &*self.crypto,
+                            context.refund_status.per_replica_allowance,
                         )
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
@@ -777,6 +750,11 @@ impl CanisterHttpPayloadBuilderImpl {
                             },
                         );
                     }
+
+                    // Defer signature verification.
+                    sig_inputs.extend(response_share_sig_inputs(
+                        reject_responses.iter().map(|r| &r.proof),
+                    ));
                 }
                 FlexibleCanisterHttpError::ResponsesTooLarge {
                     all_seen_shares,
@@ -814,10 +792,13 @@ impl CanisterHttpPayloadBuilderImpl {
                             flex_committee,
                             &mut seen_signers,
                             consensus_registry_version,
-                            &*self.crypto,
+                            context.refund_status.per_replica_allowance,
                         )
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
                     }
+
+                    // Defer signature verification.
+                    sig_inputs.extend(response_share_sig_inputs(all_seen_shares));
 
                     let num_unseen = flex_committee.len().saturating_sub(all_seen_shares.len());
                     let min_known_ok_needed = min_responses.saturating_sub(num_unseen);
@@ -854,6 +835,17 @@ impl CanisterHttpPayloadBuilderImpl {
                     }
                 }
             }
+        }
+
+        // Batch-verify the signatures of the deferred shares.
+        if !sig_inputs.is_empty() {
+            self.crypto
+                .verify_basic_sig_batch_multi_msg(&sig_inputs, consensus_registry_version)
+                .map_err(|err| {
+                    CanisterHttpPayloadValidationError::InvalidArtifact(
+                        InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
+                    )
+                })?;
         }
 
         Ok(())
