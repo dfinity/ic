@@ -9,6 +9,23 @@ common --lockfile_mode=off
 # See https://github.com/protocolbuffers/protobuf/issues/19558
 common --incompatible_enable_proto_toolchain_resolution
 
+# The module graph resolves protobuf to 33.4, but toolchains_protoc only ships a
+# prebuilt protoc up to v33.0 (see MODULE.bazel). Allow this small version skew;
+# protobuf otherwise fails the build via its ProtocAuthenticityCheck.
+build --@protobuf//bazel/toolchains:allow_nonstandard_protoc
+
+# protobuf 33.4's upb bootstrap tools (protoc-gen-upb*, protoc_minimal, ...) use
+# __start_/__stop_ linker-array sections (e.g. linkarr_upb_AllExts). lld (used by
+# the hermetic zig toolchain on Linux) garbage-collects these under its default
+# --start-stop-gc together with our opt-mode --gc-sections, breaking the link
+# with "undefined symbol: __start_linkarr_upb_AllExts". The lld-suggested
+# `-z nostart-stop-gc` is rejected by zig's wrapper, so we disable section GC
+# instead. Scoped to the exec config (these are build-time `[for tool]` targets,
+# so target binaries/canisters keep --gc-sections) and to Linux via
+# --enable_platform_specific_config (the macOS system linker rejects this flag).
+common --enable_platform_specific_config
+build:linux --host_linkopt=-Wl,--no-gc-sections
+
 # Use hermetic JDK
 # See https://bazel.build/docs/bazel-and-java#hermetic-testing
 build --java_runtime_version=remotejdk_17

@@ -17,8 +17,8 @@ bazel_dep(name = "rules_shell", version = "0.6.1")
 bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
 
 # CC dependencies (for C libs like miracl-core, etc)
-bazel_dep(name = "rules_cc", version = "0.2.16")
-bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "rules_cc", version = "0.2.17")
+bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "hermetic_cc_toolchain", version = "4.1.0")
 single_version_override(
     module_name = "hermetic_cc_toolchain",
@@ -51,7 +51,7 @@ archive_override(
 
 # Misc tools
 
-bazel_dep(name = "pigz", version = "2.8")  # (parallel) gzip
+bazel_dep(name = "pigz", version = "2.8.bcr.1")  # (parallel) gzip
 bazel_dep(name = "zstd", version = "1.5.7.bcr.1")  # zstd can change format across versions
 
 # Rust
@@ -60,7 +60,7 @@ include("//bazel:rust.MODULE.bazel")
 
 # Python dependencies
 
-bazel_dep(name = "rules_python", version = "1.4.1")
+bazel_dep(name = "rules_python", version = "1.7.0")
 
 python_version = "3.12"
 
@@ -79,8 +79,16 @@ use_repo(pip, "python_deps")
 # toolchains_protoc must be declared before protobuf so its toolchain registration wins
 bazel_dep(name = "toolchains_protoc", version = "0.6.1")
 
+# protobuf 33+ enforces (via its ProtocAuthenticityCheck) that the prebuilt
+# protoc matches the resolved `protobuf` module version (33.4, pulled in by
+# rules_cc/rules_go/rules_python/... under Bazel 9). toolchains_protoc 0.6.1
+# (latest) only ships protoc up to v33.0, so we use that and allow the small
+# (same-line, 4-patch) version skew via
+# `--@protobuf//bazel/toolchains:allow_nonstandard_protoc`, set in
+# bazel/conf/.bazelrc.build. Bump this to v33.4 (and drop the flag) once
+# toolchains_protoc ships it.
 protoc = use_extension("@toolchains_protoc//protoc:extensions.bzl", "protoc")
-protoc.toolchain(version = "v32.1")
+protoc.toolchain(version = "v33.0")
 use_repo(
     protoc,
     "toolchains_protoc_hub",
@@ -94,7 +102,7 @@ register_toolchains("@toolchains_protoc_hub//:all")
 
 bazel_dep(
     name = "protobuf",
-    version = "32.1",
+    version = "33.4",
 )
 
 # protobuf linter
@@ -102,8 +110,8 @@ bazel_dep(name = "rules_buf", version = "0.5.2")
 
 # Go dependencies
 
-bazel_dep(name = "rules_go", version = "0.50.1")
-bazel_dep(name = "gazelle", version = "0.38.0")
+bazel_dep(name = "rules_go", version = "0.61.1")
+bazel_dep(name = "gazelle", version = "0.51.3")
 
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
 go_deps.from_file(go_mod = "//:go.mod")
