@@ -256,34 +256,6 @@ jobs:
           name: bazel-targets
           path: ~/.cache/bazel-targets
 
-      - name: Verify linux-sandbox without the apparmor workaround (temporary)
-        # The only thing ci/container/setup-local-system-test-backend.sh still
-        # does on CI is relax kernel.apparmor_restrict_unprivileged_userns so
-        # bazel uses linux-sandbox instead of silently falling back to
-        # processwrapper-sandbox (which leaves $HOME writable and masks CI-only
-        # failures). To learn whether the runners need that at all, this step
-        # deliberately does NOT relax the sysctl and instead asserts -- loudly --
-        # that bazel's own linux-sandbox can start. If it passes, the runners
-        # allow unprivileged user namespaces natively and this step can be
-        # dropped (the script stays for the local devcontainer and
-        # container-run.sh, where Ubuntu 24.04 still needs the relaxation).
-        #
-        # The probe uses bazel's own linux-sandbox binary -- the exact thing
-        # bazel runs -- because apparmor userns gating is per-binary, so a
-        # generic `unshare` probe could give a false pass.
-        shell: bash
-        run: |
-          set -euo pipefail
-          apparmor=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
-          echo "::notice::$apparmor=$(cat "$apparmor" 2>/dev/null || echo '(absent)'); user=$(id -un); groups=$(id -Gn)"
-          sandbox="$(bazel info install_base)/linux-sandbox"
-          if "$sandbox" -- /bin/true; then
-            echo "::notice::linux-sandbox starts WITHOUT relaxing the apparmor sysctl -> this step can be removed from ci-main.yml"
-          else
-            echo "::error::linux-sandbox cannot start; keep ci/container/setup-local-system-test-backend.sh in this workflow (bazel would otherwise silently fall back to processwrapper-sandbox and mask CI-only failures)"
-            exit 1
-          fi
-
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
         with:

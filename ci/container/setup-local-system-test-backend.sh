@@ -40,8 +40,7 @@
 #    at build time (ci/container/Dockerfile).
 #
 # This script is invoked from the container startup paths
-# (ci/container/container-run.sh and .devcontainer/devcontainer.json) and from
-# CI (.github/workflows/ci-main.yml).
+# (ci/container/container-run.sh and .devcontainer/devcontainer.json).
 #
 # Idempotent.
 set -euo pipefail
