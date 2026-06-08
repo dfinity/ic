@@ -10,7 +10,29 @@
     "--cgroupns",
     "host",
     "--add-host",
-    "devenv-container:127.0.0.1"
+    "devenv-container:127.0.0.1",
+    // Grant the container's init process -- and therefore the VS Code server,
+    // every integrated terminal, and the bazel server they spawn -- membership
+    // in the group that owns the host's /dev/kvm, so the local system-test
+    // backend's sandboxed QEMU can open /dev/kvm. Supplementary group membership
+    // is fixed when a process is created, so it must be granted here (at
+    // container creation); the postStartCommand runs too late to affect the
+    // already-started server. This is purely a group membership on the container
+    // side -- it modifies neither the host nor the /dev/kvm device node.
+    //
+    // It MUST be the numeric GID, not the name `kvm`: podman resolves a name
+    // against the image's /etc/group, whose `kvm` group has an arbitrary
+    // build-time GID unrelated to the host. On the dfinity devenv /dev/kvm is
+    // owned by GID 993, which in this image is the `sgx` group -- the image's
+    // `kvm` group has a different GID -- so `--group-add kvm` would add the
+    // wrong group and QEMU still couldn't open /dev/kvm. (This is also why
+    // setup-local-system-test-backend.sh has to `groupmod` the `kvm` group onto
+    // 993.) ci/container/container-run.sh applies the same membership but reads
+    // the GID dynamically via `--group-add "$(stat -c %g /dev/kvm)"`; static
+    // devcontainer.json can't run `stat`, so the devenv's known GID is pinned
+    // here and must be updated if the host's /dev/kvm GID ever changes.
+    "--group-add",
+    "993"
   ],
   "workspaceMount": "source=${localWorkspaceFolder},target=/ic,type=bind",
   "workspaceFolder": "/ic",
