@@ -318,6 +318,8 @@ impl CanisterState {
             // Not rate-limited by the scheduler.
             && self.scheduler_state.heap_delta_debit.get() == 0
             && self.scheduler_state.install_code_debit.get() == 0
+            // No pending ingress induction cycles debit.
+            && system_state.ingress_induction_cycles_debit().is_zero()
     }
 
     /// See `SystemState::push_output_request` for documentation.

@@ -477,7 +477,8 @@ fn canister_has_zero_balance_when_uninstalled_due_to_low_cycles() {
     let seconds_to_burn_balance = env.cycle_balance(canister_id) as u64
         / compute_percent_allocated_per_second_fee.get() as u64;
     env.advance_time(Duration::from_secs(seconds_to_burn_balance + 1));
-    env.tick();
+    // Checkpoint round, to force charging for storage.
+    env.checkpointed_tick();
 
     // Verify the original canister still exists but it's uninstalled and has a
     // zero cycle balance.

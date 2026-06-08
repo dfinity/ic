@@ -4619,7 +4619,7 @@ impl ExecutionEnvironment {
         let mut canister_states = state.take_canister_states();
         let time = state.time();
 
-        for canister in canister_states.values_mut() {
+        for canister in canister_states.hot_values_mut() {
             match canister.system_state.get_status() {
                 CanisterStatus::Running { .. } | CanisterStatus::Stopped => continue,
                 CanisterStatus::Stopping { .. } => {}

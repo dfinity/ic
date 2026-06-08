@@ -8,10 +8,13 @@ set -euxo pipefail
 
 trap 'sudo rm -rf "${TMP_DIR}"' EXIT
 
-while getopts "o:" OPT; do
+while getopts "o:b:" OPT; do
     case "${OPT}" in
         o)
             OUT_FILE="${OPTARG}"
+            ;;
+        b)
+            BASE_IMAGE_FILE="${OPTARG}"
             ;;
         *)
             echo "No output file given" >&2
@@ -22,14 +25,11 @@ done
 
 TMP_DIR=$(mktemp -d --tmpdir="/tmp/containers" build-image-XXXXXXXXXXXX)
 
-BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:5e275723f82c67e387ba9e3c24baa0abdcb268917f276a0561c97bef9450d0b4"
+BASE_IMAGE="$(cat ${BASE_IMAGE_FILE})"
 
 podman --root "${TMP_DIR}/root" --runroot "${TMP_DIR}/runroot" build --iidfile "${TMP_DIR}/iidfile" - <<<"
     FROM $BASE_IMAGE
     USER root:root
-    # First update the required certs
-    RUN apt-get -y update && apt-get -y --no-install-recommends install ca-certificates
-    RUN apt-get -y update --snapshot 20260520T000000Z && apt-get -y --no-install-recommends install --snapshot 20260520T000000Z grub-efi faketime
     RUN mkdir -p /build/boot/grub
     RUN cp -r /usr/lib/grub/x86_64-efi /build/boot/grub
     RUN mkdir -p /build/boot/efi/EFI/Boot

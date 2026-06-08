@@ -276,20 +276,20 @@ use_repo(oci, "alpine_openssl", "alpine_openssl_linux_amd64")
 
 # Ubuntu snapshots
 
-bazel_dep(name = "rules_distroless", version = "0.3.8")
+bazel_dep(name = "rules_distroless", version = "0.8.0")
 
 apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
 
-# Packageset based on an Ubuntu noble snapshot, see manifest file
+# Packageset based on an Ubuntu resolute snapshot, see manifest file
 # for details
 # To update, comment out the `lock` field below and run:
-#   bazel run @noble//:lock
+#   bazel run @resolute//:lock
 apt.install(
-    name = "noble",
-    lock = "//bazel:noble.lock.json",
-    manifest = "//bazel:noble.yaml",
+    name = "resolute",
+    lock = "//bazel:resolute.lock.json",
+    manifest = "//bazel:resolute.yaml",
 )
-use_repo(apt, "noble")
+use_repo(apt, "resolute")
 
 # Single files & archives that are not bazel modules
 
@@ -1193,6 +1193,7 @@ canisters(
         "bitcoin_testnet": "ic-btc-canister.wasm.gz",
         "dogecoin": "ic-doge-canister.wasm.gz",
         "migration": "migration-canister.wasm.gz",
+        "engine-controller": "engine-controller-canister.wasm.gz",
         "subnet_rental": "subnet_rental_canister.wasm.gz",
     },
     path = "//:mainnet-canister-revisions.json",

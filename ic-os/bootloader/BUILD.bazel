@@ -14,11 +14,13 @@ exports_files([
 
 genrule(
     name = "build-bootloader-tree",
-    srcs = [],
+    srcs = [
+        "context/docker-base",
+    ],
     outs = [
         "bootloader-tree.tar",
     ],
-    cmd = "$(location build-bootloader-tree.sh) -o $@",
+    cmd = "$(location build-bootloader-tree.sh) -b $< -o $@",
     tags = [
         "manual",
         "requires-network",
