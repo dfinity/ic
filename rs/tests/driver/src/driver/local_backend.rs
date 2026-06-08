@@ -14,8 +14,8 @@
 //! Many Farm features have no equivalent locally (managed playnet DNS, TLS
 //! certificate issuance, HTTP file upload, multi-tenant scheduling). Those
 //! operations log a warning and either return dummy values or are explicit
-//! `bail!`s; the test author is expected to mark a test as `local = True` only
-//! after auditing those code paths.
+//! `bail!`s; the test author is expected to mark a test as `backend = "local"`
+//! or `backend = None` (default)` only after auditing those code paths.
 //!
 //! See `rs/tests/driver/templates/guestos_vm_template.xml` for the libvirt
 //! domain XML template used to launch VMs.
