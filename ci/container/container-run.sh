@@ -328,5 +328,5 @@ set -x
 # baked into the image. (The `ic-net-admin` capability launcher this backend also
 # needs IS baked into the image; see ci/container/Dockerfile.)
 BOOTSTRAP='/ic/ci/container/setup-local-system-test-backend.sh && exec "$@"'
-exec "${CONTAINER_CMD[@]}" run "${RUNTIME_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" \
+exec "${CONTAINER_CMD[@]}" run "${RUNTIME_RUN_ARGS[@]}" "$IMAGE" \
     /usr/bin/bash -c "$BOOTSTRAP" bootstrap "${cmd[@]}"
