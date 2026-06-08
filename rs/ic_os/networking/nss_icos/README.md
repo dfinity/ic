@@ -47,16 +47,6 @@ and GuestOS IP addresses.  This lookup happens the first time that the
 running program invokes any of the `gethostby*` functions that the C library
 processes.
 
-The local IPv6 address is determined by first asking the kernel which source
-address it would use to reach an off-link destination (the canonical outbound
-address on a host that has a default IPv6 route).  If that lookup fails — for
-example on a host that configures a global address via SLAAC but installs no
-default route, as is the case on the local system-test backend — the module
-falls back to enumerating the configured interface addresses and picking the
-first global-scope unicast IPv6 address (link-local `fe80::/10`, loopback,
-unspecified and multicast addresses are skipped; unique-local `fd00::/8`
-addresses are accepted).
-
 On the basis of that IP address, and the IP addressing conventions established
 by the Internet Computer, programs can determine the HostOS and GuestOS
 addresses that correspond to the computer where this software is installed
