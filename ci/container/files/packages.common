@@ -64,6 +64,10 @@ qemu-system-x86
 qemu-utils
 dnsmasq-base
 ovmf
+# Provides `capsh` (source of the baked-in /usr/local/bin/ic-net-admin launcher)
+# plus `setcap`/`getcap`; see ci/container/Dockerfile and
+# ci/container/setup-local-system-test-backend.sh.
+libcap2-bin
 
 # Unknown
 containernetworking-plugins

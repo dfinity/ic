@@ -4,28 +4,26 @@
 #
 # The local backend runs fully unprivileged: libvirtd runs as the current
 # (non-root) user in session mode (qemu:///session) and QEMU opens pre-created,
-# user-owned TAP devices directly. Two things must be arranged at container
-# start, because they depend on the host kernel / runtime and cannot be baked
-# into the image:
+# user-owned TAP devices directly. This script arranges the two prerequisites
+# that depend on the host kernel / runtime and therefore cannot be baked into
+# the image:
 #
 #  1. /dev/kvm access. The device is owned by root:<kvm-gid> (mode 0660) and the
 #     GID is assigned by the host kernel and passed into this privileged
 #     container, so it is unknown at image-build time. We align the in-container
-#     `kvm` group GID to the device and add the unprivileged users to it so the
-#     session-mode QEMU (which runs as that user) can open /dev/kvm.
+#     `kvm` group GID to the device and add the unprivileged users to that
+#     group. The processes that actually open /dev/kvm (the on-demand
+#     libvirtd/QEMU spawned by the bazel server) gain access by inheriting the
+#     kvm GID as a *supplementary group* from the container's init process.
+#     Supplementary group membership is fixed when a process is created, so it
+#     cannot be added later by this script (the VS Code / bazel server tree is
+#     already running by the time this `postStartCommand` runs); instead the kvm
+#     GID is added at *container creation* time via `--group-add` in both
+#     ci/container/container-run.sh and .devcontainer/devcontainer.json. This is
+#     purely a group/permission arrangement on the container side; it modifies
+#     neither the host nor the /dev/kvm device node.
 #
-#  2. The `ic-net-admin` capability launcher. The backend performs a handful of
-#     networking operations that the kernel gates behind CAP_NET_ADMIN /
-#     CAP_NET_RAW / CAP_NET_BIND_SERVICE (creating the per-group bridge and
-#     TAPs, and running its own dnsmasq router advertiser and DHCPv4 server,
-#     which binds the privileged UDP bootps port 67). Rather than `sudo`, it
-#     invokes a file-capability-endowed copy of `capsh` that raises exactly
-#     those capabilities into the ambient set and then execs the requested
-#     command. File capabilities (set via setcap, which needs CAP_SETFCAP)
-#     cannot be applied from an unprivileged test process, so we provision the
-#     launcher here.
-#
-#  3. Allow Bazel's linux-sandbox to run. The backend's test actions must run
+#  2. Allow Bazel's linux-sandbox to run. The backend's test actions must run
 #     under `linux-sandbox` so they match CI (under the weaker
 #     `processwrapper-sandbox` fallback `$HOME` stays writable, which masks
 #     real, CI-only failures). Bazel runs as the unprivileged container user
@@ -37,18 +35,27 @@
 #     here. NOTE: this is a host kernel sysctl; because the container is
 #     privileged and shares the host kernel, setting it takes effect host-wide.
 #
+# A third prerequisite -- the `ic-net-admin` capability launcher
+# (/usr/local/bin/ic-net-admin, NET_ADMIN_LAUNCHER in local_backend.rs) -- is no
+# longer provisioned here. It is a copy of `capsh` endowed with narrow file
+# capabilities (CAP_NET_ADMIN / CAP_NET_RAW / CAP_NET_BIND_SERVICE) that the
+# backend uses to create the per-group bridge and TAPs and to run its dnsmasq
+# router-advertiser / DHCPv4 server (which binds the privileged UDP port 67).
+# Being fully static it is baked into the image at build time instead
+# (ci/container/Dockerfile), so it no longer depends on this hook -- which
+# matters because in the devcontainer this script runs as a VS Code
+# `postStartCommand`, and VS Code can skip lifecycle commands (e.g. when its
+# in-container command runner crashes), which would leave the launcher
+# unprovisioned.
+#
 # This script is invoked from the container startup paths
 # (ci/container/container-run.sh and .devcontainer/devcontainer.json).
 #
 # Idempotent and safe to run when /dev/kvm is absent.
 set -euo pipefail
 
-# Path to the capability launcher referenced by the local backend
-# (NET_ADMIN_LAUNCHER in local_backend.rs).
-LAUNCHER=/usr/local/bin/ic-net-admin
-
-# Managing groups and file capabilities requires root; re-exec via sudo if
-# needed.
+# Aligning groups and setting the apparmor sysctl require root; re-exec via sudo
+# if needed.
 if [ "$(id -u)" -ne 0 ]; then
     exec sudo -n "$0" "$@"
 fi
@@ -70,19 +77,18 @@ if [ -e /dev/kvm ]; then
         groupadd -o -g "$gid" kvm
     fi
 
-    # Session-mode QEMU runs as the unprivileged container user, so that user
-    # must be a member of the `kvm` group to open /dev/kvm.
+    # Add the unprivileged users to the `kvm` group so that *newly created*
+    # processes which (re)compute their supplementary groups -- a fresh login,
+    # `sudo`, `su`, or a `podman exec` into the container -- can open /dev/kvm.
     #
-    # NOTE: supplementary group membership is fixed when a process is created,
-    # so this `usermod` only takes effect for processes started *afterwards*.
-    # In particular the bazel server (which spawns the QEMU test actions) must
-    # be started after this runs, otherwise it never picks up the `kvm` group
-    # and libvirtd ends up caching the emulator as not supporting `virt type
-    # 'kvm'`. Each CI workflow step and each devcontainer terminal is a fresh
-    # exec that recomputes supplementary groups, so running this before the
-    # first bazel invocation is sufficient there. The single-exec
-    # container-run.sh path cannot rely on that and instead adds the kvm GID as
-    # a supplementary group at container creation time (see container-run.sh).
+    # NOTE: this does NOT help the already-running process tree (the VS Code
+    # server, its terminals, and the bazel server they spawn). Those inherit
+    # their supplementary groups from the container's init process and never
+    # re-run initgroups, so they only obtain the kvm GID if it was added at
+    # *container creation* time. That is done via `--group-add` in both
+    # ci/container/container-run.sh (dynamically, `--group-add "$(stat -c %g
+    # /dev/kvm)"`) and .devcontainer/devcontainer.json. Neither this script nor
+    # those modify the host or the /dev/kvm device node itself.
     for user in ubuntu buildifier; do
         if getent passwd "$user" >/dev/null && ! id -nG "$user" | tr ' ' '\n' | grep -qx kvm; then
             usermod -aG kvm "$user"
@@ -90,19 +96,7 @@ if [ -e /dev/kvm ]; then
     done
 fi
 
-# --- 2. Provision the ic-net-admin capability launcher --------------------
-#
-# `capsh` ships in libcap2-bin. Copy it to a stable path and grant the narrow
-# capabilities as effective+permitted file caps so it can raise them into the
-# ambient set for the command it execs. CAP_NET_BIND_SERVICE is needed by the
-# backend's dnsmasq DHCPv4 server to bind the privileged UDP port 67.
-if command -v capsh >/dev/null 2>&1; then
-    capsh_bin="$(command -v capsh)"
-    install -m 0755 "$capsh_bin" "$LAUNCHER"
-    setcap cap_net_admin,cap_net_raw,cap_net_bind_service+ep "$LAUNCHER"
-fi
-
-# --- 3. Allow Bazel's linux-sandbox (unprivileged user namespaces) ---------
+# --- 2. Allow Bazel's linux-sandbox (unprivileged user namespaces) ---------
 #
 # Best-effort: the sysctl only exists on AppArmor-enabled kernels (Ubuntu
 # 24.04+) and may be read-only in some environments, so never fail setup over

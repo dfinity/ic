@@ -322,10 +322,11 @@ if [ -e /dev/kvm ]; then
 fi
 
 set -x
-# Prepare the local libvirt/QEMU system-test backend before running the
-# command: align the container's `kvm` group GID with the host's /dev/kvm and
-# provision the `ic-net-admin` capability launcher. These depend on the host
-# runtime and cannot be baked into the image.
+# Prepare the local libvirt/QEMU system-test backend before running the command:
+# align the container's `kvm` group GID with the host's /dev/kvm and relax the
+# linux-sandbox apparmor sysctl. These depend on the host runtime and cannot be
+# baked into the image. (The `ic-net-admin` capability launcher this backend also
+# needs IS baked into the image; see ci/container/Dockerfile.)
 BOOTSTRAP='/ic/ci/container/setup-local-system-test-backend.sh && exec "$@"'
 exec "${CONTAINER_CMD[@]}" run "${RUNTIME_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" \
     /usr/bin/bash -c "$BOOTSTRAP" bootstrap "${cmd[@]}"
