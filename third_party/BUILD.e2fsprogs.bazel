@@ -1,0 +1,66 @@
+"""
+e2fsprogs, built from source. The bundled libuuid/libblkid are enabled so we
+don't link against system copies.
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+
+filegroup(
+    name = "all_srcs",
+    srcs = glob(["**"]),
+)
+
+configure_make(
+    name = "mke2fs",
+    args = ["-j"],
+    configure_in_place = True,
+    configure_options = [
+        # Use the bundled libuuid/libblkid rather than the host's, so the binary
+        # stays self-contained.
+        "--enable-libuuid",
+        "--enable-libblkid",
+        # Trim optional features that would pull in extra deps or shared libs.
+        "--disable-fuse2fs",
+        "--disable-uuidd",
+        "--disable-nls",
+        "--disable-tls",
+        "--disable-fsck",
+        # Per the upstream INSTALL doc, static binaries need ELF shared libs off.
+        "--disable-elf-shlibs",
+        # The e2scrub install rules write to absolute host paths (/usr/lib/udev,
+        # /etc/cron.d, /usr/lib/systemd) which fails under the build sandbox.
+        # Disable each by pointing them at "no".
+        "--with-udev-rules-dir=no",
+        "--with-crond-dir=no",
+        "--with-systemd-unit-dir=no",
+    ],
+    env = {
+        "CFLAGS": "-g -O2 -static",
+        "LDFLAGS": "-static",
+    },
+    lib_source = ":all_srcs",
+    out_binaries = ["mke2fs"],
+    # We don't ship any libs out of this build; everything is folded into the
+    # mke2fs binary.
+    out_shared_libs = [],
+    out_static_libs = [],
+    # mke2fs is installed under sbin/ by autotools (it's a sysadmin tool);
+    # rules_foreign_cc only picks up out_binaries from bin/, so move it.
+    #
+    # Then drop the rest of the install tree (unused & non-reproducible).
+    # The headers under include/ are kept since rules_foreign_cc declares them
+    # as an output.
+    postfix_script = (
+        "mkdir -p $$INSTALLDIR$$/bin && " +
+        "cp $$INSTALLDIR$$/sbin/mke2fs $$INSTALLDIR$$/bin/mke2fs && " +
+        "find $$INSTALLDIR$$ -mindepth 1 -maxdepth 1 ! -name bin ! -name include -exec rm -rf {} + && " +
+        "find $$INSTALLDIR$$/bin -mindepth 1 ! -name mke2fs -delete"
+    ),
+    # Static glibc linking is a Linux/glibc thing; this isn't expected to work
+    # elsewhere.
+    target_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+    visibility = ["//visibility:public"],
+)
