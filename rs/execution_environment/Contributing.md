@@ -9,8 +9,6 @@ The following steps outline the recommended approach to introduce a new Manageme
    - furthermore, make sure to provide motivation for the new API or changes you're making and how it would benefit the ICP protocol.
 
 2. The public Management Canister [types](https://github.com/dfinity/ic/tree/master/packages/ic-management-canister-types) should be updated if applicable.
-   They should be publicly released to [crates.io](https://crates.io/crates/ic-management-canister-types) once the change is available on the ICP mainnet.
-   Use the corresponding [GitHub Action](https://github.com/dfinity/ic/actions/workflows/publish-crates.yml) to publish the crate.
 
 ---
 
@@ -20,9 +18,9 @@ The public API of the Management Canister is defined in Candid. Candid is design
 
 ---
 
-3. The [Rust CDK](https://github.com/dfinity/cdk-rs) needs to be updated. Inform *@eng-sdk* of the work required.
+3. The [Rust CDK](https://github.com/dfinity/cdk-rs) should be updated if applicable. Inform *@eng-sdk* of the work required.
 
-4. [Motoko](https://github.com/dfinity/motoko) needs to be updated. Inform *@eng-motoko* of the work required.
+4. [Motoko](https://github.com/dfinity/motoko) should be updated if applicable. Inform *@eng-motoko* of the work required.
 
 5. Add any new types or update existing ones in `rs/types/management_canister_types`. If possible, stick to existing naming conventions. E.g., error variants tend to have a domain specific prefix and a clear suffix describing the error, e.g., `ErrorCode::CanisterNotFound`.
 
@@ -49,3 +47,4 @@ The public API of the Management Canister is defined in Candid. Candid is design
 10. To do a feature release on a set of subnets, prepare an unmerged commit which toggles the flag and contact *@eng-dre*. After it is rolled out and tested, a feature release can be made to all subnets by merging the commit that enables the flag to master. Finally, the flag can be removed.
 
 11. Once the change is fully available on the ICP mainnet, the Interface Specification, public Management Canister types, Rust CDK, and Motoko changes can be publicly released.
+    Use the corresponding [GitHub Action](https://github.com/dfinity/ic/actions/workflows/publish-crates.yml) to publish the public Management Canister types in Rust.
