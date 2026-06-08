@@ -167,6 +167,7 @@ def make_argparser():
     parser.add_argument("--dflate", help="Path to our dflate tool", type=str, required=True)
     parser.add_argument("--diroid", help="Path to our diroid tool", type=str, required=True)
     parser.add_argument("--zstd", help="Path to the zstd tool", type=str, required=True)
+    parser.add_argument("--mkfs-ext4", help="Path to the mkfs.ext4 (mke2fs) tool", type=str, required=True)
     return parser
 
 
@@ -212,7 +213,9 @@ def main():
         "faketime",
         "-f",
         "1970-1-1 0:0:0",
-        "/usr/sbin/mkfs.ext4",
+        # Absolute path so faketime (which execs it) resolves it as a path
+        # rather than searching PATH.
+        os.path.abspath(args.mkfs_ext4),
         "-E",
         "hash_seed=c61251eb-100b-48fe-b089-57dea7368612",
         "-U",
