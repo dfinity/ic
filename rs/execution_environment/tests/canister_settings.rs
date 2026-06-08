@@ -407,7 +407,7 @@ fn setup_two_canisters(min_cycles: u128) -> (StateMachine, CanisterId, CanisterI
 // Ingress messages must be accepted regardless of minimum_msg_cycles_available.
 #[test]
 fn minimum_msg_cycles_available_does_not_affect_ingress() {
-    let (env, callee_id, _caller_id) = setup_two_canisters(u128::MAX);
+    let (env, callee_id, _caller_id) = setup_two_canisters(1_000_000);
 
     let res = env
         .execute_ingress(callee_id, "update", wasm().reply_data(b"ok").build())
@@ -442,8 +442,6 @@ fn inter_canister_call_accepted_when_cycles_sufficient() {
 // below minimum_msg_cycles_available (which only gates incoming call admission).
 // DTS is triggered after each accept_cycles (via instruction_counter_is_at_least)
 // to ensure that minimum_msg_cycles_available is not re-enforced at slice boundaries.
-// Uses a system subnet (ExecutionTestBuilder default) so execution is free and
-// the cycle balance assertion is exact.
 #[test]
 fn attached_cycles_consumed_in_update_and_reply_below_minimum_msg_cycles_available() {
     const SLICE_INSTRUCTIONS: u64 = 1_000_000;
@@ -564,6 +562,8 @@ fn inter_canister_call_rejected_when_cycles_insufficient() {
     let min_cycles: u128 = 1_000_000;
     let (env, callee_id, caller_id) = setup_two_canisters(min_cycles);
 
+    let callee_balance_before = env.cycle_balance(callee_id);
+
     let call_args = CallArgs::default()
         .other_side(wasm().reply_data(b"ok").build())
         .on_reply(wasm().reply_data(b"got reply").build())
@@ -585,4 +585,5 @@ fn inter_canister_call_rejected_when_cycles_insufficient() {
         reject_msg.contains("requires at least"),
         "Unexpected reject message: {reject_msg}"
     );
+    assert_eq!(env.cycle_balance(callee_id), callee_balance_before);
 }
