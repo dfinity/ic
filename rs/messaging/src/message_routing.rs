@@ -1101,10 +1101,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .ok_or_else(|| not_found_error("NNS subnet ID", None))?;
 
         // Look up the default subnet for `SetupInitialDKG`. The key may be
-        // unset (in which case `SetupInitialDKG` requests fall back to the
-        // calling subnet), or the configured subnet may not be visible from
-        // this subnet (e.g. if it has been filtered out above), in which case
-        // Look up the default subnet for `SetupInitialDKG`. The key may be
         // unset, in which case `SetupInitialDKG` requests fall back to the
         // calling subnet.
         let default_initial_dkg_subnet_id = self
