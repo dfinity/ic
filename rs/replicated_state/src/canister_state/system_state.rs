@@ -72,7 +72,7 @@ lazy_static! {
 /// Maximum number of canister changes stored in the canister history.
 pub const MAX_CANISTER_HISTORY_CHANGES: u64 = 20;
 
-/// A bundle of outgoing inter-canister `Request and matching `Callback`.
+/// A bundle of outgoing inter-canister `Request` and matching `Callback`.
 ///
 /// A `Request` and its `Callback` share several fields (destination, payment,
 /// deadline). And the request's `sender_reply_callback` cannot be known until
@@ -2695,7 +2695,7 @@ pub mod testing {
     }
 
     impl Default for OutputRequestBuilder {
-        /// Creates an `OutputRequestBuilder`` with default values.
+        /// Creates an `OutputRequestBuilder` with default values.
         fn default() -> Self {
             let name = "No-Op";
             fn prepayment<T: ic_types_cycles::CyclesUseCaseKind>() -> CompoundCycles<T> {
@@ -2724,7 +2724,7 @@ pub mod testing {
     }
 
     impl OutputRequestBuilder {
-        /// Creates a new `RequestBuilder`.
+        /// Creates a new `OutputRequestBuilder`.
         pub fn new() -> Self {
             Default::default()
         }

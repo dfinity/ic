@@ -223,6 +223,19 @@ fn correct_charging_target_canister_for_a_response() {
 }
 
 #[test]
+fn push_output_request_in_stopped_status_does_not_work() {
+    let mut fixture = SystemStateFixture::running();
+    fixture.set_stopped();
+
+    assert_matches!(
+        fixture.push_output_request(default_request_to_self()),
+        Err(StateError::CanisterStopped(CANISTER_ID))
+    );
+
+    assert!(!fixture.system_state.queues().has_output());
+}
+
+#[test]
 fn induct_messages_to_self_in_running_status_works() {
     let mut fixture = SystemStateFixture::running();
 

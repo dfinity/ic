@@ -205,7 +205,7 @@ impl RequestInPrep {
 
 /// Turns a `RequestInPrep` into an `OutputRequest`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn into_request(
+pub(crate) fn into_output_request(
     RequestInPrep {
         sender,
         callee,

@@ -30,7 +30,7 @@ use ic_types::{
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
-use request_in_prep::{RequestInPrep, into_request};
+use request_in_prep::{RequestInPrep, into_output_request};
 use sandbox_safe_system_state::{
     ConsumedCyclesDuringExecution, SandboxSafeSystemState, SystemStateModifications,
 };
@@ -3263,7 +3263,7 @@ impl SystemApi for SystemApiImpl {
                                 .to_string(),
                         })?;
 
-                let req = into_request(
+                let req = into_output_request(
                     req_in_prep,
                     *call_context_id,
                     &mut self.sandbox_safe_system_state,

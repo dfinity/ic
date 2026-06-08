@@ -188,6 +188,11 @@ fn push_output_request_succeeds_with_enough_cycles() {
         );
     request.prepayment_for_response_transmission = cycles_account_manager
         .prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule);
+    request.prepayment_for_call_transmission = cycles_account_manager.xnet_total_transmission_fee(
+        request.payload_size_bytes(),
+        SMALL_APP_SUBNET_MAX_SIZE,
+        cost_schedule,
+    );
 
     assert_eq!(
         sandbox_safe_system_state.push_output_request(
