@@ -3776,10 +3776,7 @@ fn test_delete_root_app_subnet_fails() {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         pic.delete_subnet(app_subnet_id);
     }));
-    assert!(
-        result.is_err(),
-        "deleting the root app subnet should fail"
-    );
+    assert!(result.is_err(), "deleting the root app subnet should fail");
 }
 
 #[test]
