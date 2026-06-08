@@ -3729,6 +3729,23 @@ fn test_delete_named_subnet_fails() {
 }
 
 #[test]
+fn test_delete_root_app_subnet_fails() {
+    // Create a PocketIC instance with a single application subnet.
+    // The first subnet created becomes the root subnet and cannot be deleted.
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
+
+    let app_subnet_id = pic.topology().get_app_subnets()[0];
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        pic.delete_subnet(app_subnet_id);
+    }));
+    assert!(
+        result.is_err(),
+        "deleting the root app subnet should fail"
+    );
+}
+
+#[test]
 fn test_delete_subnet_state_dir() {
     let state_dir = TempDir::new().unwrap();
     let state_dir_path = state_dir.path().to_path_buf();
