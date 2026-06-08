@@ -1816,8 +1816,7 @@ fn setup_three_subnet_registry() -> (Arc<FakeRegistryClient>, SubnetId, SubnetId
 }
 
 /// Tests that a CloudEngine subnet sees the full topology (all three subnets):
-/// `subnets`, `routing_table`, `subnets_for_certification`, and
-/// `routing_table_for_certification` all contain every subnet.
+/// both `subnets` and `routing_table` contain every subnet.
 #[test]
 fn try_read_registry_engine_subnet_sees_full_topology() {
     with_test_replica_logger(|log| {
@@ -1841,16 +1840,6 @@ fn try_read_registry_engine_subnet_sees_full_topology() {
         assert!(rt_subnets.contains(&app_subnet_id));
         assert!(rt_subnets.contains(&engine_subnet_id));
         assert!(rt_subnets.contains(&nns_subnet_id));
-
-        // No full_topology on engine subnets; certification accessors fall back to subnets().
-        assert_eq!(
-            network_topology.subnets_for_certification(),
-            network_topology.subnets(),
-        );
-        assert_eq!(
-            network_topology.routing_table_for_certification(),
-            network_topology.routing_table(),
-        );
     });
 }
 
@@ -1880,21 +1869,11 @@ fn try_read_registry_application_subnet_sees_full_topology() {
         assert!(rt_subnets.contains(&app_subnet_id));
         assert!(rt_subnets.contains(&nns_subnet_id));
         assert!(rt_subnets.contains(&engine_subnet_id));
-
-        // No full_topology on non-NNS subnets; certification accessors fall back to subnets().
-        assert_eq!(
-            network_topology.subnets_for_certification(),
-            network_topology.subnets(),
-        );
-        assert_eq!(
-            network_topology.routing_table_for_certification(),
-            network_topology.routing_table(),
-        );
     });
 }
 
 /// Tests that the NNS subnet sees all subnets in both `subnets()` and
-/// `subnets_for_certification()` (via `full_topology`), including engines.
+/// `routing_table()`, including engines.
 #[test]
 fn try_read_registry_nns_subnet_has_full_topology_with_engines() {
     with_test_replica_logger(|log| {
@@ -1911,25 +1890,15 @@ fn try_read_registry_nns_subnet_has_full_topology_with_engines() {
         assert!(subnet_keys.contains(&nns_subnet_id));
         assert!(subnet_keys.contains(&engine_subnet_id));
 
-        // subnets_for_certification also includes all three (via full_topology).
-        let cert_keys: Vec<_> = network_topology
-            .subnets_for_certification()
-            .keys()
-            .copied()
-            .collect();
-        assert!(cert_keys.contains(&app_subnet_id));
-        assert!(cert_keys.contains(&engine_subnet_id));
-        assert!(cert_keys.contains(&nns_subnet_id));
-
-        // routing_table_for_certification includes ranges for all three subnets.
-        let rt_cert: BTreeSet<_> = network_topology
-            .routing_table_for_certification()
+        // routing_table() includes ranges for all three subnets.
+        let rt_subnets: BTreeSet<_> = network_topology
+            .routing_table()
             .iter()
             .map(|(_, sid)| *sid)
             .collect();
-        assert!(rt_cert.contains(&app_subnet_id));
-        assert!(rt_cert.contains(&engine_subnet_id));
-        assert!(rt_cert.contains(&nns_subnet_id));
+        assert!(rt_subnets.contains(&app_subnet_id));
+        assert!(rt_subnets.contains(&engine_subnet_id));
+        assert!(rt_subnets.contains(&nns_subnet_id));
     });
 }
 
