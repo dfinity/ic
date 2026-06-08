@@ -5081,6 +5081,8 @@ pub mod archiving {
 
         // Install a ledger with a lot of initial balances
         let mut subnet_config = SubnetConfig::new(SubnetType::System, SubnetSecurity::None);
+        // Set max_instructions_per_round to max(max_instructions_per_slice, max_instructions_per_install_code_slice)
+        // to ensure that at most one canister message can be executed per round.
         subnet_config.scheduler_config.max_instructions_per_round = subnet_config
             .scheduler_config
             .max_instructions_per_slice
