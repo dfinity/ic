@@ -1600,9 +1600,7 @@ impl PocketIc {
         self.get_subnet(canister_id).await.is_some()
     }
 
-    /// Deletes a subnet. Returns an error if the subnet does not exist or is a named subnet.
-    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, subnet_id = %subnet_id.to_string()))]
-    pub async fn delete_subnet(&self, subnet_id: SubnetId) {
+    /// Deletes a subnet. Panics if the subnet does not exist or is a named subnet.
         let endpoint = "update/delete_subnet";
         self.post::<(), RawSubnetId>(
             endpoint,
