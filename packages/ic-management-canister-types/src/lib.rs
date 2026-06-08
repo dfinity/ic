@@ -921,6 +921,9 @@ pub enum HttpMethod {
     /// DELETE
     #[serde(rename = "delete")]
     DELETE,
+    /// PATCH
+    #[serde(rename = "patch")]
+    PATCH,
 }
 
 /// # HTTP Header.
