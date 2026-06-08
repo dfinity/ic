@@ -9,12 +9,8 @@ use ic_system_test_driver::driver::simulate_network::SimulateNetwork;
 use ic_system_test_driver::driver::test_env_api::{
     HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr,
 };
-use ic_system_test_driver::driver::test_setup::SystemTestBackend;
 use ic_system_test_driver::driver::universal_vm::*;
-use ic_system_test_driver::driver::{
-    test_env::{TestEnv, TestEnvAttribute},
-    test_env_api::*,
-};
+use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::{self, create_and_install, create_and_install_with_cycles};
 pub use ic_types::{CanisterId, PrincipalId};
 use ic_types_cycles::Cycles;
@@ -157,16 +153,9 @@ pub fn get_universal_vm_address(env: &TestEnv) -> Ipv6Addr {
 
 pub fn get_universal_vm_ipv4_address(env: &TestEnv) -> Ipv4Addr {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-    match SystemTestBackend::read_attribute(env) {
-        SystemTestBackend::Farm => deployed_universal_vm
-            .block_on_ipv4()
-            .expect("Universal VM IPv4 not found."),
-        SystemTestBackend::Local => {
-            unimplemented!(
-                "LocalBackend: get_universal_vm_ipv4_address not implemented; IPv4 wiring on Local is a future extension"
-            )
-        }
-    }
+    deployed_universal_vm
+        .block_on_ipv4()
+        .expect("Universal VM IPv4 not found.")
 }
 
 /// This function starts the httpbin service on the universal VM and creates firewall rules on all nodes to
