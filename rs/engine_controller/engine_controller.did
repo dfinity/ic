@@ -10,12 +10,18 @@ type DeleteEngineArgs = record {
 
 type Result = variant { Ok; Err : text };
 
+type NewSubnet = record {
+  new_subnet_id : opt principal;
+};
+
+type CreateEngineResult = variant { Ok : NewSubnet; Err : text };
+
 type EngineControllerInitArgs = record {
   authorized_caller : opt principal;
   initial_dkg_subnet_id : opt principal;
 };
 
 service : (opt EngineControllerInitArgs) -> {
-  create_engine : (CreateEngineArgs) -> (Result);
+  create_engine : (CreateEngineArgs) -> (CreateEngineResult);
   delete_engine : (DeleteEngineArgs) -> (Result);
 }
