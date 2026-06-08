@@ -5136,17 +5136,8 @@ pub mod archiving {
             env.tick();
             archive_info = get_archives(&env, ledger_id);
         }
-        // Verify that the ledger reports block `0` to be present only in the ledger
-        let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
-        assert!(
-            !ledger_reports_first_block_in_two_places(0, &get_blocks_res),
-            "get_blocks_res: {get_blocks_res:?}"
-        );
-        // Verify that the ledger response contained no archive info.
-        assert!(get_blocks_res.archived_ranges.is_empty());
-        // Verify that the block was already archived. Since the archiving is done in chunks, the
-        // archiving is not yet completed, so the ledger reports the block `0` to be present only
-        // in the ledger, even though it is also present in the archive by now.
+        // Keep retrieving the block `0` from the archive and calling env.tick()
+        // until the block is archived.
         let archive_id = archive_info
             .first()
             .expect("should return one archive info");
@@ -5157,6 +5148,17 @@ pub mod archiving {
             env.tick();
             get_blocks_res = archive_get_blocks_fn(&env, archive_canister_id, 0, 1);
         }
+        // Since the archiving is done in chunks, the archiving is not yet completed,
+        // so the ledger reports the block `0` to be present only
+        // in the ledger, even though it is also present in the archive by now.
+        // Verify that the ledger reports block `0` to be present only in the ledger.
+        let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
+        assert!(
+            !ledger_reports_first_block_in_two_places(0, &get_blocks_res),
+            "get_blocks_res: {get_blocks_res:?}"
+        );
+        // Verify that the ledger response contained no archive info.
+        assert!(get_blocks_res.archived_ranges.is_empty());
 
         // Tick until the transfer completes, meaning the archiving also completes.
         const MAX_TICKS: usize = 500;
