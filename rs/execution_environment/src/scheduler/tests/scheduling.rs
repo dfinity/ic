@@ -13,7 +13,7 @@ use ic_types::methods::SystemMethod;
 use ic_types_cycles::Cycles;
 use more_asserts::{assert_ge, assert_gt, assert_le};
 use std::cmp::min;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
 use std::ops::Range;
 
@@ -796,7 +796,7 @@ fn scheduler_respects_compute_allocation(
     // for free, i.e. `number_of_canisters` rounds.
     let number_of_rounds = number_of_canisters;
 
-    let canister_ids: Vec<_> = test.state().canister_states().keys().cloned().collect();
+    let canister_ids: Vec<_> = test.state().canister_states().all_keys().cloned().collect();
 
     // Add one more round as we update the accumulated priorities at the end of the round now.
     for _ in 0..=number_of_rounds {
@@ -812,7 +812,7 @@ fn scheduler_respects_compute_allocation(
     }
 
     // Check that the compute allocations of the canisters are respected.
-    for (canister_id, canister) in test.state().canister_states().iter() {
+    for (canister_id, canister) in test.state().canister_states().all_iter() {
         let compute_allocation = canister.compute_allocation().as_percent() as usize;
 
         let count = scheduled_first_counters.get(canister_id).unwrap_or(&0);

@@ -3554,6 +3554,7 @@ fn http_method_from(
         ic_types::canister_http::CanisterHttpMethod::HEAD => CanisterHttpMethod::HEAD,
         ic_types::canister_http::CanisterHttpMethod::PUT => CanisterHttpMethod::PUT,
         ic_types::canister_http::CanisterHttpMethod::DELETE => CanisterHttpMethod::DELETE,
+        ic_types::canister_http::CanisterHttpMethod::PATCH => CanisterHttpMethod::PATCH,
     }
 }
 

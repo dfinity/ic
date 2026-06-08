@@ -191,6 +191,7 @@ fn run_determine_targets(cmd: DetermineTargets) -> Result<()> {
         "Genesis-Token",
         "Node-Rewards",
         "Migration",
+        "Engine-Controller",
     ];
     let sns_candidates = ["Root", "Governance", "Swap", "Index", "Ledger", "Archive"];
 

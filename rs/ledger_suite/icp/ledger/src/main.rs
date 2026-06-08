@@ -1,14 +1,13 @@
-#![allow(deprecated)]
 #[cfg(feature = "canbench-rs")]
 mod canbench;
 
 use candid::Decode;
-use candid::{Nat, Principal, candid_method};
+use candid::{Encode, Nat, Principal, candid_method};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{LogEntry, Sink};
 use ic_cdk::api::{
-    call::{arg_data_raw, reply_raw},
-    caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
+    certified_data_set, data_certificate, debug_print as print, instruction_counter,
+    msg_arg_data as arg_data_raw, msg_caller as caller, msg_reply as reply_raw, time, trap,
 };
 use ic_cdk::futures::internals::{in_executor_context, in_query_executor_context};
 use ic_cdk::{post_upgrade, pre_upgrade, query, update};
@@ -157,8 +156,8 @@ fn init(
         }
     }
     #[cfg(not(feature = "canbench-rs"))]
-    set_certified_data(
-        &LEDGER
+    certified_data_set(
+        LEDGER
             .read()
             .unwrap()
             .blockchain
@@ -254,7 +253,7 @@ async fn send(
         Err(PaymentError::TransferError(transfer_error)) => return Err(transfer_error),
         Err(PaymentError::Reject(msg)) => panic!("{}", msg),
     };
-    set_certified_data(&hash.into_bytes());
+    certified_data_set(hash.into_bytes());
 
     // Don't put anything that could ever trap after this call or people using this
     // endpoint. If something did panic the payment would appear to fail, but would
@@ -363,7 +362,7 @@ fn icrc1_send_not_async(
         let (block_index, _hash) = apply_transaction(&mut *ledger, tx, now, effective_fee)?;
 
         #[cfg(not(feature = "canbench-rs"))]
-        set_certified_data(&hash.into_bytes());
+        certified_data_set(hash.into_bytes());
 
         block_index
     };
@@ -633,7 +632,7 @@ const BUFFER_SIZE: usize = 8388608;
 fn post_upgrade(args: Option<LedgerCanisterPayload>) {
     let start = instruction_counter();
 
-    let mut magic_bytes_reader = ic_cdk::api::stable::StableReader::default();
+    let mut magic_bytes_reader = ic_cdk::stable::StableReader::default();
     const MAGIC_BYTES: &[u8; 3] = b"MGR";
     let mut first_bytes = [0_u8; 3];
     let memory_manager_found = match magic_bytes_reader.read_exact(&mut first_bytes) {
@@ -691,8 +690,8 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
                 }
             }
         }
-        set_certified_data(
-            &ledger
+        certified_data_set(
+            ledger
                 .blockchain
                 .last_hash
                 .map(|h| h.into_bytes())
@@ -1127,7 +1126,7 @@ fn get_nodes_() {
             .iter()
             .map(|archive| archive.canister_id)
             .collect::<Vec<CanisterId>>();
-        ic_cdk::api::call::reply((result,));
+        reply_raw(Encode!(&result).unwrap());
     })
 }
 
@@ -1147,12 +1146,12 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "ledger_stable_memory_pages",
-        ic_cdk::api::stable::stable_size() as f64,
+        ic_cdk::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "stable_memory_bytes",
-        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
+        (ic_cdk::stable::stable_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
@@ -1408,7 +1407,7 @@ fn icrc2_approve_not_async(
         let (block_index, _hash) = result;
 
         #[cfg(not(feature = "canbench-rs"))]
-        set_certified_data(&hash.into_bytes());
+        certified_data_set(hash.into_bytes());
 
         block_index
     };
