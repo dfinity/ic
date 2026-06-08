@@ -12,7 +12,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
 pub type InstanceId = usize;
@@ -846,8 +845,9 @@ impl ExtendedSubnetConfigSet {
     // Return the configured named subnets in order.
     #[allow(clippy::type_complexity)]
     pub fn get_named(&self) -> Vec<(SubnetKind, Option<PathBuf>, SubnetInstructionConfig)> {
-        SubnetKind::iter()
-            .filter(|kind| kind.is_named())
+        use SubnetKind::*;
+        [NNS, SNS, II, Fiduciary, Bitcoin, TestThresholdKeys]
+            .into_iter()
             .filter_map(|kind| {
                 self.named_subnet_spec(kind)
                     .map(|spec| (kind, spec.get_state_path(), spec.get_instruction_config()))
