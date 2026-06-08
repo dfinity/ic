@@ -13,7 +13,7 @@ works correctly.  So does reverse resolution.
 
 This only works for programs that respect the C library Name Service Switch
 stack.  Programs compiled statically that do not link to the C library, and
-programs that skip the C library's resolver (going directly to DNS) will not
+programs that skip the C library's resolver (going directly to DNS) will not 
 "see" the functionality of this plugin.
 
 ## Installation
