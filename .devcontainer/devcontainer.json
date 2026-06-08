@@ -25,9 +25,8 @@
     // build-time GID unrelated to the host. On the dfinity devenv /dev/kvm is
     // owned by GID 993, which in this image is the `sgx` group -- the image's
     // `kvm` group has a different GID -- so `--group-add kvm` would add the
-    // wrong group and QEMU still couldn't open /dev/kvm. (This is also why
-    // setup-local-system-test-backend.sh has to `groupmod` the `kvm` group onto
-    // 993.) ci/container/container-run.sh applies the same membership but reads
+    // wrong group and QEMU still couldn't open /dev/kvm.
+    // ci/container/container-run.sh applies the same membership but reads
     // the GID dynamically via `--group-add "$(stat -c %g /dev/kvm)"`; static
     // devcontainer.json can't run `stat`, so the devenv's known GID is pinned
     // here and must be updated if the host's /dev/kvm GID ever changes.
@@ -37,7 +36,6 @@
   "workspaceMount": "source=${localWorkspaceFolder},target=/ic,type=bind",
   "workspaceFolder": "/ic",
   "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache/cargo ~/.cache/zig-cache ~/.claude ~/.local/share/fish /tmp/ict_testnets && touch ~/.zsh_history ~/.bash_history",
-  "postStartCommand": "/ic/ci/container/setup-local-system-test-backend.sh",
   "containerEnv": {
     "CARGO_TARGET_DIR": "/home/ubuntu/.cache/cargo",
     "USER": "${localEnv:USER}"

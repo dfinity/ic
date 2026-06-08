@@ -320,11 +320,4 @@ if [ -e /dev/kvm ]; then
 fi
 
 set -x
-# Prepare the local libvirt/QEMU system-test backend before running the command
-# by relaxing the linux-sandbox apparmor sysctl (a host-kernel setting that
-# cannot be baked into the image). KVM access is granted by the `--group-add`
-# above, and the `ic-net-admin` capability launcher this backend also needs is
-# baked into the image (see ci/container/Dockerfile).
-BOOTSTRAP='/ic/ci/container/setup-local-system-test-backend.sh && exec "$@"'
-exec "${CONTAINER_CMD[@]}" run "${RUNTIME_RUN_ARGS[@]}" "$IMAGE" \
-    /usr/bin/bash -c "$BOOTSTRAP" bootstrap "${cmd[@]}"
+exec "${CONTAINER_CMD[@]}" run "${RUNTIME_RUN_ARGS[@]}" "$IMAGE" "${cmd[@]}"

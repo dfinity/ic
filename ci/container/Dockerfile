@@ -27,10 +27,10 @@ RUN apt -yq update && \
 # router-advertiser / DHCPv4 server (which binds the privileged UDP port 67).
 # `setcap` needs CAP_SETFCAP, available at image-build time but not to the test
 # process; the resulting file capabilities are preserved in the image layer.
-# Baking this in (rather than provisioning it at container start in
-# ci/container/setup-local-system-test-backend.sh) keeps it off the runtime
-# hook's critical path -- in the devcontainer that hook is a VS Code
-# `postStartCommand`, which VS Code can skip.
+# Baking this into the image (rather than provisioning it at container start)
+# keeps it off any runtime setup path, which can be unreliable -- e.g. in the
+# devcontainer such a hook would run as a VS Code `postStartCommand`, which
+# VS Code can skip.
 RUN install -m 0755 "$(command -v capsh)" /usr/local/bin/ic-net-admin && \
     setcap cap_net_admin,cap_net_raw,cap_net_bind_service+ep /usr/local/bin/ic-net-admin
 
