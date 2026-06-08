@@ -305,28 +305,26 @@ fi
 
 # Grant /dev/kvm access from container start.
 #
-# /dev/kvm is owned by root:<kvm-gid> (mode 0660). setup-local-system-test-backend.sh runs
-# `usermod -aG kvm` inside the container, but supplementary group membership is
-# fixed when a process is created: the container's main process and all its
-# descendants (bazel, the test driver, the on-demand libvirtd and qemu) inherit
-# the supplementary groups podman assigns at container start, *before* the setup
-# script runs, so they never pick up the kvm group. Without the kvm group they
-# cannot open /dev/kvm, and libvirtd then probes/caches QEMU as not supporting
-# `virt type 'kvm'` (the "Emulator '/usr/bin/qemu-system-x86_64' does not support
-# virt type 'kvm'" error). Adding the host's kvm GID as a supplementary group at
-# container creation time (by numeric GID, since the matching group may not exist
-# in the image yet) fixes this for the whole process tree.
+# /dev/kvm is owned by root:<kvm-gid> (mode 0660). The container's main process
+# and all its descendants (bazel, the test driver, the on-demand libvirtd and
+# qemu) inherit the supplementary groups podman assigns at container start and
+# never recompute them, so the only way they can open /dev/kvm is if the owning
+# GID is added as a supplementary group *at container creation time* -- which is
+# what we do here. Without it they cannot open /dev/kvm, and libvirtd then
+# probes/caches QEMU as not supporting `virt type 'kvm'` (the "Emulator
+# '/usr/bin/qemu-system-x86_64' does not support virt type 'kvm'" error). We add
+# it by numeric GID since the matching group may not exist in the image yet.
 if [ -e /dev/kvm ]; then
     KVM_GID="$(stat -c %g /dev/kvm)"
     RUNTIME_RUN_ARGS+=(--group-add "$KVM_GID")
 fi
 
 set -x
-# Prepare the local libvirt/QEMU system-test backend before running the command:
-# align the container's `kvm` group GID with the host's /dev/kvm and relax the
-# linux-sandbox apparmor sysctl. These depend on the host runtime and cannot be
-# baked into the image. (The `ic-net-admin` capability launcher this backend also
-# needs IS baked into the image; see ci/container/Dockerfile.)
+# Prepare the local libvirt/QEMU system-test backend before running the command
+# by relaxing the linux-sandbox apparmor sysctl (a host-kernel setting that
+# cannot be baked into the image). KVM access is granted by the `--group-add`
+# above, and the `ic-net-admin` capability launcher this backend also needs is
+# baked into the image (see ci/container/Dockerfile).
 BOOTSTRAP='/ic/ci/container/setup-local-system-test-backend.sh && exec "$@"'
 exec "${CONTAINER_CMD[@]}" run "${RUNTIME_RUN_ARGS[@]}" "$IMAGE" \
     /usr/bin/bash -c "$BOOTSTRAP" bootstrap "${cmd[@]}"

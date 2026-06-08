@@ -60,8 +60,8 @@ const DNSMASQ_BIN: &str = "/usr/sbin/dnsmasq";
 /// Absolute path to the capability launcher used for the few networking
 /// operations that require `CAP_NET_ADMIN` (creating the per-group bridge and
 /// attaching TAP devices). See [`LocalBackend::net_admin`] for the rationale
-/// and `ci/container/setup-local-system-test-backend.sh` for how the launcher is
-/// provisioned.
+/// and `ci/container/Dockerfile` for how the launcher is provisioned (a
+/// file-capability-endowed `capsh` baked into the container image).
 ///
 /// The backend is otherwise fully unprivileged: `libvirtd` runs as the
 /// current (non-root) user in session mode (`qemu:///session`), and QEMU opens
@@ -248,7 +248,7 @@ impl LocalBackend {
     /// The capability comes from the [`NET_ADMIN_LAUNCHER`] binary, a
     /// file-capability-endowed `capsh` provisioned once in the container image
     /// (`cap_net_admin,cap_net_raw,cap_net_bind_service+ep`; see
-    /// `ci/container/setup-local-system-test-backend.sh`). `capsh` raises the requested
+    /// `ci/container/Dockerfile`). `capsh` raises the requested
     /// caps into its inheritable+ambient sets and then `exec`s `/bin/sh -c
     /// <script>`; ambient capabilities survive the `exec`, so the commands in
     /// `script` (e.g. `ip link add ...`) run with the caps even though the
