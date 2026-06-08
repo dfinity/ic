@@ -1632,7 +1632,7 @@ impl LogStream {
         ))
     }
 
-    /// Open a stream that the node specified by the [`Ipv6Addr`]
+    /// Open a stream to the node specified by the [`Ipv6Addr`].
     async fn open_stream(ip_addr: Ipv6Addr) -> std::io::Result<Lines<BufReader<TcpStream>>> {
         let socket_addr: SocketAddr = SocketAddr::V6(SocketAddrV6::new(ip_addr, 19531, 0, 0));
         let socket = TcpSocket::new_v6()?;
