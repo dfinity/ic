@@ -1,6 +1,6 @@
 """
 e2fsprogs, built from source. The bundled libuuid/libblkid are enabled so we
-don't link against system copies. 
+don't link against system copies.
 """
 
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
@@ -46,7 +46,16 @@ configure_make(
     out_static_libs = [],
     # mke2fs is installed under sbin/ by autotools (it's a sysadmin tool);
     # rules_foreign_cc only picks up out_binaries from bin/, so move it.
-    postfix_script = "mkdir -p $$INSTALLDIR$$/bin && cp $$INSTALLDIR$$/sbin/mke2fs $$INSTALLDIR$$/bin/mke2fs",
+    #
+    # Then drop the rest of the install tree (unused & non-reproducible).
+    # The headers under include/ are kept since rules_foreign_cc declares them
+    # as an output.
+    postfix_script = (
+        "mkdir -p $$INSTALLDIR$$/bin && " +
+        "cp $$INSTALLDIR$$/sbin/mke2fs $$INSTALLDIR$$/bin/mke2fs && " +
+        "find $$INSTALLDIR$$ -mindepth 1 -maxdepth 1 ! -name bin ! -name include -exec rm -rf {} + && " +
+        "find $$INSTALLDIR$$/bin -mindepth 1 ! -name mke2fs -delete"
+    ),
     # Static glibc linking is a Linux/glibc thing; this isn't expected to work
     # elsewhere.
     target_compatible_with = [

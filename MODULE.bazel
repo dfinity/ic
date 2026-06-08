@@ -702,6 +702,11 @@ http_archive(
 http_archive(
     name = "e2fsprogs",
     build_file = "@//third_party:BUILD.e2fsprogs.bazel",
+    # Drops the absolute build-time install prefix that mke2fs otherwise bakes
+    # into its binary (the compiled-in mke2fs.conf path), which breaks build
+    # reproducibility. See the patch for details.
+    patch_strip = 1,
+    patches = ["//bazel:e2fsprogs_no_external_config.patch"],
     sha256 = "da274408bebbfd13a5a2fc3cfc66e3ffff17c48534673aa67f88d49b99123b96",
     strip_prefix = "e2fsprogs-1.47.4",
     urls = ["https://www.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v1.47.4/e2fsprogs-1.47.4.tar.gz"],
