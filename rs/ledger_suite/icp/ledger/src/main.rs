@@ -157,7 +157,7 @@ fn init(
     }
     #[cfg(not(feature = "canbench-rs"))]
     certified_data_set(
-        &LEDGER
+        LEDGER
             .read()
             .unwrap()
             .blockchain
