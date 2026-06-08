@@ -728,7 +728,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             membership: &[node_test_id(1), node_test_id(2)],
             subnet_type: SubnetType::Application,
             features: SubnetFeatures {
-                http_requests: true,
+                sev_enabled: true,
                 ..Default::default()
             },
             chain_key_config: ChainKeyConfig {

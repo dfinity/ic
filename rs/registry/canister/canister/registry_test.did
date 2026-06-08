@@ -403,7 +403,6 @@ type SetFirewallConfigPayload = record {
 };
 
 type SubnetFeatures = record {
-  canister_sandboxing : bool;
   http_requests : bool;
   sev_enabled : opt bool;
 };
