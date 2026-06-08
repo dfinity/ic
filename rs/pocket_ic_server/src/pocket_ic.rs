@@ -2744,7 +2744,11 @@ impl PocketIcSubnets {
         }
     }
 
-    fn delete_subnet(&mut self, subnet_id: SubnetId) -> Result<(), PocketIcError> {
+    fn delete_subnet(
+        &mut self,
+        subnet_id: SubnetId,
+        default_effective_canister_id: Principal,
+    ) -> Result<(), PocketIcError> {
         let config_pos = self
             .subnet_configs
             .iter()
@@ -2765,6 +2769,18 @@ impl PocketIcSubnets {
             return Err(PocketIcError::Forbidden(
                 "Cannot delete the root subnet of the PocketIC instance.".to_string(),
             ));
+        }
+
+        let default_canister_id: CanisterId = PrincipalId(default_effective_canister_id)
+            .try_into()
+            .unwrap();
+        if let Some((_, default_subnet_id)) = self.routing_table.lookup_entry(default_canister_id)
+            && default_subnet_id == subnet_id
+        {
+            return Err(PocketIcError::Forbidden(format!(
+                "Cannot delete subnet {} which contains the default effective canister ID.",
+                subnet_id
+            )));
         }
 
         let config = self.subnet_configs.remove(config_pos);
@@ -5557,7 +5573,11 @@ pub struct DeleteSubnet {
 
 impl Operation for DeleteSubnet {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        match pic.subnets.delete_subnet(self.subnet_id) {
+        let default_effective_canister_id = pic.default_effective_canister_id;
+        match pic
+            .subnets
+            .delete_subnet(self.subnet_id, default_effective_canister_id)
+        {
             Ok(()) => OpOut::NoOutput,
             Err(e) => OpOut::Error(e),
         }

@@ -3708,6 +3708,43 @@ fn test_delete_subnet() {
 }
 
 #[test]
+fn test_delete_default_effective_canister_id_subnet_fails() {
+    // Create a PocketIC instance with one NNS subnet and two application subnets.
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .with_application_subnet()
+        .build();
+
+    let topology = pic.topology();
+    let default_effective_canister_id =
+        Principal::from(topology.default_effective_canister_id.clone());
+
+    // Identify which app subnet contains the default effective canister ID.
+    let default_subnet_id = topology
+        .get_subnet(default_effective_canister_id)
+        .expect("default effective canister ID must belong to a subnet");
+    let other_subnet_id = topology
+        .get_app_subnets()
+        .into_iter()
+        .find(|&id| id != default_subnet_id)
+        .expect("there must be a second app subnet");
+
+    // The app subnet containing the default effective canister ID cannot be deleted.
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        pic.delete_subnet(default_subnet_id);
+    }));
+    assert!(
+        result.is_err(),
+        "deleting the subnet containing the default effective canister ID should fail"
+    );
+
+    // The other app subnet can be deleted.
+    pic.delete_subnet(other_subnet_id);
+    assert_eq!(pic.topology().get_app_subnets(), vec![default_subnet_id]);
+}
+
+#[test]
 fn test_delete_named_subnet_fails() {
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
