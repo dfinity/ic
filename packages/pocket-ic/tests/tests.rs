@@ -3749,6 +3749,8 @@ fn test_delete_subnet_state_dir() {
 
     let subnet_ids = pic.topology().get_app_subnets();
     assert_eq!(subnet_ids.len(), 2);
+    // On Windows, the state_dir is only synced back from the WSL-native state directory on drop.
+    #[cfg(not(windows))]
     assert_eq!(subnet_dirs_count(), 2);
 
     pic.delete_subnet(subnet_ids[1]);
