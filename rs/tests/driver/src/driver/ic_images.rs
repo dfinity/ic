@@ -30,13 +30,13 @@ use url::Url;
 
 /// Build a URL pointing at the per-group file server run by the Local backend
 /// for the image with the given `sha256` digest. The server (see
-/// `serve_files_task`) listens on the group's IPv6 gateway address and serves
-/// each image under its content hash, mirroring Farm's content-addressed
-/// scheme.
+/// `serve_files_task`) listens on the group's IPv6 management address (off the
+/// node `/64`) and serves each image under its content hash, mirroring Farm's
+/// content-addressed scheme.
 fn local_image_url(env: &TestEnv, sha256: &str) -> Url {
     let group_name = GroupSetup::read_attribute(env).infra_group_name;
-    let gateway = LocalBackend::group_gateway_ipv6(&group_name);
-    Url::parse(&format!("http://[{gateway}]:{FILE_SERVER_PORT}/{sha256}"))
+    let mgmt = LocalBackend::group_mgmt_ipv6(&group_name);
+    Url::parse(&format!("http://[{mgmt}]:{FILE_SERVER_PORT}/{sha256}"))
         .unwrap_or_else(|_| panic!("Invalid local image URL for '{sha256}'"))
 }
 

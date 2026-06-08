@@ -534,14 +534,21 @@ impl LocalBackend {
 
     /// Returns the per-group IPv6 gateway address (`<prefix>1`). The Local
     /// backend assigns this address to the group's bridge in
-    /// [`create_group`](Self::create_group); it is the address on which the
-    /// per-group file server listens and that node-download URLs point at.
+    /// [`create_group`](Self::create_group), which both puts the node `/64`
+    /// on-link there and creates the bridge's connected route for it (whose
+    /// preferred source `create_group` then overrides to the management
+    /// address, [`group_mgmt_ipv6`](Self::group_mgmt_ipv6)).
     pub fn group_gateway_ipv6(group_name: &str) -> String {
         format!("{}1", Self::group_ipv6_prefix(group_name))
     }
 
-    /// Returns the per-group IPv6 *management* address used as the source for
-    /// host→node traffic that the test driver originates on the Local backend.
+    /// Returns the per-group IPv6 *management* address. It serves two roles on
+    /// the Local backend:
+    ///
+    /// 1. the source for host→node traffic that the test driver originates, and
+    /// 2. the address on which the per-group file server
+    ///    ([`serve_files_task`](crate::driver::serve_files_task)) listens and
+    ///    that node image-download URLs point at.
     ///
     /// It is `<prefix>:1::1`, sharing the group hash with
     /// [`group_ipv6_prefix`](Self::group_ipv6_prefix): the node `/64`
@@ -555,10 +562,17 @@ impl LocalBackend {
     /// unique, introducing no new collision class beyond the node `/64`'s
     /// existing per-group uniqueness.
     ///
+    /// Serving images from this off-`/64` address (rather than from the
+    /// on-bridge gateway) also mirrors production, where the web server hosting
+    /// GuestOS/HostOS images is not on the IC nodes' `/64`. Nodes still reach it
+    /// because the RA installs the host as their default router (see
+    /// [`create_group`](Self::create_group)), and their download replies are
+    /// accepted by the GuestOS firewall's stateful `established,related` rule.
+    ///
     /// The address is assigned to `lo` (not the bridge) so `dnsmasq` does not
     /// advertise it for SLAAC; [`create_group`](Self::create_group) overrides
     /// the node `/64`'s connected-route source to it.
-    fn group_mgmt_ipv6(group_name: &str) -> String {
+    pub fn group_mgmt_ipv6(group_name: &str) -> String {
         use ic_crypto_sha2::Sha256;
         let hash = Sha256::hash(group_name.as_bytes());
         format!(
@@ -648,7 +662,7 @@ impl LocalBackend {
         let bridge = Self::bridge_name(group_name);
         let prefix = Self::group_ipv6_prefix(group_name);
         // The gateway address (`<prefix>1`) lives on the bridge.
-        let gateway = format!("{prefix}1");
+        let gateway = Self::group_gateway_ipv6(group_name);
         // The driver's per-group management address (`<mgmt-prefix>:1::1`, a
         // second `/64` outside the node `/64`) is assigned to `lo` and used as
         // the source for host→node traffic; see `group_mgmt_ipv6`.

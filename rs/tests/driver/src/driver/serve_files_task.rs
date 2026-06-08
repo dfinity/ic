@@ -4,10 +4,16 @@
 //! images) to a content-addressed HTTP store from which Farm-hosted IC nodes
 //! download them. The Local backend has no external network access, so instead
 //! we serve those images ourselves: this task runs a tiny HTTP server bound to
-//! the group's IPv6 gateway address (see
-//! [`LocalBackend::group_gateway_ipv6`](crate::driver::local_backend::LocalBackend::group_gateway_ipv6))
+//! the group's IPv6 management address (see
+//! [`LocalBackend::group_mgmt_ipv6`](crate::driver::local_backend::LocalBackend::group_mgmt_ipv6))
 //! on [`FILE_SERVER_PORT`], and the `..._url` helpers in
 //! [`ic_images`](crate::driver::ic_images) return URLs pointing at it.
+//!
+//! The management address lies *outside* every node's `/64`, mirroring
+//! production where the web server hosting these images is not on the IC nodes'
+//! subnet. Nodes still reach it because the Local backend's Router
+//! Advertisement installs the host as their default router; see
+//! [`LocalBackend::create_group`](crate::driver::local_backend::LocalBackend::create_group).
 //!
 //! Files are addressed by their SHA-256 hash (mirroring Farm's content-
 //! addressed scheme): a `GET /<sha256>` returns the image whose contents hash
@@ -50,12 +56,12 @@ pub(crate) const SERVE_FILES_TASK_NAME: &str = "serve_files";
 const RETRY_DELAY: Duration = Duration::from_secs(2);
 
 /// TCP port on which the per-group file server listens (on the group's IPv6
-/// gateway address). Under the Local backend there is no external network, so
+/// management address). Under the Local backend there is no external network, so
 /// `icos_images` that IC nodes must fetch over HTTP (e.g. GuestOS/HostOS update
 /// images used by upgrade tests) are served by a small web server spawned from
 /// the test driver (see `serve_files_task`). The port is fixed because every
-/// group runs in its own network namespace, so there is no cross-group
-/// contention on the gateway address.
+/// group has its own (per-group unique) management address, so there is no
+/// cross-group contention on it.
 pub const FILE_SERVER_PORT: u16 = 8080;
 
 pub(crate) fn serve_files_task(group_ctx: GroupContext) {
@@ -63,10 +69,10 @@ pub(crate) fn serve_files_task(group_ctx: GroupContext) {
     debug!(logger, ">>> {SERVE_FILES_TASK_NAME}");
 
     // Wait until `GroupSetup` has been persisted so we can derive the group's
-    // gateway address. Under the Local backend the bridge and its gateway
-    // address are created inline in the parent process before the task
-    // scheduler starts, so this normally succeeds on the first iteration; the
-    // loop only guards against an unexpected startup race.
+    // management address. Under the Local backend that address is assigned to
+    // `lo` inline in the parent process before the task scheduler starts, so
+    // this normally succeeds on the first iteration; the loop only guards
+    // against an unexpected startup race.
     let group_setup = loop {
         let setup_dir = group_ctx.group_dir.join(GROUP_SETUP_DIR);
         if setup_dir.exists() {
@@ -82,11 +88,11 @@ pub(crate) fn serve_files_task(group_ctx: GroupContext) {
         std::thread::sleep(RETRY_DELAY);
     };
 
-    let gateway = LocalBackend::group_gateway_ipv6(&group_setup.infra_group_name);
+    let mgmt = LocalBackend::group_mgmt_ipv6(&group_setup.infra_group_name);
     let files = collect_served_files(&logger);
     info!(
         logger,
-        "{SERVE_FILES_TASK_NAME}: serving {} image(s) on [{gateway}]:{FILE_SERVER_PORT}",
+        "{SERVE_FILES_TASK_NAME}: serving {} image(s) on [{mgmt}]:{FILE_SERVER_PORT}",
         files.len()
     );
 
@@ -105,7 +111,7 @@ pub(crate) fn serve_files_task(group_ctx: GroupContext) {
             .route("/{sha256}", get(serve_file))
             .with_state(state);
 
-        let addr = format!("[{gateway}]:{FILE_SERVER_PORT}");
+        let addr = format!("[{mgmt}]:{FILE_SERVER_PORT}");
         let listener = loop {
             match tokio::net::TcpListener::bind(&addr).await {
                 Ok(listener) => break listener,
