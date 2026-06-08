@@ -1382,10 +1382,12 @@ impl TryFrom<pb_canister_state_bits::SnapshotVisibility> for SnapshotVisibility 
 ///   freezing_threshold : nat;
 ///   reserved_cycles_limit : nat;
 ///   log_visibility : log_visibility;
+///   snapshot_visibility : snapshot_visibility;
 ///   log_memory_limit : nat;
 ///   wasm_memory_limit : nat;
 ///   wasm_memory_threshold : nat;
 ///   environment_variables : vec environment_variable;
+///   minimum_msg_cycles_available : nat;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -1528,6 +1530,7 @@ pub struct QueryStats {
 ///     canister_history_size : nat;
 ///     wasm_chunk_store_size : nat;
 ///     snapshots_size : nat;
+///     log_memory_store_size : nat;
 ///   };
 ///   cycles : nat;
 ///   balance : vec record { blob; nat };
@@ -2372,10 +2375,12 @@ pub struct EnvironmentVariable {
 ///   freezing_threshold : opt nat;
 ///   reserved_cycles_limit : opt nat;
 ///   log_visibility : opt log_visibility;
+///   snapshot_visibility : opt snapshot_visibility;
 ///   log_memory_limit : opt nat;
 ///   wasm_memory_limit : opt nat;
 ///   wasm_memory_threshold : opt nat;
 ///   environment_variables : opt vec environment_variable;
+///   minimum_msg_cycles_available : opt nat;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
