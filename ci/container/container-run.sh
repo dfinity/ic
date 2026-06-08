@@ -304,4 +304,4 @@ if [ -f "$HOME/.container-run.conf" ]; then
 fi
 
 set -x
-exec "${CONTAINER_CMD[@]}" run "${RUNTIME_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"
+exec "${CONTAINER_CMD[@]}" run "${RUNTIME_RUN_ARGS[@]}" "$IMAGE" "${cmd[@]}"
