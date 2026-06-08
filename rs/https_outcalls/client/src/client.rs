@@ -158,7 +158,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     "Canister HTTP request with PayAsYouGo pricing is not supported yet: \
                     request_id {}, sender {}, process_id: {}",
                     request_id,
-                    request_context.request.sender,
+                    request_sender,
                     std::process::id(),
                 );
                 let _ = permit.send((
@@ -210,7 +210,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                             &mut *budget,
                             query_handler,
                             canister_http_payload,
-                            request_context.request.sender,
+                            request_sender,
                             transform,
                         )
                         .await;

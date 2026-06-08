@@ -1084,10 +1084,6 @@ impl CountBytes for CanisterHttpResponseMetadata {
 /// The content a single replica signs over: the shared
 /// [`CanisterHttpResponseMetadata`] together with that replica's own
 /// [`CanisterHttpPaymentReceipt`].
-///
-/// Including the receipt in the signed bytes binds the per-replica refund
-/// claim to the response so it cannot be forged or altered after the
-/// fact.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseReceiptShare {
@@ -1166,11 +1162,7 @@ impl CountBytes for CanisterHttpResponseSignature {
 ///
 /// Holds the shared [`CanisterHttpResponseMetadata`] together with, for
 /// each contributing signer, the [`CanisterHttpPaymentReceipt`] they
-/// signed over and their basic signature (see
-/// [`CanisterHttpResponseSignature`]). A validator reconstructs, for each
-/// signer, the exact [`CanisterHttpResponseReceiptShare`] that signer
-/// signed — the shared metadata plus that signer's receipt — and verifies
-/// the individual basic signature.
+/// signed over and their basic signature (see [`CanisterHttpResponseSignature`]).
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseProof {

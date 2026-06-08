@@ -58,8 +58,7 @@ pub enum InvalidCanisterHttpPayloadReason {
     /// There was an error with a signature calculation
     SignatureError(Box<CryptoError>),
     /// A payment receipt claims a refund larger than the per-replica allowance
-    /// derived from the request's payment. An honest replica can never refund
-    /// more than its allowance, so such a receipt is rejected.
+    /// derived from the request's payment.
     RefundExceedsAllowance {
         refund: Cycles,
         per_replica_allowance: Cycles,

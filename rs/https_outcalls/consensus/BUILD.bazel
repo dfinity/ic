@@ -70,6 +70,7 @@ rust_test(
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
         "//rs/test_utilities",
+        "//rs/test_utilities/consensus",
         "//rs/test_utilities/logger",
         "//rs/test_utilities/registry",
         "//rs/test_utilities/state",

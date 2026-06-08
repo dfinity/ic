@@ -36,7 +36,7 @@ use ic_types::{
         CanisterHttpResponseWithConsensus, PricingVersion, RefundStatus, Replication,
     },
     consensus::get_faults_tolerated,
-    crypto::{BasicSigOf, Signed, crypto_hash},
+    crypto::{BasicSigOf, crypto_hash},
     messages::CallbackId,
     signature::BasicSignature,
     time::UNIX_EPOCH,
@@ -242,8 +242,7 @@ fn build_target(
     }
 }
 
-/// Helper that signs a [`CanisterHttpResponseReceiptShare`] (the shared
-/// metadata together with a node's own payment receipt) with a committee
+/// Helper that signs `CanisterHttpResponseReceiptShare` with a committee
 /// node's crypto component.
 struct Signer<'a> {
     crypto: &'a [TempCryptoComponent],
@@ -319,7 +318,7 @@ impl<'a> PayloadAssembler<'a> {
             payment_receipt: CanisterHttpPaymentReceipt::default(),
         };
         let signature = signer.sign(node, &receipt_share);
-        Signed {
+        CanisterHttpResponseShare {
             signature: BasicSignature {
                 signature,
                 signer: self.committee[node],

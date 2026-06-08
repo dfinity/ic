@@ -32,6 +32,7 @@ use ic_management_canister_types_private::{
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_test_utilities::state_manager::RefMockStateManager;
+use ic_test_utilities_consensus::fake::FakeContentSigner;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_test_utilities_types::{
     ids::{canister_test_id, node_id_to_u64, node_test_id, subnet_test_id},
@@ -1068,55 +1069,162 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
 }
 
 #[test]
-fn validate_payload_fails_for_refund_exceeding_allowance() {
-    test_config_with_http_feature(true, 4, |mut payload_builder, _| {
-        let delegated_node_id = node_test_id(1);
-        let callback_id = CallbackId::from(99);
+fn validate_payload_fails_for_refund_exceeding_allowance_non_replicated() {
+    let delegated_node_id = node_test_id(1);
+    let callback_id = CallbackId::from(99);
 
-        // The helper uses the default `RefundStatus`, which has a zero
-        // per-replica allowance, so any positive refund claim is over the
-        // allowance.
-        let request_context = request_context(Replication::NonReplicated(delegated_node_id));
-        inject_request_contexts(&mut payload_builder, [(callback_id, request_context)]);
+    let (response, metadata) = test_response_and_metadata(callback_id.get());
+    let mut proof = response_and_metadata_to_proof(&response, &metadata);
+    proof
+        .proof
+        .signatures
+        .insert(delegated_node_id, proof_signature_with_excess_refund());
 
-        let (response, metadata) = test_response_and_metadata(callback_id.get());
-        let mut proof = response_and_metadata_to_proof(&response, &metadata);
-        // The delegated signer claims a refund of 1 cycle, exceeding the zero
-        // per-replica allowance.
-        let refund = Cycles::new(1);
-        proof.proof.signatures.insert(
-            delegated_node_id,
-            CanisterHttpResponseSignature {
-                payment_receipt: CanisterHttpPaymentReceipt { refund },
-                signature: BasicSigOf::new(BasicSig(vec![])),
-            },
-        );
-
-        let payload = CanisterHttpPayload {
+    assert_payload_rejected_for_excess_refund(
+        4,
+        vec![(
+            callback_id,
+            request_context(Replication::NonReplicated(delegated_node_id)),
+        )],
+        default_validation_context(),
+        CanisterHttpPayload {
             responses: vec![proof],
             ..Default::default()
-        };
-        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+        },
+    );
+}
 
-        let validation_result = payload_builder.validate_payload(
-            Height::from(1),
-            &test_proposal_context(&default_validation_context()),
-            &payload_bytes,
-            &[],
-        );
+#[test]
+fn validate_payload_fails_for_refund_exceeding_allowance_fully_replicated() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::from(99);
 
-        assert_matches!(
-            validation_result,
-            Err(ValidationError::InvalidArtifact(
-                InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::RefundExceedsAllowance {
-                        refund: r,
-                        per_replica_allowance,
-                    },
-                ),
-            )) if r == refund && per_replica_allowance == Cycles::new(0)
-        );
-    });
+    let (response, metadata) = test_response_and_metadata(callback_id.get());
+    let mut proof = response_and_metadata_to_proof(&response, &metadata);
+    for node in 0..num_nodes as u64 {
+        proof
+            .proof
+            .signatures
+            .insert(node_test_id(node), proof_signature_with_excess_refund());
+    }
+
+    assert_payload_rejected_for_excess_refund(
+        num_nodes,
+        vec![(callback_id, request_context(Replication::FullyReplicated))],
+        default_validation_context(),
+        CanisterHttpPayload {
+            responses: vec![proof],
+            ..Default::default()
+        },
+    );
+}
+
+#[test]
+fn validate_payload_fails_for_refund_exceeding_allowance_divergence() {
+    let callback_id = CallbackId::from(99);
+
+    let (_response, metadata) = test_response_and_metadata(callback_id.get());
+    let payload = CanisterHttpPayload {
+        divergence_responses: vec![CanisterHttpResponseDivergence {
+            shares: vec![share_with_excess_refund(0, &metadata)],
+        }],
+        ..Default::default()
+    };
+
+    assert_payload_rejected_for_excess_refund(
+        4,
+        vec![(callback_id, request_context(Replication::FullyReplicated))],
+        default_validation_context(),
+        payload,
+    );
+}
+
+#[test]
+fn validate_payload_fails_for_refund_exceeding_allowance_flexible_response() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(99);
+
+    let (response, metadata) = test_response_and_metadata_with_content(
+        callback_id.get(),
+        CanisterHttpResponseContent::Success(b"flexible".to_vec()),
+    );
+    let payload = CanisterHttpPayload {
+        flexible_responses: vec![FlexibleCanisterHttpResponses {
+            callback_id,
+            responses: vec![FlexibleCanisterHttpResponseWithProof {
+                response,
+                proof: share_with_excess_refund(0, &metadata),
+            }],
+        }],
+        ..Default::default()
+    };
+
+    assert_payload_rejected_for_excess_refund(
+        num_nodes,
+        vec![(callback_id, flexible_request_context(committee, 1, 4))],
+        default_validation_context(),
+        payload,
+    );
+}
+
+#[test]
+fn validate_payload_fails_for_refund_exceeding_allowance_too_many_rejects() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(99);
+
+    let (response, metadata) = test_response_and_metadata_with_content(
+        callback_id.get(),
+        CanisterHttpResponseContent::Reject(CanisterHttpReject {
+            reject_code: RejectCode::SysTransient,
+            message: "could not connect".to_string(),
+        }),
+    );
+    let payload = CanisterHttpPayload {
+        flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
+            callback_id,
+            reject_responses: vec![FlexibleCanisterHttpResponseWithProof {
+                response,
+                proof: share_with_excess_refund(0, &metadata),
+            }],
+        }],
+        ..Default::default()
+    };
+
+    assert_payload_rejected_for_excess_refund(
+        num_nodes,
+        vec![(callback_id, flexible_request_context(committee, 1, 4))],
+        default_validation_context(),
+        payload,
+    );
+}
+
+#[test]
+fn validate_payload_fails_for_refund_exceeding_allowance_responses_too_large() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(99);
+
+    let (_response, metadata) = test_response_and_metadata(callback_id.get());
+    let payload = CanisterHttpPayload {
+        flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
+            callback_id,
+            all_seen_shares: vec![share_with_excess_refund(0, &metadata)],
+            // Match the committee size and context `min_responses` so validation
+            // reaches the per-share refund check.
+            total_requests: num_nodes as u32,
+            min_responses: 2,
+        }],
+        ..Default::default()
+    };
+
+    assert_payload_rejected_for_excess_refund(
+        num_nodes,
+        vec![(callback_id, flexible_request_context(committee, 2, 4))],
+        default_validation_context(),
+        payload,
+    );
 }
 
 #[test]
@@ -1550,6 +1658,70 @@ pub(crate) fn add_signer_to_proof(proof: &mut CanisterHttpResponseWithConsensus,
             signature: BasicSigOf::new(BasicSig(vec![])),
         },
     );
+}
+
+/// A payment receipt whose refund exceeds the default (zero) per-replica
+/// allowance.
+fn receipt_exceeding_allowance() -> CanisterHttpPaymentReceipt {
+    CanisterHttpPaymentReceipt {
+        refund: Cycles::new(1),
+    }
+}
+
+/// Builds a share for `metadata` signed by `signer_node` whose payment receipt
+/// claims a refund exceeding the default per-replica allowance.
+fn share_with_excess_refund(
+    signer_node: u64,
+    metadata: &CanisterHttpResponseMetadata,
+) -> CanisterHttpResponseShare {
+    CanisterHttpResponseShare::fake(
+        CanisterHttpResponseReceiptShare {
+            metadata: metadata.clone(),
+            payment_receipt: receipt_exceeding_allowance(),
+        },
+        node_test_id(signer_node),
+    )
+}
+
+/// Builds an aggregated-proof signature entry whose payment receipt claims a
+/// refund exceeding the default per-replica allowance.
+fn proof_signature_with_excess_refund() -> CanisterHttpResponseSignature {
+    CanisterHttpResponseSignature {
+        payment_receipt: receipt_exceeding_allowance(),
+        signature: BasicSigOf::new(BasicSig(vec![])),
+    }
+}
+
+/// Configures a payload builder with `num_nodes` nodes and the given request
+/// `contexts`, validates `payload`, and asserts that it is rejected because a
+/// payment receipt's refund exceeds the per-replica allowance.
+fn assert_payload_rejected_for_excess_refund(
+    num_nodes: usize,
+    contexts: Vec<(CallbackId, CanisterHttpRequestContext)>,
+    validation_context: ValidationContext,
+    payload: CanisterHttpPayload,
+) {
+    test_config_with_http_feature(true, num_nodes, |mut payload_builder, _| {
+        inject_request_contexts(&mut payload_builder, contexts);
+        let validation_result = payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(&validation_context),
+            &payload_to_bytes_max_4mb(payload),
+            &[],
+        );
+        assert_matches!(
+            validation_result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::RefundExceedsAllowance {
+                        refund,
+                        per_replica_allowance,
+                    },
+                ),
+            )) if refund == receipt_exceeding_allowance().refund
+                && per_replica_allowance == Cycles::new(0)
+        );
+    });
 }
 
 /// Creates a vector of [`CanisterHttpResponseShare`]s by calling [`metadata_to_share`]

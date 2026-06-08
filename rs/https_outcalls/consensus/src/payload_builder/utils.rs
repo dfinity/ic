@@ -77,9 +77,7 @@ pub(crate) fn check_response_consistency(
 
 /// Enforces the per-replica refund allowance from the request context: the
 /// `refund` claimed in the payment receipt must never exceed the
-/// `per_replica_allowance` derived from the request's payment. This is checked
-/// for every payment receipt that enters the payload, regardless of which
-/// payload section carries it.
+/// `per_replica_allowance` derived from the request's payment.
 pub(crate) fn check_refund_allowance(
     receipt: &CanisterHttpPaymentReceipt,
     per_replica_allowance: Cycles,
@@ -196,8 +194,7 @@ pub(crate) fn validate_flexible_response_with_proof(
 /// Validates a single [`CanisterHttpResponseShare`]'s metadata.
 ///
 /// Checks callback-id consistency, duplicate signers, committee membership,
-/// registry version, and the per-replica refund allowance (via
-/// [`check_refund_allowance`]).
+/// registry version, and the per-replica refund allowance.
 ///
 /// **NOTE**: The signature is not verified. Callers are expected to
 /// batch-verify the signatures of all shares in the surrounding group via
@@ -395,11 +392,6 @@ pub(crate) fn find_non_replicated_response(
 /// shares: the shared `metadata` together with, for each signer, the
 /// basic signature and payment receipt taken directly from that signer's
 /// share.
-///
-/// Basic signatures are not cryptographically combined, so there is no
-/// separate aggregation step — each share already carries its own
-/// signature and receipt. In practice the upstream code feeds at most one
-/// share per signer.
 pub(crate) fn proof_from_shares(
     metadata: CanisterHttpResponseMetadata,
     shares: &[&CanisterHttpResponseShare],

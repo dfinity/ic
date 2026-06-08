@@ -500,8 +500,7 @@ impl CanisterHttpPoolManagerImpl {
                 };
 
                 // Invalidate shares whose refund exceeds what a single
-                // replica is allowed to claim. An honest replica cannot
-                // legitimately refund more than its per-replica allowance.
+                // replica is allowed to claim.
                 if share.content.refund() > context.refund_status.per_replica_allowance {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
                         share.clone(),
@@ -3471,10 +3470,6 @@ pub mod test {
         });
     }
 
-    /// If the refund reported in the payment receipt exceeds the per-replica
-    /// allowance configured on the request context, the share is rejected
-    /// as invalid: an honest replica cannot legitimately refund more than
-    /// its allowance.
     #[test]
     fn test_refund_greater_than_replica_allowance_is_invalid() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -3494,22 +3489,17 @@ pub mod test {
 
                 // Use a context with a small per-replica allowance.
                 let request = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::FullyReplicated,
-                    pricing_version: PricingVersion::Legacy,
                     refund_status: RefundStatus {
                         refundable_cycles: Cycles::new(1000),
                         per_replica_allowance: Cycles::new(100),
                         refunded_cycles: Cycles::new(0),
                         refunding_nodes: BTreeSet::new(),
                     },
+                    ..test_request_context(
+                        Replication::FullyReplicated,
+                        PricingVersion::Legacy,
+                        None,
+                    )
                 };
 
                 state_manager

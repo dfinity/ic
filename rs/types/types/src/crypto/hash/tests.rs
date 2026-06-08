@@ -70,8 +70,9 @@ mod crypto_hash_stability {
     use crate::CryptoHashOfState;
     use crate::batch::{BatchPayload, ValidationContext};
     use crate::canister_http::{
-        CanisterHttpRequestId, CanisterHttpResponse, CanisterHttpResponseContent,
-        CanisterHttpResponseMetadata,
+        CanisterHttpPaymentReceipt, CanisterHttpRequestId, CanisterHttpResponse,
+        CanisterHttpResponseContent, CanisterHttpResponseMetadata,
+        CanisterHttpResponseReceiptShare,
     };
     use crate::consensus::{
         Block, BlockPayload, BlockProposal, CatchUpContent, CatchUpContentProtobufBytes,
@@ -1087,7 +1088,6 @@ mod crypto_hash_stability {
     /// Test stability of CanisterHttpResponseShare hash output
     #[test]
     fn canister_http_response_share_stability() {
-        use crate::canister_http::{CanisterHttpPaymentReceipt, CanisterHttpResponseReceiptShare};
         let metadata = CanisterHttpResponseMetadata {
             id: CallbackId::from(42),
             content_hash: test_crypto_hash_of(0x42),
