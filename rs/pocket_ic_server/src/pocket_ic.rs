@@ -2759,6 +2759,14 @@ impl PocketIcSubnets {
             )));
         }
 
+        if let Some(root_subnet) = self.nns_subnet.as_ref()
+            && root_subnet.get_subnet_id() == subnet_id
+        {
+            return Err(PocketIcError::Forbidden(
+                "Cannot delete the root subnet of the PocketIC instance.".to_string(),
+            ));
+        }
+
         let config = self.subnet_configs.remove(config_pos);
 
         let subnet = self
