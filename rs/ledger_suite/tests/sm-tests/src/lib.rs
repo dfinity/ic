@@ -4676,6 +4676,7 @@ pub mod archiving {
     use ic_ledger_canister_core::range_utils;
     use ic_ledger_suite_state_machine_helpers::{get_logs, icrc3_get_blocks};
     use ic_state_machine_tests::StateMachineBuilder;
+    use ic_types::NumInstructions;
     use ic_types::ingress::{IngressState, IngressStatus};
     use ic_types::messages::MessageId;
     use icp_ledger::{GetEncodedBlocksResult, QueryEncodedBlocksResponse};
@@ -5080,7 +5081,21 @@ pub mod archiving {
         }
 
         // Install a ledger with a lot of initial balances
-        let env = StateMachine::new();
+        let mut subnet_config = SubnetConfig::new(SubnetType::System, SubnetSecurity::None);
+        subnet_config.scheduler_config.max_instructions_per_round = subnet_config
+            .scheduler_config
+            .max_instructions_per_slice
+            .max(
+                subnet_config
+                    .scheduler_config
+                    .max_instructions_per_install_code_slice,
+            );
+        let env = StateMachineBuilder::new()
+            .with_config(Some(StateMachineConfig::new(
+                subnet_config,
+                HypervisorConfig::default(),
+            )))
+            .build();
         let args = encode_init_args(InitArgs {
             archive_options: ArchiveOptions {
                 trigger_threshold: TRIGGER_THRESHOLD,
@@ -5134,16 +5149,13 @@ pub mod archiving {
         let archive_id = archive_info
             .first()
             .expect("should return one archive info");
-        let get_blocks_res = archive_get_blocks_fn(
-            &env,
-            CanisterId::unchecked_from_principal(PrincipalId::from(*archive_id)),
-            0,
-            1,
-        );
-        assert!(
-            !get_blocks_res.blocks.is_empty(),
-            "archive should contain at least one block"
-        );
+        let archive_canister_id =
+            CanisterId::unchecked_from_principal(PrincipalId::from(*archive_id));
+        let mut get_blocks_res = archive_get_blocks_fn(&env, archive_canister_id, 0, 1);
+        while get_blocks_res.blocks.is_empty() {
+            env.tick();
+            get_blocks_res = archive_get_blocks_fn(&env, archive_canister_id, 0, 1);
+        }
 
         // Tick until the transfer completes, meaning the archiving also completes.
         const MAX_TICKS: usize = 500;
