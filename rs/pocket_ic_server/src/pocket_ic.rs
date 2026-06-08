@@ -2803,14 +2803,14 @@ impl PocketIcSubnets {
         if let Some(state_dir) = self.state_dir.get() {
             let subnet_seed = compute_subnet_seed(config.ranges.clone(), config.alloc_range);
             let subnet_state_dir = state_dir.join(hex::encode(subnet_seed));
-            if subnet_state_dir.exists() {
-                if let Err(e) = std::fs::remove_dir_all(&subnet_state_dir) {
-                    eprintln!(
-                        "Failed to delete subnet state directory {}: {}",
-                        subnet_state_dir.display(),
-                        e
-                    );
-                }
+            if subnet_state_dir.exists()
+                && let Err(e) = std::fs::remove_dir_all(&subnet_state_dir)
+            {
+                eprintln!(
+                    "Failed to delete subnet state directory {}: {}",
+                    subnet_state_dir.display(),
+                    e
+                );
             }
         }
 
