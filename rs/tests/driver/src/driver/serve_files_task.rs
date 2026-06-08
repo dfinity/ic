@@ -24,7 +24,7 @@
 use crate::driver::{
     constants::GROUP_SETUP_DIR,
     context::GroupContext,
-    local_backend::{FILE_SERVER_PORT, LocalBackend},
+    local_backend::LocalBackend,
     test_env::{TestEnv, TestEnvAttribute},
     test_setup::GroupSetup,
 };
@@ -48,6 +48,15 @@ pub(crate) const SERVE_FILES_TASK_NAME: &str = "serve_files";
 
 /// Delay between retries while waiting for the group setup / binding the socket.
 const RETRY_DELAY: Duration = Duration::from_secs(2);
+
+/// TCP port on which the per-group file server listens (on the group's IPv6
+/// gateway address). Under the Local backend there is no external network, so
+/// `icos_images` that IC nodes must fetch over HTTP (e.g. GuestOS/HostOS update
+/// images used by upgrade tests) are served by a small web server spawned from
+/// the test driver (see `serve_files_task`). The port is fixed because every
+/// group runs in its own network namespace, so there is no cross-group
+/// contention on the gateway address.
+pub const FILE_SERVER_PORT: u16 = 8080;
 
 pub(crate) fn serve_files_task(group_ctx: GroupContext) {
     let logger = group_ctx.logger().clone();

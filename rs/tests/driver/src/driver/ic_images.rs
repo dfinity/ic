@@ -16,8 +16,9 @@
 //! The "default" tag corresponds to the standard env variables (ENV_DEPS__GUESTOS_DISK_IMG, etc.).
 //! Other tags use uppercase suffixes (ENV_DEPS__GUESTOS_SEV_RECOVERY_DISK_IMG, etc.).
 
-use crate::driver::local_backend::{FILE_SERVER_PORT, LocalBackend};
+use crate::driver::local_backend::LocalBackend;
 use crate::driver::resource::{DiskImage, ImageType};
+use crate::driver::serve_files_task::FILE_SERVER_PORT;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::read_dependency_from_env_to_string;
 use crate::driver::test_setup::{GroupSetup, SystemTestBackend};

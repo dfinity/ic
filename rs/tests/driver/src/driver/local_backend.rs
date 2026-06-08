@@ -71,15 +71,6 @@ const DNSMASQ_BIN: &str = "/usr/sbin/dnsmasq";
 /// environment variable.
 const NET_ADMIN_LAUNCHER: &str = "/usr/local/bin/ic-net-admin";
 
-/// TCP port on which the per-group file server listens (on the group's IPv6
-/// gateway address). Under the Local backend there is no external network, so
-/// `icos_images` that IC nodes must fetch over HTTP (e.g. GuestOS/HostOS update
-/// images used by upgrade tests) are served by a small web server spawned from
-/// the test driver (see `serve_files_task`). The port is fixed because every
-/// group runs in its own network namespace, so there is no cross-group
-/// contention on the gateway address.
-pub const FILE_SERVER_PORT: u16 = 8080;
-
 /// Persistent record (in the root TestEnv) of the libvirtd unix socket so that
 /// forked task subprocesses can connect to the daemon spawned by the setup
 /// task instead of trying to spawn their own.
