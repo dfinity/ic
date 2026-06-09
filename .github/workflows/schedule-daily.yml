@@ -181,6 +181,11 @@ jobs:
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
 
+  # We currently don't run system-tests using their `Local` backend on PRs for now since that would be too slow.
+  # These tests reserve a significant number of CPUs from Bazel causing them to effectively spend most of their time waiting
+  # to get a share of the only 64 CPUs of the GitHub runner. To run them fast we need to run them on a
+  # Bazel Remote Execution cluster such that the tests can be distributed across many 64-CPU builders. That's still work in progress.
+  # So to test the `_local` system-tests we run them daily via this job.
   local-system-tests:
     name: Bazel Test Local System Tests
     runs-on: *dind-large-setup
