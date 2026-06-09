@@ -26,6 +26,18 @@ configure_make(
     name = "mtools_build",
     args = ["-j"],
     configure_in_place = True,
+    # Pin sysconfdir to a fixed, build-location-independent path. mtools compiles
+    # its system config-file location in as SYSCONFDIR "/mtools.conf"; rules_foreign_cc
+    # points configure's --prefix at the per-build $BUILD_TMPDIR, so the default
+    # sysconfdir ($prefix/etc) bakes that absolute sandbox path into the binary's
+    # .rodata. Two builds at different output bases then differ, breaking
+    # reproducibility. /etc is the conventional location (mtools already reads
+    # /etc/default/mtools.conf) and mtools installs nothing there, so this is the
+    # build-independent path without changing behavior: IC-OS's hermetic
+    # `mtools -c mcopy/mmd` invocations don't ship an /etc/mtools.conf, so mtools
+    # falls back to its compiled-in defaults either way. (Cf. e2fsprogs, which
+    # drops the analogous ROOT_SYSCONFDIR path baked into mke2fs.)
+    configure_options = ["--sysconfdir=/etc"],
     # Pretend iconv.h is absent so configure leaves HAVE_ICONV_H undefined and
     # mtools compiles in its built-in codepage tables instead of calling iconv.
     env = {"ac_cv_header_iconv_h": "no"},
