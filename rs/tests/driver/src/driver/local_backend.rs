@@ -432,15 +432,32 @@ impl LocalBackend {
                 qemu_conf_dir.display()
             )
         })?;
-        std::fs::write(qemu_conf_dir.join("qemu.conf"), "max_core = 0\n")
-            .with_context(|| format!("writing {}", qemu_conf_dir.join("qemu.conf").display()))?;
+        // Also route QEMU's stdout/stderr (and file-backed character devices
+        // such as the VM's serial console) directly to plain files instead of
+        // through the `virtlogd` daemon. libvirt's QEMU driver defaults
+        // `stdio_handler` to `"logd"`, which makes libvirtd spawn `virtlogd`,
+        // whose sole added value is rolling the log files over at a size limit
+        // to bound a runaway guest's on-disk log growth. Bounded test runs do
+        // not need that, and the extra double-forked daemon would just be one
+        // more process the teardown reaper has to track. Setting
+        // `stdio_handler = "file"` (libvirt's historical backend) makes QEMU
+        // write the console log straight to `console.log`, so no `virtlogd` is
+        // started. The domain XML's `append='on'` is honoured natively by
+        // QEMU's file chardev, so console output is still preserved across
+        // domain restarts (guest reboots and `vm().kill()` + `vm().start()`).
+        std::fs::write(
+            qemu_conf_dir.join("qemu.conf"),
+            "max_core = 0\nstdio_handler = \"file\"\n",
+        )
+        .with_context(|| format!("writing {}", qemu_conf_dir.join("qemu.conf").display()))?;
 
         // The backend is fully unprivileged: libvirtd runs as the current user
         // in session mode and connects to a per-user QEMU driver. There is no
-        // `sudo`, no system-wide bridge, and no `virtlogd` (domain serial and
-        // console output is written directly to files). The few operations that
-        // need elevated networking capabilities (creating the bridge and TAPs)
-        // go through the narrow [`net_admin`] capability launcher instead.
+        // `sudo`, no system-wide bridge, and no `virtlogd` (the `qemu.conf`
+        // `stdio_handler = "file"` set above makes QEMU write the domain serial
+        // and console output directly to files instead). The few operations
+        // that need elevated networking capabilities (creating the bridge and
+        // TAPs) go through the narrow [`net_admin`] capability launcher instead.
         info!(logger, "Spawning libvirtd (session mode)"; "bin" => %libvirtd_bin.display(), "conf" => %conf_path.display(), "socket" => %socket_path.display());
 
         let child = Command::new(&libvirtd_bin)

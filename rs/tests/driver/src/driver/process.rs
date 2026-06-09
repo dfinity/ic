@@ -179,7 +179,7 @@ pub fn enable_child_subreaper(logger: &Logger) {
 ///
 /// # Why this is needed
 ///
-/// Local-backend daemons (`libvirtd`'s QEMU processes, `dnsmasq`, `virtlogd`)
+/// Local-backend daemons (`libvirtd`'s QEMU processes and `dnsmasq`)
 /// daemonize by double-forking. With [`enable_child_subreaper`] in effect, the
 /// orphaned grandchild is reparented to *this* process rather than to the
 /// daemon that launched it. That has two consequences if nobody reaps the
@@ -266,7 +266,7 @@ fn reap_foreign_zombie_children(my_pid: i32, my_comm: &str) {
 ///
 /// Relies on the current process being a child subreaper (see
 /// [`enable_child_subreaper`]) so that orphaned, double-forked daemons
-/// (e.g. `libvirtd`, `virtlogd`, QEMU) have been reparented here and are thus
+/// (e.g. `libvirtd`, `dnsmasq`, QEMU) have been reparented here and are thus
 /// reachable by walking the process tree.
 ///
 /// The function repeatedly:
