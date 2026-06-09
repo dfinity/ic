@@ -1,6 +1,6 @@
 # System Tests Framework
 
-**Crates**: `consensus-backup-system-tests`, `consensus-orchestrator-system-tests`, `consensus-tecdsa-system-tests`, `consensus-upgrade-system-tests`, `consensus-vetkd-system-tests`, `execution-system-tests`, `financial_integrations-system-tests`, `guest_upgrade_tests`, `ic_boundary_node_system_tests`, `ic_consensus_system_test_catch_up_test_common`, `ic_consensus_system_test_liveness_test_common`, `ic_consensus_system_test_node_registration_test_common`, `ic_consensus_system_test_subnet_recovery`, `ic_consensus_system_test_utils`, `ic_consensus_system_tests`, `ic_consensus_threshold_sig_system_test_utils`, `ic_crypto_system_tests`, `ic-boundary-nodes-integration-test-common`, `ic-boundary-nodes-performance-test-common`, `ic-boundary-nodes-system-test-utils`, `ic-system-test-driver`, `ic-systest-firewall`, `message-routing-system-tests`, `message-routing-system-tests-xnet`, `networking-system-tests`, `nns-system-tests`, `node-system-tests`, `rosetta-system-tests`, `rust-canister-tests`, `sdk-system-tests`, `sns_system_test_lib`, `sns_tests`, `systest-message-routing-common`, `xnet-slo-test-lib`, `xnet-test`
+**Crates**: `consensus-backup-system-tests`, `consensus-orchestrator-system-tests`, `consensus-tecdsa-system-tests`, `consensus-upgrade-system-tests`, `consensus-vetkd-system-tests`, `execution-system-tests`, `financial_integrations-system-tests`, `guest_upgrade_tests`, `ic_boundary_node_system_tests`, `ic_consensus_system_test_catch_up_test_common`, `ic_consensus_system_test_liveness_test_common`, `ic_consensus_system_test_node_registration_test_common`, `ic_consensus_system_test_subnet_recovery`, `ic_consensus_system_test_utils`, `ic_consensus_system_tests`, `ic_consensus_threshold_sig_system_test_utils`, `ic_crypto_system_tests`, `ic-boundary-nodes-integration-test-common`, `ic-boundary-nodes-performance-test-common`, `ic-boundary-nodes-system-test-utils`, `ic-system-test-driver`, `ic-systest-firewall`, `message-routing-system-tests`, `message-routing-system-tests-xnet`, `nested`, `networking-system-tests`, `nns-system-tests`, `node-system-tests`, `rosetta-system-tests`, `rust-canister-tests`, `sdk-system-tests`, `sns_system_test_lib`, `sns_tests`, `systest-message-routing-common`, `xnet-slo-test-lib`, `xnet-test`
 
 The system tests framework (`rs/tests/`) provides end-to-end testing infrastructure for the Internet Computer, spinning up real IC nodes in virtual machines managed by the Farm service.
 
@@ -103,6 +103,11 @@ System tests are organized by subsystem under `rs/tests/`.
 #### Scenario: Message routing tests
 - **WHEN** tests under `rs/tests/message_routing/` are run
 - **THEN** they verify XNet messaging, state sync, and canister migration
+
+#### Scenario: Nested-VM tests
+- **WHEN** tests in the `nested` crate under `rs/tests/nested/` are run
+- **THEN** they boot a GuestOS inside a HostOS (nested virtualization) on a Farm-provisioned VM
+- **AND** verify GuestOS and HostOS upgrades, node registration, SEV recovery, and nested NNS recovery
 
 ### Requirement: Test Canisters
 
