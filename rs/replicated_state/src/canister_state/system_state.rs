@@ -10,9 +10,9 @@ use self::{
     log_memory_store::LogMemoryStore,
     wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata},
 };
+pub use super::queues::CanisterOutputQueuesIterator;
 use super::queues::refunds::RefundPool;
 use super::queues::{CanisterInput, can_push};
-pub use super::queues::{CanisterOutputQueuesIterator, memory_usage_of_request};
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::page_map::PageAllocatorFileDescriptor;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
@@ -25,7 +25,7 @@ use ic_base_types::{EnvironmentVariables, NumSeconds};
 use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE;
 use ic_config::flag_status::FlagStatus;
 use ic_error_types::RejectCode;
-use ic_interfaces::execution_environment::HypervisorError;
+use ic_interfaces::execution_environment::{HypervisorError, MessageMemoryUsage};
 use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType,
@@ -36,24 +36,27 @@ use ic_types::batch::TotalQueryStats;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask,
-    Ingress, NO_DEADLINE, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse,
-    Response, SenderInfo, StopCanisterCallId, StopCanisterContext,
+    Ingress, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload, RejectContext, Request,
+    RequestMetadata, RequestOrResponse, Response, SenderInfo, StopCanisterCallId,
+    StopCanisterContext,
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
-    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes,
-    NumInstructions, PrincipalId, Time,
+    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, CountBytes, MemoryAllocation,
+    NumBytes, NumInstructions, PrincipalId, Time,
 };
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, CyclesUseCaseKind,
-    CyclesUseCaseRefundableKind, IngressInduction, Instructions, NominalCycles, Uninstall,
+    CyclesUseCaseRefundableKind, IngressInduction, Instructions, NominalCycles,
+    RequestAndResponseTransmission, Uninstall,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use lazy_static::lazy_static;
 use maplit::btreeset;
 use prometheus::IntCounter;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
@@ -68,6 +71,131 @@ lazy_static! {
 
 /// Maximum number of canister changes stored in the canister history.
 pub const MAX_CANISTER_HISTORY_CHANGES: u64 = 20;
+
+/// A bundle of outgoing inter-canister `Request` and matching `Callback`.
+///
+/// A `Request` and its `Callback` share several fields (destination, payment,
+/// deadline). And the request's `sender_reply_callback` cannot be known until
+/// the callback has actually been registered. `OutputRequest` holds the union
+/// of the distinct fields exactly once, and produces both the `Callback` (via
+/// [`OutputRequest::to_callback`]) and, once a `CallbackId` has been assigned,
+/// the `Request` (via [`OutputRequest::into_request`]).
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+pub struct OutputRequest {
+    // Fields shared by `Request` and `Callback`.
+    /// The destination canister (`Request::receiver` / `Callback::respondent`).
+    pub receiver: CanisterId,
+    /// Cycles attached to the request (`Request::payment` /
+    /// `Callback::cycles_sent`).
+    pub payment: Cycles,
+    /// If non-zero, this is a best-effort call (`Request::deadline` /
+    /// `Callback::deadline`).
+    pub deadline: CoarseTime,
+
+    // `Request`-only fields.
+    pub sender: CanisterId,
+    pub method_name: String,
+    pub method_payload: Vec<u8>,
+    pub metadata: RequestMetadata,
+
+    // `Callback`-only fields.
+    pub call_context_id: CallContextId,
+    pub prepayment_for_response_execution: CompoundCycles<Instructions>,
+    pub prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+    pub prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
+    pub on_reply: WasmClosure,
+    pub on_reject: WasmClosure,
+    pub on_cleanup: Option<WasmClosure>,
+}
+
+impl OutputRequest {
+    /// Returns `true` if this is a best-effort call (i.e. if it has a non-zero
+    /// deadline).
+    pub fn is_best_effort(&self) -> bool {
+        self.deadline != NO_DEADLINE
+    }
+
+    /// Returns the size of the user-controlled part of the eventual `Request`,
+    /// in bytes.
+    ///
+    /// Mirrors `Request::payload_size_bytes()`.
+    pub fn payload_size_bytes(&self) -> NumBytes {
+        let payload_size_bytes =
+            NumBytes::from((self.method_name.len() + self.method_payload.len()) as u64);
+        debug_assert_eq!(
+            payload_size_bytes,
+            self.clone().into_request(0.into()).payload_size_bytes()
+        );
+        payload_size_bytes
+    }
+
+    /// Returns the byte size of the eventual `Request`.
+    ///
+    /// Mirrors `Request::count_bytes()`.
+    pub fn count_bytes(&self) -> usize {
+        let count_bytes = std::mem::size_of::<RequestOrResponse>()
+            + std::mem::size_of::<Request>()
+            + self.payload_size_bytes().get() as usize;
+        debug_assert_eq!(
+            count_bytes,
+            self.clone().into_request(0.into()).count_bytes()
+        );
+        count_bytes
+    }
+
+    /// Returns the guaranteed response and best-effort memory used by the eventual
+    /// `Request` if enqueued into an input or output queue.
+    ///
+    /// Best-effort requests use `self.count_bytes()` worth of best-effort memory.
+    /// Guaranteed response requests use the maximum of `MAX_RESPONSE_COUNT_BYTES`
+    /// (reservation for the largest possible response) and `self.count_bytes()`
+    pub fn message_memory_usage(&self) -> MessageMemoryUsage {
+        let count_bytes = self.count_bytes();
+        if self.is_best_effort() {
+            MessageMemoryUsage {
+                guaranteed_response: NumBytes::new(0),
+                best_effort: (count_bytes as u64).into(),
+            }
+        } else {
+            MessageMemoryUsage {
+                guaranteed_response: (count_bytes.max(MAX_RESPONSE_COUNT_BYTES) as u64).into(),
+                best_effort: NumBytes::new(0),
+            }
+        }
+    }
+
+    /// Builds the `Callback` that the response to this request should be routed
+    /// to.
+    fn to_callback(&self) -> Callback {
+        Callback {
+            call_context_id: self.call_context_id,
+            respondent: self.receiver,
+            cycles_sent: self.payment,
+            prepayment_for_response_execution: self.prepayment_for_response_execution,
+            prepayment_for_response_transmission: self.prepayment_for_response_transmission,
+            prepayment_for_call_transmission: self.prepayment_for_call_transmission,
+            on_reply: self.on_reply.clone(),
+            on_reject: self.on_reject.clone(),
+            on_cleanup: self.on_cleanup.clone(),
+            deadline: self.deadline,
+        }
+    }
+
+    /// Consumes `self`, producing the `Request` with the given (already registered)
+    /// `sender_reply_callback`.
+    pub fn into_request(self, sender_reply_callback: CallbackId) -> Request {
+        Request {
+            receiver: self.receiver,
+            sender: self.sender,
+            sender_reply_callback,
+            payment: self.payment,
+            method_name: self.method_name,
+            method_payload: self.method_payload,
+            metadata: self.metadata,
+            deadline: self.deadline,
+        }
+    }
+}
 
 #[derive(PartialEq)]
 enum ConsumingCycles {
@@ -1000,10 +1128,7 @@ impl SystemState {
 
     /// Registers a callback and returns its ID. Returns an error if the canister is
     /// `Stopped`.
-    //
-    // TODO: Check whether this could be done implicitly, when pushing an outbound
-    // request.
-    pub fn register_callback(&mut self, callback: Callback) -> Result<CallbackId, StateError> {
+    fn register_callback(&mut self, callback: Callback) -> Result<CallbackId, StateError> {
         Ok(call_context_manager_mut(&mut self.status)
             .ok_or(StateError::CanisterStopped(self.canister_id))?
             .register_callback(callback))
@@ -1020,33 +1145,42 @@ impl SystemState {
             .unregister_callback(callback_id))
     }
 
-    /// Pushes a `Request` type message into the relevant output queue.
-    /// This is preceded by withdrawing the cycles for sending the `Request` and
-    /// receiving and processing the corresponding `Response`.
-    /// If cycles withdrawal succeeds, the function also reserves a slot on the
-    /// matching input queue for the `Response`.
+    /// Atomically registers the `Callback` carried by the given `OutputRequest` and
+    /// enqueues the `Request` (with the resulting `CallbackId`) onto the relevant
+    /// output queue.
     ///
-    /// # Errors
-    ///
-    /// Returns a `QueueFull` error along with the provided message if either
-    /// the output queue or the matching input queue is full.
+    /// Returns the assigned `CallbackId` on success. Returns an error if the
+    /// canister is `Stopped` (callback cannot be registered); or if the output or
+    /// matching input queue is full.
     pub fn push_output_request(
         &mut self,
-        msg: Arc<Request>,
+        request: OutputRequest,
         time: Time,
-    ) -> Result<(), (StateError, Arc<Request>)> {
+    ) -> Result<CallbackId, StateError> {
         assert_eq!(
-            msg.sender, self.canister_id,
+            request.sender, self.canister_id,
             "Expected `Request` to have been sent by canister ID {}, but instead got {}",
-            self.canister_id, msg.sender
+            self.canister_id, request.sender
         );
-        self.queues.push_output_request(msg, time)
+
+        let callback = request.to_callback();
+        let callback_id = self.register_callback(callback)?;
+        let request = request.into_request(callback_id);
+        let result = self.queues.push_output_request(request.into(), time);
+        match result {
+            Ok(()) => Ok(callback_id),
+            Err((err, _msg)) => {
+                self.unregister_callback(callback_id)?;
+                Err(err)
+            }
+        }
     }
 
-    /// See documentation for [`CanisterQueues::reject_subnet_output_request`].
+    /// Atomically registers the `Callback` carried by the given `OutputRequest` and
+    /// enqueues a matching reject response with the given `RejectContext`.
     pub fn reject_subnet_output_request(
         &mut self,
-        request: Request,
+        request: OutputRequest,
         reject_context: RejectContext,
         subnet_ids: &BTreeSet<PrincipalId>,
     ) -> Result<(), StateError> {
@@ -1055,8 +1189,16 @@ impl SystemState {
             "Expected `Request` to have been sent from canister ID {}, but instead got {}",
             self.canister_id, request.sender
         );
-        self.queues
-            .reject_subnet_output_request(request, reject_context, subnet_ids)
+        let callback = request.to_callback();
+        let callback_id = self.register_callback(callback)?;
+        let request = request.into_request(callback_id);
+        let result = self
+            .queues
+            .reject_subnet_output_request(request, reject_context, subnet_ids);
+        if result.is_err() {
+            self.unregister_callback(callback_id)?;
+        }
+        result
     }
 
     /// Returns the number of output requests that can be pushed onto the queue
@@ -2545,5 +2687,105 @@ pub mod testing {
             next_snapshot_id: Default::default(),
             environment_variables: Default::default(),
         };
+    }
+
+    /// Builder for `OutputRequest`, for use in tests.
+    pub struct OutputRequestBuilder {
+        request: OutputRequest,
+    }
+
+    impl Default for OutputRequestBuilder {
+        /// Creates an `OutputRequestBuilder` with default values.
+        fn default() -> Self {
+            let name = "No-Op";
+            fn prepayment<T: ic_types_cycles::CyclesUseCaseKind>() -> CompoundCycles<T> {
+                CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
+            }
+
+            Self {
+                request: OutputRequest {
+                    receiver: 0.into(),
+                    payment: Cycles::zero(),
+                    deadline: NO_DEADLINE,
+                    sender: 1.into(),
+                    method_name: name.to_string(),
+                    method_payload: Vec::new(),
+                    metadata: Default::default(),
+                    call_context_id: 2.into(),
+                    prepayment_for_response_execution: prepayment(),
+                    prepayment_for_response_transmission: prepayment(),
+                    prepayment_for_call_transmission: prepayment(),
+                    on_reply: ic_types::methods::WasmClosure::new(0, 0),
+                    on_reject: ic_types::methods::WasmClosure::new(0, 0),
+                    on_cleanup: None,
+                },
+            }
+        }
+    }
+
+    impl OutputRequestBuilder {
+        /// Creates a new `OutputRequestBuilder`.
+        pub fn new() -> Self {
+            Default::default()
+        }
+
+        pub fn receiver(mut self, receiver: CanisterId) -> Self {
+            self.request.receiver = receiver;
+            self
+        }
+
+        pub fn sender(mut self, sender: CanisterId) -> Self {
+            self.request.sender = sender;
+            self
+        }
+
+        pub fn payment(mut self, payment: Cycles) -> Self {
+            self.request.payment = payment;
+            self
+        }
+
+        pub fn method_name<S: ToString>(mut self, method_name: S) -> Self {
+            self.request.method_name = method_name.to_string();
+            self
+        }
+
+        pub fn method_payload(mut self, method_payload: Vec<u8>) -> Self {
+            self.request.method_payload = method_payload;
+            self
+        }
+
+        pub fn deadline(mut self, deadline: ic_types::time::CoarseTime) -> Self {
+            self.request.deadline = deadline;
+            self
+        }
+
+        pub fn prepayment_for_response_execution(
+            mut self,
+            prepayment: CompoundCycles<Instructions>,
+        ) -> Self {
+            self.request.prepayment_for_response_execution = prepayment;
+            self
+        }
+
+        pub fn prepayment_for_response_transmission(
+            mut self,
+            prepayment: CompoundCycles<RequestAndResponseTransmission>,
+        ) -> Self {
+            self.request.prepayment_for_response_transmission = prepayment;
+            self
+        }
+
+        pub fn prepayment_for_call_transmission(
+            mut self,
+            prepayment: CompoundCycles<RequestAndResponseTransmission>,
+        ) -> Self {
+            self.request.prepayment_for_call_transmission = prepayment;
+            self
+        }
+
+        /// Returns the built `OutputRequest`.
+        pub fn build(self) -> OutputRequest {
+            self.request
+        }
     }
 }

@@ -11,7 +11,7 @@ register_toolchains("@rules_buf_toolchains//:all")
 
 # General Bazel helpers
 bazel_dep(name = "bazel_skylib", version = "1.8.2")
-bazel_dep(name = "aspect_bazel_lib", version = "2.9.0")
+bazel_dep(name = "aspect_bazel_lib", version = "2.19.3")
 bazel_dep(name = "rules_shell", version = "0.6.1")
 
 bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
@@ -30,26 +30,23 @@ single_version_override(
 )
 
 # configure/make dependencies
-bazel_dep(name = "rules_foreign_cc", version = "0.14.0")
+bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
 
 register_toolchains(
     "@rules_foreign_cc//toolchains:preinstalled_pkgconfig_toolchain",
     "@rules_foreign_cc//toolchains:preinstalled_make_toolchain",
 )
 
-# Use HEAD to include this commit which is needed for preinstalled toolchains to work
-# https://github.com/bazel-contrib/rules_foreign_cc/commit/d03f7ae79ddda0ad228b17048b9e2dc0efcc8e95
-#
 # Use a patch to work around determinism issues in make & pkgconfig toolchains
 # https://github.com/bazel-contrib/rules_foreign_cc/issues/1313
 archive_override(
     module_name = "rules_foreign_cc",
-    integrity = "sha384-bTtlZejENu+3rnOsCg1nmSZJl54++7nB0zgzWT+jtZJ1QyMRwkV4ieOaeORQTdjY",
+    integrity = "sha256-MnWXKJE8N2ukWwEWhptxtoscLr+PK897QSIrwHt3PXM=",
     patch_strip = 1,
     patches = ["//bazel:rules_foreign_cc.patch"],
-    strip_prefix = "rules_foreign_cc-77d4483fadbb1b7bcace18ed8e8e87e8791050f6",
+    strip_prefix = "rules_foreign_cc-0.15.1",
     type = "tar.gz",
-    urls = ["https://codeload.github.com/bazelbuild/rules_foreign_cc/tar.gz/77d4483fadbb1b7bcace18ed8e8e87e8791050f6"],
+    urls = ["https://github.com/bazel-contrib/rules_foreign_cc/releases/download/0.15.1/rules_foreign_cc-0.15.1.tar.gz"],
 )
 
 # Misc tools
