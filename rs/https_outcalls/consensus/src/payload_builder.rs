@@ -533,13 +533,7 @@ impl CanisterHttpPayloadBuilderImpl {
         // Defer signature verification of the reconstructed response shares.
         sig_inputs.extend(response_share_sig_inputs(&aggregate_shares));
 
-        let faults_tolerated = match self.membership.get_canister_http_committee(height) {
-            Ok(members) => ic_types::consensus::get_faults_tolerated(members.len()),
-            _ => {
-                warn!(self.log, "Failed to get canister http committee");
-                return validation_failed(CanisterHttpPayloadValidationFailure::Membership);
-            }
-        };
+        let faults_tolerated = ic_types::consensus::get_faults_tolerated(committee.len());
 
         for response in &payload.divergence_responses {
             let (valid_signers, invalid_signers): (Vec<NodeId>, Vec<NodeId>) = response
