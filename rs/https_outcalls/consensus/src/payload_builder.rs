@@ -436,14 +436,10 @@ impl CanisterHttpPayloadBuilderImpl {
                 )
             })?;
 
-        // Owned reconstruction of the per-signer shares behind each aggregated
-        // (fully/non-replicated) response proof. Declared before `sig_inputs` so
-        // that it outlives the borrows `sig_inputs` holds into it.
+        // Shares reconstructed from aggregated response proofs.
         let mut aggregate_shares: Vec<CanisterHttpResponseShare> = Vec::new();
-        // Accumulates the signature-verification inputs of every response,
-        // flexible, and divergence share in the payload, so that all of them can
-        // be checked in a single batched multi-message verification call at the
-        // very end.
+        // Accumulates all signatures in the payload, so that they can be checked
+        // in a single batched multi-message verification call at the very end.
         let mut sig_inputs: Vec<ResponseShareSigInput> = Vec::new();
 
         // Check conditions on individual responses
@@ -522,18 +518,16 @@ impl CanisterHttpPayloadBuilderImpl {
                 });
             }
 
-            // Each per-signer entry of the proof carries that signer's payment
-            // receipt alongside their signature. Reconstruct, for each signer,
-            // the share they signed (shared metadata + their receipt) so its
-            // signature can be batch-verified with the rest. This also enforces
-            // the per-replica refund allowance on every receipt in the proof.
-            aggregate_shares.extend(
-                utils::reconstruct_aggregate_proof_shares(
-                    &response.proof,
+            // Enforce the per-replica refund allowance on every receipt in the proof.
+            for sig in response.proof.signatures.values() {
+                utils::check_refund_allowance(
+                    &sig.payment_receipt,
                     request_context.refund_status.per_replica_allowance,
                 )
-                .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?,
-            );
+                .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+            }
+            // Reconstruct the per-signer shares from the response proof.
+            aggregate_shares.extend(utils::reconstruct_individual_shares(&response.proof));
         }
 
         // Defer signature verification of the reconstructed response shares.
@@ -562,20 +556,6 @@ impl CanisterHttpPayloadBuilderImpl {
                 });
             }
 
-            for share in response.shares.iter() {
-                // Enforce per-replica refund allowance for divergence
-                // shares. While a divergence proof does not deliver a
-                // refund directly, malformed refund claims should still
-                // be rejected to avoid leaking budget through the
-                // divergence codepath in any future extensions.
-                if let Some(ctx) = http_contexts.get(&share.content.id()) {
-                    utils::check_refund_allowance(
-                        &share.content.payment_receipt,
-                        ctx.refund_status.per_replica_allowance,
-                    )
-                    .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
-                }
-            }
             // Defer signature verification.
             sig_inputs.extend(response_share_sig_inputs(&response.shares));
 
@@ -601,6 +581,16 @@ impl CanisterHttpPayloadBuilderImpl {
                         InvalidCanisterHttpPayloadReason::InvalidPayloadSection(callback_id),
                     );
                 }
+
+                // Enforce per-replica refund allowance for divergence shares.
+                for share in grouped_shares.values().flatten() {
+                    utils::check_refund_allowance(
+                        &share.content.payment_receipt,
+                        context.refund_status.per_replica_allowance,
+                    )
+                    .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
+                }
+
                 if !grouped_shares_meet_divergence_criteria(&grouped_shares, faults_tolerated) {
                     return invalid_artifact(
                         InvalidCanisterHttpPayloadReason::DivergenceProofDoesNotMeetDivergenceCriteria,

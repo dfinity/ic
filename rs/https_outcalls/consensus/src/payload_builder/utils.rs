@@ -77,7 +77,7 @@ pub(crate) fn check_response_consistency(
 
 /// Enforces the per-replica refund allowance from the request context: the
 /// `refund` claimed in the payment receipt must never exceed the
-/// `per_replica_allowance` derived from the request's payment.
+/// `per_replica_allowance` derived from the request's context.
 pub(crate) fn check_refund_allowance(
     receipt: &CanisterHttpPaymentReceipt,
     per_replica_allowance: Cycles,
@@ -95,39 +95,45 @@ pub(crate) fn check_refund_allowance(
 /// [`CanisterHttpResponseShare`] that signer actually signed: the shared
 /// [`CanisterHttpResponseMetadata`] combined with that signer's own
 /// [`CanisterHttpPaymentReceipt`], paired with that signer's basic signature.
-///
-/// Returning the reconstructed shares lets the caller batch-verify their
-/// signatures together with the flexible and divergence shares of the payload
-/// in a single multi-message verification call (via
-/// [`response_share_sig_inputs`]), rather than verifying each aggregated proof
-/// on its own.
-///
-/// Also enforces the per-replica refund allowance on each signer's payment
-/// receipt via [`check_refund_allowance`].
-///
-/// **NOTE**: The signatures are not verified here. Callers must batch-verify
-/// them via [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
-pub(crate) fn reconstruct_aggregate_proof_shares(
+pub(crate) fn reconstruct_individual_shares(
     proof: &CanisterHttpResponseProof,
-    per_replica_allowance: Cycles,
-) -> Result<Vec<CanisterHttpResponseShare>, InvalidCanisterHttpPayloadReason> {
-    proof
-        .signatures
+) -> impl Iterator<Item = CanisterHttpResponseShare> + '_ {
+    proof.signatures.iter().map(|(signer, sig)| Signed {
+        content: CanisterHttpResponseReceiptShare {
+            metadata: proof.metadata.clone(),
+            payment_receipt: sig.payment_receipt.clone(),
+        },
+        signature: BasicSignature {
+            signature: sig.signature.clone(),
+            signer: *signer,
+        },
+    })
+}
+
+/// Assembles a [`CanisterHttpResponseProof`] from a slice of contributing
+/// shares: the shared `metadata` together with, for each signer, the
+/// basic signature and payment receipt taken directly from that signer's
+/// share.
+pub(crate) fn aggregate_shares(
+    metadata: CanisterHttpResponseMetadata,
+    shares: &[&CanisterHttpResponseShare],
+) -> CanisterHttpResponseProof {
+    let signatures = shares
         .iter()
-        .map(|(signer, sig)| {
-            check_refund_allowance(&sig.payment_receipt, per_replica_allowance)?;
-            Ok(Signed {
-                content: CanisterHttpResponseReceiptShare {
-                    metadata: proof.metadata.clone(),
-                    payment_receipt: sig.payment_receipt.clone(),
+        .map(|share| {
+            (
+                share.signature.signer,
+                CanisterHttpResponseSignature {
+                    payment_receipt: share.content.payment_receipt.clone(),
+                    signature: share.signature.signature.clone(),
                 },
-                signature: BasicSignature {
-                    signature: sig.signature.clone(),
-                    signer: *signer,
-                },
-            })
+            )
         })
-        .collect()
+        .collect();
+    CanisterHttpResponseProof {
+        metadata,
+        signatures,
+    }
 }
 
 /// Validates a single [`FlexibleCanisterHttpResponseWithProof`].
@@ -356,7 +362,7 @@ pub(crate) fn find_fully_replicated_response(
                 .get_response_content_by_hash(&metadata.content_hash)
                 .map(|content| CanisterHttpResponseWithConsensus {
                     content,
-                    proof: proof_from_shares(metadata.clone(), shares),
+                    proof: aggregate_shares(metadata.clone(), shares),
                 })
         } else {
             None
@@ -382,36 +388,10 @@ pub(crate) fn find_non_replicated_response(
                     .get_response_content_by_hash(&metadata.content_hash)
                     .map(|content| CanisterHttpResponseWithConsensus {
                         content,
-                        proof: proof_from_shares(metadata.clone(), &[correct_share]),
+                        proof: aggregate_shares(metadata.clone(), &[correct_share]),
                     })
             })
     })
-}
-
-/// Assembles a [`CanisterHttpResponseProof`] from a slice of contributing
-/// shares: the shared `metadata` together with, for each signer, the
-/// basic signature and payment receipt taken directly from that signer's
-/// share.
-pub(crate) fn proof_from_shares(
-    metadata: CanisterHttpResponseMetadata,
-    shares: &[&CanisterHttpResponseShare],
-) -> CanisterHttpResponseProof {
-    let signatures = shares
-        .iter()
-        .map(|share| {
-            (
-                share.signature.signer,
-                CanisterHttpResponseSignature {
-                    payment_receipt: share.content.payment_receipt.clone(),
-                    signature: share.signature.signature.clone(),
-                },
-            )
-        })
-        .collect();
-    CanisterHttpResponseProof {
-        metadata,
-        signatures,
-    }
 }
 
 /// Result of scanning flexible HTTP outcall shares for a single callback.
