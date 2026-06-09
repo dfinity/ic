@@ -7,14 +7,10 @@ common --lockfile_mode=off
 
 # Use prebuilt protoc binary via toolchain resolution instead of compiling from C++ source.
 # See https://github.com/protocolbuffers/protobuf/issues/19558
+# (Removing this still builds, but reverts to compiling protoc/libprotoc from source.)
 common --incompatible_enable_proto_toolchain_resolution
 
-# The module graph resolves protobuf to 33.4, but toolchains_protoc only ships a
-# prebuilt protoc up to v33.0 (see MODULE.bazel). Allow this small version skew;
-# protobuf otherwise fails the build via its ProtocAuthenticityCheck.
-build --@protobuf//bazel/toolchains:allow_nonstandard_protoc
-
-# protobuf 33.4's upb bootstrap tools (protoc-gen-upb*, protoc_minimal, ...) use
+# protobuf 33's upb bootstrap tools (protoc-gen-upb*, protoc_minimal, ...) use
 # __start_/__stop_ linker-array sections (e.g. linkarr_upb_AllExts). lld (used by
 # the hermetic zig toolchain on Linux) garbage-collects these under its default
 # --start-stop-gc together with our opt-mode --gc-sections, breaking the link

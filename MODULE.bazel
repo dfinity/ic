@@ -79,14 +79,11 @@ use_repo(pip, "python_deps")
 # toolchains_protoc must be declared before protobuf so its toolchain registration wins
 bazel_dep(name = "toolchains_protoc", version = "0.6.1")
 
-# protobuf 33+ enforces (via its ProtocAuthenticityCheck) that the prebuilt
-# protoc matches the resolved `protobuf` module version (33.4, pulled in by
-# rules_cc/rules_go/rules_python/... under Bazel 9). toolchains_protoc 0.6.1
-# (latest) only ships protoc up to v33.0, so we use that and allow the small
-# (same-line, 4-patch) version skew via
-# `--@protobuf//bazel/toolchains:allow_nonstandard_protoc`, set in
-# bazel/conf/.bazelrc.build. Bump this to v33.4 (and drop the flag) once
-# toolchains_protoc ships it.
+# Pin protoc to the prebuilt binary toolchains_protoc provides (v33.0, its
+# latest) and pin the `protobuf` module to the matching 33.0 below. protobuf 33+
+# enforces (via ProtocAuthenticityCheck) that protoc and the protobuf module
+# share the same version, so they are kept in lockstep.
+# https://registry.bazel.build/modules/toolchains_protoc
 protoc = use_extension("@toolchains_protoc//protoc:extensions.bzl", "protoc")
 protoc.toolchain(version = "v33.0")
 use_repo(
@@ -102,7 +99,16 @@ register_toolchains("@toolchains_protoc_hub//:all")
 
 bazel_dep(
     name = "protobuf",
-    version = "33.4",
+    version = "33.0",
+)
+
+# Bazel 9's builtin modules (rules_cc/rules_go/rules_python/...) pull in
+# protobuf 33.4, but toolchains_protoc only ships a prebuilt protoc up to v33.0.
+# Pin protobuf to 33.0 so it matches the prebuilt protoc and satisfies
+# protobuf's ProtocAuthenticityCheck (33.0 and 33.4 are the same release line).
+single_version_override(
+    module_name = "protobuf",
+    version = "33.0",
 )
 
 # protobuf linter
